@@ -211,16 +211,58 @@ async function tutorialUsage(since) {
     const completed = docs.filter(d => d.completed).length;
     const totalSteps = docs.reduce((m, d) => Math.max(m, d.totalSteps || 0), 0);
 
-    // reached[step] = playthroughs whose furthest section is at least `step`.
-    const funnel = [];
-    for (let step = 0; step < totalSteps; step++) {
-      funnel.push({ step, reached: docs.filter(d => (d.furthestStep || 0) >= step).length });
+    // `furthestStep` is a positional index into a step list that changes whenever
+    // a section is added, so step 2 of a 4-section run is a different section from
+    // step 2 of a 5-section one and the two cannot share a bar.
+    //
+    // Deliberately NOT reconciled by shifting old indices up: `reached` counts
+    // furthestStep >= step, so a shifted row would count as having reached the
+    // newly inserted section too — overstating the reach of exactly the section a
+    // new funnel exists to measure, and erasing its drop-off.
+    //
+    // Nor is this a one-off backfill. Cached web bundles and un-updated native
+    // installs keep reporting the older shape for as long as they're in the wild,
+    // so old-shape plays keep arriving. Each shape therefore gets its own funnel,
+    // newest first, and the split maintains itself.
+    const byVersion = new Map();
+    for (const d of docs) {
+      const v = d.totalSteps || 0;
+      if (!byVersion.has(v)) byVersion.set(v, []);
+      byVersion.get(v).push(d);
     }
-    // dropOff = reached this step but not the next (the final step's "next" is completion).
-    for (let i = 0; i < funnel.length; i++) {
-      const next = i + 1 < funnel.length ? funnel[i + 1].reached : completed;
-      funnel[i].dropOff = Math.max(0, funnel[i].reached - next);
-    }
+    const buildFunnel = (rows, steps) => {
+      const stepCompleted = rows.filter(d => d.completed).length;
+      // reached[step] = playthroughs whose furthest section is at least `step`.
+      const f = [];
+      for (let step = 0; step < steps; step++) {
+        f.push({ step, reached: rows.filter(d => (d.furthestStep || 0) >= step).length });
+      }
+      // dropOff = reached this step but not the next (the final step's "next" is completion).
+      for (let i = 0; i < f.length; i++) {
+        const next = i + 1 < f.length ? f[i + 1].reached : stepCompleted;
+        f[i].dropOff = Math.max(0, f[i].reached - next);
+      }
+      return f;
+    };
+    const versions = [...byVersion.keys()]
+      .sort((a, b) => b - a)
+      .map(steps => {
+        const rows = byVersion.get(steps);
+        return {
+          totalSteps: steps,
+          current: steps === totalSteps,
+          sessions: rows.length,
+          completed: rows.filter(d => d.completed).length,
+          funnel: buildFunnel(rows, steps),
+        };
+      });
+
+    // The current shape's figures, kept as top-level fields so callers that only
+    // care about "the funnel as it stands now" don't have to dig through versions.
+    const live = versions.find(v => v.current);
+    const funnel = live?.funnel ?? [];
+    const funnelSessions = live?.sessions ?? 0;
+    const funnelCompleted = live?.completed ?? 0;
 
     const dayMap = new Map();
     for (const d of docs) dayMap.set(ymd(d.startedAt), (dayMap.get(ymd(d.startedAt)) ?? 0) + 1);
@@ -238,6 +280,9 @@ async function tutorialUsage(since) {
       abandonPct: sessions ? 1 - completed / sessions : 0,
       totalSteps,
       funnel,
+      funnelSessions,
+      funnelCompleted,
+      versions,
       sessionsByDay: dayMap,
     };
   }));
@@ -763,6 +808,9 @@ router.get('/cbat', async (req, res) => {
           completionRate: t.completionRate,
           totalSteps: t.totalSteps,
           funnel: t.funnel,
+          funnelSessions: t.funnelSessions,
+          funnelCompleted: t.funnelCompleted,
+          versions: t.versions,
         })),
       },
     });

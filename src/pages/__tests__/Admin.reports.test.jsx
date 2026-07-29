@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Admin from '../Admin'
 
@@ -263,6 +263,76 @@ describe('Admin — Reports tab', () => {
     expect(screen.getByText(/8 plays · 5 completed/)).toBeInTheDocument()
     expect(screen.getByText('Step 1')).toBeInTheDocument()
     expect(screen.getByText('Completed')).toBeInTheDocument()
+    // One shape of the tutorial, so the section count isn't called out.
+    expect(screen.queryByText(/older app build/i)).toBeNull()
+  })
+
+  it('draws a separate funnel per tutorial version when a section was added', async () => {
+    // A step index only means something against the section count it was recorded
+    // with, so the API splits them and the panel must not merge them back.
+    global.fetch = setupFetch({
+      cbat: { ...MOCK_CBAT, data: { ...MOCK_CBAT.data, tutorials: [{
+        ...MOCK_CBAT.data.tutorials[0],
+        totalSteps: 5,
+        funnel: [
+          { step: 0, reached: 5, dropOff: 1 },
+          { step: 1, reached: 4, dropOff: 1 },
+          { step: 2, reached: 3, dropOff: 0 },
+          { step: 3, reached: 3, dropOff: 0 },
+          { step: 4, reached: 3, dropOff: 0 },
+        ],
+        versions: [
+          {
+            totalSteps: 5, current: true, sessions: 5, completed: 3,
+            funnel: [
+              { step: 0, reached: 5, dropOff: 1 },
+              { step: 1, reached: 4, dropOff: 1 },
+              { step: 2, reached: 3, dropOff: 0 },
+              { step: 3, reached: 3, dropOff: 0 },
+              { step: 4, reached: 3, dropOff: 0 },
+            ],
+          },
+          {
+            totalSteps: 4, current: false, sessions: 3, completed: 2,
+            funnel: [
+              { step: 0, reached: 3, dropOff: 1 },
+              { step: 1, reached: 2, dropOff: 0 },
+              { step: 2, reached: 2, dropOff: 0 },
+              { step: 3, reached: 2, dropOff: 0 },
+            ],
+          },
+        ],
+      }] } },
+    })
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Total Sessions')).toBeInTheDocument())
+
+    // The all-versions totals stay in the header — splitting the funnel must not
+    // hide that 5 people completed the tutorial across both shapes.
+    expect(screen.getByText(/8 plays · 5 completed/)).toBeInTheDocument()
+
+    // Both shapes are labelled with their own completion rate, so the effect of
+    // adding a section is readable; the stale one is flagged, not dropped.
+    expect(screen.getByText(/5 sections · current · 5 plays · 3 completed/)).toBeInTheDocument()
+    expect(screen.getByText(/4 sections · older app build · 3 plays · 2 completed/)).toBeInTheDocument()
+    // Two funnels, so the shared step labels appear once per version.
+    expect(screen.getAllByText('Step 1')).toHaveLength(2)
+    expect(screen.getAllByText('Step 5')).toHaveLength(1)
+    expect(screen.getAllByText('Completed')).toHaveLength(2)
+
+    // Each version's rows sit in their own bordered box, so the two funnels don't
+    // read as one long list of steps.
+    const boxes = [...document.querySelectorAll('.rounded-lg.border')]
+      .filter(el => el.querySelector('.bg-slate-100'))
+    expect(boxes).toHaveLength(2)
+    expect(within(boxes[0]).getByText(/5 sections · current/)).toBeInTheDocument()
+    expect(within(boxes[0]).getAllByText(/^Step \d$/)).toHaveLength(5)
+    expect(within(boxes[1]).getAllByText(/^Step \d$/)).toHaveLength(4)
+
+    // The live funnel is the one being read, so it takes the colour that draws
+    // the eye; the older shape recedes.
+    expect(screen.getByText(/5 sections · current/).className).toContain('text-amber-400')
+    expect(screen.getByText(/4 sections · older app build/).className).toContain('text-brand-300')
   })
 
   it('greys the names of tutorial/practice games in the per-game table', async () => {

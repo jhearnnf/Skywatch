@@ -1180,7 +1180,14 @@ function ReportsTab({ API }) {
                     bar rows' spacing so adjacent funnels stay distinguishable. */}
                 <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
                   {cbat.tutorials.map(t => {
-                    const base = t.funnel?.[0]?.reached || t.sessions || 0
+                    // A step index only means something relative to the section
+                    // count it was recorded against, so the API returns one funnel
+                    // per section count rather than blending them (see
+                    // tutorialUsage). More than one means a section was added and
+                    // older app builds are still reporting the previous shape.
+                    const versions = t.versions?.length
+                      ? t.versions
+                      : [{ totalSteps: t.totalSteps, current: true, sessions: t.sessions, completed: t.completed, funnel: t.funnel || [] }]
                     return (
                       <div key={t.key}>
                         <div className="flex items-baseline justify-between mb-2 gap-3">
@@ -1190,28 +1197,59 @@ function ReportsTab({ API }) {
                             {fmtNum(t.sessions)} plays · {fmtNum(t.completed)} completed ({fmtPct(t.completionRate)})
                           </span>
                         </div>
-                        {base === 0 ? (
+                        {t.sessions === 0 ? (
                           <p className="text-xs text-slate-500">No tutorial plays in this window.</p>
                         ) : (
-                          <div className="space-y-1.5">
-                            {t.funnel.map(s => (
-                              <div key={s.step} className="flex items-center gap-2">
-                                <span className="w-16 shrink-0 text-[11px] text-slate-500">Step {s.step + 1}</span>
-                                <div className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
-                                  <div className="h-full" style={{ width: `${(s.reached / base) * 100}%`, backgroundColor: '#5baaff' }} />
+                          /* Each version's steps are boxed so one funnel reads as a
+                             single unit — with two shapes side by side, a bare rule
+                             between them left the step rows looking like one long
+                             list. Border only: a fill would flatten the contrast of
+                             the bar tracks sitting inside it. */
+                          <div className="space-y-2.5">
+                            {versions.map(v => {
+                              const base = v.funnel?.[0]?.reached || v.sessions || 0
+                              return (
+                                <div key={v.totalSteps} className="rounded-lg border border-slate-200 px-3 py-2.5">
+                                  {/* Only worth naming the shape once there's more
+                                      than one — otherwise it's noise on every row.
+                                      Amber on the current shape, blue on the older
+                                      one: the live funnel is what's actually being
+                                      read, so it gets the colour that draws the eye
+                                      and the stale one recedes. */}
+                                  {versions.length > 1 && (
+                                    <p className={`text-[10px] mb-2 pb-1.5 border-b border-slate-100 ${v.current ? 'text-amber-400' : 'text-brand-300'}`}>
+                                      {v.totalSteps} sections{v.current ? ' · current' : ' · older app build'} ·{' '}
+                                      {fmtNum(v.sessions)} plays · {fmtNum(v.completed)} completed
+                                      {' '}({fmtPct(v.sessions ? v.completed / v.sessions : 0)})
+                                    </p>
+                                  )}
+                                  {base === 0 ? (
+                                    <p className="text-xs text-slate-500">No plays on this version.</p>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      {v.funnel.map(s => (
+                                        <div key={s.step} className="flex items-center gap-2">
+                                          <span className="w-16 shrink-0 text-[11px] text-slate-500">Step {s.step + 1}</span>
+                                          <div className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
+                                            <div className="h-full" style={{ width: `${(s.reached / base) * 100}%`, backgroundColor: '#5baaff' }} />
+                                          </div>
+                                          <span className="w-10 shrink-0 text-right text-[11px] text-slate-600">{fmtNum(s.reached)}</span>
+                                          <span className="w-12 shrink-0 text-right text-[11px] text-red-400">{s.dropOff > 0 ? `−${fmtNum(s.dropOff)}` : ''}</span>
+                                        </div>
+                                      ))}
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-16 shrink-0 text-[11px] text-emerald-400">Completed</span>
+                                        <div className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
+                                          <div className="h-full" style={{ width: `${(v.completed / base) * 100}%`, backgroundColor: '#34d399' }} />
+                                        </div>
+                                        <span className="w-10 shrink-0 text-right text-[11px] text-slate-600">{fmtNum(v.completed)}</span>
+                                        <span className="w-12 shrink-0" />
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                                <span className="w-10 shrink-0 text-right text-[11px] text-slate-600">{fmtNum(s.reached)}</span>
-                                <span className="w-12 shrink-0 text-right text-[11px] text-red-400">{s.dropOff > 0 ? `−${fmtNum(s.dropOff)}` : ''}</span>
-                              </div>
-                            ))}
-                            <div className="flex items-center gap-2">
-                              <span className="w-16 shrink-0 text-[11px] text-emerald-400">Completed</span>
-                              <div className="flex-1 h-4 rounded bg-slate-100 overflow-hidden">
-                                <div className="h-full" style={{ width: `${(t.completed / base) * 100}%`, backgroundColor: '#34d399' }} />
-                              </div>
-                              <span className="w-10 shrink-0 text-right text-[11px] text-slate-600">{fmtNum(t.completed)}</span>
-                              <span className="w-12 shrink-0" />
-                            </div>
+                              )
+                            })}
                           </div>
                         )}
                       </div>
