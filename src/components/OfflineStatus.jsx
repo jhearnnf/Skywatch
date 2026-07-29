@@ -74,9 +74,14 @@ export default function OfflineStatus() {
 
   let text, action, tone
   if (signedOut) {
+    // With nothing queued there is nothing being lost: every game route is
+    // behind RequireAuth, so a signed-out user is bounced to /login the moment
+    // they pick one. Saying "your scores aren't being saved" described a state
+    // they can't actually be in. What they need to know is that the session
+    // ended and they can't play until they sign back in.
     text = pending > 0
       ? `You're signed out — ${scores} saved. Sign in to upload them.`
-      : `You're signed out — your scores aren't being saved.`
+      : `You're signed out — sign in to keep playing.`
     action = { label: 'Sign in', onClick: () => navigate('/login') }
     tone = 'alert'
   } else if (unreachable) {
