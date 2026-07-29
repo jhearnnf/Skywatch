@@ -1407,6 +1407,41 @@ body.play-mode .card-shadow {
   animation: cbatCuePulse 1.6s ease-in-out infinite;
 }
 
+/* ── Target tutorial: symbol anatomy demo ───────────────────────────────────
+   The demo symbol is built up a mark at a time. Stroke/fill transitions let the
+   outline bleed from white into its side colour rather than snapping; the SVG
+   coordinate origin is the symbol's own centre, so the default SVG
+   transform-origin of 0 0 already scales each mark about the symbol centre. */
+.cbat-tut-symbol svg :is(circle, rect, polygon, line, g) {
+  transition: stroke 0.45s ease, fill 0.45s ease;
+}
+@keyframes cbatTutPartIn {
+  from { opacity: 0; transform: scale(0.55); }
+  to   { opacity: 1; transform: scale(1); }
+}
+/* The one mark that has just appeared. */
+.cbat-tut-part-in {
+  animation: cbatTutPartIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+/* Brightened compass while the demo teaches the facing arrow. */
+@keyframes cbatCompassPulse {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(91, 170, 255, 0)); }
+  50%      { filter: drop-shadow(0 0 6px rgba(91, 170, 255, 0.9)); }
+}
+.cbat-compass-pulse {
+  animation: cbatCompassPulse 1.2s ease-in-out infinite;
+}
+/* Triple-pulse for the single word in a Scene Target chip that belongs to the
+   mark currently being drawn. Colour + glow only — no weight or scale change, so
+   the surrounding words never reflow as the lit word moves along the label. */
+@keyframes cbatWordLit {
+  0%, 12%, 24%, 36%, 100% { color: #ddeaf8; text-shadow: none; }
+  6%, 18%, 30%            { color: #9ccaff; text-shadow: 0 0 6px rgba(91, 170, 255, 0.85); }
+}
+.cbat-word-lit {
+  animation: cbatWordLit 2.2s ease-in-out infinite;
+}
+
 /* Bouncing arrow pointing down at a scene target. left/top set inline; the
    class owns the transform so the centering offset survives the animation. */
 @keyframes cbatArrowBounce {

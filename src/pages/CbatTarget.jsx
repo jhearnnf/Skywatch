@@ -6,6 +6,10 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { getAircraftRoster } from '../lib/offlineRoster'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useCbatDemo } from '../utils/cbat/demoMode'
+import {
+  labelFor, shapeMatches, planDemoHuntTargets,
+  DEMO_TARGET, DEMO_LABEL_TOKENS, DEMO_HUNT_REQUIRED,
+} from '../utils/cbat/targetSymbols'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
@@ -89,26 +93,6 @@ function scanFrame(aircraft) {
     offsetX: (Math.random() - 0.5) * 4,   // ±2 world units
     offsetZ: (Math.random() - 0.5) * 4,
   }
-}
-
-function labelFor(t) {
-  const adj = []
-  if (t.damaged) adj.push('damaged')
-  if (t.highPriority) adj.push('high-priority')
-  adj.push(t.color)
-  let base = t.kind + 's'
-  if (t.direction) base += ` facing ${{ N: 'north', E: 'east', S: 'south', W: 'west' }[t.direction]}`
-  return adj.join(' ') + ' ' + base
-}
-
-function shapeMatches(shape, target) {
-  if (shape.fake || shape.kind === 'unknown') return false
-  if (shape.kind !== target.kind) return false
-  if (shape.color !== target.color) return false
-  if (target.damaged && !shape.damaged) return false
-  if (target.highPriority && !shape.highPriority) return false
-  if (target.direction && shape.direction !== target.direction) return false
-  return true
 }
 
 // Plan target labels and pre-generate all scene shapes + their spawn times.
@@ -284,11 +268,15 @@ const KIND_SCALE = {
   pentagon: 2.05,         // pentagons sized to match octagons
   line: 1.25,
 }
-function Shape({ shape, scale = 1 }) {
-  const { kind, color, damaged, highPriority, direction, x, y, fake, lineHorizontal } = shape
+// `partIn` names the one mark that has just appeared ('damaged' | 'priority' |
+// 'direction'); that group animates in rather than popping. Tutorial-only — the
+// live game passes nothing and renders exactly as before. `shape.strokeOverride`
+// likewise lets the tutorial draw an outline before a side colour is assigned.
+function Shape({ shape, scale = 1, partIn = null }) {
+  const { kind, color, damaged, highPriority, direction, x, y, fake, lineHorizontal, strokeOverride } = shape
   const hex = COL_HEX[color]
   const isReal = !fake && kind !== 'unknown'
-  const strokeCol = kind === 'unknown' ? COL_HEX.neutral : hex
+  const strokeCol = strokeOverride || (kind === 'unknown' ? COL_HEX.neutral : hex)
   const baseR = SHAPE_R_BASE * scale
   const box = SHAPE_BOX * scale
   const R = baseR * (KIND_SCALE[kind] || 1)
@@ -329,7 +317,7 @@ function Shape({ shape, scale = 1 }) {
   }
 
   const crosshairArms = isReal && highPriority ? (
-    <g stroke={strokeCol} strokeWidth="2.5" opacity="0.85">
+    <g className={partIn === 'priority' ? 'cbat-tut-part-in' : undefined} stroke={strokeCol} strokeWidth="2.5" opacity="0.85">
       <line x1={0} y1={-R * 1.9} x2={0} y2={-R * 1.2} />
       <line x1={0} y1={R * 1.2} x2={0} y2={R * 1.9} />
       <line x1={-R * 1.9} y1={0} x2={-R * 1.2} y2={0} />
@@ -349,7 +337,7 @@ function Shape({ shape, scale = 1 }) {
     return R * 0.55
   })()
   const damagedX = isReal && damaged ? (
-    <g stroke={strokeCol} strokeWidth="3" strokeLinecap="round">
+    <g className={partIn === 'damaged' ? 'cbat-tut-part-in' : undefined} stroke={strokeCol} strokeWidth="3" strokeLinecap="round">
       <line x1={-damagedReach} y1={-damagedReach} x2={damagedReach} y2={damagedReach} />
       <line x1={-damagedReach} y1={damagedReach} x2={damagedReach} y2={-damagedReach} />
     </g>
@@ -361,7 +349,11 @@ function Shape({ shape, scale = 1 }) {
     const tip = { N: [0, -d - 6], S: [0, d + 6], E: [d + 6, 0], W: [-d - 6, 0] }[direction]
     const base1 = { N: [-5, -d + 2], S: [-5, d - 2], E: [d - 2, -5], W: [-d + 2, -5] }[direction]
     const base2 = { N: [5, -d + 2], S: [5, d - 2], E: [d - 2, 5], W: [-d + 2, 5] }[direction]
-    arrow = <polygon points={`${tip[0]},${tip[1]} ${base1[0]},${base1[1]} ${base2[0]},${base2[1]}`} fill={strokeCol} />
+    arrow = (
+      <g className={partIn === 'direction' ? 'cbat-tut-part-in' : undefined}>
+        <polygon points={`${tip[0]},${tip[1]} ${base1[0]},${base1[1]} ${base2[0]},${base2[1]}`} fill={strokeCol} />
+      </g>
+    )
   }
 
   const leftPct = (x / 1000) * 100
@@ -415,7 +407,10 @@ function AlertCircle({ alert, scale = 1, onClick }) {
 }
 
 // ── Info panel: legend/key ───────────────────────────────────────────────────
-function InfoPanel({ highlightUnknown = false } = {}) {
+// `highlight` names one legend entry to spotlight (e.g. 'unknown', 'hostile',
+// 'damaged'). While one is named, every other entry fades so the eye lands
+// straight on the thing being taught.
+function InfoPanel({ highlight = null } = {}) {
   const Item = ({ icon, label, className = '' }) => (
     <span className={`flex items-center gap-1 whitespace-nowrap ${className}`}>
       {icon}<span>{label}</span>
@@ -424,21 +419,23 @@ function InfoPanel({ highlightUnknown = false } = {}) {
   const outlineSvg = (child) => (
     <svg width="11" height="11" viewBox="-6 -6 12 12" style={{ flexShrink: 0 }}>{child}</svg>
   )
-  // While the Key panel is spotlighted (section 1), fade every entry except
-  // "unknown" so the eye lands straight on the one the player has to decode.
-  const other = highlightUnknown ? 'opacity-20 transition-opacity duration-300' : 'transition-opacity duration-300'
+  const cls = (name) => (
+    highlight === name ? 'cbat-triple-pulse'
+      : highlight ? 'opacity-20 transition-opacity duration-300'
+      : 'transition-opacity duration-300'
+  )
   return (
     <div className="w-full h-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-1.5 py-1 text-[10px] text-[#ddeaf8] leading-[1.2]">
       <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-        <Item className={other} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#ef4444]" />} label="hostile" />
-        <Item className={other} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5baaff]" />} label="friendly" />
-        <Item className={other} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#facc15]" />} label="neutral" />
-        <Item className={other} icon={outlineSvg(<circle cx="0" cy="0" r="4.5" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="truck" />
-        <Item className={other} icon={outlineSvg(<rect x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="tank" />
-        <Item className={other} icon={outlineSvg(<polygon points="0,-5.2 -4.5,2.6 4.5,2.6" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="building" />
-        <Item className={highlightUnknown ? 'cbat-triple-pulse' : ''} icon={outlineSvg(<rect x="-3.5" y="-3.5" width="7" height="7" fill="none" stroke="#facc15" strokeWidth="1.3" transform="rotate(45)" />)} label="unknown" />
-        <Item className={other} icon={<span className="text-red-300 font-bold">✕</span>} label="damaged" />
-        <Item className={other} icon={outlineSvg(
+        <Item className={cls('hostile')} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#ef4444]" />} label="hostile" />
+        <Item className={cls('friendly')} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5baaff]" />} label="friendly" />
+        <Item className={cls('neutral')} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#facc15]" />} label="neutral" />
+        <Item className={cls('truck')} icon={outlineSvg(<circle cx="0" cy="0" r="4.5" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="truck" />
+        <Item className={cls('tank')} icon={outlineSvg(<rect x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="tank" />
+        <Item className={cls('building')} icon={outlineSvg(<polygon points="0,-5.2 -4.5,2.6 4.5,2.6" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="building" />
+        <Item className={cls('unknown')} icon={outlineSvg(<rect x="-3.5" y="-3.5" width="7" height="7" fill="none" stroke="#facc15" strokeWidth="1.3" transform="rotate(45)" />)} label="unknown" />
+        <Item className={cls('damaged')} icon={<span className="text-red-300 font-bold">✕</span>} label="damaged" />
+        <Item className={cls('hi-pri')} icon={outlineSvg(
           <g stroke="#5baaff" strokeWidth="1.5" strokeLinecap="round">
             <line x1="0" y1="-5" x2="0" y2="-2" />
             <line x1="0" y1="2" x2="0" y2="5" />
@@ -567,7 +564,12 @@ function ScanTargetPanel({ aircraft }) {
 }
 
 // ── Scene target panel ───────────────────────────────────────────────────────
-function SceneTargetPanel({ labels, diamondsActive, highlightUnknown = false }) {
+// `highlight` spotlights one chip by id. `demoChip` instead renders a single
+// chip whose words are individually spanned, so the tutorial can light the one
+// word belonging to the symbol mark it is currently drawing.
+const SCENE_TARGET_CHIP = 'inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#060e1a] border border-[#1a3a5c] rounded text-[10px] text-[#ddeaf8]'
+
+function SceneTargetPanel({ labels, diamondsActive, highlight = null, demoChip = null }) {
   const all = [
     ...(diamondsActive ? [{ id: '__unknown', text: 'unknown' }] : []),
     ...labels.map(l => ({ id: l.id, text: labelFor(l) })),
@@ -576,12 +578,31 @@ function SceneTargetPanel({ labels, diamondsActive, highlightUnknown = false }) 
     <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1.5 overflow-hidden">
       <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">Scene Targets</p>
       <div className="flex flex-wrap gap-1 overflow-hidden">
-        {all.length === 0 && <p className="text-[10px] text-slate-600 italic">none yet…</p>}
-        {all.map(l => (
-          <span key={l.id} className={`inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#060e1a] border border-[#1a3a5c] rounded text-[10px] text-[#ddeaf8] ${highlightUnknown && l.id === '__unknown' ? 'cbat-triple-pulse' : ''}`}>
-            {l.text}
+        {demoChip ? (
+          <span className={SCENE_TARGET_CHIP}>
+            {demoChip.words.map((w, i) => (
+              <span
+                key={w}
+                className={
+                  i === demoChip.litIndex ? 'cbat-word-lit'
+                    : demoChip.litIndex != null ? 'opacity-30 transition-opacity duration-300'
+                    : 'transition-opacity duration-300'
+                }
+              >
+                {w}
+              </span>
+            ))}
           </span>
-        ))}
+        ) : (
+          <>
+            {all.length === 0 && <p className="text-[10px] text-slate-600 italic">none yet…</p>}
+            {all.map(l => (
+              <span key={l.id} className={`${SCENE_TARGET_CHIP} ${highlight === l.id ? 'cbat-triple-pulse' : ''}`}>
+                {l.text}
+              </span>
+            ))}
+          </>
+        )}
       </div>
     </div>
   )
@@ -640,12 +661,14 @@ function SystemTargetPanel({ targets }) {
 }
 
 // ── Compass ──────────────────────────────────────────────────────────────────
-function Compass() {
+// `pulse` brightens the compass while the tutorial teaches the facing arrow — a
+// bare N/E/S/W marker means nothing without it.
+function Compass({ pulse = false }) {
   return (
     <svg
       width="46" height="46" viewBox="0 0 46 46"
-      className="absolute top-1.5 left-1.5 pointer-events-none"
-      style={{ zIndex: 25, opacity: 0.55 }}
+      className={`absolute top-1.5 left-1.5 pointer-events-none${pulse ? ' cbat-compass-pulse' : ''}`}
+      style={{ zIndex: 25, opacity: pulse ? 1 : 0.55 }}
     >
       <circle cx="23" cy="23" r="20" fill="#060e1a" fillOpacity="0.35" stroke="#1a3a5c" strokeWidth="1.3" />
       <polygon points="23,5 20,23 26,23" fill="#ef4444" />
@@ -773,6 +796,72 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
   )
 }
 
+// ── Tutorial section 2: symbol anatomy demo ──────────────────────────────────
+// One fixed target (DEMO_TARGET) is drawn a mark at a time so the player learns
+// that every word in a Scene Target label maps to exactly one mark on the symbol.
+const DEMO_PHASE_MS = 3000        // dwell on each mark
+const DEMO_HOLD_MS  = 2200        // hold on the finished symbol before offering Continue
+const DEMO_SCALE    = 2.6         // the demo symbol is the only thing in the scene, so draw it big
+const DEMO_STROKE_UNSET = '#ffffff'   // outline before a side colour is assigned
+// One entry per mark, in reveal order: which Key legend entry to spotlight,
+// which label token to light, and the coach copy for that mark. `part` matches
+// the group names Shape animates in via its `partIn` prop.
+const DEMO_PHASES = [
+  {
+    part: 'body', key: 'tank', token: 3,
+    caption: <>Start with the <b className="text-brand-300">shape</b>. A square is a <b className="text-brand-300">tank</b> — that's what you sweep the scene for first.</>,
+  },
+  {
+    part: 'colour', key: 'hostile', token: 2,
+    caption: <>Now the <b className="text-brand-300">colour</b>. Red means <b className="text-red-400">hostile</b> — blue is friendly, yellow neutral.</>,
+  },
+  {
+    part: 'damaged', key: 'damaged', token: 0,
+    caption: <>The <b className="text-brand-300">X</b> through the middle means <b className="text-brand-300">damaged</b>.</>,
+  },
+  {
+    part: 'priority', key: 'hi-pri', token: 1,
+    caption: <><b className="text-brand-300">Arms</b> around the outside mark it <b className="text-brand-300">high-priority</b>.</>,
+  },
+  {
+    part: 'direction', key: null, token: 4,
+    caption: <>The <b className="text-brand-300">arrow</b> shows which way it's facing — this one is heading <b className="text-brand-300">north</b>. Check the compass.</>,
+  },
+]
+const DEMO_DONE_CAPTION = (
+  <>
+    That's the whole description: a{' '}
+    <b className="text-brand-300">damaged, high-priority, hostile tank facing north</b>.
+    Every word has to match before you click it — so now go and find them.
+  </>
+)
+
+// Having had it explained, the player has to do it: hunt the matching targets out
+// of a scene salted with near misses. Only clearing them all moves the tutorial on.
+const DEMO_HUNT_CAPTION = (found) => (
+  <>
+    Click every <b className="text-brand-300">damaged, high-priority, hostile tank facing north</b>{' '}
+    in the scene — there are <b className="text-brand-300">{DEMO_HUNT_REQUIRED}</b>. Several are
+    close but wrong, so check every word before you click.{' '}
+    <b className="text-brand-300">Found {found} of {DEMO_HUNT_REQUIRED}.</b>
+  </>
+)
+
+// Cumulative symbol state for phase `i` — marks accumulate as the sequence runs.
+function demoShapeAt(i) {
+  return {
+    id: 'demo',
+    kind:  DEMO_TARGET.kind,
+    color: DEMO_TARGET.color,
+    // No side colour until the colour phase, so the outline starts white.
+    strokeOverride: i < 1 ? DEMO_STROKE_UNSET : null,
+    damaged:      i >= 2,
+    highPriority: i >= 3,
+    direction:    i >= 4 ? DEMO_TARGET.direction : null,
+    fake: false, spawnAt: 0, x: 500, y: 400,
+  }
+}
+
 // ── Tutorial / practice mode ─────────────────────────────────────────────────
 // Progressive walkthrough: panels unlock one step at a time. Each step lists the
 // panels it enables and the panels it pulses to draw the eye. More steps will be
@@ -797,6 +886,20 @@ const TUTORIAL_STEPS = [
         <b className="text-red-400">red pulsing circle</b> too — click it as fast as you can;
         in the real game these keep appearing, and the quicker you clear them the more points
         you score.
+      </>
+    ),
+  },
+  {
+    enabled: { info: true, scene: true, sceneTarget: true },
+    // Static highlight purely so none of these three panels dim — in a demo step
+    // the per-phase spotlight does the pointing, not the usual panel pulse.
+    highlight: ['scene', 'info', 'sceneTarget'],
+    demo: true,
+    title: 'Read a full target',
+    body: (
+      <>
+        Real targets aren't just a shape. Every <b className="text-brand-300">mark</b> on the symbol
+        is one <b className="text-brand-300">word</b> in its description — watch this one get built up.
       </>
     ),
   },
@@ -877,6 +980,36 @@ function planTutorialScene() {
       damaged: false, highPriority: false, direction: null,
       spawnAt: 0, fake: true, ...placeRandom(),
     })
+  }
+  return shapes
+}
+
+// Build the scene the player hunts in once section 2's explanation has played.
+// Exactly DEMO_HUNT_REQUIRED shapes match the taught description; everything else
+// is a near miss differing in one mark, so the player has to read the whole label
+// rather than pattern-match "red box".
+function planDemoHuntScene() {
+  resetPlacements()
+  const shapes = planDemoHuntTargets().map(t => ({
+    id: uid(), ...t, spawnAt: 0, fake: false, ...placeRandom(),
+  }))
+  // Unrelated shapes so the scene reads like the real game. Anything that would
+  // accidentally match is rejected — the copy promises exactly five.
+  let placed = 0
+  const filler = randRange(4, 6)
+  for (let guard = 0; placed < filler && guard < 100; guard++) {
+    const s = {
+      id: uid(),
+      kind:  pick(SHAPE_KINDS),
+      color: pick(SHAPE_COLOURS),
+      damaged:      Math.random() < 0.4,
+      highPriority: Math.random() < 0.4,
+      direction:    Math.random() < 0.4 ? pick(DIRECTIONS) : null,
+      spawnAt: 0, fake: false,
+    }
+    if (shapeMatches(s, DEMO_TARGET)) continue
+    shapes.push({ ...s, ...placeRandom() })
+    placed++
   }
   return shapes
 }
@@ -967,18 +1100,26 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   // user must click before the section will advance. Cleared once, then gone.
   const [tutAlert, setTutAlert] = useState(() => ({ id: uid(), ...randomAlertPos() }))
 
-  // Section 2 (Light) state.
+  // Section 2 (symbol anatomy) state. The section runs in three stages: 'reveal'
+  // draws the example a mark at a time, 'ready' holds the finished symbol with the
+  // recap, and 'hunt' makes the player find matching targets themselves.
+  const [demoStage, setDemoStage] = useState('reveal')
+  const [phaseIdx, setPhaseIdx] = useState(0)
+  const [huntShapes] = useState(() => planDemoHuntScene())
+  const [huntClicked, setHuntClicked] = useState(() => new Set())
+
+  // Section 3 (Light) state.
   const [lightPattern, setLightPattern] = useState(() => randomLightPattern())
   const [lightTarget] = useState(() => randomLightPattern())
   const [lightFlash, setLightFlash] = useState(false)
 
-  // Section 3 (Scan) state. The target is the first available aircraft; the
+  // Section 4 (Scan) state. The target is the first available aircraft; the
   // scan panel cycles aircraft and periodically shows the target.
   const [scanPanelAc, setScanPanelAc] = useState(null)
   const [scanFlash, setScanFlash] = useState(false)
   const scanTargetAc = aircraftList[0] || null
 
-  // Section 4 (System) state. Target code is injected below the visible fold so
+  // Section 5 (System) state. Target code is injected below the visible fold so
   // it scrolls into view; an IntersectionObserver flashes it once it's visible.
   const systemRef = useRef(null)
   const [sysColumns, setSysColumns] = useState(() => initSysColumns())
@@ -1001,6 +1142,30 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   const step = TUTORIAL_STEPS[stepIdx]
   const enabled = step?.enabled || {}
   const sequence = step?.sequence || null
+  const isDemo = !!step?.demo
+
+  // Section 2: walk the demo symbol through its marks, then hold on the finished
+  // symbol before offering the hunt. Deliberately never auto-advances out of
+  // 'ready' — a step the player only reads shouldn't pull itself away mid-sentence.
+  useEffect(() => {
+    if (!isDemo || demoStage !== 'reveal') return
+    const last = phaseIdx >= DEMO_PHASES.length - 1
+    const id = setTimeout(
+      () => (last ? setDemoStage('ready') : setPhaseIdx(i => i + 1)),
+      last ? DEMO_HOLD_MS : DEMO_PHASE_MS,
+    )
+    return () => clearTimeout(id)
+  }, [isDemo, phaseIdx, demoStage])
+
+  // The mark being drawn right now — null once the sequence has finished, so the
+  // completed symbol and its full label read plainly with nothing lit.
+  const demoPhase = isDemo && demoStage === 'reveal' ? DEMO_PHASES[phaseIdx] : null
+  const huntFound = huntClicked.size
+  const resetDemo = () => {
+    setDemoStage('reveal')
+    setPhaseIdx(0)
+    setHuntClicked(new Set())
+  }
 
   // Once the user starts clicking targets, freeze the guided spotlight cycle and
   // let them finish clicking the remaining unknown targets at their own pace.
@@ -1016,7 +1181,9 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   }, [stepIdx, sequence, engaged])
   const focus = engaged ? null : (sequence ? sequence[focusIdx % sequence.length] : null)
 
-  const isPulsing = (panel) => (!engaged && (sequence ? focus === panel : step?.highlight?.includes(panel)))
+  // A demo step's `highlight` exists only to keep its panels undimmed, so it must
+  // not also pulse them — the per-phase spotlight inside them does the pointing.
+  const isPulsing = (panel) => (!engaged && !isDemo && (sequence ? focus === panel : step?.highlight?.includes(panel)))
   const pulse = (panel) => (isPulsing(panel) ? ' cbat-tutorial-pulse' : '')
 
   // Panels this step actually uses (its spotlight sequence, or its highlight
@@ -1032,7 +1199,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   const scanActive   = !!step?.highlight?.includes('scan')
   const systemActive = !!step?.highlight?.includes('system')
 
-  // Section 2: cycle the player's light pattern so a match periodically appears.
+  // Section 3: cycle the player's light pattern so a match periodically appears.
   // Mirrors the live game — when the current pattern matches the target, hold it
   // noticeably longer so the player has time to spot it and press LOCK. The
   // effect re-runs whenever the pattern changes, re-scheduling the next change.
@@ -1046,7 +1213,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
     return () => clearTimeout(id)
   }, [enabled.light, lightPattern, lightTarget])
 
-  // Section 3: cycle the scan panel aircraft, holding a match longer (mirrors
+  // Section 4: cycle the scan panel aircraft, holding a match longer (mirrors
   // the light cycle). Re-runs on each panel change to re-schedule.
   useEffect(() => {
     if (!enabled.scan || !scanTargetAc) return
@@ -1059,7 +1226,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
     return () => clearTimeout(id)
   }, [enabled.scan, scanPanelAc, scanTargetAc, aircraftList])
 
-  // Section 4: once the System panel is shown, measure the visible height and
+  // Section 5: once the System panel is shown, measure the visible height and
   // inject the target code just below the fold so it scrolls into view rather
   // than starting on screen. Runs inside rAF so it reads post-layout sizes.
   useEffect(() => {
@@ -1098,12 +1265,14 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   }, [enabled.system, sysTarget])
 
   const visibleShapes = shapes.filter(s => !clicked.has(s.id))
+  const huntVisible = huntShapes.filter(s => !huntClicked.has(s.id))
 
   // Advance to the next section, or finish the tutorial after the last one.
   const advance = () => {
     if (stepIdx < TUTORIAL_STEPS.length - 1) {
       setEngaged(false)
       setFocusIdx(0)
+      resetDemo()
       setStepIdx(stepIdx + 1)
     } else {
       setDone(true)
@@ -1116,32 +1285,45 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
     if (idx < 0 || idx > TUTORIAL_STEPS.length - 1) return
     setEngaged(false)
     setFocusIdx(0)
+    resetDemo()
     setStepIdx(idx)
   }
 
-  const onSceneClick = (e) => {
+  // Map a scene click into scene coordinates and return the shape under it, with
+  // `prefer` winning when several overlap and distance breaking the remaining tie.
+  const hitAt = (e, pool, prefer) => {
     const rect = e.currentTarget.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) return
+    if (rect.width === 0 || rect.height === 0) return null
     const clickX = e.clientX - rect.left
     const clickY = e.clientY - rect.top
     const scaleX = rect.width / 1000
     const scaleY = rect.height / 800
-    const hits = visibleShapes.filter(s => {
+    const hits = pool.filter(s => {
       const sx = s.x * scaleX
       const sy = s.y * scaleY
       const half = SHAPE_R_BASE * shapeScale * (KIND_SCALE[s.kind] || 1) + 8
       return Math.abs(sx - clickX) <= half && Math.abs(sy - clickY) <= half
     })
-    if (hits.length === 0) return
-    // Prefer an unknown diamond when several shapes overlap the click.
+    if (hits.length === 0) return null
     hits.sort((a, b) => {
-      const p = (b.kind === 'unknown' ? 1 : 0) - (a.kind === 'unknown' ? 1 : 0)
+      const p = (prefer(b) ? 1 : 0) - (prefer(a) ? 1 : 0)
       if (p !== 0) return p
       const da = Math.hypot(a.x * scaleX - clickX, a.y * scaleY - clickY)
       const db = Math.hypot(b.x * scaleX - clickX, b.y * scaleY - clickY)
       return da - db
     })
-    const hit = hits[0]
+    return hits[0]
+  }
+
+  const flashMiss = () => {
+    setMissFlash(true)
+    setTimeout(() => setMissFlash(false), 300)
+  }
+
+  const onSceneClick = (e) => {
+    // Prefer an unknown diamond when several shapes overlap the click.
+    const hit = hitAt(e, visibleShapes, s => s.kind === 'unknown')
+    if (!hit) return
     if (hit.kind === 'unknown') {
       setClicked(prev => new Set(prev).add(hit.id))
       setEngaged(true)
@@ -1149,9 +1331,22 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
       const remaining = visibleShapes.filter(s => s.kind === 'unknown' && s.id !== hit.id).length
       if (remaining === 0 && !tutAlert) advance()
     } else {
-      setMissFlash(true)
-      setTimeout(() => setMissFlash(false), 300)
+      flashMiss()
     }
+  }
+
+  // Section 2's hunt: only shapes matching the taught description count, and
+  // clearing them all is what moves the tutorial on to the Light section.
+  const onHuntClick = (e) => {
+    const hit = hitAt(e, huntVisible, s => shapeMatches(s, DEMO_TARGET))
+    if (!hit) return
+    if (!shapeMatches(hit, DEMO_TARGET)) {
+      flashMiss()
+      return
+    }
+    const next = new Set(huntClicked).add(hit.id)
+    setHuntClicked(next)
+    if (next.size >= DEMO_HUNT_REQUIRED) advance()
   }
 
   const onTutAlertClick = () => {
@@ -1238,6 +1433,26 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
             >
               <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
               <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+              {isDemo && (
+                /* Per-mark caption, nested inside the step's own transition so it
+                   cross-fades on its own without re-sliding the whole card. */
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.p
+                    /* Keyed by stage, so the hunt's running count updates in
+                       place instead of re-animating on every target found. */
+                    key={demoStage === 'reveal' ? phaseIdx : demoStage}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2 }}
+                    className="text-sm text-[#ddeaf8] leading-relaxed mt-2 pl-2 border-l-2 border-brand-600"
+                  >
+                    {demoStage === 'reveal' ? demoPhase?.caption
+                      : demoStage === 'ready' ? DEMO_DONE_CAPTION
+                      : DEMO_HUNT_CAPTION(huntFound)}
+                  </motion.p>
+                </AnimatePresence>
+              )}
             </motion.div>
           </AnimatePresence>
           <div className="flex items-center gap-3 mt-4">
@@ -1247,6 +1462,26 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
             >
               Exit practice
             </button>
+            {isDemo && demoStage !== 'reveal' && (
+              <>
+                <button
+                  onClick={resetDemo}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-0 cursor-pointer"
+                >
+                  Replay
+                </button>
+                {/* The hunt has no button of its own — finding all five is what
+                    ends the section, so there is nothing here to press past it. */}
+                {demoStage === 'ready' && (
+                  <button
+                    onClick={() => setDemoStage('hunt')}
+                    className="ml-auto px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-xs cursor-pointer"
+                  >
+                    Find them
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       </motion.div>
@@ -1255,7 +1490,9 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
       <div className="cbat-target-arena">
         <div className="cbat-target-grid">
           <div className={`grid-info${pulse('info')}${dim('info')}`}>
-            {enabled.info ? <InfoPanel highlightUnknown={focus === 'info'} /> : <TutorialDisabledPanel label="Key" />}
+            {enabled.info
+              ? <InfoPanel highlight={isDemo ? demoPhase?.key : (focus === 'info' ? 'unknown' : null)} />
+              : <TutorialDisabledPanel label="Key" />}
           </div>
           <div className={`grid-light${pulse('light')}${dim('light')}`}>
             {enabled.light
@@ -1278,7 +1515,30 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
               : <TutorialDisabledPanel label="System" />}
           </div>
           <div className={`grid-scene${pulse('scene')}${dim('scene')}`}>
-            {enabled.scene ? (
+            {!enabled.scene ? <TutorialDisabledPanel label="Scene" />
+              : isDemo && demoStage !== 'hunt' ? (
+              /* Section 2's explanation puts one enlarged symbol in an otherwise
+                 empty scene, reusing this grid slot so the arena doesn't shift. */
+              <div className="cbat-target-scene cbat-tut-symbol relative w-full h-full border border-[#1a3a5c] rounded-lg overflow-hidden">
+                <Compass pulse={demoPhase?.part === 'direction'} />
+                <Shape
+                  shape={demoShapeAt(phaseIdx)}
+                  scale={shapeScale * DEMO_SCALE}
+                  partIn={demoPhase?.part}
+                />
+              </div>
+            ) : isDemo ? (
+              /* …then the hunt: a real scene the player has to pick out of. */
+              <div
+                className={`cbat-target-scene cbat-tut-hunt relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-[#1a3a5c]'}`}
+                onClick={onHuntClick}
+              >
+                <Compass />
+                {huntVisible.map(s => (
+                  <Shape key={s.id} shape={s} scale={shapeScale} />
+                ))}
+              </div>
+            ) : (
               <div
                 className={`cbat-target-scene relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-[#1a3a5c]'}`}
                 onClick={onSceneClick}
@@ -1300,11 +1560,16 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
                   <TutorialArrow x={tutAlert.x} y={tutAlert.y} />
                 )}
               </div>
-            ) : <TutorialDisabledPanel label="Scene" />}
+            )}
           </div>
           <div className={`grid-scene-target${pulse('sceneTarget')}${dim('sceneTarget')}`}>
             {enabled.sceneTarget
-              ? <SceneTargetPanel labels={[]} diamondsActive={diamondsActive} highlightUnknown={focus === 'sceneTarget'} />
+              ? <SceneTargetPanel
+                  labels={[]}
+                  diamondsActive={diamondsActive}
+                  highlight={focus === 'sceneTarget' ? '__unknown' : null}
+                  demoChip={isDemo ? { words: DEMO_LABEL_TOKENS, litIndex: demoPhase?.token ?? null } : null}
+                />
               : <TutorialDisabledPanel label="Scene Targets" />}
           </div>
           <div className={`grid-light-target${pulse('lightTarget')}${dim('lightTarget')}`}>
