@@ -71,4 +71,53 @@ describe('GET /api/admin/reports/cbat — tutorial usage', () => {
     expect(tut.sessions).toBe(0);
     expect(tut.funnel).toEqual([]);
   });
+
+  // Every CBAT game shipping a practice/tutorial mode must appear, not just Target.
+  it('covers all tutorial-enabled games, with Target first', async () => {
+    const res = await request(app)
+      .get('/api/admin/reports/cbat?window=all')
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+
+    expect(data.tutorials.map(t => t.key))
+      .toEqual(['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial']);
+    // Labels are derived from CBAT_GAMES, so a game rename carries through.
+    expect(data.gameLabels['flag-tutorial']).toBe('FLAG (tutorial)');
+    expect(data.gameLabels['ant-tutorial']).toBe('Airborne Numerical Test (tutorial)');
+    // All of them grey out and get a per-game row + stacked-chart series.
+    for (const key of ['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial']) {
+      expect(data.practiceKeys).toContain(key);
+      expect(data.gameKeys).toContain(key);
+      expect(data.perGame.find(g => g.key === key)?.isTutorial).toBe(true);
+    }
+  });
+
+  it('builds funnels per game, keeping one game out of another\'s counts', async () => {
+    await GameSessionCbatTutorial.create([
+      { userId: u1._id, gameKey: 'ant',  clientRunId: 'ant-a',  furthestStep: 2, totalSteps: 3, completed: true },
+      { userId: u2._id, gameKey: 'ant',  clientRunId: 'ant-b',  furthestStep: 0, totalSteps: 3, completed: false },
+      { userId: u1._id, gameKey: 'flag', clientRunId: 'flag-a', furthestStep: 1, totalSteps: 2, completed: false },
+    ]);
+
+    const res = await request(app)
+      .get('/api/admin/reports/cbat?window=all')
+      .set('Cookie', cookie);
+
+    const byKey = Object.fromEntries(res.body.data.tutorials.map(t => [t.key, t]));
+
+    expect(byKey['ant-tutorial'].sessions).toBe(2);
+    expect(byKey['ant-tutorial'].players).toBe(2);
+    expect(byKey['ant-tutorial'].completed).toBe(1);
+    expect(byKey['ant-tutorial'].funnel.map(s => s.reached)).toEqual([2, 1, 1]);
+    // The run that never left step 0 drops off between step 1 and step 2.
+    expect(byKey['ant-tutorial'].funnel[0].dropOff).toBe(1);
+
+    expect(byKey['flag-tutorial'].sessions).toBe(1);
+    expect(byKey['flag-tutorial'].completed).toBe(0);
+    expect(byKey['sat-tutorial'].sessions).toBe(0);
+    // Tutorials still stay out of the engagement headline session count.
+    expect(res.body.data.headlines.totalSessions).toBe(0);
+  });
 });

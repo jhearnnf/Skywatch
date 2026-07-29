@@ -18,12 +18,18 @@ const { OS_KEYS } = require('../constants/clientPlatforms');
 // whose key is in `practiceKeys` (built from these + the tutorial entries).
 const PRACTICE_GAME_KEYS = ['plane-turn-2d', 'plane-turn-3d'];
 
-// In-app tutorials surfaced on the Reports page. `key` is a display-only pseudo
-// game key; `gameKey` is the real CBAT game the tutorial belongs to (what the
-// GameSessionCbatTutorial rows store).
-const TUTORIAL_GAMES = [
-  { key: 'target-tutorial', gameKey: 'target', label: 'Target (tutorial)' },
-];
+// In-app tutorials surfaced on the Reports page — the CBAT games that ship a
+// practice/tutorial mode reporting progress to POST /games/cbat/:gameKey/tutorial.
+// `key` is a display-only pseudo game key; `gameKey` is the real CBAT game the
+// tutorial belongs to (what the GameSessionCbatTutorial rows store). Labels are
+// derived from CBAT_GAMES so a game rename can't leave the tutorial row stale.
+// Order here is the render order of the Tutorial Drop-off funnels.
+const TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat'];
+const TUTORIAL_GAMES = TUTORIAL_GAME_KEYS.map(gameKey => ({
+  key: `${gameKey}-tutorial`,
+  gameKey,
+  label: `${CBAT_GAMES[gameKey]?.label ?? gameKey} (tutorial)`,
+}));
 
 // Timezone for the day/hour activity heatmap and the Test Usage series. The
 // audience is UK-based, and "what time of day" only reads correctly in local
