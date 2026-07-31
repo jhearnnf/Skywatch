@@ -221,7 +221,7 @@ const appSettingsSchema = new mongoose.Schema({
       'plane-turn-2d': true, 'plane-turn-3d': true, 'trace-1': true, 'trace-2': true,
       flag: true, 'flag-easier': true, 'visualisation-2d': true, 'visualisation-3d': true,
       dpt: true, act: true,
-      'numerical-ops': true,
+      'numerical-ops': true, 'numerical-ops-easier': true,
       dad: true,
       sat: true,
       cut: true, 'cut-easier': true,

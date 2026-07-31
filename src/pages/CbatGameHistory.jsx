@@ -24,6 +24,7 @@ export const GAME_LABELS = {
   'trace-1':          'Trace 1',
   'trace-2':          'Trace 2',
   'numerical-ops':    'Numerical Operations',
+  'numerical-ops-easier': 'Numerical Operations (Easier)',
   'dad':              'Directions and Distances',
   'sat':              'Situational Awareness Test',
   'cut':              'Cognitive Updating Test',

@@ -41,6 +41,7 @@ const GameSessionCbatVisualisation3DResult = CBAT_GAMES['visualisation-3d'].Mode
 const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
 const GameSessionCbatActResult             = CBAT_GAMES['act'].Model;
 const GameSessionCbatNumericalOpsResult    = CBAT_GAMES['numerical-ops'].Model;
+const GameSessionCbatNumericalOpsEasierResult = CBAT_GAMES['numerical-ops-easier'].Model;
 const GameSessionCbatDADResult             = CBAT_GAMES['dad'].Model;
 const GameSessionCbatSatResult             = CBAT_GAMES['sat'].Model;
 const GameSessionCbatCutResult             = CBAT_GAMES['cut'].Model;
@@ -2363,15 +2364,19 @@ router.post('/cbat/angles/result', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/cbat/numerical-ops/result
-router.post('/cbat/numerical-ops/result', protect, async (req, res) => {
+// POST /api/games/cbat/numerical-ops/result and /numerical-ops-easier/result
+// Identical payloads — both difficulties run the same 20 questions in the same
+// four rounds, only the arithmetic is toned down. The difficulty is fixed by the
+// route (never read from the body) so a run can only ever land in the collection
+// its board reads from.
+async function submitNumericalOpsResult(req, res, Model) {
   try {
     const {
       correctCount, correctPercentage,
       round1Correct, round2Correct, round3Correct, round4Correct,
       totalTime, avgTimePerQuestionMs,
     } = req.body;
-    const result = await saveCbatResult(GameSessionCbatNumericalOpsResult, req, {
+    const result = await saveCbatResult(Model, req, {
       correctCount,
       correctPercentage,
       round1Correct,
@@ -2385,7 +2390,9 @@ router.post('/cbat/numerical-ops/result', protect, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-});
+}
+router.post('/cbat/numerical-ops/result', protect, (req, res) => submitNumericalOpsResult(req, res, GameSessionCbatNumericalOpsResult));
+router.post('/cbat/numerical-ops-easier/result', protect, (req, res) => submitNumericalOpsResult(req, res, GameSessionCbatNumericalOpsEasierResult));
 
 // POST /api/games/cbat/dad/result
 router.post('/cbat/dad/result', protect, async (req, res) => {
@@ -3082,6 +3089,7 @@ router.get('/cbat/act/leaderboard', protect, (req, res) => cbatLeaderboard(req, 
 router.get('/cbat/trace-1/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-1'));
 router.get('/cbat/trace-2/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-2'));
 router.get('/cbat/numerical-ops/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'numerical-ops'));
+router.get('/cbat/numerical-ops-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'numerical-ops-easier'));
 router.get('/cbat/dad/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dad'));
 router.get('/cbat/sat/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sat'));
 router.get('/cbat/cut/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'cut'));
@@ -3275,6 +3283,7 @@ router.get('/cbat/act/personal-best', protect, (req, res) => cbatPersonalBest(re
 router.get('/cbat/trace-1/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-1'));
 router.get('/cbat/trace-2/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-2'));
 router.get('/cbat/numerical-ops/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'numerical-ops'));
+router.get('/cbat/numerical-ops-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'numerical-ops-easier'));
 router.get('/cbat/dad/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dad'));
 router.get('/cbat/sat/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sat'));
 router.get('/cbat/cut/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'cut'));

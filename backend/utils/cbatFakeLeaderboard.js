@@ -32,6 +32,7 @@ const GAME_OFFSET = {
   'trace-1':         13,
   'trace-2':         19,
   'numerical-ops':   15,
+  'numerical-ops-easier': 9,
   'act':             18,
   'dad':             22,
   'cut':              3,
@@ -46,6 +47,13 @@ const GAME_OFFSET = {
 // scoreSequence (optional) overrides the step generator when a game's real
 // scores can only take specific values (e.g. ANT awards 0/5/10 per round,
 // so totals are always multiples of 5).
+// timeSequence (optional) does for times what scoreSequence does for scores,
+// and exists for a different reason: the stepped generator walks time up in
+// lockstep with score walking down, so every row is slower than the one above
+// it. On a game where speed and accuracy trade off — rush the answers and you
+// finish fast with a worse score — a perfectly anti-correlated board is the
+// tell that it's generated. An explicit sequence lets a mid-table row be the
+// quickest on the board.
 // seedTime is the fastest fake's totalTime; timeStep scales the between-row
 // deltas. Both reflect what a real completion actually looks like for each
 // game (e.g. code-duplicates is 15 rounds × ~5s display + answer ≈ 100–200s,
@@ -170,6 +178,24 @@ const FAKE_TUNING = {
     floor: 35, ceiling: 100, seedTime: 312.4, timeStep: 4.3,
     scoreSequence: [95, 90, 90, 85, 85, 80, 75, 75, 70, 65, 65, 60, 55, 55, 50, 50, 45, 40, 40, 35],
   },
+  'numerical-ops-easier': {
+    // Same 20 questions and the same 0–100 percentage ceiling as Hard — smaller
+    // numbers and times-table ×/÷ simply mean more of them land, so the band
+    // sits higher.
+    //
+    // Times are far quicker than Hard's (~312s): an easier sum is answered in a
+    // couple of seconds rather than run near the 20s timeout, so 20 questions
+    // land in roughly 40–80s.
+    //
+    // Explicitly paired with the scores rather than stepped, because on this
+    // game speed and accuracy trade off: the fastest rows on the board are
+    // MID-TABLE — someone hammering the keypad finishes in 41s with 45–60%,
+    // while a careful 95% takes 62s. A board where time rose neatly as score
+    // fell would read as generated.
+    floor: 45, ceiling: 100,
+    scoreSequence: [95,   95,   90,   90,   85,   85,   80,   80,   75,   75,   70,   70,   65,   65,   60,   60,   55,   50,   50,   45],
+    timeSequence:  [62.4, 71.8, 55.7, 68.3, 49.2, 74.6, 58.1, 66.9, 44.3, 79.5, 51.8, 63.7, 42.6, 76.2, 40.9, 69.4, 47.5, 43.8, 72.7, 41.2],
+  },
   'dad': {
     // correctCount out of 15 (Directions and Distances), higher is better. Top
     // demo of 14 stays under a perfect 15; the roster trails to 4. No hard
@@ -232,7 +258,11 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
         ? Math.min(runScore + scoreDelta, tuning.ceiling)
         : Math.max(runScore - scoreDelta, tuning.floor);
     }
-    if (i > 0) {
+    // An explicit time sequence (paired row-for-row with scoreSequence) wins;
+    // otherwise walk up from seedTime with the step deltas.
+    if (tuning.timeSequence) {
+      runTime = tuning.timeSequence[i % tuning.timeSequence.length];
+    } else if (i > 0) {
       const timeDelta = TIME_STEPS[i % TIME_STEPS.length] * tuning.timeStep;
       runTime += timeDelta;
     }
@@ -330,6 +360,9 @@ const WEEKLY_PER_PLAY = {
   'trace-1':          26,  // real med 29 (correctTurns /40)
   'trace-2':           5,  // correctCount /8 — a little below a decent single run
   'numerical-ops':    80,  // real med 90 (correctPercentage)
+  // Smaller numbers and times-table ×/÷, so a decent run scores above a decent
+  // hard one on the same 0–100 scale.
+  'numerical-ops-easier': 85,
   'dad':               9,  // correctCount /15 — a little below a decent single run
   'sat':              11,  // correctCount /18 — a little below a decent single run
   'cut':             350,  // accumulating totalScore — a little below a decent single run

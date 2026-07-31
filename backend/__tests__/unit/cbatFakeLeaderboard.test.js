@@ -19,6 +19,7 @@ const GAME_MAX = {
   'trace-1':         40,     // 5 rounds × 8 turns
   'trace-2':         8,      // 8 rounds, one question each
   'numerical-ops':   100,    // percentage 0–100
+  'numerical-ops-easier': 100,
   'dad':             15,     // 15 questions, one point each
   'sat':             18,     // 18 questions (3 situations × 6), one point each
   'cut':             null,   // accumulating score, no fixed ceiling
@@ -179,6 +180,40 @@ describe('padLeaderboard', () => {
       const fractional = fakes.filter(f => Math.round(f.bestTime * 10) % 10 !== 0);
       expect(fractional.length).toBeGreaterThan(0);
     }
+  });
+
+  it('pairs an explicit timeSequence row-for-row with its scoreSequence', () => {
+    for (const [game, tuning] of Object.entries(FAKE_TUNING)) {
+      if (!tuning.timeSequence) continue;
+      expect(tuning.scoreSequence).toBeDefined();
+      expect(tuning.timeSequence).toHaveLength(tuning.scoreSequence.length);
+      const out = padLeaderboard([], game);
+      out.filter(e => e.isFake).forEach(f => {
+        expect(tuning.timeSequence).toContain(f.bestTime);
+      });
+    }
+  });
+
+  // The stepped generator walks time up as score walks down, so every row is
+  // slower than the one above it. On Numerical Operations that's the wrong
+  // story — rushing the keypad buys speed and costs accuracy — so its Easier
+  // board carries an explicit timeSequence whose quickest rows are mid-table.
+  it('decorrelates score and time on numerical-ops-easier (rushed runs are fast AND wrong)', () => {
+    const out = padLeaderboard([], 'numerical-ops-easier');
+    const times = out.map(e => e.bestTime);
+
+    times.forEach(t => {
+      expect(t).toBeGreaterThanOrEqual(40);
+      expect(t).toBeLessThanOrEqual(80);
+    });
+
+    // Not the stepped board: times must NOT rise monotonically down the ranks.
+    const monotonic = times.every((t, i) => i === 0 || t >= times[i - 1]);
+    expect(monotonic).toBe(false);
+
+    // The fastest run on the board is not the best-scoring one.
+    const fastest = out[times.indexOf(Math.min(...times))];
+    expect(fastest.bestScore).toBeLessThan(out[0].bestScore);
   });
 
   it('FLAG fakes intentionally tie at 60.0 (fixed-60s games, real runs do the same)', () => {

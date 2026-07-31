@@ -14,6 +14,7 @@ const GameSessionCbatActResult           = require('../models/GameSessionCbatAct
 const GameSessionCbatTrace1Result        = require('../models/GameSessionCbatTrace1Result');
 const GameSessionCbatTrace2Result        = require('../models/GameSessionCbatTrace2Result');
 const GameSessionCbatNumericalOpsResult  = require('../models/GameSessionCbatNumericalOpsResult');
+const GameSessionCbatNumericalOpsEasierResult = require('../models/GameSessionCbatNumericalOpsEasierResult');
 const GameSessionCbatDADResult           = require('../models/GameSessionCbatDADResult');
 const GameSessionCbatSatResult           = require('../models/GameSessionCbatSatResult');
 const GameSessionCbatCutResult           = require('../models/GameSessionCbatCutResult');
@@ -188,6 +189,17 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better
     bestOp: '$max',
     label: 'Numerical Operations',
+  },
+  // Numerical Operations' "Easier" difficulty — smaller numbers per round, ×/÷
+  // held inside the 10 times table, and an op mix weighted toward + and −. Its
+  // own collection and therefore its own boards; the page at
+  // /cbat/numerical-ops picks the key from the selected difficulty.
+  'numerical-ops-easier': {
+    Model: GameSessionCbatNumericalOpsEasierResult,
+    primaryField: 'correctPercentage',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Numerical Operations (Easier)',
   },
   'dad': {
     Model: GameSessionCbatDADResult,

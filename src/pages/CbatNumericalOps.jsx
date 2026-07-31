@@ -8,34 +8,42 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import {
+  NUMERICAL_OPS_DIFFICULTIES, NUMERICAL_OPS_LAUNCH_MS, numericalOpsTuning, computeGrade,
+  readStoredNumericalOpsDifficulty, storeNumericalOpsDifficulty,
+} from '../utils/cbat/numericalOpsDifficulty'
 
 // ── Constants ────────────────────────────────────────────────────────────────
+// Shared by both difficulties: the round structure, the question count and the
+// clock are the same test at either setting — only the arithmetic changes (see
+// utils/cbat/numericalOpsDifficulty.js).
 const ROUNDS = 4
 const QUESTIONS_PER_ROUND = 5
 const TOTAL_QUESTIONS = ROUNDS * QUESTIONS_PER_ROUND
 const PER_QUESTION_MS = 20000
 const FEEDBACK_MS = 900
-const ROUND_MAX = [10, 25, 50, 99]
-// Weighted op pool — division is harder to satisfy (needs a clean integer
-// result) and tends to dominate when picked uniformly, so it's deliberately
-// rarer here: ÷ shows up ~1/7 of the time vs ~2/7 each for + − ×.
-const OPS = ['+', '+', '-', '-', '*', '*', '/']
 
 // ── Question generation ──────────────────────────────────────────────────────
 function randInt(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1))
 }
 
-function buildQuestion(round) {
-  const max = ROUND_MAX[round - 1]
-  const op = OPS[Math.floor(Math.random() * OPS.length)]
+function buildQuestion(round, tuning) {
+  const max = tuning.roundMax[round - 1]
+  const op = tuning.ops[Math.floor(Math.random() * tuning.ops.length)]
+  // Easier caps the SECOND operand of × and ÷ (the multiplier / divisor) so the
+  // sum stays a times-table fact while `a` still grows with the round. Hard sets
+  // no cap, which leaves both operands in [1, max] exactly as before.
+  const factorMax = tuning.factorMax ? Math.min(max, tuning.factorMax) : max
+  const bMax = (op === '*' || op === '/') ? factorMax : max
 
   // Both displayed operands kept within [1, max]; ÷ also requires a clean
   // integer result, so we retry until the random pair satisfies the rule
   // (with a generous cap for tiny ranges like round 1).
   for (let attempt = 0; attempt < 50; attempt++) {
     let a = randInt(1, max)
-    let b = randInt(1, max)
+    let b = randInt(1, bMax)
     if (op === '-') {
       if (a < b) [a, b] = [b, a]
       return { a, b, op, answer: a - b, round }
@@ -58,11 +66,11 @@ function buildQuestion(round) {
   return { a: 6, b: 2, op: '/', answer: 3, round }
 }
 
-function buildQuestions() {
+function buildQuestions(tuning) {
   const out = []
   for (let r = 1; r <= ROUNDS; r++) {
     for (let i = 0; i < QUESTIONS_PER_ROUND; i++) {
-      out.push(buildQuestion(r))
+      out.push(buildQuestion(r, tuning))
     }
   }
   return out
@@ -120,7 +128,14 @@ function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
-function ResultsScreen({ answers, totalTime }) {
+const GRADE_STYLE = {
+  'Outstanding': { emoji: '🎖️', color: 'text-green-400' },
+  'Good':        { emoji: '✈️', color: 'text-brand-300' },
+  'Needs Work':  { emoji: '🔧', color: 'text-amber-400' },
+  'Failed':      { emoji: '💥', color: 'text-red-400' },
+}
+
+function ResultsScreen({ answers, totalTime, tuning }) {
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
   const perRound = [1, 2, 3, 4].map(r => ({
@@ -128,10 +143,10 @@ function ResultsScreen({ answers, totalTime }) {
     correct: answers.filter(a => a.round === r && a.correct).length,
   }))
 
-  const grade = pct >= 90 ? { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '✈️', color: 'text-brand-300' }
-    : pct >= 50 ? { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
-    : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
+  // Bands come from the difficulty played — both share the same 100% ceiling, so
+  // an easier run has to be more accurate to earn the same grade.
+  const label = computeGrade(pct, tuning)
+  const grade = { label, ...GRADE_STYLE[label] }
 
   return (
     <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
@@ -190,7 +205,20 @@ export default function CbatNumericalOps() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
-  const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
+  const [phase, setPhase] = useState('intro') // intro | launching | playing | feedback | results
+
+  // The difficulty the instructions card is set to. Persisted, so the card opens
+  // on whatever was played last.
+  const [difficulty, setDifficulty] = useState(readStoredNumericalOpsDifficulty)
+  const tuning = numericalOpsTuning(difficulty)
+  // The difficulty the run on screen is being played at. Pinned at launch so
+  // flipping the card's selection mid-run could never redirect a finished score.
+  // The ref is what the game logic reads; the state is what the render tree
+  // reads (reading a ref during render trips react-hooks/refs).
+  const runTuningRef = useRef(tuning)
+  const [runDifficulty, setRunDifficulty] = useState(difficulty)
+  const runTuning = numericalOpsTuning(runDifficulty)
+
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     if (phase === 'playing' || phase === 'feedback') enterImmersive()
@@ -219,14 +247,17 @@ export default function CbatNumericalOps() {
   useEffect(() => { answersRef.current = answers }, [answers])
   useEffect(() => { totalElapsedRef.current = totalElapsedMs }, [totalElapsedMs])
 
-  // Fetch personal best
-  useEffect(() => {
+  // Fetch personal best. Per-difficulty (separate collections), so this refetches
+  // on every switch.
+  const fetchPB = useCallback((gameKey) => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/numerical-ops/personal-best`)
+    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
-  }, [user])
+  }, [user, apiFetch, API])
+
+  useEffect(() => { fetchPB(tuning.gameKey) }, [fetchPB, tuning.gameKey])
 
   // Submit score to backend
   const submitScore = useCallback((finalAnswers, finalTotalMs) => {
@@ -238,11 +269,14 @@ export default function CbatNumericalOps() {
     const round4Correct = finalAnswers.filter(a => a.round === 4 && a.correct).length
     const totalTime = finalTotalMs / 1000
     const avgTimePerQuestionMs = Math.round(finalTotalMs / TOTAL_QUESTIONS)
+    // The ref, not the runTuning state — this is the tuning the finished run was
+    // actually played on, whatever the card is showing now.
+    const playedTuning = runTuningRef.current
 
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: correctCount })
-    submitCbatResult(`numerical-ops`, {
+    submitCbatResult(playedTuning.gameKey, {
         correctCount, correctPercentage,
         round1Correct, round2Correct, round3Correct, round4Correct,
         totalTime, avgTimePerQuestionMs,
@@ -250,13 +284,10 @@ export default function CbatNumericalOps() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/numerical-ops/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        fetchPB(playedTuning.gameKey)
       })
       .catch(() => {})
-  }, [apiFetch, API, markGameCompleted])
+  }, [apiFetch, API, markGameCompleted, fetchPB])
 
   const currentQuestion = questions[currentIdx] || null
   const currentRound = currentQuestion ? currentQuestion.round : 1
@@ -371,8 +402,8 @@ export default function CbatNumericalOps() {
   }, [phase, currentInput, currentIdx])
 
   const startGame = useCallback(() => {
-    startTracking('numerical-ops')
-    setQuestions(buildQuestions())
+    startTracking(runTuningRef.current.gameKey)
+    setQuestions(buildQuestions(runTuningRef.current))
     setCurrentIdx(0)
     setAnswers([])
     answersRef.current = []
@@ -383,6 +414,27 @@ export default function CbatNumericalOps() {
     totalElapsedRef.current = 0
     setPhase('playing')
   }, [startTracking])
+
+  // Pressing Start doesn't drop straight into the game: the chosen difficulty
+  // button flashes on a greyed-out card for NUMERICAL_OPS_LAUNCH_MS first.
+  const beginLaunch = useCallback(() => {
+    runTuningRef.current = tuning
+    setRunDifficulty(tuning.key)
+    setPhase('launching')
+  }, [tuning])
+
+  useEffect(() => {
+    if (phase !== 'launching') return
+    const t = setTimeout(() => startGame(), NUMERICAL_OPS_LAUNCH_MS)
+    return () => clearTimeout(t)
+  }, [phase, startGame])
+
+  const chooseDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeNumericalOpsDifficulty(key)
+    // The old board's best belongs to the difficulty being left.
+    setPersonalBest(null)
+  }, [])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -402,18 +454,23 @@ export default function CbatNumericalOps() {
 
   const remainingSec = (qRemainingMs / 1000).toFixed(1)
   const correctSoFar = answers.filter(a => a.correct).length
+  const launching = phase === 'launching'
+  // During the launch flash everything on the card except the chosen difficulty
+  // button greys out, so the flashing button is the only thing left alive.
+  const dim = launching ? ' cbat-launch-dim' : ''
 
   return (
     <div className="cbat-numerical-ops-page">
       <SEO title="Numerical Operations — CBAT" description="Solve two-number arithmetic against the clock — +, −, ×, ÷." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
+      <div className={`flex items-center gap-2 mb-2${dim}`}>
+        {phase === 'intro' || launching
           ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
           : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['playing', 'feedback'].includes(phase)} />
         }
         <h1 className="text-sm font-extrabold text-slate-900">Numerical Operations</h1>
+        {(phase === 'playing' || phase === 'feedback') && <DifficultyMarker tuning={runTuning} />}
       </div>
 
       {/* Not logged in */}
@@ -433,25 +490,54 @@ export default function CbatNumericalOps() {
         <div className="flex flex-col items-center">
 
           {/* Intro screen */}
-          {phase === 'intro' && (
+          {(phase === 'intro' || launching) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
             >
-              <p className="text-4xl mb-3">🧮</p>
-              <p className="text-xl font-extrabold text-white mb-2">Numerical Operations</p>
-              <p className="text-sm text-slate-400 mb-5">
+              <p className={`text-4xl mb-3${dim}`}>🧮</p>
+
+              {/* NUMERICAL_OPS_DIFFICULTIES is ordered [easier, hard], so the
+                  easier option lands left of the title and hard lands right of
+                  it. The title is too long to sit between them on a phone, so it
+                  goes above and the pair sits under it. */}
+              <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Numerical Operations</p>
+              <div className="flex items-center justify-center gap-3 mb-1">
+                <DifficultyButton
+                  tuning={NUMERICAL_OPS_DIFFICULTIES[0]}
+                  selected={difficulty === NUMERICAL_OPS_DIFFICULTIES[0].key}
+                  onSelect={chooseDifficulty}
+                  flashing={launching && difficulty === NUMERICAL_OPS_DIFFICULTIES[0].key}
+                  dimmed={launching && difficulty !== NUMERICAL_OPS_DIFFICULTIES[0].key}
+                />
+                <DifficultyButton
+                  tuning={NUMERICAL_OPS_DIFFICULTIES[1]}
+                  selected={difficulty === NUMERICAL_OPS_DIFFICULTIES[1].key}
+                  onSelect={chooseDifficulty}
+                  flashing={launching && difficulty === NUMERICAL_OPS_DIFFICULTIES[1].key}
+                  dimmed={launching && difficulty !== NUMERICAL_OPS_DIFFICULTIES[1].key}
+                />
+              </div>
+              <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+
+              <p className={`text-sm text-slate-400 mb-5${dim}`}>
                 Solve two-number arithmetic against the clock. Four rounds of five questions, with numbers getting bigger each round. 20 seconds per question.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
+              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2${dim}`}>
                 {[1, 2, 3, 4].map(r => (
                   <div key={r} className="flex items-start gap-2 text-sm text-[#ddeaf8]">
                     <span className="text-brand-300 font-bold shrink-0">R{r}</span>
-                    <span>5 questions · numbers 1–{ROUND_MAX[r - 1]} · +, −, ×, ÷</span>
+                    <span>5 questions · numbers 1–{tuning.roundMax[r - 1]} · +, −, ×, ÷</span>
                   </div>
                 ))}
+                {tuning.factorMax && (
+                  <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1">
+                    <span className="shrink-0">✕</span>
+                    <span>× and ÷ stay inside the {tuning.factorMax} times table</span>
+                  </div>
+                )}
                 <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1">
                   <span className="shrink-0">⏱</span>
                   <span>20s per question — running out counts as wrong</span>
@@ -459,8 +545,8 @@ export default function CbatNumericalOps() {
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
                   <p className="text-lg font-mono font-bold text-brand-300">
                     {personalBest.bestScore}%
                     <span className="text-slate-500 mx-1">·</span>
@@ -470,15 +556,16 @@ export default function CbatNumericalOps() {
                 </div>
               )}
 
-              <div className="text-center mb-4">
-                <Link to="/cbat/numerical-ops/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+              <div className={`text-center mb-4${dim}`}>
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
 
               <button
-                onClick={startGame}
-                className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
+                onClick={beginLaunch}
+                disabled={launching}
+                className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}
               >
                 Start
               </button>
@@ -589,7 +676,7 @@ export default function CbatNumericalOps() {
                     className="text-center mt-2"
                   >
                     <span className="text-xs text-brand-300 font-bold">
-                      Round {currentRound} — numbers now up to {ROUND_MAX[currentRound - 1]}
+                      Round {currentRound} — numbers now up to {runTuning.roundMax[currentRound - 1]}
                     </span>
                   </motion.div>
                 )}
@@ -600,7 +687,7 @@ export default function CbatNumericalOps() {
           {/* Results */}
           {phase === 'results' && (
             <CbatGameOver
-              gameKey="numerical-ops"
+              gameKey={runTuning.gameKey}
               score={Math.round((answers.filter(a => a.correct).length / TOTAL_QUESTIONS) * 100)}
               time={totalElapsedMs / 1000}
               scoreSaved={scoreSaved}
@@ -611,6 +698,7 @@ export default function CbatNumericalOps() {
               <ResultsScreen
                 answers={answers}
                 totalTime={totalElapsedMs / 1000}
+                tuning={runTuning}
               />
             </CbatGameOver>
           )}

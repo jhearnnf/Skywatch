@@ -17,7 +17,7 @@ export const CBAT_GAMES = [
   { key: 'visualisation',    emoji: '🧊', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png' },
   { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png' },
   { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png' },
-  { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png' },
+  { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', badge: 'New Difficulty Modes' },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — track a journey of relative turns from text alone, then name the direction back to the start.', path: '/cbat/dad',             image: '/images/DAD.png' },
   // `isNew: true` surfaces a "New Game" badge on the hub tile; `badge: '…'`
   // surfaces arbitrary announcement text in the same slot (for a game that
@@ -62,7 +62,8 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'visualisation-3d':{ title: 'Visualisation 3D',  emoji: '🧊',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
   'dpt':             { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/dpt' },
   'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true },
-  'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops' },
+  'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
+  'numerical-ops-easier': { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad' },
   'sat':             { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 18, formatScore: (s) => `${s}/18`, backPath: '/cbat/sat' },
   'cut':             { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
@@ -82,6 +83,10 @@ export const CBAT_DIFFICULTY_GROUPS = {
   cut: [
     { gameKey: 'cut-easier', label: 'Easier' },
     { gameKey: 'cut',        label: 'Hard' },
+  ],
+  'numerical-ops': [
+    { gameKey: 'numerical-ops-easier', label: 'Easier' },
+    { gameKey: 'numerical-ops',        label: 'Hard' },
   ],
 }
 

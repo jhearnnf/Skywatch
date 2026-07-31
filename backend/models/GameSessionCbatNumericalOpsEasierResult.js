@@ -1,0 +1,26 @@
+const mongoose = require('mongoose');
+
+// Numerical Operations "Easier" difficulty results.
+//
+// Same shape as GameSessionCbatNumericalOpsResult, but a SEPARATE collection —
+// the two difficulties keep entirely separate leaderboards and never need
+// reading together, and a `difficulty` discriminator on the existing collection
+// would need a backfill for every pre-difficulty row (the registry's modeFilter
+// has to be a plain equality match; see GameSessionCbatCutEasierResult).
+const schema = new mongoose.Schema({
+  userId:               { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  correctCount:         { type: Number },
+  correctPercentage:    { type: Number, required: true },
+  round1Correct:        { type: Number },
+  round2Correct:        { type: Number },
+  round3Correct:        { type: Number },
+  round4Correct:        { type: Number },
+  totalTime:            { type: Number, required: true },
+  avgTimePerQuestionMs: { type: Number },
+  createdAt:            { type: Date, default: Date.now },
+});
+
+schema.index({ userId: 1, createdAt: -1 });
+schema.index({ correctPercentage: -1, totalTime: 1 });
+
+module.exports = mongoose.model('GameSessionCbatNumericalOpsEasierResult', schema);
