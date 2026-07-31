@@ -53,7 +53,7 @@ export default function LiveGameGrid({
   // Not "every game" — the wall shows a shuffled handful of what's built, and
   // the CBAT battery has tests we don't cover yet.
   heading = 'Real games, playing right now.',
-  subheading = 'These are the training games themselves. Tap any one to start.',
+  subheading = 'Select one of the games below to begin practising.',
 }) {
   const { user } = useAuth()
   const { settings } = useAppSettings() ?? {}
