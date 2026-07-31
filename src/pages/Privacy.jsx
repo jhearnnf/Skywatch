@@ -3,7 +3,9 @@ import { motion } from 'framer-motion'
 import SEO from '../components/SEO'
 
 const PRIVACY_EMAIL = 'skywatchdev@proton.me'
-const EFFECTIVE_DATE = '2 May 2026'
+// Section 11 promises changes are posted with an updated effective date, so this
+// moves whenever the policy's substance does — not on typo fixes.
+const EFFECTIVE_DATE = '31 July 2026'
 
 function Section({ title, children }) {
   return (
@@ -85,7 +87,44 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="5. Third-party services">
+        <Section title="5. What other users can see">
+          <p>
+            SkyWatch is competitive, so some of your data is shown to other people by design. This
+            is what is visible, and to whom:
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <span className="text-slate-700 font-medium">Your display name</span> — shown beside your
+              scores wherever you appear on a leaderboard. If you have not set one, only your agent
+              number (a seven-digit identifier) is shown in its place.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Agent rankings</span> — your display name or
+              agent number and your total airstars. This leaderboard can be viewed{' '}
+              <span className="text-slate-700 font-medium">without signing in</span>.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Game leaderboards</span> — your display name
+              or agent number, your scores and your completion times on each aptitude game, including
+              the weekly boards and the recent-scores feed. These require a signed-in account to view.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Homepage progress examples</span> — your
+              agent number only, never your display name. See section 4, including how to opt out.
+            </li>
+          </ul>
+          <p>
+            Your email address is never shown to other players. Administrators can see account details,
+            including email addresses, for support and moderation.
+          </p>
+          <p>
+            You control this. Your display name is yours to choose, change or remove at any time under
+            Profile → Settings → Display Name, once every 30 days. Clearing it means only your agent
+            number appears anywhere you are listed.
+          </p>
+        </Section>
+
+        <Section title="6. Third-party services">
           <p>We use the following third-party services which may process your personal data:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li><span className="text-slate-700 font-medium">Google OAuth</span> — provides sign-in functionality. Governed by Google's Privacy Policy.</li>
@@ -96,7 +135,7 @@ export default function Privacy() {
           </ul>
         </Section>
 
-        <Section title="6. Cookies and tracking">
+        <Section title="7. Cookies and tracking">
           <p>
             We use cookies and similar technologies to keep you signed in (authentication cookie) and
             to collect analytics data via PostHog. The authentication cookie is strictly necessary
@@ -112,7 +151,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="7. Data retention">
+        <Section title="8. Data retention">
           <p>
             We retain your personal data for as long as your account is active. If you request
             deletion of your account, we will remove your personal data within 30 days, except where
@@ -120,7 +159,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="8. Your rights under UK GDPR">
+        <Section title="9. Your rights under UK GDPR">
           <p>As a UK resident, you have the following rights regarding your personal data:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li><span className="text-slate-700 font-medium">Access</span> — request a copy of the data we hold about you.</li>
@@ -147,7 +186,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="9. Children">
+        <Section title="10. Children">
           <p>
             SkyWatch Academy is intended for users aged 13 and over. We do not knowingly collect
             personal data from children under the age of 13. If you believe a child under 13 has
@@ -155,7 +194,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="10. Changes to this policy">
+        <Section title="11. Changes to this policy">
           <p>
             We may update this Privacy Policy from time to time. Changes will be posted on this page
             with an updated effective date. Continued use of the app after changes are posted
