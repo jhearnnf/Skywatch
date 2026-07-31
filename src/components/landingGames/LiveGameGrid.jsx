@@ -54,7 +54,7 @@ export default function LiveGameGrid({
   // the CBAT battery has tests we don't cover yet, so nothing here promises
   // the full set. Avoid "right now" too: it read as a live feed of other
   // people's sessions.
-  heading = 'Train the skills the CBAT tests.',
+  heading = 'Practise the real CBAT subtests.',
   subheading = 'Select one of the games below to begin practising.',
 }) {
   const { user } = useAuth()
