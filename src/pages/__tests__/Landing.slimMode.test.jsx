@@ -35,6 +35,13 @@ vi.mock('../../components/landingGames/LiveGameGrid', () => ({
   default: () => <div data-testid="live-game-grid" />,
 }))
 
+// Charts need a measured container, and the real component renders nothing
+// until its fetch resolves with qualifying players. Stub it to a marker so the
+// section's position on the page can be asserted.
+vi.mock('../../components/landingGames/PlayerProgressWall', () => ({
+  default: () => <div data-testid="player-progress-wall" />,
+}))
+
 // Both registries return a non-empty scene list so each window *would* render
 // if not otherwise gated.
 vi.mock('../../components/homePreview/registries/intelBriefRegistry', () => ({
@@ -81,6 +88,24 @@ describe('Landing — slim (CBAT-only) mode', () => {
     expect(screen.queryByText('Everything You Need to Know')).toBeNull()
     expect(screen.queryByText('How It Works')).toBeNull()
     expect(screen.queryByText('Browse Subjects')).toBeNull()
+  })
+
+  // Evidence before the ask. Reversing these two leaves the page making its
+  // final request before showing any reason to say yes, and ends the page on
+  // charts with no button to press.
+  it('puts the proof wall above the closing CTA, not below it', async () => {
+    render(<Landing />)
+    const wall = await screen.findByTestId('player-progress-wall')
+    const cta = screen.getByText('Start Your Own Run.')
+    // DOCUMENT_POSITION_FOLLOWING (4) — the CTA comes after the wall.
+    expect(wall.compareDocumentPosition(cta) & 4).toBeTruthy()
+  })
+
+  it('closes with copy that follows from the evidence rather than the hero', async () => {
+    render(<Landing />)
+    await screen.findByTestId('player-progress-wall')
+    expect(screen.getByText(/Every line above began at run one/)).toBeDefined()
+    expect(screen.queryByText('Sharpen Your Edge.')).toBeNull()
   })
 
   it('points the signup CTAs at register (not the RAF onboarding flow)', () => {

@@ -152,9 +152,8 @@ describe('PlayerProgressWall', () => {
     expect(screen.getByTestId('progress-skeleton')).toBeDefined()
   })
 
-  // The page already asks twice above this section. A third ask here competed
-  // with the one directly above it, so the wall carries no CTA of its own —
-  // logged in or out.
+  // The closing card sits immediately below this section with the page's final
+  // ask, so the wall carries no CTA of its own — logged in or out.
   it('carries no call to action of its own', async () => {
     global.fetch = respondWith([panel()])
     render(<PlayerProgressWall />)

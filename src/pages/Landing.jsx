@@ -391,6 +391,19 @@ export default function Landing() {
       </section>
       </>)}
 
+      {/* ── Proof wall ─────────────────────────────────────────
+          Real players' score histories, three picked at random per page load.
+          Renders nothing when no player qualifies.
+
+          It sits directly ABOVE the closing CTA, not below it: evidence first,
+          then the ask. The other order let the page make its final request
+          before it had shown any reason to say yes, and left the page trailing
+          off on charts with no button — a visitor the charts convinced had to
+          scroll back up to act. */}
+      <Suspense fallback={null}>
+        <PlayerProgressWall />
+      </Suspense>
+
       {/* ── CTA ───────────────────────────────────────────── */}
       <section className="py-12 sm:py-20 px-5">
         <motion.div
@@ -411,10 +424,14 @@ export default function Landing() {
           </div>
 
           <div className="text-5xl mb-4">🎯</div>
-          <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>{slim ? 'Sharpen Your Edge.' : 'Aim Higher.'}</h2>
+          {/* Slim copy picks up from the progress wall directly above rather
+              than restating the hero — the old "Sharpen Your Edge" repeated the
+              hero's "Sharpen each subtest" a screen and a half earlier and
+              added no argument the charts had not already made. */}
+          <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>{slim ? 'Start Your Own Run.' : 'Aim Higher.'}</h2>
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
             {slim
-              ? 'Practise CBAT-style simulations and walk in ready.'
+              ? 'Every line above began at run one. Practise the real subtests and build yours.'
               : 'Stop skimming Wikipedia. Start actually knowing military aviation.'}
           </p>
           {user ? (
@@ -444,14 +461,6 @@ export default function Landing() {
           )}
         </motion.div>
       </section>
-
-      {/* ── Proof wall ─────────────────────────────────────────
-          Sits under the CTA and makes its case: real players' score histories,
-          three picked at random per page load. Renders nothing when no player
-          qualifies. */}
-      <Suspense fallback={null}>
-        <PlayerProgressWall />
-      </Suspense>
 
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="py-8 px-5 border-t border-slate-200 text-center">

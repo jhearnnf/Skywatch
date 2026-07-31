@@ -9,9 +9,9 @@ import { CBAT_LEADERBOARD_CONFIG } from '../../data/cbatGames'
 // GET /api/games/cbat/showcase (see backend/utils/cbatShowcase.js for who is
 // eligible and why).
 //
-// It sits directly under the closing CTA and argues the CTA's case: the card
-// above says practice works, these say it worked for these players, over this
-// many plays and this much time.
+// It sits directly above the closing CTA and argues that CTA's case before it
+// is made: these say practice worked for these players, over this many plays
+// and this much time, and the card below then asks.
 //
 // NO RAW SCORES ANYWHERE. A visitor who has never played cannot read "803" —
 // not on an axis, not in a footer. So the chart is stripped to a trend line (see
@@ -151,11 +151,11 @@ export default function PlayerProgressWall() {
         </p>
       )}
 
-      {/* No CTA of its own, deliberately. The page already carries "Start
-          Practising Free" in the hero and again in the card directly above this
-          section; a third ask a few pixels below the second one competes with it
-          rather than adding to it. This section's job is to make that button
-          worth pressing, not to duplicate it. */}
+      {/* No CTA of its own, deliberately. The closing card sits immediately
+          below this section and carries the page's final ask; a second button a
+          few pixels above it would compete with it rather than add to it. This
+          section's job is to make that button worth pressing, not to duplicate
+          it. */}
     </section>
   )
 }
