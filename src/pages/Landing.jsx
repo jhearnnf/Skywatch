@@ -431,7 +431,7 @@ export default function Landing() {
           <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>{slim ? 'Start Your Own Run.' : 'Aim Higher.'}</h2>
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
             {slim
-              ? 'Every line above began at run one. Practise the real subtests and build yours.'
+              ? 'Every line above began at run one. Start practising and build yours.'
               : 'Stop skimming Wikipedia. Start actually knowing military aviation.'}
           </p>
           {user ? (

@@ -50,11 +50,17 @@ function useIsMobile() {
 
 export default function LiveGameGrid({
   eyebrow = 'CBAT PRACTICE GAMES',
-  // Not "every game" — the wall shows a shuffled handful of what's built, and
-  // the CBAT battery has tests we don't cover yet, so nothing here promises
-  // the full set. Avoid "right now" too: it read as a live feed of other
-  // people's sessions.
-  heading = 'Practise the real CBAT subtests.',
+  // Three things this heading must not do, each learned the hard way:
+  //
+  //   • Never imply these ARE the CBAT. We do not have the real subtests and
+  //     must not suggest otherwise — "Practise the real CBAT subtests" read as
+  //     exactly that claim. These are our own simulations, and they train the
+  //     skills the real thing measures. Keep a qualifier like "CBAT-style".
+  //   • Don't say "every" — the wall shows a shuffled handful of what's built,
+  //     and the battery has subtests we don't cover yet.
+  //   • Don't say "right now" — it read as a live feed of other people's
+  //     sessions rather than cards demoing themselves.
+  heading = 'CBAT-style simulations, built to train the same skills.',
   subheading = 'Select one of the games below to begin practising.',
 }) {
   const { user } = useAuth()

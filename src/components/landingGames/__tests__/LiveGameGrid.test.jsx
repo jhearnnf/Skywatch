@@ -78,6 +78,18 @@ describe('LiveGameGrid', () => {
     expect(container.querySelector('[data-testid="live-game-grid"]')).toBeNull()
   })
 
+  // We do not have the real subtests, so the wall must never read as though we
+  // do. It must also not promise the full battery — the pool is a shuffled
+  // handful and some subtests aren't built yet.
+  it('offers simulations without claiming to be the real CBAT', () => {
+    const { container } = render(<LiveGameGrid />)
+    const text = container.textContent
+
+    expect(text).toMatch(/CBAT-style/i)
+    expect(text).not.toMatch(/the real CBAT|real CBAT (sub)?tests?|actual CBAT/i)
+    expect(text).not.toMatch(/every (part|subtest|game)/i)
+  })
+
   it('keeps the same wall across re-renders', () => {
     const { rerender } = render(<LiveGameGrid />)
     const first = ids()
