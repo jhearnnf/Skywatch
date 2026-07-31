@@ -70,12 +70,21 @@ describe('PlayerProgressWall', () => {
     expect(container.textContent).toMatch(/Real scores from real Skywatch players/i)
   })
 
-  it('shows the run count and the averages behind the percentage', async () => {
+  it('shows how many plays it took', async () => {
     global.fetch = respondWith([panel()])
     render(<PlayerProgressWall />)
 
     await waitFor(() => expect(screen.getByText(/41 runs/)).toBeDefined())
-    expect(screen.getByText('120 → 197 avg')).toBeDefined()
+  })
+
+  it('shows no raw scores — they mean nothing to someone who has not played', async () => {
+    global.fetch = respondWith([panel({ firstAvg: 120, lastAvg: 197, best: 320 })])
+    const { container } = render(<PlayerProgressWall />)
+
+    await waitFor(() => expect(screen.getByTestId('progress-card')).toBeDefined())
+    for (const score of ['120', '197', '320']) {
+      expect(container.textContent).not.toContain(score)
+    }
   })
 
   it('states elapsed time in whole weeks, never as a date', async () => {

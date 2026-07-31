@@ -13,12 +13,12 @@ import { CBAT_LEADERBOARD_CONFIG } from '../../data/cbatGames'
 // above says practice works, these say it worked for these players, over this
 // many plays and this much time.
 //
-// THE CHART CARRIES THE SHAPE, THE FOOTER CARRIES THE NUMBERS. A visitor who has
-// never played cannot read "803" on an axis, so the chart is stripped to a trend
-// line (see ImprovementChart) and the checkable figures — run count, elapsed
-// time, first→last averages — are set as text underneath where they read as
-// English. That split is what lets the graphic be simple without the section
-// becoming unfalsifiable.
+// NO RAW SCORES ANYWHERE. A visitor who has never played cannot read "803" —
+// not on an axis, not in a footer. So the chart is stripped to a trend line (see
+// ImprovementChart) and the card states only the figures that carry meaning
+// without knowing the game: how much better, over how many plays, across how
+// long. The scores themselves stay in the payload, doing their work behind the
+// percentage.
 //
 // The improvement figure is the same first-five vs last-five comparison the
 // player sees on their own "You" tab, so a player who finds themselves here
@@ -44,7 +44,6 @@ function spanPhrase(days) {
 
 function ProgressCard({ panel, index }) {
   const cfg = CBAT_LEADERBOARD_CONFIG[panel.gameKey] ?? {}
-  const formatScore = cfg.formatScore ?? ((s) => `${s}`)
 
   return (
     <motion.div
@@ -83,13 +82,13 @@ function ProgressCard({ panel, index }) {
         height={CHART_HEIGHT}
       />
 
-      {/* The numbers behind the percentage, so it can be checked rather than trusted. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-2 pt-2 border-t border-slate-200/60 intel-mono text-slate-500">
-        <span>{panel.attempts} runs · {spanPhrase(panel.spanDays)}</span>
-        <span>
-          {formatScore(panel.firstAvg)} → {formatScore(panel.lastAvg)} avg
-        </span>
-      </div>
+      {/* Effort and elapsed time only. The raw score averages used to sit here
+          too, but "679 → 872" means nothing to someone who has never played the
+          game — the percentage above already says how much better, and how much
+          better is the only part a visitor can actually read. */}
+      <p className="mt-2 pt-2 border-t border-slate-200/60 intel-mono text-slate-500">
+        {panel.attempts} runs · {spanPhrase(panel.spanDays)}
+      </p>
     </motion.div>
   )
 }
