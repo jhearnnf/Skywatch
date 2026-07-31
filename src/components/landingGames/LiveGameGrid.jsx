@@ -52,7 +52,12 @@ export default function LiveGameGrid({
   eyebrow = 'CBAT PRACTICE GAMES',
   // Not "every game" — the wall shows a shuffled handful of what's built, and
   // the CBAT battery has tests we don't cover yet.
-  heading = 'Real games, playing right now.',
+  //
+  // "Playing themselves", not "playing right now": the latter read as a live
+  // feed of other people's sessions. Nothing here is anyone's game — each card
+  // is the real game component demoing itself. "Real" still earns its place, it
+  // just has to claim the right thing (not a screenshot, not a mockup).
+  heading = 'Real games, playing themselves.',
   subheading = 'Select one of the games below to begin practising.',
 }) {
   const { user } = useAuth()
