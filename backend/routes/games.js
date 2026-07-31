@@ -25,6 +25,7 @@ const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
 const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgressSeries');
+const { buildCbatShowcase } = require('../utils/cbatShowcase');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
@@ -3147,6 +3148,18 @@ async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
   ]);
   return padLeaderboard(real, gameKey, { limit: 20, isAdmin }).filter(e => e.isFake);
 }
+
+// GET /api/games/cbat/showcase — the landing page's proof wall. Public (it runs for logged-out
+// visitors, which is the entire point) and read-only: one randomly picked top-ten player per
+// showcased game, with their score history and how far they've come. Selection rules, exclusions
+// and caching all live in utils/cbatShowcase.js.
+router.get('/cbat/showcase', async (_req, res) => {
+  try {
+    res.json({ status: 'success', data: { panels: await buildCbatShowcase() } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // GET /api/games/cbat/recent — public-to-signed-in feed of latest scores across every CBAT game.
 // Scoped to the last 24h and deduped per (user, game, mode) keeping the user's best attempt,

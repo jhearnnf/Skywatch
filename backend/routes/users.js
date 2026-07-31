@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const { effectiveTier } = require('../utils/subscription');
+const { clearShowcaseCache } = require('../utils/cbatShowcase');
 const GameSessionQuizResult              = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt             = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult     = require('../models/GameSessionOrderOfBattleResult');
@@ -149,6 +150,36 @@ router.patch('/me/difficulty', protect, async (req, res) => {
       { difficultySetting: difficulty },
       { returnDocument: 'after' }
     ).populate('rank');
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/showcase — opt in or out of the public progress wall on
+// the landing page. Body { visible: boolean }.
+//
+// This is the GDPR right-to-object route (Art. 21) for the one processing we do
+// on a legitimate-interests basis that leaves the members-only side of the app.
+// It clears the showcase cache on the way out: the wall memoises its candidate
+// pool for five minutes, and "your objection takes effect shortly" is a worse
+// answer than simply making it true immediately.
+router.patch('/me/showcase', protect, async (req, res) => {
+  try {
+    const { visible } = req.body ?? {};
+    if (typeof visible !== 'boolean') {
+      return res.status(400).json({ status: 'error', message: 'visible must be true or false' });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { hideFromShowcase: !visible },
+      { returnDocument: 'after' }
+    ).populate('rank');
+
+    clearShowcaseCache();
+
     const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
     res.json({ status: 'success', data: { user } });
   } catch (err) {

@@ -55,6 +55,14 @@ const userSchema = new mongoose.Schema(
     // a red/amber "TESTER" watermark.
     isTester: { type: Boolean, default: false },
 
+    // Opt-OUT of the public progress wall on the landing page (see
+    // utils/cbatShowcase.js). Stored as the objection rather than as consent so
+    // the default — included, anonymised behind an agent number — needs no
+    // backfill, and so a `false` here can never be mistaken for a recorded
+    // "yes". Set from Profile › Settings; honoured immediately (the route
+    // clears the showcase cache).
+    hideFromShowcase: { type: Boolean, default: false },
+
     // Subscription
     subscriptionTier: {
       type: String,

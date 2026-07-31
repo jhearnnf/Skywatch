@@ -85,6 +85,7 @@ export default function Profile() {
     return () => { alive = false }
   }, [])
   const [diffBusy,    setDiffBusy]    = useState(false)
+  const [showcaseBusy, setShowcaseBusy] = useState(false)
   const [nameEditing, setNameEditing] = useState(false)
   const [nameDraft,   setNameDraft]   = useState('')
   const [nameBusy,    setNameBusy]    = useState(false)
@@ -202,6 +203,25 @@ export default function Profile() {
       if (data?.data?.user) setUser(data.data.user)
     } catch { /* non-fatal */ }
     finally { setDiffBusy(false) }
+  }
+
+  // Opt in or out of the landing page's progress wall. Stored server-side as an
+  // objection (hideFromShowcase), so `visible` is its inverse — see
+  // backend/utils/cbatShowcase.js.
+  const showcaseVisible = !(user?.hideFromShowcase ?? false)
+  const changeShowcase = async (visible) => {
+    if (showcaseBusy || visible === showcaseVisible) return
+    setShowcaseBusy(true)
+    try {
+      const res = await apiFetch(`${API}/api/users/me/showcase`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible }),
+      })
+      const data = await res.json()
+      if (data?.data?.user) setUser(data.data.user)
+    } catch { /* non-fatal */ }
+    finally { setShowcaseBusy(false) }
   }
 
   const cycleCoins = user?.cycleAirstars ?? 0   // drives XP bar (resets per rank cycle)
@@ -490,6 +510,48 @@ export default function Profile() {
                 : <><span>Mute</span><span>Max</span></>
               }
             </div>
+          </div>
+
+          {/* Homepage feature — the opt-out for the landing page's progress wall.
+              Worded so the choice can be made without reading a policy: it says
+              exactly what appears (agent number) and exactly what does not (name,
+              dates). Shown on native too, since the wall renders in the app. */}
+          <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Homepage Feature</p>
+            <p className="text-[11px] text-slate-400 mb-3">
+              We sometimes show a player's score progress on the Skywatch homepage as an example of
+              how practice pays off. You appear as your agent number only — never your display name,
+              and never the date/time you played.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => changeShowcase(true)}
+                disabled={showcaseBusy}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                  ${showcaseVisible
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                  }`}
+              >
+                📈 Include me
+              </button>
+              <button
+                onClick={() => changeShowcase(false)}
+                disabled={showcaseBusy}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                  ${!showcaseVisible
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                  }`}
+              >
+                🚫 Leave me out
+              </button>
+            </div>
+            {!showcaseVisible && (
+              <p className="text-[11px] text-slate-400 mt-2">
+                Your scores will not appear on the homepage. This takes effect straight away.
+              </p>
+            )}
           </div>
 
           {/* Subscription — hidden in slim (native) mode and while beta tester auto-gold is active */}

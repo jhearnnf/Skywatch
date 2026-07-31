@@ -73,6 +73,14 @@ export default function Privacy() {
             <span className="text-slate-700 font-medium">Legitimate interests</span> — to understand how the app is used so we can improve it (analytics), to maintain security and prevent abuse, and to allow administrators to monitor active usage of the platform.
           </p>
           <p>
+            <span className="text-slate-700 font-medium">Public examples of progress</span> — we may
+            show examples of how players improve on our public pages. These show an agent number, a
+            run-by-run score history, and roughly how long that history spans. They never include
+            your display name, your email address, or the dates and times you played. You can opt
+            out at any time under Profile → Settings → Homepage Feature, and it takes effect
+            immediately.
+          </p>
+          <p>
             We do not sell your personal data to third parties and we do not use it for advertising.
           </p>
         </Section>

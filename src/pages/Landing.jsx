@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, Suspense } from 'react'
+import { useEffect, useState, useMemo, Suspense, lazy } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -12,6 +12,10 @@ import PreviewWindow from '../components/homePreview/PreviewWindow'
 import LiveGameGrid from '../components/landingGames/LiveGameGrid'
 import { buildIntelBriefScenes } from '../components/homePreview/registries/intelBriefRegistry'
 import { buildCbatScenes } from '../components/homePreview/registries/cbatRegistry'
+
+// Lazy purely to keep Recharts out of the landing page's first chunk — the wall
+// sits at the bottom of the page and nothing above it needs charting.
+const PlayerProgressWall = lazy(() => import('../components/landingGames/PlayerProgressWall'))
 
 const FEATURES = [
   { icon: '✈️', title: 'Learn About Military Aviation', body: 'Structured intel briefs covering aircraft, bases, roles, operations, and more — designed for aspiring aviators.' },
@@ -410,7 +414,7 @@ export default function Landing() {
           <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>{slim ? 'Sharpen Your Edge.' : 'Aim Higher.'}</h2>
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
             {slim
-              ? 'Practise the real CBAT subtests and walk in ready.'
+              ? 'Practise CBAT-style simulations and walk in ready.'
               : 'Stop skimming Wikipedia. Start actually knowing military aviation.'}
           </p>
           {user ? (
@@ -440,6 +444,14 @@ export default function Landing() {
           )}
         </motion.div>
       </section>
+
+      {/* ── Proof wall ─────────────────────────────────────────
+          Sits under the CTA and makes its case: real players' score histories,
+          three picked at random per page load. Renders nothing when no player
+          qualifies. */}
+      <Suspense fallback={null}>
+        <PlayerProgressWall />
+      </Suspense>
 
       {/* ── Footer ────────────────────────────────────────── */}
       <footer className="py-8 px-5 border-t border-slate-200 text-center">
