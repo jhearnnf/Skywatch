@@ -165,7 +165,7 @@ export default function Landing() {
           {/* Classified badge row */}
           <motion.div variants={fadeUp} custom={0} className="flex items-center justify-center gap-2 mb-8">
             <span className="classified-tag">{slim ? 'CBAT TRAINING' : 'CLASSIFIED'}</span>
-            <span className="intel-tag">FREE TO START</span>
+            <span className="intel-tag">FREE</span>
           </motion.div>
 
           <motion.h1 variants={fadeUp} custom={1} className="text-5xl sm:text-6xl font-extrabold text-slate-900 mb-5 leading-tight tracking-tight">
