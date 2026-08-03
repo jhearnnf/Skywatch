@@ -126,6 +126,25 @@ describe('CbatDonationNote — the ask', () => {
     expect(screen.queryByRole('button', { name: /already supported|not now/i })).toBeNull()
   })
 
+  // The denominator of the admin funnel stat. Reported on render rather than inferred from the
+  // server offering the note, because the server decides that while the award overlay is still
+  // covering the screen — a player who leaves there never saw the card.
+  it('reports an impression once, on render', () => {
+    const onRecord = vi.fn()
+    const { rerender } = render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={onRecord} />)
+    expect(onRecord).toHaveBeenCalledWith('shown')
+
+    // A re-render must not inflate the count.
+    rerender(<CbatDonationNote url="https://ko-fi.com/x" onRecord={onRecord} />)
+    expect(onRecord.mock.calls.filter(([a]) => a === 'shown')).toHaveLength(1)
+  })
+
+  it('reports no impression when there is no URL to show', () => {
+    const onRecord = vi.fn()
+    render(<CbatDonationNote url="" onRecord={onRecord} />)
+    expect(onRecord).not.toHaveBeenCalled()
+  })
+
   it('records a dismissal and disappears when waved away', () => {
     const onRecord = vi.fn()
     render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={onRecord} />)

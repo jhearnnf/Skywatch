@@ -9,6 +9,12 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ state: null }),
 }))
 
+vi.mock('../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({
+    settings: {}, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
+  }),
+}))
+
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     user: { _id: 'admin1', isAdmin: true, subscriptionTier: 'gold' },

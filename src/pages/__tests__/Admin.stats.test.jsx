@@ -24,9 +24,12 @@ vi.mock('../../context/UnsolvedReportsContext', () => ({
   useUnsolvedReports: () => ({ unsolvedCount: 0, unresolvedSystemLogs: 0, refresh: vi.fn() }),
 }))
 
+// Mutable so a test can flip slim mode — the Stats tab greys out the stats that measure
+// surfaces CBAT-only mode removes.
+const mockAppSettings = vi.hoisted(() => ({ value: {} }))
 vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({
-    settings: {}, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
+    settings: mockAppSettings.value, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
   }),
 }))
 
@@ -62,6 +65,7 @@ const MOCK_STATS = {
     totalUsers: 10, onlineUsers: 3, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     emailsSent: 42, emailsFailed: 7,
+    donationCardSeen: 40, donationLinkClicked: 6,
   },
   games: {
     totalGamesPlayed: 50, totalGamesCompleted: 40, totalGamesWon: 30,
@@ -107,8 +111,106 @@ function setupFetch() {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
+describe('Admin — Stats tab: donation funnel', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows clicked-through over saw-the-card, with the rate', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
+    expect(screen.getByText('6 / 40')).toBeInTheDocument()
+    expect(screen.getByText(/15% of those who saw it clicked through/)).toBeInTheDocument()
+  })
+
+  // A zero denominator must read as "nobody has seen it" rather than dividing by zero into NaN%.
+  it('says so plainly before anyone has seen the card', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({
+          status: 'success',
+          data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, donationCardSeen: 0, donationLinkClicked: 0 } },
+        }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<Admin />)
+    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
+    expect(screen.getByText(/nobody has seen the card yet/)).toBeInTheDocument()
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
+  })
+})
+
+describe('Admin — Stats tab: current time', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows a 24-hour wall clock with seconds', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Current Time')).toBeInTheDocument())
+    // Seconds are the point — a clock without them looks broken rather than idle.
+    expect(screen.getByText(/^\d{2}:\d{2}:\d{2}$/)).toBeInTheDocument()
+  })
+
+  it('advances on its own', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      render(<Admin />)
+      await waitFor(() => expect(screen.getByText('Current Time')).toBeInTheDocument())
+      const first = screen.getByText(/^\d{2}:\d{2}:\d{2}$/).textContent
+
+      await vi.advanceTimersByTimeAsync(2500)
+      expect(screen.getByText(/^\d{2}:\d{2}:\d{2}$/).textContent).not.toBe(first)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('Admin — Stats tab: CBAT-only mode', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks(); mockAppSettings.value = {} })
+
+  const SLIM_HIDDEN = ['Free', 'Trial', 'Paying Subscribers', 'Easy Mode', 'Medium Mode', 'Combined Streaks']
+
+  it('shows the full-site stats normally', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    for (const label of SLIM_HIDDEN) {
+      expect(screen.getByText(label).closest('[aria-disabled]')).toBeNull()
+    }
+    expect(screen.queryByText(/not used in CBAT-only mode/)).not.toBeInTheDocument()
+  })
+
+  // Frozen-looking cards with no explanation read as "we have zero paying users", which is a very
+  // different message from "this cannot move while the site is CBAT-only".
+  it('greys out the stats whose surfaces slim mode removes, and says why', async () => {
+    mockAppSettings.value = { slimModeEnabled: true }
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    for (const label of SLIM_HIDDEN) {
+      expect(screen.getByText(label).closest('[aria-disabled="true"]')).not.toBeNull()
+    }
+    expect(screen.getAllByText(/not used in CBAT-only mode/)).toHaveLength(SLIM_HIDDEN.length)
+  })
+
+  // Users Online and the donation funnel both still move in CBAT-only mode.
+  it('leaves the CBAT-relevant stats alone', async () => {
+    mockAppSettings.value = { slimModeEnabled: true }
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    expect(screen.getByText('Users Online').closest('[aria-disabled="true"]')).toBeNull()
+    expect(screen.getByText('Donation Link').closest('[aria-disabled="true"]')).toBeNull()
+  })
+})
+
 describe('Admin — Stats tab: collapsible sections', () => {
-  beforeEach(() => { global.fetch = setupFetch() })
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
   afterEach(() => { vi.restoreAllMocks() })
 
   it('renders the Users section open and OpenRouter Spend closed by default', async () => {

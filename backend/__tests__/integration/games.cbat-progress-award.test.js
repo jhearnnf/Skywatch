@@ -54,6 +54,9 @@ async function seedAngles(count, from, to, userId = user._id) {
 const claim = (gameKey = 'angles', c = cookie) =>
   request(app).post(`/api/games/cbat/${gameKey}/progress-award/claim`).set('Cookie', c);
 
+const record = (action, c = cookie) =>
+  request(app).post('/api/games/cbat/progress-award/donation').set('Cookie', c).send({ action });
+
 describe('POST /api/games/cbat/:gameKey/progress-award/claim', () => {
   it('awards a tier once the player has improved enough', async () => {
     await seedAngles(10, 10, 15);   // +50%
@@ -212,12 +215,7 @@ describe('the donation note attached to an award', () => {
   // only ever existed to carry one.
   it('stops after the dismissal cap but keeps awarding milestones', async () => {
     await enableDonate();
-    for (let i = 0; i < 2; i++) {
-      await request(app)
-        .post('/api/games/cbat/progress-award/donation')
-        .set('Cookie', cookie)
-        .send({ action: 'dismissed' });
-    }
+    for (let i = 0; i < 2; i++) await record('dismissed');
 
     await seedAngles(10, 10, 16);
     const res = await claim();
@@ -228,31 +226,87 @@ describe('the donation note attached to an award', () => {
   // Looking is not giving — a click-through must not count as an answer, or we would stop asking
   // people who visited the page and changed their mind.
   it('does not count a click-through as a dismissal', async () => {
-    await request(app)
-      .post('/api/games/cbat/progress-award/donation')
-      .set('Cookie', cookie)
-      .send({ action: 'clicked' });
+    await record('clicked');
 
     const saved = await User.findById(user._id).lean();
     expect(saved.donationPrompt.dismissCount).toBe(0);
+    expect(saved.donationPrompt.clickCount).toBe(1);
   });
 
   it('rejects an unknown action', async () => {
-    const res = await request(app)
-      .post('/api/games/cbat/progress-award/donation')
-      .set('Cookie', cookie)
-      .send({ action: 'whatever' });
+    const res = await record('whatever');
     expect(res.status).toBe(400);
   });
 
   // The old three-button note reported this; the control it came from is gone, so the action is
   // no longer accepted rather than being silently ignored.
   it('rejects the retired "supported" action', async () => {
-    const res = await request(app)
-      .post('/api/games/cbat/progress-award/donation')
-      .set('Cookie', cookie)
-      .send({ action: 'supported' });
+    const res = await record('supported');
     expect(res.status).toBe(400);
+  });
+});
+
+describe('the donation funnel behind the admin stat', () => {
+  it('counts an impression only when the note reports rendering', async () => {
+    await record('shown');
+
+    const saved = await User.findById(user._id).lean();
+    expect(saved.donationPrompt.impressionCount).toBe(1);
+  });
+
+  // The stat's denominator must not come from the server's decision to offer the note: that is
+  // taken while the award overlay is still up, so it would count players who left before the
+  // card ever appeared.
+  it('does not count an impression merely because the ask was offered', async () => {
+    await AppSettings.updateOne({}, {
+      $set: { progressAwardDonateEnabled: true, progressAwardDonateUrl: 'https://ko-fi.com/x' },
+    });
+    await seedAngles(10, 10, 16);
+
+    const res = await claim();
+    expect(res.body.data.donate).not.toBeNull();   // offered…
+
+    const saved = await User.findById(user._id).lean();
+    expect(saved.donationPrompt.lastShownAt).not.toBeNull();
+    expect(saved.donationPrompt.impressionCount).toBe(0);   // …but not yet seen
+  });
+
+  it('reports both legs of the funnel on the admin stats endpoint', async () => {
+    await createRank();
+    const admin = await createAdminUser({ agentNumber: '2000004' });
+
+    // One user saw it and clicked; one only saw it; one has never met it.
+    await record('shown');
+    await record('clicked');
+
+    const seenOnly = await createUser({ agentNumber: '1000002' });
+    await record('shown', authCookie(seenOnly._id));
+
+    await createUser({ agentNumber: '1000003' });
+
+    const res = await request(app).get('/api/admin/stats').set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.users.donationCardSeen).toBe(2);
+    expect(res.body.data.users.donationLinkClicked).toBe(1);
+  });
+
+  // Counted in people, not events — otherwise one enthusiast opening the link repeatedly would
+  // read as several conversions and the rate could exceed 100%.
+  it('counts a user once however many times they click', async () => {
+    await createRank();
+    const admin = await createAdminUser({ agentNumber: '2000005' });
+
+    await record('shown');
+    await record('clicked');
+    await record('clicked');
+    await record('clicked');
+
+    const res = await request(app).get('/api/admin/stats').set('Cookie', authCookie(admin._id));
+    expect(res.body.data.users.donationLinkClicked).toBe(1);
+
+    const saved = await User.findById(user._id).lean();
+    expect(saved.donationPrompt.clickCount).toBe(3);   // the raw tally still accumulates
   });
 });
 

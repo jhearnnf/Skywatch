@@ -206,13 +206,22 @@ const userSchema = new mongoose.Schema(
     // ~18 games; the ask riding on them must not. A cap that reset per device
     // (or per game) would not be a cap.
     //
-    // Two fields, because the note has two controls (see CbatDonationNote): when
-    // it was last shown, and how many times it has been waved away. There is no
-    // "already donated" flag — we cannot observe an external payment, and the
-    // dismissal cap already stops asking someone who has answered twice.
+    // `lastShownAt` and `dismissCount` drive the caps: when we last offered the
+    // note, and how many times it has been waved away. There is no "already
+    // donated" flag — we cannot observe an external payment, and the dismissal
+    // cap already stops asking someone who has answered twice.
+    //
+    // `impressionCount` and `clickCount` are the funnel behind the admin stat,
+    // and are deliberately NOT derived from the two above. `lastShownAt` is set
+    // when the SERVER decides the note is due, which happens while the award
+    // overlay is still up — a player who closes the tab there was offered it but
+    // never saw it. The impression is reported by the note itself on render, so
+    // the denominator counts people who actually laid eyes on the card.
     donationPrompt: {
-      lastShownAt:  { type: Date,   default: null },
-      dismissCount: { type: Number, default: 0 },
+      lastShownAt:     { type: Date,   default: null },
+      dismissCount:    { type: Number, default: 0 },
+      impressionCount: { type: Number, default: 0 },
+      clickCount:      { type: Number, default: 0 },
     },
   },
   { timestamps: true }

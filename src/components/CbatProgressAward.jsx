@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import Overlay from './ui/Overlay'
 import useCountUp from '../hooks/useCountUp'
@@ -142,6 +142,19 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
 // dismissible notice, which is what it is, instead of a third cluster of buttons.
 export function CbatDonationNote({ url, onRecord }) {
   const [gone, setGone] = useState(false)
+  const reported = useRef(false)
+
+  // The impression is reported from here, on render, rather than inferred from the server having
+  // decided the note was due — that decision is made while the award overlay is still covering the
+  // screen, so it would count people who left before this ever appeared. It is the denominator of
+  // the admin funnel stat, so counting it honestly is the whole point.
+  //
+  // The ref guard keeps StrictMode's double-invoke (and any remount) from double-counting.
+  useEffect(() => {
+    if (reported.current || !url) return
+    reported.current = true
+    onRecord?.('shown')
+  }, [url])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = (action) => { setGone(true); onRecord?.(action) }
 

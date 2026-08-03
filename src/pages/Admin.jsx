@@ -226,6 +226,34 @@ function StatCard({ label, value, sub, color = 'slate', disabled = false, delta,
   )
 }
 
+// A wall clock that ticks.
+//
+// Its own component so the 1Hz re-render stays here: StatsTab refetches on a 30s interval and
+// re-rendering that whole subtree every second to move one digit would be wasteful.
+//
+// The first tick is aligned to the top of the next real second — starting a bare 1000ms interval
+// leaves the display permanently up to a second behind, which is exactly the kind of drift a
+// clock is judged on. Figures are tabular so the width doesn't jitter as digits change.
+function CurrentTimeCard() {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    let interval
+    const tick = () => setNow(new Date())
+    const align = setTimeout(() => { tick(); interval = setInterval(tick, 1000) }, 1000 - (Date.now() % 1000))
+    return () => { clearTimeout(align); if (interval) clearInterval(interval) }
+  }, [])
+
+  return (
+    <StatCard
+      label="Current Time"
+      value={<span className="tabular-nums">{now.toLocaleTimeString('en-GB', { hour12: false })}</span>}
+      color="brand"
+      sub={now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+    />
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STATS TAB
 // ─────────────────────────────────────────────────────────────────────────────
@@ -248,6 +276,7 @@ function StatsSection({ title, defaultOpen = false, children }) {
 
 function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   const { apiFetch } = useAuth()
+  const { settings: appSettings } = useAppSettings()
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [error, setError] = useState('')
@@ -308,6 +337,16 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
   const pct = (n, d) => d > 0 ? `${Math.round((n / d) * 100)}%` : '—'
 
+  // Slim (CBAT-only) mode removes the surfaces some of these stats measure — quiz difficulty and
+  // the tier-gated full site — so the cards would sit there quietly frozen with no hint as to
+  // why. Greying them says "this can't move right now" rather than "this is zero".
+  //
+  // Read from the live AppSettings rather than the stats payload: it's a display concern, and it
+  // flips the moment an admin toggles slim mode instead of waiting for the 30s stats refetch.
+  const slimStat = appSettings?.slimModeEnabled === true
+    ? { disabled: true, sub: 'not used in CBAT-only mode' }
+    : {}
+
   return (
     <div className="space-y-8">
       {/* Users */}
@@ -320,14 +359,14 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           >
             <StatCard label="Users Online"      value={`${fmtNum(users.onlineUsers ?? 0)} / ${fmtNum(users.totalUsers)}`} color="brand" />
           </button>
-          <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate" />
-          <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber" />
-          <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)}   color="emerald" />
+          <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate"   {...slimStat} />
+          <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber"   {...slimStat} />
+          <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)} color="emerald" {...slimStat} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate" />
-          <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate" />
-          <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate" />
+          <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate"   {...slimStat} />
+          <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate"   {...slimStat} />
+          <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate"   {...slimStat} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <button
@@ -345,11 +384,26 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             <StatCard label="Emails Failed" value={fmtNum(users.emailsFailed)} color="red" sub="delivery failed" />
           </button>
         </div>
+        {/* Donation funnel. Counted in people, not events — one enthusiast opening the link five
+            times is one conversion, not five. The denominator is users who actually saw the card
+            (it reports its own impression), so the rate is a real click-through rate rather than
+            clicks over everyone who merely earned a milestone. */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard
+            label="Donation Link"
+            value={`${fmtNum(users.donationLinkClicked ?? 0)} / ${fmtNum(users.donationCardSeen ?? 0)}`}
+            color="amber"
+            sub={users.donationCardSeen
+              ? `${Math.round((users.donationLinkClicked / users.donationCardSeen) * 100)}% of those who saw it clicked through`
+              : 'nobody has seen the card yet'}
+          />
+        </div>
       </StatsSection>
 
       {/* Server / Performance */}
       <StatsSection title="Server & Performance" defaultOpen>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <CurrentTimeCard />
           <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="brand" />
           <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
           <StatCard

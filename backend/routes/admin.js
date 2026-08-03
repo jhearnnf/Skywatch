@@ -389,6 +389,7 @@ router.get('/stats', async (_req, res) => {
       aptitudeSyncCompleted,
       aptitudeSyncAirstarsAgg,
       emailsSent, emailsFailed,
+      donationCardSeen, donationLinkClicked,
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - 10 * 60 * 1000) } }),
@@ -475,6 +476,11 @@ router.get('/stats', async (_req, res) => {
       AptitudeSyncUsage.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$airstarsEarned', 0] } } } }]),
       EmailLog.countDocuments({ status: 'sent' }),
       EmailLog.countDocuments({ status: 'failed' }),
+      // Donation funnel, counted in USERS rather than events: "3 of 40 people who saw the card
+      // clicked through" is the question being asked, and one enthusiast opening the link five
+      // times must not read as five conversions.
+      User.countDocuments({ 'donationPrompt.impressionCount': { $gt: 0 } }),
+      User.countDocuments({ 'donationPrompt.clickCount': { $gt: 0 } }),
     ]);
 
     const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncCompleted;
@@ -488,6 +494,7 @@ router.get('/stats', async (_req, res) => {
           easyPlayers, mediumPlayers,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
+          donationCardSeen, donationLinkClicked,
         },
         games: {
           totalGamesPlayed:    totalGamesPlayed    + aptitudeSyncCompleted + aptitudeSyncAbandoned,

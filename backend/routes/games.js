@@ -3516,25 +3516,33 @@ router.post('/cbat/:gameKey/progress-award/claim', protect, async (req, res) => 
   }
 });
 
-// POST /api/games/cbat/progress-award/donation — record what the user did with the ask.
+// POST /api/games/cbat/progress-award/donation — record what happened to the ask.
 //
-// Two outcomes, matching the note's two controls: 'dismissed' counts toward the cap that
-// eventually stops us asking, and 'clicked' records a click-through.
+// 'shown' is reported by the note when it renders, and is the denominator of the admin funnel
+// stat. It is NOT inferred from the server's own decision to offer the note: that decision is
+// taken while the award overlay is still up, so a player who leaves at that point would be
+// counted as having seen a card they never saw.
 //
-// A click-through deliberately does NOT stop future asks: it means they looked, not that they
+// 'dismissed' counts toward the cap that eventually stops us asking. 'clicked' records a
+// click-through and deliberately does NOT stop future asks — it means they looked, not that they
 // gave, and we cannot observe an external Stripe payment. Someone who clicks through and donates
-// will meet the ask once more after the cooldown, and can wave it away — which costs them a
-// dismissal, and is the honest trade for not being able to see their payment.
+// meets the ask once more after the cooldown and can wave it away, which costs them a dismissal.
+// That is the honest trade for not being able to see their payment.
+const DONATION_ACTION_UPDATES = {
+  shown:     { $inc: { 'donationPrompt.impressionCount': 1 } },
+  clicked:   { $inc: { 'donationPrompt.clickCount': 1 } },
+  dismissed: { $inc: { 'donationPrompt.dismissCount': 1 } },
+};
+
 router.post('/cbat/progress-award/donation', protect, async (req, res) => {
   const { action } = req.body || {};
-  if (!['dismissed', 'clicked'].includes(action)) {
-    return res.status(400).json({ message: 'action must be dismissed or clicked' });
+  const update = DONATION_ACTION_UPDATES[action];
+  if (!update) {
+    return res.status(400).json({ message: 'action must be shown, clicked or dismissed' });
   }
 
   try {
-    if (action === 'dismissed') {
-      await User.updateOne({ _id: req.user._id }, { $inc: { 'donationPrompt.dismissCount': 1 } });
-    }
+    await User.updateOne({ _id: req.user._id }, update);
     res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
