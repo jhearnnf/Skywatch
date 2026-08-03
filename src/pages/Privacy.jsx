@@ -112,6 +112,13 @@ export default function Privacy() {
               <span className="text-slate-700 font-medium">Homepage progress examples</span> — your
               agent number only, never your display name. See section 4, including how to opt out.
             </li>
+            <li>
+              <span className="text-slate-700 font-medium">Discord medal announcements</span> — if you
+              take 1st, 2nd or 3rd place on an aptitude game's all-time leaderboard, we announce it in
+              the SkyWatch Discord server: your display name or agent number, the game, your score and
+              your new position. Everyday scores are never announced. Anyone in that Discord server can
+              see these messages, and they remain there until deleted.
+            </li>
           </ul>
           <p>
             Your email address is never shown to other players. Administrators can see account details,
@@ -129,6 +136,7 @@ export default function Privacy() {
           <ul className="list-disc pl-5 space-y-1">
             <li><span className="text-slate-700 font-medium">Google OAuth</span> — provides sign-in functionality. Governed by Google's Privacy Policy.</li>
             <li><span className="text-slate-700 font-medium">PostHog</span> — EU-hosted analytics platform. Collects usage behaviour, session replays, and device info. Data is stored within the EU.</li>
+            <li><span className="text-slate-700 font-medium">Discord</span> — receives leaderboard medal announcements (display name or agent number, game and score). Governed by Discord's Privacy Policy.</li>
             <li><span className="text-slate-700 font-medium">Vercel</span> — hosts the frontend application.</li>
             <li><span className="text-slate-700 font-medium">Railway</span> — hosts the backend API.</li>
             <li><span className="text-slate-700 font-medium">MongoDB Atlas</span> — stores your account and usage data.</li>
