@@ -4831,6 +4831,10 @@ function ContentTab({ API }) {
   const [modal,       setModal]       = useState(null)
   const [toast,       setToast]       = useState('')
   const [emailBusy,   setEmailBusy]   = useState(false)
+  const [discordBusy, setDiscordBusy] = useState(false)
+  // Whether DISCORD_WEBHOOK_URL is set on the server. Never the URL itself — the
+  // API only reports the boolean.
+  const [discordReady, setDiscordReady] = useState(true)
   const { apiFetch } = useAuth()
 
   const load = useCallback(() => {
@@ -4846,6 +4850,7 @@ function ContentTab({ API }) {
           })
           setDraft(merged)
         }
+        setDiscordReady(d.data?.discordWebhookConfigured !== false)
       })
   }, [API])
 
@@ -4876,6 +4881,19 @@ function ContentTab({ API }) {
       setToast('✗ Failed to send test email')
     } finally {
       setEmailBusy(false)
+    }
+  }
+
+  const sendTestDiscord = async () => {
+    setDiscordBusy(true)
+    try {
+      const res  = await apiFetch(`${API}/api/admin/discord/test`, { method: 'POST', credentials: 'include' })
+      const data = await res.json()
+      setToast(data.status === 'success' ? `✓ ${data.message}` : `✗ ${data.message}`)
+    } catch {
+      setToast('✗ Failed to post to Discord')
+    } finally {
+      setDiscordBusy(false)
     }
   }
 
@@ -4962,6 +4980,37 @@ function ContentTab({ API }) {
           ConfirmModal={ConfirmModal}
           Toast={Toast}
         />
+      </Section>
+
+      {/* ── Discord ───────────────────────────────────────────────── */}
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Discord</p>
+
+      <Section title="Medal Broadcasts" collapsible onSave={() => save('Update Discord Broadcasts', ['discordBroadcastEnabled'])}>
+        <Toggle
+          label="Post new medals to Discord"
+          hint="When a player takes 1st, 2nd or 3rd on a game's all-time leaderboard, announce it in the Discord channel. Ordinary scores are never posted."
+          checked={draft.discordBroadcastEnabled ?? false}
+          onChange={v => setDraft(p => ({ ...p, discordBroadcastEnabled: v }))}
+          disabled={!discordReady}
+          disabledHint="DISCORD_WEBHOOK_URL is not set on the server, so nothing can be posted."
+        />
+        <p className="text-[11px] text-slate-400 pt-2">
+          Players are named the same way the leaderboard names them — display name, or agent
+          number if they have not set one. Email addresses are never posted.
+        </p>
+        <div className="pt-3">
+          <button
+            onClick={sendTestDiscord}
+            disabled={discordBusy || !discordReady}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-40"
+          >
+            {discordBusy ? 'Posting…' : '💬 Send Test Message'}
+          </button>
+          <p className="text-[11px] text-slate-400 mt-1.5">
+            Posts a sample medal message to the configured channel. Works whether or not the toggle
+            above is on, so you can check the webhook before going live.
+          </p>
+        </div>
       </Section>
 
       {/* ── Generated Content ─────────────────────────────────────── */}
