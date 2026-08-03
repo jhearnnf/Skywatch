@@ -45,7 +45,7 @@ const { autoLinkKeywords, buildTitleRejectCheck } = require('../utils/keywordLin
 const { validateBriefTitleForCategory } = require('../utils/airframeValidation');
 const { reprioritizeCategory } = require('../utils/priorityRanking');
 const { lookupRankOrderByTitle } = require('../constants/rankOrder');
-const { NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
+const { NATIVE_PLATFORMS, OS_KEYS } = require('../constants/clientPlatforms');
 const {
   compactRankOrder,
   setRankOrder: setLeadRankOrder,
@@ -1246,6 +1246,27 @@ router.get('/users/search', async (req, res) => {
       latestNativeReleases(),
     ]);
     res.json({ status: 'success', data: { users: enriched, latestClients } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/users/lookup?q= — identity-only search for pickers.
+// Deliberately separate from /users/search: that one enriches every hit with
+// per-user stats and a latest-release comparison, which is far too much work
+// for a type-ahead. This returns just enough to render a name and post an id.
+router.get('/users/lookup', async (req, res) => {
+  try {
+    const q = (req.query.q ?? '').toString().trim();
+    if (!q) return res.json({ status: 'success', data: { users: [] } });
+
+    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const users = await User.find(
+      { $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }] },
+      'agentNumber email displayName',
+    ).sort({ isAdmin: -1, createdAt: 1 }).limit(20).lean();
+
+    res.json({ status: 'success', data: { users } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -6100,6 +6121,25 @@ const { getRecentCommits } = require('../utils/github');
 
 const UPDATE_NOTIF_IMAGE_MODES = ['none', 'placeholder', 'custom', 'upload'];
 
+// Targeting arrays are "empty means everyone" (see models/UpdateNotification),
+// so anything unrecognised is dropped rather than rejected — a stale OS key or
+// a deleted user's id must not block the save, it just stops narrowing the
+// audience. De-duplicated so the stored list stays tidy.
+function parseTargetOs(raw) {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map(v => String(v ?? '').trim().toLowerCase()).filter(v => OS_KEYS.includes(v)))];
+}
+
+function parseTargetUsers(raw) {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw
+    // Accept either bare ids or the populated objects the editor renders as chips.
+    .map(v => (v && typeof v === 'object' ? v._id : v))
+    .map(v => String(v ?? '').trim())
+    .filter(v => mongoose.isValidObjectId(v));
+  return [...new Set(ids)];
+}
+
 // Normalize the editor payload before save. Strips imageUrl when mode is 'none'
 // or 'placeholder', coerces empty strings on date fields to null, trims strings,
 // validates required shape. Returns either { ok: true, payload } or { ok: false, error }.
@@ -6149,6 +6189,8 @@ function parseUpdateNotificationPayload(body) {
       targetPath: (body.targetPath ?? '').toString().trim(),
       responsesEnabled: !!body.responsesEnabled,
       applyToExistingOnly: !!body.applyToExistingOnly,
+      targetOs:    parseTargetOs(body.targetOs),
+      targetUsers: parseTargetUsers(body.targetUsers),
     },
   };
 }
@@ -6165,6 +6207,9 @@ router.get('/update-notifications', async (req, res) => {
         .skip((page - 1) * limit)
         .limit(limit)
         .populate('createdBy', 'agentNumber email')
+        // Populated so the editor can show who a targeted notification is for
+        // without a second round-trip per row.
+        .populate('targetUsers', 'agentNumber email displayName')
         .lean(),
       UpdateNotification.countDocuments({}),
     ]);

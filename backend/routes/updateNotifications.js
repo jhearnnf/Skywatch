@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const UpdateNotification = require('../models/UpdateNotification');
+const { osFromUserAgent } = require('../constants/clientPlatforms');
 
 // All endpoints require an authenticated user.
 router.use(protect);
@@ -18,6 +19,15 @@ function existingOnlyClause(user) {
       { applyToExistingOnly: true, validFrom: null, createdAt: { $gte: userCreatedAt } },
     ],
   };
+}
+
+// Which OS the reader is on right now. Native clients run in a webview whose
+// User-Agent still names the platform, so the same inference the heartbeat uses
+// works here. Null when unrecognisable, which means only notifications with no
+// OS targeting at all will match — a stray UA must never be treated as "on
+// every OS" and leak a Windows-only announcement to an iPhone.
+function currentOs(req) {
+  return osFromUserAgent(req.headers['user-agent']);
 }
 
 // GET /api/update-notifications/current?path=<pathname>
@@ -42,6 +52,7 @@ router.get('/current', async (req, res) => {
         ...(active.$and || []),
         { $or: [{ targetPath: '' }, { targetPath: path }] },
         existingOnlyClause(req.user),
+        ...UpdateNotification.audienceClauses(userId, currentOs(req)),
       ],
     };
 
@@ -60,6 +71,8 @@ router.get('/current', async (req, res) => {
     }
 
     delete doc.viewedBy;
+    // Never ship the recipient list to a reader — it names other accounts.
+    delete doc.targetUsers;
     res.json({ status: 'success', data: { notification: doc } });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
@@ -78,10 +91,11 @@ router.get('/history', async (req, res) => {
       $and: [
         ...(active.$and || []),
         existingOnlyClause(req.user),
+        ...UpdateNotification.audienceClauses(req.user._id, currentOs(req)),
       ],
     };
     const docs = await UpdateNotification
-      .find(filter, { viewedBy: 0 })
+      .find(filter, { viewedBy: 0, targetUsers: 0 })
       .sort({ createdAt: -1 })
       .lean();
     res.json({ status: 'success', data: { notifications: docs } });

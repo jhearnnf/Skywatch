@@ -413,3 +413,170 @@ describe('GET /api/update-notifications/history', () => {
     expect(res.body.data.notifications[0].viewedBy).toBeUndefined();
   });
 });
+
+// User-Agents that exercise each branch of osFromUserAgent. An Android UA also
+// contains "Linux", which is exactly the overlap the targeting must get right.
+const UA = {
+  windows: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+  mac:     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15',
+  linux:   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
+  ios:     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1',
+  android: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
+};
+
+const currentAs = (user, os) => request(app)
+  .get('/api/update-notifications/current')
+  .set('Cookie', authCookie(user._id))
+  .set('User-Agent', UA[os]);
+
+describe('update notification OS targeting', () => {
+  beforeEach(async () => {
+    await createRank();
+    await createSettings();
+  });
+
+  it('shows a targeted notification only on a listed OS', async () => {
+    const user = await createUser();
+    await createNotification({ title: 'windows-only', targetOs: ['windows'] });
+
+    const onWindows = await currentAs(user, 'windows');
+    expect(onWindows.body.data.notification.title).toBe('windows-only');
+
+    const onAndroid = await currentAs(user, 'android');
+    expect(onAndroid.body.data.notification).toBeNull();
+  });
+
+  it('treats an empty targetOs as every OS', async () => {
+    const user = await createUser();
+    await createNotification({ title: 'everyone', targetOs: [] });
+
+    for (const os of Object.keys(UA)) {
+      const res = await currentAs(user, os);
+      expect(res.body.data.notification?.title).toBe('everyone');
+    }
+  });
+
+  it('treats a notification saved before OS targeting existed as every OS', async () => {
+    const user = await createUser();
+    const n = await createNotification({ title: 'legacy' });
+    // Simulate a pre-existing document: the field is absent, not empty.
+    await UpdateNotification.collection.updateOne({ _id: n._id }, { $unset: { targetOs: '' } });
+
+    const res = await currentAs(user, 'ios');
+    expect(res.body.data.notification.title).toBe('legacy');
+  });
+
+  it('supports several OSes on one notification', async () => {
+    const user = await createUser();
+    await createNotification({ title: 'mobile', targetOs: ['ios', 'android'] });
+
+    expect((await currentAs(user, 'ios')).body.data.notification.title).toBe('mobile');
+    expect((await currentAs(user, 'android')).body.data.notification.title).toBe('mobile');
+    expect((await currentAs(user, 'linux')).body.data.notification).toBeNull();
+  });
+
+  it('does not mistake an Android client for Linux', async () => {
+    const user = await createUser();
+    await createNotification({ title: 'linux-only', targetOs: ['linux'] });
+
+    // The Android UA contains "Linux" — it must not match a Linux-only notice.
+    expect((await currentAs(user, 'android')).body.data.notification).toBeNull();
+    expect((await currentAs(user, 'linux')).body.data.notification.title).toBe('linux-only');
+  });
+
+  it('hides OS-targeted notifications when the OS cannot be determined', async () => {
+    const user = await createUser();
+    await createNotification({ title: 'targeted', targetOs: ['windows'] });
+
+    const res = await request(app)
+      .get('/api/update-notifications/current')
+      .set('Cookie', authCookie(user._id))
+      .set('User-Agent', 'curl/8.0.1');
+    expect(res.body.data.notification).toBeNull();
+  });
+
+  it('filters history by OS too', async () => {
+    const user = await createUser();
+    await createNotification({ title: 'all' });
+    await createNotification({ title: 'ios-only', targetOs: ['ios'] });
+
+    const res = await request(app)
+      .get('/api/update-notifications/history')
+      .set('Cookie', authCookie(user._id))
+      .set('User-Agent', UA.windows);
+    expect(res.body.data.notifications.map(n => n.title)).toEqual(['all']);
+  });
+});
+
+describe('update notification per-user targeting', () => {
+  beforeEach(async () => {
+    await createRank();
+    await createSettings();
+  });
+
+  it('shows a targeted notification only to listed users', async () => {
+    const chosen = await createUser({ email: 'chosen@test.com', agentNumber: '900001' });
+    const other  = await createUser({ email: 'other@test.com',  agentNumber: '900002' });
+    await createNotification({ title: 'for-chosen', targetUsers: [chosen._id] });
+
+    const forChosen = await request(app)
+      .get('/api/update-notifications/current')
+      .set('Cookie', authCookie(chosen._id));
+    expect(forChosen.body.data.notification.title).toBe('for-chosen');
+
+    const forOther = await request(app)
+      .get('/api/update-notifications/current')
+      .set('Cookie', authCookie(other._id));
+    expect(forOther.body.data.notification).toBeNull();
+  });
+
+  it('treats an empty targetUsers as everyone', async () => {
+    const user = await createUser();
+    await createNotification({ title: 'everyone', targetUsers: [] });
+
+    const res = await request(app)
+      .get('/api/update-notifications/current')
+      .set('Cookie', authCookie(user._id));
+    expect(res.body.data.notification.title).toBe('everyone');
+  });
+
+  it('never leaks the recipient list to the reader', async () => {
+    const chosen = await createUser({ email: 'chosen@test.com', agentNumber: '900003' });
+    await createNotification({ title: 'private', targetUsers: [chosen._id] });
+
+    const current = await request(app)
+      .get('/api/update-notifications/current')
+      .set('Cookie', authCookie(chosen._id));
+    expect(current.body.data.notification.targetUsers).toBeUndefined();
+
+    const history = await request(app)
+      .get('/api/update-notifications/history')
+      .set('Cookie', authCookie(chosen._id));
+    expect(history.body.data.notifications[0].targetUsers).toBeUndefined();
+  });
+
+  it('requires BOTH filters to pass — a listed user on the wrong OS sees nothing', async () => {
+    const chosen = await createUser({ email: 'chosen@test.com', agentNumber: '900004' });
+    await createNotification({ title: 'narrow', targetUsers: [chosen._id], targetOs: ['ios'] });
+
+    expect((await currentAs(chosen, 'windows')).body.data.notification).toBeNull();
+    expect((await currentAs(chosen, 'ios')).body.data.notification.title).toBe('narrow');
+  });
+
+  it('filters history by user too', async () => {
+    const chosen = await createUser({ email: 'chosen@test.com', agentNumber: '900005' });
+    const other  = await createUser({ email: 'other@test.com',  agentNumber: '900006' });
+    await createNotification({ title: 'all' });
+    await createNotification({ title: 'chosen-only', targetUsers: [chosen._id] });
+
+    const forOther = await request(app)
+      .get('/api/update-notifications/history')
+      .set('Cookie', authCookie(other._id));
+    expect(forOther.body.data.notifications.map(n => n.title)).toEqual(['all']);
+
+    const forChosen = await request(app)
+      .get('/api/update-notifications/history')
+      .set('Cookie', authCookie(chosen._id));
+    expect(forChosen.body.data.notifications.map(n => n.title)).toEqual(['chosen-only', 'all']);
+  });
+});

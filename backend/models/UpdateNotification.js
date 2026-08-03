@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { OS_KEYS } = require('../constants/clientPlatforms');
 
 const IMAGE_MODES = ['none', 'placeholder', 'custom', 'upload'];
 
@@ -53,6 +54,19 @@ const updateNotificationSchema = new mongoose.Schema({
   // that don't make sense to new joiners ("we just launched X").
   applyToExistingOnly: { type: Boolean, default: false },
 
+  // Operating systems this notification is for, from OS_KEYS. EMPTY MEANS EVERY
+  // OS — not "no OS" — so an untargeted notification behaves exactly as it did
+  // before this field existed. The OS is the one the reader is on *right now*
+  // (derived from the request User-Agent), not every OS they've ever used, so a
+  // Windows-only announcement stays hidden when that same account opens the
+  // Android app.
+  targetOs:    { type: [String], enum: OS_KEYS, default: [] },
+
+  // Specific recipients. EMPTY MEANS EVERYONE. When non-empty, only these users
+  // ever see the notification — it stacks with (does not override) targetOs and
+  // applyToExistingOnly, so a listed user on the wrong OS still sees nothing.
+  targetUsers: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [] },
+
   createdBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 
   viewedBy:   { type: [viewedBySchema], default: [] },
@@ -61,6 +75,7 @@ const updateNotificationSchema = new mongoose.Schema({
 // Selection rule helper indexes.
 updateNotificationSchema.index({ enabled: 1, validFrom: 1, expiresAt: 1, createdAt: -1 });
 updateNotificationSchema.index({ 'viewedBy.userId': 1 });
+updateNotificationSchema.index({ targetUsers: 1 });
 
 // Build the Mongo filter for "active right now" (enabled + inside time window).
 updateNotificationSchema.statics.activeFilter = function (now = new Date()) {
@@ -71,6 +86,27 @@ updateNotificationSchema.statics.activeFilter = function (now = new Date()) {
       { $or: [{ expiresAt: null }, { expiresAt: { $gte: now } }] },
     ],
   };
+};
+
+// Clause for an "empty means everyone" targeting array: matches docs where the
+// field is absent (notifications written before the field existed), explicitly
+// null, or an empty array — plus any doc that lists `value`. A null/undefined
+// `value` means we could not work out what the reader is, so only untargeted
+// notifications qualify.
+function untargetedOrIncludes(field, value) {
+  const anyone = { [field]: { $in: [null, []] } };
+  if (value === null || value === undefined) return anyone;
+  return { $or: [anyone, { [field]: value }] };
+}
+
+// Every "is this notification for this reader?" clause except the time window:
+// OS targeting and per-user targeting. `os` is the reader's current OS key (see
+// osFromUserAgent) or null when it could not be determined.
+updateNotificationSchema.statics.audienceClauses = function (userId, os) {
+  return [
+    untargetedOrIncludes('targetOs', os || null),
+    untargetedOrIncludes('targetUsers', userId || null),
+  ];
 };
 
 updateNotificationSchema.statics.IMAGE_MODES = IMAGE_MODES;

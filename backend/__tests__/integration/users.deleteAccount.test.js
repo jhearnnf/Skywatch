@@ -164,6 +164,49 @@ describe('deleteUserAndData — anonymisation', () => {
     // The deleted user's free-text answer is gone with their entry.
     expect(JSON.stringify(after.viewedBy)).not.toContain('my private free-text answer');
   });
+
+  it('pulls the user out of a notification aimed at several people, leaving the rest', async () => {
+    const user  = await createUser();
+    const other = await createUser();
+
+    const notif = await UpdateNotification.create({
+      title: 'Update', body: 'Body', targetUsers: [user._id, other._id],
+    });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    const after = await UpdateNotification.findById(notif._id);
+    expect(after.targetUsers.map(String)).toEqual([String(other._id)]);
+    // Still aimed at someone, so it stays live.
+    expect(after.enabled).toBe(true);
+  });
+
+  it('disables a notification aimed only at the deleted user rather than broadcasting it', async () => {
+    const user = await createUser();
+
+    const notif = await UpdateNotification.create({
+      title: 'Just for you', body: 'Body', targetUsers: [user._id],
+    });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    const after = await UpdateNotification.findById(notif._id);
+    expect(after.targetUsers).toEqual([]);
+    // An empty targetUsers means "everyone" — this must not quietly become a
+    // site-wide announcement because its only recipient closed their account.
+    expect(after.enabled).toBe(false);
+  });
+
+  it('leaves an untargeted notification alone', async () => {
+    const user = await createUser();
+    const notif = await UpdateNotification.create({ title: 'For all', body: 'Body' });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    const after = await UpdateNotification.findById(notif._id);
+    expect(after.enabled).toBe(true);
+    expect(after.targetUsers).toEqual([]);
+  });
 });
 
 describe('DELETE /api/admin/users/:id', () => {

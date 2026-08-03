@@ -119,6 +119,20 @@ async function deleteUserAndData(userId) {
     { $pull: { viewedBy: { userId: id } } },
   );
 
+  //    Their id also has to come out of any notification aimed specifically at
+  //    them. Order matters: an empty targetUsers means "everyone", so a notice
+  //    written for this one person would start broadcasting the moment their id
+  //    was pulled. Those are disabled first, then emptied — an admin can review
+  //    and re-enable, which is the recoverable direction to fail in.
+  await model('UpdateNotification').updateMany(
+    { targetUsers: { $all: [id], $size: 1 } },
+    { $set: { enabled: false } },
+  );
+  await model('UpdateNotification').updateMany(
+    { targetUsers: id },
+    { $pull: { targetUsers: id } },
+  );
+
   // 4. Audit + ops trails: keep the event, drop the person.
   await model('SystemLog').updateMany({ userId: id }, { $set: { userId: null } });
   await model('AdminAction').updateMany({ userId: id },       { $set: { userId: null } });

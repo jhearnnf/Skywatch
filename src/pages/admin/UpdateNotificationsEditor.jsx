@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { PAGE_OPTIONS, pageLabelForValue } from '../../constants/pages'
+import { TARGET_OS_OPTIONS, osSummary } from '../../constants/targetOs'
 import Overlay from '../../components/ui/Overlay'
 import RichTextEditor from '../../components/ui/RichTextEditor'
 import renderNotificationBody from '../../utils/renderNotificationBody'
@@ -25,6 +26,14 @@ const EMPTY_DRAFT = {
   targetPath: '',
   responsesEnabled: false,
   applyToExistingOnly: false,
+  // Both default to empty, which means "no narrowing": every OS, everyone.
+  targetOs:    [],
+  targetUsers: [], // populated { _id, email, agentNumber, displayName } objects
+}
+
+// Best label we have for a user in a chip or a search hit.
+function userLabel(u) {
+  return u?.displayName || u?.email || u?.agentNumber || '(unknown user)'
 }
 
 // Convert an ISO date string (or null) to the value expected by
@@ -97,6 +106,12 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
       targetPath: n.targetPath ?? '',
       responsesEnabled: !!n.responsesEnabled,
       applyToExistingOnly: !!n.applyToExistingOnly,
+      targetOs:    Array.isArray(n.targetOs) ? [...n.targetOs] : [],
+      // The list endpoint populates these, but tolerate bare ids so a row
+      // fetched from anywhere else still renders a (minimal) chip.
+      targetUsers: Array.isArray(n.targetUsers)
+        ? n.targetUsers.map(u => (typeof u === 'string' ? { _id: u } : u)).filter(Boolean)
+        : [],
     }
     setDraft(next)
     setSavedDraft(next)
@@ -236,6 +251,8 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
           // datetime-local emits 'yyyy-MM-ddTHH:mm' with no zone — let Date() interpret as local.
           validFrom: draft.validFrom ? new Date(draft.validFrom).toISOString() : '',
           expiresAt: draft.expiresAt ? new Date(draft.expiresAt).toISOString() : '',
+          // Chips carry full user objects for display; the API stores ids.
+          targetUsers: draft.targetUsers.map(u => u._id),
           reason,
         }
         const res = await apiFetch(url, {
@@ -362,6 +379,22 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                         title="Only users registered before the cutoff see this"
                       >
                         existing only
+                      </span>
+                    )}
+                    {(n.targetOs?.length > 0) && (
+                      <span
+                        className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700"
+                        title={`Only shows on ${osSummary(n.targetOs)}`}
+                      >
+                        {osSummary(n.targetOs)}
+                      </span>
+                    )}
+                    {(n.targetUsers?.length > 0) && (
+                      <span
+                        className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700"
+                        title={n.targetUsers.map(userLabel).join(', ')}
+                      >
+                        {n.targetUsers.length} user{n.targetUsers.length === 1 ? '' : 's'}
                       </span>
                     )}
                   </div>
@@ -510,6 +543,8 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 </Field>
               </div>
 
+              {/* Empty targetPath is the "any page" default, same as an empty
+                  targeting array — so the dim test is the same shape. */}
               <Field label="Target page">
                 <select
                   value={draft.targetPath}
@@ -520,6 +555,40 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+              </Field>
+
+              <Field label="Operating systems">
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {TARGET_OS_OPTIONS.map(opt => (
+                    <label key={opt.value} className="flex items-center gap-2 text-sm text-text">
+                      <input
+                        type="checkbox"
+                        checked={draft.targetOs.includes(opt.value)}
+                        onChange={e => setDraft(d => ({
+                          ...d,
+                          targetOs: e.target.checked
+                            ? [...d.targetOs, opt.value]
+                            : d.targetOs.filter(v => v !== opt.value),
+                        }))}
+                      />
+                      <span>{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {draft.targetOs.length === 0
+                    ? 'None selected — shows on every operating system.'
+                    : `Only shows to readers currently on ${osSummary(draft.targetOs)}.`}
+                </p>
+              </Field>
+
+              <Field label="Specific users">
+                <UserTargetPicker
+                  API={API}
+                  apiFetch={apiFetch}
+                  selected={draft.targetUsers}
+                  onChange={next => setDraft(d => ({ ...d, targetUsers: next }))}
+                />
               </Field>
 
               <label className="flex items-center gap-2 mt-2 text-sm text-text">
@@ -775,6 +844,137 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
           onCancel={() => setConfirmOp(null)}
         />
       )}
+    </div>
+  )
+}
+
+// Type-ahead for narrowing a notification to named users. Selected users are
+// held as full objects (chips need something to render); the parent maps them
+// down to ids on save. Kept at module scope, not inlined in the editor's
+// render, so typing here doesn't remount the input on every keystroke.
+function UserTargetPicker({ API, apiFetch, selected, onChange }) {
+  const [query,    setQuery]    = useState('')
+  const [results,  setResults]  = useState([])
+  const [busy,     setBusy]     = useState(false)
+  const [searched, setSearched] = useState(false)
+
+  const selectedIds = useMemo(
+    () => new Set((selected ?? []).map(u => String(u._id))),
+    [selected],
+  )
+
+  // Debounced lookup. `cancelled` guards against an in-flight response for an
+  // older query landing after a newer one and overwriting the results.
+  useEffect(() => {
+    const q = query.trim()
+    if (!q) {
+      setResults([])
+      setSearched(false)
+      setBusy(false)
+      return
+    }
+    let cancelled = false
+    setBusy(true)
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch(
+          `${API}/api/admin/users/lookup?q=${encodeURIComponent(q)}`,
+          { credentials: 'include' },
+        )
+        const data = await res.json()
+        if (!cancelled) setResults(data?.data?.users ?? [])
+      } catch {
+        if (!cancelled) setResults([])
+      } finally {
+        if (!cancelled) {
+          setSearched(true)
+          setBusy(false)
+        }
+      }
+    }, 250)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [query, API, apiFetch])
+
+  function addUser(u) {
+    if (selectedIds.has(String(u._id))) return
+    onChange([...(selected ?? []), u])
+    setQuery('')
+  }
+
+  function removeUser(id) {
+    onChange((selected ?? []).filter(u => String(u._id) !== String(id)))
+  }
+
+  return (
+    <div>
+      <input
+        type="search"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Search by name, email or agent number…"
+        aria-label="Search users"
+        className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none focus:ring-2 focus:ring-brand-600/40"
+      />
+
+      {query.trim() && (
+        <div className="mt-1.5 rounded-xl border border-slate-200 bg-surface max-h-40 overflow-y-auto">
+          {busy ? (
+            <p className="text-xs text-slate-500 px-3 py-2">Searching…</p>
+          ) : results.length === 0 ? (
+            <p className="text-xs text-slate-500 px-3 py-2">{searched ? 'No users found.' : 'Type to search.'}</p>
+          ) : (
+            <ul className="divide-y divide-slate-200">
+              {results.map(u => {
+                const already = selectedIds.has(String(u._id))
+                return (
+                  <li key={u._id}>
+                    <button
+                      type="button"
+                      disabled={already}
+                      onClick={() => addUser(u)}
+                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+                    >
+                      <span className="block text-sm text-text truncate">{userLabel(u)}</span>
+                      <span className="block text-[11px] text-slate-400 truncate">
+                        Agent {u.agentNumber || '—'}{u.email ? ` · ${u.email}` : ''}{already ? ' · already added' : ''}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {(selected ?? []).length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {selected.map(u => (
+            <span
+              key={u._id}
+              className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full bg-brand-50 text-brand-700"
+            >
+              {userLabel(u)}
+              <button
+                type="button"
+                aria-label={`Remove ${userLabel(u)}`}
+                onClick={() => removeUser(u._id)}
+                className="text-brand-700 hover:text-red-700"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <p className="text-[11px] text-slate-500 mt-1">
+        {(selected ?? []).length === 0
+          ? 'None selected — shows to everyone.'
+          : selected.length === 1
+            ? 'Only this user will see it.'
+            : `Only these ${selected.length} users will see it.`}
+      </p>
     </div>
   )
 }

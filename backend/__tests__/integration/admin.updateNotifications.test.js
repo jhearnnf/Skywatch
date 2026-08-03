@@ -566,3 +566,159 @@ describe('POST /api/admin/update-notifications/ai-summarize', () => {
     expect(res.body.data.commitsUsed).toBe(0);
   });
 });
+
+describe('update notification audience targeting (admin)', () => {
+  it('persists targetOs and targetUsers', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({ email: 'target@test.com' });
+
+    const res = await request(app)
+      .post('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        title: 't', body: 'b', reason: 'r',
+        targetOs:    ['windows', 'android'],
+        targetUsers: [String(target._id)],
+      });
+    expect(res.status).toBe(201);
+
+    const fresh = await UpdateNotification.findById(res.body.data.notification._id);
+    expect(fresh.targetOs).toEqual(['windows', 'android']);
+    expect(fresh.targetUsers.map(String)).toEqual([String(target._id)]);
+  });
+
+  it('defaults both to empty when omitted', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 't', body: 'b', reason: 'r' });
+    expect(res.status).toBe(201);
+
+    const fresh = await UpdateNotification.findById(res.body.data.notification._id);
+    expect(fresh.targetOs).toEqual([]);
+    expect(fresh.targetUsers).toEqual([]);
+  });
+
+  it('drops unrecognised OS keys and invalid ids rather than failing the save', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .post('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        title: 't', body: 'b', reason: 'r',
+        targetOs:    ['Windows', 'solaris', 'windows', ''],
+        targetUsers: ['not-an-id', null],
+      });
+    expect(res.status).toBe(201);
+
+    const fresh = await UpdateNotification.findById(res.body.data.notification._id);
+    // Case-insensitive, de-duplicated, unknown keys discarded.
+    expect(fresh.targetOs).toEqual(['windows']);
+    expect(fresh.targetUsers).toEqual([]);
+  });
+
+  it('accepts populated user objects as well as bare ids', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({ email: 'chip@test.com' });
+
+    const res = await request(app)
+      .post('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id))
+      .send({
+        title: 't', body: 'b', reason: 'r',
+        targetUsers: [{ _id: String(target._id), email: 'chip@test.com' }],
+      });
+    expect(res.status).toBe(201);
+
+    const fresh = await UpdateNotification.findById(res.body.data.notification._id);
+    expect(fresh.targetUsers.map(String)).toEqual([String(target._id)]);
+  });
+
+  it('clears targeting on edit when the arrays come back empty', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({ email: 'was-targeted@test.com' });
+    const doc = await UpdateNotification.create({
+      title: 't', body: 'b', targetOs: ['ios'], targetUsers: [target._id],
+    });
+
+    const res = await request(app)
+      .put(`/api/admin/update-notifications/${doc._id}`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ title: 't', body: 'b', reason: 'r', targetOs: [], targetUsers: [] });
+    expect(res.status).toBe(200);
+
+    const fresh = await UpdateNotification.findById(doc._id);
+    expect(fresh.targetOs).toEqual([]);
+    expect(fresh.targetUsers).toEqual([]);
+  });
+
+  it('populates targetUsers on the admin list so the editor can label them', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({ email: 'shown@test.com' });
+    await UpdateNotification.create({ title: 't', body: 'b', targetUsers: [target._id] });
+
+    const res = await request(app)
+      .get('/api/admin/update-notifications')
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data.notifications[0].targetUsers[0].email).toBe('shown@test.com');
+  });
+});
+
+describe('GET /api/admin/users/lookup', () => {
+  it('403s for non-admins', async () => {
+    const user = await createUser();
+    const res = await request(app)
+      .get('/api/admin/users/lookup?q=test')
+      .set('Cookie', authCookie(user._id));
+    expect(res.status).toBe(403);
+  });
+
+  it('matches on email, agent number and display name', async () => {
+    const admin = await createAdminUser();
+    const u = await createUser({ email: 'findme@test.com', agentNumber: '7654321', displayName: 'Maverick' });
+
+    for (const q of ['findme', '65432', 'maver']) {
+      const res = await request(app)
+        .get(`/api/admin/users/lookup?q=${q}`)
+        .set('Cookie', authCookie(admin._id));
+      expect(res.status).toBe(200);
+      expect(res.body.data.users.map(x => String(x._id))).toContain(String(u._id));
+    }
+  });
+
+  it('returns identity fields only — no stats, no password', async () => {
+    const admin = await createAdminUser();
+    await createUser({ email: 'lean@test.com' });
+
+    const res = await request(app)
+      .get('/api/admin/users/lookup?q=lean@test.com')
+      .set('Cookie', authCookie(admin._id));
+    const hit = res.body.data.users[0];
+    // Nothing beyond what a picker row needs — in particular no stats block and
+    // no credentials.
+    expect(Object.keys(hit).sort()).toEqual(
+      expect.arrayContaining(['_id', 'email']),
+    );
+    expect(Object.keys(hit).every(k => ['_id', 'agentNumber', 'email', 'displayName'].includes(k))).toBe(true);
+  });
+
+  it('returns an empty list for a blank query instead of erroring', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .get('/api/admin/users/lookup?q=  ')
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data.users).toEqual([]);
+  });
+
+  it('treats regex punctuation in the query as literal text', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .get('/api/admin/users/lookup?q=' + encodeURIComponent('a.*+('))
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data.users).toEqual([]);
+  });
+});
