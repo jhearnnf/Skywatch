@@ -3813,6 +3813,16 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
   )
 }
 
+// Tester emphasis in the users list — the red watermarked row, the pulsing idle
+// border and the tester-first sort order — is only useful while a beta round is
+// running. Admins doing anything else want a plain list, so the whole treatment
+// is behind one toggle whose state persists across sessions.
+const TESTER_FX_KEY = 'admin:users:testerHighlights'
+
+const readTesterFx = () => {
+  try { return localStorage.getItem(TESTER_FX_KEY) !== '0' } catch { return true }
+}
+
 function UsersTab({ API, onViewEmailHistory }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -3832,6 +3842,12 @@ function UsersTab({ API, onViewEmailHistory }) {
   const [tierPanel,   setTierPanel]   = useState(null) // user._id of open panel
   const [expanded,    setExpanded]    = useState(() => new Set()) // user._ids expanded
   const [latestClients, setLatestClients] = useState({}) // newest native release per platform
+  const [testerFx, setTesterFx] = useState(readTesterFx) // tester wash + pulse + sort priority
+
+  const toggleTesterFx = (on) => {
+    setTesterFx(on)
+    try { localStorage.setItem(TESTER_FX_KEY, on ? '1' : '0') } catch { /* private mode */ }
+  }
 
   // This admin page is itself running the currently deployed web bundle, which
   // makes it the only reliable answer to "what is the latest web build?" — the
@@ -3890,18 +3906,19 @@ function UsersTab({ API, onViewEmailHistory }) {
   const sortedUsers = useMemo(() => {
     // A tester who has not tested today is the row worth chasing, so they lead
     // their group — matching the idle border the row already gets.
-    const owesTest = u => u.isTester && !testedToday(u)
+    // With the toggle off the list sorts purely on admin/online status.
+    const owesTest = u => testerFx && u.isTester && !testedToday(u)
     const priority = u => {
       if (u.isAdmin) return 3
       const s = onlineStatus(u.lastSeen)
       if (s === 'live') return 2
       if (s === 'away') return 1
-      if (!u.isTester) return 0     // offline testers sit atop the offline group
+      if (!testerFx || !u.isTester) return 0  // offline testers sit atop the offline group
       return owesTest(u) ? 0.75 : 0.5
     }
     return [...users].sort((a, b) =>
       priority(b) - priority(a) || owesTest(b) - owesTest(a))
-  }, [users])
+  }, [users, testerFx])
 
   // Flag/unflag a user as a tester. Saves instantly (no confirm) and optimistically
   // updates local state so the row re-sorts + re-styles immediately; reverts on failure.
@@ -3965,6 +3982,19 @@ function UsersTab({ API, onViewEmailHistory }) {
         />
       )}
 
+      {/* Tester highlighting — off gives a plain, evenly styled list */}
+      <label className="flex items-center gap-2 mb-3 text-xs font-semibold text-slate-500 cursor-pointer select-none w-fit">
+        <input
+          type="checkbox"
+          aria-label="Highlight testers"
+          checked={testerFx}
+          onChange={e => toggleTesterFx(e.target.checked)}
+          className="accent-amber-500"
+        />
+        Highlight testers
+        <span className="font-normal text-slate-400">— row wash, idle pulse and tester-first order</span>
+      </label>
+
       {/* Search */}
       <form className="flex gap-2 mb-5" onSubmit={e => { e.preventDefault(); runSearch() }}>
         <input
@@ -4025,7 +4055,7 @@ function UsersTab({ API, onViewEmailHistory }) {
             })}
           </div>
           <div className={`relative z-10 rounded-2xl border overflow-hidden ${
-            u.isTester
+            testerFx && u.isTester
               ? `admin-tester-row ${testedToday(u) ? 'border-amber-700/60' : 'admin-tester-idle'}`
             : u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50'
             : 'bg-surface border-slate-200'}`}>

@@ -21,6 +21,12 @@ vi.mock('../../context/AuthContext', () => ({
   }),
 }))
 
+vi.mock('../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({
+    settings: {}, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
+  }),
+}))
+
 vi.mock('../../context/AppTutorialContext', () => ({
   TUTORIAL_STEPS: {},
   TUTORIAL_KEYS: [],
@@ -77,6 +83,7 @@ async function navigateToUsers() {
 describe('Admin — Users tab: tester flag', () => {
   beforeEach(() => {
     global.Audio = class { play = vi.fn().mockResolvedValue(undefined) }
+    localStorage.clear() // tester highlighting persists; start each test at the default
   })
   afterEach(() => { vi.restoreAllMocks() })
 
@@ -88,12 +95,11 @@ describe('Admin — Users tab: tester flag', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('plain@test.com'))
 
-    // Checkbox only appears once the row is expanded
-    expect(screen.queryByRole('checkbox')).toBeNull()
+    // Row checkbox only appears once the row is expanded
+    expect(screen.queryByLabelText('tester')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
 
-    // One expanded row → one tester checkbox
-    const checkbox = screen.getByRole('checkbox')
+    const checkbox = screen.getByLabelText('tester')
     expect(checkbox.checked).toBe(false)
     fireEvent.click(checkbox)
 
@@ -205,5 +211,71 @@ describe('Admin — Users tab: tester flag', () => {
     const liveEl = screen.getByText('live@test.com')
     const idleEl = screen.getByText('tester@test.com')
     expect(liveEl.compareDocumentPosition(idleEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('Admin — Users tab: tester highlighting toggle', () => {
+  beforeEach(() => {
+    global.Audio = class { play = vi.fn().mockResolvedValue(undefined) }
+    localStorage.clear()
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const highlightBox = () => screen.getByRole('checkbox', { name: 'Highlight testers' })
+
+  it('is on by default and drops the wash, the pulse and the sort when switched off', async () => {
+    // Plain user first in the array, so tester-first order is observable.
+    global.fetch = setupFetch([OFFLINE_PLAIN, OFFLINE_TESTER])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+
+    expect(highlightBox().checked).toBe(true)
+    expect(screen.getByText('tester@test.com').closest('.admin-tester-row')).not.toBeNull()
+
+    fireEvent.click(highlightBox())
+
+    const testerEl = screen.getByText('tester@test.com')
+    expect(testerEl.closest('.admin-tester-row')).toBeNull()
+    expect(testerEl.closest('.admin-tester-idle')).toBeNull()
+    // Sort falls back to the source order: the plain user leads again
+    const plainEl = screen.getByText('plain@test.com')
+    expect(plainEl.compareDocumentPosition(testerEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('restores the off state on the next mount', async () => {
+    global.fetch = setupFetch([OFFLINE_TESTER])
+
+    const first = render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+    fireEvent.click(highlightBox())
+    first.unmount()
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
+
+    expect(highlightBox().checked).toBe(false)
+    expect(screen.getByText('tester@test.com').closest('.admin-tester-row')).toBeNull()
+  })
+
+  it('still lets an admin flag a tester while highlighting is off', async () => {
+    const patchSpy = vi.fn()
+    global.fetch = setupFetch([OFFLINE_PLAIN], patchSpy)
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('plain@test.com'))
+
+    fireEvent.click(highlightBox())
+    fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
+    fireEvent.click(screen.getByLabelText('tester'))
+
+    await waitFor(() => expect(patchSpy).toHaveBeenCalled())
+    expect(JSON.parse(patchSpy.mock.calls[0][1].body)).toEqual({ isTester: true })
+    // Flag set, but the row stays plain because highlighting is off
+    expect(screen.getByText('plain@test.com').closest('.admin-tester-row')).toBeNull()
   })
 })
