@@ -208,7 +208,7 @@ async function openReportsTab() {
 
 describe('Admin — Reports tab', () => {
   beforeEach(() => { global.fetch = setupFetch() })
-  afterEach(() => { vi.restoreAllMocks() })
+  afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
 
   it('renders Snapshot headline cards (window-independent)', async () => {
     await openReportsTab()
@@ -224,6 +224,15 @@ describe('Admin — Reports tab', () => {
     // The subtitle names both qualifying signals: an app open counts as a test
     // in its own right, not only a game played.
     expect(screen.getByText('testers who played CBAT or opened the app · last 7 days')).toBeInTheDocument()
+  })
+
+  it('hides the Test Usage snapshot card when tester highlighting is switched off', async () => {
+    localStorage.setItem('admin:users:testerHighlights', '0')
+    await openReportsTab()
+    // Wait for the snapshot to land — otherwise "not rendered" would pass simply
+    // because nothing had loaded yet — then assert Test Usage isn't among it.
+    await waitFor(() => expect(screen.getByText('Operating Systems')).toBeInTheDocument())
+    expect(screen.queryByText('Test Usage')).not.toBeInTheDocument()
   })
 
   it('renders the Operating Systems snapshot card with an unreported bucket', async () => {

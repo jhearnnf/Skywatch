@@ -666,3 +666,52 @@ describe('Admin — Settings tab: Airstars Economy & Game options', () => {
     await waitFor(() => expect(input.value).toBe('5'))
   })
 })
+
+// Browser-local switch, not an AppSettings field — it must persist without a
+// Save button and without a PATCH.
+describe('Admin — Settings tab: Beta Testing', () => {
+  beforeEach(() => {
+    global.Audio = MockAudio
+    audioInstances = []
+    localStorage.clear()
+  })
+
+  afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
+
+  async function openBetaTesting() {
+    global.fetch = setupFetch()
+    render(<Admin />)
+    const settingsTab = await screen.findByRole('button', { name: /settings/i })
+    fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Beta Testing'))
+    fireEvent.click(screen.getByText('Beta Testing'))
+    await waitFor(() => screen.getByText('Highlight testers'))
+  }
+
+  const highlightToggle = () =>
+    within(screen.getByText('Highlight testers').closest('div').parentElement).getByRole('button')
+
+  it('starts on and writes the off state straight to localStorage', async () => {
+    await openBetaTesting()
+
+    const toggle = highlightToggle()
+    expect(toggle.className).toContain('bg-brand-500')
+
+    fireEvent.click(toggle)
+
+    await waitFor(() => expect(toggle.className).toContain('bg-slate-200'))
+    expect(localStorage.getItem('admin:users:testerHighlights')).toBe('0')
+  })
+
+  it('reflects an off state stored by an earlier session', async () => {
+    localStorage.setItem('admin:users:testerHighlights', '0')
+    await openBetaTesting()
+    expect(highlightToggle().className).toContain('bg-slate-200')
+  })
+
+  it('has no Save button — the section saves nothing to the server', async () => {
+    await openBetaTesting()
+    const section = screen.getByText('Beta Testing').closest('div').parentElement
+    expect(within(section).queryByText('Save')).toBeNull()
+  })
+})

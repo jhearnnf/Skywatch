@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Admin from '../Admin'
 
@@ -214,6 +214,8 @@ describe('Admin — Users tab: tester flag', () => {
   })
 })
 
+// The switch itself lives in Settings › Beta Testing (see Admin.settings.test.jsx);
+// the users list only reads the stored state on mount.
 describe('Admin — Users tab: tester highlighting toggle', () => {
   beforeEach(() => {
     global.Audio = class { play = vi.fn().mockResolvedValue(undefined) }
@@ -221,9 +223,9 @@ describe('Admin — Users tab: tester highlighting toggle', () => {
   })
   afterEach(() => { vi.restoreAllMocks() })
 
-  const highlightBox = () => screen.getByRole('checkbox', { name: 'Highlight testers' })
+  const switchOff = () => localStorage.setItem('admin:users:testerHighlights', '0')
 
-  it('is on by default and drops the wash, the pulse and the sort when switched off', async () => {
+  it('is on by default: the tester leads the list and carries the wash', async () => {
     // Plain user first in the array, so tester-first order is observable.
     global.fetch = setupFetch([OFFLINE_PLAIN, OFFLINE_TESTER])
 
@@ -231,10 +233,19 @@ describe('Admin — Users tab: tester highlighting toggle', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('tester@test.com'))
 
-    expect(highlightBox().checked).toBe(true)
-    expect(screen.getByText('tester@test.com').closest('.admin-tester-row')).not.toBeNull()
+    const testerEl = screen.getByText('tester@test.com')
+    expect(testerEl.closest('.admin-tester-row')).not.toBeNull()
+    const plainEl = screen.getByText('plain@test.com')
+    expect(testerEl.compareDocumentPosition(plainEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 
-    fireEvent.click(highlightBox())
+  it('drops the wash, the pulse and the sort when the stored state is off', async () => {
+    switchOff()
+    global.fetch = setupFetch([OFFLINE_PLAIN, OFFLINE_TESTER])
+
+    render(<Admin />)
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
 
     const testerEl = screen.getByText('tester@test.com')
     expect(testerEl.closest('.admin-tester-row')).toBeNull()
@@ -244,24 +255,36 @@ describe('Admin — Users tab: tester highlighting toggle', () => {
     expect(plainEl.compareDocumentPosition(testerEl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('restores the off state on the next mount', async () => {
+  it('no longer offers the switch in the users list itself', async () => {
     global.fetch = setupFetch([OFFLINE_TESTER])
-
-    const first = render(<Admin />)
-    await navigateToUsers()
-    await waitFor(() => screen.getByText('tester@test.com'))
-    fireEvent.click(highlightBox())
-    first.unmount()
 
     render(<Admin />)
     await navigateToUsers()
     await waitFor(() => screen.getByText('tester@test.com'))
 
-    expect(highlightBox().checked).toBe(false)
+    expect(screen.queryByRole('checkbox', { name: 'Highlight testers' })).toBeNull()
+  })
+
+  it('picks up a switch flipped in Settings when the users list is next opened', async () => {
+    global.fetch = setupFetch([OFFLINE_TESTER])
+
+    render(<Admin />)
+    const settingsTab = await screen.findByRole('button', { name: /settings/i })
+    fireEvent.click(settingsTab)
+    await waitFor(() => screen.getByText('Beta Testing'))
+    fireEvent.click(screen.getByText('Beta Testing'))
+    await waitFor(() => screen.getByText('Highlight testers'))
+
+    const row = screen.getByText('Highlight testers').closest('div').parentElement
+    fireEvent.click(within(row).getByRole('button'))
+
+    await navigateToUsers()
+    await waitFor(() => screen.getByText('tester@test.com'))
     expect(screen.getByText('tester@test.com').closest('.admin-tester-row')).toBeNull()
   })
 
   it('still lets an admin flag a tester while highlighting is off', async () => {
+    switchOff()
     const patchSpy = vi.fn()
     global.fetch = setupFetch([OFFLINE_PLAIN], patchSpy)
 
@@ -269,7 +292,6 @@ describe('Admin — Users tab: tester highlighting toggle', () => {
     await navigateToUsers()
     await waitFor(() => screen.getByText('plain@test.com'))
 
-    fireEvent.click(highlightBox())
     fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
     fireEvent.click(screen.getByLabelText('tester'))
 
