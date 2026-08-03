@@ -7,7 +7,12 @@
 // lookDeltaX  — accumulated mouse/touch yaw delta in pixels (consumed each frame)
 // lookDeltaY  — accumulated mouse pitch delta in pixels (consumed each frame)
 // pointerLocked — true while pointer-lock is engaged; CharacterController uses
-//                 mouse look only while locked, otherwise auto-tracks movement
+//                 mouse look only while locked
+// autoYaw     — true while the virtual joystick is the movement source. Touch has no look
+//               control, so the camera has to turn itself: it swings behind the direction of
+//               travel. Keyboard play sets this false — there the mouse owns the yaw, and
+//               auto-turning on top of camera-relative input spins the camera (the movement
+//               direction rotates with the camera, so the turn never converges)
 // _action     — set true on E / action-button tap; CharacterController consumes
 //               via consumeAction() so each press fires exactly once
 // _jump       — set true on Space / jump-button tap; consumed via consumeJump()
@@ -18,6 +23,7 @@ export const input = {
   lookDeltaX: 0,
   lookDeltaY: 0,
   pointerLocked: false,
+  autoYaw: false,
   run: false,
   _action: false,
   _jump: false,

@@ -55,6 +55,8 @@ export default function VirtualJoystick() {
     // Normalise to [-1, 1]; screen-Y down = move forward (-z in world).
     input.move.x = px / RADIUS
     input.move.z = py / RADIUS
+    // Touch has no look control, so the camera turns itself to trail the joystick.
+    input.autoYaw = true
   }
 
   return (

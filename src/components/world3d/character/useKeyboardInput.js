@@ -37,6 +37,8 @@ export function useKeyboardInput() {
       if (JUMP.has(e.code)) { input.setJump(); return }
       if (FORWARD.has(e.code) || BACK.has(e.code) || LEFT.has(e.code) || RIGHT.has(e.code)) {
         held.add(e.code)
+        // Keyboard play owns the yaw through the mouse — never auto-turn on top of it.
+        input.autoYaw = false
         sync()
       }
     }

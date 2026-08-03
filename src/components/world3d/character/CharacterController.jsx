@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { resolveMove } from '../collision/colliders'
 import { scanClosest, activateClosest } from '../interaction/interactables'
 import { input } from './inputStore'
-import { shortestAngleDelta } from './yaw'
+import { shortestAngleDelta, cameraYawBehind, cameraRelativeMove } from './yaw'
 import { playerState } from '../state/playerState'
 import PlayerModel from '../props/PlayerModel'
 
@@ -13,7 +13,11 @@ const RUN_SPEED = 5
 const RADIUS = 0.45
 const MOUSE_SENS = 0.0025
 const CAM_LERP = 0.12
-const YAW_AUTO_LERP = 0.08
+// Joystick auto-follow: exponential approach rate (per second) and a hard cap on how fast the
+// camera may swing (rad/s ≈ 126 deg/s), so pulling the stick sideways or back turns the view
+// instead of whirling it.
+const YAW_AUTO_RATE = 4.8
+const YAW_AUTO_MAX = 2.2
 const CAM_OFFSET = new THREE.Vector3(0, 7, 5)
 const LOOK_AT_HEIGHT = 1.1
 // Pitch is clamped so the orbiting camera never dips below the floor (look up)
@@ -62,12 +66,9 @@ export default function CharacterController({ spawn = [0, 0, 0] }) {
     input.lookDeltaY = 0
 
     // Local input → world delta via camera yaw
-    const cosY = Math.cos(yawRef.current)
-    const sinY = Math.sin(yawRef.current)
-    const localX = input.move.x
-    const localZ = input.move.z
-    const worldDx = localX * cosY + localZ * sinY
-    const worldDz = -localX * sinY + localZ * cosY
+    const { dx: worldDx, dz: worldDz } = cameraRelativeMove(
+      yawRef.current, input.move.x, input.move.z,
+    )
 
     const running = input.run
     const step = (running ? RUN_SPEED : WALK_SPEED) * dt
@@ -95,11 +96,16 @@ export default function CharacterController({ spawn = [0, 0, 0] }) {
       agentRef.current.position.z = next.z
       if (Math.hypot(worldDx, worldDz) > 0.01) {
         facingRef.current = Math.atan2(worldDx, worldDz)
-        // Auto-follow yaw when mouse isn't driving it. The wrap lives in shortestAngleDelta
-        // because getting it wrong here spins the camera rather than merely turning it the long
-        // way — see the note there on JavaScript's remainder operator.
-        if (!input.pointerLocked) {
-          yawRef.current += shortestAngleDelta(yawRef.current, facingRef.current) * YAW_AUTO_LERP
+        // Auto-follow yaw for joystick play only (touch has no look control). The target is
+        // cameraYawBehind(facing), NOT facing itself — the two use conventions half a turn
+        // apart, and both the wrap and that half-turn spin the camera when they're wrong. See
+        // the notes in yaw.js. Rate-capped and dt-scaled so the swing is a turn at any frame
+        // rate rather than a whirl.
+        if (input.autoYaw && !input.pointerLocked) {
+          const delta = shortestAngleDelta(yawRef.current, cameraYawBehind(facingRef.current))
+          yawRef.current += THREE.MathUtils.clamp(
+            delta * YAW_AUTO_RATE, -YAW_AUTO_MAX, YAW_AUTO_MAX,
+          ) * dt
         }
       }
       agentRef.current.rotation.y = facingRef.current
