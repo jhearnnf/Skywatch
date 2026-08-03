@@ -266,6 +266,12 @@ export function previewCbatMenuMusic(sliderValue) {
   _playActMp3('/sounds/cbat menu (start).mp3', sliderValue ?? 100, 10000)
 }
 
+// Admin preview for the hangar lobby soundtrack — same slot/cancellation as the
+// CBAT menu preview above.
+export function previewHangarLobbyMusic(sliderValue) {
+  _playActMp3('/sounds/hangar lobby (repeat).mp3', sliderValue ?? 100, 10000)
+}
+
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3']
 
 // Module-level settings cache
@@ -311,6 +317,7 @@ function fetchSettings() {
         volumeTypingSound: 30,         soundEnabledTypingSound: true,
         volumeGridReveal: 30,          soundEnabledGridReveal: true,
         volumeCbatMenuMusic: 100,      soundEnabledCbatMenuMusic: true,
+        volumeHangarLobbyMusic: 100,   soundEnabledHangarLobbyMusic: true,
         durationTypingSound: 3,        durationGridReveal: 12,
         freeCategories: ['News'], silverCategories: [],
       }
@@ -335,6 +342,21 @@ export function setMasterVolume(v) {
 
 function masterVol(vol) {
   return vol * (getMasterVolume() / 100)
+}
+
+// ── Hangar music volume (user preference, stored in localStorage) ────────────
+// A personal level for the 3D Hangar soundtrack, set from the in-world pause
+// menu. Layers under the admin ceiling and the master volume rather than
+// replacing either, so a user can turn the music down without touching effects.
+const HANGAR_MUSIC_VOL_KEY = 'skywatch_hangar_music_volume'
+
+export function getHangarMusicVolume() {
+  const v = parseInt(localStorage.getItem(HANGAR_MUSIC_VOL_KEY) ?? '100', 10)
+  return isNaN(v) ? 100 : Math.min(100, Math.max(0, v))
+}
+
+export function setHangarMusicVolume(v) {
+  localStorage.setItem(HANGAR_MUSIC_VOL_KEY, String(Math.min(100, Math.max(0, Math.round(v)))))
 }
 
 // ── FLAG (CBAT) contact bleep ────────────────────────────────────────────────
@@ -374,6 +396,15 @@ export function getCbatMenuMusicSetting() {
   return {
     volume:  Math.min(1, Math.max(0, (s.volumeCbatMenuMusic ?? 100) / 100)),
     enabled: s.soundEnabledCbatMenuMusic !== false,
+  }
+}
+
+// Same, for the hangar lobby soundtrack (3D Hangar world).
+export function getHangarLobbyMusicSetting() {
+  const s = cache || {}
+  return {
+    volume:  Math.min(1, Math.max(0, (s.volumeHangarLobbyMusic ?? 100) / 100)),
+    enabled: s.soundEnabledHangarLobbyMusic !== false,
   }
 }
 

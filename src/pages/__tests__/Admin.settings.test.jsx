@@ -43,7 +43,7 @@ vi.mock('../../utils/sound', () => ({
   invalidateSoundSettings: vi.fn(), previewTypingSound: vi.fn(), previewGridRevealTone: vi.fn(),
   previewActVoiceCommand: vi.fn(), previewActChatter: vi.fn(),
   previewActStatic: vi.fn(), previewActBleep: vi.fn(), stopActPreview: vi.fn(),
-  previewCbatMenuMusic: vi.fn(),
+  previewCbatMenuMusic: vi.fn(), previewHangarLobbyMusic: vi.fn(),
 }))
 
 vi.mock('framer-motion', () => ({
@@ -324,6 +324,16 @@ describe('Admin — Settings tab: Sound Effects', () => {
     fireEvent.click(within(row).getByTitle('Preview'))
 
     expect(previewCbatMenuMusic).toHaveBeenCalled()
+  })
+
+  it('▶ for the Hangar "Lobby Soundtrack" row uses previewHangarLobbyMusic', async () => {
+    const { previewHangarLobbyMusic } = await import('../../utils/sound')
+    await renderAndOpenSettings()
+
+    const row = screen.getByText('Lobby Soundtrack').closest('div')
+    fireEvent.click(within(row).getByTitle('Preview'))
+
+    expect(previewHangarLobbyMusic).toHaveBeenCalled()
   })
 
   it('preview uses the volume from settings (80% → 0.8)', async () => {

@@ -4,6 +4,7 @@ import BaseScene from './scene/BaseScene'
 import HudOverlay from './hud/HudOverlay'
 import MobileControls from './ui/MobileControls'
 import ModalLayer from './ui/ModalLayer'
+import HangarMusic from './HangarMusic'
 import { useBodyLock } from './state/useBodyLock'
 import { useKeyboardInput } from './character/useKeyboardInput'
 import { usePointerLookInput } from './character/usePointerLookInput'
@@ -55,6 +56,7 @@ export default function World3D() {
       <HudOverlay />
       <MobileControls />
       <ModalLayer />
+      <HangarMusic />
     </div>
   )
 }

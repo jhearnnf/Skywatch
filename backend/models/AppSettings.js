@@ -136,6 +136,10 @@ const appSettingsSchema = new mongoose.Schema({
   volumeCbatMenuMusic:       { type: Number, default: 100, min: 0, max: 100 },
   soundEnabledCbatMenuMusic: { type: Boolean, default: true },
 
+  // Hangar lobby soundtrack — loops while the 3D Hangar world is on screen.
+  volumeHangarLobbyMusic:       { type: Number, default: 100, min: 0, max: 100 },
+  soundEnabledHangarLobbyMusic: { type: Boolean, default: true },
+
   // Blueprint grid-reveal tones (Intel Brief image cell dissolve)
   volumeGridReveal:       { type: Number, default: 30, min: 0, max: 100 },
   soundEnabledGridReveal: { type: Boolean, default: true },
