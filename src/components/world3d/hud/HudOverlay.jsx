@@ -1,6 +1,7 @@
 import LevelDisplay from './LevelDisplay'
 import AirstarsHud from './AirstarsHud'
 import InteractionPrompt from './InteractionPrompt'
+import PauseButton from './PauseButton'
 
 // DOM overlay positioned absolutely over the Canvas. pointer-events: none on
 // the wrapper so the canvas still receives clicks for pointer-lock; child
@@ -12,6 +13,9 @@ export default function HudOverlay() {
     <div className="fixed inset-0 z-30 pointer-events-none">
       <div className="absolute bottom-4 left-4">
         <LevelDisplay />
+      </div>
+      <div className="absolute top-4 left-4">
+        <PauseButton />
       </div>
       <div className="absolute top-4 right-4">
         <AirstarsHud />

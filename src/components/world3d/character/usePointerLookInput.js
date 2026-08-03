@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { input } from './inputStore'
+import { pause } from '../state/pauseStore'
 
 // Pointer-lock mouse-look. Click anywhere on the canvas container to lock the
 // pointer; mousemove deltas accumulate into input.lookDeltaX (yaw) and
@@ -15,6 +16,9 @@ export function usePointerLookInput(canvasContainerRef) {
     if (!el) return
 
     const onClick = () => {
+      // Don't grab the pointer back out from under the pause menu — its own
+      // buttons and slider sit inside this container.
+      if (pause.get()) return
       if (document.pointerLockElement !== el) {
         el.requestPointerLock?.()
       }

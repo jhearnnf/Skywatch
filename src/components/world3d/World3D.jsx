@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Canvas } from '@react-three/fiber'
 import BaseScene from './scene/BaseScene'
 import HudOverlay from './hud/HudOverlay'
 import MobileControls from './ui/MobileControls'
 import ModalLayer from './ui/ModalLayer'
+import PauseMenu from './ui/PauseMenu'
 import HangarMusic from './HangarMusic'
+import { pause } from './state/pauseStore'
+import { usePauseControls } from './state/usePauseControls'
 import { useBodyLock } from './state/useBodyLock'
 import { useKeyboardInput } from './character/useKeyboardInput'
 import { usePointerLookInput } from './character/usePointerLookInput'
@@ -18,9 +21,11 @@ import { input } from './character/inputStore'
 export default function World3D() {
   const containerRef = useRef(null)
   const [hidden, setHidden] = useState(false)
+  const paused = useSyncExternalStore(pause.subscribe, pause.get, () => false)
   useBodyLock('world3d-locked')
   useKeyboardInput()
   usePointerLookInput(containerRef)
+  usePauseControls()
 
   useEffect(() => {
     const onVis = () => setHidden(document.hidden)
@@ -46,7 +51,7 @@ export default function World3D() {
     >
       <Canvas
         dpr={1}
-        frameloop={hidden ? 'demand' : 'always'}
+        frameloop={hidden || paused ? 'demand' : 'always'}
         camera={{ position: [0, 7, 12], fov: 50, near: 0.1, far: 200 }}
         gl={{ antialias: true, alpha: false }}
         style={{ background: '#06101e' }}
@@ -56,6 +61,7 @@ export default function World3D() {
       <HudOverlay />
       <MobileControls />
       <ModalLayer />
+      <PauseMenu />
       <HangarMusic />
     </div>
   )

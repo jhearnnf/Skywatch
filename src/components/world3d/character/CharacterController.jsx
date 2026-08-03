@@ -6,6 +6,7 @@ import { scanClosest, activateClosest } from '../interaction/interactables'
 import { input } from './inputStore'
 import { shortestAngleDelta, cameraYawBehind, cameraRelativeMove } from './yaw'
 import { playerState } from '../state/playerState'
+import { pause } from '../state/pauseStore'
 import PlayerModel from '../props/PlayerModel'
 
 const WALK_SPEED = 2.5
@@ -49,6 +50,9 @@ export default function CharacterController({ spawn = [0, 0, 0] }) {
   const { camera } = useThree()
 
   useFrame((_, rawDt) => {
+    // Paused: hold everything still. The Canvas drops to frameloop="demand" too, but a
+    // React re-render can still invalidate a frame, and a held key must not step then.
+    if (pause.get()) return
     const dt = Math.min(rawDt, 0.05)
 
     if (input.pointerLocked) {
