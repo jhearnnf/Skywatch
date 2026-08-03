@@ -4,6 +4,7 @@ import * as THREE from 'three'
 import { resolveMove } from '../collision/colliders'
 import { scanClosest, activateClosest } from '../interaction/interactables'
 import { input } from './inputStore'
+import { shortestAngleDelta } from './yaw'
 import { playerState } from '../state/playerState'
 import PlayerModel from '../props/PlayerModel'
 
@@ -94,10 +95,11 @@ export default function CharacterController({ spawn = [0, 0, 0] }) {
       agentRef.current.position.z = next.z
       if (Math.hypot(worldDx, worldDz) > 0.01) {
         facingRef.current = Math.atan2(worldDx, worldDz)
-        // Auto-follow yaw when mouse isn't driving it
+        // Auto-follow yaw when mouse isn't driving it. The wrap lives in shortestAngleDelta
+        // because getting it wrong here spins the camera rather than merely turning it the long
+        // way — see the note there on JavaScript's remainder operator.
         if (!input.pointerLocked) {
-          const delta = ((facingRef.current - yawRef.current + Math.PI) % (Math.PI * 2)) - Math.PI
-          yawRef.current += delta * YAW_AUTO_LERP
+          yawRef.current += shortestAngleDelta(yawRef.current, facingRef.current) * YAW_AUTO_LERP
         }
       }
       agentRef.current.rotation.y = facingRef.current
