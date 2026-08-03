@@ -16,6 +16,7 @@
 // we only guard against accidental duplicates, not deliberate fakes.
 
 const { CBAT_GAMES } = require('../constants/cbatGames');
+const { announceCbatMedal } = require('./discordMedals');
 
 let pathsEnsured = false;
 
@@ -64,7 +65,15 @@ async function saveCbatResult(Model, req, fields, extraFilter = {}) {
     const d = new Date(playedAt);
     if (!Number.isNaN(d.getTime())) doc.createdAt = d;
   }
-  return Model.create(doc);
+  const created = await Model.create(doc);
+
+  // Discord medal broadcast. Deliberately below the dedupe short-circuit above,
+  // so a retried offline flush that resolves to an existing row never announces
+  // the same medal twice. Fire-and-forget with its own catch: a webhook problem
+  // must not fail the submission or delay the response.
+  announceCbatMedal(Model, created.toObject ? created.toObject() : created).catch(() => {});
+
+  return created;
 }
 
 module.exports = { ensureCbatResultPaths, saveCbatResult };
