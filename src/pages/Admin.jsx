@@ -803,6 +803,21 @@ function PerGameTableSkeleton() {
   )
 }
 
+// Tester emphasis — the red watermarked row, the pulsing idle border and the
+// tester-first sort order in the users list, plus the Test Usage chart in
+// Reports — is only useful while a beta round is running. Admins doing anything
+// else want a plain list and no tester reporting, so the whole treatment sits
+// behind one switch (Settings › Beta Testing) whose state persists per browser.
+const TESTER_FX_KEY = 'admin:users:testerHighlights'
+
+const readTesterFx = () => {
+  try { return localStorage.getItem(TESTER_FX_KEY) !== '0' } catch { return true }
+}
+
+const writeTesterFx = (on) => {
+  try { localStorage.setItem(TESTER_FX_KEY, on ? '1' : '0') } catch { /* private mode */ }
+}
+
 function ReportsTab({ API }) {
   const { apiFetch } = useAuth()
   const [window, setWindow] = useState('7d')
@@ -813,6 +828,12 @@ function ReportsTab({ API }) {
   const [windowedLoading, setWindowedLoading] = useState(true)
   const [cbatLoading, setCbatLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Test Usage is a beta-round instrument, exactly like the tester emphasis in
+  // the users list, so the one "Highlight testers" toggle governs both: off means
+  // no tester-specific reporting anywhere. Read once on mount — only one tab is
+  // mounted at a time, so the toggle can't change underneath this component.
+  const [testerFx] = useState(readTesterFx)
 
   // Snapshot is fetched ONCE on mount — it doesn't depend on the window picker.
   useEffect(() => {
@@ -885,11 +906,12 @@ function ReportsTab({ API }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton /><StatCardSkeleton />
             </div>
-            {/* 3 columns at xl with DAU spanning 2 — five charts fill two rows
-                exactly, no ragged trailing gap. Mirrors the loaded layout. */}
+            {/* 3 columns at xl. DAU spans the width left over by the other cards
+                so the rows always fill exactly, with or without Test Usage.
+                Mirrors the loaded layout. */}
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className="xl:col-span-2"><ChartSkeleton height={200} /></ChartCard>
-              <ChartCard title="Test Usage" sub="last 7 days"><ChartSkeleton height={200} /></ChartCard>
+              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className={testerFx ? 'xl:col-span-2' : 'xl:col-span-3'}><ChartSkeleton height={200} /></ChartCard>
+              {testerFx && <ChartCard title="Test Usage" sub="last 7 days"><ChartSkeleton height={200} /></ChartCard>}
               <ChartCard title="Signup Source" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Subscription Tiers" sub="current snapshot"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Operating Systems" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
@@ -905,9 +927,10 @@ function ReportsTab({ API }) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-              {/* DAU spans two columns — it's a 30-point time series, so it's the
-                  one chart here that actually reads better wide. */}
-              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className="xl:col-span-2">
+              {/* DAU spans the rest of its row — it's a 30-point time series, so
+                  it's the one chart here that actually reads better wide. Without
+                  Test Usage beside it that's the full three columns. */}
+              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className={testerFx ? 'xl:col-span-2' : 'xl:col-span-3'}>
                 <ReportChart
                   type="line"
                   data={snapshot.dailyDau}
@@ -917,17 +940,19 @@ function ReportsTab({ API }) {
                 />
               </ChartCard>
 
-              <ChartCard title="Test Usage" sub="testers who played CBAT or opened the app · last 7 days">
-                <ReportChart
-                  type="bar"
-                  data={snapshot.testUsage ?? []}
-                  xKey="date"
-                  keys={['count']}
-                  colors={['#34d399']}
-                  formatXSub={(d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}
-                  height={200}
-                />
-              </ChartCard>
+              {testerFx && (
+                <ChartCard title="Test Usage" sub="testers who played CBAT or opened the app · last 7 days">
+                  <ReportChart
+                    type="bar"
+                    data={snapshot.testUsage ?? []}
+                    xKey="date"
+                    keys={['count']}
+                    colors={['#34d399']}
+                    formatXSub={(d) => new Date(d).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })}
+                    height={200}
+                  />
+                </ChartCard>
+              )}
 
               <ChartCard title="Signup Source" sub="all-time">
                 <ReportChart
@@ -2436,6 +2461,9 @@ function SettingsTab({ API }) {
   const [caseFilesList, setCaseFilesList] = useState(null) // null = loading, [] = empty, [...] = loaded
   const [caseFilesDraft, setCaseFilesDraft] = useState({}) // { [slug]: ['free','silver',...] }
 
+  // Browser-local, not an AppSettings field — see the Beta Testing section below.
+  const [testerFx, setTesterFx] = useState(readTesterFx)
+
   useEffect(() => {
     let cancelled = false
     fetch(`${API}/api/case-files`, { credentials: 'include' })
@@ -3283,6 +3311,18 @@ function SettingsTab({ API }) {
         )}
       </Section>
 
+      {/* ── Beta Testing ────────────────────────────────────── */}
+      {/* Not an AppSettings field: this only changes what this admin sees, so it
+          saves to the browser instantly and the section carries no Save button. */}
+      <Section title="Beta Testing" collapsible>
+        <Toggle
+          label="Highlight testers"
+          hint="Users list: red row wash on testers, a pulsing border on any who have not tested today, and tester-first ordering. Also shows the Test Usage chart in Reports. Off gives a plain list and no tester reporting. Saved in this browser only, and applied when you next open those tabs."
+          checked={testerFx}
+          onChange={v => { setTesterFx(v); writeTesterFx(v) }}
+        />
+      </Section>
+
       {/* ── Feature Flags ───────────────────────────────────── */}
       <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled', 'previewWindowIntelBriefEnabled', 'previewWindowCbatEnabled'])}>
         <Toggle
@@ -3821,16 +3861,6 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
   )
 }
 
-// Tester emphasis in the users list — the red watermarked row, the pulsing idle
-// border and the tester-first sort order — is only useful while a beta round is
-// running. Admins doing anything else want a plain list, so the whole treatment
-// is behind one toggle whose state persists across sessions.
-const TESTER_FX_KEY = 'admin:users:testerHighlights'
-
-const readTesterFx = () => {
-  try { return localStorage.getItem(TESTER_FX_KEY) !== '0' } catch { return true }
-}
-
 function UsersTab({ API, onViewEmailHistory }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -3850,12 +3880,9 @@ function UsersTab({ API, onViewEmailHistory }) {
   const [tierPanel,   setTierPanel]   = useState(null) // user._id of open panel
   const [expanded,    setExpanded]    = useState(() => new Set()) // user._ids expanded
   const [latestClients, setLatestClients] = useState({}) // newest native release per platform
-  const [testerFx, setTesterFx] = useState(readTesterFx) // tester wash + pulse + sort priority
-
-  const toggleTesterFx = (on) => {
-    setTesterFx(on)
-    try { localStorage.setItem(TESTER_FX_KEY, on ? '1' : '0') } catch { /* private mode */ }
-  }
+  // Tester wash + pulse + sort priority. Switched in Settings › Beta Testing;
+  // read once here because only one admin tab is mounted at a time.
+  const [testerFx] = useState(readTesterFx)
 
   // This admin page is itself running the currently deployed web bundle, which
   // makes it the only reliable answer to "what is the latest web build?" — the
@@ -3989,19 +4016,6 @@ function UsersTab({ API, onViewEmailHistory }) {
           onClose={() => setScoresModal(null)}
         />
       )}
-
-      {/* Tester highlighting — off gives a plain, evenly styled list */}
-      <label className="flex items-center gap-2 mb-3 text-xs font-semibold text-slate-500 cursor-pointer select-none w-fit">
-        <input
-          type="checkbox"
-          aria-label="Highlight testers"
-          checked={testerFx}
-          onChange={e => toggleTesterFx(e.target.checked)}
-          className="accent-amber-500"
-        />
-        Highlight testers
-        <span className="font-normal text-slate-400">— row wash, idle pulse and tester-first order</span>
-      </label>
 
       {/* Search */}
       <form className="flex gap-2 mb-5" onSubmit={e => { e.preventDefault(); runSearch() }}>
