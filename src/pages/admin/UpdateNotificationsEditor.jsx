@@ -470,7 +470,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 </p>
               </Field>
 
-              <Field label="Image">
+              <Field label="Image" dimmed={draft.imageMode === 'none'}>
                 <div className="space-y-1.5">
                   {[
                     { v: 'none',        label: 'None' },
@@ -527,14 +527,14 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Valid from">
+                <Field label="Valid from" dimmed={!draft.validFrom}>
                   <input
                     type="datetime-local" value={draft.validFrom}
                     onChange={e => setDraft(d => ({ ...d, validFrom: e.target.value }))}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-surface text-text outline-none focus:ring-2 focus:ring-brand-600/40"
                   />
                 </Field>
-                <Field label="Expires">
+                <Field label="Expires" dimmed={!draft.expiresAt}>
                   <input
                     type="datetime-local" value={draft.expiresAt}
                     onChange={e => setDraft(d => ({ ...d, expiresAt: e.target.value }))}
@@ -545,7 +545,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
 
               {/* Empty targetPath is the "any page" default, same as an empty
                   targeting array — so the dim test is the same shape. */}
-              <Field label="Target page">
+              <Field label="Target page" dimmed={!draft.targetPath}>
                 <select
                   value={draft.targetPath}
                   onChange={e => setDraft(d => ({ ...d, targetPath: e.target.value }))}
@@ -557,7 +557,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 </select>
               </Field>
 
-              <Field label="Operating systems">
+              <Field label="Operating systems" dimmed={draft.targetOs.length === 0}>
                 <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                   {TARGET_OS_OPTIONS.map(opt => (
                     <label key={opt.value} className="flex items-center gap-2 text-sm text-text">
@@ -582,7 +582,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 </p>
               </Field>
 
-              <Field label="Specific users">
+              <Field label="Specific users" dimmed={draft.targetUsers.length === 0}>
                 <UserTargetPicker
                   API={API}
                   apiFetch={apiFetch}
@@ -979,9 +979,23 @@ function UserTargetPicker({ API, apiFetch, selected, onChange }) {
   )
 }
 
-function Field({ label, children }) {
+// A labelled block in the editor form.
+//
+// `dimmed` fades the whole block back so the eye lands on the title and body,
+// which are the only two things every notification needs. It's presentation
+// only — nothing is disabled, and the block returns to full strength on hover
+// or as soon as anything inside it takes focus, so a dimmed control is never
+// harder to use than an undimmed one. Callers pass the field's own "am I still
+// at my default?" test, so a field un-dims the moment it's actually set.
+function Field({ label, children, dimmed = false }) {
   return (
-    <div className="py-2">
+    <div
+      data-field={label}
+      data-dimmed={dimmed ? 'true' : 'false'}
+      className={`py-2 transition-opacity duration-200 ${
+        dimmed ? 'opacity-40 hover:opacity-100 focus-within:opacity-100' : ''
+      }`}
+    >
       <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
       {children}
     </div>
