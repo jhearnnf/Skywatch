@@ -228,6 +228,34 @@ const appSettingsSchema = new mongoose.Schema({
     }),
   },
 
+  // CBAT progress awards — the post-game milestone screen shown when a player's
+  // recent form has improved measurably on their early runs (see
+  // backend/utils/cbatProgressAward.js for the tiers and the attempt floor).
+  //
+  // Deliberately TWO flags rather than one. The milestone screen is a retention
+  // feature that stands on its own; the donation footnote is a separate, later
+  // decision that rides on it. Splitting them means the ask can be turned on or
+  // off without redeploying, and the celebration keeps working either way.
+  //
+  // There is no admin bypass for progressAwardEnabled (unlike cbatGameEnabled).
+  // If admins saw awards while the flag was off there would be no way to verify
+  // that "off" really means off — the admin preview route is the way to see it.
+  progressAwardEnabled:       { type: Boolean,  default: true },
+  progressAwardDonateEnabled: { type: Boolean,  default: true },
+
+  // Where the donation CTA points. Empty means the footnote does not render at
+  // all, however progressAwardDonateEnabled is set — a live ask with nowhere to
+  // go is worse than no ask.
+  //
+  // The default is the live Stripe payment link, so the ask works on deploy
+  // without an admin having to paste it in. Admins can still override it in
+  // Game Options; once they save that section the stored value wins and this
+  // default stops applying to that environment.
+  progressAwardDonateUrl: {
+    type: String,
+    default: 'https://donate.stripe.com/9B6cMXaxWeWi6ne6QR18c00',
+  },
+
   // Chat (user↔admin help) feature
   chatEnabled:                { type: Boolean,  default: true },
 

@@ -6397,4 +6397,32 @@ router.post('/update-notifications/ai-summarize', async (req, res) => {
   }
 });
 
+// POST /api/admin/progress-award/reset — clear the CALLING admin's own milestone
+// and donation-prompt state.
+//
+// Scoped to self on purpose: this is a testing aid, and there is no reason for an
+// admin to be able to re-fire someone else's celebration or reopen a donation ask
+// a real user has already declined.
+//
+// It is the necessary companion to the preview button rather than a duplicate of
+// it. The preview proves the screen RENDERS; only replaying the real trigger with
+// a cleared record proves it FIRES — awards are once-per-tier, so without this an
+// admin gets exactly one organic sighting per game and can never test it again.
+router.post('/progress-award/reset', async (req, res) => {
+  try {
+    await User.updateOne(
+      { _id: req.user._id },
+      {
+        $set: {
+          cbatProgressAwards: [],
+          donationPrompt: { lastShownAt: null, dismissCount: 0 },
+        },
+      },
+    );
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

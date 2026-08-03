@@ -32,11 +32,14 @@ vi.mock('react-router-dom', () => ({
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => mockChrome }))
 // The gain badges and the pulsing numbers are motion.spans (see LeaderboardRow's GainCell), so
-// the mock has to cover span as well as div or the rows render nothing.
+// the mock has to cover span as well as div or the rows render nothing. AnimatePresence wraps the
+// progress-award overlay; motion.circle draws its ring.
 vi.mock('framer-motion', () => ({
+  AnimatePresence: ({ children }) => <>{children}</>,
   motion: {
     div: ({ children, className }) => <div className={className}>{children}</div>,
     span: ({ children, className }) => <span className={className}>{children}</span>,
+    circle: ({ children, className }) => <circle className={className}>{children}</circle>,
   },
 }))
 // Recharts' ResponsiveContainer measures its parent, which is 0×0 in jsdom, so it renders

@@ -2359,6 +2359,7 @@ function AiPromptsSection({ API }) {
 function SettingsTab({ API }) {
   const { apiFetch } = useAuth()
   const { refreshSettings } = useAppSettings()
+  const navigate = useNavigate()
   const [settings, setSettings] = useState(null)
   const [draft,    setDraft]    = useState({})
   const [modal,    setModal]    = useState(null)   // { label, fields }
@@ -2636,6 +2637,9 @@ function SettingsTab({ API }) {
           'cbatEnabled',
           'cbatTiers',
           'cbatGameEnabled',
+          'progressAwardEnabled',
+          'progressAwardDonateEnabled',
+          'progressAwardDonateUrl',
           'caseFilesEnabled',
           'caseFilesDailyLimitFree',
           'caseFilesDailyLimitSilver',
@@ -2912,6 +2916,78 @@ function SettingsTab({ API }) {
                       })}
                     </div>
                     <p className="text-xs text-slate-400 mt-2">Enabling free also enables silver and gold; enabling silver also enables gold.</p>
+                  </div>
+
+                  {/* ── Progress awards ─────────────────────────────────
+                      Two switches on purpose: the milestone screen is a retention
+                      feature that stands alone, and the donation note is a separate
+                      decision riding on it. Either can move without the other. */}
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-1">Progress awards</p>
+                  <Toggle
+                    label="Progress award screen"
+                    hint="After a game, celebrate players whose recent form has improved on their early runs. Fires once per improvement tier (+15% / +30% / +50%) per game, from 8 attempts. Admins get no bypass — use Preview below."
+                    checked={draft.progressAwardEnabled !== false}
+                    onChange={v => set('progressAwardEnabled', v)}
+                  />
+                  <Toggle
+                    label="Donation note on progress awards"
+                    hint="Adds a small donation ask below the results once the player dismisses the award. Capped globally: at most once every 30 days, and never again after two dismissals or an 'Already supported' click."
+                    checked={draft.progressAwardDonateEnabled !== false}
+                    onChange={v => set('progressAwardDonateEnabled', v)}
+                    disabled={draft.progressAwardEnabled === false}
+                    disabledHint="Unavailable while the progress award screen is off — the note only ever appears attached to an award."
+                  />
+                  <div className="py-2.5 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700 mb-1">Donation link</p>
+                    <p className="text-xs text-slate-400 mb-2">
+                      Where “Support Skywatch” points (Ko-fi, Buy Me a Coffee, Stripe payment link…).
+                      Leave empty and the note never renders, whatever the switch above says — a live
+                      ask pointing nowhere is worse than no ask.
+                    </p>
+                    <input
+                      type="text"
+                      value={draft.progressAwardDonateUrl ?? ''}
+                      onChange={e => set('progressAwardDonateUrl', e.target.value)}
+                      placeholder="https://ko-fi.com/…"
+                      className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+                    />
+                    {draft.progressAwardEnabled !== false
+                      && draft.progressAwardDonateEnabled !== false
+                      && !String(draft.progressAwardDonateUrl ?? '').trim() && (
+                      <p className="text-xs text-amber-700 mt-1.5">
+                        No URL set, so players see the award but no donation note.
+                      </p>
+                    )}
+                  </div>
+                  <div className="py-2.5 border-b border-slate-100 last:border-0">
+                    <p className="text-sm font-semibold text-slate-700 mb-1">Testing</p>
+                    <p className="text-xs text-slate-400 mb-2">
+                      Preview shows the whole post-game flow with a random game and tier — it proves the
+                      screen renders. Reset clears your own milestones so you can earn one for real and
+                      prove it fires. Reset only ever touches your account.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/admin/award-preview')}
+                        className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
+                      >
+                        Preview the award flow
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await fetch(`${API}/api/admin/progress-award/reset`, {
+                            method: 'POST',
+                            credentials: 'include',
+                          })
+                          setToast(res.ok ? '✓ Your progress milestones were reset' : '✗ Reset failed')
+                        }}
+                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold rounded-xl transition-colors"
+                      >
+                        Reset my milestones
+                      </button>
+                    </div>
                   </div>
                 </>
               )}

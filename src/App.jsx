@@ -87,6 +87,7 @@ import NotFound       from './pages/NotFound'
 
 // v2 admin
 import Admin          from './pages/Admin'
+import CbatAwardPreview from './pages/CbatAwardPreview'
 import OpenRouterUsage from './pages/OpenRouterUsage'
 import AptitudeSync   from './pages/AptitudeSync'
 import World3DRoute  from './components/world3d/World3DRoute'
@@ -301,6 +302,9 @@ function AppRoutes() {
           <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
           <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />
+          {/* Admin-only preview of the post-game progress-award flow. Under /admin so it inherits
+              the slim-mode allowlist and stays out of the player-facing routes. */}
+          <Route path="/admin/award-preview" element={<RequireAuth><PageWrapper><CbatAwardPreview /></PageWrapper></RequireAuth>} />
 
           {/* 3D World (feature-flagged) */}
           <Route path="/immerse" element={<World3DRoute />} />

@@ -25,6 +25,7 @@ const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
 const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgressSeries');
+const { tierToAward, donationPromptDue } = require('../utils/cbatProgressAward');
 const { buildCbatShowcase } = require('../utils/cbatShowcase');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
@@ -3430,5 +3431,114 @@ async function cbatProgress(req, res, gameKey) {
 }
 
 router.get('/cbat/:gameKey/progress', protect, (req, res) => cbatProgress(req, res, req.params.gameKey));
+
+// POST /api/games/cbat/:gameKey/progress-award/claim — award a progress milestone, once.
+//
+// A POST, not a GET, because it MUTATES: deciding an award and recording that it was shown have
+// to be one operation. Two tabs finishing a run at the same moment would otherwise both read
+// "not yet awarded" and both celebrate.
+//
+// Kept off GET /progress for the same reason — that route is also the leaderboard's "You" tab and
+// the admin per-user chart, neither of which should burn a user's milestone by being looked at.
+//
+// The award is claimed when this returns, whether or not the client renders it. A user who
+// navigates away in the same instant loses that milestone. The alternative (peek, then confirm
+// after render) costs a second round trip on every game completion to protect a celebration
+// screen — not worth it, and the claim happens with the results already on screen.
+router.post('/cbat/:gameKey/progress-award/claim', protect, async (req, res) => {
+  const { gameKey } = req.params;
+  const cfg = CBAT_GAMES[gameKey];
+  if (!cfg) return res.status(400).json({ message: 'Unknown game' });
+
+  try {
+    const settings = await AppSettings.getSettings();
+    // No admin bypass — see the note on progressAwardEnabled in models/AppSettings.js.
+    if (!settings?.progressAwardEnabled) {
+      return res.json({ status: 'success', data: { award: null, donate: null } });
+    }
+
+    const user = await User.findById(req.user._id)
+      .select('cbatProgressAwards donationPrompt')
+      .lean();
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const seenTiers = (user.cbatProgressAwards ?? [])
+      .filter(a => a.gameKey === gameKey)
+      .map(a => a.tier);
+
+    // Same default window as the sparkline this award appears above, so the headline
+    // percentage and the chart underneath it can never state different numbers.
+    const progress = await buildCbatProgress(cfg, req.user._id);
+    const award = tierToAward(progress, { lowerIsBetter: cfg.sortDir === 1, seenTiers });
+    if (!award) return res.json({ status: 'success', data: { award: null, donate: null } });
+
+    // Claim every tier crossed, not just the one being shown: a player who jumps
+    // straight past +15 to +50 has had their +15 moment, and must not be given it
+    // later on a smaller delta. The filter makes this the atomic step — if another
+    // request claimed any of these first, this one matches nothing and awards nothing.
+    const shownAt = new Date();
+    const claimed = await User.findOneAndUpdate(
+      {
+        _id: req.user._id,
+        cbatProgressAwards: { $not: { $elemMatch: { gameKey, tier: { $in: award.claimed } } } },
+      },
+      {
+        $push: {
+          cbatProgressAwards: {
+            $each: award.claimed.map(tier => ({ gameKey, tier, shownAt })),
+          },
+        },
+      },
+      { returnDocument: 'after' },
+    ).select('_id').lean();
+
+    if (!claimed) return res.json({ status: 'success', data: { award: null, donate: null } });
+
+    // The donation footnote is decided separately and capped globally — an award
+    // firing is a necessary condition for the ask, never a sufficient one.
+    const due = donationPromptDue(user.donationPrompt, settings);
+    if (due) {
+      await User.updateOne(
+        { _id: req.user._id },
+        { $set: { 'donationPrompt.lastShownAt': shownAt } },
+      );
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        award: { gameKey, tier: award.tier, pct: award.pct, attempts: progress.attempts },
+        donate: due ? { url: settings.progressAwardDonateUrl } : null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/cbat/progress-award/donation — record what the user did with the ask.
+//
+// Two outcomes, matching the note's two controls: 'dismissed' counts toward the cap that
+// eventually stops us asking, and 'clicked' records a click-through.
+//
+// A click-through deliberately does NOT stop future asks: it means they looked, not that they
+// gave, and we cannot observe an external Stripe payment. Someone who clicks through and donates
+// will meet the ask once more after the cooldown, and can wave it away — which costs them a
+// dismissal, and is the honest trade for not being able to see their payment.
+router.post('/cbat/progress-award/donation', protect, async (req, res) => {
+  const { action } = req.body || {};
+  if (!['dismissed', 'clicked'].includes(action)) {
+    return res.status(400).json({ message: 'action must be dismissed or clicked' });
+  }
+
+  try {
+    if (action === 'dismissed') {
+      await User.updateOne({ _id: req.user._id }, { $inc: { 'donationPrompt.dismissCount': 1 } });
+    }
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 module.exports = router;

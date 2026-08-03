@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
 import LeaderboardRow, { rowCols, rowPad } from './LeaderboardRow'
 import CbatProgressChart from './CbatProgressChart'
+import CbatProgressAward, { CbatDonationNote } from './CbatProgressAward'
 import { cbatTrend, cbatTrendPhrase, isCbatNewBest } from '../utils/cbatProgress'
 import { cbatAdminViewOn, withCbatView } from '../utils/cbatAdminView'
 import useCountUp from '../hooks/useCountUp'
+import { SLIM_APP } from '../utils/appMode'
 import { isOnline, onNetworkChange } from '../lib/net'
 import { onApiHealthChange, getApiHealth } from '../lib/apiHealth'
 import { onOutboxChange, pendingCount } from '../lib/cbatOutbox'
@@ -41,6 +43,9 @@ import { onOutboxChange, pendingCount } from '../lib/cbatOutbox'
 //                  buttons (e.g. Change Aircraft, Back to Modes) — same slot
 //                  and styling on every game for consistency
 //   children     — the game-specific results breakdown (embedded, no buttons)
+//   previewAward — admin preview only: { award, donate } rendered instead of asking
+//                  the server, so an admin can see the milestone flow without
+//                  having to earn it. Never set in normal play.
 
 function fmtCountdown(resetsAt) {
   const ms = new Date(resetsAt).getTime() - Date.now()
@@ -376,6 +381,7 @@ function QueuedScoreNote() {
 
 export default function CbatGameOver({
   gameKey, score, time, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
+  previewAward = null,
 }) {
   const { apiFetch, API } = useAuth()
   const { enterGameOver, exitGameOver } = useGameChrome()
@@ -446,6 +452,45 @@ export default function CbatGameOver({
     return () => { cancelled = true; clearTimeout(t) }
   }, [gameKey, queued, scoreSaved])  // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Progress-award milestone. Claimed from the server rather than derived here: the decision
+  // depends on which tiers this user has already been shown, and deciding it has to be atomic
+  // with recording it (see the claim route in backend/routes/games.js).
+  //
+  // Skipped when queued, for the same reason the progress fetch is: an offline run isn't in the
+  // series yet, so the server would judge the improvement without the run just played.
+  const [award, setAward] = useState(previewAward?.award ?? null)
+  const [donate, setDonate] = useState(previewAward?.donate ?? null)
+  const [awardDismissed, setAwardDismissed] = useState(false)
+
+  useEffect(() => {
+    if (previewAward || queued) return
+    let cancelled = false
+    const claim = () => {
+      apiFetch(`${API}/api/games/cbat/${gameKey}/progress-award/claim`, { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+          if (cancelled || !d?.data?.award) return
+          setAward(d.data.award)
+          setDonate(d.data.donate ?? null)
+        })
+        .catch(() => { /* the milestone is additive — a failure just means no celebration */ })
+    }
+    if (scoreSaved) { claim(); return () => { cancelled = true } }
+    const t = setTimeout(claim, SAVE_WAIT_FALLBACK_MS)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [gameKey, queued, scoreSaved, previewAward])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fire-and-forget: what the user did with the ask only affects whether we ask again later,
+  // so a failed write costs one extra prompt in a month's time and is not worth surfacing.
+  const recordDonation = (action) => {
+    if (previewAward) return   // a preview must not write to the admin's real prompt state
+    apiFetch(`${API}/api/games/cbat/progress-award/donation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    }).catch(() => {})
+  }
+
   const formatScore = cfg.formatScore || ((s) => `${s}`)
   const formatTime = fmtTime(cfg.timeDecimals ?? 1)
   const showTime = !cfg.hideTime && Number.isFinite(time)
@@ -474,6 +519,24 @@ export default function CbatGameOver({
       animate={{ opacity: 1, scale: 1 }}
       className="w-full max-w-md flex flex-col gap-4"
     >
+      {/* The milestone celebration takes the screen briefly, then dissolves to the results
+          underneath. It earns that interruption by being rare — once per tier per game, ever.
+          It is portalled to <body> (see CbatProgressAward) because this element animates
+          `scale`, which would otherwise trap a fixed-position child inside it. */}
+      <AnimatePresence>
+        {award && !awardDismissed && (
+          <CbatProgressAward
+            key="award"
+            tier={award.tier}
+            pct={award.pct}
+            attempts={award.attempts}
+            gameTitle={cfg.title || gameKey}
+            gameEmoji={cfg.emoji || '📈'}
+            onDismiss={() => setAwardDismissed(true)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Panel 1 — personal beat + weekly position */}
       <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
         {/* Score and clock sit side by side, but not as equals: the score stays the headline and
@@ -534,6 +597,20 @@ export default function CbatGameOver({
           <p className="text-[11px] text-green-400 mt-1">✓ Score saved</p>
         )}
       </div>
+
+      {/* The donation ask — a footnote to the milestone, never part of it. It appears only once
+          the celebration above has been dismissed, so the achievement lands on its own first and
+          can't read as the setup for a request.
+
+          Never in the native app (SLIM_APP), whatever the admin flags say. Google Play treats
+          donations outside Play Billing as a nonprofit carve-out, and Apple is stricter still —
+          an in-app donation link from a non-registered-charity is a store-policy risk that a
+          web-only ask avoids entirely. Deliberately SLIM_APP and not useSlimMode(): slim mode
+          applied to the WEBSITE is just a trimmed site and carries no store exposure. The award
+          itself still fires natively — it's a retention feature and no policy touches it. */}
+      {award && awardDismissed && donate?.url && !SLIM_APP && (
+        <CbatDonationNote url={donate.url} onRecord={recordDonation} />
+      )}
 
       {/* Panel 2 — game-specific breakdown (rendered embedded, no own actions) */}
       {children}

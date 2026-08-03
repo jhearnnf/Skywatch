@@ -15,6 +15,17 @@ const clientBuildSchema = new mongoose.Schema({
   lastSeenAt:  { type: Date,   default: null },
 }, { _id: false });
 
+// One CBAT progress-award milestone this user has already been shown.
+// `tier` is the improvement threshold crossed (see backend/utils/cbatProgressAward.js).
+// The row existing is what stops that tier re-firing on every later run once the
+// player is sitting above its threshold — the award marks *crossing* the line,
+// not being over it.
+const cbatProgressAwardSchema = new mongoose.Schema({
+  gameKey: { type: String, required: true },
+  tier:    { type: Number, required: true },
+  shownAt: { type: Date,   default: Date.now },
+}, { _id: false });
+
 const gameTutorialSchema = new mongoose.Schema({
   gameTypeId:        { type: mongoose.Schema.Types.ObjectId, ref: 'GameType', required: true },
   completed:         { type: Boolean, default: false },
@@ -181,6 +192,27 @@ const userSchema = new mongoose.Schema(
         badgeSeen:  { type: Boolean, default: false },
       }, { _id: false }),
       default: () => new Map(),
+    },
+
+    // CBAT progress awards already shown to this user, one row per (gameKey, tier).
+    // Persisted rather than kept in localStorage so a player who trains on their
+    // phone and their laptop isn't congratulated twice for the same milestone.
+    cbatProgressAwards: { type: [cbatProgressAwardSchema], default: [] },
+
+    // Frequency state for the donation footnote attached to those awards.
+    //
+    // GLOBAL, not per game — that's the whole point of it being separate state.
+    // Milestones are per-game and can legitimately fire many times across the
+    // ~18 games; the ask riding on them must not. A cap that reset per device
+    // (or per game) would not be a cap.
+    //
+    // Two fields, because the note has two controls (see CbatDonationNote): when
+    // it was last shown, and how many times it has been waved away. There is no
+    // "already donated" flag — we cannot observe an external payment, and the
+    // dismissal cap already stops asking someone who has answered twice.
+    donationPrompt: {
+      lastShownAt:  { type: Date,   default: null },
+      dismissCount: { type: Number, default: 0 },
     },
   },
   { timestamps: true }
