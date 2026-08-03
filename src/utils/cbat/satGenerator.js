@@ -8,7 +8,8 @@
 // Pure and deterministic: pass a seeded `rng` (() => [0,1)) to reproduce a
 // situation in tests. Defaults to Math.random for live play.
 //
-// generateSatSituation({ unitCount, aircraftCount, questionCount, supportCall }, rng)
+// generateSatSituation({ unitRange, aircraftRange, questionCount, supportChance,
+//                        aircraftFields }, rng)
 //   → { units, aircraft, comms, questions }
 //   units    = [{ id, type, count, heading, allegiance, row, col, ref }]
 //   aircraft = [{ callsign, waypointDir, waypointRef, waypointAt, altitude, channel }]
@@ -26,6 +27,9 @@ export const ALLEGIANCES = ['friendly', 'hostile', 'unknown']
 const HEADINGS = ['N', 'S', 'E', 'W']
 const HEADING_WORD = { N: 'North', S: 'South', E: 'East', W: 'West' }
 const CALLSIGNS = ['York', 'Leeds', 'Hull']
+// The controller-aircraft panel's four fields. A difficulty may show a subset —
+// see `aircraftFields` in satDifficulty.js.
+export const ALL_AIRCRAFT_FIELDS = ['waypoint', 'waypointAt', 'altitude', 'channel']
 const CHANNELS = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot']
 // Spoken phonetic for grid columns / flight levels so speechSynthesis reads
 // "Charlie four" not "C4", and "two five zero" not "250".
@@ -114,8 +118,11 @@ function makeAircraft(aircraftCount, rng, randInt) {
 // support request: a ground unit on the grid calls for support and one of the
 // controller aircraft is tasked to respond. It's the only fact that ties the
 // audio to the map, so it can't be answered from either alone.
-function makeComms(aircraft, units, supportCall, rng) {
-  const kinds = ['altitude', 'channel', 'waypoint']
+function makeComms(aircraft, units, supportCall, fields, rng) {
+  // The radio only ever talks about fields the panel is actually showing —
+  // otherwise a difficulty that hides the waypoint still has a voice reading it
+  // out, which is harder than the full picture, not easier.
+  const kinds = ['altitude', 'channel', 'waypoint'].filter(k => fields.includes(k))
   const comms = aircraft.map(ac => {
     const kind = pick(kinds, rng)
     if (kind === 'altitude') {
@@ -162,7 +169,7 @@ function makeComms(aircraft, units, supportCall, rng) {
 // Build the candidate question pool from the situation's facts, then sample
 // `questionCount` of them. Each unit is referenced by its (unique) grid ref so
 // prompts are never ambiguous.
-function makeQuestions(units, aircraft, comms, questionCount, rng) {
+function makeQuestions(units, aircraft, comms, questionCount, fields, rng) {
   const candidates = []
   const countPool = [1, 2, 3, 4, 5, 6, 7, 8, 9]
   const headingPool = Object.values(HEADING_WORD)
@@ -200,26 +207,28 @@ function makeQuestions(units, aircraft, comms, questionCount, rng) {
     })
   })
 
+  // One question per field the panel shows. A difficulty that hides a field must
+  // never be asked about it — the answer was never on screen.
   aircraft.forEach(ac => {
-    candidates.push({
+    if (fields.includes('waypoint')) candidates.push({
       category: 'aircraft-waypoint',
       prompt: `Where is ${ac.callsign}'s next waypoint?`,
       answer: ac.waypointRef,
       options: buildOptions(ac.waypointRef, allRefs, rng),
     })
-    candidates.push({
+    if (fields.includes('waypointAt')) candidates.push({
       category: 'aircraft-seconds',
       prompt: `How many seconds until ${ac.callsign} reaches its next waypoint?`,
       answer: ac.waypointAt,
       options: buildOptions(ac.waypointAt, secPool, rng),
     })
-    candidates.push({
+    if (fields.includes('altitude')) candidates.push({
       category: 'aircraft-altitude',
       prompt: `What altitude (flight level) is ${ac.callsign} at?`,
       answer: ac.altitude,
       options: buildOptions(ac.altitude, altPool, rng),
     })
-    candidates.push({
+    if (fields.includes('channel')) candidates.push({
       category: 'aircraft-channel',
       prompt: `What comms channel is ${ac.callsign} on?`,
       answer: ac.channel,
@@ -278,16 +287,27 @@ function commsAircraft(aircraft, comm) {
 
 export function generateSatSituation(opts = {}, rng = Math.random) {
   const randInt = makeRandInt(rng)
-  const unitCount = opts.unitCount ?? randInt(3, 5)
-  const aircraftCount = opts.aircraftCount ?? randInt(2, 3)
+  // Ranges (not fixed counts) are what a difficulty tunes — rolling them here
+  // rather than in the caller keeps a seeded rng in charge of the whole
+  // situation, so a seed still reproduces it exactly. An explicit unitCount /
+  // aircraftCount / supportCall still wins, which is how the tutorial pins its
+  // fixed practice picture.
+  const [unitMin, unitMax] = opts.unitRange ?? [3, 5]
+  const [acMin, acMax] = opts.aircraftRange ?? [2, 3]
+  const unitCount = opts.unitCount ?? randInt(unitMin, unitMax)
+  const aircraftCount = opts.aircraftCount ?? randInt(acMin, acMax)
   const questionCount = opts.questionCount ?? 6
-  // Occasional by design — roughly every other situation carries one.
-  const supportCall = opts.supportCall ?? rng() < 0.5
+  // Which of the four aircraft-panel fields are on screen. Gates both what the
+  // radio talks about and what can be asked, so the two never drift from what
+  // the player was actually shown.
+  const fields = opts.aircraftFields ?? ALL_AIRCRAFT_FIELDS
+  // Occasional by design — on Hard, roughly every other situation carries one.
+  const supportCall = opts.supportCall ?? rng() < (opts.supportChance ?? 0.5)
 
   const units = makeUnits(unitCount, rng, randInt)
   const aircraft = makeAircraft(aircraftCount, rng, randInt)
-  const comms = makeComms(aircraft, units, supportCall, rng)
-  const questions = makeQuestions(units, aircraft, comms, questionCount, rng)
+  const comms = makeComms(aircraft, units, supportCall, fields, rng)
+  const questions = makeQuestions(units, aircraft, comms, questionCount, fields, rng)
 
   return { units, aircraft, comms, questions }
 }

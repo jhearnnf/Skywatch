@@ -37,6 +37,8 @@ const GAME_OFFSET = {
   'dad':             22,
   'cut':              3,
   'cut-easier':       5,
+  'sat':             21,
+  'sat-easier':      17,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -210,6 +212,13 @@ const FAKE_TUNING = {
     floor: 5, ceiling: 18, seedTime: 204.6, timeStep: 5.4,
     scoreSequence: [17, 16, 16, 15, 15, 14, 14, 13, 12, 12, 11, 11, 10, 9, 9, 8, 8, 7, 6, 5],
   },
+  'sat-easier': {
+    // correctCount out of 10 (2 situations × 5 questions), higher is better. Top
+    // demo of 9 stays under a perfect 10; the roster trails to 3. Half the run
+    // length of Hard — two observe windows rather than three — so ~100–150s.
+    floor: 3, ceiling: 10, seedTime: 112.4, timeStep: 3.1,
+    scoreSequence: [9, 9, 9, 8, 8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 3, 3],
+  },
   'trace-2': {
     // correctCount out of 8 (watch-and-recall, one question per round), higher
     // is better. Top demo of 7 stays under a perfect 8; the roster trails to 2.
@@ -365,6 +374,7 @@ const WEEKLY_PER_PLAY = {
   'numerical-ops-easier': 85,
   'dad':               9,  // correctCount /15 — a little below a decent single run
   'sat':              11,  // correctCount /18 — a little below a decent single run
+  'sat-easier':        6,  // correctCount /10 — same idea on the shorter run
   'cut':             350,  // accumulating totalScore — a little below a decent single run
   'cut-easier':      260,  // fewer scheduled tasks in the same 180s
 };

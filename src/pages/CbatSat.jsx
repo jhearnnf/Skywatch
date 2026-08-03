@@ -5,26 +5,40 @@ import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
-import { generateSatSituation, SAT_GRID } from '../utils/cbat/satGenerator'
+import { generateSatSituation, SAT_GRID, ALL_AIRCRAFT_FIELDS } from '../utils/cbat/satGenerator'
 import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
-import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import {
+  SAT_DIFFICULTIES, SAT_LAUNCH_MS, satTuning, satTotalQuestions, computeGrade,
+  readStoredSatDifficulty, storeSatDifficulty,
+} from '../utils/cbat/satDifficulty'
+import { useCbatDemo } from '../utils/cbat/demoMode'
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const SITUATIONS = 3
-const QUESTIONS_PER_SITUATION = 6
-const TOTAL_QUESTIONS = SITUATIONS * QUESTIONS_PER_SITUATION
+// Situation count, question count, how many units and aircraft appear and how
+// often a support call comes in are all per-difficulty — see satDifficulty.js.
+// The clocks below are shared: Easier lightens the load, never the timer.
 const OBSERVE_MS = 28000      // study window per situation
 const PER_QUESTION_MS = 22000 // recall timer per question
 const AIRCRAFT_SLOT_MS = 5000 // panel 4 shows one callsign at a time, switching on this cadence
 // The grid shows each contact exactly once — the observe window is split evenly
-// between them (3–5 units → ~6–9s each) and the last one stays up until the end.
+// between them (Hard's 3–5 units → ~6–9s each, Easier's 2–3 → ~9–14s) and the
+// last one stays up until the end.
 
-function buildSituations() {
+function buildSituations(tuning) {
   const out = []
-  for (let i = 0; i < SITUATIONS; i++) out.push(generateSatSituation({ questionCount: QUESTIONS_PER_SITUATION }))
+  for (let i = 0; i < tuning.situations; i++) {
+    out.push(generateSatSituation({
+      questionCount: tuning.questionsPerSituation,
+      unitRange: tuning.unitRange,
+      aircraftRange: tuning.aircraftRange,
+      aircraftFields: tuning.aircraftFields,
+      supportChance: tuning.supportChance,
+    }))
+  }
   return out
 }
 
@@ -140,7 +154,11 @@ function AircraftField({ label, children, theme = DEFAULT_THEME }) {
 // One callsign at a time fills the whole panel (matching the real SAT), with a
 // dots indicator showing which of the aircraft is currently displayed. The
 // panel auto-switches between callsigns during the observe window.
-function AircraftPanel({ aircraft, activeIdx }) {
+//
+// `fields` is the difficulty's aircraftFields — Easier shows altitude and comms
+// channel only. It must stay in step with what the generator asks about and what
+// the radio says, or the player gets questioned on something never displayed.
+function AircraftPanel({ aircraft, activeIdx, fields = ALL_AIRCRAFT_FIELDS }) {
   const ac = aircraft[activeIdx % aircraft.length]
   if (!ac) return null
   const theme = CALLSIGN_THEME[ac.callsign] || DEFAULT_THEME
@@ -162,27 +180,35 @@ function AircraftPanel({ aircraft, activeIdx }) {
         </div>
       </div>
       <dl className="grid grid-cols-1 gap-2 flex-1">
-        <AircraftField label="Next Waypoint" theme={theme}>
-          <span className="text-green-400 text-6xl font-bold leading-none align-middle mr-2">{WAYPOINT_ARROW[ac.waypointDir]}</span>
-          <span className="align-middle">{ac.waypointRef}</span>
-        </AircraftField>
-        <AircraftField label="Next Waypoint At" theme={theme}>{ac.waypointAt}s</AircraftField>
-        <AircraftField label="Altitude" theme={theme}>FL{ac.altitude}</AircraftField>
-        <AircraftField label="Comms Channel" theme={theme}>{ac.channel}</AircraftField>
+        {fields.includes('waypoint') && (
+          <AircraftField label="Next Waypoint" theme={theme}>
+            <span className="text-green-400 text-6xl font-bold leading-none align-middle mr-2">{WAYPOINT_ARROW[ac.waypointDir]}</span>
+            <span className="align-middle">{ac.waypointRef}</span>
+          </AircraftField>
+        )}
+        {fields.includes('waypointAt') && <AircraftField label="Next Waypoint At" theme={theme}>{ac.waypointAt}s</AircraftField>}
+        {fields.includes('altitude') && <AircraftField label="Altitude" theme={theme}>FL{ac.altitude}</AircraftField>}
+        {fields.includes('channel') && <AircraftField label="Comms Channel" theme={theme}>{ac.channel}</AircraftField>}
       </dl>
     </div>
   )
 }
 
 // ── Results screen (embedded inside CbatGameOver) ────────────────────────────
-function ResultsScreen({ answers, totalTime }) {
-  const correct = answers.filter(a => a.correct).length
-  const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
+const GRADE_STYLE = {
+  Outstanding: { emoji: '🎖️', color: 'text-green-400' },
+  Good:        { emoji: '🗺️', color: 'text-brand-300' },
+  'Needs Work':{ emoji: '🔧', color: 'text-amber-400' },
+  Failed:      { emoji: '💥', color: 'text-red-400' },
+}
 
-  const grade = pct >= 90 ? { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '🗺️', color: 'text-brand-300' }
-    : pct >= 50 ? { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
-    : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
+function ResultsScreen({ answers, totalTime, tuning }) {
+  const total = satTotalQuestions(tuning)
+  const correct = answers.filter(a => a.correct).length
+  const pct = Math.round((correct / total) * 100)
+
+  const label = computeGrade(pct, tuning)
+  const grade = { label, ...GRADE_STYLE[label] }
 
   return (
     <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
@@ -194,7 +220,7 @@ function ResultsScreen({ answers, totalTime }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}/{TOTAL_QUESTIONS}</p>
+            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}/{total}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
@@ -373,8 +399,11 @@ function SatTutorial({ onExit, onProgress }) {
             <SatGrid units={sit.units} />
             <GridLegend />
           </div>
+          {/* The tutorial teaches the whole game, so it always shows the full
+              four-field panel regardless of the difficulty selected behind it —
+              the coach copy for this step describes all four. */}
           <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1 mb-2${pulse('aircraft')}`}>
-            <AircraftPanel aircraft={sit.aircraft} activeIdx={0} />
+            <AircraftPanel aircraft={sit.aircraft} activeIdx={0} fields={ALL_AIRCRAFT_FIELDS} />
           </div>
           <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2 mb-3 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1${pulse('radio')}`}>
             <div className="flex items-center gap-2 shrink-0">
@@ -443,19 +472,28 @@ export default function CbatSat() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
-  const [phase, setPhase] = useState('intro') // intro | tutorial | observe | playing | feedback | results
+  const [phase, setPhase] = useState('intro') // intro | tutorial | launching | observe | playing | feedback | results
+  const isDemo = !!useCbatDemo()
+
+  // The difficulty the instructions card is set to. Persisted, so the card opens
+  // on whatever was played last.
+  const [difficulty, setDifficulty] = useState(readStoredSatDifficulty)
+  const tuning = satTuning(difficulty)
+  // The difficulty the run on screen is being played at. Pinned at launch so
+  // flipping the card's selection mid-run could never redirect a finished score.
+  // The ref is what the game logic reads; the state is what the render tree
+  // reads (reading a ref during render trips react-hooks/refs).
+  const runTuningRef = useRef(tuning)
+  const [runDifficulty, setRunDifficulty] = useState(difficulty)
+  const runTuning = satTuning(runDifficulty)
+  const runTotalQuestions = satTotalQuestions(runTuning)
+
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     if (phase === 'tutorial' || phase === 'observe' || phase === 'playing' || phase === 'feedback') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
-
-  // SAT is in beta — swap the shell's cool dark-blue backdrop for a warm,
-  // "beta"-watermarked wash while this page is mounted, so the game visibly
-  // reads as unfinished. Styled via body.cbat-sat-beta in main.css (mirrors
-  // the cbat-dpt-fullwidth body-class pattern).
-  useGameBodyClass('cbat-sat-beta')
 
   // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
   // Online-only by design — a learning aid, not a score, so no offline outbox.
@@ -497,43 +535,45 @@ export default function CbatSat() {
   const currentSituation = situations[situationIdx] || null
   const currentQuestion = currentSituation?.questions[questionIdx] || null
 
-  // Fetch personal best
-  useEffect(() => {
+  // Fetch personal best. Per-difficulty (separate collections), so this refetches
+  // on every switch.
+  const fetchPB = useCallback((gameKey) => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/sat/personal-best`)
+    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
-  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user, apiFetch, API])
+
+  useEffect(() => { fetchPB(tuning.gameKey) }, [fetchPB, tuning.gameKey])
 
   // Stop any speech when the component unmounts.
   useEffect(() => () => stopSpeech(), [])
 
   // Submit score to backend
   const submitScore = useCallback((finalAnswers, finalTotalMs) => {
+    const playedTuning = runTuningRef.current
+    const totalQuestions = satTotalQuestions(playedTuning)
     const correctCount = finalAnswers.filter(a => a.correct).length
     const totalTime = finalTotalMs / 1000
-    const avgTimePerQuestionMs = Math.round(finalTotalMs / TOTAL_QUESTIONS)
+    const avgTimePerQuestionMs = Math.round(finalTotalMs / totalQuestions)
 
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: correctCount })
-    submitCbatResult('sat', {
+    submitCbatResult(playedTuning.gameKey, {
         correctCount,
-        totalQuestions: TOTAL_QUESTIONS,
+        totalQuestions,
         totalTime,
         avgTimePerQuestionMs,
       }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/sat/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        fetchPB(playedTuning.gameKey)
       })
       .catch(() => {})
-  }, [apiFetch, API, markGameCompleted])
+  }, [apiFetch, API, markGameCompleted, fetchPB])
 
   // Observe phase — countdown + sequential radio comms. When it ends (or the
   // user clicks Ready), units/aircraft disappear and the recall questions begin.
@@ -632,7 +672,7 @@ export default function CbatSat() {
       return
     }
     const nextS = situationIdx + 1
-    if (nextS < SITUATIONS) {
+    if (nextS < runTuningRef.current.situations) {
       setSituationIdx(nextS)
       setQuestionIdx(0)
       setPhase('observe')
@@ -643,12 +683,8 @@ export default function CbatSat() {
   }
 
   const startGame = useCallback(() => {
-    // Must happen synchronously in the click handler: iOS Safari only allows
-    // speech that was unlocked by a user gesture, and the first radio call is
-    // fired later by the observe timer.
-    primeSpeech()
-    startTracking('sat')
-    setSituations(buildSituations())
+    startTracking(runTuningRef.current.gameKey)
+    setSituations(buildSituations(runTuningRef.current))
     setSituationIdx(0)
     setQuestionIdx(0)
     setAnswers([])
@@ -658,6 +694,34 @@ export default function CbatSat() {
     totalElapsedRef.current = 0
     setPhase('observe')
   }, [startTracking])
+
+  // Pressing Start doesn't drop straight into the game: the chosen difficulty
+  // button flashes on a greyed-out card for SAT_LAUNCH_MS first. A demo tile on
+  // the landing wall skips the flash — its driver clicks Start the moment the
+  // card mounts, so a dimmed card is all anyone would ever see of it.
+  const beginLaunch = useCallback(() => {
+    // primeSpeech must happen synchronously in the click handler: iOS Safari
+    // only allows speech that was unlocked by a user gesture, and the first
+    // radio call is fired later by the observe timer.
+    primeSpeech()
+    runTuningRef.current = tuning
+    setRunDifficulty(tuning.key)
+    if (isDemo) { startGame(); return }
+    setPhase('launching')
+  }, [tuning, isDemo, startGame])
+
+  useEffect(() => {
+    if (phase !== 'launching') return
+    const t = setTimeout(() => startGame(), SAT_LAUNCH_MS)
+    return () => clearTimeout(t)
+  }, [phase, startGame])
+
+  const chooseDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeSatDifficulty(key)
+    // The old board's best belongs to the difficulty being left.
+    setPersonalBest(null)
+  }, [])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -675,21 +739,26 @@ export default function CbatSat() {
   }, [])
 
   const correctSoFar = answers.filter(a => a.correct).length
-  const globalQ = situationIdx * QUESTIONS_PER_SITUATION + questionIdx + 1
+  const globalQ = situationIdx * runTuning.questionsPerSituation + questionIdx + 1
   const observeSec = (observeRemainingMs / 1000).toFixed(0)
   const remainingSec = (qRemainingMs / 1000).toFixed(0)
+  const launching = phase === 'launching'
+  // During the launch flash everything on the card except the chosen difficulty
+  // button greys out, so the flashing button is the only thing left alive.
+  const dim = launching ? ' cbat-launch-dim' : ''
 
   return (
     <div className="cbat-sat-page">
       <SEO title="Situational Awareness Test — CBAT" description="Observe a tactical picture of units, aircraft and radio calls, then recall the details from memory." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
+      <div className={`flex items-center gap-2 mb-2${dim}`}>
+        {phase === 'intro' || launching
           ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
           : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['observe', 'playing', 'feedback'].includes(phase)} />
         }
         <h1 className="text-sm font-extrabold text-slate-900">Situational Awareness Test</h1>
+        {['observe', 'playing', 'feedback'].includes(phase) && <DifficultyMarker tuning={runTuning} />}
       </div>
 
       {/* Not logged in */}
@@ -708,19 +777,38 @@ export default function CbatSat() {
         <div className="flex flex-col items-center">
 
           {/* Intro screen */}
-          {phase === 'intro' && (
+          {(phase === 'intro' || launching) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
             >
-              <p className="text-4xl mb-3">🗺️</p>
-              <p className="text-xl font-extrabold text-white mb-2">Situational Awareness Test</p>
-              <p className="text-base text-slate-400 mb-5">
+              <p className={`text-4xl mb-3${dim}`}>🗺️</p>
+
+              {/* SAT_DIFFICULTIES is ordered [easier, hard], so the easier option
+                  lands left of the title and hard lands right of it. The title is
+                  too long to sit between them on a phone, so it goes above and
+                  the pair sits under it. */}
+              <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Situational Awareness Test</p>
+              <div className="flex items-center justify-center gap-3 mb-1">
+                {SAT_DIFFICULTIES.map(t => (
+                  <DifficultyButton
+                    key={t.key}
+                    tuning={t}
+                    selected={difficulty === t.key}
+                    onSelect={chooseDifficulty}
+                    flashing={launching && difficulty === t.key}
+                    dimmed={launching && difficulty !== t.key}
+                  />
+                ))}
+              </div>
+              <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+
+              <p className={`text-base text-slate-400 mb-5${dim}`}>
                 Build and hold a mental picture of a changing battlefield. Each situation shows units on a grid and controller aircraft, with some details called in over the <span className="text-brand-300">radio</span>. It all disappears — then you answer from memory.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-base text-[#ddeaf8]">
+              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-base text-[#ddeaf8]${dim}`}>
                 <div className="flex items-start gap-2">
                   <span className="text-brand-300 font-bold shrink-0">1.</span>
                   <span>Observe — units (type, count, allegiance, heading), aircraft data, and radio calls.</span>
@@ -731,7 +819,7 @@ export default function CbatSat() {
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-brand-300 font-bold shrink-0">3.</span>
-                  <span>{SITUATIONS} situations · {TOTAL_QUESTIONS} questions total.</span>
+                  <span>{tuning.situations} situations · {satTotalQuestions(tuning)} questions total.</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#8a9bb5] pt-1">
                   <span className="shrink-0">⏱</span>
@@ -740,10 +828,10 @@ export default function CbatSat() {
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
+                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg font-mono font-bold text-brand-300">
-                    {personalBest.bestScore}/{TOTAL_QUESTIONS}
+                    {personalBest.bestScore}/{satTotalQuestions(tuning)}
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
                   </p>
@@ -751,23 +839,25 @@ export default function CbatSat() {
                 </div>
               )}
 
-              <div className="text-center mb-4">
-                <Link to="/cbat/sat/leaderboard" className="text-sm text-brand-300 hover:text-brand-200 transition-colors">
+              <div className={`text-center mb-4${dim}`}>
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-sm text-brand-300 hover:text-brand-200 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
 
               <div className="flex items-center justify-center gap-3">
                 <button
-                  onClick={startGame}
+                  onClick={beginLaunch}
+                  disabled={launching}
                   data-demo-start
-                  className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
+                  className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}
                 >
                   Start
                 </button>
                 <button
                   onClick={() => { primeSpeech(); setPhase('tutorial') }}
-                  className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm"
+                  disabled={launching}
+                  className={`px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm${dim}`}
                 >
                   Tutorial
                 </button>
@@ -791,7 +881,7 @@ export default function CbatSat() {
               {/* Panel 1 (instruction) + Panel 2 (timer) */}
               <div className="flex items-stretch gap-2 mb-2">
                 <div className="flex-1 bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{SITUATIONS} — Memorise the picture</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations} — Memorise the picture</p>
                   <p className="text-sm text-[#ddeaf8]">Units, aircraft data and radio calls. It disappears when the timer ends.</p>
                 </div>
                 <div className="w-20 bg-[#0a1628] border border-[#1a3a5c] rounded-lg flex flex-col items-center justify-center">
@@ -819,7 +909,7 @@ export default function CbatSat() {
                 <div className="sm:flex-[2] flex flex-col">
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 px-1">Controller Aircraft</p>
                   <div className="flex-1">
-                    <AircraftPanel aircraft={currentSituation.aircraft} activeIdx={activeAircraft} />
+                    <AircraftPanel aircraft={currentSituation.aircraft} activeIdx={activeAircraft} fields={runTuning.aircraftFields} />
                   </div>
                 </div>
               </div>
@@ -858,7 +948,7 @@ export default function CbatSat() {
             <div className="w-full max-w-md">
               {/* HUD */}
               <div className="flex items-center justify-between text-sm font-mono mb-2 px-1">
-                <span className="text-slate-400">Q <span className="text-brand-300">{globalQ}</span>/{TOTAL_QUESTIONS}</span>
+                <span className="text-slate-400">Q <span className="text-brand-300">{globalQ}</span>/{runTotalQuestions}</span>
                 <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span></span>
                 <span className="text-slate-400">⏱ <span className={qRemainingMs < 6000 ? 'text-red-400' : 'text-brand-300'}>{remainingSec}s</span></span>
               </div>
@@ -868,7 +958,7 @@ export default function CbatSat() {
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
-                  animate={{ width: `${(answers.length / TOTAL_QUESTIONS) * 100}%` }}
+                  animate={{ width: `${(answers.length / runTotalQuestions) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
               </div>
@@ -922,7 +1012,7 @@ export default function CbatSat() {
                       onClick={goNext}
                       className="w-full px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                     >
-                      {globalQ >= TOTAL_QUESTIONS
+                      {globalQ >= runTotalQuestions
                         ? 'See Results'
                         : questionIdx + 1 >= (currentSituation?.questions.length || 0)
                           ? 'Next Situation →'
@@ -937,7 +1027,7 @@ export default function CbatSat() {
           {/* Results */}
           {phase === 'results' && (
             <CbatGameOver
-              gameKey="sat"
+              gameKey={runTuning.gameKey}
               score={answers.filter(a => a.correct).length}
               time={totalElapsedMs / 1000}
               scoreSaved={scoreSaved}
@@ -945,7 +1035,7 @@ export default function CbatSat() {
               personalBest={personalBest}
               onPlayAgain={() => { setScoreSaved(false); startGame() }}
             >
-              <ResultsScreen answers={answers} totalTime={totalElapsedMs / 1000} />
+              <ResultsScreen answers={answers} totalTime={totalElapsedMs / 1000} tuning={runTuning} />
             </CbatGameOver>
           )}
         </div>

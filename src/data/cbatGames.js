@@ -23,9 +23,7 @@ export const CBAT_GAMES = [
   // surfaces arbitrary announcement text in the same slot (for a game that
   // isn't new but has gained something).
   { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', badge: 'New Difficulty Modes' },
-  // `beta: true` surfaces a BETA badge on the hub tile — SAT is live but still
-  // being polished. Drop the flag once it's finished.
-  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', beta: true },
+  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', badge: 'New Difficulty Modes' },
 ]
 
 // Per-leaderboard display config, keyed by the backend leaderboard gameKey
@@ -65,7 +63,11 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'numerical-ops-easier': { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad' },
-  'sat':             { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 18, formatScore: (s) => `${s}/18`, backPath: '/cbat/sat' },
+  'sat':             { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 18, formatScore: (s) => `${s}/18`, backPath: '/cbat/sat', difficultyGroup: 'sat' },
+  // Easier asks 10 questions (2 situations × 5) where Hard asks 18, so unlike
+  // the other splits the two boards don't share a ceiling. Separate collections
+  // anyway, so nothing is being compared across them.
+  'sat-easier':      { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 10, formatScore: (s) => `${s}/10`, backPath: '/cbat/sat', difficultyGroup: 'sat' },
   'cut':             { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
   'cut-easier':      { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
 }
@@ -87,6 +89,10 @@ export const CBAT_DIFFICULTY_GROUPS = {
   'numerical-ops': [
     { gameKey: 'numerical-ops-easier', label: 'Easier' },
     { gameKey: 'numerical-ops',        label: 'Hard' },
+  ],
+  sat: [
+    { gameKey: 'sat-easier', label: 'Easier' },
+    { gameKey: 'sat',        label: 'Hard' },
   ],
 }
 

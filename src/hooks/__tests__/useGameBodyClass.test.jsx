@@ -42,7 +42,7 @@ describe('useGameBodyClass', () => {
   })
 
   it('defaults to active, for games that mark the body for their whole mount', () => {
-    renderHook(() => useGameBodyClass('cbat-sat-beta'))
-    expect(document.body.classList.contains('cbat-sat-beta')).toBe(true)
+    renderHook(() => useGameBodyClass('cbat-vis2d-locked'))
+    expect(document.body.classList.contains('cbat-vis2d-locked')).toBe(true)
   })
 })

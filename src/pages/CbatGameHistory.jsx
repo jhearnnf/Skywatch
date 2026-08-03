@@ -27,6 +27,7 @@ export const GAME_LABELS = {
   'numerical-ops-easier': 'Numerical Operations (Easier)',
   'dad':              'Directions and Distances',
   'sat':              'Situational Awareness Test',
+  'sat-easier':       'Situational Awareness Test (Easier)',
   'cut':              'Cognitive Updating Test',
   'cut-easier':       'Cognitive Updating Test (Easier)',
 }

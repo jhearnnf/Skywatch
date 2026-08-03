@@ -17,6 +17,7 @@ const GameSessionCbatNumericalOpsResult  = require('../models/GameSessionCbatNum
 const GameSessionCbatNumericalOpsEasierResult = require('../models/GameSessionCbatNumericalOpsEasierResult');
 const GameSessionCbatDADResult           = require('../models/GameSessionCbatDADResult');
 const GameSessionCbatSatResult           = require('../models/GameSessionCbatSatResult');
+const GameSessionCbatSatEasierResult     = require('../models/GameSessionCbatSatEasierResult');
 const GameSessionCbatCutResult           = require('../models/GameSessionCbatCutResult');
 const GameSessionCbatCutEasierResult     = require('../models/GameSessionCbatCutEasierResult');
 
@@ -214,6 +215,18 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better
     bestOp: '$max',
     label: 'Situational Awareness Test',
+  },
+  // SAT's "Easier" difficulty — 2–3 units instead of 3–5, always 2 controller
+  // aircraft instead of 2–3, fewer support calls, and a shorter run (2
+  // situations of 5 questions, so scores are out of 10 not 18). Its own
+  // collection and therefore its own boards; the page at /cbat/sat picks the
+  // key from the selected difficulty.
+  'sat-easier': {
+    Model: GameSessionCbatSatEasierResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Situational Awareness Test (Easier)',
   },
   'cut': {
     Model: GameSessionCbatCutResult,
