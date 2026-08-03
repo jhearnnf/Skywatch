@@ -23,6 +23,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
+const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
 const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
 const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgressSeries');
 const { tierToAward, donationPromptDue } = require('../utils/cbatProgressAward');
@@ -3133,30 +3134,9 @@ async function cbatPersonalBest(req, res, gameKey) {
   }
 }
 
-// Rebuild the demo (fake) rows the all-time board would inject for one game, so a
-// recent score can be ranked against the SAME padded board the Recent Scores row
-// links through to — not just the real sessions. Mirrors cbatLeaderboard's real-board
-// pipeline (top-20 best-per-user) so padLeaderboard's short-circuit / gap-fill logic
-// matches: games where real entries already fill the board get no fakes here either.
-async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
-  const modeFilter = cfg.modeFilter ?? null;
-  const real = await cfg.Model.aggregate([
-    ...(modeFilter ? [{ $match: modeFilter }] : []),
-    { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
-    {
-      $group: {
-        _id: '$userId',
-        userId: { $first: '$userId' },
-        [cfg.primaryField]: { $first: `$${cfg.primaryField}` },
-        totalTime: { $first: '$totalTime' },
-      },
-    },
-    { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
-    { $limit: 20 },
-    { $project: { _id: 0, userId: 1, bestScore: `$${cfg.primaryField}`, bestTime: '$totalTime' } },
-  ]);
-  return padLeaderboard(real, gameKey, { limit: 20, isAdmin }).filter(e => e.isFake);
-}
+// cbatPaddedFakes (the demo rows the all-time board injects for one game) lives in
+// utils/cbatBoardRank.js — shared with the Discord medal broadcaster so both rank
+// against exactly the same padded board a player sees.
 
 // GET /api/games/cbat/showcase — the landing page's proof wall. Public (it runs for logged-out
 // visitors, which is the entire point) and read-only: one randomly picked top-ten player per
