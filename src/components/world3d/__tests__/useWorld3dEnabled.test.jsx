@@ -10,42 +10,67 @@ vi.mock('../../../context/AuthContext', () => ({
 
 import { useAppSettings } from '../../../context/AppSettingsContext'
 import { useAuth } from '../../../context/AuthContext'
-import { useWorld3dEnabled } from '../state/useWorld3dEnabled'
+import { useWorld3dEnabled, useWorld3dNavVisible } from '../state/useWorld3dEnabled'
 
-function setup(flagMode, user) {
-  useAppSettings.mockReturnValue({ settings: { featureFlags: { world3d: flagMode } } })
+function setup(hangarGameEnabled, user) {
+  useAppSettings.mockReturnValue({ settings: { hangarGameEnabled } })
   useAuth.mockReturnValue({ user })
 }
 
-describe('useWorld3dEnabled', () => {
-  it('is false when flag is off', () => {
-    setup('off', { id: '1', isAdmin: true })
+const admin   = { id: '1', isAdmin: true }
+const regular = { id: '2', isAdmin: false }
+
+describe('useWorld3dEnabled — access', () => {
+  it('is false for a normal user when the toggle is off', () => {
+    setup(false, regular)
     expect(renderHook(() => useWorld3dEnabled()).result.current).toBe(false)
   })
 
-  it('is false when flag is admin and user is not admin', () => {
-    setup('admin', { id: '1', isAdmin: false })
-    expect(renderHook(() => useWorld3dEnabled()).result.current).toBe(false)
-  })
-
-  it('is true when flag is admin and user is admin', () => {
-    setup('admin', { id: '1', isAdmin: true })
+  it('is true for a normal user when the toggle is on', () => {
+    setup(true, regular)
     expect(renderHook(() => useWorld3dEnabled()).result.current).toBe(true)
   })
 
-  it('is true when flag is everyone and user is logged in (non-admin)', () => {
-    setup('everyone', { id: '1', isAdmin: false })
+  it('is true for an admin even when the toggle is off — URL access is never gated', () => {
+    setup(false, admin)
     expect(renderHook(() => useWorld3dEnabled()).result.current).toBe(true)
   })
 
-  it('is false when flag is everyone but no user', () => {
-    setup('everyone', null)
+  it('is false when logged out, even with the toggle on', () => {
+    setup(true, null)
     expect(renderHook(() => useWorld3dEnabled()).result.current).toBe(false)
   })
 
-  it('defaults to off when the flag key is missing', () => {
-    useAppSettings.mockReturnValue({ settings: { featureFlags: {} } })
-    useAuth.mockReturnValue({ user: { id: '1', isAdmin: true } })
+  it('defaults to off when the setting is missing', () => {
+    useAppSettings.mockReturnValue({ settings: {} })
+    useAuth.mockReturnValue({ user: regular })
     expect(renderHook(() => useWorld3dEnabled()).result.current).toBe(false)
+  })
+})
+
+describe('useWorld3dNavVisible — nav entry', () => {
+  it('is false for a normal user when the toggle is off', () => {
+    setup(false, regular)
+    expect(renderHook(() => useWorld3dNavVisible()).result.current).toBe(false)
+  })
+
+  it('is true for a normal user when the toggle is on', () => {
+    setup(true, regular)
+    expect(renderHook(() => useWorld3dNavVisible()).result.current).toBe(true)
+  })
+
+  it('is false for an admin when the toggle is off — the URL escape hatch shows no nav item', () => {
+    setup(false, admin)
+    expect(renderHook(() => useWorld3dNavVisible()).result.current).toBe(false)
+  })
+
+  it('is true for an admin when the toggle is on', () => {
+    setup(true, admin)
+    expect(renderHook(() => useWorld3dNavVisible()).result.current).toBe(true)
+  })
+
+  it('is false when logged out', () => {
+    setup(true, null)
+    expect(renderHook(() => useWorld3dNavVisible()).result.current).toBe(false)
   })
 })

@@ -176,7 +176,7 @@ const appSettingsSchema = new mongoose.Schema({
   featureFlags: {
     type: Map,
     of: String,
-    default: () => ({ rsvpReader: 'off', briefReel: 'off', world3d: 'off' }),
+    default: () => ({ rsvpReader: 'off', briefReel: 'off' }),
   },
 
   // Flashcards feature — when false, News-category briefs skip the flashcard
@@ -184,6 +184,19 @@ const appSettingsSchema = new mongoose.Schema({
   // and the collect animation is suppressed. Reached-flashcard records still
   // persist so re-enabling restores them immediately.
   newsFlashcardsEnabled: { type: Boolean, default: false },
+
+  // HANGAR GAME — the 3D walkable hangar environment at /immerse.
+  //
+  // Off by default. When on, the game is reachable by every signed-in user and
+  // gains its own nav entry, INCLUDING in slim ("CBAT-only") mode — it is the
+  // one non-CBAT experience the slim app deliberately keeps. When off, there is
+  // no nav entry for anyone, but admins can still open /immerse directly by URL
+  // so the environment stays previewable before launch. See
+  // src/components/world3d/state/useWorld3dEnabled.js for the client gate.
+  //
+  // This replaces the former `featureFlags.world3d` tri-state, which had no
+  // admin UI and so could never actually be turned on.
+  hangarGameEnabled: { type: Boolean, default: false },
 
   // APTITUDE_SYNC feature
   aptitudeSyncEnabled:          { type: Boolean,  default: false },
@@ -431,7 +444,6 @@ appSettingsSchema.statics.getSettings = async function () {
       const KNOWN_FLAG_KEYS = {
         rsvpReader: 'off',
         briefReel:  'off',
-        world3d:    'off',
       };
       const current = settings.featureFlags;
       let touched = false;

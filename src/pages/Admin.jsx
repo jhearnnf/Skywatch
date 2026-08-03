@@ -2366,7 +2366,7 @@ function SettingsTab({ API }) {
   const [toast,    setToast]    = useState('')
   const [wtaSpawn,   setWtaSpawn]   = useState(null)
   const [cbatAircraft, setCbatAircraft] = useState(null)   // aircraft with a 3D model available
-  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false, caseFiles: false, flashcards: false })
+  const [gameGroupsOpen, setGameGroupsOpen] = useState({ quiz: false, wta: false, aptitudeSync: false, cbat: false, caseFiles: false, flashcards: false, hangar: false })
   const toggleGameGroup = (key) => setGameGroupsOpen(p => ({ ...p, [key]: !p[key] }))
   const [cbatGameRowsOpen, setCbatGameRowsOpen] = useState({ general: true })
   const toggleCbatGameRow = (key) => setCbatGameRowsOpen(p => ({ ...p, [key]: !p[key] }))
@@ -2645,6 +2645,7 @@ function SettingsTab({ API }) {
           'caseFilesDailyLimitSilver',
           'caseFilesDailyLimitGold',
           'newsFlashcardsEnabled',
+          'hangarGameEnabled',
         ]
         if (draft.cbatEnabled) {
           gameOptionsFields.push('cbatTargetAircraftBriefIds', 'cbatFlagAircraftBriefIds')
@@ -3147,6 +3148,42 @@ function SettingsTab({ API }) {
               checked={draft.newsFlashcardsEnabled ?? false}
               onChange={v => set('newsFlashcardsEnabled', v)}
             />
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => toggleGameGroup('hangar')}
+          className="w-full flex items-center justify-between text-base font-extrabold text-brand-600 uppercase tracking-widest pt-6 pb-2 mb-2 border-b-2 border-brand-600/40"
+        >
+          <span>Hangar Game</span>
+          <span className="text-brand-600 text-xs">{gameGroupsOpen.hangar ? '▲' : '▼'}</span>
+        </button>
+        {gameGroupsOpen.hangar && (
+          <>
+            <Toggle
+              label="Hangar game enabled"
+              hint="The walkable 3D hangar environment at /immerse. When on, every signed-in user gets a Hangar nav entry and can play it — including in Slim (CBAT-only) mode and the native app, which keep it as the one non-CBAT game. When off, nobody sees the nav entry, but admins can still open /immerse directly by URL to preview it."
+              checked={draft.hangarGameEnabled ?? false}
+              onChange={v => set('hangarGameEnabled', v)}
+            />
+            <div className="py-2.5 border-b border-slate-100 last:border-0">
+              <p className="text-sm font-semibold text-slate-700 mb-1">Testing</p>
+              <p className="text-xs text-slate-400 mb-2">
+                Opens the hangar in this tab. Works whether or not the toggle above is on —
+                admin URL access is never gated — so you can walk the environment before launching it.
+                Unsaved changes on this page are lost, so save first.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/immerse')}
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
+                >
+                  Open the hangar
+                </button>
+              </div>
+            </div>
           </>
         )}
       </Section>

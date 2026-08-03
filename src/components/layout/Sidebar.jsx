@@ -8,8 +8,9 @@ import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
-import { SLIM_NAV_ITEMS, slimNavActiveTo } from '../../utils/appMode'
+import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
+import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 
 const NAV_ITEMS = [
   { to: '/home',          emoji: '🏠', label: 'Home'       },
@@ -38,7 +39,10 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const slim = useSlimMode()
-  const navItems = slim ? SLIM_NAV_ITEMS : NAV_ITEMS
+  // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
+  const showHangarNav = useWorld3dNavVisible()
+  const baseNavItems = slim ? SLIM_NAV_ITEMS : NAV_ITEMS
+  const navItems = showHangarNav ? [...baseNavItems, HANGAR_NAV_ITEM] : baseNavItems
   const activeNavTo = slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()

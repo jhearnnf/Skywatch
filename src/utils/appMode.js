@@ -34,7 +34,15 @@ const SLIM_ALLOWED_PREFIXES = [
   '/privacy',            // store-compliance page
   '/delete-account',     // store-compliance page — the URL declared to Google Play
   '/admin',              // admins can still reach Settings to toggle slim off
+  '/immerse',            // Hangar game — see note below
 ]
+
+// Note on '/immerse': the Hangar is the one non-CBAT game slim mode keeps, by
+// design — enabling it in Admin → Game Options is meant to surface it even on
+// the native app. This list is a pure function of the pathname with no access
+// to AppSettings, so the path is allow-listed unconditionally and the
+// hangarGameEnabled check happens in World3DRoute, which redirects to /cbat
+// when the game is off. Route-level gating stays in one place that way.
 
 export function isSlimAllowed(pathname) {
   return SLIM_ALLOWED_PREFIXES.some(
@@ -48,10 +56,18 @@ export const SLIM_NAV_ITEMS = [
   { to: '/profile', emoji: '👤', label: 'Profile' },
 ]
 
+// Hangar game nav entry. Appended by Sidebar/BottomNav in BOTH slim and full
+// mode when AppSettings.hangarGameEnabled is on — it is not part of either base
+// list because its visibility is settings-driven, not mode-driven.
+export const HANGAR_NAV_ITEM = { to: '/immerse', emoji: '🛩️', label: 'Hangar' }
+
 // Which slim nav item should be highlighted for a given pathname.
 export function slimNavActiveTo(pathname) {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     return '/admin'
+  }
+  if (pathname === '/immerse' || pathname.startsWith('/immerse/')) {
+    return '/immerse'
   }
   if (
     pathname === '/profile' || pathname.startsWith('/profile/') ||

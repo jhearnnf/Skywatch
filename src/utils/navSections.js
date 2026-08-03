@@ -8,6 +8,7 @@
 const SECTION_PREFIXES = [
   ['/admin',           ['/admin']],
   ['/chat',            ['/chat']],
+  ['/immerse',         ['/immerse']],
   ['/play',            ['/play', '/cbat', '/cbat-game-history', '/case-files']],
   ['/learn-priority',  ['/learn-priority', '/brief', '/quiz', '/battle-of-order',
                         '/wheres-that-aircraft', '/aptitude-sync', '/intel-brief-history']],

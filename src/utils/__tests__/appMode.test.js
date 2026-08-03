@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SLIM_APP, isSlimAllowed, slimNavActiveTo, SLIM_NAV_ITEMS } from '../appMode'
+import { SLIM_APP, isSlimAllowed, slimNavActiveTo, SLIM_NAV_ITEMS, HANGAR_NAV_ITEM } from '../appMode'
 
 describe('appMode', () => {
   it('defaults to full app (not slim) under test/web', () => {
@@ -7,7 +7,14 @@ describe('appMode', () => {
   })
 
   it('exposes exactly CBAT + Profile as slim nav items', () => {
+    // Hangar is deliberately NOT in here — it is settings-driven, so the nav
+    // components append HANGAR_NAV_ITEM themselves when the toggle is on.
     expect(SLIM_NAV_ITEMS.map((i) => i.to)).toEqual(['/cbat', '/profile'])
+  })
+
+  it('exposes the Hangar nav item separately from the mode-driven lists', () => {
+    expect(HANGAR_NAV_ITEM.to).toBe('/immerse')
+    expect(SLIM_NAV_ITEMS).not.toContain(HANGAR_NAV_ITEM)
   })
 
   describe('isSlimAllowed', () => {
@@ -31,6 +38,12 @@ describe('appMode', () => {
       ]) {
         expect(isSlimAllowed(p)).toBe(true)
       }
+    })
+
+    it('allows the Hangar game, the one non-CBAT game slim mode keeps', () => {
+      // Allow-listed unconditionally — hangarGameEnabled is checked in
+      // World3DRoute, not here, since this is a pure pathname function.
+      expect(isSlimAllowed('/immerse')).toBe(true)
     })
 
     it('blocks learning content and other games', () => {
@@ -68,6 +81,10 @@ describe('appMode', () => {
     it('highlights admin for /admin surfaces', () => {
       expect(slimNavActiveTo('/admin')).toBe('/admin')
       expect(slimNavActiveTo('/admin/openrouter-usage')).toBe('/admin')
+    })
+
+    it('highlights the Hangar for /immerse', () => {
+      expect(slimNavActiveTo('/immerse')).toBe('/immerse')
     })
 
     it('highlights CBAT for everything else', () => {

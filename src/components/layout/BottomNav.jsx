@@ -9,8 +9,9 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
 import { getActiveNavTo } from '../../utils/navSections'
-import { SLIM_NAV_ITEMS, slimNavActiveTo } from '../../utils/appMode'
+import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
+import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 
 // Slightly longer than the 300ms slide-in transition in main.css so the flash
 // starts after the BottomNav is on-screen.
@@ -37,8 +38,11 @@ export default function BottomNav() {
   const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
   const { settings } = useAppSettings() ?? {}
   const showChatNav = !slim && user && settings?.chatEnabled !== false && chatVisible
+  // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
+  const showHangarNav = useWorld3dNavVisible()
 
   let items = slim ? [...SLIM_NAV_ITEMS] : [...NAV_ITEMS]
+  if (showHangarNav) items = [...items, HANGAR_NAV_ITEM]
   if (showChatNav) items = [...items, CHAT_ITEM]
   if (user?.isAdmin) items = [...items, ADMIN_ITEM]
   const location = useLocation()
