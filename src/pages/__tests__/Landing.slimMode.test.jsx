@@ -96,16 +96,29 @@ describe('Landing — slim (CBAT-only) mode', () => {
   it('puts the proof wall above the closing CTA, not below it', async () => {
     render(<Landing />)
     const wall = await screen.findByTestId('player-progress-wall')
-    const cta = screen.getByText('Start Your Own Run.')
+    const cta = screen.getByText("Get on this week's leaderboard.")
     // DOCUMENT_POSITION_FOLLOWING (4) — the CTA comes after the wall.
     expect(wall.compareDocumentPosition(cta) & 4).toBeTruthy()
   })
 
-  it('closes with copy that follows from the evidence rather than the hero', async () => {
+  // The closing card must stand on its own: the progress wall above it renders
+  // nothing when no player qualifies, so copy pointing at "the lines above" can
+  // end up pointing at nothing. It also must not restate the hero.
+  it('closes with copy that does not depend on the wall above it', async () => {
     render(<Landing />)
     await screen.findByTestId('player-progress-wall')
-    expect(screen.getByText(/Every line above began at run one/)).toBeDefined()
+    const card = screen.getByText("Get on this week's leaderboard.").closest('div')
+    expect(card.textContent).toMatch(/every game scores you instantly/i)
+    expect(card.textContent).not.toMatch(/above/i)
     expect(screen.queryByText('Sharpen Your Edge.')).toBeNull()
+  })
+
+  // The heading should not spend itself on the button's verb — "Start" ran
+  // three times in the old card (heading, body, button).
+  it('does not repeat the button verb across the closing card', () => {
+    render(<Landing />)
+    const card = screen.getByText("Get on this week's leaderboard.").closest('div')
+    expect(card.textContent.match(/Start/gi) ?? []).toHaveLength(1)
   })
 
   it('points the signup CTAs at register (not the RAF onboarding flow)', () => {

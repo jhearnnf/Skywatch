@@ -419,19 +419,33 @@ export default function Landing() {
         >
           <CornerBrackets size={20} color="#5baaff" opacity={0.5} />
 
+          {/* "PRIORITY ACCESS" is kept for the briefings, where access is the
+              thing being offered. In slim mode the ask is a free signup, and an
+              exclusivity tag on a free product reads as a paywall — so the tag
+              states the fact that makes the heading below credible instead: the
+              boards really do reset weekly (CbatLeaderboard renders a countdown
+              off `resetsAt`), which is why a stranger can expect to place. */}
           <div className="flex items-center justify-center gap-2 mb-4">
-            <span className="classified-tag">PRIORITY ACCESS</span>
+            <span className="classified-tag">{slim ? 'WEEKLY RESET' : 'PRIORITY ACCESS'}</span>
           </div>
 
           <div className="text-5xl mb-4">🎯</div>
-          {/* Slim copy picks up from the progress wall directly above rather
-              than restating the hero — the old "Sharpen Your Edge" repeated the
-              hero's "Sharpen each subtest" a screen and a half earlier and
-              added no argument the charts had not already made. */}
-          <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>{slim ? 'Start Your Own Run.' : 'Aim Higher.'}</h2>
+          {/* Slim copy states the payoff and the reason to sign up; the button
+              below carries the verb. The old "Start Your Own Run." spent the
+              heading on the button's own word ("Start" ran three times in one
+              card) and leant on "run", which the page only defines in the wall
+              above — a section that renders nothing when no player qualifies,
+              leaving "every line above" pointing at nothing. This version reads
+              the same with or without it.
+
+              "This week's" rather than bare "the leaderboard": the boards reset
+              weekly and CbatLeaderboard opens on that tab, so the bar being
+              offered is one week of scores, not a year of them — a far smaller
+              thing to ask a stranger to believe they can clear. */}
+          <h2 className="text-3xl font-extrabold mb-3" style={{ color: '#ffffff' }}>{slim ? "Get on this week's leaderboard." : 'Aim Higher.'}</h2>
           <p className="text-lg mb-8 max-w-md mx-auto" style={{ color: '#a8c4e0' }}>
             {slim
-              ? 'Every line above began at run one. Start practising and build yours.'
+              ? 'Create an account and every game scores you instantly, tracking your progress from the first play.'
               : 'Stop skimming Wikipedia. Start actually knowing military aviation.'}
           </p>
           {user ? (
