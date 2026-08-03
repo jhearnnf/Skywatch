@@ -120,7 +120,7 @@ export default function PlayerProgressWall() {
           It works. Here is the evidence.
         </h2>
         <p className="text-sm text-slate-500 px-3 max-w-xl mx-auto">
-          Real scores from real Skywatch players, pulled live from the leaderboards.
+          Real scores from real SkyWatch players, pulled live from the leaderboards.
         </p>
       </div>
 

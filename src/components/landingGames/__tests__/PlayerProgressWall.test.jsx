@@ -67,7 +67,8 @@ describe('PlayerProgressWall', () => {
     const { container } = render(<PlayerProgressWall />)
 
     await waitFor(() => expect(screen.getByTestId('progress-card')).toBeDefined())
-    expect(container.textContent).toMatch(/Real scores from real Skywatch players/i)
+    // Case-sensitive on purpose: the brand is written SkyWatch (or SKYWATCH) on the landing page.
+    expect(container.textContent).toMatch(/Real scores from real SkyWatch players/)
   })
 
   it('shows how many plays it took', async () => {
