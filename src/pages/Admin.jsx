@@ -4028,8 +4028,12 @@ function UsersTab({ API, onViewEmailHistory }) {
       <div className="space-y-3 pr-16">
         {sortedUsers.map(u => {
           const isExpanded = expanded.has(u._id)
+          // Neither online nor away → the row fades back so the live and recently
+          // active accounts carry the eye. Expanding lifts the fade: once you are
+          // reading a row's detail panel it needs to be fully legible.
+          const isDormant = !onlineStatus(u.lastSeen) && !isExpanded
           return (
-          <div key={u._id} className="relative">
+          <div key={u._id} className={`relative transition-opacity ${isDormant ? 'opacity-40 hover:opacity-75' : ''}`}>
           {/* OS tabs — every operating system this account has ever been seen on,
               just off the card's right edge. Lit = used; greyed = never seen.
               Always visible; collapsed rows use a compact 2-column grid, expanded
