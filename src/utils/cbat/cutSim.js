@@ -34,11 +34,10 @@ export const AIR_INTERVAL = 45_000
 export const GROUND_INTERVAL = 90_000
 export const SENSOR_ARM_WINDOW = 6_000   // activating within this of due earns points
 
-// Mission — dispenser lights fill over the lead-in, then a release window opens.
-// Each drop names one of three stations; the player must release the ORDERED
-// station (read from Message) at the scheduled Clock time — nothing on the panel
-// reveals which/when, so it's a genuine memory-updating task.
-export const LOAD_FILL_MS = 9_000
+// Mission — a release window opens at the scheduled time. Each drop names one of
+// three stations; the player must release the ORDERED station (read from Message)
+// at the scheduled Clock time. The Mission panel gives no cue at all — neither
+// which station nor when — so it's a genuine memory-updating task.
 export const LOAD_RELEASE_WINDOW = 6_000
 export const LOAD_POINTS = 3
 export const stationName = (i) => `Station ${i + 1}`
@@ -132,7 +131,6 @@ export function scheduleNextLoad(sim) {
   sim.loadDueAt = sim.elapsedMs + randRange(...sim.tuning.loadGapMs)
   sim.loadTarget = rand(LOAD_POINTS)
   sim.loadArmed = true
-  sim.loadLights = 0
   sim.loadReady = false
   pushMessage(sim, `MISSION: drop ${stationName(sim.loadTarget)} at ${clockAt(sim, sim.loadDueAt)}`)
 }
@@ -181,7 +179,6 @@ export function makeSim(difficulty) {
     loadDueAt,
     loadTarget,
     loadArmed: true,
-    loadLights: 0,
     loadReady: false,
 
     // System — hydraulic pressure + comms code
@@ -240,11 +237,10 @@ export function advanceSim(sim, dt) {
     pushMessage(sim, `SENSOR: select camera ${sim.requiredCamera}`)
   }
 
-  // Mission — dispenser lights fill over the lead-in to the scheduled drop time;
-  // the release window opens at the drop time. Miss it and it's a fault.
+  // Mission — the release window opens at the scheduled drop time. Nothing on
+  // the panel announces it; the player has to be watching the Clock. Miss the
+  // window and it's a fault.
   if (sim.loadArmed) {
-    const leadStart = sim.loadDueAt - LOAD_FILL_MS
-    sim.loadLights = Math.max(0, Math.min(6, Math.floor((sim.elapsedMs - leadStart) / (LOAD_FILL_MS / 6))))
     sim.loadReady = sim.elapsedMs >= sim.loadDueAt
     if (sim.elapsedMs > sim.loadDueAt + LOAD_RELEASE_WINDOW) {
       award(sim, SCORE.loadMissed, `${stationName(sim.loadTarget)} load drop missed`)

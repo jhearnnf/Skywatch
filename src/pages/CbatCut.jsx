@@ -185,31 +185,20 @@ function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt,
   )
 }
 
-function MissionPanel({ loadLights, loadReady, onRelease }) {
+function MissionPanel({ onRelease }) {
   return (
     <Panel title="Mission">
       <div className="flex flex-col items-center justify-center gap-3 h-full">
         <p className="text-[10px] text-slate-400 text-center">
           Release the <b className="text-[#ddeaf8]">package</b> at its scheduled time — read the ordered station in Message and watch the Clock.
         </p>
-        {/* Dispenser readiness — fills as the scheduled time approaches. */}
-        <div className="flex gap-1.5">
-          {Array.from({ length: 6 }, (_, i) => (
-            <span key={i} className="inline-block rounded-full border border-[#1a3a5c]"
-              style={{
-                width: 14, height: 14,
-                background: i < loadLights ? '#22c55e' : '#060e1a',
-                boxShadow: i < loadLights ? '0 0 8px #22c55e' : 'none',
-              }} />
-          ))}
-        </div>
-        {/* Three drop stations — the panel never says which one; recall it. */}
+        {/* Three drop stations — the panel says neither which one nor when. Both
+            the station and its time live only in Message, so the release is a
+            pure memory-updating task with no cue on the panel itself. */}
         <div className="flex gap-2">
           {Array.from({ length: LOAD_POINTS }, (_, i) => (
             <button key={i} onClick={() => onRelease(i)} data-demo-answer
-              className={`px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors ${
-                loadReady ? 'bg-red-600 hover:bg-red-500 text-white cbat-btn-flash' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
-              }`}>
+              className="px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]">
               {stationName(i)}
             </button>
           ))}
@@ -620,7 +609,7 @@ export default function CbatCut() {
       case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} />
       case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
       case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} />
-      case 'mission':    return <MissionPanel loadLights={sim.loadLights} loadReady={sim.loadReady} onRelease={onRelease} />
+      case 'mission':    return <MissionPanel onRelease={onRelease} />
       case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} />
       default:           return null
     }
