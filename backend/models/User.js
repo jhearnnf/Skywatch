@@ -60,6 +60,20 @@ const userSchema = new mongoose.Schema(
     isAdmin:  { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
 
+    // Chat-specific ban, separate from isBanned (which locks the whole account).
+    // A chat-banned user can still read channels and DMs but cannot post in
+    // them. They CAN still use the support chat — a ban that also cuts off the
+    // only route to appeal it would be a trap.
+    chatBannedAt:       { type: Date, default: null },
+    chatBannedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    chatBanReason:      { type: String, trim: true, maxlength: 300, default: null },
+
+    // Opt-OUT of the Community unread dot. Stored as "enabled" with a default
+    // of true because the dot is on for everyone unless they say otherwise, and
+    // an absent field must read as on — no backfill needed. Turning it off
+    // silences the badge only; the user keeps full access to Community.
+    communityNotificationsEnabled: { type: Boolean, default: true },
+
     // Admin-set flag marking an account as a tester. Purely admin-facing (never
     // exposed on public profile/leaderboard): in the Admin › Users panel it
     // floats an offline tester to the top of the offline group and gives the row

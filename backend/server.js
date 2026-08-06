@@ -35,6 +35,10 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // Split legacy GameSessionCbatStart docs (gameKey:'plane-turn') into
     // 'plane-turn-2d' to match the registry split. Idempotent.
     await require('./migrations/splitPlaneTurnStarts')({ db: mongoose.connection.db });
+    // Move chat to the three-type model (support/dm/channel): backfill type,
+    // replace the legacy open-chat unique index whose filter lacked `type`,
+    // and seed a starting channel on a database that has none. Idempotent.
+    await require('./migrations/chatChannelsUpgrade')();
     // Add the clientResultId path/index to CBAT result schemas so offline score
     // submissions can be deduplicated on flush retries.
     require('./utils/cbatResult').ensureCbatResultPaths();
