@@ -278,6 +278,17 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
+/* Clipper: the admin video tool is a two-column authoring surface (fact ledger
+   or idea list beside the script), which does not fit inside max-w-3xl.
+   Toggled from src/pages/Clipper.jsx. */
+@media (min-width: 1024px) {
+  body.clipper-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
 /* CUT gameplay: widen the shell on desktop so the running-commentary column has
    room beside the arena. Toggled from src/pages/CbatCut.jsx while playing. */
 @media (min-width: 1024px) {

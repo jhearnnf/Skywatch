@@ -92,6 +92,7 @@ import NotFound       from './pages/NotFound'
 import Admin          from './pages/Admin'
 import CbatAwardPreview from './pages/CbatAwardPreview'
 import OpenRouterUsage from './pages/OpenRouterUsage'
+import Clipper        from './pages/Clipper'
 import AptitudeSync   from './pages/AptitudeSync'
 import World3DRoute  from './components/world3d/World3DRoute'
 
@@ -313,6 +314,9 @@ function AppRoutes() {
           <Route path="/cbat-game-history"     element={<RequireAuth><PageWrapper><CbatGameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/intel-brief-history"   element={<RequireAuth><PageWrapper><IntelBriefHistory /></PageWrapper></RequireAuth>} />
           <Route path="/admin"             element={<RequireAuth><PageWrapper><Admin /></PageWrapper></RequireAuth>} />
+          {/* Clipper — admin-only short-form video tool. The page itself checks
+              isAdmin; every /api/clipper route is adminOnly server-side too. */}
+          <Route path="/clipper"           element={<RequireAuth><PageWrapper><Clipper /></PageWrapper></RequireAuth>} />
           <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />
           {/* Admin-only preview of the post-game progress-award flow. Under /admin so it inherits
               the slim-mode allowlist and stays out of the player-facing routes. */}

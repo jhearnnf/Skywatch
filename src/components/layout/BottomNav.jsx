@@ -84,6 +84,9 @@ export default function BottomNav() {
           const showBadge = to === '/play' && hasAnyNew && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
           const showReportBadge = to === '/admin' && unsolvedCount > 0
+          // Admin gets the same translucent dark-red treatment as the sidebar,
+          // so the entry reads as "staff only" wherever it appears.
+          const isAdminItem = to === '/admin'
           const showChatBadge   = to === '/chat'  && chatUnread
           const isProfileItem = to === '/profile'
           const handleLearnClick = isLearn && hasAnyNewCategory && user
@@ -101,9 +104,13 @@ export default function BottomNav() {
               to={slim || user || to === '/home' || to === '/rankings' ? to : '/login'}
               onClick={handleLearnClick}
               className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
-                ${active
-                  ? 'text-brand-600'
-                  : 'text-slate-400 hover:text-slate-600'
+                ${isAdminItem
+                  ? (active
+                      ? 'bg-red-200/80 text-slate-900'
+                      : 'bg-red-100/50 text-slate-600 hover:bg-red-200/60 hover:text-slate-900')
+                  : active
+                    ? 'text-brand-600'
+                    : 'text-slate-400 hover:text-slate-600'
                 }`}
             >
               <span className={`relative text-xl leading-none transition-transform ${active ? 'scale-110' : ''}`}>

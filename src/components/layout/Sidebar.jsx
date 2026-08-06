@@ -8,6 +8,7 @@ import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
+import { isLocalEnvironment } from '../../utils/localEnvironment'
 import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, NATIVE_APP, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
@@ -48,6 +49,7 @@ export default function Sidebar() {
   const baseNavItems = slim ? SLIM_NAV_ITEMS : NAV_ITEMS
   const withHangar = showHangarNav ? [...baseNavItems, HANGAR_NAV_ITEM] : baseNavItems
   const activeNavTo = slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
+  const clipperAvailable = isLocalEnvironment()
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
@@ -113,6 +115,47 @@ export default function Sidebar() {
           )
         })}
 
+        {/* Clipper — admin-only short-form video tool. Desktop sidebar only:
+            it is a content-authoring surface with a timeline editor, so there
+            is deliberately no BottomNav entry for it.
+
+            Shown greyed rather than hidden away from the workstation: its video
+            stages need the local agent, so the entry stays visible (you know
+            the tool exists and where it lives) but is not clickable. */}
+        {user?.isAdmin && (() => {
+          const isActive = activeNavTo === '/clipper'
+          const baseClass = 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all mt-2 outline-none focus:outline-none'
+          const icon = <span className="relative text-lg w-6 text-center shrink-0">🎬</span>
+
+          if (!clipperAvailable) {
+            return (
+              <span
+                aria-disabled="true"
+                title="Clipper runs on the machine hosting SkyWatch - open it from localhost"
+                className={`${baseClass} text-slate-300 cursor-not-allowed select-none`}
+              >
+                {icon}
+                Clipper
+              </span>
+            )
+          }
+
+          return (
+            <Link
+              to="/clipper"
+              aria-current={isActive ? 'page' : undefined}
+              className={`${baseClass}
+                ${isActive
+                  ? 'bg-red-200/80 text-slate-900'
+                  : 'bg-red-100/50 text-slate-700 hover:bg-red-200/60 hover:text-slate-900'
+                }`}
+            >
+              {icon}
+              Clipper
+            </Link>
+          )
+        })()}
+
         {user?.isAdmin && (() => {
           const isActive = activeNavTo === '/admin'
           return (
@@ -121,8 +164,8 @@ export default function Sidebar() {
               aria-current={isActive ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all mt-2 outline-none focus:outline-none
                 ${isActive
-                  ? 'bg-slate-200 text-slate-800'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                  ? 'bg-red-200/80 text-slate-900'
+                  : 'bg-red-100/50 text-slate-700 hover:bg-red-200/60 hover:text-slate-900'
                 }`}
             >
               <span className="relative text-lg w-6 text-center shrink-0">

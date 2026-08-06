@@ -46,6 +46,7 @@ const SLIM_ALLOWED_PREFIXES = [
   '/privacy',            // store-compliance page
   '/delete-account',     // store-compliance page — the URL declared to Google Play
   '/admin',              // admins can still reach Settings to toggle slim off
+  '/clipper',            // admin-only video tool — reachable for the same reason as /admin
   '/immerse',            // Hangar game — see note below
   '/chat',               // channels + DMs — see note below
 ]
@@ -96,6 +97,9 @@ export const HANGAR_NAV_ITEM = { to: '/immerse', emoji: '🛩️', label: 'Hanga
 export function slimNavActiveTo(pathname) {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     return '/admin'
+  }
+  if (pathname === '/clipper' || pathname.startsWith('/clipper/')) {
+    return '/clipper'
   }
   if (pathname === '/immerse' || pathname.startsWith('/immerse/')) {
     return '/immerse'
