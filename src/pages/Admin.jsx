@@ -9552,6 +9552,225 @@ function EmailLogsTab({ API, initialStatusFilter, initialUserFilter }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DELETIONS TAB — the erasure register
+//
+// Every row is anonymous on purpose: this proves deletions happened without
+// keeping a list of who left. The lookup box is how you answer a data-subject
+// asking "did you delete my data?" — it hashes what you type and matches it
+// against the register, which is the only way back from a row to a person.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fmtDeletionDate = (d) =>
+  new Date(d).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+function DeletionRow({ d, first }) {
+  const admin = d.adminUserId
+  return (
+    <div className={`px-4 py-3 ${!first ? 'border-t border-slate-700/50' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <LabelBadge
+              label={d.initiatedBy === 'admin' ? 'Admin' : 'Self-service'}
+              color={d.initiatedBy === 'admin' ? 'bg-amber-900/40 text-amber-300' : 'bg-sky-900/40 text-sky-300'}
+              uppercase
+            />
+            <span className="text-[10px] text-slate-600">
+              {d.recordsErased} record{d.recordsErased === 1 ? '' : 's'} erased
+            </span>
+            {d.accountAgeDays != null && (
+              <span className="text-[10px] text-slate-600">· account age {d.accountAgeDays}d</span>
+            )}
+          </div>
+          {d.reason && <p className="text-xs text-slate-700 truncate">{d.reason}</p>}
+          {d.initiatedBy === 'admin' && (
+            <p className="text-[10px] text-slate-600 mt-0.5">
+              By Agent {admin?.agentNumber ?? admin?.email ?? 'deleted admin'}
+            </p>
+          )}
+          {d.breakdown && Object.keys(d.breakdown).length > 0 && (
+            <details className="mt-1">
+              <summary className="text-[10px] text-slate-600 cursor-pointer hover:text-slate-800">
+                Breakdown
+              </summary>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                {Object.entries(d.breakdown)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([model, n]) => (
+                    <span key={model} className="text-[10px] text-slate-600">
+                      {model} <span className="text-slate-800 font-semibold">{n}</span>
+                    </span>
+                  ))}
+              </div>
+            </details>
+          )}
+        </div>
+        <span className="text-[10px] text-slate-600 whitespace-nowrap shrink-0">
+          {fmtDeletionDate(d.deletedAt)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function DeletionsTab({ API }) {
+  const { apiFetch } = useAuth()
+  const [deletions,  setDeletions]  = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [page,       setPage]       = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total,      setTotal]      = useState(0)
+  const [counts,     setCounts]     = useState({ self: 0, admin: 0 })
+  const [filter,     setFilter]     = useState('')
+
+  const [email,     setEmail]     = useState('')
+  const [checking,  setChecking]  = useState(false)
+  const [result,    setResult]    = useState(null)   // { matches, stillActive } | { error }
+
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams({ page, limit: 20 })
+    if (filter) params.set('initiatedBy', filter)
+    apiFetch(`${API}/api/admin/account-deletions?${params}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        setDeletions(d.data?.deletions ?? [])
+        setTotal(d.data?.total ?? 0)
+        setTotalPages(d.data?.totalPages ?? 1)
+        setCounts({ self: d.data?.selfTotal ?? 0, admin: d.data?.adminTotal ?? 0 })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [API, page, filter])
+
+  const lookup = async (e) => {
+    e.preventDefault()
+    if (!email.trim()) return
+    setChecking(true)
+    setResult(null)
+    try {
+      const r = await apiFetch(`${API}/api/admin/account-deletions/lookup`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      const d = await r.json()
+      if (!r.ok) setResult({ error: d.message || 'Lookup failed' })
+      else setResult(d.data)
+    } catch (err) {
+      setResult({ error: err.message || 'Lookup failed' })
+    }
+    setChecking(false)
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 gap-3">
+        <h2 className="text-base font-bold text-slate-900">Account Deletions</h2>
+        <select
+          value={filter}
+          onChange={e => { setFilter(e.target.value); setPage(1) }}
+          className="text-xs border border-slate-700 rounded-lg px-2 py-1.5 text-slate-700 bg-surface focus:outline-none focus:ring-1 focus:ring-brand-400"
+        >
+          <option value="">All ({counts.self + counts.admin})</option>
+          <option value="self">Self-service ({counts.self})</option>
+          <option value="admin">Admin ({counts.admin})</option>
+        </select>
+      </div>
+
+      <p className="text-[11px] text-slate-600 mb-4 leading-relaxed">
+        Proof that erasure requests were carried out, kept without any personal data — no email,
+        agent number or name is stored, so this list names nobody. To answer someone asking whether
+        their data was deleted, look their address up below; it is hashed for matching and never stored.
+      </p>
+
+      <form onSubmit={lookup} className="bg-surface rounded-2xl border border-slate-700 p-4 mb-4">
+        <label htmlFor="deletion-lookup" className="block text-xs font-bold text-slate-800 mb-2">
+          Check an email address
+        </label>
+        <div className="flex gap-2">
+          <input
+            id="deletion-lookup"
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="them@example.com"
+            className="flex-1 min-w-0 text-xs border border-slate-700 rounded-lg px-3 py-2 text-slate-800 bg-surface-raised placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-400"
+          />
+          <button
+            type="submit"
+            disabled={checking || !email.trim()}
+            className="text-xs px-4 py-2 rounded-lg bg-brand-600 text-white font-bold disabled:opacity-40 hover:bg-brand-700 transition-colors whitespace-nowrap"
+          >
+            {checking ? 'Checking…' : 'Look up'}
+          </button>
+        </div>
+
+        {result?.error && (
+          <p className="mt-3 text-xs text-red-400">{result.error}</p>
+        )}
+        {result && !result.error && result.matches?.length > 0 && (
+          <div className="mt-3 rounded-lg bg-emerald-950/40 border border-emerald-800/50 p-3">
+            <p className="text-xs font-bold text-emerald-300 mb-1">
+              Erased — this address has {result.matches.length === 1 ? 'a record' : `${result.matches.length} records`} in the register.
+            </p>
+            {result.matches.map(m => (
+              <p key={m._id} className="text-[11px] text-slate-700">
+                {fmtDeletionDate(m.deletedAt)} · {m.initiatedBy === 'admin' ? 'admin-initiated' : 'self-service'} · {m.recordsErased} records erased
+                {m.reason ? ` · ${m.reason}` : ''}
+              </p>
+            ))}
+          </div>
+        )}
+        {result && !result.error && result.matches?.length === 0 && (
+          <div className="mt-3 rounded-lg bg-amber-950/40 border border-amber-800/50 p-3">
+            <p className="text-xs font-bold text-amber-300 mb-1">
+              {result.stillActive ? 'Account still active' : 'No record'}
+            </p>
+            <p className="text-[11px] text-slate-700">
+              {result.stillActive
+                ? 'This address still has a live account — nothing has been erased for it. Delete it from Users if that is what they are asking for.'
+                : 'No deletion recorded for this address, and no live account either. They may never have registered, used a different address, or been deleted before this register existed.'}
+            </p>
+          </div>
+        )}
+      </form>
+
+      <div className="bg-surface rounded-2xl border border-slate-700 overflow-hidden mb-4">
+        {loading && <p className="py-8 text-center text-slate-600 text-sm animate-pulse">Loading…</p>}
+        {!loading && deletions.length === 0 && (
+          <p className="py-8 text-center text-slate-600 text-sm">No account deletions recorded</p>
+        )}
+        {!loading && deletions.map((d, i) => (
+          <DeletionRow key={d._id} d={d} first={i === 0} />
+        ))}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-600">Page {page} of {totalPages} ({total} total)</span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-700 font-semibold disabled:opacity-40 hover:bg-surface-raised transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // INTEL TAB (Reports + Action Logs + Email Logs)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -9560,6 +9779,7 @@ const INTEL_SUBTABS = [
   { id: 'action-log',  label: 'Action Logs'  },
   { id: 'email-log',   label: 'Email Logs'   },
   { id: 'system-logs', label: 'System Logs'  },
+  { id: 'deletions',   label: 'Deletions'    },
 ]
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -9682,6 +9902,7 @@ function SystemLogsTab({ API, onResolved }) {
     account_creation_failure:    { label: 'Account Creation Failed',       color: 'bg-red-900/40 text-red-300' },
     cors_origin_rejected:        { label: 'Blocked Unknown Origin',        color: 'bg-sky-900/40 text-sky-300' },
     api_unreachable:             { label: 'Device Could Not Reach API',    color: 'bg-sky-900/40 text-sky-300' },
+    account_deletion_log_failure:{ label: 'Deletion Not Recorded',         color: 'bg-red-900/40 text-red-300' },
   }
 
   return (
@@ -9905,6 +10126,7 @@ function IntelTab({ API, unsolvedCount, unresolvedSystemLogs, initialSub, initia
       {sub === 'action-log'  && <LogsTab        API={API} />}
       {sub === 'email-log'   && <EmailLogsTab   API={API} initialStatusFilter={initialEmailStatus} initialUserFilter={initialEmailUser} />}
       {sub === 'system-logs' && <SystemLogsTab  API={API} onResolved={refresh} />}
+      {sub === 'deletions'   && <DeletionsTab   API={API} />}
     </div>
   )
 }
