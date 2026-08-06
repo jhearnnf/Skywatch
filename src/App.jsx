@@ -20,6 +20,7 @@ import { ChatUnreadProvider }                from './context/ChatUnreadContext'
 import { GameChromeProvider }                from './context/GameChromeContext'
 import TutorialPickerOverlay                  from './components/TutorialPickerOverlay'
 import CbatMenuMusic                          from './components/CbatMenuMusic'
+import CommunityMusic                         from './components/CommunityMusic'
 import AppShell                            from './components/layout/AppShell'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
@@ -416,6 +417,7 @@ export default function App() {
                   <GameChromeProvider>
                     <AppRoutes />
                     <CbatMenuMusic />
+        <CommunityMusic />
                     <NotifLayer />
                     <OfflineStatus />
                     <UpdateNotificationModal />

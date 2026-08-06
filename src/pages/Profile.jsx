@@ -7,6 +7,7 @@ import TutorialModal from '../components/tutorial/TutorialModal'
 import { MOCK_LEADERBOARD } from '../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../utils/sound'
 import { refreshCbatMusicVolume } from '../utils/cbat/menuMusic'
+import { refreshCommunityMusicVolume } from '../utils/communityMusic'
 import { displayTier, isFreeUser } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -521,6 +522,8 @@ export default function Profile() {
                 // Menu music is playing on this page — apply the new level live
                 // instead of only on the next navigation.
                 refreshCbatMusicVolume()
+                // Community has its own bed; it obeys the same master volume.
+                refreshCommunityMusicVolume()
               }}
               aria-label="App volume"
             />

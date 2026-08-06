@@ -272,6 +272,10 @@ export function previewHangarLobbyMusic(sliderValue) {
   _playActMp3('/sounds/hangar lobby (repeat).mp3', sliderValue ?? 100, 10000)
 }
 
+export function previewCommunityMusic(sliderValue) {
+  _playActMp3('/sounds/community (repeat).mp3', sliderValue ?? 60, 10000)
+}
+
 const OUT_OF_AMMO_VARIANTS = ['out_of_ammo_1.mp3', 'out_of_ammo_2.mp3', 'out_of_ammo_3.mp3']
 
 // Module-level settings cache
@@ -425,6 +429,15 @@ export function getCbatMenuMusicSetting() {
   return {
     volume:  Math.min(1, Math.max(0, (s.volumeCbatMenuMusic ?? 100) / 100)),
     enabled: s.soundEnabledCbatMenuMusic !== false,
+  }
+}
+
+// Same, for the Community soundtrack.
+export function getCommunityMusicSetting() {
+  const s = cache || {}
+  return {
+    volume:  Math.min(1, Math.max(0, (s.volumeCommunityMusic ?? 60) / 100)),
+    enabled: s.soundEnabledCommunityMusic !== false,
   }
 }
 
