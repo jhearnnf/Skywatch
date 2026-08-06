@@ -30,6 +30,8 @@ export const GAME_LABELS = {
   'sat-easier':       'Situational Awareness Test (Easier)',
   'cut':              'Cognitive Updating Test',
   'cut-easier':       'Cognitive Updating Test (Easier)',
+  'rtt':              'Rapid Tracking Test',
+  'rtt-easier':       'Rapid Tracking Test (Easier)',
 }
 
 const PRIMARY_LABELS = {

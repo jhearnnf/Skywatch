@@ -24,6 +24,7 @@ export const CBAT_GAMES = [
   // isn't new but has gained something).
   { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', badge: 'New Difficulty Modes' },
   { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', badge: 'New Difficulty Modes' },
+  { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', isNew: true },
 ]
 
 // Per-leaderboard display config, keyed by the backend leaderboard gameKey
@@ -70,6 +71,10 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'sat-easier':      { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 10, formatScore: (s) => `${s}/10`, backPath: '/cbat/sat', difficultyGroup: 'sat' },
   'cut':             { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
   'cut-easier':      { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
+  // Run length is fixed per difficulty, so every real time is near-identical and
+  // the column tells nobody anything — hidden, like CUT's and FLAG's.
+  'rtt':             { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt' },
+  'rtt-easier':      { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt' },
 }
 
 // Games whose difficulties keep separate leaderboards. The leaderboard page
@@ -93,6 +98,10 @@ export const CBAT_DIFFICULTY_GROUPS = {
   sat: [
     { gameKey: 'sat-easier', label: 'Easier' },
     { gameKey: 'sat',        label: 'Hard' },
+  ],
+  rtt: [
+    { gameKey: 'rtt-easier', label: 'Easier' },
+    { gameKey: 'rtt',        label: 'Hard' },
   ],
 }
 

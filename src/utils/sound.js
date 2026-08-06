@@ -387,6 +387,35 @@ export function playFlagBleep(kind = 'enter') {
   })
 }
 
+// ── RTT (CBAT) shutter ───────────────────────────────────────────────────────
+// The camera trigger in the Rapid Tracking Test. Synthesised like the FLAG bleep
+// and the ACT tones rather than shipped as an asset, so it works offline and
+// costs nothing to download. A captured frame is a short bright click; a wasted
+// one is a duller, lower thunk, so the ear knows whether the frame counted
+// without the eye leaving the reticle.
+export function playRttShutter(kind = 'hit') {
+  if (isDemoActive()) return
+  const vol = masterVol(kind === 'hit' ? 0.22 : 0.16)
+  if (vol <= 0) return
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const now = ctx.currentTime
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = kind === 'hit' ? 'square' : 'triangle'
+      // A fast downward sweep reads as a mechanical snap rather than a beep.
+      osc.frequency.setValueAtTime(kind === 'hit' ? 1900 : 420, now)
+      osc.frequency.exponentialRampToValueAtTime(kind === 'hit' ? 620 : 180, now + 0.05)
+      gain.gain.setValueAtTime(0.0001, now)
+      gain.gain.exponentialRampToValueAtTime(vol, now + 0.006)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + (kind === 'hit' ? 0.09 : 0.13))
+      osc.connect(gain).connect(ctx.destination)
+      osc.start(now)
+      osc.stop(now + 0.16)
+    } catch { /* audio context unavailable — the shutter is feedback, not gameplay */ }
+  })
+}
+
 // Synchronous read of the CBAT menu-music admin setting from the settings cache.
 // Returns { volume: 0..1, enabled }. Falls back to full-volume/enabled until the
 // settings fetch has warmed the cache (matches how other sounds behave on a

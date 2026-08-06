@@ -43,9 +43,9 @@ function renderWithUser(user = { _id: '1', name: 'Test' }) {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CBAT_GAMES data', () => {
-  it('has 15 games, all visible and clickable with images', () => {
-    expect(CBAT_GAMES.length).toBe(15)
-    expect(GAMES_WITH_IMAGES.length).toBe(15)
+  it('has 16 games, all visible and clickable with images', () => {
+    expect(CBAT_GAMES.length).toBe(16)
+    expect(GAMES_WITH_IMAGES.length).toBe(16)
     expect(GAMES_WITHOUT_IMAGES.length).toBe(0)
     expect(CBAT_GAMES.every(g => !g.hidden)).toBe(true)
   })
@@ -115,10 +115,11 @@ describe('Cbat page — tile badges', () => {
     expect(screen.getAllByText('New Difficulty Modes')).toHaveLength(badged.length)
   })
 
-  it('no longer flags CUT as a new game', () => {
+  it('flags RTT as the new game, and no longer CUT', () => {
     renderWithUser()
     expect(CBAT_GAMES.find(g => g.key === 'cut').isNew).toBeUndefined()
-    expect(screen.queryByText('New Game')).toBeNull()
+    expect(CBAT_GAMES.find(g => g.key === 'rtt').isNew).toBe(true)
+    expect(screen.getAllByText('New Game')).toHaveLength(1)
   })
 })
 

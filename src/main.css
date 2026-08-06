@@ -307,6 +307,103 @@ body.chat-wide .app-shell-content {
   padding-bottom: 0.75rem;
 }
 
+/* RTT gameplay: widen the shell so the sensor picture gets the screen. Field of
+   view is fixed, so a wider arena is literally more warning of a crossing
+   target. Toggled from src/pages/CbatRtt.jsx while playing. */
+@media (min-width: 1024px) {
+  body.cbat-rtt-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* ── RTT reticle ───────────────────────────────────────────────────────────
+   Pinned to the centre of the sensor picture and sized as a PERCENTAGE of the
+   arena height, not in pixels: the capture cone is an angle, the camera's
+   vertical field of view is an angle, and their ratio is a fraction of the
+   frame — so a percentage stays correct at every window size with no measuring
+   and no resize handler. CbatRtt computes the number from the difficulty's
+   capture radius.
+
+   The colour is driven by a data-state attribute that RttScene's frame loop
+   writes directly, because routing 60 Hz of lock/obscured state through React
+   would cost a render a frame. */
+.rtt-reticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  color: #5baaff;
+  transition: color 90ms linear;
+}
+.rtt-reticle[data-state='lock']     { color: #22c55e; }
+.rtt-reticle[data-state='obscured'] { color: #f59e0b; }
+/* Three frames already in the bag — there is nothing left to earn on this
+   target, so the reticle goes neutral rather than staying invitingly green. */
+.rtt-reticle[data-state='done']     { color: #94a3b8; }
+
+/* ── RTT target cue ────────────────────────────────────────────────────────
+   An arrow riding a circle around the reticle, pointing the way to slew. Sized
+   as a percentage of the arena so it tracks the picture, and the ARM is what
+   rotates — the arrow glyph is anchored at the arm's right edge and points
+   along +x, so rotating the arm swings it round the circle still facing
+   outward. Nothing inside carries text, so nothing ends up upside down.
+
+   Amber while it points at the next target during a gap between passes, brand
+   blue while it points at the one that is live. */
+.rtt-cue {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  color: #5baaff;
+  transition: opacity 140ms linear;
+}
+.rtt-cue[data-state='next'] { color: #f59e0b; }
+
+.rtt-cue-arm {
+  position: absolute;
+  inset: 0;
+}
+.rtt-cue-arrow {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 30px;
+  height: 19px;
+  margin-top: -9.5px;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.75));
+}
+
+/* Frame-captured flash over the whole picture. */
+@keyframes rttShutterFlash {
+  0%   { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+.rtt-shutter-flash {
+  animation: rttShutterFlash 180ms ease-out forwards;
+}
+
+/* The on-screen shutter is for touch only. With a mouse the button is a trap:
+   the pointer's position IS the stick, so reaching for a button below the arena
+   would peg the aim on the way there. Mouse and trackpad players click in the
+   picture or press Space. */
+.rtt-shutter {
+  display: none;
+}
+@media (pointer: coarse) {
+  .rtt-shutter {
+    display: flex;
+  }
+}
+
 /* Admin panel: the max-w-3xl reading column wasted most of a desktop monitor —
    the Reports tab is a grid of charts that turned into a long scroll, and the
    tab strip only spanned 768px. Toggled from src/pages/Admin.jsx for the whole
