@@ -288,6 +288,25 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
+/* Chat: the two-pane layout (conversation rail + open thread) needs the whole
+   width — inside max-w-3xl the rail would eat half of a 768px column and leave
+   the messages in a gutter. Applies from the md breakpoint, not lg, because
+   that is where the panes stop collapsing to one. Toggled from
+   src/pages/chat/ChatShell.jsx and AdminChatView.jsx. Trimmed vertical padding
+   too: chat sizes itself to the viewport, so the shell's py-6 just pushes the
+   composer off the bottom of the screen. */
+@media (min-width: 768px) {
+  body.chat-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+body.chat-wide .app-shell-content {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
 /* Admin panel: the max-w-3xl reading column wasted most of a desktop monitor —
    the Reports tab is a grid of charts that turned into a long scroll, and the
    tab strip only spanned 768px. Toggled from src/pages/Admin.jsx for the whole

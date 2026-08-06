@@ -32,6 +32,7 @@ import UpdateNotificationModal             from './components/UpdateNotification
 import OfflineStatus                        from './components/OfflineStatus'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
 import { isSlimAllowed } from './utils/appMode'
+import { transitionKeyFor } from './utils/navSections'
 import { useSlimMode, useLandingPageEnabled } from './hooks/useSlimMode'
 
 // v2 pages
@@ -77,7 +78,7 @@ import GameHistory        from './pages/GameHistory'
 import CbatGameHistory   from './pages/CbatGameHistory'
 import IntelBriefHistory from './pages/IntelBriefHistory'
 import ReportProblem  from './pages/ReportProblem'
-import Chat           from './pages/Chat'
+import Chat, { ChatAdminRoute } from './pages/chat/Chat'
 import Contact        from './pages/Contact'
 import Privacy        from './pages/Privacy'
 import DeleteAccount  from './pages/DeleteAccount'
@@ -241,7 +242,7 @@ function AppRoutes() {
     <AppShell>
       <ScrollToTop />
       <AnimatePresence mode="wait" initial={false}>
-        <Routes location={location} key={location.pathname}>
+        <Routes location={location} key={transitionKeyFor(location.pathname)}>
 
           {/* Public */}
           <Route path="/" element={<PageWrapper><Landing /></PageWrapper>} />
@@ -292,6 +293,14 @@ function AppRoutes() {
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
           <Route path="/chat"             element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
+          {/* Static segment before the dynamic one — react-router ranks it
+              higher regardless, but the order documents the intent. */}
+          <Route path="/chat/admin"       element={<RequireAuth><PageWrapper><ChatAdminRoute /></PageWrapper></RequireAuth>} />
+          {/* Same <Chat /> element type as /chat above, deliberately: React
+              then reconciles them as one component instead of unmounting and
+              remounting, so opening a conversation keeps the rail and its data
+              alive. Paired with transitionKeyFor() — both are needed. */}
+          <Route path="/chat/:conversationId" element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
           <Route path="/privacy"          element={<PageWrapper><Privacy /></PageWrapper>} />
           <Route path="/delete-account"   element={<PageWrapper><DeleteAccount /></PageWrapper>} />

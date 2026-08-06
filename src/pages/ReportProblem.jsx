@@ -27,7 +27,11 @@ export default function ReportProblem() {
         method: 'POST', credentials: 'include',
       })
       if (!res.ok) throw new Error()
-      navigate('/chat')
+      // Straight into the thread that was just opened, rather than the chat
+      // list — the user asked for help, not for a directory.
+      const d = await res.json().catch(() => null)
+      const id = d?.data?.conversation?._id
+      navigate(id ? `/chat/${id}` : '/chat')
     } catch {
       setChatBusy(false)
     }
