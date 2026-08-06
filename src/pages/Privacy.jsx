@@ -5,7 +5,7 @@ import SEO from '../components/SEO'
 const PRIVACY_EMAIL = 'skywatchdev@proton.me'
 // Section 11 promises changes are posted with an updated effective date, so this
 // moves whenever the policy's substance does — not on typo fixes.
-const EFFECTIVE_DATE = '31 July 2026'
+const EFFECTIVE_DATE = '6 August 2026'
 
 function Section({ title, children }) {
   return (
@@ -164,6 +164,17 @@ export default function Privacy() {
             We retain your personal data for as long as your account is active. If you request
             deletion of your account, we will remove your personal data within 30 days, except where
             we are required to retain it for legal or compliance purposes.
+          </p>
+          <p>
+            We keep a record that a deletion took place, so that we can demonstrate we acted on it.
+            That record contains no personal data — not your email address, name or account
+            reference — only the date, whether you or an administrator started it, how old the
+            account was and how many records were removed. Alongside it we store a one-way
+            cryptographic hash of your email address. A hash cannot be read back into an email
+            address, so the record identifies nobody; its only purpose is that if you later ask us
+            to confirm your data was deleted, we can check the address you give us against it and
+            answer you. We keep these records for as long as we may need to evidence that deletions
+            were carried out.
           </p>
         </Section>
 
