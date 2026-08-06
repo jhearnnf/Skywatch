@@ -624,6 +624,7 @@ router.get('/stats', async (_req, res) => {
 
 const OpenRouterUsageLog = require('../models/OpenRouterUsageLog');
 const { fetchOpenRouterKeyUsage } = require('../utils/openRouter');
+const { OPENROUTER_KEY_NAMES } = require('../constants/openRouterKeys');
 
 // Cache lifetime numbers for 60s so repeated admin page loads don't hammer
 // OpenRouter's /api/v1/key endpoint.
@@ -634,14 +635,10 @@ async function getLifetimeUsage() {
   if (lifetimeCache.data && (Date.now() - lifetimeCache.fetchedAt) < LIFETIME_CACHE_MS) {
     return lifetimeCache.data;
   }
-  const [main, aptitude, socials, casefiles, briefreel] = await Promise.all([
-    fetchOpenRouterKeyUsage('main'),
-    fetchOpenRouterKeyUsage('aptitude'),
-    fetchOpenRouterKeyUsage('socials'),
-    fetchOpenRouterKeyUsage('casefiles'),
-    fetchOpenRouterKeyUsage('briefreel'),
-  ]);
-  const data = { main, aptitude, socials, casefiles, briefreel };
+  const results = await Promise.all(
+    OPENROUTER_KEY_NAMES.map(k => fetchOpenRouterKeyUsage(k)),
+  );
+  const data = Object.fromEntries(OPENROUTER_KEY_NAMES.map((k, i) => [k, results[i]]));
   lifetimeCache.data = data;
   lifetimeCache.fetchedAt = Date.now();
   return data;
@@ -673,13 +670,12 @@ router.get('/openrouter/summary', async (_req, res) => {
       ]),
     ]);
 
-    const today = {
-      main:      { cost: 0, calls: 0, byFeature: {} },
-      aptitude:  { cost: 0, calls: 0, byFeature: {} },
-      socials:   { cost: 0, calls: 0, byFeature: {} },
-      casefiles: { cost: 0, calls: 0, byFeature: {} },
-      briefreel: { cost: 0, calls: 0, byFeature: {} },
-    };
+    // Seeded from the key registry so every key always reports a tile, even
+    // with zero calls — a key that silently vanished from the response would
+    // read as "no spend" rather than "not being tracked".
+    const today = Object.fromEntries(
+      OPENROUTER_KEY_NAMES.map(k => [k, { cost: 0, calls: 0, byFeature: {} }]),
+    );
     for (const row of todayAgg) {
       const k = row._id.key;
       if (!today[k]) continue;
@@ -687,66 +683,24 @@ router.get('/openrouter/summary', async (_req, res) => {
       today[k].calls += row.calls;
       today[k].byFeature[row._id.feature] = { cost: row.cost, calls: row.calls };
     }
-    const last7Days = {
-      main:      { cost: 0, calls: 0 },
-      aptitude:  { cost: 0, calls: 0 },
-      socials:   { cost: 0, calls: 0 },
-      casefiles: { cost: 0, calls: 0 },
-      briefreel: { cost: 0, calls: 0 },
-    };
+    const last7Days = Object.fromEntries(
+      OPENROUTER_KEY_NAMES.map(k => [k, { cost: 0, calls: 0 }]),
+    );
     for (const row of weekAgg) {
       if (last7Days[row._id]) last7Days[row._id] = { cost: row.cost, calls: row.calls };
     }
 
     res.json({
       status: 'success',
-      data: {
-        main: {
-          lifetime:  lifetime.main.usage,
-          lifetimeLabel: lifetime.main.label,
-          lifetimeError: lifetime.main.error,
-          today:     today.main.cost,
-          todayCalls: today.main.calls,
-          todayByFeature: today.main.byFeature,
-          last7Days: last7Days.main.cost,
-        },
-        aptitude: {
-          lifetime:  lifetime.aptitude.usage,
-          lifetimeLabel: lifetime.aptitude.label,
-          lifetimeError: lifetime.aptitude.error,
-          today:     today.aptitude.cost,
-          todayCalls: today.aptitude.calls,
-          todayByFeature: today.aptitude.byFeature,
-          last7Days: last7Days.aptitude.cost,
-        },
-        socials: {
-          lifetime:  lifetime.socials.usage,
-          lifetimeLabel: lifetime.socials.label,
-          lifetimeError: lifetime.socials.error,
-          today:     today.socials.cost,
-          todayCalls: today.socials.calls,
-          todayByFeature: today.socials.byFeature,
-          last7Days: last7Days.socials.cost,
-        },
-        casefiles: {
-          lifetime:  lifetime.casefiles.usage,
-          lifetimeLabel: lifetime.casefiles.label,
-          lifetimeError: lifetime.casefiles.error,
-          today:     today.casefiles.cost,
-          todayCalls: today.casefiles.calls,
-          todayByFeature: today.casefiles.byFeature,
-          last7Days: last7Days.casefiles.cost,
-        },
-        briefreel: {
-          lifetime:  lifetime.briefreel.usage,
-          lifetimeLabel: lifetime.briefreel.label,
-          lifetimeError: lifetime.briefreel.error,
-          today:     today.briefreel.cost,
-          todayCalls: today.briefreel.calls,
-          todayByFeature: today.briefreel.byFeature,
-          last7Days: last7Days.briefreel.cost,
-        },
-      },
+      data: Object.fromEntries(OPENROUTER_KEY_NAMES.map(k => [k, {
+        lifetime:       lifetime[k].usage,
+        lifetimeLabel:  lifetime[k].label,
+        lifetimeError:  lifetime[k].error,
+        today:          today[k].cost,
+        todayCalls:     today[k].calls,
+        todayByFeature: today[k].byFeature,
+        last7Days:      last7Days[k].cost,
+      }])),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -764,7 +718,7 @@ router.get('/openrouter/logs', async (req, res) => {
     const cursor = req.query.cursor;
 
     const match = {};
-    if (key === 'main' || key === 'aptitude' || key === 'socials' || key === 'casefiles' || key === 'briefreel') match.key = key;
+    if (OPENROUTER_KEY_NAMES.includes(key)) match.key = key;
     if (feature) {
       const list = Array.isArray(feature) ? feature : String(feature).split(',').map(s => s.trim()).filter(Boolean);
       if (list.length) match.feature = { $in: list };

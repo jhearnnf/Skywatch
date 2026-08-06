@@ -57,6 +57,7 @@ app.use('/api/stripe',        require('./routes/stripe'));
 app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));
 app.use('/api/admin/social', require('./routes/social'));
 app.use('/api/brief-reels',   require('./routes/briefReels'));
+app.use('/api/clipper',       require('./routes/clipper'));
 app.use('/api/update-notifications', require('./routes/updateNotifications'));
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));

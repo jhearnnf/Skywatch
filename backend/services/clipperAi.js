@@ -1,0 +1,294 @@
+// Clipper AI — generates short-form video ideas and full scripts from the
+// graded facts in the CBAT reference guide.
+//
+// Two calls, deliberately kept separate:
+//   1. generateIdeas  — cheap batch of one-liners; the admin picks one
+//   2. generateScript — the full beat list for the chosen idea
+//
+// The script call emits the spoken text AND the per-beat visual query, SFX cue
+// and overlay suggestion in one pass, so every later stage is search-and-approve
+// rather than another generation. That is the same division of labour as
+// briefReelAi: the model writes the script, our code owns how it is rendered.
+//
+// Nothing here enforces content rules. Prompts ask, utils/clipperGuardrails.js
+// enforces — see the note at the top of that file for why.
+
+const { callOpenRouter } = require('../utils/openRouter');
+const { parseTimelineJson: parseAiJson, containment } = require('./briefReelAi');
+
+const MODEL = 'anthropic/claude-sonnet-4-5';
+
+// Tokens too generic to signal what an idea is *about*. Shares the approach of
+// briefReelAi's CALLOUT_STOPWORDS but not its vocabulary — every Clipper idea
+// mentions CBAT and tests, so those words carry no signal here.
+const IDEA_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'over', 'your',
+  'you', 'are', 'has', 'have', 'their', 'than', 'about', 'what', 'when', 'how',
+  'why', 'but', 'not', 'can', 'will', 'must', 'should', 'get', 'got', 'one',
+  'cbat', 'test', 'tests', 'testing', 'raf', 'exam', 'score', 'scores',
+  'tip', 'tips', 'trick', 'tricks', 'thing', 'things', 'know', 'need',
+]);
+
+const SIMILARITY_THRESHOLD = 0.5;
+
+function ideaTokens(text) {
+  const words = String(text || '').toLowerCase().match(/[a-z0-9]{2,}/g) || [];
+  return new Set(words.filter(w => !IDEA_STOPWORDS.has(w)));
+}
+
+// Drop candidates that say the same thing as an earlier idea — either one
+// already generated in this batch, or one from the ledger.
+function dedupeIdeas(candidates, priorTexts) {
+  const seen = (priorTexts || []).map(ideaTokens).filter(s => s.size > 0);
+  const kept = [];
+
+  for (const cand of candidates) {
+    const tokens = ideaTokens(cand.oneLiner);
+    if (tokens.size === 0) continue;
+    if (seen.some(prev => containment(prev, tokens) >= SIMILARITY_THRESHOLD)) continue;
+    seen.push(tokens);
+    kept.push(cand);
+  }
+  return kept;
+}
+
+// ── Prompt fragments ────────────────────────────────────────────────────────
+
+const HOUSE_RULES = `Hard content rules. These are checked by a validator after you answer, and a script that breaks them is rejected:
+
+1. NEVER name a real person. The source material is a community chat export; the people in it did not consent to appearing in a video. Refer to "sitters", "people who've taken it", "one candidate" — never a username or name.
+2. NEVER claim or imply this platform hosts the real CBAT, or that its practice games are identical to the real test. They are CBAT-style simulations. You may give advice ABOUT the real test; you may not say we have it.
+3. NEVER say the platform helps someone pass an RAF application, get into the RAF, or improve their chances. Keep any reference to the RAF general.
+4. Facts are confidence-graded and the grade is given to you:
+   - green: state it directly.
+   - amber: you MUST hedge it. Use "reportedly", "a lot of sitters say", "people tend to find", "worth checking" or similar IN THE SAME BEAT.
+   - red: never used - you will not be given any.
+5. Use hyphens, not em dashes or en dashes.
+6. Write British English.`;
+
+const VOICE_GUIDE = `Voice and format:
+
+- This is a 9:16 short-form video, spoken aloud over b-roll. Target 45 seconds, roughly 110-130 words total.
+- The FIRST beat is the hook. It has about 2 seconds to stop a scroll. Make it concrete and specific - a surprising number, a counterintuitive claim, a mistake people make. Never open with "In this video" or "Here are some tips".
+- Short sentences. Spoken register, not written. Contractions are good.
+- Name the thing plainly. Puns and idioms read as filler.
+- Every beat must earn its place - if a beat does not add a new fact or turn, cut it.`;
+
+// ── Idea generation ─────────────────────────────────────────────────────────
+
+const IDEA_SCHEMA = `Return ONLY a JSON object:
+
+{
+  "ideas": [
+    {
+      "oneLiner": "<the video's premise in one sentence, <= 120 chars>",
+      "hook":     "<the opening line as it would be spoken, <= 90 chars>",
+      "angle":    "<what makes THIS take different, <= 90 chars>",
+      "mode":     "tips" | "feature",
+      "factKeys": ["test:flag:0", ...]
+    }
+  ]
+}
+
+- "tips" = advice about sitting the test. "feature" = showcases something on the platform.
+- factKeys must be chosen from the facts supplied below. 1-3 per idea.
+- Every idea must be about a DIFFERENT main point. Do not produce two ideas that a viewer would experience as the same video.`;
+
+function formatFactsForPrompt(facts) {
+  return facts.map(f => {
+    const where = f.containerAbbr || f.containerName || f.containerId;
+    return `- [${f.factKey}] (${f.grade}${where ? `, ${where}` : ''}) ${f.text}`;
+  }).join('\n');
+}
+
+// The coverage map is what stops the ledger repeating itself. A fact may be
+// reused freely; the same spin may not, so we hand the model every hook and
+// angle a fact has already carried and require a new one.
+function formatCoverage(facts) {
+  const used = facts.filter(f => f.useCount > 0);
+  if (used.length === 0) return 'No fact has been used in a video yet.';
+
+  return used.map(f => {
+    const angles = (f.anglesUsed || [])
+      .map(a => `      - hook: "${a.hook}" / angle: "${a.angle}"`)
+      .join('\n');
+    return `- [${f.factKey}] used ${f.useCount}x:\n${angles || '      (angles not recorded)'}`;
+  }).join('\n');
+}
+
+async function generateIdeas({ facts, priorOneLiners = [], count = 6, mode = null }) {
+  if (!Array.isArray(facts) || facts.length === 0) {
+    throw new Error('No facts available to generate ideas from');
+  }
+
+  const system = `You are the script writer for SkyWatch's short-form video channel. SkyWatch is an independent platform with CBAT-style practice games. You turn findings from a community research guide about the CBAT aptitude test into ideas for TikTok/Reels/Shorts videos.
+
+${HOUSE_RULES}
+
+${VOICE_GUIDE}
+
+${IDEA_SCHEMA}`;
+
+  const user = `Available facts:
+${formatFactsForPrompt(facts)}
+
+Previously used angles - any reuse of these facts needs a genuinely different hook AND a different main point:
+${formatCoverage(facts)}
+
+Generate ${count} ideas${mode ? ` in "${mode}" mode` : ''}. Return ONLY the JSON object.`;
+
+  const res = await callOpenRouter({
+    key: 'clipper',
+    feature: 'clipper-ideas',
+    body: {
+      model: MODEL,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user',   content: user },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 2000,
+      temperature: 0.9,   // ideas want range; the script call is tighter
+    },
+  });
+
+  const parsed = parseAiJson(res?.choices?.[0]?.message?.content ?? '{}');
+  if (!parsed || !Array.isArray(parsed.ideas)) {
+    throw new Error('AI returned no ideas');
+  }
+
+  const validKeys = new Set(facts.map(f => f.factKey));
+  const cleaned = parsed.ideas
+    .filter(i => i && typeof i.oneLiner === 'string' && i.oneLiner.trim())
+    .map(i => ({
+      oneLiner: i.oneLiner.trim(),
+      hook:     String(i.hook  ?? '').trim(),
+      angle:    String(i.angle ?? '').trim(),
+      mode:     i.mode === 'feature' ? 'feature' : 'tips',
+      // Drop hallucinated keys rather than failing the batch — the admin still
+      // gets usable ideas, and an idea with no valid fact is discarded below.
+      factKeys: Array.isArray(i.factKeys) ? i.factKeys.filter(k => validKeys.has(k)) : [],
+    }))
+    .filter(i => i.factKeys.length > 0);
+
+  return dedupeIdeas(cleaned, priorOneLiners);
+}
+
+// ── Script generation ───────────────────────────────────────────────────────
+
+const SCRIPT_SCHEMA = `Return ONLY a JSON object:
+
+{
+  "title": "<short internal title, <= 60 chars>",
+  "beats": [
+    {
+      "id": "b1",
+      "text": "<the spoken line, 1-2 sentences>",
+      "factKeys": ["test:flag:0"],
+      "visual": {
+        "kind": "stock" | "capture",
+        "query": "<3-6 word stock footage search, e.g. 'fighter jet cockpit view'>",
+        "recipeId": "<only when kind is capture>"
+      },
+      "sfxCue": "<optional: whoosh | riser | pop | scratch | notification | ''>",
+      "overlay": "<optional on-screen text, <= 40 chars, '' if none>"
+    }
+  ],
+  "outro": "<closing call to action, <= 90 chars, '' if none>"
+}
+
+- 6 to 10 beats.
+- factKeys may be empty for a linking beat, but every fact you were given should appear in some beat.
+- visual.kind is "capture" ONLY for beats showing the platform itself. Available recipeIds: ${'`play-dpt`'}, ${'`browse-leaderboard`'}, ${'`cbat-home`'}. Otherwise use "stock" with a query.
+- Do not put an overlay on every beat. Three or four across the video is right.`;
+
+async function generateScript({ idea, facts, mode = 'tips', outroEnabled = true }) {
+  if (!idea || !idea.oneLiner) throw new Error('An idea is required');
+  if (!Array.isArray(facts) || facts.length === 0) {
+    throw new Error('No facts supplied for the script');
+  }
+
+  const system = `You are the script writer for SkyWatch's short-form video channel. SkyWatch is an independent platform with CBAT-style practice games.
+
+${HOUSE_RULES}
+
+${VOICE_GUIDE}
+
+${SCRIPT_SCHEMA}`;
+
+  const user = `Write the script for this idea.
+
+Premise: ${idea.oneLiner}
+Hook:    ${idea.hook || '(write one)'}
+Angle:   ${idea.angle || '(your choice)'}
+Mode:    ${mode}
+
+Facts you may use - the grade in brackets decides whether you state it flatly or hedge it:
+${formatFactsForPrompt(facts)}
+
+${outroEnabled
+  ? 'End with a short call to action pointing at skywatch.academy. It must not mention RAF applications.'
+  : 'Do not write an outro - return "" for outro.'}
+
+Return ONLY the JSON object.`;
+
+  const res = await callOpenRouter({
+    key: 'clipper',
+    feature: 'clipper-script',
+    body: {
+      model: MODEL,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user',   content: user },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 3000,
+      temperature: 0.7,
+    },
+  });
+
+  const parsed = parseAiJson(res?.choices?.[0]?.message?.content ?? '{}');
+  if (!parsed || !Array.isArray(parsed.beats) || parsed.beats.length === 0) {
+    throw new Error('AI returned no script beats');
+  }
+
+  const validKeys = new Set(facts.map(f => f.factKey));
+  const beats = parsed.beats
+    .filter(b => b && typeof b.text === 'string' && b.text.trim())
+    .map((b, i) => {
+      const kind = b.visual?.kind === 'capture' ? 'capture' : 'stock';
+      return {
+        id:       String(b.id || `b${i + 1}`),
+        text:     b.text.trim(),
+        factKeys: Array.isArray(b.factKeys) ? b.factKeys.filter(k => validKeys.has(k)) : [],
+        visual: {
+          kind,
+          query:    kind === 'stock'   ? String(b.visual?.query    ?? '').trim() : '',
+          recipeId: kind === 'capture' ? String(b.visual?.recipeId ?? '').trim() : '',
+        },
+        sfxCue:  String(b.sfxCue  ?? '').trim(),
+        overlay: String(b.overlay ?? '').trim(),
+      };
+    });
+
+  const wordCount = beats.reduce((n, b) => n + b.text.split(/\s+/).filter(Boolean).length, 0);
+
+  return {
+    title: String(parsed.title ?? '').trim() || idea.oneLiner.slice(0, 60),
+    beats,
+    wordCount,
+    // ~2.6 words/sec is a typical short-form voiceover pace. Reconciled against
+    // real VO duration once stage 3 has run.
+    estDurationSec: Math.round(wordCount / 2.6),
+    outro: outroEnabled ? String(parsed.outro ?? '').trim() : '',
+  };
+}
+
+module.exports = {
+  generateIdeas,
+  generateScript,
+  dedupeIdeas,
+  ideaTokens,
+  IDEA_STOPWORDS,
+  SIMILARITY_THRESHOLD,
+};

@@ -3,6 +3,21 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 
+// Mirrors backend/constants/openRouterKeys.js. Kept in the same order so the
+// filter row matches the tile order on the Admin stats page. Adding a key
+// backend-side without adding it here means its calls are logged but cannot be
+// filtered for on this page.
+const OPENROUTER_KEYS = ['main', 'aptitude', 'socials', 'casefiles', 'briefreel', 'clipper']
+
+const KEY_BADGE = {
+  main:      'bg-brand-50 text-brand-700',
+  aptitude:  'bg-amber-50 text-amber-700',
+  socials:   'bg-emerald-50 text-emerald-700',
+  casefiles: 'bg-violet-50 text-violet-700',
+  briefreel: 'bg-sky-50 text-sky-700',
+  clipper:   'bg-rose-50 text-rose-700',
+}
+
 const RANGE_PRESETS = [
   { id: 'today',    label: 'Today'    },
   { id: '7d',       label: 'Last 7d'  },
@@ -179,7 +194,7 @@ export default function OpenRouterUsage() {
         <div>
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">API Key</p>
           <div className="flex gap-2 flex-wrap">
-            {['all', 'main', 'aptitude', 'socials', 'casefiles', 'briefreel'].map(k => (
+            {['all', ...OPENROUTER_KEYS].map(k => (
               <button
                 key={k}
                 onClick={() => setKey(k)}
@@ -255,7 +270,7 @@ export default function OpenRouterUsage() {
               {rows.map(r => (
                 <tr key={r._id} className="border-t border-slate-100">
                   <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{fmtDateTime(r.createdAt)}</td>
-                  <td className="px-3 py-2"><span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${r.key === 'aptitude' ? 'bg-amber-50 text-amber-700' : r.key === 'socials' ? 'bg-emerald-50 text-emerald-700' : r.key === 'casefiles' ? 'bg-violet-50 text-violet-700' : r.key === 'briefreel' ? 'bg-sky-50 text-sky-700' : 'bg-brand-50 text-brand-700'}`}>{r.key}</span></td>
+                  <td className="px-3 py-2"><span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${KEY_BADGE[r.key] ?? KEY_BADGE.main}`}>{r.key}</span></td>
                   <td className="px-3 py-2 text-slate-700">{r.feature}</td>
                   <td className="px-3 py-2 text-slate-600 truncate max-w-[200px]">
                     {r.briefId && r.briefId.title ? (

@@ -1,5 +1,6 @@
 const { AsyncLocalStorage } = require('async_hooks');
 const OpenRouterUsageLog = require('../models/OpenRouterUsageLog');
+const { OPENROUTER_KEYS, OPENROUTER_KEY_NAMES } = require('../constants/openRouterKeys');
 
 // Per-request feature context. Routes wrap their handler bodies with
 // withFeature(...) so that any downstream callOpenRouter() invocation inside
@@ -35,33 +36,12 @@ function currentBriefId() {
 }
 
 function resolveKeyAndHeader(key) {
-  if (key === 'aptitude') {
-    return {
-      apiKey: process.env.OPENROUTER_KEY_APTITUDE || process.env.OPENROUTER_KEY,
-      title:  'SkyWatch APTITUDE_SYNC',
-    };
-  }
-  if (key === 'socials') {
-    return {
-      apiKey: process.env.OPENROUTER_KEY_SOCIALS || process.env.OPENROUTER_KEY,
-      title:  'SkyWatch Socials',
-    };
-  }
-  if (key === 'casefiles') {
-    return {
-      apiKey: process.env.OPENROUTER_KEY_CASEFILES || process.env.OPENROUTER_KEY,
-      title:  'SkyWatch Case Files',
-    };
-  }
-  if (key === 'briefreel') {
-    return {
-      apiKey: process.env.OPENROUTER_KEY_BRIEFREEL || process.env.OPENROUTER_KEY,
-      title:  'SkyWatch Brief Reel',
-    };
-  }
+  const spec = OPENROUTER_KEYS[key] || OPENROUTER_KEYS.main;
   return {
-    apiKey: process.env.OPENROUTER_KEY,
-    title:  'SkyWatch',
+    // Every dedicated key falls back to the main one when unset, so a missing
+    // per-feature key degrades to shared billing rather than a hard failure.
+    apiKey: (spec.env && process.env[spec.env]) || process.env.OPENROUTER_KEY,
+    title:  spec.title,
   };
 }
 
@@ -160,6 +140,8 @@ async function fetchOpenRouterKeyUsage(key) {
 }
 
 module.exports = {
+  OPENROUTER_KEYS,
+  OPENROUTER_KEY_NAMES,
   callOpenRouter,
   fetchOpenRouterKeyUsage,
   withFeature,

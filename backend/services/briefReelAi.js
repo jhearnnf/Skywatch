@@ -490,6 +490,11 @@ module.exports = {
   adjustBeatDurations,
   realignFlybys,
   dedupCallouts,
+  // Exported for reuse by services/clipperAi.js, which needs the same
+  // "are these two bits of copy saying the same thing?" test for its
+  // anti-repetition ledger. The algorithm is shared; the stopword
+  // vocabulary is not — Clipper tunes its own for CBAT tips copy.
+  containment,
   FACTIONS,
   HEADGEAR,
   PROP_TYPES,
