@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
-import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 import MessageList from './components/MessageList'
 import ComposeBox from './components/ComposeBox'
 import { agentLabel, formatTime } from './format'
@@ -24,9 +23,6 @@ export default function AdminChatView() {
   const [searchParams] = useSearchParams()
   const initialUserId = searchParams.get('userId')
 
-  // This view has always asked for max-w-6xl and always been silently clamped
-  // to 768px by AppShell. The body class is what actually delivers it.
-  useGameBodyClass('chat-wide')
   // Deep link from a chat report in Admin › Intel › Reports.
   const initialConversationId = searchParams.get('conversationId')
 

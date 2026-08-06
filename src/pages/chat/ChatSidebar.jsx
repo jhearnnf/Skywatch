@@ -44,7 +44,8 @@ function SectionLabel({ children }) {
 // Purely presentational — ChatShell owns the data and the polling, so the rail
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
-  support, channels = [], dms = [], viewer, activeId, isAdmin, onStartSupport,
+  support, channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
+  onStartSupport, onOpenBot,
 }) {
   return (
     <div className="flex-1 flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
@@ -108,6 +109,42 @@ export default function ChatSidebar({
           />
         ))}
 
+        {/* Bots are admin-only for now and kept out of Direct messages: a
+            tool you query is not a person you are talking to, and mixing them
+            would bury real conversations. */}
+        {bots.length > 0 && (
+          <>
+            <SectionLabel>Bots</SectionLabel>
+            {bots.map(b => (
+              b.conversationId ? (
+                <Row
+                  key={b.userId}
+                  to={`/chat/${b.conversationId}`}
+                  icon="🤖"
+                  title={b.title}
+                  subtitle={b.description}
+                  unread={b.unread}
+                  timestamp={b.lastMessageAt}
+                  active={String(activeId) === String(b.conversationId)}
+                />
+              ) : (
+                <button
+                  key={b.userId}
+                  type="button"
+                  onClick={() => onOpenBot?.(b.userId)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-100 transition-colors text-left"
+                >
+                  <div className="text-lg leading-none shrink-0">🤖</div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-700">{b.title}</p>
+                    <p className="text-[11px] text-slate-400">{b.description}</p>
+                  </div>
+                </button>
+              )
+            ))}
+          </>
+        )}
+
         <SectionLabel>Direct messages</SectionLabel>
         {dms.length === 0 ? (
           <p className="text-[11px] text-slate-400 px-3 pb-3">
@@ -133,7 +170,7 @@ export default function ChatSidebar({
             to="/chat/admin"
             className="block text-center px-3 py-1.5 text-[11px] font-bold text-brand-600 hover:text-brand-700 border border-brand-200 hover:bg-brand-100 rounded-lg transition-colors"
           >
-            Moderation console
+            Community console
           </Link>
         </div>
       )}

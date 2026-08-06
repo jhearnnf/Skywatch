@@ -70,6 +70,21 @@ export default function ChatShell() {
   // calls it after you send or delete. Firing it on every 30s overview poll as
   // well just doubled up on requests that return the same answer.
 
+  // Opening a bot for the first time has no thread yet — create it, then go.
+  const openBot = async (botUserId) => {
+    const r = await apiFetch(`${API}/api/chat/dm`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: botUserId }),
+    })
+    const d = await r.json().catch(() => null)
+    if (d?.data?.conversation) {
+      refreshOverview()
+      navigate(`/chat/${d.data.conversation._id}`)
+    }
+  }
+
   const startSupport = async () => {
     const r = await apiFetch(`${API}/api/chat/conversations`, {
       method: 'POST', credentials: 'include',
@@ -83,7 +98,12 @@ export default function ChatShell() {
   // need a second overview fetch just to render its header.
   const activeTitle = useMemo(() => {
     if (!conversationId || !data) return ''
-    const all = [data.support, ...(data.channels ?? []), ...(data.dms ?? [])].filter(Boolean)
+    const all = [
+      data.support,
+      ...(data.channels ?? []),
+      ...(data.dms ?? []),
+      ...(data.bots ?? []).map(b => ({ _id: b.conversationId, title: b.title })),
+    ].filter(Boolean)
     return all.find(c => String(c._id) === String(conversationId))?.title ?? ''
   }, [conversationId, data])
 
@@ -101,10 +121,12 @@ export default function ChatShell() {
           support={data?.support}
           channels={data?.channels}
           dms={data?.dms}
+          bots={data?.bots}
           viewer={data?.viewer}
           activeId={conversationId}
           isAdmin={Boolean(user?.isAdmin)}
           onStartSupport={startSupport}
+          onOpenBot={openBot}
         />
       </div>
 

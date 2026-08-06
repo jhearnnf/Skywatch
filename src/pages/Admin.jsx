@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Overlay from '../components/ui/Overlay'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -32,7 +32,6 @@ import ReportHeatmap from '../components/admin/ReportHeatmap'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import TutorialsEditor from './admin/TutorialsEditor'
 import UpdateNotificationsEditor from './admin/UpdateNotificationsEditor'
-import ChatChannelsEditor from './admin/ChatChannelsEditor'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
@@ -5031,9 +5030,21 @@ function ContentTab({ API }) {
         CollapsibleBox={CollapsibleBox}
       />
 
-      {/* ── Chat Channels ─────────────────────────────────────────── */}
-      <Section title="Chat Channels" collapsible>
-        <ChatChannelsEditor API={API} Toast={Toast} />
+      {/* ── Community ─────────────────────────────────────────────── */}
+      {/* Channels, bots and moderation all live in the Community console, so
+          configuring a channel and moderating it are not two different pages.
+          This is the signpost, not a second copy of the controls. */}
+      <Section title="Community" collapsible>
+        <p className="text-[11px] text-slate-400 mb-3">
+          Channels, the chat bot and every transcript are managed together in the Community
+          console. The on/off switch for the whole feature is in Settings, Feature Flags.
+        </p>
+        <Link
+          to="/chat/admin"
+          className="inline-flex px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
+        >
+          Open Community console →
+        </Link>
       </Section>
 
       {/* ── Update Notifications ──────────────────────────────────── */}

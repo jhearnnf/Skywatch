@@ -5,7 +5,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { NATIVE_APP } from '../../utils/appMode'
 import SEO from '../../components/SEO'
 import ChatShell from './ChatShell'
-import AdminChatView from './AdminChatView'
+import CommunityConsole from './CommunityConsole'
 
 const DESCRIPTION = 'Channels and direct messages for Skywatch agents.'
 
@@ -56,7 +56,7 @@ function ChatRoute({ view }) {
 
   if (view === 'admin') {
     if (!user.isAdmin) return <Navigate to="/chat" replace />
-    return <Shell><AdminChatView /></Shell>
+    return <Shell><CommunityConsole /></Shell>
   }
   // /chat and /chat/:conversationId render the same two-pane shell — which pane
   // is visible on mobile follows from the route param. See ChatShell.
