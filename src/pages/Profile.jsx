@@ -14,6 +14,7 @@ import ProfileBadge from '../components/ProfileBadge'
 import SocialLinks from '../components/SocialLinks'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
+import { NATIVE_APP } from '../utils/appMode'
 import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
 
@@ -86,6 +87,7 @@ export default function Profile() {
   }, [])
   const [diffBusy,    setDiffBusy]    = useState(false)
   const [showcaseBusy, setShowcaseBusy] = useState(false)
+  const [communityNotifsBusy, setCommunityNotifsBusy] = useState(false)
   const [nameEditing, setNameEditing] = useState(false)
   const [nameDraft,   setNameDraft]   = useState('')
   const [nameBusy,    setNameBusy]    = useState(false)
@@ -222,6 +224,24 @@ export default function Profile() {
       if (data?.data?.user) setUser(data.data.user)
     } catch { /* non-fatal */ }
     finally { setShowcaseBusy(false) }
+  }
+
+  // Community notification dot. Stored as "enabled" server-side, so an absent
+  // field reads as on and needs no backfill.
+  const communityNotifs = user?.communityNotificationsEnabled !== false
+  const changeCommunityNotifs = async (enabled) => {
+    if (communityNotifsBusy || enabled === communityNotifs) return
+    setCommunityNotifsBusy(true)
+    try {
+      const res = await apiFetch(`${API}/api/users/me/community-notifications`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      const data = await res.json()
+      if (data?.data?.user) setUser(data.data.user)
+    } catch { /* non-fatal */ }
+    finally { setCommunityNotifsBusy(false) }
   }
 
   const cycleCoins = user?.cycleAirstars ?? 0   // drives XP bar (resets per rank cycle)
@@ -511,6 +531,50 @@ export default function Profile() {
               }
             </div>
           </div>
+
+          {/* Community notifications — the opt-out for the navbar unread dot.
+              Hidden inside the native app, where Community does not exist at
+              all, so the gate is NATIVE_APP rather than slim mode (web slim
+              mode does have Community). */}
+          {!NATIVE_APP && appSettings?.chatEnabled !== false && (
+            <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Community Notifications</p>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Show a red dot on the Community button when there are new messages in a channel or
+                a direct message.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => changeCommunityNotifs(true)}
+                  disabled={communityNotifsBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${communityNotifs
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
+                >
+                  🔔 Notify me
+                </button>
+                <button
+                  onClick={() => changeCommunityNotifs(false)}
+                  disabled={communityNotifsBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${!communityNotifs
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
+                >
+                  🔕 Turn off
+                </button>
+              </div>
+              {!communityNotifs && (
+                <p className="text-[11px] text-slate-400 mt-2">
+                  The dot is off. Community still works normally and any new messages are waiting
+                  for you when you open it.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Homepage feature — the opt-out for the landing page's progress wall.
               Worded so the choice can be made without reading a policy: it says

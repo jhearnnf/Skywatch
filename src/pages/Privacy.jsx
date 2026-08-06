@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import SEO from '../components/SEO'
 
 const PRIVACY_EMAIL = 'skywatchdev@proton.me'
-// Section 11 promises changes are posted with an updated effective date, so this
+// Section 12 promises changes are posted with an updated effective date, so this
 // moves whenever the policy's substance does — not on typo fixes.
 const EFFECTIVE_DATE = '6 August 2026'
 
@@ -54,6 +54,7 @@ export default function Privacy() {
             <li><span className="text-slate-700 font-medium">Profile data</span> — badge and avatar choices you make within the app.</li>
             <li><span className="text-slate-700 font-medium">Usage data</span> — game scores, quiz results, intel brief reading history, streaks, and airstar totals.</li>
             <li><span className="text-slate-700 font-medium">Support data</span> — content and email address provided when you submit a problem report.</li>
+            <li><span className="text-slate-700 font-medium">Message data</span> — the content of messages you send in chat channels, direct messages and support threads, and any messages you report to us. See section 6.</li>
             <li><span className="text-slate-700 font-medium">Analytics data</span> — page views, click events, session replays, and device/browser information collected via PostHog.</li>
             <li><span className="text-slate-700 font-medium">Presence data</span> — a "last seen" timestamp recorded periodically while you are actively using the app with the page visible and in focus. This is used by administrators to monitor platform usage.</li>
           </ul>
@@ -131,7 +132,50 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="6. Third-party services">
+        <Section title="6. Messaging and chat">
+          <p>
+            SkyWatch has a chat feature with three parts: a private support thread between you and
+            the SkyWatch team, public channels open to every signed-in user, and direct messages
+            between two users. Chat is available on the website only — it is not part of the
+            SkyWatch mobile app.
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <span className="text-slate-700 font-medium">What is stored</span> — the content of
+              every message, who sent it, the display name they were using at the time, and when it
+              was sent.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Who can see channels</span> — anything you
+              post in a public channel is visible to every signed-in SkyWatch user, and stays visible
+              until removed.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Who can see direct messages</span> — the
+              two people in the conversation, and SkyWatch administrators. Administrators can read
+              any message on the platform, including direct messages, in order to moderate the
+              service and respond to reports.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">You need a display name to post</span> —
+              posting in a channel or a direct message requires a display name, which other users
+              will see. The support thread does not.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Reports and moderation</span> — you can
+              report a message to us. A report records the message, who sent it and who reported it,
+              and is visible to administrators only. We may remove messages or withdraw a user's
+              access to channels and direct messages.
+            </li>
+          </ul>
+          <p>
+            Messages we remove are hidden from other users but retained in our moderation records.
+            If a channel is closed, its messages are kept for the same purpose. See section 9 for
+            how long we keep data.
+          </p>
+        </Section>
+
+        <Section title="7. Third-party services">
           <p>We use the following third-party services which may process your personal data:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li><span className="text-slate-700 font-medium">Google OAuth</span> — provides sign-in functionality. Governed by Google's Privacy Policy.</li>
@@ -143,7 +187,7 @@ export default function Privacy() {
           </ul>
         </Section>
 
-        <Section title="7. Cookies and tracking">
+        <Section title="8. Cookies and tracking">
           <p>
             We use cookies and similar technologies to keep you signed in (authentication cookie) and
             to collect analytics data via PostHog. The authentication cookie is strictly necessary
@@ -159,11 +203,19 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="8. Data retention">
+        <Section title="9. Data retention">
           <p>
             We retain your personal data for as long as your account is active. If you request
             deletion of your account, we will remove your personal data within 30 days, except where
             we are required to retain it for legal or compliance purposes.
+          </p>
+          <p>
+            If you delete your account, your support threads and direct messages are deleted with
+            it. Because a channel is shared, messages you posted in one remain visible to other
+            users as part of that conversation's history, with your name and account reference
+            removed. Messages retained for moderation purposes — those removed by a moderator, and
+            those in closed channels — are kept in our administrative records and are not visible
+            to other users.
           </p>
           <p>
             We keep a record that a deletion took place, so that we can demonstrate we acted on it.
@@ -178,7 +230,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="9. Your rights under UK GDPR">
+        <Section title="10. Your rights under UK GDPR">
           <p>As a UK resident, you have the following rights regarding your personal data:</p>
           <ul className="list-disc pl-5 space-y-1">
             <li><span className="text-slate-700 font-medium">Access</span> — request a copy of the data we hold about you.</li>
@@ -205,7 +257,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="10. Children">
+        <Section title="11. Children">
           <p>
             SkyWatch Academy is intended for users aged 13 and over. We do not knowingly collect
             personal data from children under the age of 13. If you believe a child under 13 has
@@ -213,7 +265,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="11. Changes to this policy">
+        <Section title="12. Changes to this policy">
           <p>
             We may update this Privacy Policy from time to time. Changes will be posted on this page
             with an updated effective date. Continued use of the app after changes are posted
