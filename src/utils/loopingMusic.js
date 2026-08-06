@@ -74,11 +74,22 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
     }
   }
 
+  // Runs when the current fade finishes OR is cancelled — never dropped.
+  let pendingFadeDone = null
+
   function cancelFade() {
     if (fadeRAF != null) {
       try { cancelAnimationFrame(fadeRAF) } catch {}
       fadeRAF = null
     }
+    // A cancelled fade must still run whatever it was going to do. stopSequence
+    // pauses its clips from this callback, so dropping it silently orphaned an
+    // element that was still playing and no longer referenced by anything that
+    // could stop it — every fast stop-then-start leaked another immortal loop
+    // on top of the last.
+    const pending = pendingFadeDone
+    pendingFadeDone = null
+    pending?.()
   }
 
   // Ramp the applied gain to `target` over FADE_MS, then invoke `onDone`.
@@ -91,6 +102,7 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
       onDone?.()
       return
     }
+    pendingFadeDone = onDone ?? null
     const from   = appliedGain
     const startT = performance.now()
     const step = (now) => {
@@ -100,7 +112,9 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
         fadeRAF = requestAnimationFrame(step)
       } else {
         fadeRAF = null
-        onDone?.()
+        const done = pendingFadeDone
+        pendingFadeDone = null
+        done?.()
       }
     }
     fadeRAF = requestAnimationFrame(step)
@@ -206,6 +220,9 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
 
   function startLoopClip() {
     try {
+      // Never replace a live element without stopping it first: an unpaused
+      // orphan keeps looping with nothing holding a reference to it.
+      if (repeatAudio) { try { repeatAudio.pause() } catch {} }
       repeatAudio = makeAudio(repeatSrc)
       repeatAudio.loop = true
       repeatAudio.volume = appliedGain
@@ -227,6 +244,7 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
     appliedGain = 0
     if (startSrc) {
       try {
+        if (startAudio) { try { startAudio.pause() } catch {} }
         startAudio = makeAudio(startSrc)
         startAudio.volume = 0
         startAudio.addEventListener('ended', onStartEnded, { once: true })
@@ -247,7 +265,7 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
     const audios = liveAudios()
     fadeTo(0, () => {
       for (const a of audios) {
-        try { a.pause() } catch {}
+        try { a.pause(); a.currentTime = 0 } catch {}
       }
       // Only clear if a new sequence hasn't started in the meantime.
       if (!playing) {
