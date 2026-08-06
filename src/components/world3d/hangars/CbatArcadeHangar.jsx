@@ -6,10 +6,15 @@ import Interactable from '../interaction/Interactable'
 
 // Cabinet slots laid out around the hangar interior. Local coordinates
 // (relative to the hangar centre, which is 16 wide × 14 deep — so x ∈ [-8, 8],
-// z ∈ [-7, 7] with the door on the front/-Z face). 14 slots — one per *visible*
-// CBAT game (hidden games never get a cabinet). If the visible list ever grows
-// beyond SLOTS.length, slots after the array end simply don't get a cabinet
-// (no overflow, no crowding). hangarLayout.test.js asserts the slots keep up.
+// z ∈ [-7, 7] with the door on the front/-Z face). 17 slots for 16 visible CBAT
+// games (hidden games never get a cabinet), so there is one spare. If the
+// visible list ever grows beyond SLOTS.length, slots after the array end simply
+// don't get a cabinet (no overflow, no crowding). hangarLayout.test.js asserts
+// the slots keep up — it had fallen two behind by the time RTT was added.
+//
+// A cabinet's footprint is 1.4 wide × 1.0 deep, so the 2.5 spacing on the side
+// walls leaves a 1.1 gap and nothing intersects its neighbours or the row round
+// the corner.
 
 export const SLOTS = [
   // Back row, screens facing the door (-Z local). 5 cabinets.
@@ -18,19 +23,23 @@ export const SLOTS = [
   { x:  0, z: 5.5, rot: 0 },
   { x:  3, z: 5.5, rot: 0 },
   { x:  6, z: 5.5, rot: 0 },
-  // Left wall, screens facing interior (+X). 4 cabinets.
-  { x: -6.5, z:  4, rot: -Math.PI / 2 },
-  { x: -6.5, z:  1, rot: -Math.PI / 2 },
-  { x: -6.5, z: -2, rot: -Math.PI / 2 },
-  { x: -6.5, z: -5, rot: -Math.PI / 2 },
-  // Right wall, screens facing interior (-X). 4 cabinets.
-  { x:  6.5, z:  4, rot:  Math.PI / 2 },
-  { x:  6.5, z:  1, rot:  Math.PI / 2 },
-  { x:  6.5, z: -2, rot:  Math.PI / 2 },
-  { x:  6.5, z: -5, rot:  Math.PI / 2 },
-  // Front wall, left of the doorway, screen facing interior (+Z). 1 cabinet.
-  // Clear of the door gap (x ∈ [-2, 2]) and the z=-5 wall cabinets.
+  // Left wall, screens facing interior (+X). 5 cabinets.
+  { x: -6.5, z:  4,   rot: -Math.PI / 2 },
+  { x: -6.5, z:  1.5, rot: -Math.PI / 2 },
+  { x: -6.5, z: -1,   rot: -Math.PI / 2 },
+  { x: -6.5, z: -3.5, rot: -Math.PI / 2 },
+  { x: -6.5, z: -6,   rot: -Math.PI / 2 },
+  // Right wall, screens facing interior (-X). 5 cabinets.
+  { x:  6.5, z:  4,   rot:  Math.PI / 2 },
+  { x:  6.5, z:  1.5, rot:  Math.PI / 2 },
+  { x:  6.5, z: -1,   rot:  Math.PI / 2 },
+  { x:  6.5, z: -3.5, rot:  Math.PI / 2 },
+  { x:  6.5, z: -6,   rot:  Math.PI / 2 },
+  // Front wall, either side of the doorway, screens facing interior (+Z).
+  // 2 cabinets, clear of the door gap (x ∈ [-2, 2]) and of the z = -6 wall
+  // cabinets beside them.
   { x: -5, z: -6, rot: Math.PI },
+  { x:  5, z: -6, rot: Math.PI },
 ]
 
 function isGameEnabled(game, cbatGameEnabled) {
