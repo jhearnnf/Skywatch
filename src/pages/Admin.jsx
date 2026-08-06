@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Overlay from '../components/ui/Overlay'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -31,6 +31,7 @@ import ReportHeatmap from '../components/admin/ReportHeatmap'
 import { TUTORIAL_STEPS, TUTORIAL_KEYS, useAppTutorial } from '../context/AppTutorialContext'
 import TutorialsEditor from './admin/TutorialsEditor'
 import UpdateNotificationsEditor from './admin/UpdateNotificationsEditor'
+import ChatChannelsEditor from './admin/ChatChannelsEditor'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
@@ -423,87 +424,31 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
         {!openRouter ? (
           <div className="py-4 text-center text-slate-400 text-xs animate-pulse">Loading OpenRouter usage…</div>
         ) : (
+          // Driven off the keys the API actually returns, which come from
+          // backend/constants/openRouterKeys.js. Previously each key had two
+          // hand-written tiles, and a new key silently had no spend shown until
+          // someone remembered to add them here.
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            <button type="button" onClick={() => openRouterNav('main', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>main</>}
-                value={fmtUSD(openRouter.main?.today)}
-                sub={`${fmtNum(openRouter.main?.todayCalls)} calls today`}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('main', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>main</>}
-                value={fmtUSD(openRouter.main?.lifetime)}
-                sub={openRouter.main?.lifetimeError || 'all-time spend'}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('aptitude', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>aptitude</>}
-                value={fmtUSD(openRouter.aptitude?.today)}
-                sub={`${fmtNum(openRouter.aptitude?.todayCalls)} calls today`}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('aptitude', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>aptitude</>}
-                value={fmtUSD(openRouter.aptitude?.lifetime)}
-                sub={openRouter.aptitude?.lifetimeError || 'all-time spend'}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('socials', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>socials</>}
-                value={fmtUSD(openRouter.socials?.today)}
-                sub={`${fmtNum(openRouter.socials?.todayCalls)} calls today`}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('socials', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>socials</>}
-                value={fmtUSD(openRouter.socials?.lifetime)}
-                sub={openRouter.socials?.lifetimeError || 'all-time spend'}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('casefiles', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>casefiles</>}
-                value={fmtUSD(openRouter.casefiles?.today)}
-                sub={`${fmtNum(openRouter.casefiles?.todayCalls)} calls today`}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('casefiles', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>casefiles</>}
-                value={fmtUSD(openRouter.casefiles?.lifetime)}
-                sub={openRouter.casefiles?.lifetimeError || 'all-time spend'}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('briefreel', 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>briefreel</>}
-                value={fmtUSD(openRouter.briefreel?.today)}
-                sub={`${fmtNum(openRouter.briefreel?.todayCalls)} calls today`}
-                color="emerald"
-              />
-            </button>
-            <button type="button" onClick={() => openRouterNav('briefreel', 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
-              <StatCard
-                label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>briefreel</>}
-                value={fmtUSD(openRouter.briefreel?.lifetime)}
-                sub={openRouter.briefreel?.lifetimeError || 'all-time spend'}
-                color="emerald"
-              />
-            </button>
+            {Object.keys(openRouter).map(key => (
+              <Fragment key={key}>
+                <button type="button" onClick={() => openRouterNav(key, 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
+                  <StatCard
+                    label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>{key}</>}
+                    value={fmtUSD(openRouter[key]?.today)}
+                    sub={`${fmtNum(openRouter[key]?.todayCalls)} calls today`}
+                    color="emerald"
+                  />
+                </button>
+                <button type="button" onClick={() => openRouterNav(key, 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
+                  <StatCard
+                    label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>{key}</>}
+                    value={fmtUSD(openRouter[key]?.lifetime)}
+                    sub={openRouter[key]?.lifetimeError || 'all-time spend'}
+                    color="emerald"
+                  />
+                </button>
+              </Fragment>
+            ))}
           </div>
         )}
       </StatsSection>
@@ -3350,8 +3295,8 @@ function SettingsTab({ API }) {
           onChange={v => set('featureFlags', { ...(draft.featureFlags ?? {}), briefReel: v })}
         />
         <Toggle
-          label="Help Chat"
-          hint="When off, the Chat nav entry, Help-page chat card, and /chat page are hidden, and the chat API returns 503. Existing conversations are retained."
+          label="Chat"
+          hint="Covers support chat, channels and direct messages. When off, the Chat nav entry, Help-page chat card, and /chat pages are hidden, and the chat API returns 503. Existing conversations are retained. Chat is always hidden inside the Android app regardless of this setting."
           checked={draft.chatEnabled !== false}
           onChange={v => set('chatEnabled', v)}
         />
@@ -4311,7 +4256,7 @@ function UsersTab({ API, onViewEmailHistory }) {
                 </button>
               )}
               {u._id !== currentUser?._id && (
-                <button onClick={() => { if (!slim) navigate(`/chat?userId=${u._id}`) }}
+                <button onClick={() => { if (!slim) navigate(`/chat/admin?userId=${u._id}`) }}
                   disabled={slim}
                   title={slim ? 'Messaging is unavailable while CBAT slim mode is enabled' : 'Open chat with this user'}
                   aria-label={slim ? 'Messaging unavailable in CBAT slim mode' : 'Open chat with this user'}
@@ -4540,9 +4485,13 @@ function UsersTab({ API, onViewEmailHistory }) {
 
 function ProblemsTab({ API, onOpenBrief }) {
   const { apiFetch } = useAuth()
+  const navigate = useNavigate()
   const { refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const [problems, setProblems] = useState([])
   const [filter,   setFilter]   = useState('unsolved')
+  // Reported chat messages land in this same queue. Splitting them out keeps a
+  // moderation flood from burying bug reports, and vice versa.
+  const [kind,     setKind]     = useState('all')
   const [search,   setSearch]   = useState('')
   const [loading,  setLoading]  = useState(true)
   const [expanded, setExpanded] = useState(null)
@@ -4558,11 +4507,12 @@ function ProblemsTab({ API, onOpenBrief }) {
     setLoading(true)
     const params = new URLSearchParams()
     if (filter !== 'all') params.set('solved', filter === 'solved' ? 'true' : 'false')
+    if (kind !== 'all') params.set('kind', kind)
     apiFetch(`${API}/api/admin/problems?${params}`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => setProblems(d.data?.problems ?? []))
       .finally(() => setLoading(false))
-  }, [API, filter, tick])
+  }, [API, filter, kind, tick])
 
   const visible = search.trim()
     ? problems.filter(p => p.description.toLowerCase().includes(search.toLowerCase()) || p.pageReported?.toLowerCase().includes(search.toLowerCase()))
@@ -4586,6 +4536,46 @@ function ProblemsTab({ API, onOpenBrief }) {
     setToast(solved !== undefined ? (solved ? '✓ Marked solved' : '✓ Reopened') : '✓ Updated')
     if (solved !== undefined) refreshUnsolvedCount()
     setTick(t => t + 1)
+  }
+
+  // ── Chat moderation, driven straight from a report row ────────────────────
+  // These call the chat API rather than the problems API: the report is the
+  // trigger, but the action belongs to chat. Each leaves a note on the report
+  // so the queue records what was done about it.
+  const handleDeleteReportedMessage = async (p) => {
+    if (!window.confirm('Remove this message for everyone? Admins can still see it.')) return
+    setBusy(p._id)
+    await apiFetch(`${API}/api/chat/admin/messages/${p.chatMessageId}`, {
+      method: 'DELETE', credentials: 'include',
+    }).catch(() => {})
+    setBusy(null)
+    await executeUpdate({ id: p._id, description: 'Reported message deleted.', notifyUser: false })
+  }
+
+  const handleChatBan = async (p) => {
+    const reason = window.prompt('Ban this user from channels and DMs?\n\nReason (shown to them):')
+    if (reason === null) return
+    setBusy(p._id)
+    await apiFetch(`${API}/api/chat/admin/users/${p.reportedUserId._id}/chat-ban`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    }).catch(() => {})
+    setBusy(null)
+    await executeUpdate({
+      id: p._id,
+      description: `Reported user banned from chat.${reason ? ` Reason: ${reason}` : ''}`,
+      notifyUser: false,
+    })
+  }
+
+  const handleChatUnban = async (p) => {
+    setBusy(p._id)
+    await apiFetch(`${API}/api/chat/admin/users/${p.reportedUserId._id}/chat-ban`, {
+      method: 'DELETE', credentials: 'include',
+    }).catch(() => {})
+    setBusy(null)
+    await executeUpdate({ id: p._id, description: 'Chat ban lifted.', notifyUser: false })
   }
 
   const handleSaveNote = (p) => {
@@ -4661,6 +4651,21 @@ function ProblemsTab({ API, onOpenBrief }) {
         />
       </div>
 
+      {/* Kind — bug reports vs reported chat messages */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {[
+          { id: 'all',          label: 'Everything' },
+          { id: 'bug',          label: 'Bug reports' },
+          { id: 'chat_message', label: 'Chat reports' },
+        ].map(k => (
+          <button key={k.id} onClick={() => setKind(k.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
+              ${kind === k.id ? 'bg-brand-600 text-white' : 'bg-surface border border-slate-700 text-slate-700 hover:border-brand-400'}`}>
+            {k.label}
+          </button>
+        ))}
+      </div>
+
       {loading && <div className="text-center py-8 text-slate-600 text-sm animate-pulse">Loading…</div>}
       {!loading && visible.length === 0 && (
         <div className="text-center py-12 text-slate-600">
@@ -4679,6 +4684,13 @@ function ProblemsTab({ API, onOpenBrief }) {
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-600 mb-0.5">{p.pageReported || 'Unknown page'} · {new Date(p.time).toLocaleDateString('en-GB')}</p>
                 <p className="text-sm font-semibold text-slate-900 line-clamp-2">{p.description}</p>
+                {p.kind === 'chat_message' && (
+                  <span className="inline-flex items-center gap-1 mt-1 mr-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-900/40 text-red-300">
+                    💬 Chat report
+                    {p.reportedUserId && ` · ${p.reportedUserId.displayName || p.reportedUserId.email || `#${p.reportedUserId.agentNumber}`}`}
+                    {p.reportedUserId?.chatBannedAt && ' · already banned'}
+                  </span>
+                )}
                 {p.intelligenceBrief && (
                   <span
                     role="link"
@@ -4698,6 +4710,49 @@ function ProblemsTab({ API, onOpenBrief }) {
 
             {expanded === p._id && (
               <div className="px-4 pb-4 border-t border-slate-700 pt-3 space-y-3">
+
+                {/* Moderation actions — chat reports only. The reported body is
+                    copied into the description above, so it survives even if the
+                    message is deleted before an admin gets here. */}
+                {p.kind === 'chat_message' && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {p.chatConversationId && (
+                      <button
+                        onClick={() => navigate(`/chat/admin?conversationId=${p.chatConversationId}`)}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-brand-200 text-brand-600 hover:bg-brand-100 transition-colors"
+                      >
+                        Open transcript
+                      </button>
+                    )}
+                    {p.chatMessageId && (
+                      <button
+                        onClick={() => handleDeleteReportedMessage(p)}
+                        disabled={busy === p._id}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-red-200 text-red-600 hover:bg-red-900/20 transition-colors"
+                      >
+                        Delete message
+                      </button>
+                    )}
+                    {p.reportedUserId && !p.reportedUserId.chatBannedAt && (
+                      <button
+                        onClick={() => handleChatBan(p)}
+                        disabled={busy === p._id}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-red-200 text-red-600 hover:bg-red-900/20 transition-colors"
+                      >
+                        Ban from chat
+                      </button>
+                    )}
+                    {p.reportedUserId?.chatBannedAt && (
+                      <button
+                        onClick={() => handleChatUnban(p)}
+                        disabled={busy === p._id}
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-700 text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        Lift chat ban
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Full original description */}
                 <div className="bg-surface-raised rounded-xl p-3 text-xs text-slate-700">
@@ -4972,6 +5027,11 @@ function ContentTab({ API }) {
         Toast={Toast}
         CollapsibleBox={CollapsibleBox}
       />
+
+      {/* ── Chat Channels ─────────────────────────────────────────── */}
+      <Section title="Chat Channels" collapsible>
+        <ChatChannelsEditor API={API} Toast={Toast} />
+      </Section>
 
       {/* ── Update Notifications ──────────────────────────────────── */}
       <Section title="Update Notifications" collapsible>
