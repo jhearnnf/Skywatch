@@ -17,6 +17,26 @@ const chatMessageSchema = new mongoose.Schema({
   // screen when the message was sent, not whatever the account is called today.
   senderDisplayName: { type: String, default: null },
 
+  // The message this one replies to, Discord-style. A snapshot of the parent's
+  // author and body rides alongside the ref so the quote still renders when the
+  // parent is deleted, moderated away, or simply older than the loaded page —
+  // resolving it live would leave holes in the conversation.
+  replyTo: {
+    messageId:   { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage', default: null },
+    displayName: { type: String, default: null },
+    excerpt:     { type: String, default: null },
+  },
+
+  // Emoji reactions, embedded rather than in their own collection: they are
+  // read with the message every single time and never queried on their own, so
+  // a join would cost more than it saved. Bounded by a fixed emoji whitelist,
+  // so the array can never grow past that many entries.
+  reactions: [{
+    _id:     false,
+    emoji:   { type: String, required: true },
+    userIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  }],
+
   // Commit SHAs this message announced, when it came from the GitHub-backed
   // update drafter. Recorded so the next draft run can skip work that has
   // already been announced rather than offering it again.

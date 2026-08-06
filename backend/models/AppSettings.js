@@ -140,6 +140,12 @@ const appSettingsSchema = new mongoose.Schema({
   volumeHangarLobbyMusic:       { type: Number, default: 100, min: 0, max: 100 },
   soundEnabledHangarLobbyMusic: { type: Boolean, default: true },
 
+  // Community soundtrack. Adjustable from the Community console as well as the
+  // Sound Effects panel — same two fields either way, so the two screens can
+  // never disagree about what is playing.
+  volumeCommunityMusic:         { type: Number, default: 60, min: 0, max: 100 },
+  soundEnabledCommunityMusic:   { type: Boolean, default: true },
+
   // Blueprint grid-reveal tones (Intel Brief image cell dissolve)
   volumeGridReveal:       { type: Number, default: 30, min: 0, max: 100 },
   soundEnabledGridReveal: { type: Boolean, default: true },

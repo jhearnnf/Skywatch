@@ -26,8 +26,8 @@ describe('seeding', () => {
     expect(rows.map(c => c.channel.slug)).toEqual(['announcements', 'general']);
     expect(rows[0].channel.order).toBeLessThan(rows[1].channel.order);
     // Announcements is a noticeboard; General is a conversation.
-    expect(rows[0].channel.adminOnly).toBe(true);
-    expect(rows[1].channel.adminOnly).toBe(false);
+    expect(rows[0].channel.postPolicy).toBe('admin');
+    expect(rows[1].channel.postPolicy).toBe('everyone');
   });
 
   it('is idempotent — a second run creates nothing', async () => {

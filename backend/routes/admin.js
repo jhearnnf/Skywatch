@@ -1079,7 +1079,7 @@ router.post('/test-email', async (req, res) => {
 // channel, since the webhook itself is write-only and never echoes back.
 router.post('/discord/test', async (req, res) => {
   try {
-    const { postToDiscord, agentLabel, MEDALS } = require('../utils/discordMedals');
+    const { postToDiscord, agentLabel, escapeMarkdown, MEDALS } = require('../utils/discordMedals');
     if (!(process.env.DISCORD_WEBHOOK_URL || '').trim()) {
       return res.status(400).json({ status: 'error', message: 'DISCORD_WEBHOOK_URL is not set on the server' });
     }
@@ -1090,7 +1090,7 @@ router.post('/discord/test', async (req, res) => {
       content: `${medal.emoji} Test message from SkyWatch admin`,
       embeds: [{
         title: `${medal.emoji} ${medal.word} medal — Target`,
-        description: `**${agentLabel(req.user)}** is now ${medal.place} on the Target all-time leaderboard.`,
+        description: `**${escapeMarkdown(agentLabel(req.user))}** is now ${medal.place} on the Target all-time leaderboard.`,
         color: medal.colour,
         fields: [{ name: 'Score', value: '4,250', inline: true }],
         footer: { text: 'SkyWatch · test message' },

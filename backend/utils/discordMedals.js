@@ -88,9 +88,15 @@ function escapeMarkdown(text) {
 }
 
 // Exactly what the leaderboard shows: display name, else agent number. Never email.
+//
+// Returns the name RAW. Escaping is a property of where the name is going, not
+// of the name itself: Discord needs markdown escaped, and the in-app Medals
+// channel renders plain text and must not show the backslashes. Escaping here
+// meant a name like SkyWatch_Dev reached chat as "SkyWatch\_Dev".
+// Each sink escapes for itself — see buildMedalPayload.
 function agentLabel(user) {
-  if (user?.displayName) return escapeMarkdown(user.displayName);
-  if (user?.agentNumber) return `Agent ${escapeMarkdown(user.agentNumber)}`;
+  if (user?.displayName) return user.displayName.replace(/\s+/g, ' ').trim();
+  if (user?.agentNumber) return `Agent ${String(user.agentNumber).replace(/\s+/g, ' ').trim()}`;
   return 'An agent';
 }
 
@@ -126,6 +132,9 @@ function gameKeyForResult(Model, doc) {
 }
 
 function buildMedalPayload({ medal, gameLabel, gameKey, agent, score, time, primaryField, previousRank }) {
+  // Escape at the sink: this payload is Discord markdown, so a user-controlled
+  // display name has to be defused here rather than upstream.
+  const safeAgent = escapeMarkdown(agent);
   const fields = [
     { name: SCORE_LABEL[primaryField] || 'Score', value: formatScore(primaryField, score), inline: true },
   ];
@@ -145,7 +154,7 @@ function buildMedalPayload({ medal, gameLabel, gameKey, agent, score, time, prim
     embeds: [
       {
         title: `${medal.emoji} ${medal.word} medal — ${gameLabel}`,
-        description: `**${agent}** is now ${medal.place} on the ${gameLabel} all-time leaderboard.`,
+        description: `**${safeAgent}** is now ${medal.place} on the ${gameLabel} all-time leaderboard.`,
         color: medal.colour,
         ...(clientUrl ? { url: `${clientUrl}/cbat/${gameKey}/leaderboard?period=all-time` } : {}),
         fields,
@@ -194,11 +203,20 @@ async function postToDiscord(payload) {
 //
 // Returns the payload it posted (or null), which is what the tests assert on.
 // Never throws: the caller is a score submission.
-async function announceCbatMedal(Model, doc) {
+/**
+ * Work out whether this result earned a medal, independent of where it gets
+ * announced.
+ *
+ * Split out of announceCbatMedal so the same detection feeds both sinks —
+ * Discord and the in-app Medals channel. Running it twice would double every
+ * ranking query on a hot path (it runs on every CBAT score submission), so the
+ * caller checks that at least one sink is on BEFORE calling this, preserving
+ * the original property that a fully disabled feature costs nothing.
+ *
+ * @returns {Promise<Object|null>} medal detail, or null if this is not a medal
+ */
+async function detectCbatMedal(Model, doc) {
   try {
-    if (!webhookUrl()) return null;
-    if (!(await broadcastEnabled())) return null;
-
     const [gameKey, cfg] = gameKeyForResult(Model, doc);
     if (!cfg) return null;
 
@@ -243,27 +261,53 @@ async function announceCbatMedal(Model, doc) {
 
     const user = await User.findById(doc.userId).select('displayName agentNumber').lean();
 
-    const payload = buildMedalPayload({
-      medal,
-      gameLabel: cfg.label,
-      gameKey,
-      agent: agentLabel(user),
-      score,
-      time,
-      primaryField: cfg.primaryField,
-      previousRank,
-    });
+    return {
+      medal, gameKey, gameLabel: cfg.label, primaryField: cfg.primaryField,
+      agent: agentLabel(user), userId: doc.userId, score, time, previousRank,
+    };
+  } catch (err) {
+    console.error(`[medals] detection failed: ${err.message}`);
+    return null;
+  }
+}
 
-    await postToDiscord(payload);
+/**
+ * Announce a medal everywhere it should go.
+ *
+ * Sinks are independent and never block each other: Discord being down must not
+ * stop the in-app feed, and neither may break a score submission. Both are
+ * awaited through allSettled purely so a test can wait on them.
+ */
+async function announceCbatMedal(Model, doc) {
+  try {
+    const discordOn = Boolean(webhookUrl()) && await broadcastEnabled();
+    const { chatMedalsEnabled, postMedalToChannel } = require('./chatMedals');
+    const chatOn = await chatMedalsEnabled();
+    // Nothing listening — skip the ranking work entirely.
+    if (!discordOn && !chatOn) return null;
+
+    const detail = await detectCbatMedal(Model, doc);
+    if (!detail) return null;
+
+    // Returns the Discord payload, unchanged from before the second sink was
+    // added, so callers and tests that inspect it still work.
+    const payload = discordOn ? buildMedalPayload(detail) : null;
+    await Promise.allSettled([
+      payload ? postToDiscord(payload) : null,
+      chatOn ? postMedalToChannel(detail) : null,
+    ].filter(Boolean));
+
     return payload;
   } catch (err) {
-    console.error(`[discord] medal announcement failed: ${err.message}`);
+    console.error(`[medals] announcement failed: ${err.message}`);
     return null;
   }
 }
 
 module.exports = {
   announceCbatMedal,
+  detectCbatMedal,
+  buildMedalPayload,
   postToDiscord,
   resetDiscordCache,
   agentLabel,

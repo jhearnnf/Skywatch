@@ -44,7 +44,7 @@ function isLegacyOpenChatIndex(index) {
 
 async function chatChannelsUpgrade({ logger = console } = {}) {
   const collection = ChatConversation.collection;
-  const result = { typed: 0, counted: 0, droppedIndex: false, seededChannel: false, seededAnnouncements: false };
+  const result = { typed: 0, counted: 0, policied: 0, droppedIndex: false, seededChannel: false, seededAnnouncements: false };
 
   // ── 1. Backfill type ───────────────────────────────────────────────────────
   const typed = await ChatConversation.updateMany(
@@ -102,6 +102,28 @@ async function chatChannelsUpgrade({ logger = console } = {}) {
     result.counted += 1;
   }
 
+  // ── 3b. adminOnly -> postPolicy ────────────────────────────────────────────
+  // The boolean could only say "staff or everyone". A bot feed is a third case,
+  // so it becomes an enum; this maps the old field across. Keyed on postPolicy
+  // being absent, so an admin who later relaxes a channel is not re-restricted
+  // on the next boot.
+  const policied = await ChatConversation.updateMany(
+    { type: 'channel', 'channel.postPolicy': { $exists: false }, 'channel.adminOnly': true },
+    { $set: { 'channel.postPolicy': 'admin' } },
+  );
+  const openPolicied = await ChatConversation.updateMany(
+    { type: 'channel', 'channel.postPolicy': { $exists: false } },
+    { $set: { 'channel.postPolicy': 'everyone' } },
+  );
+  result.policied = (policied.modifiedCount ?? 0) + (openPolicied.modifiedCount ?? 0);
+
+  // The old boolean is now derived on read and must not linger as a second
+  // source of truth.
+  await ChatConversation.updateMany(
+    { type: 'channel', 'channel.adminOnly': { $exists: true } },
+    { $unset: { 'channel.adminOnly': 1 } },
+  );
+
   // ── 4. Seed the starting channels ──────────────────────────────────────────
   // Only on a database with no channels at all, so an admin who deliberately
   // archives every channel doesn't find them resurrected on the next deploy.
@@ -120,7 +142,7 @@ async function chatChannelsUpgrade({ logger = console } = {}) {
           description: 'Updates from the Skywatch team.',
           emoji:       '📢',
           order:       -1,
-          adminOnly:   true,
+          postPolicy:  'admin',
         },
       },
       {
@@ -132,7 +154,7 @@ async function chatChannelsUpgrade({ logger = console } = {}) {
           description: 'Anything and everything.',
           emoji:       '💬',
           order:       0,
-          adminOnly:   false,
+          postPolicy:  'everyone',
         },
       },
     ]);
@@ -156,16 +178,16 @@ async function chatChannelsUpgrade({ logger = console } = {}) {
         description: 'Updates from the Skywatch team.',
         emoji:       '📢',
         order:       -1,
-        adminOnly:   true,
+        postPolicy:  'admin',
       },
     });
     result.seededAnnouncements = true;
   }
 
-  if (result.typed || result.droppedIndex || result.counted || result.seededChannel || result.seededAnnouncements) {
+  if (result.typed || result.droppedIndex || result.counted || result.policied || result.seededChannel || result.seededAnnouncements) {
     logger?.log?.(
       `[migration] chatChannelsUpgrade: typed=${result.typed} counted=${result.counted} ` +
-      `droppedIndex=${result.droppedIndex} seededChannel=${result.seededChannel} ` +
+      `droppedIndex=${result.droppedIndex} policied=${result.policied} seededChannel=${result.seededChannel} ` +
       `seededAnnouncements=${result.seededAnnouncements}`,
     );
   }

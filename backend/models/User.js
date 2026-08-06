@@ -68,6 +68,23 @@ const userSchema = new mongoose.Schema(
     chatBannedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     chatBanReason:      { type: String, trim: true, maxlength: 300, default: null },
 
+    // Automated chat account. A real User row so DMs, avatars, the sender map,
+    // name colours and the admin transcript all work with no special-casing —
+    // but it never plays anything, so it is excluded from the leaderboard and
+    // the homepage showcase, and only admins may message it.
+    isBot: { type: Boolean, default: false },
+
+    // What this bot is for, in its own words. Stored per-bot rather than
+    // hardcoded in the UI: the sidebar used to label every bot "Answers from
+    // the CBAT community guide", which is true of the guide bot and nonsense
+    // for one that only posts medals.
+    botDescription: { type: String, trim: true, maxlength: 120, default: null },
+
+    // Whether this bot answers direct messages. A poster (the medal bot) has no
+    // conversational role at all — without this it would be DM-able and would
+    // reply with CBAT guide answers under a name that promises medals.
+    botAnswersDms: { type: Boolean, default: false },
+
     // Opt-OUT of the Community unread dot. Stored as "enabled" with a default
     // of true because the dot is on for everyone unless they say otherwise, and
     // an absent field must read as on — no backfill needed. Turning it off

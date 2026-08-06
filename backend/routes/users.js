@@ -311,7 +311,8 @@ router.delete('/me', protect, async (req, res) => {
 // GET /api/users/leaderboard — top 20 agents by total airstars (public)
 router.get('/leaderboard', async (req, res) => {
   try {
-    const agents = await User.find({})
+    // Bots never play, so they must never rank.
+    const agents = await User.find({ isBot: { $ne: true } })
       .select('agentNumber displayName totalAirstars')
       .sort({ totalAirstars: -1 })
       .limit(20);

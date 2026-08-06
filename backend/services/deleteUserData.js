@@ -65,6 +65,8 @@ const AUTHORSHIP_REFS = [
   // later deletes their own account stops being the named actor on the rows
   // they signed. The row (and its reason) stays; the byline goes.
   ['AccountDeletion',    ['adminUserId']],
+  // The bot's guide is app content that outlives whoever uploaded it.
+  ['BotKnowledge',       ['uploadedByUserId']],
   ['BriefReel',          ['generatedBy', 'publishedBy']],
   ['ChatConversation',   ['closedByUserId', 'archivedByUserId']],
   ['ChatMessage',        ['deletedByUserId']],

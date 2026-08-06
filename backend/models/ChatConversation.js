@@ -46,6 +46,11 @@ const chatConversationSchema = new mongoose.Schema({
   // race hits E11000 and re-resolves, same pattern as the support chat.
   participantKey: { type: String, default: null },
 
+  // Set when one participant is a bot. Denormalised so the per-message post
+  // check is a field read rather than a User lookup on every send, and so a
+  // thread can be recognised as a bot thread without resolving participants.
+  botUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
   // ── channel ────────────────────────────────────────────────────────────────
   channel: {
     name:        { type: String, trim: true, maxlength: 40,  default: null },
@@ -53,9 +58,24 @@ const chatConversationSchema = new mongoose.Schema({
     description: { type: String, trim: true, maxlength: 200, default: null },
     emoji:       { type: String, trim: true, maxlength: 8,   default: null },
     order:       { type: Number, default: 0 },
-    // Read by everyone, posted to by admins only — an announcements board
-    // rather than a conversation. Enforced server-side in postRefusal().
-    adminOnly:   { type: Boolean, default: false },
+
+    // Who may post. Everyone reads either way — this is only about writing.
+    //   'everyone' — an ordinary conversation
+    //   'admin'    — a noticeboard the Skywatch team writes (Announcements)
+    //   'bot'      — a feed exactly one bot writes (Medals). Users interact
+    //                with it through reactions rather than replies.
+    // Replaces the old `adminOnly` boolean, which could not express the third
+    // case; migrations/chatChannelsUpgrade.js maps the old field across. The
+    // API still returns a derived `adminOnly` for "you cannot post here",
+    // computed from this rather than stored, so there is one source of truth.
+    postPolicy:    { type: String, enum: ['everyone', 'admin', 'bot'], default: 'everyone' },
+    postBotUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
+    // Whether messages here count towards the Community unread dot. A feed
+    // that posts on every podium finish would otherwise badge the navbar all
+    // day and train people to ignore it — which would cost the dot its meaning
+    // everywhere else, not just here.
+    notifyMembers: { type: Boolean, default: true },
   },
 
   // Archiving hides a channel from users while keeping every message readable

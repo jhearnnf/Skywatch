@@ -39,6 +39,11 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // replace the legacy open-chat unique index whose filter lacked `type`,
     // and seed a starting channel on a database that has none. Idempotent.
     await require('./migrations/chatChannelsUpgrade')();
+    // One-shot repair of medal messages posted while agentLabel() escaped
+    // markdown for Discord, which the plain-text chat feed showed literally.
+    await require('./migrations/unescapeMedalMessages')();
+    // The guide bot's account. Idempotent; see seeds/seedChatBot.js.
+    await require('./seeds/seedChatBot')();
     // Add the clientResultId path/index to CBAT result schemas so offline score
     // submissions can be deduplicated on flush retries.
     require('./utils/cbatResult').ensureCbatResultPaths();

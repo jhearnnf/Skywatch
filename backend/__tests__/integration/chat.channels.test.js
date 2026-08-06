@@ -259,14 +259,14 @@ describe('sender profiles (chat avatars)', () => {
 describe('announcements channels (adminOnly)', () => {
   const makeAnnouncements = (cookie) =>
     request(app).post('/api/chat/admin/channels').set('Cookie', cookie)
-      .send({ name: 'Announcements', emoji: '📢', order: -1, adminOnly: true });
+      .send({ name: 'Announcements', emoji: '📢', order: -1, postPolicy: 'admin' });
 
   it('lets admins post and refuses everyone else', async () => {
     const admin = await createUser({ isAdmin: true, displayName: 'Control' });
     const user  = await createUser({ displayName: 'Falcon' });
 
     const made = await makeAnnouncements(authCookie(admin._id));
-    expect(made.body.data.channel.channel.adminOnly).toBe(true);
+    expect(made.body.data.channel.channel.postPolicy).toBe('admin');
     const id = made.body.data.channel._id;
 
     const byAdmin = await request(app).post(`/api/chat/conversations/${id}/messages`)

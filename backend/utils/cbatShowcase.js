@@ -120,6 +120,7 @@ async function loadPool(cfg, gameKey) {
         // A player's own objection, set from Profile › Settings. `$ne: true`
         // rather than `false` so accounts predating the field are included.
         'user.hideFromShowcase': { $ne: true },
+        'user.isBot': { $ne: true },
         // Matched on the lowercased name rather than displayNameLower, which is
         // only written by the rename route and so is absent on some accounts.
         $expr: {

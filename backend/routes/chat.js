@@ -10,6 +10,20 @@ const ProblemReport    = require('../models/ProblemReport');
 const User             = require('../models/User');
 const { generateAnnouncementDrafts } = require('../utils/announcementDrafts');
 const { resolveSelectedBadges } = require('../utils/selectedBadge');
+const { medalsForUsers } = require('../utils/cbatMedalHolders');
+const BotKnowledge = require('../models/BotKnowledge');
+const { parseCbatGuide, renderGuideCorpus } = require('../utils/cbatGuideParser');
+const { generateBotReply } = require('../utils/chatBot');
+
+// One knowledge document for now. A second bot would key off its own slug.
+const BOT_KNOWLEDGE_SLUG = 'cbat-guide';
+
+const POST_POLICIES = ['everyone', 'admin', 'bot'];
+
+// Fixed reaction set. Deliberately small: a picker people can scan beats an
+// emoji keyboard, and a whitelist keeps arbitrary text out of a channel whose
+// whole point is that users cannot post text into it.
+const REACTION_EMOJI = ['👍', '🎉', '🔥', '👏', '😮', '❤️'];
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
@@ -110,12 +124,25 @@ function postRefusal(convo, user) {
     if (!isParticipant) {
       return { status: 403, body: { message: 'You are not part of this conversation.' } };
     }
+    // Second gate on bot DMs — see POST /dm. A thread that outlives someone's
+    // admin rights must stop accepting messages, not keep working.
+    if (convo.botUserId && !user.isAdmin) {
+      return { status: 403, body: { message: 'That agent is not accepting direct messages.' } };
+    }
   }
 
   if (convo.type === 'channel') {
     if (convo.isArchived) return { status: 400, body: { message: 'This channel has been archived.' } };
-    // An announcements board: everyone reads, only staff post.
-    if (convo.channel?.adminOnly && !user.isAdmin) {
+    const policy = convo.channel?.postPolicy ?? 'everyone';
+    // A bot feed. Only the one bot writes here — not admins either, so a stray
+    // human message can never appear in what reads as an automated record.
+    if (policy === 'bot' && String(convo.channel?.postBotUserId ?? '') !== String(user._id)) {
+      return {
+        status: 403,
+        body: { code: 'CHANNEL_READ_ONLY', message: 'This channel is a feed. React to a message instead of replying.' },
+      };
+    }
+    if (policy === 'admin' && !user.isAdmin) {
       return {
         status: 403,
         body: { code: 'CHANNEL_READ_ONLY', message: 'Only the Skywatch team can post in this channel.' },
@@ -152,13 +179,16 @@ function postRefusal(convo, user) {
 
 // Append a message, advancing the conversation's last-message fields and
 // marking it read for the sender (sending implies reading everything up to now).
-async function appendMessage({ conversation, senderUserId, senderRole, body, senderDisplayName = null }) {
+async function appendMessage({
+  conversation, senderUserId, senderRole, body, senderDisplayName = null, replyTo = null,
+}) {
   const message = await ChatMessage.create({
     conversationId: conversation._id,
     senderUserId,
     senderRole,
     body,
     senderDisplayName,
+    ...(replyTo ? { replyTo } : {}),
   });
 
   const update = {
@@ -201,6 +231,10 @@ function markRead(userId, conversationId, at = new Date()) {
 // read for the sender as it writes.
 function isUnread(convo, readRow) {
   if (!convo.messageCount) return false;
+  // Admin-disabled notifications for this channel. A feed that badges the
+  // navbar on every message trains people to ignore the dot, which would cost
+  // it its meaning everywhere else too.
+  if (convo.type === 'channel' && convo.channel?.notifyMembers === false) return false;
   if (!readRow) return true;
   return new Date(readRow.lastReadAt) < new Date(convo.lastMessageAt);
 }
@@ -247,7 +281,7 @@ async function previewMap(conversationIds) {
 // query filter in GET /messages). The hideBody branch below is the belt to that
 // braces — it keeps any other caller that forgets the filter from leaking a
 // removed body.
-function serializeMessage(m, { viewerIsAdmin, conversationType }) {
+function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
   const deleted = Boolean(m.deletedAt);
   const hideBody = deleted && !viewerIsAdmin;
 
@@ -266,6 +300,18 @@ function serializeMessage(m, { viewerIsAdmin, conversationType }) {
     deleted,
     deletedAt:         m.deletedAt ?? null,
     createdAt:         m.createdAt,
+    reactions:         (m.reactions ?? [])
+      .filter(r => (r.userIds ?? []).length)
+      .map(r => ({
+        emoji: r.emoji,
+        count: (r.userIds ?? []).length,
+        mine:  (r.userIds ?? []).some(id => String(id) === String(viewerId)),
+      })),
+    replyTo:           m.replyTo?.messageId ? {
+      messageId:   m.replyTo.messageId,
+      displayName: m.replyTo.displayName ?? null,
+      excerpt:     m.replyTo.excerpt ?? null,
+    } : null,
   };
 }
 
@@ -300,7 +346,12 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
     .populate('rank', 'rankNumber rankAbbreviation')
     .lean();
 
-  const badges = await resolveSelectedBadges(users.map(u => u.selectedBadgeBriefId));
+  const [badges, medals] = await Promise.all([
+    resolveSelectedBadges(users.map(u => u.selectedBadgeBriefId)),
+    // Podium places on the CBAT boards, hung off the avatar in chat. Resolved
+    // for the whole thread in one cached sweep — see utils/cbatMedalHolders.js.
+    medalsForUsers(users.map(u => u._id)),
+  ]);
 
   const out = {};
   for (const u of users) {
@@ -313,6 +364,8 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
       // cutout → rank badge → rank abbreviation.
       selectedBadge: badges.get(String(u.selectedBadgeBriefId)) ?? null,
       rank:          u.rank ?? null,
+      isBot:         Boolean(u.isBot),
+      medals:        medals[String(u._id)] ?? [],
     };
   }
   return out;
@@ -373,9 +426,11 @@ router.get('/overview', async (req, res) => {
         emoji:       c.channel?.emoji ?? null,
         description: c.channel?.description ?? '',
         order:       c.channel?.order ?? 0,
-        adminOnly:   Boolean(c.channel?.adminOnly),
+        postPolicy:  c.channel?.postPolicy ?? 'everyone',
+        // Derived, never stored: "not everyone can post here".
+        adminOnly:   (c.channel?.postPolicy ?? 'everyone') !== 'everyone',
+        notifyMembers: c.channel?.notifyMembers !== false,
       }))
-      .map(c => ({ ...c, adminOnly: Boolean(c.adminOnly) }))
       .sort((a, b) => (a.order - b.order) || a.name.localeCompare(b.name));
 
     const dms = convos
@@ -402,12 +457,40 @@ router.get('/overview', async (req, res) => {
       ?? convos.find(c => c.type === 'support')
       ?? null;
 
+    // Bots are admin-only for now, and a bot you have never messaged has no
+    // conversation to list — so they are advertised separately from `dms`,
+    // with the thread id when one exists and null when it does not. The client
+    // opens the id or calls POST /dm to create it.
+    let bots = [];
+    if (req.user.isAdmin) {
+      // Only bots you can actually talk to. A poster like the medal bot has no
+      // conversational role, so listing it as a DM target would promise a
+      // reply it has no way to give.
+      const botUsers = await User.find({
+        isBot: true, isBanned: { $ne: true }, botAnswersDms: true,
+      }).select('displayName agentNumber botDescription').lean();
+      bots = botUsers.map(b => {
+        const thread = convos.find(c => String(c.botUserId) === String(b._id));
+        return {
+          userId:         b._id,
+          title:          b.displayName || 'Bot',
+          description:    b.botDescription || null,
+          conversationId: thread?._id ?? null,
+          unread:         thread ? isUnread(thread, reads.get(String(thread._id))) : false,
+          lastMessageAt:  thread?.lastMessageAt ?? null,
+        };
+      });
+    }
+
     res.json({ status: 'success', data: {
       support: supportConvo
         ? { ...decorate(supportConvo), title: SUPPORT_LABEL, status: supportConvo.status }
         : null,
       channels,
-      dms,
+      // A bot DM is listed under `bots`, not here — it is a tool, not a person
+      // you are talking to, and mixing them would bury real conversations.
+      dms: dms.filter(d => !convos.find(c => String(c._id) === String(d._id))?.botUserId),
+      bots,
       viewer: {
         displayName:         req.user.displayName ?? null,
         displayNameRequired: !req.user.displayName,
@@ -426,7 +509,7 @@ router.get('/users/:id/card', async (req, res) => {
   try {
     if (!isValidId(req.params.id)) return res.status(404).json({ message: 'User not found' });
     const target = await User.findById(req.params.id)
-      .select('displayName agentNumber isAdmin isBanned').lean();
+      .select('displayName agentNumber isAdmin isBanned isBot').lean();
     if (!target || target.isBanned) return res.status(404).json({ message: 'User not found' });
 
     res.json({ status: 'success', data: { user: {
@@ -434,6 +517,7 @@ router.get('/users/:id/card', async (req, res) => {
       displayName: target.displayName ?? null,
       agentNumber: target.agentNumber ?? null,
       isAdmin:     Boolean(target.isAdmin),
+      isBot:       Boolean(target.isBot),
       isSelf:      String(target._id) === String(req.user._id),
     } } });
   } catch (err) {
@@ -452,8 +536,21 @@ router.post('/dm', async (req, res) => {
       return res.status(400).json({ message: 'You cannot message yourself.' });
     }
 
-    const target = await User.findById(userId).select('_id isBanned').lean();
+    const target = await User.findById(userId)
+      .select('_id isBanned isBot botAnswersDms').lean();
     if (!target || target.isBanned) return res.status(404).json({ message: 'User not found' });
+
+    // Bots are admin-only for now. Enforced here AND in postRefusal: this stops
+    // the thread being created, that stops anyone posting into one that already
+    // exists (or was created while they were still an admin).
+    if (target.isBot && !req.user.isAdmin) {
+      return res.status(403).json({ message: 'That agent is not accepting direct messages.' });
+    }
+    // A poster bot has nothing to say back, so a thread with one would just sit
+    // there unanswered.
+    if (target.isBot && !target.botAnswersDms) {
+      return res.status(400).json({ message: 'That bot posts to a channel and does not take messages.' });
+    }
 
     const participantKey = ChatConversation.dmKey(req.user._id, userId);
     let convo = await ChatConversation.findOne({ type: 'dm', participantKey });
@@ -463,7 +560,12 @@ router.post('/dm', async (req, res) => {
       const participantIds = [req.user._id, target._id]
         .map(String).sort().map(id => new mongoose.Types.ObjectId(id));
       try {
-        convo = await ChatConversation.create({ type: 'dm', participantIds, participantKey });
+        convo = await ChatConversation.create({
+          type: 'dm',
+          participantIds,
+          participantKey,
+          botUserId: target.isBot ? target._id : null,
+        });
       } catch (err) {
         if (err && err.code === 11000) {
           convo = await ChatConversation.findOne({ type: 'dm', participantKey });
@@ -589,6 +691,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
       messages: items.map(m => serializeMessage(m, {
         viewerIsAdmin:    Boolean(req.user.isAdmin),
         conversationType: convo.type,
+        viewerId:         req.user._id,
       })),
       senders,
       hasMore,
@@ -597,7 +700,8 @@ router.get('/conversations/:id/messages', async (req, res) => {
         type:       convo.type,
         status:     convo.status,
         isArchived: convo.isArchived,
-        adminOnly:  Boolean(convo.channel?.adminOnly),
+        postPolicy: convo.channel?.postPolicy ?? 'everyone',
+        adminOnly:  (convo.channel?.postPolicy ?? 'everyone') !== 'everyone',
         title:      convo.type === 'channel' ? channelTitle(convo) : null,
       },
     } });
@@ -633,20 +737,175 @@ router.post('/conversations/:id/messages', async (req, res) => {
       ? (isOwner ? 'user' : 'admin')
       : (req.user.isAdmin ? 'admin' : 'user');
 
+    // Reply target. Snapshotted at send time rather than joined on read, so the
+    // quote survives the parent being deleted or scrolled out of the page.
+    let replyTo = null;
+    const replyToId = req.body?.replyToId;
+    if (replyToId && isValidId(replyToId)) {
+      const parent = await ChatMessage.findOne({
+        _id: replyToId, conversationId: convo._id, deletedAt: null,
+      }).select('senderDisplayName senderRole body').lean();
+      if (parent) {
+        replyTo = {
+          messageId:   parent._id,
+          displayName: convo.type === 'support' && parent.senderRole === 'admin'
+            ? SUPPORT_LABEL
+            : parent.senderDisplayName,
+          excerpt: (parent.body ?? '').slice(0, 160),
+        };
+      }
+    }
+
     const message = await appendMessage({
       conversation:      convo,
       senderUserId:      req.user._id,
       senderRole,
       body,
       senderDisplayName: req.user.displayName ?? null,
+      replyTo,
     });
 
     res.json({ status: 'success', data: {
       message: serializeMessage(message.toObject(), {
         viewerIsAdmin:    Boolean(req.user.isAdmin),
         conversationType: convo.type,
+        viewerId:         req.user._id,
       }),
     } });
+
+    // Answer AFTER responding, never before: a model call takes seconds, and
+    // making the sender wait for it would leave their own message hanging in
+    // the composer. The client's 5s poll picks the reply up.
+    if (convo.botUserId && String(convo.botUserId) !== String(req.user._id)) {
+      replyAsBot(convo).catch(err => {
+        console.error('[chat] bot reply failed:', err?.message);
+      });
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Generate and post the bot's answer to the latest message in a bot DM.
+//
+// Never throws into the request path — it runs detached, so a failure has to
+// surface as a visible message in the thread rather than a silent nothing.
+// One reply at a time per conversation, so a burst of messages cannot start
+// several overlapping generations.
+const botReplyInFlight = new Set();
+
+async function replyAsBot(convo) {
+  const key = String(convo._id);
+  if (botReplyInFlight.has(key)) return;
+  botReplyInFlight.add(key);
+  try {
+    const [bot, knowledge, recent] = await Promise.all([
+      User.findById(convo.botUserId).select('displayName botAnswersDms').lean(),
+      BotKnowledge.findOne({ slug: BOT_KNOWLEDGE_SLUG }).select('corpus').lean(),
+      ChatMessage.find({ conversationId: convo._id, deletedAt: null })
+        .sort({ createdAt: -1 }).limit(12).lean(),
+    ]);
+    // Belt and braces alongside the POST /dm gate: a thread that predates the
+    // flag must not start answering.
+    if (!bot || !bot.botAnswersDms) return;
+
+    const ordered = recent.reverse();
+    const question = ordered[ordered.length - 1]?.body ?? '';
+    const history  = ordered.slice(0, -1).map(m => ({
+      fromBot: String(m.senderUserId) === String(convo.botUserId),
+      body:    m.body,
+    }));
+
+    const { text } = await generateBotReply({
+      question,
+      corpus: knowledge?.corpus ?? '',
+      history,
+    });
+
+    const fresh = await ChatConversation.findById(convo._id);
+    if (!fresh) return;
+    await appendMessage({
+      conversation:      fresh,
+      senderUserId:      convo.botUserId,
+      senderRole:        'user',
+      body:              text,
+      senderDisplayName: bot.displayName ?? 'Guide Bot',
+    });
+  } finally {
+    botReplyInFlight.delete(key);
+  }
+}
+
+// ── Admin: bot knowledge ─────────────────────────────────────────────────────
+
+// GET /api/chat/admin/bot/knowledge — what the bot currently answers from
+router.get('/admin/bot/knowledge', adminOnly, async (req, res) => {
+  try {
+    const doc = await BotKnowledge.findOne({ slug: BOT_KNOWLEDGE_SLUG })
+      .select('-sections -corpus')
+      .populate('uploadedByUserId', 'email displayName')
+      .lean();
+    res.json({ status: 'success', data: { knowledge: doc ?? null } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT /api/chat/admin/bot/knowledge { filename, html }
+//
+// The guide lives in a gitignored folder outside backend/, so it can never be
+// on Railway's filesystem. Uploading it into Mongo is what makes the bot work
+// in production at all — and it means refreshing the guide needs no deploy.
+router.put('/admin/bot/knowledge', adminOnly, async (req, res) => {
+  try {
+    const html = (req.body?.html ?? '').toString();
+    if (!html.trim()) return res.status(400).json({ message: 'No file contents received' });
+    if (html.length > 5_000_000) return res.status(413).json({ message: 'That file is too large' });
+
+    let parsed;
+    try {
+      parsed = parseCbatGuide(html);
+    } catch (err) {
+      return res.status(422).json({ message: err.message });
+    }
+
+    const corpus = renderGuideCorpus(parsed.sections);
+    const tests  = (parsed.sections.TESTS ?? []).length;
+    const facts  = (parsed.sections.TESTS ?? [])
+      .reduce((sum, t) => sum + (t?.facts?.length ?? 0), 0);
+
+    const doc = await BotKnowledge.findOneAndUpdate(
+      { slug: BOT_KNOWLEDGE_SLUG },
+      {
+        $set: {
+          title:            'CBAT community guide',
+          corpus,
+          sections:         parsed.sections,
+          sourceFilename:   (req.body?.filename ?? '').toString().slice(0, 200) || null,
+          sourceBytes:      html.length,
+          uploadedByUserId: req.user._id,
+          stats: {
+            tests,
+            facts,
+            corpusChars:     corpus.length,
+            sectionsFound:   parsed.found,
+            sectionsMissing: parsed.missing,
+          },
+        },
+      },
+      { upsert: true, returnDocument: 'after' },
+    );
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'chat_bot_knowledge_upload',
+      reason:     `Uploaded the chat bot guide (${tests} tests, ${facts} facts)`,
+    });
+
+    res.json({ status: 'success', data: { knowledge: {
+      slug: doc.slug, title: doc.title, stats: doc.stats,
+      sourceFilename: doc.sourceFilename, updatedAt: doc.updatedAt,
+    } } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -668,6 +927,72 @@ router.post('/conversations/:id/read', async (req, res) => {
     }
 
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/chat/reactions — the emoji a client may offer
+router.get('/reactions', (req, res) => {
+  res.json({ status: 'success', data: { emoji: REACTION_EMOJI } });
+});
+
+// POST /api/chat/messages/:id/reactions { emoji } — toggle your reaction.
+//
+// Reactions are the interaction model for read-only channels: you cannot reply
+// in a bot feed, but you can respond to it. Restricted to a fixed set rather
+// than free text — an open field would be a message box on a channel that is
+// meant to be read-only, and it bounds the embedded array.
+router.post('/messages/:id/reactions', async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Message not found' });
+
+    const emoji = (req.body?.emoji ?? '').toString();
+    if (!REACTION_EMOJI.includes(emoji)) {
+      return res.status(400).json({ message: 'That reaction is not available.' });
+    }
+
+    const message = await ChatMessage.findById(req.params.id);
+    if (!message || message.deletedAt) return res.status(404).json({ message: 'Message not found' });
+
+    const convo = await ChatConversation.findById(message.conversationId);
+    if (!convo || !canRead(convo, req.user)) return res.status(403).json({ message: 'Forbidden' });
+    // A chat ban silences reacting too, or it would just be a quieter way to
+    // keep participating.
+    if (isChatBanned(req.user)) {
+      return res.status(403).json({ code: 'CHAT_BANNED', message: 'You cannot react in chat.' });
+    }
+
+    const existing = (message.reactions ?? []).find(r => r.emoji === emoji);
+    const mine = existing?.userIds?.some(id => String(id) === String(req.user._id));
+
+    // Positional $addToSet/$pull rather than read-modify-write, so two people
+    // reacting at the same moment cannot clobber each other's entry.
+    if (mine) {
+      await ChatMessage.updateOne(
+        { _id: message._id, 'reactions.emoji': emoji },
+        { $pull: { 'reactions.$.userIds': req.user._id } },
+      );
+    } else if (existing) {
+      await ChatMessage.updateOne(
+        { _id: message._id, 'reactions.emoji': emoji },
+        { $addToSet: { 'reactions.$.userIds': req.user._id } },
+      );
+    } else {
+      await ChatMessage.updateOne(
+        { _id: message._id, 'reactions.emoji': { $ne: emoji } },
+        { $push: { reactions: { emoji, userIds: [req.user._id] } } },
+      );
+    }
+
+    const fresh = await ChatMessage.findById(message._id).lean();
+    res.json({ status: 'success', data: {
+      message: serializeMessage(fresh, {
+        viewerIsAdmin:    Boolean(req.user.isAdmin),
+        conversationType: convo.type,
+        viewerId:         req.user._id,
+      }),
+    } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -911,7 +1236,7 @@ router.get('/admin/users/:userId/messages', adminOnly, async (req, res) => {
       messages: messages.map(m => {
         const c = byId.get(String(m.conversationId));
         return {
-          ...serializeMessage(m, { viewerIsAdmin: true, conversationType: c?.type }),
+          ...serializeMessage(m, { viewerIsAdmin: true, conversationType: c?.type, viewerId: req.user._id }),
           conversationType:  c?.type ?? null,
           conversationTitle: c?.type === 'channel' ? channelTitle(c) : null,
         };
@@ -1057,6 +1382,9 @@ router.get('/admin/channels', adminOnly, async (req, res) => {
         description:   c.channel?.description ?? '',
         emoji:         c.channel?.emoji ?? null,
         order:         c.channel?.order ?? 0,
+        postPolicy:    c.channel?.postPolicy ?? 'everyone',
+        postBotUserId: c.channel?.postBotUserId ?? null,
+        notifyMembers: c.channel?.notifyMembers !== false,
         isArchived:    Boolean(c.isArchived),
         archivedAt:    c.archivedAt ?? null,
         messageCount:  c.messageCount ?? 0,
@@ -1084,8 +1412,13 @@ router.post('/admin/channels', adminOnly, async (req, res) => {
       description: (req.body?.description ?? '').toString().trim().slice(0, 200),
       emoji:       (req.body?.emoji ?? '').toString().trim().slice(0, 8) || null,
       order:       Number.isFinite(Number(req.body?.order)) ? Number(req.body.order) : 0,
-      adminOnly:   req.body?.adminOnly === true,
+      postPolicy:  POST_POLICIES.includes(req.body?.postPolicy) ? req.body.postPolicy : 'everyone',
+      postBotUserId: isValidId(req.body?.postBotUserId) ? req.body.postBotUserId : null,
+      notifyMembers: req.body?.notifyMembers !== false,
     };
+    if (channel.postPolicy === 'bot' && !channel.postBotUserId) {
+      return res.status(400).json({ message: 'Pick which bot posts in this channel.' });
+    }
 
     // Explicit check first so the answer is deterministic, then the unique
     // index as the race backstop for two admins creating the same name at once.
@@ -1147,8 +1480,21 @@ router.patch('/admin/channels/:id', adminOnly, async (req, res) => {
     if (req.body?.order !== undefined && Number.isFinite(Number(req.body.order))) {
       set['channel.order'] = Number(req.body.order);
     }
-    if (req.body?.adminOnly !== undefined) {
-      set['channel.adminOnly'] = req.body.adminOnly === true;
+    if (POST_POLICIES.includes(req.body?.postPolicy)) {
+      set['channel.postPolicy'] = req.body.postPolicy;
+      if (req.body.postPolicy !== 'bot') set['channel.postBotUserId'] = null;
+    }
+    if (req.body?.postBotUserId !== undefined) {
+      set['channel.postBotUserId'] = isValidId(req.body.postBotUserId) ? req.body.postBotUserId : null;
+    }
+    if (req.body?.notifyMembers !== undefined) {
+      set['channel.notifyMembers'] = req.body.notifyMembers !== false;
+    }
+    const nextPolicy = set['channel.postPolicy'] ?? convo.channel?.postPolicy;
+    const nextBot = 'channel.postBotUserId' in set
+      ? set['channel.postBotUserId'] : convo.channel?.postBotUserId;
+    if (nextPolicy === 'bot' && !nextBot) {
+      return res.status(400).json({ message: 'Pick which bot posts in this channel.' });
     }
 
     let updated;
@@ -1381,7 +1727,7 @@ router.delete('/admin/messages/:id', adminOnly, async (req, res) => {
     });
 
     res.json({ status: 'success', data: {
-      message: serializeMessage(updated.toObject(), { viewerIsAdmin: true }),
+      message: serializeMessage(updated.toObject(), { viewerIsAdmin: true, viewerId: req.user._id }),
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });
