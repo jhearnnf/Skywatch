@@ -25,6 +25,8 @@ const GAME_MAX = {
   'sat-easier':      10,     // 10 questions (2 situations × 5), one point each
   'cut':             null,   // accumulating score, no fixed ceiling
   'cut-easier':      null,   // accumulating score, no fixed ceiling
+  'rtt':             null,   // accumulating score, no fixed ceiling
+  'rtt-easier':      null,   // accumulating score, no fixed ceiling
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 

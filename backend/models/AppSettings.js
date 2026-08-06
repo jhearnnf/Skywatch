@@ -242,6 +242,7 @@ const appSettingsSchema = new mongoose.Schema({
       dad: true,
       sat: true, 'sat-easier': true,
       cut: true, 'cut-easier': true,
+      rtt: true, 'rtt-easier': true,
     }),
   },
 
@@ -489,6 +490,7 @@ appSettingsSchema.statics.getSettings = async function () {
         dad: true,
         sat: true, 'sat-easier': true,
         cut: true, 'cut-easier': true,
+        rtt: true, 'rtt-easier': true,
       };
       const current = settings.cbatGameEnabled;
       let touched = false;

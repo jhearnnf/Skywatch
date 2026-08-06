@@ -50,6 +50,8 @@ const GameSessionCbatSatResult             = CBAT_GAMES['sat'].Model;
 const GameSessionCbatSatEasierResult       = CBAT_GAMES['sat-easier'].Model;
 const GameSessionCbatCutResult             = CBAT_GAMES['cut'].Model;
 const GameSessionCbatCutEasierResult       = CBAT_GAMES['cut-easier'].Model;
+const GameSessionCbatRttResult             = CBAT_GAMES['rtt'].Model;
+const GameSessionCbatRttEasierResult       = CBAT_GAMES['rtt-easier'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2457,6 +2459,28 @@ async function submitCutResult(req, res, Model) {
 router.post('/cbat/cut/result', protect, (req, res) => submitCutResult(req, res, GameSessionCbatCutResult));
 router.post('/cbat/cut-easier/result', protect, (req, res) => submitCutResult(req, res, GameSessionCbatCutEasierResult));
 
+// POST /api/games/cbat/rtt/result and /rtt-easier/result
+// Identical payloads; the difficulty is fixed by the route (never read from the
+// body) so a run can only ever land in the collection its board reads from.
+async function submitRttResult(req, res, Model) {
+  try {
+    const { totalScore, totalTime, framesTaken, framesOnTarget, targetsCompleted, avgCentringErrorDeg } = req.body;
+    const result = await saveCbatResult(Model, req, {
+      totalScore: totalScore ?? 0,
+      totalTime,
+      framesTaken,
+      framesOnTarget,
+      targetsCompleted,
+      avgCentringErrorDeg,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+router.post('/cbat/rtt/result', protect, (req, res) => submitRttResult(req, res, GameSessionCbatRttResult));
+router.post('/cbat/rtt-easier/result', protect, (req, res) => submitRttResult(req, res, GameSessionCbatRttEasierResult));
+
 // POST /api/games/cbat/trace-2/result
 router.post('/cbat/trace-2/result', protect, async (req, res) => {
   try {
@@ -3105,6 +3129,8 @@ router.get('/cbat/sat/leaderboard', protect, (req, res) => cbatLeaderboard(req, 
 router.get('/cbat/sat-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sat-easier'));
 router.get('/cbat/cut/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'cut'));
 router.get('/cbat/cut-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'cut-easier'));
+router.get('/cbat/rtt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'rtt'));
+router.get('/cbat/rtt-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'rtt-easier'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -3291,6 +3317,8 @@ router.get('/cbat/sat/personal-best', protect, (req, res) => cbatPersonalBest(re
 router.get('/cbat/sat-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sat-easier'));
 router.get('/cbat/cut/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'cut'));
 router.get('/cbat/cut-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'cut-easier'));
+router.get('/cbat/rtt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'rtt'));
+router.get('/cbat/rtt-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'rtt-easier'));
 
 // GET /api/games/cbat/:gameKey/progress — the signed-in user's own score series for one game,
 // oldest → newest, backing the post-game trend sparkline and the leaderboard's "You" tab.

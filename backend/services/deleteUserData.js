@@ -34,6 +34,8 @@ const OWNED_BY_USER = [
   'GameSessionCbatNumericalOpsResult',
   'GameSessionCbatNumericalOpsEasierResult',
   'GameSessionCbatPlaneTurnResult',
+  'GameSessionCbatRttResult',
+  'GameSessionCbatRttEasierResult',
   'GameSessionCbatSatResult',
   'GameSessionCbatSatEasierResult',
   'GameSessionCbatStart',

@@ -39,6 +39,8 @@ const GAME_OFFSET = {
   'cut-easier':       5,
   'sat':             21,
   'sat-easier':      17,
+  'rtt':             23,
+  'rtt-easier':      24,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -245,6 +247,39 @@ const FAKE_TUNING = {
     floor: 110, ceiling: 420, seedTime: 176.9, timeStep: 0.4,
     scoreSequence: [420, 400, 385, 365, 345, 330, 310, 295, 280, 265, 250, 235, 220, 205, 190, 175, 160, 145, 128, 110],
   },
+  'rtt': {
+    // Rapid Tracking Test — accumulating totalScore (higher better), no fixed
+    // ceiling in the leaderboard's eyes, though a flawless run tops out at 1800
+    // (12 passes × 3 dead-centre frames + completion bonuses). The demo ceiling
+    // of 960 is a strong-but-human run: most frames captured, most of them off
+    // centre, a couple of passes lost behind cover. Roster trails to 230.
+    // 12 passes of ~8s plus gaps run ~115s; the time column is hidden
+    // (CBAT_LEADERBOARD_CONFIG hideTime) but a small fractional step keeps the
+    // stored times from all matching.
+    //
+    // Dropped ~8% from the original tuning when airframe drift went into the
+    // game — the wander mostly costs centring bonus rather than hits. That is
+    // an estimate: retune this and the grade bands in rttDifficulty.js together
+    // once there are real runs to look at.
+    //
+    // DELIBERATELY NOT round numbers. The multiple-of-5 sequences elsewhere in
+    // this file exist because those games can only PRODUCE multiples of 5 (ANT
+    // awards 10/5/0, FLAG's awards are all multiples of 5) — there, a demo
+    // score of 63 would be impossible and look fabricated. RTT is the opposite:
+    // a frame pays 20 plus a centring bonus of `round(20 × howCentred)`, so a
+    // real total is an arbitrary integer, and a board where every score happens
+    // to end in 0 or 5 is itself the tell.
+    floor: 230, ceiling: 960, seedTime: 114.8, timeStep: 0.3,
+    scoreSequence: [958, 921, 884, 852, 813, 779, 748, 711, 679, 641, 608, 572, 539, 504, 468, 431, 396, 357, 312, 264],
+  },
+  'rtt-easier': {
+    // Eight passes instead of twelve, so the achievable total is two thirds of
+    // Hard's (1200 for a perfect run) — the demo band scales with it rather
+    // than sitting higher because the game is easier. Arbitrary integers for
+    // the same reason as Hard's, above.
+    floor: 175, ceiling: 675, seedTime: 80.6, timeStep: 0.3,
+    scoreSequence: [673, 644, 621, 592, 571, 538, 517, 489, 466, 438, 412, 387, 361, 338, 309, 283, 261, 233, 209, 181],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -377,6 +412,8 @@ const WEEKLY_PER_PLAY = {
   'sat-easier':        6,  // correctCount /10 — same idea on the shorter run
   'cut':             350,  // accumulating totalScore — a little below a decent single run
   'cut-easier':      260,  // fewer scheduled tasks in the same 180s
+  'rtt':             645,  // accumulating totalScore — a little below a decent single run
+  'rtt-easier':      460,  // eight passes instead of twelve, so a lower total
 };
 
 // Six deterministic demo players: a couple of active ones, the rest light.

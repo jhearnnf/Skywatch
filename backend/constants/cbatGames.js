@@ -20,6 +20,8 @@ const GameSessionCbatSatResult           = require('../models/GameSessionCbatSat
 const GameSessionCbatSatEasierResult     = require('../models/GameSessionCbatSatEasierResult');
 const GameSessionCbatCutResult           = require('../models/GameSessionCbatCutResult');
 const GameSessionCbatCutEasierResult     = require('../models/GameSessionCbatCutEasierResult');
+const GameSessionCbatRttResult           = require('../models/GameSessionCbatRttResult');
+const GameSessionCbatRttEasierResult     = require('../models/GameSessionCbatRttEasierResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -244,6 +246,24 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Cognitive Updating Test (Easier)',
+  },
+  'rtt': {
+    Model: GameSessionCbatRttResult,
+    primaryField: 'totalScore',
+    sortDir: -1,           // higher is better (accumulating score)
+    bestOp: '$max',
+    label: 'Rapid Tracking Test',
+  },
+  // RTT's "Easier" difficulty — 8 target passes instead of 12, no fast air,
+  // slower passes and less time behind cover. Its own collection and therefore
+  // its own boards; the page at /cbat/rtt picks the key from the selected
+  // difficulty.
+  'rtt-easier': {
+    Model: GameSessionCbatRttEasierResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Rapid Tracking Test (Easier)',
   },
 };
 
