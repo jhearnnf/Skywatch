@@ -29,6 +29,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
   const [cardUserId,   setCardUserId]   = useState(null)
   const [reporting,    setReporting]    = useState(null)
   const [reportDone,   setReportDone]   = useState(false)
+  const [replyTo,      setReplyTo]      = useState(null)
 
   const fetchMessages = useCallback(async () => {
     const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages`, {
@@ -91,7 +92,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text }),
+        body: JSON.stringify({ body: text, replyToId: replyTo?._id ?? null }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) {
@@ -103,6 +104,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
       // The POST already returns the created message, so appending it beats
       // re-downloading the whole thread. The 5s poll reconciles anything that
       // arrived from someone else in the meantime.
+      setReplyTo(null)
       if (d?.data?.message) {
         setMessages(prev => [...prev, d.data.message])
         // Your first message in a thread wouldn't be in the sender map yet, so
@@ -143,6 +145,21 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
     }
   }
 
+  // Reactions are the only way to interact with a bot feed, so they work even
+  // where the composer is hidden. Swap the single message in place rather than
+  // refetching the thread — the response carries the updated counts.
+  const handleReact = async (message, emoji) => {
+    const r = await apiFetch(`${API}/api/chat/messages/${message._id}/reactions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji }),
+    }).catch(() => null)
+    const d = await r?.json().catch(() => null)
+    if (!r?.ok) { setErr(d?.message || 'Could not add that reaction'); return }
+    setMessages(prev => prev.map(m => (m._id === d.data.message._id ? d.data.message : m)))
+  }
+
   const handleDelete = async (message) => {
     if (!window.confirm('Remove this message for everyone? Admins can still see it.')) return
     await apiFetch(`${API}/api/chat/admin/messages/${message._id}`, {
@@ -158,7 +175,11 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
   const isClosed   = type === 'support' && conversation?.status === 'closed'
   const isArchived = Boolean(conversation?.isArchived)
   // Announcements board: everyone reads, only staff post.
+  const postPolicy  = conversation?.postPolicy ?? 'everyone'
   const isAdminOnly = Boolean(conversation?.adminOnly)
+  // A feed nobody can reply to — offering reply would suggest a conversation
+  // that will not happen.
+  const canPost = postPolicy === 'everyone' || (postPolicy === 'admin' && user?.isAdmin)
   // Support never asks for a display name — see postRefusal() in routes/chat.js.
   const gateOnName = (needsName || displayNameRequired) && type !== 'support'
 
@@ -183,6 +204,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
             <p className="text-[11px] text-slate-400">
               {isArchived ? 'Archived channel'
                 : isClosed ? 'This chat is closed'
+                  : postPolicy === 'bot' ? 'Automatic feed - react rather than reply'
                   : isAdminOnly ? 'Updates from the Skywatch team'
                     : type === 'channel' ? 'Everyone can see this channel'
                       : type === 'dm' ? 'Direct message'
@@ -214,6 +236,8 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           viewerIsAdmin={Boolean(user?.isAdmin)}
           senders={senders}
           onOpenUser={setCardUserId}
+          onReply={canPost ? setReplyTo : undefined}
+          onReact={handleReact}
           onReport={m => { setReportDone(false); setReporting(m) }}
           onDelete={user?.isAdmin ? handleDelete : undefined}
           emptyLabel={type === 'channel'
@@ -239,6 +263,12 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
         <div className="border-t border-slate-200 p-3 text-center">
           <p className="text-xs text-slate-500">This chat has been closed. Start a new one from Support.</p>
         </div>
+      ) : postPolicy === 'bot' ? (
+        <div className="border-t border-slate-200 p-3 text-center">
+          <p className="text-xs text-slate-500">
+            This channel is a feed. React to a message to join in.
+          </p>
+        </div>
       ) : isAdminOnly ? (
         user?.isAdmin ? (
           <AnnouncementDrafter
@@ -259,7 +289,13 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
       ) : gateOnName ? (
         <DisplayNameGate onDone={() => { setNeedsName(false); onChanged?.() }} />
       ) : (
-        <ComposeBox disabled={loading} busy={busy} onSend={handleSend} />
+        <ComposeBox
+          disabled={loading}
+          busy={busy}
+          onSend={handleSend}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
+        />
       )}
 
       {cardUserId && (

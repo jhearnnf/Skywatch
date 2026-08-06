@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { vi, describe, it, expect } from 'vitest'
 import MessageList from '../components/MessageList'
 
 const CUTOUT = 'https://cdn.test/typhoon.png'
@@ -135,6 +135,165 @@ describe('MessageList — removed messages', () => {
     )
     expect(screen.getByText('something rude')).toBeTruthy()
     expect(screen.getByText(/removed by a moderator/i)).toBeTruthy()
+  })
+})
+
+describe('MessageList — replies', () => {
+  const withReply = (senderUserId, body, replyTo) =>
+    msg(senderUserId, body, { replyTo })
+
+  it('quotes the parent above the message', () => {
+    renderList([
+      msg('u1', 'original'),
+      withReply('u2', 'answering that', {
+        messageId: 'm-orig', displayName: 'Falcon', excerpt: 'original',
+      }),
+    ])
+    expect(screen.getByText('answering that')).toBeTruthy()
+    // The quote renders from the snapshot, so the parent's name shows twice:
+    // once as its own author, once in the quote.
+    expect(screen.getAllByText('Falcon').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('renders the quote even when the parent is gone', () => {
+    // The snapshot is why this works — resolving the parent live would leave a
+    // hole whenever it was deleted or simply out of the loaded page.
+    renderList([
+      withReply('u2', 'answering', {
+        messageId: 'missing', displayName: 'Falcon', excerpt: 'the old message',
+      }),
+    ])
+    expect(screen.getByText('the old message')).toBeTruthy()
+  })
+
+  it('always starts a new run, so the quote is never orphaned', () => {
+    // Without this, a reply grouped under the previous message would show its
+    // quote beneath someone else's name.
+    renderList([
+      msg('u1', 'one'),
+      withReply('u1', 'two', {
+        messageId: 'x', displayName: 'Viper', excerpt: 'something',
+      }),
+    ])
+    expect(screen.getAllByText('Falcon')).toHaveLength(2)
+  })
+
+  it('offers reply on other people\'s messages and on your own', () => {
+    const onReply = vi.fn()
+    renderList([msg('u1', 'hello')], { onReply })
+    fireEvent.click(screen.getByTitle('Reply'))
+    expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ body: 'hello' }))
+  })
+
+  it('does not offer reply on a removed message', () => {
+    renderList([msg('u1', 'gone', { deleted: true })], { onReply: vi.fn(), viewerIsAdmin: true })
+    expect(screen.queryByTitle('Reply')).toBeNull()
+  })
+})
+
+describe('MessageList — name colours', () => {
+  it('gives different agents different colours, stably', () => {
+    const { container } = renderList([msg('u1', 'a'), msg('u2', 'b')])
+    const names = [...container.querySelectorAll('[style*="color"]')]
+      .map(el => el.getAttribute('style'))
+    expect(new Set(names).size).toBeGreaterThan(1)
+  })
+})
+
+describe('MessageList — avatar medals', () => {
+  const withMedals = (medals) => ({
+    ...SENDERS,
+    u1: { ...SENDERS.u1, medals },
+  })
+
+  const render1 = (medals) =>
+    render(
+      <MessageList
+        messages={[msg('u1', 'hello')]}
+        currentUserId="me"
+        conversationType="channel"
+        senders={withMedals(medals)}
+      />,
+    )
+
+  it('hangs a gold medal off the avatar for a board leader', () => {
+    render1([{ gameKey: 'target', gameLabel: 'Target', rank: 1 }])
+    expect(screen.getByTitle('Gold — Target')).toBeTruthy()
+  })
+
+  it('names silver and bronze correctly', () => {
+    render1([
+      { gameKey: 'a', gameLabel: 'Alpha', rank: 2 },
+      { gameKey: 'b', gameLabel: 'Bravo', rank: 3 },
+    ])
+    expect(screen.getByTitle('Silver — Alpha')).toBeTruthy()
+    expect(screen.getByTitle('Bronze — Bravo')).toBeTruthy()
+  })
+
+  it('shows nothing for an agent with no medals', () => {
+    render1([])
+    expect(screen.queryByTitle(/Gold|Silver|Bronze/)).toBeNull()
+  })
+
+  const many = (n) => Array.from({ length: n }, (_, i) => ({
+    gameKey: `g${i}`, gameLabel: `Game ${i}`, rank: (i % 3) + 1,
+  }))
+
+  const medalEls = () => [...document.querySelectorAll('span[title*="—"]')]
+
+  it('shows at most three, then counts the rest', () => {
+    render1(many(7))
+    expect(medalEls()).toHaveLength(3)
+    expect(screen.getByTitle('4 more')).toBeTruthy()
+    expect(screen.getByText('+4')).toBeTruthy()
+  })
+
+  it('shows no counter when three or fewer are held', () => {
+    render1(many(3))
+    expect(medalEls()).toHaveLength(3)
+    expect(screen.queryByText(/^\+/)).toBeNull()
+  })
+
+  it('overlaps each medal heavily onto the one before', () => {
+    // Not a token nudge: each medal covers two-thirds of the previous one, so
+    // the stack reads as stacked rather than as a row.
+    render1(many(3))
+    const [first, ...rest] = medalEls()
+    expect(parseFloat(first.style.marginLeft) || 0).toBe(0)
+    for (const el of rest) {
+      expect(parseFloat(el.style.marginLeft)).toBe(-8)
+    }
+  })
+
+  it('keeps three medals narrower than three laid side by side', () => {
+    render1(many(3))
+    const width = medalEls().reduce((sum, el, i) => (
+      sum + (i === 0 ? 12 : 12 + parseFloat(el.style.marginLeft))
+    ), 0)
+    expect(width).toBe(20)      // vs 36 laid side by side
+    expect(width).toBeLessThan(24)
+  })
+
+  it('keeps the best medal on top of the stack', () => {
+    // Gold must never be the one tucked behind a bronze.
+    render1([
+      { gameKey: 'a', gameLabel: 'Alpha', rank: 1 },
+      { gameKey: 'b', gameLabel: 'Bravo', rank: 3 },
+    ])
+    const items = medalEls()
+    expect(Number(items[0].style.zIndex)).toBeGreaterThan(Number(items[1].style.zIndex))
+  })
+
+  it('shows the medal once per run, with the avatar', () => {
+    render(
+      <MessageList
+        messages={[msg('u1', 'one'), msg('u1', 'two')]}
+        currentUserId="me"
+        conversationType="channel"
+        senders={withMedals([{ gameKey: 'target', gameLabel: 'Target', rank: 1 }])}
+      />,
+    )
+    expect(screen.getAllByTitle('Gold — Target')).toHaveLength(1)
   })
 })
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function ComposeBox({ disabled, busy, onSend, placeholder }) {
+export default function ComposeBox({ disabled, busy, onSend, placeholder, replyTo, onCancelReply }) {
   const [body, setBody] = useState('')
 
   const handleSend = () => {
@@ -11,7 +11,27 @@ export default function ComposeBox({ disabled, busy, onSend, placeholder }) {
   }
 
   return (
-    <div className="border-t border-slate-200 p-3 flex items-end gap-2">
+    <div className="border-t border-slate-200">
+      {/* Reply target, shown above the box so it is obvious what you are
+          answering before you start typing. */}
+      {replyTo && (
+        <div className="flex items-center gap-2 px-3 pt-2 text-[11px]">
+          <span className="text-slate-400 shrink-0">Replying to</span>
+          <span className="font-semibold text-slate-600 shrink-0">
+            {replyTo.senderDisplayName || 'Unknown agent'}
+          </span>
+          <span className="text-slate-400 truncate">{replyTo.body}</span>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="ml-auto shrink-0 text-slate-400 hover:text-slate-600 px-1"
+            aria-label="Cancel reply"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <div className="p-3 flex items-end gap-2">
       <textarea
         rows={1}
         disabled={disabled}
@@ -31,6 +51,7 @@ export default function ComposeBox({ disabled, busy, onSend, placeholder }) {
       >
         Send
       </button>
+      </div>
     </div>
   )
 }
