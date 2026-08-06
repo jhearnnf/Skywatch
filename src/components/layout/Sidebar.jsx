@@ -8,7 +8,7 @@ import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
-import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, slimNavActiveTo } from '../../utils/appMode'
+import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, NATIVE_APP, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 
@@ -19,6 +19,10 @@ const NAV_ITEMS = [
   { to: '/rankings',      emoji: '🏆', label: 'Progression' },
   { to: '/profile',       emoji: '👤', label: 'Profile'    },
 ]
+
+// Labelled "Community" rather than "Chat": the destination is channels and DMs
+// between agents, not just a line to the support team. The route stays /chat.
+const CHAT_ITEM = { to: '/chat', emoji: '💬', label: 'Community' }
 
 function CrosshairLogo() {
   return (
@@ -42,14 +46,22 @@ export default function Sidebar() {
   // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
   const showHangarNav = useWorld3dNavVisible()
   const baseNavItems = slim ? SLIM_NAV_ITEMS : NAV_ITEMS
-  const navItems = showHangarNav ? [...baseNavItems, HANGAR_NAV_ITEM] : baseNavItems
+  const withHangar = showHangarNav ? [...baseNavItems, HANGAR_NAV_ITEM] : baseNavItems
   const activeNavTo = slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
-  const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
+  const { hasUnread: chatUnread } = useChatUnread() ?? {}
   const { levels: liveLevels, settings } = useAppSettings() ?? {}
-  const showChatNav = !slim && user && settings?.chatEnabled !== false && chatVisible
+  // Chat is a permanent entry for every signed-in user off-native — it is now a
+  // place you go (channels, DMs), not just a notification about a support
+  // thread, so it no longer waits for an open conversation to exist. Hidden
+  // inside the native app: see NATIVE_APP in utils/appMode.js. It DOES show in
+  // slim mode, which is why `slim` is not part of this condition.
+  const showChatNav = !NATIVE_APP && user && settings?.chatEnabled !== false
+  // Rendered inside the main loop rather than appended after it, so it can sit
+  // above Profile.
+  const navItems = showChatNav ? insertBeforeProfile(withHangar, CHAT_ITEM) : withHangar
   const levelInfo = user ? getLevelInfo(user.cycleAirstars ?? 0, liveLevels) : null
 
   return (
@@ -59,8 +71,10 @@ export default function Sidebar() {
         {navItems.map(({ to, emoji, label }) => {
           const isPlay     = to === '/play'
           const isLearn    = to === '/learn-priority'
+          const isChat     = to === '/chat'
           const showPlayBadge     = isPlay  && hasAnyNew         && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
+          const showChatBadge     = isChat  && chatUnread
           const handleLearnClick = isLearn && hasAnyNewCategory
             ? (e) => {
                 e.preventDefault()
@@ -72,7 +86,7 @@ export default function Sidebar() {
           return (
             <Link
               key={to}
-              data-nav={isPlay ? 'play' : isLearn ? 'learn' : undefined}
+              data-nav={isPlay ? 'play' : isLearn ? 'learn' : isChat ? 'chat' : undefined}
               to={to}
               onClick={handleLearnClick}
               aria-current={isActive ? 'page' : undefined}
@@ -90,35 +104,14 @@ export default function Sidebar() {
                 {showCategoryBadge && (
                   <span className="nav-new-badge" aria-label="New category unlocked" />
                 )}
+                {showChatBadge && (
+                  <span className="nav-new-badge" aria-label="New message" />
+                )}
               </span>
               {label}
             </Link>
           )
         })}
-
-        {showChatNav && (() => {
-          const isActive = activeNavTo === '/chat'
-          return (
-            <Link
-              data-nav="chat"
-              to="/chat"
-              aria-current={isActive ? 'page' : undefined}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
-                ${isActive
-                  ? 'bg-brand-100 text-brand-600 border-brand-200'
-                  : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
-                }`}
-            >
-              <span className="relative text-lg w-6 text-center shrink-0">
-                💬
-                {chatUnread && (
-                  <span className="nav-new-badge" aria-label="New chat message" />
-                )}
-              </span>
-              Chat
-            </Link>
-          )
-        })()}
 
         {user?.isAdmin && (() => {
           const isActive = activeNavTo === '/admin'

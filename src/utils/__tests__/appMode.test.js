@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { SLIM_APP, isSlimAllowed, slimNavActiveTo, SLIM_NAV_ITEMS, HANGAR_NAV_ITEM } from '../appMode'
+import { SLIM_APP, NATIVE_APP, isSlimAllowed, slimNavActiveTo, SLIM_NAV_ITEMS, HANGAR_NAV_ITEM } from '../appMode'
 
 describe('appMode', () => {
   it('defaults to full app (not slim) under test/web', () => {
     expect(SLIM_APP).toBe(false)
+  })
+
+  it('reports web (not native) under test', () => {
+    // Chat visibility hangs off this, so a regression here would silently ship
+    // user-to-user messaging into the store build.
+    expect(NATIVE_APP).toBe(false)
   })
 
   it('exposes exactly CBAT + Profile as slim nav items', () => {
@@ -55,11 +61,19 @@ describe('appMode', () => {
         '/rankings',
         '/case-files',
         '/quiz/abc',
-        '/chat',
         '/intel-brief-history',
       ]) {
         expect(isSlimAllowed(p)).toBe(false)
       }
+    })
+
+    it('allows chat, which slim mode keeps', () => {
+      // Slim mode keeps chat; the NATIVE_APP gate on the nav entry and the
+      // /chat route is what hides it in the store build. Those are two separate
+      // gates on purpose — web slim mode still gets chat.
+      expect(isSlimAllowed('/chat')).toBe(true)
+      expect(isSlimAllowed('/chat/admin')).toBe(true)
+      expect(isSlimAllowed('/chat/507f1f77bcf86cd799439011')).toBe(true)
     })
 
     it('does not let /cbat swallow /cbat-game-history via prefix', () => {
@@ -85,6 +99,12 @@ describe('appMode', () => {
 
     it('highlights the Hangar for /immerse', () => {
       expect(slimNavActiveTo('/immerse')).toBe('/immerse')
+    })
+
+    it('highlights chat for /chat surfaces', () => {
+      expect(slimNavActiveTo('/chat')).toBe('/chat')
+      expect(slimNavActiveTo('/chat/admin')).toBe('/chat')
+      expect(slimNavActiveTo('/chat/507f1f77bcf86cd799439011')).toBe('/chat')
     })
 
     it('highlights CBAT for everything else', () => {

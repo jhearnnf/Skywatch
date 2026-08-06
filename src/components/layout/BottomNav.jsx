@@ -9,7 +9,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
 import { getActiveNavTo } from '../../utils/navSections'
-import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, slimNavActiveTo } from '../../utils/appMode'
+import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, NATIVE_APP, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 
@@ -27,7 +27,10 @@ const NAV_ITEMS = [
 ]
 
 const ADMIN_ITEM = { to: '/admin', emoji: '⚙️', label: 'Admin' }
-const CHAT_ITEM  = { to: '/chat',  emoji: '💬', label: 'Chat'  }
+// Labelled "Community" rather than "Chat": the destination is channels and
+// DMs between agents, not just a line to the support team. The route stays
+// /chat.
+const CHAT_ITEM  = { to: '/chat',  emoji: '💬', label: 'Community' }
 
 export default function BottomNav() {
   const { user } = useAuth()
@@ -35,15 +38,17 @@ export default function BottomNav() {
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
-  const { hasAnyOpenChat: chatVisible, hasUnread: chatUnread } = useChatUnread() ?? {}
+  const { hasUnread: chatUnread } = useChatUnread() ?? {}
   const { settings } = useAppSettings() ?? {}
-  const showChatNav = !slim && user && settings?.chatEnabled !== false && chatVisible
+  // Permanent entry off-native for every signed-in user, slim mode included.
+  // See the matching note in Sidebar.jsx and NATIVE_APP in utils/appMode.js.
+  const showChatNav = !NATIVE_APP && user && settings?.chatEnabled !== false
   // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
   const showHangarNav = useWorld3dNavVisible()
 
   let items = slim ? [...SLIM_NAV_ITEMS] : [...NAV_ITEMS]
   if (showHangarNav) items = [...items, HANGAR_NAV_ITEM]
-  if (showChatNav) items = [...items, CHAT_ITEM]
+  if (showChatNav) items = insertBeforeProfile(items, CHAT_ITEM)
   if (user?.isAdmin) items = [...items, ADMIN_ITEM]
   const location = useLocation()
   const navigate = useNavigate()
@@ -116,7 +121,7 @@ export default function BottomNav() {
                   <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
                 )}
                 {showChatBadge && (
-                  <span className="nav-new-badge" aria-label="New chat message" />
+                  <span className="nav-new-badge" aria-label="New message" />
                 )}
               </span>
               <span className={`text-[10px] font-semibold tracking-wide ${active ? 'text-brand-600' : ''}`}>
