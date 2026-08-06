@@ -7,7 +7,7 @@
  *   GET  /api/chat/unread/me               — navbar dot + entry visibility
  *   GET  /api/chat/conversations/:id/messages — thread, with isolation 403
  *   POST /api/chat/conversations/:id/messages — send, blocks on closed
- *   POST /api/chat/conversations/:id/read  — mark read (clears userLastReadAt)
+ *   POST /api/chat/conversations/:id/read  — mark read (writes a ChatRead row)
  *   POST /api/chat/conversations/:id/close — user-initiated close + system message
  *
  *   Feature flag (chatEnabled=false) — all routes 503.
@@ -78,7 +78,9 @@ describe('GET /api/chat/unread/me', () => {
     const u = await createUser();
     const res = await request(app).get('/api/chat/unread/me')
       .set('Cookie', authCookie(u._id));
-    expect(res.body.data).toEqual({ hasAnyOpenChat: false, hasUnread: false });
+    expect(res.body.data).toEqual({
+      hasAnyOpenChat: false, hasUnread: false, totalUnread: 0, muted: false,
+    });
   });
 
   it('hasAnyOpenChat=true with no unread when only user has spoken', async () => {
@@ -112,6 +114,42 @@ describe('GET /api/chat/unread/me', () => {
 
     res = await request(app).get('/api/chat/unread/me').set('Cookie', cu);
     expect(res.body.data.hasUnread).toBe(false);
+  });
+
+  it('is silenced by communityNotificationsEnabled=false', async () => {
+    const user  = await createUser({ displayName: 'Falcon' });
+    const admin = await createUser({ isAdmin: true });
+    const cu = authCookie(user._id);
+
+    const start = await request(app).post('/api/chat/conversations').set('Cookie', cu);
+    await request(app).post(`/api/chat/conversations/${start.body.data.conversation._id}/messages`)
+      .set('Cookie', authCookie(admin._id)).send({ body: 'reply' });
+
+    let res = await request(app).get('/api/chat/unread/me').set('Cookie', cu);
+    expect(res.body.data.hasUnread).toBe(true);
+
+    const off = await request(app).patch('/api/users/me/community-notifications')
+      .set('Cookie', cu).send({ enabled: false });
+    expect(off.status).toBe(200);
+
+    res = await request(app).get('/api/chat/unread/me').set('Cookie', cu);
+    expect(res.body.data.hasUnread).toBe(false);
+    expect(res.body.data.totalUnread).toBe(0);
+    expect(res.body.data.muted).toBe(true);
+    // Muting the badge must not hide the conversation itself.
+    expect(res.body.data.hasAnyOpenChat).toBe(true);
+
+    await request(app).patch('/api/users/me/community-notifications')
+      .set('Cookie', cu).send({ enabled: true });
+    res = await request(app).get('/api/chat/unread/me').set('Cookie', cu);
+    expect(res.body.data.hasUnread).toBe(true);
+  });
+
+  it('rejects a non-boolean community-notifications value', async () => {
+    const user = await createUser();
+    const res = await request(app).patch('/api/users/me/community-notifications')
+      .set('Cookie', authCookie(user._id)).send({ enabled: 'yes' });
+    expect(res.status).toBe(400);
   });
 
   it('closed conversations do not surface as open', async () => {

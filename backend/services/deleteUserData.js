@@ -64,8 +64,12 @@ const AUTHORSHIP_REFS = [
   // they signed. The row (and its reason) stays; the byline goes.
   ['AccountDeletion',    ['adminUserId']],
   ['BriefReel',          ['generatedBy', 'publishedBy']],
-  ['ChatConversation',   ['closedByUserId']],
-  ['ProblemReport',      ['adminUserId']],
+  ['ChatConversation',   ['closedByUserId', 'archivedByUserId']],
+  ['ChatMessage',        ['deletedByUserId']],
+  // reportedUserId: a chat report outlives the account that was reported — the
+  // moderation record is the point of it — but must not keep pointing at them.
+  ['ProblemReport',      ['adminUserId', 'reportedUserId']],
+  ['User',               ['chatBannedByUserId']],
   ['SocialAccount',      ['connectedBy']],
   ['SocialPost',         ['createdBy']],
   ['UpdateNotification', ['createdBy']],
@@ -99,23 +103,45 @@ async function deleteUserAndData(userId, context = {}) {
   const deleted = {};
 
   // 1. Chat — messages hang off conversations, so clear children first.
-  //    Any message this user sent inside someone *else's* conversation (i.e.
-  //    they were an admin replying) is kept but de-identified: deleting it
-  //    would tear holes in another user's support thread.
+  //
+  //    Support threads and DMs are deleted outright, messages included. A DM is
+  //    a private 1:1 thread: once one side is gone it has no owner left who can
+  //    meaningfully consent to it being kept, so it goes rather than leaving the
+  //    other participant holding half a conversation with a deleted account.
+  //    Reported content survives this independently — a chat ProblemReport
+  //    copies the offending message body into its own description precisely so
+  //    the moderation record does not depend on the message still existing.
+  //
+  //    Channel messages are KEPT but de-identified. Deleting them would tear
+  //    holes in a shared conversation that other users are still reading. Both
+  //    identifying fields have to go: the sender ref and the display-name
+  //    snapshot stored alongside it.
   const ChatConversation = model('ChatConversation');
   const ChatMessage      = model('ChatMessage');
+  const ChatRead         = model('ChatRead');
 
-  const ownConversations = await ChatConversation.find({ userId: id }).select('_id').lean();
-  const conversationIds  = ownConversations.map((c) => c._id);
+  const ownConversations = await ChatConversation.find({
+    $or: [{ userId: id }, { participantIds: id }],
+  }).select('_id').lean();
+  const conversationIds = ownConversations.map((c) => c._id);
 
   if (conversationIds.length) {
     const msgs = await ChatMessage.deleteMany({ conversationId: { $in: conversationIds } });
     deleted.ChatMessage = msgs.deletedCount;
+    await ChatRead.deleteMany({ conversationId: { $in: conversationIds } });
   }
-  const convos = await ChatConversation.deleteMany({ userId: id });
+  const convos = await ChatConversation.deleteMany({
+    $or: [{ userId: id }, { participantIds: id }],
+  });
   deleted.ChatConversation = convos.deletedCount;
 
-  await ChatMessage.updateMany({ senderUserId: id }, { $set: { senderUserId: null } });
+  const reads = await ChatRead.deleteMany({ userId: id });
+  deleted.ChatRead = reads.deletedCount;
+
+  await ChatMessage.updateMany(
+    { senderUserId: id },
+    { $set: { senderUserId: null, senderDisplayName: null } },
+  );
 
   // 2. Rows that exist only for this user.
   for (const modelName of OWNED_BY_USER) {

@@ -259,7 +259,7 @@ describe('cascade coverage', () => {
       ...OWNED_BY_USER,
       ...AUTHORSHIP_REFS.map(([name]) => name),
       // Handled explicitly in the service, not via the tables above.
-      'User', 'ChatConversation', 'ChatMessage', 'UpdateNotification',
+      'User', 'ChatConversation', 'ChatMessage', 'ChatRead', 'UpdateNotification',
       'SystemLog', 'AdminAction', 'EmailLog',
     ]);
 

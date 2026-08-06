@@ -2276,13 +2276,19 @@ router.get('/problems/count', async (req, res) => {
 // GET /api/admin/problems
 router.get('/problems', async (req, res) => {
   try {
-    const { solved, search } = req.query;
+    const { solved, search, kind } = req.query;
     const filter = {};
     if (solved !== undefined) filter.solved = solved === 'true';
     if (search) filter.description = new RegExp(search, 'i');
+    // Reported chat messages share this queue. `kind=bug` excludes documents
+    // written before the field existed via $ne rather than an equality match,
+    // since those have no `kind` at all.
+    if (kind === 'chat_message') filter.kind = 'chat_message';
+    if (kind === 'bug')          filter.kind = { $ne: 'chat_message' };
 
     const problems = await ProblemReport.find(filter)
-      .populate('userId', 'email agentNumber')
+      .populate('userId', 'email agentNumber displayName')
+      .populate('reportedUserId', 'email agentNumber displayName chatBannedAt')
       .populate('updates.adminUserId', 'agentNumber email')
       .populate('intelligenceBrief', 'title')
       .sort({ time: -1 });

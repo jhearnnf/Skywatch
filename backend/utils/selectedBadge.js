@@ -23,4 +23,33 @@ async function withSelectedBadge(userObj) {
   return userObj;
 }
 
-module.exports = { resolveSelectedBadge, withSelectedBadge };
+// Batch form of resolveSelectedBadge, for surfaces that render many users at
+// once — a chat thread can easily hold twenty distinct senders, and calling the
+// single-brief version per user would fire twenty queries for what is usually
+// a handful of distinct aircraft.
+//
+// Returns Map<briefIdString, badge|null> covering every id passed in.
+async function resolveSelectedBadges(briefIds = []) {
+  const ids = [...new Set(briefIds.filter(Boolean).map(String))];
+  const out = new Map();
+  if (!ids.length) return out;
+
+  const briefs = await IntelligenceBrief.find({ _id: { $in: ids } })
+    .select('title category status media')
+    .populate('media')
+    .lean();
+
+  for (const brief of briefs) {
+    if (brief.category !== 'Aircrafts' || brief.status !== 'published') continue;
+    const cutoutMedia = (brief.media || []).find(m => m.cutoutUrl);
+    if (!cutoutMedia) continue;
+    out.set(String(brief._id), {
+      briefId:   brief._id,
+      title:     brief.title,
+      cutoutUrl: cutoutMedia.cutoutUrl,
+    });
+  }
+  return out;
+}
+
+module.exports = { resolveSelectedBadge, resolveSelectedBadges, withSelectedBadge };

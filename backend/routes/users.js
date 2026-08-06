@@ -187,6 +187,32 @@ router.patch('/me/showcase', protect, async (req, res) => {
   }
 });
 
+// PATCH /api/users/me/community-notifications — turn the Community unread dot
+// on or off. Body { enabled: boolean }.
+//
+// Notification preference only: it silences the navbar badge and nothing else.
+// The user keeps full access to channels, DMs and support, and any unread
+// messages are still there waiting when they open Community.
+router.patch('/me/community-notifications', protect, async (req, res) => {
+  try {
+    const { enabled } = req.body ?? {};
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ status: 'error', message: 'enabled must be true or false' });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { communityNotificationsEnabled: enabled },
+      { returnDocument: 'after' }
+    ).populate('rank');
+
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // PATCH /api/users/me/display-name — set, change, or clear the user's display name.
 // Null/empty body clears it. Enforces validation, case-insensitive uniqueness,
 // and a 30-day cooldown between changes (first-ever set is free).
