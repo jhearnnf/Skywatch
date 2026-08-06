@@ -54,7 +54,7 @@ export default function ChatSidebar({
           <p className="text-xs font-bold text-red-700">You cannot post in chat</p>
           <p className="text-[11px] text-red-600 mt-0.5">
             {viewer.chatBanReason || 'A moderator has restricted your chat access.'}
-            {' '}You can still read, and you can still message the Skywatch team.
+            {' '}You can still read, and you can still message the SkyWatch team.
           </p>
         </div>
       )}
@@ -81,7 +81,7 @@ export default function ChatSidebar({
             <div className="text-lg leading-none shrink-0">🛟</div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-slate-700">{SUPPORT_LABEL}</p>
-              <p className="text-[11px] text-slate-400">Start a chat with the Skywatch team</p>
+              <p className="text-[11px] text-slate-400">Start a chat with the SkyWatch team</p>
             </div>
           </button>
         )}
@@ -89,7 +89,7 @@ export default function ChatSidebar({
         <SectionLabel>Channels</SectionLabel>
         {channels.length === 0 ? (
           <p className="text-[11px] text-slate-400 px-3 pb-3">
-            No channels yet. The Skywatch team will open some soon.
+            No channels yet. The SkyWatch team will open some soon.
           </p>
         ) : channels.map(c => (
           <Row
@@ -100,7 +100,7 @@ export default function ChatSidebar({
             // Say up front that it is a noticeboard, so nobody types a reply
             // into a channel that will refuse it.
             subtitle={c.adminOnly
-              ? [c.description, 'Skywatch team only'].filter(Boolean).join(' · ')
+              ? [c.description, 'SkyWatch team only'].filter(Boolean).join(' · ')
               : c.description}
             preview={c.preview}
             unread={c.unread}

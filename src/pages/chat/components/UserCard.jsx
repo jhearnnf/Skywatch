@@ -59,7 +59,7 @@ export default function UserCard({ userId, onClose, onOpenDm }) {
               <p className="text-[11px] text-slate-400 mt-0.5">Agent #{profile.agentNumber}</p>
             )}
             {profile.isAdmin && (
-              <p className="text-[11px] font-semibold text-brand-600 mt-1">Skywatch staff</p>
+              <p className="text-[11px] font-semibold text-brand-600 mt-1">SkyWatch staff</p>
             )}
 
             {err && <p className="text-xs text-red-600 mt-3">{err}</p>}

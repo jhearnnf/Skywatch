@@ -6,7 +6,7 @@
  *
  * The sibling of discordMedals.js, sharing its detection (detectCbatMedal) so
  * the ranking work runs once per score rather than once per sink. This module
- * owns only the "where it lands in Skywatch" part.
+ * owns only the "where it lands in SkyWatch" part.
  *
  * Three things it must never do, inherited from the Discord sink and just as
  * true here:

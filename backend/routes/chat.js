@@ -84,9 +84,9 @@ const slugify = (name) => String(name).toLowerCase().trim()
 const isChatBanned = (user) => Boolean(user?.chatBannedAt);
 
 // Who a message is from, as far as other users are concerned. Support threads
-// collapse every admin to one "Skywatch Support" identity; in channels and DMs
+// collapse every admin to one "SkyWatch Support" identity; in channels and DMs
 // admins speak under their own display name like anyone else.
-const SUPPORT_LABEL = 'Skywatch Support';
+const SUPPORT_LABEL = 'SkyWatch Support';
 
 // Read access.
 //   channel  — any logged-in user, unless archived (admins keep reading those)
@@ -145,7 +145,7 @@ function postRefusal(convo, user) {
     if (policy === 'admin' && !user.isAdmin) {
       return {
         status: 403,
-        body: { code: 'CHANNEL_READ_ONLY', message: 'Only the Skywatch team can post in this channel.' },
+        body: { code: 'CHANNEL_READ_ONLY', message: 'Only the SkyWatch team can post in this channel.' },
       };
     }
   }
@@ -327,7 +327,7 @@ const channelTitle = (c) =>
 // snapshotted per message, because a moderation transcript has to show the name
 // that was actually on screen at the time.)
 //
-// In a support thread every admin reply presents as one "Skywatch Support"
+// In a support thread every admin reply presents as one "SkyWatch Support"
 // identity, so admins are omitted here — their personal badge is not the
 // support team's face, and exposing it would leak which staff member replied.
 async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {

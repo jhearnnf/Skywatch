@@ -299,15 +299,15 @@ describe('MessageList — avatar medals', () => {
 
 describe('MessageList — support identity', () => {
   const supportMsgs = [
-    msg('a1', 'Hi, how can I help?', { senderRole: 'admin', senderDisplayName: 'Skywatch Support' }),
-    msg('a2', 'Any update?',          { senderRole: 'admin', senderDisplayName: 'Skywatch Support' }),
+    msg('a1', 'Hi, how can I help?', { senderRole: 'admin', senderDisplayName: 'SkyWatch Support' }),
+    msg('a2', 'Any update?',          { senderRole: 'admin', senderDisplayName: 'SkyWatch Support' }),
   ]
 
   it('groups two different admins as one support identity', () => {
-    // The user sees one "Skywatch Support", so two admins replying in a row is
+    // The user sees one "SkyWatch Support", so two admins replying in a row is
     // one visual run — and must not expose either admin's personal badge.
     renderList(supportMsgs, { conversationType: 'support', senders: {} })
-    expect(screen.getAllByTitle('Skywatch Support')).toHaveLength(1)
+    expect(screen.getAllByTitle('SkyWatch Support')).toHaveLength(1)
     expect(avatars()).toHaveLength(0)
   })
 
@@ -315,6 +315,6 @@ describe('MessageList — support identity', () => {
     renderList(supportMsgs, {
       conversationType: 'support', viewerIsAdmin: true, senders: {},
     })
-    expect(screen.queryAllByTitle('Skywatch Support')).toHaveLength(0)
+    expect(screen.queryAllByTitle('SkyWatch Support')).toHaveLength(0)
   })
 })

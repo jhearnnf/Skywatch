@@ -122,7 +122,7 @@ describe('ChatShell', () => {
   it('offers to start a support chat when none exists', async () => {
     overview({ support: null, channels: [], dms: [], viewer: VIEWER })
     render(<ChatShell />)
-    await waitFor(() => expect(screen.getByText('Start a chat with the Skywatch team')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Start a chat with the SkyWatch team')).toBeTruthy())
   })
 
   it('pins an existing support thread above the channels', async () => {
@@ -131,7 +131,7 @@ describe('ChatShell', () => {
       channels: [], dms: [], viewer: VIEWER,
     })
     render(<ChatShell />)
-    await waitFor(() => expect(screen.getByText('Skywatch Support')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('SkyWatch Support')).toBeTruthy())
     expect(screen.getByText('Usually replies within a few hours')).toBeTruthy()
   })
 
@@ -145,7 +145,7 @@ describe('ChatShell', () => {
     await waitFor(() => expect(screen.getByText('You cannot post in chat')).toBeTruthy())
     expect(screen.getByText(/Abusive language/)).toBeTruthy()
     // The ban must not read as a total lockout — support stays reachable.
-    expect(screen.getByText(/still message the Skywatch team/)).toBeTruthy()
+    expect(screen.getByText(/still message the SkyWatch team/)).toBeTruthy()
   })
 
   it('points users at channels as the way into a DM', async () => {

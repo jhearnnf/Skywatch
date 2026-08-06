@@ -217,7 +217,7 @@ describe('sender profiles (chat avatars)', () => {
   });
 
   it('omits admins from a support thread, so no staff badge leaks', async () => {
-    // The user sees one "Skywatch Support" identity; whose badge replied is not
+    // The user sees one "SkyWatch Support" identity; whose badge replied is not
     // theirs to know.
     const admin = await createUser({ isAdmin: true, displayName: 'Control' });
     const user  = await createUser({ displayName: 'Falcon' });

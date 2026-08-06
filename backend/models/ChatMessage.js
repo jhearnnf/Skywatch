@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // senderUserId is null for system messages (e.g. "User closed this chat").
 // For admin messages it records which admin replied — internally visible to
 // admins, while the user view of a SUPPORT thread collapses all admin messages
-// to the single "Skywatch Support" identity. In channels and DMs admins post
+// to the single "SkyWatch Support" identity. In channels and DMs admins post
 // under their own display name like anyone else.
 const chatMessageSchema = new mongoose.Schema({
   conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', required: true },

@@ -35,7 +35,7 @@ export default function ReportMessageDialog({ message, onClose, onReported }) {
       <div className="w-full max-w-sm bg-surface rounded-2xl border border-slate-200 card-shadow p-5">
         <p className="text-base font-extrabold text-slate-800 mb-1">Report this message</p>
         <p className="text-xs text-slate-500 mb-3">
-          The Skywatch team will review it. The sender is not told who reported them.
+          The SkyWatch team will review it. The sender is not told who reported them.
         </p>
 
         <div className="rounded-xl bg-slate-100 border border-slate-200 px-3 py-2 mb-3">

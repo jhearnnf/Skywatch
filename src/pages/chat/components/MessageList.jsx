@@ -267,7 +267,7 @@ function MessageRow({
 }
 
 // Who a message appears to come from, for grouping. Usually the sender id, but
-// in support every admin collapses to one "Skywatch Support" identity — so two
+// in support every admin collapses to one "SkyWatch Support" identity — so two
 // admins replying in a row is still one run, exactly as the user sees it.
 function identityKey(m, collapseAdmins) {
   if (collapseAdmins && m.senderRole === 'admin') return 'support'

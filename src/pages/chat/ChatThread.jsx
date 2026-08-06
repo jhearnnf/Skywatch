@@ -205,7 +205,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
               {isArchived ? 'Archived channel'
                 : isClosed ? 'This chat is closed'
                   : postPolicy === 'bot' ? 'Automatic feed - react rather than reply'
-                  : isAdminOnly ? 'Updates from the Skywatch team'
+                  : isAdminOnly ? 'Updates from the SkyWatch team'
                     : type === 'channel' ? 'Everyone can see this channel'
                       : type === 'dm' ? 'Direct message'
                         : 'Usually replies within a few hours'}
@@ -251,7 +251,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
       )}
       {reportDone && (
         <p className="text-xs text-emerald-700 bg-emerald-50 border-t border-emerald-200 px-3 py-2">
-          Thanks — the Skywatch team will review that message.
+          Thanks — the SkyWatch team will review that message.
         </p>
       )}
 
@@ -282,7 +282,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
         ) : (
           <div className="border-t border-slate-200 p-3 text-center">
             <p className="text-xs text-slate-500">
-              Only the Skywatch team posts here. Head to a channel to join the conversation.
+              Only the SkyWatch team posts here. Head to a channel to join the conversation.
             </p>
           </div>
         )

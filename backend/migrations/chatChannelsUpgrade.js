@@ -139,7 +139,7 @@ async function chatChannelsUpgrade({ logger = console } = {}) {
         channel: {
           name:        'Announcements',
           slug:        'announcements',
-          description: 'Updates from the Skywatch team.',
+          description: 'Updates from the SkyWatch team.',
           emoji:       '📢',
           order:       -1,
           postPolicy:  'admin',
@@ -175,7 +175,7 @@ async function chatChannelsUpgrade({ logger = console } = {}) {
       channel: {
         name:        'Announcements',
         slug:        'announcements',
-        description: 'Updates from the Skywatch team.',
+        description: 'Updates from the SkyWatch team.',
         emoji:       '📢',
         order:       -1,
         postPolicy:  'admin',

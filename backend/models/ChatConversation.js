@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 // One collection backs all three kinds of chat, discriminated by `type`:
 //
-//   'support'  — the original user↔"Skywatch Help Team" thread. `userId` is the
+//   'support'  — the original user↔"SkyWatch Help Team" thread. `userId` is the
 //                user; admins are not participants (any admin can read/reply via
 //                the shared `adminLastReadAt`). Has an open/closed lifecycle.
 //   'dm'       — a 1:1 thread between two users. `participantIds` holds both,
@@ -61,7 +61,7 @@ const chatConversationSchema = new mongoose.Schema({
 
     // Who may post. Everyone reads either way — this is only about writing.
     //   'everyone' — an ordinary conversation
-    //   'admin'    — a noticeboard the Skywatch team writes (Announcements)
+    //   'admin'    — a noticeboard the SkyWatch team writes (Announcements)
     //   'bot'      — a feed exactly one bot writes (Medals). Users interact
     //                with it through reactions rather than replies.
     // Replaces the old `adminOnly` boolean, which could not express the third

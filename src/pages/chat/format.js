@@ -1,4 +1,4 @@
-export const SUPPORT_LABEL = 'Skywatch Support'
+export const SUPPORT_LABEL = 'SkyWatch Support'
 
 export function formatTime(ts) {
   try {

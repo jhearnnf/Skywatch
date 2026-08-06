@@ -99,7 +99,7 @@ describe('untrusted input handling', () => {
     // These are project-wide constraints, not bot preferences — the bot must
     // not be the one surface that breaks them.
     const prompt = buildSystemPrompt(CORPUS);
-    expect(prompt).toMatch(/never state or imply that Skywatch has the real CBAT tests/i);
+    expect(prompt).toMatch(/never state or imply that SkyWatch has the real CBAT tests/i);
     expect(prompt).toMatch(/helps people apply to the RAF/i);
   });
 
@@ -112,7 +112,7 @@ describe('untrusted input handling', () => {
   });
 
   it('recognises prompt scaffolding in output', () => {
-    expect(looksLikeLeak('You are the Skywatch guide bot. Your rules are...')).toBe(true);
+    expect(looksLikeLeak('You are the SkyWatch guide bot. Your rules are...')).toBe(true);
     expect(looksLikeLeak('FLAG is about circled aircraft.')).toBe(false);
   });
 });

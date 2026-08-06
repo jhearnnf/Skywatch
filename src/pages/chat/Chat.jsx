@@ -7,7 +7,7 @@ import SEO from '../../components/SEO'
 import ChatShell from './ChatShell'
 import CommunityConsole from './CommunityConsole'
 
-const DESCRIPTION = 'Channels and direct messages for Skywatch agents.'
+const DESCRIPTION = 'Channels and direct messages for SkyWatch agents.'
 
 function Shell({ children }) {
   return (
