@@ -264,7 +264,7 @@ router.delete('/me', protect, async (req, res) => {
       });
     }
 
-    await deleteUserAndData(userId);
+    await deleteUserAndData(userId, { initiatedBy: 'self' });
 
     // Same cookie shape as POST /api/auth/logout — a stale jwt would otherwise
     // sit in the browser pointing at a user that no longer exists.

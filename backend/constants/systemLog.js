@@ -16,6 +16,10 @@ const LOG_TYPES = [
   // believed it was online. Queued on the device and uploaded once it recovers,
   // so it always arrives late — see the note in utils/rejectedOriginLog.js.
   'api_unreachable',
+  // An account was erased but the erasure-register row failed to write. The
+  // deletion itself succeeded — this is the accountability record going missing,
+  // which needs noting by hand. See services/deleteUserData.js.
+  'account_deletion_log_failure',
 ];
 
 module.exports = { LOG_TYPES };

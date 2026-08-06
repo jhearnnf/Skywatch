@@ -3,6 +3,7 @@ const { protect, adminOnly, sweepStaleStreaks, staleStreakCutoff } = require('..
 const User = require('../models/User');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
+const AccountDeletion = require('../models/AccountDeletion');
 const EmailLog    = require('../models/EmailLog');
 const AppSettings = require('../models/AppSettings');
 const { sendWelcomeEmail, sendReportReplyEmail, sendAdminComposedEmail } = require('../utils/email');
@@ -360,6 +361,73 @@ router.get('/actions', async (req, res) => {
     ]);
 
     res.json({ status: 'success', data: { actions, total, page, totalPages: Math.ceil(total / limit) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Erasure register ─────────────────────────────────────────────────────────
+// The record that accounts were deleted, kept deliberately anonymous. See
+// models/AccountDeletion.js for why it holds what it holds.
+
+// GET /api/admin/account-deletions?page=1&limit=20&initiatedBy=self
+router.get('/account-deletions', async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const filter = {};
+    if (['self', 'admin'].includes(req.query.initiatedBy)) filter.initiatedBy = req.query.initiatedBy;
+
+    const [rows, total, selfTotal, adminTotal] = await Promise.all([
+      AccountDeletion.find(filter)
+        .sort({ deletedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        // userRef never leaves the server. It's one-way, but shipping a stable
+        // per-person token to the browser invites it being correlated with
+        // something else; the UI has no use for it.
+        .select('-userRef')
+        .populate('adminUserId', 'agentNumber email')
+        .lean(),
+      AccountDeletion.countDocuments(filter),
+      AccountDeletion.countDocuments({ initiatedBy: 'self' }),
+      AccountDeletion.countDocuments({ initiatedBy: 'admin' }),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: { deletions: rows, total, page, totalPages: Math.ceil(total / limit), selfTotal, adminTotal },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/account-deletions/lookup { email }
+//
+// Answers "was this person's account erased, and when?" — the question a
+// data-subject follow-up actually asks. The email is hashed with the same key
+// the register was written with and matched; it is never stored or logged here,
+// and a miss is reported as a miss rather than as an error.
+router.post('/account-deletions/lookup', async (req, res) => {
+  try {
+    const userRef = AccountDeletion.refFor(req.body?.email);
+    if (!userRef) return res.status(400).json({ message: 'An email address is required' });
+
+    const matches = await AccountDeletion.find({ userRef })
+      .sort({ deletedAt: -1 })
+      .select('-userRef')
+      .populate('adminUserId', 'agentNumber email')
+      .lean();
+
+    // A live account is a meaningfully different answer from "no record" —
+    // without it, an admin can't tell "we erased nothing" from "they're still
+    // here", and those need opposite replies.
+    const stillActive = matches.length
+      ? false
+      : Boolean(await User.exists({ email: String(req.body.email).trim().toLowerCase() }));
+
+    res.json({ status: 'success', data: { matches, stillActive } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1831,7 +1899,11 @@ router.delete('/users/:id', requireReason, async (req, res) => {
       return res.status(400).json({ message: 'You cannot delete your own account' });
     }
     const userId = req.params.id;
-    await deleteUserAndData(userId);
+    await deleteUserAndData(userId, {
+      initiatedBy: 'admin',
+      adminUserId: req.user._id,
+      reason:      req.body.reason,
+    });
     // Audit row is written after the cascade — the cascade nulls AdminAction refs
     // pointing at the deleted user, so creating this first would blank its own
     // targetUserId.

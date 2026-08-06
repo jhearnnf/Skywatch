@@ -59,6 +59,10 @@ const OWNED_BY_USER = [
 // The doc belongs to the app, not the user — a brief reel still exists after the
 // admin who published it leaves. Null the ref, keep the content.
 const AUTHORSHIP_REFS = [
+  // The erasure register outlives everyone in it by design — but an admin who
+  // later deletes their own account stops being the named actor on the rows
+  // they signed. The row (and its reason) stays; the byline goes.
+  ['AccountDeletion',    ['adminUserId']],
   ['BriefReel',          ['generatedBy', 'publishedBy']],
   ['ChatConversation',   ['closedByUserId']],
   ['ProblemReport',      ['adminUserId']],
@@ -80,10 +84,17 @@ const AUTHORSHIP_REFS = [
  * last, so a mid-way failure leaves the account intact and retryable rather than
  * a live login pointing at half-erased data.
  *
+ * Writes an AccountDeletion row afterwards — the erasure register that lets us
+ * demonstrate this ran, holding no personal data. See models/AccountDeletion.js.
+ *
  * @param {string|mongoose.Types.ObjectId} userId
+ * @param {Object}  [context]
+ * @param {'self'|'admin'} [context.initiatedBy='self'] who asked for the deletion
+ * @param {string|mongoose.Types.ObjectId} [context.adminUserId] acting admin
+ * @param {string}  [context.reason] the admin's stated reason
  * @returns {Promise<{ deleted: Object<string, number> }>} per-collection counts
  */
-async function deleteUserAndData(userId) {
+async function deleteUserAndData(userId, context = {}) {
   const id = new mongoose.Types.ObjectId(String(userId));
   const deleted = {};
 
@@ -151,11 +162,52 @@ async function deleteUserAndData(userId) {
     }
   }
 
-  // 6. The account itself, last.
+  // 6. The account itself, last. The returned doc is the only chance to read
+  //    the email — it's needed to derive the register's pseudonymous ref, and a
+  //    moment later there is nowhere left to read it from.
   const res = await User.findByIdAndDelete(id);
   deleted.User = res ? 1 : 0;
 
+  // 7. Record that this happened. Only when there was actually an account to
+  //    erase — a repeat call against a missing id must not mint a second row.
+  if (res) await recordDeletion(res, deleted, context);
+
   return { deleted };
+}
+
+/**
+ * Write the erasure-register row. Deliberately non-fatal: the erasure is the
+ * legal obligation and it has already succeeded by this point, so a failure
+ * here must not turn a completed deletion into a 500 the caller might retry.
+ * It does not pass silently either — a SystemLog surfaces it in Admin ▸ Intel,
+ * where an admin can note the gap by hand.
+ */
+async function recordDeletion(deletedUser, deleted, context) {
+  const AccountDeletion = model('AccountDeletion');
+  try {
+    const createdAt = deletedUser.createdAt;
+    const accountAgeDays = createdAt
+      ? Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 86400000))
+      : null;
+
+    await AccountDeletion.create({
+      userRef:        AccountDeletion.refFor(deletedUser.email),
+      initiatedBy:    context.initiatedBy === 'admin' ? 'admin' : 'self',
+      adminUserId:    context.adminUserId || null,
+      reason:         context.reason || '',
+      accountAgeDays,
+      recordsErased:  Object.values(deleted).reduce((sum, n) => sum + (n || 0), 0),
+      breakdown:      Object.fromEntries(Object.entries(deleted).filter(([, n]) => n > 0)),
+    });
+  } catch (err) {
+    try {
+      await model('SystemLog').create({
+        type: 'account_deletion_log_failure',
+        failureReason: err.message,
+        details: { initiatedBy: context.initiatedBy || 'self' },
+      });
+    } catch { /* the log about the log failing is where we stop */ }
+  }
 }
 
 module.exports = { deleteUserAndData, OWNED_BY_USER, AUTHORSHIP_REFS };
