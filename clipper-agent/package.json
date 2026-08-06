@@ -1,0 +1,18 @@
+{
+  "name": "skywatch-clipper-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local worker for SkyWatch Clipper: footage capture, voice, captions and video rendering.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "once": "node index.js --once"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.506",
+    "@remotion/install-whisper-cpp": "^4.0.506",
+    "@remotion/renderer": "^4.0.506",
+    "dotenv": "^17.0.0",
+    "playwright": "^1.62.1"
+  }
+}

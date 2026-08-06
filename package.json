@@ -26,6 +26,7 @@
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@remotion/player": "^4.0.506",
     "@tailwindcss/vite": "^4.2.1",
     "@testing-library/dom": "^10.4.1",
     "framer-motion": "^12.38.0",
@@ -40,6 +41,7 @@
     "react-router-dom": "^7.13.1",
     "react-zoom-pan-pinch": "^4.0.3",
     "recharts": "^3.8.1",
+    "remotion": "^4.0.506",
     "tailwindcss": "^4.2.1",
     "three": "^0.183.2"
   },
