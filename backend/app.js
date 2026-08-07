@@ -56,10 +56,6 @@ app.use('/api/admin/reports', require('./routes/adminReports'));
 app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
 app.use('/api/chat',   require('./routes/chat'));
-// Public: the CBAT guide page reads this signed out. Mounted after /api/chat so
-// the two are obviously separate — the guide is not part of the chat feature and
-// is not behind its chatGate.
-app.use('/api/guide',  require('./routes/guide'));
 app.use('/api/tutorials', require('./routes/tutorials'));
 app.use('/api/stripe',        require('./routes/stripe'));
 app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));
