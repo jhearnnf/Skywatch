@@ -5,27 +5,67 @@
 // Adding a new CBAT game: append a row here. The Cbat hub picks it up
 // automatically; if its `path` is set and a matching scene exists in
 // src/components/homePreview/scenes/cbat/, the landing preview includes it too.
+//
+// `estMinutes` — how long a run takes, shown on the hub tile so a player can
+// pick a game that fits the time they have. A number, or [min, max] where one
+// tile covers two run lengths (Trace 1/2, Visualisation 2D/3D, and the games
+// with an Easier/Hard split). Rounded to the nearest minute, or .5 below two
+// minutes where whole minutes would be misleading.
+//
+// These came from the median recorded `totalTime` of real runs in prod, not
+// from guesswork — but `totalTime` does not mean the same thing in every game,
+// so four needed correcting before use:
+//   • ACT stores a placeholder (CbatAct.jsx computes it from a flat
+//     curveLen = 100 per round, which is not the real tunnel length). Measured
+//     properly off buildTunnelCurve().getLength() / speed, a run is ~5:08, not
+//     the ~1:41 every row in the collection claims.
+//   • SAT sums per-question time only, so it omits the OBSERVE_MS study window
+//     before each situation — 3×28s on Hard, 2×28s on Easier. Added back.
+//   • Numerical Operations likewise omits FEEDBACK_MS between questions.
+//   • ANT pauses its clock during round review, so its median understates the
+//     wall-clock; the p75 is the fairer figure and is what's used.
+// The five fixed-length games (FLAG 60s, Instruments 90s, Target 120s, CUT
+// 180s) all measured within a couple of seconds of their caps, which is what
+// confirms the units and that the medians are trustworthy elsewhere.
+//
+// DPT really is ~15 minutes — 8 rounds at ROUND_DURATION_MS = 105s. It is by
+// far the longest game here and the measurement agrees with the arithmetic.
 export const CBAT_GAMES = [
-  { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Multi-task across eight panels — hunt shapes, match lights, ID aircraft, find codes.', path: '/cbat/target',          image: '/images/Target.png' },
-  { key: 'ant',             emoji: '📡', title: 'ANT',              desc: 'Airborne Numerical Test — speed, distance and time. Compute arrival, distance, fuel or speed against the clock.', path: '/cbat/ant',             image: '/images/ANT.png' },
-  { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Spot the target symbol in a growing grid, round by round.', path: '/cbat/symbols',         image: '/images/Symbols.png' },
-  { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates', image: '/images/Code Duplicates.png' },
-  { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles',          image: '/images/Angles.png' },
-  { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments',     image: '/images/Instruments.png' },
-  { key: 'plane-turn',      emoji: '🗺️', title: 'Trace 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png' },
-  { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png', badge: 'New Difficulty Modes' },
-  { key: 'visualisation',    emoji: '🧊', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png' },
-  { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png' },
-  { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png' },
-  { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', badge: 'New Difficulty Modes' },
-  { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — track a journey of relative turns from text alone, then name the direction back to the start.', path: '/cbat/dad',             image: '/images/DAD.png' },
+  { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Multi-task across eight panels — hunt shapes, match lights, ID aircraft, find codes.', path: '/cbat/target',          image: '/images/Target.png', estMinutes: 2 },
+  { key: 'ant',             emoji: '📡', title: 'ANT',              desc: 'Airborne Numerical Test — speed, distance and time. Compute arrival, distance, fuel or speed against the clock.', path: '/cbat/ant',             image: '/images/ANT.png', estMinutes: 5 },
+  { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Spot the target symbol in a growing grid, round by round.', path: '/cbat/symbols',         image: '/images/Symbols.png', estMinutes: 1 },
+  { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates', image: '/images/Code Duplicates.png', estMinutes: 2 },
+  { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles',          image: '/images/Angles.png', estMinutes: 1 },
+  { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments',     image: '/images/Instruments.png', estMinutes: 1.5 },
+  { key: 'plane-turn',      emoji: '🗺️', title: 'Trace 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png', estMinutes: [1, 3] },
+  { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png', estMinutes: 1, badge: 'New Difficulty Modes' },
+  { key: 'visualisation',    emoji: '🧊', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png', estMinutes: [1, 2] },
+  { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png', estMinutes: 15 },
+  { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png', estMinutes: 5 },
+  { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', estMinutes: [1, 2], badge: 'New Difficulty Modes' },
+  { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — track a journey of relative turns from text alone, then name the direction back to the start.', path: '/cbat/dad',             image: '/images/DAD.png', estMinutes: 5 },
   // `isNew: true` surfaces a "New Game" badge on the hub tile; `badge: '…'`
   // surfaces arbitrary announcement text in the same slot (for a game that
   // isn't new but has gained something).
-  { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', badge: 'New Difficulty Modes' },
-  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', badge: 'New Difficulty Modes' },
-  { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', isNew: true },
+  { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', estMinutes: 3, badge: 'New Difficulty Modes' },
+  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [2, 3], badge: 'New Difficulty Modes' },
+  { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', estMinutes: [1, 2], isNew: true },
 ]
+
+// Render a game's `estMinutes` for display. Returns null when a game has no
+// estimate, so a caller can omit the line entirely rather than print a blank.
+// Written in sentence case — the hub tile uppercases it in CSS, the same way
+// its "Coming soon" line does.
+export function formatEstTime(game) {
+  const est = game?.estMinutes
+  if (est == null) return null
+  if (Array.isArray(est)) {
+    const [lo, hi] = est
+    // An en dash, not a hyphen — it's a range, and it reads as one at 10px.
+    return lo === hi ? `⏱ ${lo} min` : `⏱ ${lo}–${hi} min`
+  }
+  return `⏱ ${est} min`
+}
 
 // Per-leaderboard display config, keyed by the backend leaderboard gameKey
 // (the URL segment, e.g. 'plane-turn-2d', 'trace-1', 'target'). Shared by the

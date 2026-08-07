@@ -6,7 +6,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
 import RecentCbatScores from '../components/RecentCbatScores'
 import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
-import { CBAT_GAMES } from '../data/cbatGames'
+import { CBAT_GAMES, formatEstTime } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
@@ -63,6 +63,31 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
         }}
       />
     </>
+  )
+}
+
+// Estimated run length, pinned to the tile's top-left corner, opposite the
+// New Game / announcement badges. Deliberately not a badge itself — it's
+// standing information on every tile, so it carries no fill at all and sits
+// right back at 35% opacity — a detail you find when you look for it rather
+// than one the tile presents to you.
+//
+// The text-shadow is what makes that possible: this faint, the glyphs would
+// otherwise break up against the blurred background image and its scanlines,
+// and a fill dark enough to prevent that is exactly the visual weight we're
+// trying to remove. It's pulled back in step with the text so it never reads
+// as a smudge under it.
+function EstTime({ game }) {
+  const label = formatEstTime(game)
+  if (!label) return null
+  return (
+    <span
+      data-testid={`est-time-${game.key}`}
+      className="absolute top-2 left-2 px-2 py-1 text-slate-700/35 text-[10px] font-bold tracking-wide uppercase whitespace-nowrap"
+      style={{ zIndex: 4, textShadow: '0 1px 2px rgba(5,13,26,0.75)' }}
+    >
+      {label}
+    </span>
   )
 }
 
@@ -133,6 +158,7 @@ function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, sho
           hover:border-brand-300 hover:bg-brand-50 hover:-translate-y-0.5 no-underline overflow-hidden"
       >
         <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
+        <EstTime game={game} />
         {showNewBadge && game.key === NEW_GAME_KEY && enabled && (
           <span
             className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
@@ -319,6 +345,7 @@ export default function Cbat() {
                     hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5 no-underline overflow-hidden"
                 >
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
+                  <EstTime game={game} />
                   {(game.isNew || (showNewBadge && game.key === NEW_GAME_KEY)) && enabled && (
                     <span
                       className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
@@ -357,10 +384,12 @@ export default function Cbat() {
                   className="relative flex items-center gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow h-full min-h-[130px] w-full opacity-60 overflow-hidden"
                 >
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} dimmed />
+                  <EstTime game={game} />
                   <span className="text-4xl shrink-0" style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
                   <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
                     <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
                     <p className="text-xs text-slate-700">{game.desc}</p>
+                    <EstTime game={game} />
                     <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wide">
                       {adminDisabled ? 'Temporarily disabled — check back soon' : 'Coming soon'}
                     </p>

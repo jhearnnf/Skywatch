@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Cbat, { CBAT_GAMES } from '../Cbat'
+import { formatEstTime } from '../../data/cbatGames'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,33 @@ describe('CBAT_GAMES data', () => {
     expect(CBAT_GAMES.every(g => !g.hidden)).toBe(true)
   })
 
+  // A new game landing on the hub without a time estimate would render a tile
+  // that's silently missing a line the others all have, so this is an
+  // invariant over the whole list rather than a spot check.
+  it('every game states how long a run takes', () => {
+    for (const game of CBAT_GAMES) {
+      const est = game.estMinutes
+      expect(est, `${game.key} has no estMinutes`).toBeDefined()
+      const bounds = Array.isArray(est) ? est : [est]
+      expect(bounds.every(n => typeof n === 'number' && n > 0)).toBe(true)
+      // A range must actually be a range, low end first.
+      if (Array.isArray(est)) {
+        expect(est).toHaveLength(2)
+        expect(est[0]).toBeLessThanOrEqual(est[1])
+      }
+    }
+  })
+
+  it('formats single estimates and ranges', () => {
+    expect(formatEstTime({ estMinutes: 2 })).toBe('⏱ 2 min')
+    expect(formatEstTime({ estMinutes: 1.5 })).toBe('⏱ 1.5 min')
+    expect(formatEstTime({ estMinutes: [2, 3] })).toBe('⏱ 2–3 min')
+    // A range whose ends collapse reads as a single value, not "2–2".
+    expect(formatEstTime({ estMinutes: [2, 2] })).toBe('⏱ 2 min')
+    expect(formatEstTime({})).toBeNull()
+    expect(formatEstTime(null)).toBeNull()
+  })
+
   it('image paths match expected filenames', () => {
     const expected = {
       'target':          '/images/Target.png',
@@ -96,6 +124,36 @@ describe('Cbat page — background images', () => {
     for (const game of CBAT_GAMES) {
       expect(screen.getByText(game.title)).toBeInTheDocument()
     }
+  })
+
+  // Covers both tile branches a signed-in user sees: the plain <Link> tile and
+  // the CombinedGameTile used by Trace 1/2 and Visualisation 2D/3D.
+  it('renders the time estimate on every tile', () => {
+    renderWithUser()
+    for (const game of CBAT_GAMES) {
+      expect(screen.getByTestId(`est-time-${game.key}`)).toHaveTextContent(formatEstTime(game))
+    }
+  })
+
+  // The estimate is a corner pill on the card itself, not part of the text
+  // block — it must be a sibling of the title/desc wrapper, or absolute
+  // positioning would resolve against the wrong box.
+  it('pins the estimate to the card corner, outside the text block', () => {
+    renderWithUser()
+    const pill = screen.getByTestId('est-time-target')
+    expect(pill.className).toContain('absolute')
+    expect(pill.className).toContain('top-2')
+    expect(pill.className).toContain('left-2')
+    expect(pill.parentElement).not.toBe(screen.getByText('Target').parentElement)
+  })
+
+  it('shows a range on the tiles that cover two run lengths', () => {
+    renderWithUser()
+    expect(screen.getByTestId('est-time-plane-turn')).toHaveTextContent('⏱ 1–3 min')
+    expect(screen.getByTestId('est-time-sat')).toHaveTextContent('⏱ 2–3 min')
+    // DPT is by far the longest game — worth stating plainly before a player
+    // starts it, and worth a test so a future retune can't quietly drop it.
+    expect(screen.getByTestId('est-time-dpt')).toHaveTextContent('⏱ 15 min')
   })
 
   it('shows lock card and blurs grid when user is null', () => {
