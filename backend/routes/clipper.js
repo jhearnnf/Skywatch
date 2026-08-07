@@ -195,6 +195,16 @@ async function applyJobResult(job) {
     };
     script.markModified('captions');
     if (script.stageState.get('captions') === 'approved') script.stageState.set('captions', 'stale');
+  } else if (job.type === 'voice') {
+    // Merged rather than assigned, so regenerating one line keeps the rest.
+    script.voice = mergeVoiceLines(script, job.result);
+    script.markModified('voice');
+    if (script.stageState.get('voice') === 'approved') script.stageState.set('voice', 'stale');
+
+    // Caption timings are measured against these takes. A new take of any
+    // length moves the words after it, so alignment has to be redone — and a
+    // captions stage still marked 'approved' would hide that.
+    if (script.stageState.get('captions') === 'approved') script.stageState.set('captions', 'stale');
   } else if (field) {
     script[field] = job.result;
     script.markModified(field);
@@ -1066,9 +1076,23 @@ router.post('/scripts/:id/voice/generate', async (req, res) => {
 
     // The outro is a real beat for every downstream stage, so it must be
     // narrated too — otherwise the video ends on silence over the end card.
-    const payloadBeats = beats.map(b => ({ id: b.id, text: b.text }));
+    let payloadBeats = beats.map(b => ({ id: b.id, text: b.text }));
     if (doc.outro?.enabled && doc.outro.copy) {
       payloadBeats.push({ id: 'outro', text: doc.outro.copy });
+    }
+
+    // A regenerate targets one line. Re-narrating the whole script to redo a
+    // single take costs a Voicebox generation per beat and, worse, gives every
+    // other line a new delivery the admin has already approved.
+    const beatIds = Array.isArray(req.body?.beatIds)
+      ? req.body.beatIds.map(String).filter(Boolean)
+      : null;
+
+    if (beatIds) {
+      payloadBeats = payloadBeats.filter(b => beatIds.includes(b.id));
+      if (payloadBeats.length === 0) {
+        const e = new Error('None of those beats exist in this script'); e.status = 400; throw e;
+      }
     }
 
     const job = await ClipperJob.create({
@@ -1076,6 +1100,9 @@ router.post('/scripts/:id/voice/generate', async (req, res) => {
       type: 'voice',
       payload: {
         beats: payloadBeats,
+        // Recorded so the result can be merged rather than replacing every
+        // line — the agent only returns what it was asked to narrate.
+        beatIds: beatIds || undefined,
         provider,
         profileId,
         instruct: String(req.body?.instruct || '').slice(0, 500) || undefined,

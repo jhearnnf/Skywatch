@@ -31,33 +31,47 @@ let cachedBundle = null;
 // the backend stores for a capture beat fails the render outright rather than
 // quietly rendering black. Both the Node-side downloader and the headless
 // Chrome it drives are on this machine, so a loopback URL is all that is needed.
+// Both media fields a beat can carry as a local file. Narration is one of them:
+// the voice stage writes a wav to this machine's disk, and Remotion's <Audio>
+// goes through the same downloader as <OffthreadVideo>.
+const LOCAL_FIELDS = ['videoUrl', 'audioUrl'];
+
+const isLocal = (url) => typeof url === 'string' && url.startsWith('file:');
+
 function resolveLocalAssets(timeline) {
   const beats = timeline.beats ?? [];
-  const local = beats.filter(b => typeof b.videoUrl === 'string' && b.videoUrl.startsWith('file:'));
+  const local = beats.filter(b => LOCAL_FIELDS.some(f => isLocal(b[f])));
   if (local.length === 0) return timeline;
 
   if (!mediaServer.getBaseUrl()) {
     throw new Error(
-      `${local.length} beat(s) use a screen recording, which the renderer can only read over ` +
-      'http - and the agent\'s media server is not running. Restart the agent and render again.',
+      `${local.length} beat(s) use a local recording or narration file, which the renderer can ` +
+      'only read over http - and the agent\'s media server is not running. Restart the agent and ' +
+      'render again.',
     );
   }
 
   return {
     ...timeline,
     beats: beats.map(beat => {
-      if (typeof beat.videoUrl !== 'string' || !beat.videoUrl.startsWith('file:')) return beat;
+      if (!LOCAL_FIELDS.some(f => isLocal(beat[f]))) return beat;
 
-      const served = mediaServer.toUrl(beat.videoUrl);
-      if (!served) {
-        // Only paths inside the Clipper temp folder are servable. Anything else
-        // is a recording from an older layout, or a path that has been swept.
-        throw new Error(
-          `Beat "${beat.id}" points at a recording the media server will not serve ` +
-          `(${beat.videoUrl}). Re-record that beat.`,
-        );
+      const next = { ...beat };
+      for (const field of LOCAL_FIELDS) {
+        if (!isLocal(next[field])) continue;
+
+        const served = mediaServer.toUrl(next[field]);
+        if (!served) {
+          // Only paths inside the Clipper temp folder are servable. Anything
+          // else is from an older layout, or has been swept by the OS.
+          throw new Error(
+            `Beat "${beat.id}" points at a ${field === 'audioUrl' ? 'narration file' : 'recording'} ` +
+            `the media server will not serve (${next[field]}). Regenerate that beat.`,
+          );
+        }
+        next[field] = served;
       }
-      return { ...beat, videoUrl: served };
+      return next;
     }),
   };
 }

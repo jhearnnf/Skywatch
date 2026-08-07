@@ -71,6 +71,44 @@ describe('with the media server running', () => {
   });
 });
 
+// Remotion's <Audio> goes through the same downloader as <OffthreadVideo>, so
+// narration written to this machine's disk needs the same treatment.
+describe('narration', () => {
+  const NARRATION = path.join(mediaServer.ROOT, 's1', 'b1.wav');
+  const NARRATION_URL = `file:///${NARRATION.replace(/\\/g, '/')}`;
+
+  let close;
+  beforeAll(async () => { ({ close } = await mediaServer.start()); });
+  afterAll(async () => { await close(); });
+
+  it('rewrites a narration URL to one the renderer can fetch', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: STOCK, audioUrl: NARRATION_URL }] };
+    const out = resolveLocalAssets(timeline);
+
+    expect(out.beats[0].audioUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/file\?path=/);
+    expect(out.beats[0].videoUrl).toBe(STOCK);
+  });
+
+  it('rewrites video and narration on the same beat', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: CAPTURE_URL, audioUrl: NARRATION_URL }] };
+    const out = resolveLocalAssets(timeline);
+
+    expect(out.beats[0].videoUrl).toMatch(/^http:/);
+    expect(out.beats[0].audioUrl).toMatch(/^http:/);
+  });
+
+  it('handles a beat whose only local asset is its narration', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: null, audioUrl: NARRATION_URL }] };
+    expect(resolveLocalAssets(timeline).beats[0].audioUrl).toMatch(/^http:/);
+  });
+
+  it('names narration in the error when the file is outside the media root', () => {
+    const outside = `file:///${path.join(os.homedir(), 'voice.wav').replace(/\\/g, '/')}`;
+    const timeline = { beats: [{ id: 'b1', videoUrl: null, audioUrl: outside }] };
+    expect(() => resolveLocalAssets(timeline)).toThrow(/narration file/);
+  });
+});
+
 describe('with the media server down', () => {
   it('fails with a fix rather than letting Remotion throw its scheme error', () => {
     expect(() => resolveLocalAssets(timelineWith(CAPTURE_URL)))

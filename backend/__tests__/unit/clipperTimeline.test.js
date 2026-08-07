@@ -173,3 +173,58 @@ describe('buildCaptionPages', () => {
     expect(buildCaptionPages([])).toEqual([]);
   });
 });
+
+// The voice stage records only `wavPath` — the agent's job is to put a file on
+// disk. Nothing turned that into something playable, so line.audioUrl was
+// always undefined and every beat rendered silent, in the preview and the MP4
+// alike. Deriving it here rather than in the agent also gives already-narrated
+// scripts a voice track without regenerating them.
+describe('narration audio', () => {
+  const withVoice = (line) => script({
+    voice: { lines: [{ beatId: 'b1', durationMs: 3000, startMs: 0, ...line }] },
+  });
+
+  it('derives a playable URL from the wav the agent wrote', () => {
+    const t = buildTimeline(withVoice({ wavPath: 'C:\\Temp\\skywatch-clipper\\s1\\b1.wav' }));
+    expect(t.beats[0].audioUrl).toBe('file:///C:/Temp/skywatch-clipper/s1/b1.wav');
+  });
+
+  it('handles POSIX paths', () => {
+    const t = buildTimeline(withVoice({ wavPath: '/tmp/skywatch-clipper/s1/b1.wav' }));
+    expect(t.beats[0].audioUrl).toBe('file:///tmp/skywatch-clipper/s1/b1.wav');
+  });
+
+  it('prefers an explicit audioUrl when the agent supplies one', () => {
+    const t = buildTimeline(withVoice({
+      wavPath: 'C:\\Temp\\b1.wav',
+      audioUrl: 'https://cdn.example.com/b1.wav',
+    }));
+    expect(t.beats[0].audioUrl).toBe('https://cdn.example.com/b1.wav');
+  });
+
+  it('leaves a beat with no narration silent rather than inventing a URL', () => {
+    const t = buildTimeline(withVoice({}));
+    expect(t.beats[0].audioUrl).toBeNull();
+    expect(t.beats[1].audioUrl).toBeNull();
+  });
+
+  it('gives the outro its narration too', () => {
+    const t = buildTimeline(script({
+      outro: { enabled: true, copy: 'More at skywatch.academy' },
+      voice: { lines: [{ beatId: 'outro', durationMs: 2000, wavPath: 'C:\\Temp\\outro.wav' }] },
+    }));
+    const outro = t.beats.find(b => b.isEndCard);
+    expect(outro.audioUrl).toBe('file:///C:/Temp/outro.wav');
+  });
+});
+
+describe('pathToFileUrl', () => {
+  it('returns null for nothing', () => {
+    expect(pathToFileUrl(null)).toBeNull();
+    expect(pathToFileUrl('')).toBeNull();
+  });
+
+  it('passes an existing file URL through unchanged', () => {
+    expect(pathToFileUrl('file:///C:/Temp/a.wav')).toBe('file:///C:/Temp/a.wav');
+  });
+});

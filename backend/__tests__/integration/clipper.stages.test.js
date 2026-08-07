@@ -300,11 +300,17 @@ describe('agent results land on the script', () => {
     await request(app)
       .post(`/api/clipper/agent/jobs/${job._id}/result`)
       .set('Authorization', AGENT)
-      .send({ ok: true, result: { provider: 'voicebox', totalDurationMs: 41000, lines: [{ beatId: 'b1' }] } })
+      .send({ ok: true, result: {
+        provider: 'voicebox',
+        lines: [{ beatId: 'b1', durationMs: 41000, wavPath: 'b1.wav' }],
+      } })
       .expect(200);
 
     const saved = await ClipperScript.findById(doc._id).lean();
     expect(saved.voice.provider).toBe('voicebox');
+    expect(saved.voice.lines[0].wavPath).toBe('b1.wav');
+    // Summed from the lines rather than taken from the job: after a partial
+    // re-record the agent's total only covers the beats it was asked for.
     expect(saved.voice.totalDurationMs).toBe(41000);
   });
 
@@ -319,6 +325,91 @@ describe('agent results land on the script', () => {
       .set('Authorization', AGENT).send({ ok: true, result: { lines: [] } }).expect(200);
 
     expect((await ClipperScript.findById(doc._id)).stageState.get('voice')).toBe('stale');
+  });
+
+  // Regenerating one line narrates one beat, so the agent returns one line.
+  // Assigning that to script.voice would delete every other take.
+  describe('regenerating a single line', () => {
+    const threeBeats = [
+      beat('b1', 'One.', 'q'), beat('b2', 'Two.', 'q'), beat('b3', 'Three.', 'q'),
+    ];
+
+    const narrateAll = async (doc) => {
+      const job = await ClipperJob.create({ scriptId: doc._id, type: 'voice', payload: {} });
+      await request(app)
+        .post(`/api/clipper/agent/jobs/${job._id}/result`)
+        .set('Authorization', AGENT)
+        .send({ ok: true, result: { provider: 'voicebox', profileId: 'p1', lines: [
+          { beatId: 'b1', text: 'One.',   durationMs: 1000, wavPath: 'a.wav' },
+          { beatId: 'b2', text: 'Two.',   durationMs: 2000, wavPath: 'b.wav' },
+          { beatId: 'b3', text: 'Three.', durationMs: 3000, wavPath: 'c.wav' },
+        ] } })
+        .expect(200);
+      return doc;
+    };
+
+    const redo = async (doc, line) => {
+      const job = await ClipperJob.create({
+        scriptId: doc._id, type: 'voice', payload: { beatIds: [line.beatId] },
+      });
+      await request(app)
+        .post(`/api/clipper/agent/jobs/${job._id}/result`)
+        .set('Authorization', AGENT)
+        .send({ ok: true, result: { lines: [line] } })
+        .expect(200);
+      return ClipperScript.findById(doc._id).lean();
+    };
+
+    it('keeps the takes it did not re-record', async () => {
+      const doc = await narrateAll(await makeScript(threeBeats));
+      const saved = await redo(doc, { beatId: 'b2', text: 'Two.', durationMs: 2500, wavPath: 'b2.wav' });
+
+      expect(saved.voice.lines.map(l => l.beatId)).toEqual(['b1', 'b2', 'b3']);
+      expect(saved.voice.lines[0].wavPath).toBe('a.wav');
+      expect(saved.voice.lines[2].wavPath).toBe('c.wav');
+    });
+
+    it('replaces the take it did re-record', async () => {
+      const doc = await narrateAll(await makeScript(threeBeats));
+      const saved = await redo(doc, { beatId: 'b2', text: 'Two.', durationMs: 2500, wavPath: 'b2.wav' });
+
+      expect(saved.voice.lines[1].wavPath).toBe('b2.wav');
+      expect(saved.voice.lines[1].durationMs).toBe(2500);
+    });
+
+    // startMs is what buildTimeline rebases caption words against, so a take
+    // even 500ms longer slides every later caption out of step with the audio.
+    it('rebuilds the offsets after a longer take', async () => {
+      const doc = await narrateAll(await makeScript(threeBeats));
+      const saved = await redo(doc, { beatId: 'b2', text: 'Two.', durationMs: 2500, wavPath: 'b2.wav' });
+
+      expect(saved.voice.lines.map(l => l.startMs)).toEqual([0, 1000, 3500]);
+      expect(saved.voice.totalDurationMs).toBe(6500);
+    });
+
+    it('rebuilds the offsets after a shorter take', async () => {
+      const doc = await narrateAll(await makeScript(threeBeats));
+      const saved = await redo(doc, { beatId: 'b1', text: 'One.', durationMs: 400, wavPath: 'b1.wav' });
+
+      expect(saved.voice.lines.map(l => l.startMs)).toEqual([0, 400, 2400]);
+      expect(saved.voice.totalDurationMs).toBe(5400);
+    });
+
+    it('keeps lines in script order however they arrive', async () => {
+      const doc = await narrateAll(await makeScript(threeBeats));
+      const saved = await redo(doc, { beatId: 'b1', text: 'One.', durationMs: 900, wavPath: 'z.wav' });
+      expect(saved.voice.lines.map(l => l.beatId)).toEqual(['b1', 'b2', 'b3']);
+    });
+
+    // Caption timings were measured against the old take.
+    it('marks an approved captions stage stale', async () => {
+      const doc = await narrateAll(await makeScript(threeBeats));
+      doc.stageState.set('captions', 'approved');
+      await doc.save();
+
+      await redo(doc, { beatId: 'b2', text: 'Two.', durationMs: 2500, wavPath: 'b2.wav' });
+      expect((await ClipperScript.findById(doc._id)).stageState.get('captions')).toBe('stale');
+    });
   });
 
   it('appends renders rather than replacing them', async () => {

@@ -159,7 +159,7 @@ function buildTimeline(script) {
       durationMs: Math.max(END_CARD_MS, line?.durationMs ?? 0),
       videoUrl: null,
       trimInMs: 0,
-      audioUrl: line?.audioUrl || null,
+      audioUrl: line?.audioUrl || pathToFileUrl(line?.wavPath),
       overlay: null,
       sfx: [],
       captionPages: [],

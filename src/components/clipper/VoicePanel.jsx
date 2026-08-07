@@ -1,17 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { mediaUrl } from '../../utils/clipperPreview'
 
 // Stage 3 — narrate the script.
 //
 // The voice profile is chosen per video, not set globally: a tips video and a
 // feature demo want different reads, and the whole point of having Bethan,
 // Mr House and News Lady available is switching between them.
+//
+// Takes are listened to here rather than in the render preview. A line is
+// judged on its own — is the emphasis right, did it swallow a word — and
+// finding out at the render stage means scrubbing a minute of video to hear
+// four seconds of audio. Regenerate is per line for the same reason: re-reading
+// the whole script to fix one take gives every other line a new delivery.
+//
+// The wav files live on the agent's disk, so playback goes through its media
+// server (utils/clipperPreview.js). No agent, no playback — hence the guard.
 
 const PROVIDERS = [
   { id: 'voicebox',   label: 'Voicebox (local)' },
   { id: 'elevenlabs', label: 'ElevenLabs' },
 ]
 
-export default function VoicePanel({ script, voices, agentOnline, providers, job, refreshingVoices, onRefreshVoices, onGenerate, onApprove, busy }) {
+export default function VoicePanel({ script, voices, agentOnline, providers, job, mediaBaseUrl, refreshingVoices, onRefreshVoices, onGenerate, onApprove, busy }) {
   const voice = script?.voice
   const [provider, setProvider]   = useState(voice?.provider ?? 'voicebox')
   const [profileId, setProfileId] = useState(voice?.profileId ?? '')
@@ -33,6 +43,56 @@ export default function VoicePanel({ script, voices, agentOnline, providers, job
   const lines = voice?.lines ?? []
 
   const fmt = (ms) => `${(ms / 1000).toFixed(1)}s`
+
+  // ── Playback ──────────────────────────────────────────────────────────────
+  // One <audio> element for the whole panel rather than one per line: only ever
+  // one take plays at a time, and a dozen elements each holding a wav is a lot
+  // of memory for a feature whose job is to play four seconds of speech.
+  const audioRef = useRef(null)
+  const [playing, setPlaying] = useState(null)   // { index, all } | null
+
+  const srcFor = useCallback(
+    (line) => (line?.wavPath ? mediaUrl(line.wavPath, mediaBaseUrl) : null),
+    [mediaBaseUrl],
+  )
+  const canPlay = Boolean(mediaBaseUrl) && lines.some(l => l.wavPath)
+
+  const playFrom = useCallback((index, all) => {
+    const el = audioRef.current
+    const src = srcFor(lines[index])
+    if (!el || !src) return
+
+    el.src = src
+    el.play()
+      .then(() => setPlaying({ index, all }))
+      // Autoplay policy, a swept temp file, an agent that just stopped — none
+      // of them are worth an error banner over a preview button.
+      .catch(() => setPlaying(null))
+  }, [lines, srcFor])
+
+  const stop = useCallback(() => {
+    audioRef.current?.pause()
+    setPlaying(null)
+  }, [])
+
+  // Sequential play walks the lines in order, which is the only way to hear
+  // whether the takes sit together as one read.
+  //
+  // Reads `playing` straight from state rather than through a setState updater:
+  // an updater runs during the next render, so anything it schedules is a side
+  // effect in the wrong place. The handler is attached in JSX, so React always
+  // calls the current closure.
+  const handleEnded = useCallback(() => {
+    if (!playing) return
+    const next = playing.index + 1
+    if (playing.all && next < lines.length) playFrom(next, true)
+    else setPlaying(null)
+  }, [playing, lines.length, playFrom])
+
+  // No effect watches for the agent going away mid-playback: whatever is
+  // already buffered plays out (harmless), the next take's play() rejects and
+  // clears the state through the catch above, and every button is disabled by
+  // `canPlay` the moment the base URL is gone.
 
   return (
     <div className="space-y-4">
@@ -151,23 +211,72 @@ export default function VoicePanel({ script, voices, agentOnline, providers, job
 
       {lines.length > 0 && (
         <>
-          <p className="text-xs text-slate-500">
-            {lines.length} lines &middot; {fmt(voice.totalDurationMs)} total
-            {voice.totalDurationMs > 60000 && (
-              <span className="text-amber-700 font-semibold"> &middot; over a minute, consider trimming</span>
-            )}
-          </p>
-          <div className="space-y-1.5">
-            {lines.map((l, i) => (
-              <div key={l.beatId} className="flex items-start gap-3 border border-slate-200 rounded-lg bg-slate-50 px-3 py-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 shrink-0 mt-0.5">
-                  {l.beatId === 'outro' ? 'Outro' : `Beat ${i + 1}`}
-                </span>
-                <p className="text-sm text-slate-700 flex-1">{l.text}</p>
-                <span className="text-xs text-slate-500 font-mono shrink-0">{fmt(l.durationMs)}</span>
-              </div>
-            ))}
+          <audio ref={audioRef} onEnded={handleEnded} className="hidden" />
+
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-slate-500">
+              {lines.length} lines &middot; {fmt(voice.totalDurationMs)} total
+              {voice.totalDurationMs > 60000 && (
+                <span className="text-amber-700 font-semibold"> &middot; over a minute, consider trimming</span>
+              )}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => (playing?.all ? stop() : playFrom(0, true))}
+              disabled={!canPlay}
+              title={canPlay ? undefined : 'The agent serves the audio - start it first'}
+              className="ml-auto px-3 py-1.5 rounded-lg border border-brand-200 text-brand-600 text-xs font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+            >
+              {playing?.all ? 'Stop' : 'Play all'}
+            </button>
           </div>
+
+          <div className="space-y-1.5">
+            {lines.map((l, i) => {
+              const isPlaying = playing?.index === i
+              return (
+                <div
+                  key={l.beatId}
+                  className={`flex items-start gap-3 border rounded-lg px-3 py-2 transition-colors ${
+                    isPlaying ? 'border-brand-600 bg-brand-100' : 'border-slate-200 bg-slate-50'
+                  }`}
+                >
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 shrink-0 mt-0.5">
+                    {l.beatId === 'outro' ? 'Outro' : `Beat ${i + 1}`}
+                  </span>
+                  <p className="text-sm text-slate-700 flex-1">{l.text}</p>
+                  <span className="text-xs text-slate-500 font-mono shrink-0">{fmt(l.durationMs)}</span>
+
+                  <button
+                    type="button"
+                    onClick={() => (isPlaying ? stop() : playFrom(i, false))}
+                    disabled={!srcFor(l)}
+                    title={srcFor(l) ? undefined : 'The agent serves the audio - start it first'}
+                    className="shrink-0 px-2 py-0.5 rounded-lg border border-brand-200 text-brand-600 text-xs font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40"
+                  >
+                    {isPlaying ? 'Stop' : 'Play'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onGenerate({ provider, profileId, instruct, beatIds: [l.beatId] })}
+                    disabled={busy || running || !profileId || !providerOk(provider)}
+                    title="Re-record just this line"
+                    className="shrink-0 px-2 py-0.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-100 transition-colors disabled:opacity-40"
+                  >
+                    Redo
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          {!canPlay && (
+            <p className="text-xs text-slate-500">
+              Start the agent to play these back &mdash; it serves the audio files from this machine.
+            </p>
+          )}
         </>
       )}
     </div>
