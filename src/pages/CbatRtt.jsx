@@ -14,6 +14,8 @@ import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficulty
 import { playRttShutter } from '../utils/sound'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { createRttInput } from '../utils/cbat/rttInput'
+import { useMockStick } from '../utils/cbat/useMockStick'
+import StickSetup from '../components/cbat/StickSetup'
 import {
   RTT_DIFFICULTIES, RTT_LAUNCH_MS, rttTuning,
   readStoredRttDifficulty, storeRttDifficulty, computeGrade,
@@ -164,6 +166,10 @@ export default function CbatRtt() {
   const [sensitivity, setSensitivity] = useState(readStoredSensitivity)
   const sensitivityRef = useRef(sensitivity)
   useEffect(() => { sensitivityRef.current = sensitivity }, [sensitivity])
+
+  // Admin ?stick=mock — a synthetic joystick, so the stick path can be flown
+  // without one. See mockGamepad.js.
+  const mockStick = useMockStick()
 
   const [sim, setSim] = useState(null)
   const simRef = useRef(null)
@@ -423,6 +429,13 @@ export default function CbatRtt() {
                     onChange={(e) => changeSensitivity(Number(e.target.value))}
                     className="w-full accent-brand-600 cursor-pointer"
                   />
+                </div>
+
+                {/* Joystick. Sits under the sensitivity slider rather than
+                    inside it: the slider applies to whatever is flying, stick
+                    or mouse, so it is not a joystick setting. */}
+                <div className={dim.trim()}>
+                  <StickSetup title="Joystick" mockActive={mockStick} />
                 </div>
 
                 {personalBest && (

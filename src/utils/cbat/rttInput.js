@@ -2,16 +2,19 @@
 //
 // The real CBAT RTT is flown on a joystick: how far the stick is pushed sets how
 // FAST the camera slews (rate control, not aim), and the trigger on the front of
-// the stick takes the picture. There is no joystick here yet, so a pointer
-// stands in for one — the pointer's offset from the middle of the arena is the
-// stick's deflection, and the mouse button is the trigger.
+// the stick takes the picture. A pointer stands in for one where there is no
+// stick — the pointer's offset from the middle of the arena is the stick's
+// deflection, and the mouse button is the trigger.
 //
 // Everything downstream only ever sees a normalised axis pair in [-1,1] and a
-// count of trigger presses. That is the entire point of this module: when a real
-// stick arrives, `gamepad` below becomes the live source and not one line of the
-// game changes. It is also why the pointer path is written against pointer
-// events rather than mouse events — the same code drives a finger drag, which is
-// what the native CBAT-only app needs.
+// count of trigger presses. That is the entire point of this module: a real
+// stick is just another source feeding the same two numbers, and not one line of
+// the game changes when one is plugged in. It is also why the pointer path is
+// written against pointer events rather than mouse events — the same code drives
+// a finger drag, which is what the native CBAT-only app needs.
+//
+// The stick itself lives in gamepad.js, shared with ACT. This file owns the
+// pointer and keyboard fallbacks and the rule for which source is in charge.
 //
 //   const input = createRttInput({ el })
 //   input.poll()                    // once per frame
@@ -19,30 +22,17 @@
 //   const shots = input.consumeTriggerEdges()
 //   input.dispose()
 
-// A stick has slop around centre and so does a hand on a mouse; without a dead
-// zone the camera never quite stops.
-export const RTT_DEAD_ZONE = 0.07
-// Expo bends the response curve so small deflections give fine control and the
-// outer travel gives the speed — real sticks behave this way, and tracking a
-// slow walker is impossible on a linear curve.
-export const RTT_EXPO = 0.5
-// Deflection a gamepad axis must reach before we accept that a stick is really
-// being flown (rather than sitting connected with a drifting potentiometer).
-const GAMEPAD_WAKE = 0.2
+import {
+  createStickReader, applyCurve, clamp1, loadProfile, defaultProfile, listPads,
+  STICK_DEAD_ZONE, STICK_EXPO,
+} from './gamepad'
 
-export function clamp1(v) {
-  return v < -1 ? -1 : v > 1 ? 1 : v
-}
-
-// Dead zone, then cubic expo. Rescaled past the dead zone so full deflection
-// still reaches exactly 1 — otherwise the top of the range is unreachable.
-export function applyCurve(v, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO) {
-  const m = Math.abs(clamp1(v))
-  if (m <= deadZone) return 0
-  const t = (m - deadZone) / (1 - deadZone)
-  const curved = (1 - expo) * t + expo * t * t * t
-  return Math.sign(v) * curved
-}
+// Re-exported under their old names: the curve is shared with the stick (a
+// mouse standing in for a stick had better behave like one), and these are the
+// names the rest of RTT and its tests already use.
+export const RTT_DEAD_ZONE = STICK_DEAD_ZONE
+export const RTT_EXPO = STICK_EXPO
+export { applyCurve, clamp1 }
 
 // Pointer position → stick deflection. Both axes are normalised by HALF THE
 // HEIGHT, not by each own dimension: dividing x by the width would make the
@@ -59,18 +49,13 @@ export function pointerAxes(clientX, clientY, rect, opts = {}) {
   }
 }
 
-function firstConnectedPad() {
-  if (typeof navigator === 'undefined' || !navigator.getGamepads) return null
-  let pads
-  try { pads = navigator.getGamepads() } catch { return null }
-  if (!pads) return null
-  for (const p of pads) {
-    if (p && p.connected && p.axes && p.axes.length >= 2) return p
-  }
-  return null
-}
-
 export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO } = {}) {
+  // The dead zone and expo the caller asked for have to reach the stick too, or
+  // a tuned pointer and an untuned stick would fly differently on the same run.
+  const stick = createStickReader({
+    profileFor: (id) => ({ ...(loadProfile(id) || defaultProfile(id)), deadZone, expo }),
+  })
+
   const state = {
     source: 'pointer',
     axes: { x: 0, y: 0 },
@@ -81,7 +66,6 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
     pointer: null,
     rect: null,
     rectAt: 0,
-    padDown: false,
     keyDown: false,
     // Touch has no resting position — a finger that is not down is not anywhere.
     // So a touch only drives the stick while it is held, and only if it started
@@ -145,11 +129,11 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
   }
 
   // ── Gamepad ────────────────────────────────────────────────────────────────
+  // Unplugging mid-run drops straight back to the pointer rather than pausing.
+  // A run is scored on time, and a USB dropout is not a reason to void one — the
+  // player should be able to keep flying on the mouse.
   const onGamepadDisconnected = () => {
-    if (!firstConnectedPad()) {
-      state.source = 'pointer'
-      state.padDown = false
-    }
+    if (!listPads().length) state.source = 'pointer'
   }
 
   if (typeof window !== 'undefined') {
@@ -173,18 +157,18 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
     // axes() because a gamepad trigger is only observable by comparing button
     // state between frames — there are no gamepad events for it.
     poll(now = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
-      const pad = firstConnectedPad()
-      if (pad) {
-        const px = clamp1(pad.axes[0] || 0)
-        const py = clamp1(pad.axes[1] || 0)
-        const pressed = !!(pad.buttons && (pad.buttons[0]?.pressed || pad.buttons[1]?.pressed))
+      stick.poll()
+      if (stick.connected()) {
+        // A trigger squeeze is a shot whichever source is nominally in charge —
+        // the player reaching for the stick's trigger has told us what they are
+        // flying on, and swallowing that first press would cost them a frame.
+        const shots = stick.consumeEdges('trigger')
+        state.triggerEdges += shots
         // A connected-but-idle stick shouldn't steal the pointer's job; it takes
         // over the moment it's actually moved or its trigger is squeezed.
-        if (Math.hypot(px, py) > GAMEPAD_WAKE || pressed) state.source = 'gamepad'
+        if (stick.awake() || shots > 0) state.source = 'gamepad'
         if (state.source === 'gamepad') {
-          state.axes = { x: applyCurve(px, deadZone, expo), y: applyCurve(py, deadZone, expo) }
-          if (pressed && !state.padDown) state.triggerEdges += 1
-          state.padDown = pressed
+          state.axes = stick.axes()
           return
         }
       }
@@ -213,8 +197,11 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
     fireTrigger() { state.triggerEdges += 1 },
 
     source() { return state.source },
+    // Which physical device is flying, for the HUD's source readout.
+    stickId() { return stick.padId() },
 
     dispose() {
+      stick.dispose()
       if (typeof window !== 'undefined') {
         window.removeEventListener('pointermove', onPointerMove)
         window.removeEventListener('pointerout', onPointerOut)

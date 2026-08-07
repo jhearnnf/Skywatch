@@ -35,6 +35,13 @@ import {
 import CodeRecall from './CbatAct/CodeRecall'
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
+import {
+  createActStick,
+  readStoredActStickRate, storeActStickRate,
+  MIN_ACT_STICK_RATE, MAX_ACT_STICK_RATE,
+} from '../utils/cbat/actStickInput'
+import { useMockStick } from '../utils/cbat/useMockStick'
+import StickSetup from '../components/cbat/StickSetup'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5
@@ -533,6 +540,10 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   const roundStartedAtRef = useRef(performance.now())
   // dx/dy here are in pixel-equivalent units; converted to rotations via TURN_RATE.
   const inputRef       = useRef({ dx: 0, dy: 0 })
+  // The joystick, if there is one. It writes into the same accumulator as the
+  // mouse — see actStickInput.js for why an integrated deflection and a pixel
+  // delta are interchangeable here.
+  const stickRef       = useRef(null)
   // Live wall-proximity feedback for visual glow. value: 0 (centred) → 1 (at wall).
   const proximityRef   = useRef({ value: 0, scraping: false })
 
@@ -732,6 +743,19 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     }
   }, [])
 
+  // Joystick, alive for exactly as long as the round. Created unconditionally:
+  // with nothing plugged in it reads no device and contributes nothing, so
+  // there is no flag to get wrong and no path that behaves differently for the
+  // overwhelming majority of players who are on a mouse.
+  useEffect(() => {
+    const stick = createActStick()
+    stickRef.current = stick
+    return () => {
+      stick.dispose()
+      stickRef.current = null
+    }
+  }, [])
+
   // Bleep button handler — exposed for the JSX.
   const onBleepTap = useCallback(() => {
     // Tutorial path: any tap during the round-1 tutorial dismisses it and
@@ -760,6 +784,11 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     statsRef.current.reactionMsList.push(reactionMs)
     pendingBleepRef.current = null
   }, [])
+
+  // The game loop's dependency list is [roundIdx], so it cannot close over a
+  // callback directly without either restarting the loop or lying to the lint.
+  const onBleepTapRef = useRef(onBleepTap)
+  useEffect(() => { onBleepTapRef.current = onBleepTap }, [onBleepTap])
 
   // Fire BLEEP on pointer-down rather than click. This registers the tap
   // instantly — no synthetic-click latency on a reaction-timed action — and,
@@ -860,6 +889,28 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
       const dt  = Math.min(0.05, (now - lastTickRef.current) / 1000)
       lastTickRef.current = now
 
+      // ── 0aa. Joystick. Polled here, ABOVE the tutorial guard, because the
+      // stick's BLEEP button has to dismiss the round-1 teach moment exactly
+      // like a tap on the on-screen button does — a player flying on a stick
+      // who has to reach for the mouse to get past the tutorial has been told
+      // the wrong thing about how the game is played.
+      //
+      // Steering is a different matter and stays below the guard: banking
+      // deflection while the tunnel is frozen would fire it all off in one
+      // rotation the moment play resumes. Demo tiles skip the stick entirely —
+      // the autopilot at 0b REPLACES inputRef rather than adding to it, so
+      // anything written here would be discarded anyway.
+      let stickDx = 0
+      let stickDy = 0
+      const stick = stickRef.current
+      if (stick && !demoRef.current) {
+        const d = stick.poll(dt)
+        stickDx = d.dx
+        stickDy = d.dy
+        const bleeps = stick.consumeBleeps()
+        for (let b = 0; b < bleeps; b++) onBleepTapRef.current?.()
+      }
+
       // ── 0. Tutorial pause — round-1 bleep teach moment. While active,
       // skip motion, audio cue firing, scoring, and shape evaluation.
       // Resumes on the next frame after the player taps BLEEP. dt is
@@ -886,6 +937,12 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
           dt,
         })
       }
+
+      // Stick deflection joins the mouse's pixels here, once the frame is known
+      // to be a live one. Zero unless a stick is connected and this is not a
+      // demo tile.
+      inputRef.current.dx += stickDx
+      inputRef.current.dy += stickDy
 
       // ── 1. Apply pending steering input as a rotation of the ball's forward ──
       // Yaw around world-up; pitch around camera-right. The per-tick magnitude
@@ -1338,6 +1395,9 @@ export default function CbatAct() {
   const [queued, setQueued]             = useState(false)
   const [audioReady, setAudioReady]     = useState(false)
   const audioRef = useRef(null)
+  // Admin ?stick=mock — a synthetic joystick, so the stick path can be flown
+  // without one. See mockGamepad.js.
+  const mockStick = useMockStick()
 
   // Round-5 memory code. Generated once per run and held here, above the round
   // component — ActRound unmounts when the round ends, but the answer is typed
@@ -1628,6 +1688,7 @@ export default function CbatAct() {
             <IntroScreen
               personalBest={personalBest}
               onStart={startGame}
+              mockStick={mockStick}
             />
           )}
 
@@ -1686,7 +1747,12 @@ export default function CbatAct() {
 }
 
 // ── Intro screen ─────────────────────────────────────────────────────────────
-function IntroScreen({ personalBest, onStart }) {
+function IntroScreen({ personalBest, onStart, mockStick }) {
+  const [stickRate, setStickRate] = useState(readStoredActStickRate)
+  const changeStickRate = (value) => {
+    setStickRate(value)
+    storeActStickRate(value)
+  }
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1732,6 +1798,27 @@ function IntroScreen({ personalBest, onStart }) {
           <span>Scraping the tunnel wall costs −5 / second</span>
         </div>
       </div>
+
+      {/* Joystick. The steer rate lives inside the panel rather than beside it
+          because it only means anything with a stick attached — on a mouse the
+          drag distance is the rate. */}
+      <StickSetup title="Joystick" mockActive={mockStick}>
+        <label htmlFor="act-stick-rate" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
+          <span>Steer rate</span>
+          <span className="font-mono text-brand-300">{stickRate}</span>
+        </label>
+        <input
+          id="act-stick-rate"
+          type="range"
+          min={MIN_ACT_STICK_RATE}
+          max={MAX_ACT_STICK_RATE}
+          step="10"
+          value={stickRate}
+          onChange={(e) => changeStickRate(Number(e.target.value))}
+          className="w-full accent-brand-600 cursor-pointer"
+        />
+        <p className="mt-1 text-[10px] text-[#8a9bb5]">How fast the ball turns with the stick hard over.</p>
+      </StickSetup>
 
       {personalBest && (
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
