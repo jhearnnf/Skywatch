@@ -42,12 +42,12 @@ export default function ChatBotEditor({ API, Toast }) {
     if (!file || busy) return
     setBusy(true); setErr('')
     try {
-      const html = await file.text()
+      const text = await file.text()
       const r = await apiFetch(`${API}/api/chat/admin/bot/knowledge`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, html }),
+        body: JSON.stringify({ filename: file.name, text }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) throw new Error(d?.message || 'Could not read that file')
@@ -101,14 +101,15 @@ export default function ChatBotEditor({ API, Toast }) {
         <input
           ref={fileRef}
           type="file"
-          accept=".html,.htm,text/html"
+          accept=".html,.htm,.txt,text/html,text/plain"
           onChange={e => upload(e.target.files?.[0])}
           disabled={busy}
           className="block w-full text-xs text-slate-500 file:mr-3 file:px-4 file:py-2 file:rounded-xl file:border-0 file:bg-brand-600 file:text-white file:text-sm file:font-bold hover:file:bg-brand-700 file:cursor-pointer disabled:opacity-50"
         />
         <p className="text-[11px] text-slate-400 mt-2">
-          Upload the public guide HTML. Replacing it takes effect on the bot&rsquo;s next reply —
-          no deploy needed.
+          Upload the public guide HTML, or the minified guide text built from it. Both give the
+          bot the same material and the same per-question cost, so pick whichever you have to
+          hand. Replacing it takes effect on the bot&rsquo;s next reply — no deploy needed.
         </p>
         {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
         {busy && <p className="text-xs text-slate-400 mt-2">Reading and parsing…</p>}

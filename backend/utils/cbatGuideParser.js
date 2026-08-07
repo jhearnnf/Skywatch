@@ -322,8 +322,170 @@ function renderGuideCorpus(sections = {}, { tests = null } = {}) {
   return out.join('\n');
 }
 
+// ── Reading a rendered corpus back in ───────────────────────────────────────
+
+/**
+ * Parse a rendered corpus (the minified .txt) back into `sections`.
+ *
+ * Why this exists rather than just storing the text: `loadBotCorpus` re-renders
+ * from `sections` per question so retrieval can send only the tests a question
+ * is about. A document with no `sections` falls back to the stored string —
+ * which means uploading the flat corpus would silently switch retrieval OFF and
+ * make every reply cost the WHOLE guide. That is the opposite of why the
+ * minified file exists, and nothing in the UI would show it had happened.
+ *
+ * So the flat file is parsed back into the same shape the HTML produces.
+ *
+ * The guarantee is on the corpus, not on the original guide data: render →
+ * parse → render is byte-identical, and the round-trip test asserts exactly
+ * that. Fields the renderer never emits (a test's long `brief`, the ids) are
+ * not recovered, because the bot has never seen them.
+ */
+const CODE_CONF = Object.fromEntries(Object.entries(CONF_CODE).map(([k, v]) => [v, k]));
+
+const CORPUS_HEADER = '=== CBAT COMMUNITY GUIDE ===';
+
+// The blocks that survive a render. Everything in WANTED except CONF, which
+// only styles the HTML page.
+const CORPUS_SECTIONS = WANTED.filter(k => k !== 'CONF');
+
+// `[G] Tag: statement | caveat` — tag and caveat both optional.
+const FACT_RE = /^\s*\[([A-Z?])\]\s+(.*)$/;
+
+function parseFactLine(line) {
+  const m = FACT_RE.exec(line);
+  if (!m) return null;
+
+  const c = CODE_CONF[m[1]] ?? 'amber';
+  let rest = m[2];
+
+  // Split on the FIRST separator only: a caveat may contain more of them.
+  let n = '';
+  const sep = rest.indexOf(' | ');
+  if (sep !== -1) { n = rest.slice(sep + 3).trim(); rest = rest.slice(0, sep); }
+
+  // A tag is a short label before the first colon. Bounded so a statement that
+  // happens to contain a colon does not get its opening clause eaten.
+  let tag = '';
+  const colon = rest.indexOf(': ');
+  if (colon > 0 && colon <= 40) { tag = rest.slice(0, colon).trim(); rest = rest.slice(colon + 2); }
+
+  return { c, tag, t: rest.trim(), n };
+}
+
+const splitTitle = (s) => {
+  const m = /^(.*?)\s*\(([^()]*)\)\s*$/.exec(s.trim());
+  return m ? { name: m[1].trim(), abbr: m[2].trim() } : { name: s.trim(), abbr: '' };
+};
+
+function parseGuideCorpusText(text) {
+  if (typeof text !== 'string' || !text.includes(CORPUS_HEADER)) {
+    throw new Error(
+      'That file does not look like the CBAT guide — no guide data found. ' +
+      'Upload the public guide HTML, or the minified guide text built from it.',
+    );
+  }
+
+  const sections = {
+    TESTS: [], DAY_GROUPS: [], OTHER: [], HELPED: [], TOOLKINDS: [], FELT: [], OPEN: [],
+  };
+
+  let mode = null;      // which section the following lines belong to
+  let current = null;   // the object being filled
+
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/\s+$/, '');
+    if (!line.trim() || line.startsWith('===')) continue;
+
+    if (line.startsWith('## ')) {
+      const head = line.slice(3).trim();
+      if (/^THE TESTS DESCRIBED HERE$/i.test(head)) { mode = 'roster'; current = null; continue; }
+
+      let m;
+      if ((m = /^TEST:\s*(.+)$/i.exec(head))) {
+        current = { ...splitTitle(m[1]), aka: '', verdict: '', facts: [] };
+        sections.TESTS.push(current); mode = 'test'; continue;
+      }
+      if ((m = /^ON THE DAY:\s*(.+)$/i.exec(head))) {
+        current = { title: m[1].trim(), facts: [] };
+        sections.DAY_GROUPS.push(current); mode = 'facts'; continue;
+      }
+      if ((m = /^OTHER SERVICES:\s*(.+)$/i.exec(head))) {
+        current = { flag: m[1].trim(), facts: [] };
+        sections.OTHER.push(current); mode = 'facts'; continue;
+      }
+      if (/^WHAT CANDIDATES SAID HELPED$/i.test(head)) { mode = 'helped'; current = null; continue; }
+      if (/^HOW IT FELT VERSUS HOW IT SCORED$/i.test(head)) { mode = 'felt'; current = null; continue; }
+      if (/^KNOWN UNKNOWNS/i.test(head)) { mode = 'open'; current = null; continue; }
+
+      // Anything else is a practice-tool checklist, whose heading is its name.
+      current = { name: head, items: [] };
+      sections.TOOLKINDS.push(current); mode = 'toolkind'; continue;
+    }
+
+    // The roster is recomputed on every render, so nothing under it is read.
+    if (mode === 'roster' || !mode) continue;
+
+    const fact = parseFactLine(line);
+    if (fact && current?.facts) { current.facts.push(fact); continue; }
+
+    if (mode === 'test' && current) {
+      let m;
+      if ((m = /^Also known as:\s*(.+)$/i.exec(line.trim()))) { current.aka = m[1].trim(); continue; }
+      if ((m = /^Overall:\s*(.+)$/i.exec(line.trim()))) { current.verdict = m[1].trim(); continue; }
+    }
+
+    const item = /^-\s+(.*)$/.exec(line.trim());
+    if (!item) continue;
+    const body = item[1];
+
+    if (mode === 'helped') {
+      const m = /^(.*?)(?:\s*\(mentioned by\s*(\d+)\))?:\s*([\s\S]*)$/.exec(body);
+      if (m) {
+        const row = { tool: m[1].trim(), note: m[3].trim() };
+        if (m[2]) row.n = Number(m[2]);
+        sections.HELPED.push(row);
+      }
+    } else if (mode === 'felt') {
+      const m = /^(.*?)\s+—\s+felt:\s*([\s\S]*?)\s+Actual:\s*([\s\S]*)$/.exec(body);
+      if (m) sections.FELT.push({ who: m[1].trim(), felt: m[2].trim(), actual: m[3].trim() });
+    } else if (mode === 'open') {
+      const m = /^([\s\S]*?)\s*\(([\s\S]*)\)\s*$/.exec(body);
+      sections.OPEN.push(m ? { q: m[1].trim(), note: m[2].trim() } : { q: body.trim(), note: '' });
+    } else if (mode === 'toolkind' && current) {
+      const colon = body.indexOf(': ');
+      if (colon > 0) current.items.push([body.slice(0, colon).trim(), body.slice(colon + 2).trim()]);
+    }
+  }
+
+  if (!sections.TESTS.length) {
+    throw new Error('That file has no test sections in it — it may be truncated.');
+  }
+
+  const found = Object.keys(sections).filter(k => sections[k].length);
+  // Measured against what a corpus can actually carry, not against WANTED.
+  // CONF is the confidence-chip config for the HTML page; the renderer never
+  // emits it and the bot never reads it, so listing it as missing would put a
+  // permanent amber "Missing sections: CONF" on every .txt upload.
+  const missing = CORPUS_SECTIONS.filter(k => !found.includes(k));
+  return { sections: normalise(sections), found, missing };
+}
+
+/**
+ * Accept either form of the guide and return the same shape.
+ *
+ * The admin picks a file; making them also pick the right parser for it is a
+ * way to get a confusing error message rather than a useful product decision.
+ */
+function parseGuideUpload(text) {
+  if (typeof text !== 'string' || !text.trim()) throw new Error('Guide file is empty');
+  return text.includes(CORPUS_HEADER) ? parseGuideCorpusText(text) : parseCbatGuide(text);
+}
+
 module.exports = {
   parseCbatGuide,
+  parseGuideCorpusText,
+  parseGuideUpload,
   renderGuideCorpus,
   matchBracket,
   normalise,
@@ -332,4 +494,5 @@ module.exports = {
   // this renderer emits, rather than the two drifting apart silently.
   CONF_CODE,
   CONF_LEGEND,
+  CORPUS_HEADER,
 };

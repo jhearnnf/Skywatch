@@ -13,7 +13,7 @@ const { generateAnnouncementDrafts } = require('../utils/announcementDrafts');
 const { resolveSelectedBadges } = require('../utils/selectedBadge');
 const { medalsForUsers } = require('../utils/cbatMedalHolders');
 const BotKnowledge = require('../models/BotKnowledge');
-const { parseCbatGuide, renderGuideCorpus } = require('../utils/cbatGuideParser');
+const { parseGuideUpload, renderGuideCorpus } = require('../utils/cbatGuideParser');
 
 const {
   generateBotReply, screenChannelMention, stripMention, looksHostile, REFUSALS,
@@ -1217,20 +1217,27 @@ router.get('/admin/bot/knowledge', adminOnly, async (req, res) => {
   }
 });
 
-// PUT /api/chat/admin/bot/knowledge { filename, html }
+// PUT /api/chat/admin/bot/knowledge { filename, text }
 //
 // The guide lives in a gitignored folder outside backend/, so it can never be
 // on Railway's filesystem. Uploading it into Mongo is what makes the bot work
 // in production at all — and it means refreshing the guide needs no deploy.
+//
+// Takes either the public guide HTML or the minified corpus .txt built from it
+// (scripts/buildGuideCorpus.js). Both end up as the same `sections`, so the
+// choice of file changes nothing about how the bot answers — in particular the
+// .txt does NOT bypass retrieval, which is the trap parseGuideUpload avoids.
+//
+// `html` is still accepted as the body key so an older client keeps working.
 router.put('/admin/bot/knowledge', adminOnly, async (req, res) => {
   try {
-    const html = (req.body?.html ?? '').toString();
-    if (!html.trim()) return res.status(400).json({ message: 'No file contents received' });
-    if (html.length > 5_000_000) return res.status(413).json({ message: 'That file is too large' });
+    const text = (req.body?.text ?? req.body?.html ?? '').toString();
+    if (!text.trim()) return res.status(400).json({ message: 'No file contents received' });
+    if (text.length > 5_000_000) return res.status(413).json({ message: 'That file is too large' });
 
     let parsed;
     try {
-      parsed = parseCbatGuide(html);
+      parsed = parseGuideUpload(text);
     } catch (err) {
       return res.status(422).json({ message: err.message });
     }
@@ -1248,7 +1255,7 @@ router.put('/admin/bot/knowledge', adminOnly, async (req, res) => {
           corpus,
           sections:         parsed.sections,
           sourceFilename:   (req.body?.filename ?? '').toString().slice(0, 200) || null,
-          sourceBytes:      html.length,
+          sourceBytes:      text.length,
           uploadedByUserId: req.user._id,
           stats: {
             tests,

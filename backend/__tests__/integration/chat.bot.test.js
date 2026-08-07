@@ -303,6 +303,47 @@ describe('knowledge upload', () => {
     expect(res.status).toBe(400);
   });
 
+  it('accepts the minified guide text as well as the HTML', async () => {
+    const admin = await createUser({ isAdmin: true });
+    const c = authCookie(admin._id);
+
+    // Whatever the admin picks, the bot must end up with the same material.
+    await request(app).put('/api/chat/admin/bot/knowledge').set('Cookie', c)
+      .send({ filename: 'guide.html', text: GUIDE_HTML });
+    const fromHtml = await BotKnowledge.findOne({ slug: 'cbat-guide' }).lean();
+
+    const res = await request(app).put('/api/chat/admin/bot/knowledge').set('Cookie', c)
+      .send({ filename: 'CBAT_Guide_Minified.txt', text: fromHtml.corpus });
+
+    expect(res.status).toBe(200);
+    const fromText = await BotKnowledge.findOne({ slug: 'cbat-guide' }).lean();
+    expect(fromText.sourceFilename).toBe('CBAT_Guide_Minified.txt');
+    expect(fromText.corpus).toBe(fromHtml.corpus);
+    // Sections are what keep retrieval alive. Storing the text alone would send
+    // the whole guide on every question, with nothing in the UI to show it.
+    expect(fromText.sections.TESTS).toHaveLength(fromHtml.sections.TESTS.length);
+    expect(fromText.stats.tests).toBe(fromHtml.stats.tests);
+  });
+
+  it('still accepts the old `html` body key from an older client', async () => {
+    const admin = await createUser({ isAdmin: true });
+    const res = await request(app).put('/api/chat/admin/bot/knowledge')
+      .set('Cookie', authCookie(admin._id))
+      .send({ filename: 'guide.html', html: GUIDE_HTML });
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects a text file that is not a rendered guide', async () => {
+    const admin = await createUser({ isAdmin: true });
+    const res = await request(app).put('/api/chat/admin/bot/knowledge')
+      .set('Cookie', authCookie(admin._id))
+      .send({ filename: 'shopping.txt', text: 'milk, bread, revise for the CBAT' });
+
+    expect(res.status).toBe(422);
+    expect(res.body.message).toMatch(/does not look like the CBAT guide/i);
+    expect(await BotKnowledge.countDocuments({})).toBe(0);
+  });
+
   it('is admin-only, both ways', async () => {
     const user = await createUser({ displayName: 'Falcon' });
     const c = authCookie(user._id);

@@ -5,8 +5,10 @@
  * and containment behaviour is tested as carefully as the happy path.
  */
 const {
-  parseCbatGuide, renderGuideCorpus, matchBracket, normalise,
+  parseCbatGuide, parseGuideCorpusText, parseGuideUpload,
+  renderGuideCorpus, matchBracket, normalise,
 } = require('../../utils/cbatGuideParser');
+const { selectGuideSlice } = require('../../utils/cbatGuideRetrieval');
 
 const guide = (body) => `<!doctype html><html><body><script>${body}</script></body></html>`;
 
@@ -150,6 +152,100 @@ describe('renderGuideCorpus', () => {
     const corpus = renderGuideCorpus(sections);
     expect(corpus).toMatch(/KNOWN UNKNOWNS — the guide has NO answer/);
     expect(corpus).toContain('What is in Trace 2?');
+  });
+});
+
+// A guide with one of every section, so the round trip is exercised on the
+// shapes that only appear once (HELPED counts, FELT's two clauses, TOOLKINDS
+// whose heading is its own name) rather than only on tests.
+const FULL = guide(`
+const TESTS = [
+  { id:'flag', name:'Figures, Logistics and Groups', abbr:'FLAG', aka:'"the triangles one"',
+    verdict:'The highest-stakes test.',
+    facts:[
+      {c:'green',tag:'Core rule',t:'Only circled aircraft count.',n:'Fix your practice for this.'},
+      {c:'grey',tag:'Format',t:'Three tasks at once.',n:'From the published guides.'}
+    ]},
+  { id:'ant', name:'Airbourne Numerical Test', abbr:'ANT', aka:'speed and distance',
+    verdict:'Best documented.',
+    facts:[{c:'red',tag:'Old',t:'The old timing no longer holds.',n:'Changed in 2021.'}]}
+];
+const DAY_GROUPS = [{ id:'regime', title:'What the day feels like',
+  facts:[{c:'amber',tag:'Kit',t:'No pen or paper.',n:'Staff police this one.'}] }];
+const OTHER = [{ id:'rn', flag:'Royal Navy',
+  facts:[{c:'green',tag:'Crossover',t:'The result carries across.',n:'One account.'}] }];
+const HELPED = [{ tool:'Mental arithmetic', n:5, note:'Drilled away from any app.' },
+                { tool:'Flight simulators', note:'No count for this one.' }];
+const TOOLKINDS = [{ id:'coverage', name:'What to check before you commit',
+  items:[['Does it cover the hard tests?','Coverage beats polish.']] }];
+const FELT = [{ who:'A pilot candidate', felt:'Sure he had failed.', actual:'Passed comfortably.', d:'better' }];
+const OPEN = [{ q:'What is in Trace 2?', note:'Nobody who sat it has said.' }];
+`);
+
+describe('parseGuideCorpusText — uploading the minified guide', () => {
+  it('round-trips: render, parse, render again gives the same corpus', () => {
+    // This is the whole contract. The .txt is only safe to upload because it
+    // rebuilds the same sections, so a byte-identical re-render is the proof.
+    const corpus = renderGuideCorpus(parseCbatGuide(FULL).sections);
+    const back = parseGuideCorpusText(corpus);
+    expect(renderGuideCorpus(back.sections)).toBe(corpus);
+  });
+
+  it('recovers every section, not just the tests', () => {
+    const { sections } = parseGuideCorpusText(renderGuideCorpus(parseCbatGuide(FULL).sections));
+    expect(sections.TESTS).toHaveLength(2);
+    expect(sections.TESTS[0].abbr).toBe('FLAG');
+    expect(sections.DAY_GROUPS).toHaveLength(1);
+    expect(sections.OTHER[0].flag).toBe('Royal Navy');
+    expect(sections.HELPED[0]).toMatchObject({ tool: 'Mental arithmetic', n: 5 });
+    expect(sections.TOOLKINDS[0].items[0][0]).toBe('Does it cover the hard tests?');
+    expect(sections.FELT[0]).toMatchObject({ who: 'A pilot candidate', actual: 'Passed comfortably.' });
+    expect(sections.OPEN[0].q).toBe('What is in Trace 2?');
+  });
+
+  it('keeps the confidence grade on the way back in', () => {
+    const { sections } = parseGuideCorpusText(renderGuideCorpus(parseCbatGuide(FULL).sections));
+    expect(sections.TESTS[0].facts.map(f => f.c)).toEqual(['green', 'grey']);
+    expect(sections.TESTS[1].facts[0].c).toBe('red');
+  });
+
+  it('leaves retrieval working, which is the trap a flat upload would set', () => {
+    // A document with no sections falls back to the stored string and sends the
+    // WHOLE guide on every question. Uploading the minified file must not do
+    // that quietly, so assert it still slices.
+    const fromHtml = parseCbatGuide(FULL).sections;
+    const fromText = parseGuideCorpusText(renderGuideCorpus(fromHtml)).sections;
+    const pick = (s) => selectGuideSlice(s, 'what is the FLAG test like');
+    expect(pick(fromText).full).toBe(false);
+    expect(pick(fromText).tests.map(t => t.abbr)).toEqual(pick(fromHtml).tests.map(t => t.abbr));
+  });
+
+  it('rejects a text file that is not a rendered guide', () => {
+    expect(() => parseGuideCorpusText('just some notes about the CBAT'))
+      .toThrow(/does not look like the CBAT guide/i);
+  });
+
+  it('does not report CONF as missing, which the corpus never carries', () => {
+    // CONF only styles the HTML page. Counting it would put a permanent amber
+    // "Missing sections" warning on the admin screen after every .txt upload.
+    const { missing } = parseGuideCorpusText(renderGuideCorpus(parseCbatGuide(FULL).sections));
+    expect(missing).not.toContain('CONF');
+    expect(missing).toEqual([]);
+  });
+});
+
+describe('parseGuideUpload — accepting either file', () => {
+  it('takes the guide HTML', () => {
+    expect(parseGuideUpload(MINIMAL).sections.TESTS[0].abbr).toBe('FLAG');
+  });
+
+  it('takes the minified corpus and produces the same corpus back', () => {
+    const corpus = renderGuideCorpus(parseCbatGuide(FULL).sections);
+    expect(renderGuideCorpus(parseGuideUpload(corpus).sections)).toBe(corpus);
+  });
+
+  it('rejects an empty file before trying to work out which kind it is', () => {
+    expect(() => parseGuideUpload('   ')).toThrow(/empty/i);
   });
 });
 
