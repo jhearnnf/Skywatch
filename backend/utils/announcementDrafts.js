@@ -12,6 +12,7 @@
 
 const { callOpenRouter } = require('./openRouter');
 const { fetchRecentCommits } = require('./githubCommits');
+const { stripEmDashes } = require('./chatBot');
 
 // Matches the model the rest of the backend uses for short-form copy.
 const DEFAULT_MODEL = 'anthropic/claude-haiku-4-5';
@@ -114,7 +115,11 @@ async function generateAnnouncementDrafts({
 
   const raw = data?.choices?.[0]?.message?.content ?? '';
   const updates = parseUpdates(raw).map(u => ({
-    text: u.text.slice(0, MAX_CHARS),
+    // The prompt asks for hyphens and the model supplies em dashes anyway, so
+    // it is enforced here rather than requested. Same filter the chat bot uses;
+    // an em dash is the clearest sign a person did not write something, and
+    // these end up in a public channel.
+    text: stripEmDashes(u.text).slice(0, MAX_CHARS),
     // Keep only SHAs that were actually in the input — a model that invents one
     // would otherwise poison the exclude list and silently hide a real commit.
     shas: u.shas.filter(s => fresh.some(c => c.shortSha === s || c.sha === s)),

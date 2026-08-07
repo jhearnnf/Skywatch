@@ -475,3 +475,15 @@ describe('MessageList — the new-messages line', () => {
     expect(container.querySelector('[aria-label="New messages"]')).toBeNull()
   })
 })
+
+describe('MessageList — typing indicator', () => {
+  it('names the bot that is composing a reply', () => {
+    renderList([msg('u1', 'hello')], { typingName: 'Guide Bot' })
+    expect(screen.getByText('Guide Bot is typing…')).toBeTruthy()
+  })
+
+  it('shows nothing when no reply is in flight', () => {
+    renderList([msg('u1', 'hello')])
+    expect(screen.queryByText(/is typing/)).toBeNull()
+  })
+})

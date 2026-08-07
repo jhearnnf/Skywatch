@@ -38,6 +38,12 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
   const [entryState,   setEntryState]   = useState(null)
   const [highlightId,  setHighlightId]  = useState(null)
   const [jumping,      setJumping]      = useState(false)
+  // Two sources: the server's own flag, picked up by the poll, and an
+  // optimistic local one set the moment you send a message that asks the bot
+  // something — otherwise the indicator would not appear for up to a poll,
+  // which is most of the wait it exists to explain.
+  const [botTyping,    setBotTyping]    = useState(null)
+  const [askedBot,     setAskedBot]     = useState(null)
 
   const fetchMessages = useCallback(async ({ limit } = {}) => {
     const qs = limit ? `?limit=${limit}` : ''
@@ -91,6 +97,11 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
         const d = await fetchMessages()
         setMessages(prev => (signature(prev) === signature(d.messages) ? prev : d.messages))
         setSenders(d.senders ?? {})
+        setBotTyping(d.botTyping ?? null)
+        // The server is now authoritative again, so drop the optimistic flag.
+        // A poll that reports no reply in flight means the bot either answered
+        // or decided to stay quiet — either way the indicator has done its job.
+        if (!d.botTyping) setAskedBot(null)
         const newest = d.messages[d.messages.length - 1]
         if (newest && String(newest.senderUserId) !== String(user?._id)) markRead()
       } catch { /* transient — the next tick retries */ }
@@ -98,6 +109,15 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
     const id = setInterval(tick, POLL_MS)
     return () => clearInterval(id)
   }, [fetchMessages, markRead, user])
+
+  // Backstop for the optimistic flag. Normally the next poll takes it down;
+  // this covers a run of failed polls, so the indicator can never be left
+  // running forever on a bot that already gave up.
+  useEffect(() => {
+    if (!askedBot) return
+    const id = setTimeout(() => setAskedBot(null), 45_000)
+    return () => clearTimeout(id)
+  }, [askedBot])
 
   const handleSend = async (text) => {
     setBusy(true); setErr('')
@@ -119,6 +139,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
       // re-downloading the whole thread. The 5s poll reconciles anything that
       // arrived from someone else in the meantime.
       setReplyTo(null)
+      if (d?.data?.botReplyingName) setAskedBot(d.data.botReplyingName)
       if (d?.data?.message) {
         setMessages(prev => [...prev, d.data.message])
         // Your first message in a thread wouldn't be in the sender map yet, so
@@ -338,6 +359,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           onSeenBy={setSeenByMsg}
           dividerAfter={entryState?.lastReadAt ?? null}
           highlightId={highlightId}
+          typingName={botTyping || askedBot}
           // A bot feed is a log, not a conversation: every entry is from the
           // same poster, so each one keeps its own name and timestamp.
           groupRuns={postPolicy !== 'bot'}

@@ -14,8 +14,12 @@ const { medalsForUsers } = require('../utils/cbatMedalHolders');
 const BotKnowledge = require('../models/BotKnowledge');
 const { parseCbatGuide, renderGuideCorpus } = require('../utils/cbatGuideParser');
 
-const { generateBotReply } = require('../utils/chatBot');
+const {
+  generateBotReply, screenChannelMention, stripMention, looksHostile, REFUSALS,
+} = require('../utils/chatBot');
 const { resolveMentions, MENTION_LIMIT } = require('../utils/chatMentions');
+const { selectGuideSlice } = require('../utils/cbatGuideRetrieval');
+const { overDailyBudget, noteBotSpend } = require('../utils/chatBotBudget');
 
 // One knowledge document for now. A second bot would key off its own slug.
 const BOT_KNOWLEDGE_SLUG = 'cbat-guide';
@@ -739,6 +743,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
       // Where this viewer got up to last time, and whether anything since then
       // was addressed to them. Null lastReadAt means "never opened", which
       // draws no divider — a first visit is not a pile of unread messages.
+      // Drives "Guide Bot is typing…". Picked up by the 5s poll, so it can lag
+      // by a poll — the sender's own client shows it immediately from
+      // botWillReply on the send response instead.
+      botTyping:           botTypingName(convo._id),
       lastReadAt:          readRow?.lastReadAt ?? null,
       unreadMentionCount:  unreadMentions,
       firstUnreadMention:  firstMention
@@ -826,27 +834,85 @@ router.post('/conversations/:id/messages', async (req, res) => {
     // In a channel the bot speaks only when @mentioned — never on its own, and
     // never in a thread it was not addressed in. A bot that mentions itself
     // cannot start a loop for the same reason.
+    const mentionedBot = mentioned.find(u => u.isBot && u.botAnswersDms);
+    const dmBotReplying = Boolean(convo.botUserId)
+      && String(convo.botUserId) !== String(req.user._id);
+    const channelBotReplying = convo.type === 'channel' && Boolean(mentionedBot) && !req.user.isBot;
+
+    // The name is wanted before the response goes out so the sender's typing
+    // indicator can say who. In a channel it is already resolved; in a bot DM
+    // it costs one indexed lookup, and only on a bot DM.
+    let botReplyingName = null;
+    if (channelBotReplying) botReplyingName = mentionedBot.displayName ?? null;
+    else if (dmBotReplying) {
+      botReplyingName = (await User.findById(convo.botUserId).select('displayName').lean())
+        ?.displayName ?? null;
+    }
+
     res.json({ status: 'success', data: {
       message: serializeMessage(message.toObject(), {
         viewerIsAdmin:    Boolean(req.user.isAdmin),
         conversationType: convo.type,
         viewerId:         req.user._id,
       }),
+      // So the sender sees "Guide Bot is typing…" the instant they hit send,
+      // rather than up to a poll later. It names a bot that has been ASKED,
+      // not one that will definitely answer — screening may still decide to
+      // ignore this one, and the next poll is what takes the indicator down.
+      botReplyingName,
     } });
 
     // Answer AFTER responding, never before: a model call takes seconds, and
     // making the sender wait for it would leave their own message hanging in
     // the composer. The client's 5s poll picks the reply up.
-    if (convo.botUserId && String(convo.botUserId) !== String(req.user._id)) {
-      replyAsBot(convo).catch(err => {
+    if (dmBotReplying) {
+      replyAsBot(convo, botReplyingName).catch(err => {
         console.error('[chat] bot reply failed:', err?.message);
       });
     }
 
+    if (channelBotReplying) {
+      replyAsBotInChannel(convo, message, mentionedBot, req.user).catch(err => {
+        console.error('[chat] channel bot reply failed:', err?.message);
+      });
+    }
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+// What the bot answers from, for one question.
+//
+// Re-rendered from the stored `sections` rather than served from the stored
+// `corpus` string. Both are saved at upload time, but the corpus is a SNAPSHOT
+// of how renderGuideCorpus worked that day — so improving the renderer would do
+// nothing at all until somebody happened to re-upload the guide. That is a
+// silent failure: the bot keeps giving the old answer and the change looks
+// broken. Rendering on read is a few string joins next to a model call.
+//
+// Rendering per question is also what makes retrieval possible. The whole guide
+// is ~15,000 tokens and was going out on every question — about $0.015 of input
+// per reply, ~95% of the measured $0.0168 cost, to answer something about one
+// test. selectGuideSlice picks the sections the question actually needs; across
+// a realistic mix that is ~39% of the tokens.
+//
+// Falls back to the stored string for a document uploaded before sections were
+// kept.
+async function loadBotCorpus(question) {
+  const doc = await BotKnowledge.findOne({ slug: BOT_KNOWLEDGE_SLUG })
+    .select('corpus sections').lean();
+  if (!doc) return '';
+  if (doc.sections && (doc.sections.TESTS ?? []).length) {
+    try {
+      const { tests, full } = selectGuideSlice(doc.sections, question);
+      return renderGuideCorpus(doc.sections, { tests: full ? null : tests });
+    } catch {
+      // A malformed sections blob must not silence the bot entirely.
+      return doc.corpus ?? '';
+    }
+  }
+  return doc.corpus ?? '';
+}
 
 // Who an "@name" may resolve to. Bots are included (that is how Guide Bot gets
 // addressed); banned accounts are not, so a removed user's name stops pinging.
@@ -857,6 +923,191 @@ function findMentionableByName(lowerNames) {
   }).select('displayName displayNameLower isBot botAnswersDms').lean();
 }
 
+// ── Guide bot in a channel ───────────────────────────────────────────────────
+//
+// Budgets, enforced before the model is called. A channel bot is a shared,
+// paid-for resource sitting in a room full of strangers, so the question is not
+// "is this person allowed to ask" but "how much can any one person spend".
+//
+// In-process, like the send rate limiter above, and for the same reason: this
+// guards against a person holding down Enter on a single-instance backend, not
+// against a distributed attacker. Revisit if the backend is ever scaled out.
+const BOT_USER_MAX      = 5;            // answers per user...
+const BOT_USER_WINDOW   = 10 * 60_000;  // ...per 10 minutes
+const BOT_CHANNEL_GAP   = 10_000;       // minimum quiet time between answers
+const botUserHits    = new Map();       // userId  -> number[]
+const botChannelLast = new Map();       // convoId -> timestamp
+
+// How much of the conversation the bot is shown in a channel. Enough for a
+// follow-up ("and how long does that last?") to make sense, short enough that
+// it cannot be filled with someone else's agenda.
+const CHANNEL_HISTORY_TURNS = 6;
+const DM_HISTORY_TURNS = 12;
+
+// ...and how far back that reaches. A conversation is a session: someone who
+// asked about FLAG this morning and comes back tonight with an unrelated
+// question is starting again, not continuing. Replaying the morning makes the
+// bot answer as though they were connected, and pays input tokens for the
+// privilege. Counted from now rather than from the last message, so a thread
+// that has gone quiet goes cold on its own.
+const HISTORY_WINDOW_MS = 30 * 60_000;
+
+const historySince = () => new Date(Date.now() - HISTORY_WINDOW_MS);
+
+// ── "Guide Bot is typing…" ───────────────────────────────────────────────────
+//
+// A model call takes seconds. Without this the channel just sits there and it
+// is impossible to tell whether the bot is thinking or has decided to ignore
+// you — and since ignoring you IS a real outcome here, that ambiguity matters
+// more than it would elsewhere.
+//
+// In-process and expiring, like the rate limiters: a flag that outlived the
+// process would leave a bot permanently "typing" after a restart. The expiry
+// is the backstop for a generation that dies without running its finally.
+const BOT_TYPING_TTL = 60_000;
+const botTyping = new Map();            // convoId -> { name, expiresAt }
+
+const markBotTyping  = (id, name) =>
+  botTyping.set(String(id), { name: name || 'Guide Bot', expiresAt: Date.now() + BOT_TYPING_TTL });
+const clearBotTyping = (id) => botTyping.delete(String(id));
+// Returns the NAME of the bot composing a reply, or null. The name rather than
+// a boolean so the indicator can say which bot, without the client having to
+// guess or hardcode one.
+const botTypingName  = (id) => {
+  const row = botTyping.get(String(id));
+  return row && row.expiresAt > Date.now() ? row.name : null;
+};
+
+function botBudgetRefusal(userId, conversationId) {
+  const now = Date.now();
+
+  const last = botChannelLast.get(String(conversationId)) ?? 0;
+  if (now - last < BOT_CHANNEL_GAP) return 'channel-cooldown';
+
+  const key = String(userId);
+  const recent = (botUserHits.get(key) ?? []).filter(t => now - t < BOT_USER_WINDOW);
+  if (recent.length >= BOT_USER_MAX) {
+    botUserHits.set(key, recent);
+    return 'user-quota';
+  }
+
+  recent.push(now);
+  botUserHits.set(key, recent);
+  botChannelLast.set(String(conversationId), now);
+  return null;
+}
+
+// Keep both maps from growing without bound on a long-lived process.
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, times] of botUserHits) {
+    const live = times.filter(t => now - t < BOT_USER_WINDOW);
+    if (live.length) botUserHits.set(key, live); else botUserHits.delete(key);
+  }
+  for (const [key, at] of botChannelLast) {
+    if (now - at > BOT_USER_WINDOW) botChannelLast.delete(key);
+  }
+  for (const [key, expires] of botTyping) {
+    if (expires.expiresAt < now) botTyping.delete(key);
+  }
+}, BOT_USER_WINDOW).unref?.();
+
+// Answer an @mention in a channel.
+//
+// Every rejection path here is SILENT — no message, no refusal, no tombstone.
+// See the note at the top of utils/chatBot.js: in a public room a refusal
+// confirms the attack landed and hands anyone a way to fill the channel with
+// bot messages. Screening runs before the API call, so silence is also free.
+async function replyAsBotInChannel(convo, triggerMessage, bot, asker) {
+  const question = stripMention(triggerMessage.body, bot.displayName);
+
+  const screen = screenChannelMention(question);
+  if (!screen.ok) return null;
+
+  if (botBudgetRefusal(asker._id, convo._id)) return null;
+
+  // The day's ceiling. Silent in a channel like every other refusal here —
+  // announcing "I have hit my spending limit" to a public room is an invitation
+  // to check whether it is true.
+  if (await overDailyBudget()) return null;
+
+  const key = String(convo._id);
+  if (botReplyInFlight.has(key)) return null;
+  botReplyInFlight.add(key);
+  markBotTyping(convo._id, bot.displayName);
+  try {
+    const [freshBot, knowledge, recent, otherBots] = await Promise.all([
+      User.findById(bot._id).select('displayName botAnswersDms isBanned').lean(),
+      loadBotCorpus(question),
+      ChatMessage.find({
+        conversationId: convo._id,
+        _id:            { $ne: triggerMessage._id },
+        deletedAt:      null,
+        senderRole:     { $ne: 'system' },
+        createdAt:      { $gte: historySince() },
+      }).sort({ createdAt: -1 }).limit(CHANNEL_HISTORY_TURNS).lean(),
+      User.find({ isBot: true }).select('_id').lean(),
+    ]);
+    if (!freshBot || freshBot.isBanned || !freshBot.botAnswersDms) return null;
+
+    const botIds = new Set(otherBots.map(b => String(b._id)));
+
+    // Recent channel traffic, so a follow-up like "and how long does it last?"
+    // has something to attach to.
+    //
+    // A channel is not a DM, though: everything here was written by people who
+    // are not the one asking. Two rules make that safe enough to use.
+    //   • Anything hostile is DROPPED rather than passed through, so a
+    //     bystander cannot plant an instruction for someone else's question to
+    //     pick up. The <message> wrapper would already mark it as data; this
+    //     means the model never sees it at all.
+    //   • Speakers are named inside the wrapper, so the bot can tell whose
+    //     question it is answering rather than reading the room as one voice.
+    const history = recent
+      .reverse()
+      .filter(m => !looksHostile(m.body))
+      // Other bots' output is not conversation — the medals feed would just be
+      // noise in the context window.
+      .filter(m => String(m.senderUserId ?? '') === String(freshBot._id)
+        || !botIds.has(String(m.senderUserId)))
+      .map(m => ({
+        fromBot: String(m.senderUserId ?? '') === String(freshBot._id),
+        body:    `${m.senderDisplayName || 'Someone'}: ${(m.body ?? '').slice(0, 400)}`,
+      }));
+
+    const { text, costUsd } = await generateBotReply({
+      question,
+      corpus:  knowledge,
+      history,
+      // Channel mode: a refusal becomes null and nothing is posted.
+      silent:  true,
+    });
+    noteBotSpend(costUsd);
+    if (!text) return null;
+
+    const fresh = await ChatConversation.findById(convo._id);
+    if (!fresh || fresh.isArchived) return null;
+
+    return appendMessage({
+      conversation:      fresh,
+      senderUserId:      freshBot._id,
+      senderRole:        'user',
+      body:              text,
+      senderDisplayName: freshBot.displayName ?? 'Guide Bot',
+      // Quote the question, so an answer arriving after other messages is not
+      // left floating with no visible subject.
+      replyTo: {
+        messageId:   triggerMessage._id,
+        displayName: triggerMessage.senderDisplayName ?? null,
+        excerpt:     (triggerMessage.body ?? '').slice(0, 160),
+      },
+    });
+  } finally {
+    botReplyInFlight.delete(key);
+    clearBotTyping(convo._id);
+  }
+}
+
 // Generate and post the bot's answer to the latest message in a bot DM.
 //
 // Never throws into the request path — it runs detached, so a failure has to
@@ -865,16 +1116,21 @@ function findMentionableByName(lowerNames) {
 // several overlapping generations.
 const botReplyInFlight = new Set();
 
-async function replyAsBot(convo) {
+async function replyAsBot(convo, botName) {
   const key = String(convo._id);
   if (botReplyInFlight.has(key)) return;
   botReplyInFlight.add(key);
+  markBotTyping(convo._id, botName);
   try {
-    const [bot, knowledge, recent] = await Promise.all([
+    const [bot, recent] = await Promise.all([
       User.findById(convo.botUserId).select('displayName botAnswersDms').lean(),
-      BotKnowledge.findOne({ slug: BOT_KNOWLEDGE_SLUG }).select('corpus').lean(),
-      ChatMessage.find({ conversationId: convo._id, deletedAt: null })
-        .sort({ createdAt: -1 }).limit(12).lean(),
+      ChatMessage.find({
+        conversationId: convo._id,
+        deletedAt:      null,
+        // The message being answered is the newest, so it is always inside the
+        // window — this only ever trims context, never the question.
+        createdAt:      { $gte: historySince() },
+      }).sort({ createdAt: -1 }).limit(DM_HISTORY_TURNS).lean(),
     ]);
     // Belt and braces alongside the POST /dm gate: a thread that predates the
     // flag must not start answering.
@@ -887,11 +1143,32 @@ async function replyAsBot(convo) {
       body:    m.body,
     }));
 
-    const { text } = await generateBotReply({
+    // Sequential rather than alongside the fetch above: which slice of the
+    // guide to load depends on the question, and the question comes out of
+    // that fetch. One extra round trip is nothing next to the model call.
+    const knowledge = await loadBotCorpus(question);
+
+    // In a DM the ceiling is spoken rather than silent: bot DMs are admin-only,
+    // and an admin needs to tell "switched off for the day" from "broken".
+    if (await overDailyBudget()) {
+      const fresh = await ChatConversation.findById(convo._id);
+      if (!fresh) return;
+      await appendMessage({
+        conversation:      fresh,
+        senderUserId:      convo.botUserId,
+        senderRole:        'user',
+        body:              REFUSALS.budget,
+        senderDisplayName: bot.displayName ?? 'Guide Bot',
+      });
+      return;
+    }
+
+    const { text, costUsd } = await generateBotReply({
       question,
-      corpus: knowledge?.corpus ?? '',
+      corpus: knowledge,
       history,
     });
+    noteBotSpend(costUsd);
 
     const fresh = await ChatConversation.findById(convo._id);
     if (!fresh) return;
@@ -904,6 +1181,7 @@ async function replyAsBot(convo) {
     });
   } finally {
     botReplyInFlight.delete(key);
+    clearBotTyping(convo._id);
   }
 }
 

@@ -211,6 +211,23 @@ function MessageBody({ message, senders, currentUserId }) {
   })
 }
 
+// "Guide Bot is typing…" — a model call takes seconds, and without this the
+// channel just sits there. That ambiguity matters more here than it would
+// elsewhere, because the bot deciding to ignore you IS a real outcome: silence
+// is how it answers an injection attempt or a bare mention.
+function TypingIndicator({ name }) {
+  return (
+    <div className="flex items-center gap-2 mt-2 px-2 text-[11px] text-slate-400">
+      <span className="flex gap-0.5" aria-hidden="true">
+        <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+        <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '120ms' }} />
+        <span className="w-1 h-1 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '240ms' }} />
+      </span>
+      <span>{name} is typing…</span>
+    </div>
+  )
+}
+
 // The Discord line: where you got up to last time. Rendered above the first
 // message you have not seen, and frozen for the whole visit — it must not creep
 // down the screen as the poll marks things read underneath you.
@@ -409,14 +426,17 @@ export default function MessageList({
   // means "never been here", which draws no line — a first visit is not a pile
   // of unread messages.
   dividerAfter = null,
+  // Name of the bot currently composing a reply, or null.
+  typingName = null,
   emptyLabel = 'No messages yet — say hi to get started.',
 }) {
   const scrollRef = useRef(null)
 
+  // Also scrolls when the indicator appears, so it is not left below the fold.
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages])
+  }, [messages, typingName])
 
   const collapseAdmins = conversationType === 'support' && !viewerIsAdmin
 
@@ -500,6 +520,7 @@ export default function MessageList({
           </Fragment>
         )
       })}
+      {typingName && <TypingIndicator name={typingName} />}
     </div>
   )
 }

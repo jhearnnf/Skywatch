@@ -142,3 +142,116 @@ describe('matchBracket', () => {
     expect(() => matchBracket('[1, 2, 3', 0)).toThrow(/Unbalanced/);
   });
 });
+
+describe('renderGuideCorpus — the roster line', () => {
+  const THREE = guide(`
+const TESTS = [
+  { id:'flag', name:'Figures, Logistics and Groups', abbr:'FLAG', facts:[{c:'green',tag:'a',t:'b'}] },
+  { id:'sdt',  name:'Sensory Discrimination Test',   abbr:'SDT',  facts:[{c:'green',tag:'a',t:'b'}] },
+  { id:'act',  name:'Aircraft Control Test',         abbr:'ACT',  facts:[{c:'green',tag:'a',t:'b'}] }
+];
+`);
+
+  it('states how many tests are described, so the bot never has to count', () => {
+    // "How many tests are there?" is one of the first things anyone asks, and
+    // the count is not written anywhere in the guide — only implied by the
+    // sections. Counting headings in code is reliable; asking a model to is not.
+    const { sections } = parseCbatGuide(THREE);
+    expect(renderGuideCorpus(sections)).toMatch(/3 tests are described below/);
+  });
+
+  it('names them, so "which ones" is answerable too', () => {
+    const { sections } = parseCbatGuide(THREE);
+    const corpus = renderGuideCorpus(sections);
+    expect(corpus).toContain('Figures, Logistics and Groups (FLAG)');
+    expect(corpus).toContain('Sensory Discrimination Test (SDT)');
+    expect(corpus).toContain('Aircraft Control Test (ACT)');
+  });
+
+  it('frames the count as a floor rather than a definitive roster', () => {
+    // It is what candidates have described, not the published battery.
+    const { sections } = parseCbatGuide(THREE);
+    expect(renderGuideCorpus(sections)).toMatch(/at least this many/i);
+  });
+
+  it('omits the line entirely when there are no tests', () => {
+    // Rendered directly: parseCbatGuide rejects a guide with no TESTS outright,
+    // so this state only arises from a caller passing sections of its own.
+    expect(renderGuideCorpus({})).not.toMatch(/tests are described below/);
+    expect(renderGuideCorpus({ TESTS: [] })).not.toMatch(/tests are described below/);
+  });
+});
+
+describe('renderGuideCorpus — rendering a subset', () => {
+  const THREE = guide(`
+const TESTS = [
+  { id:'flag', name:'Figures, Logistics and Groups', abbr:'FLAG', facts:[{c:'green',tag:'Core rule',t:'Only circled aircraft count.'}] },
+  { id:'cut',  name:'Cognitive Updating Test',       abbr:'CUT',  facts:[{c:'green',tag:'Format',t:'Six displays at once.'}] },
+  { id:'rtt',  name:'Rapid Tracking Test',           abbr:'RTT',  facts:[{c:'green',tag:'Kit',t:'Uses a joystick.'}] }
+];
+`);
+
+  it('writes out only the tests it was given', () => {
+    const { sections } = parseCbatGuide(THREE);
+    const only = renderGuideCorpus(sections, { tests: [sections.TESTS[0]] });
+
+    expect(only).toContain('Only circled aircraft count.');
+    expect(only).not.toContain('Six displays at once.');
+    expect(only).not.toContain('Uses a joystick.');
+  });
+
+  it('still names every test in the roster', () => {
+    // Otherwise the bot reads "not sent this time" as "not covered", and tells
+    // the user it has nothing on a test the guide documents in full.
+    const { sections } = parseCbatGuide(THREE);
+    const only = renderGuideCorpus(sections, { tests: [sections.TESTS[0]] });
+
+    expect(only).toMatch(/3 tests are described below/);
+    expect(only).toContain('Cognitive Updating Test (CUT)');
+    expect(only).toContain('Rapid Tracking Test (RTT)');
+    expect(only).toMatch(/Only the tests relevant to the current question/);
+    expect(only).toMatch(/Every test named above is covered/);
+  });
+
+  it('keeps the always-on core whatever the slice', () => {
+    const { sections } = parseCbatGuide(MINIMAL);
+    const core = renderGuideCorpus(sections, { tests: [] });
+
+    expect(core).toContain('=== CBAT COMMUNITY GUIDE ===');
+    expect(core).toContain('=== END OF GUIDE ===');
+    expect(core).toMatch(/not official material/i);
+    expect(core).toMatch(/KNOWN UNKNOWNS/);
+  });
+
+  it('adds no subset note when every test is included', () => {
+    const { sections } = parseCbatGuide(THREE);
+    const all = renderGuideCorpus(sections, { tests: sections.TESTS });
+    expect(all).not.toMatch(/Only the tests relevant/);
+  });
+
+  it('renders everything by default', () => {
+    const { sections } = parseCbatGuide(THREE);
+    expect(renderGuideCorpus(sections)).toBe(renderGuideCorpus(sections, { tests: null }));
+  });
+
+  it('is materially smaller for one test than for all of them', () => {
+    // Sized like the real guide — 23 tests averaging ~1,800 characters each.
+    // The toy three-fact fixture above is too small to show the saving: the
+    // "only the relevant tests" note costs more than the sections it removes.
+    const facts = Array.from({ length: 8 }, (_, i) =>
+      `{c:'green',tag:'Point ${i}',t:'${'detail '.repeat(20)}',n:'${'caveat '.repeat(10)}'}`).join(',');
+    const big = guide(`
+const TESTS = [
+  { id:'a', name:'Alpha Test', abbr:'ALP', facts:[${facts}] },
+  { id:'b', name:'Bravo Test', abbr:'BRV', facts:[${facts}] },
+  { id:'c', name:'Charlie Test', abbr:'CHA', facts:[${facts}] }
+];
+`);
+    const { sections } = parseCbatGuide(big);
+    const one = renderGuideCorpus(sections, { tests: [sections.TESTS[0]] });
+    const all = renderGuideCorpus(sections);
+
+    // Roughly a third, since the fixture is almost entirely test bodies.
+    expect(one.length).toBeLessThan(all.length * 0.5);
+  });
+});

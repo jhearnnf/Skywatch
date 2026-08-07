@@ -188,8 +188,15 @@ function renderFacts(facts = [], indent = '  ') {
  * repeating what candidates reported, not stating what the test is, and it can
  * only pass that distinction on to the reader if it is attached to each claim
  * rather than mentioned once at the top.
+ *
+ * @param {Object} sections  parsed guide
+ * @param {Array|null} opts.tests  render only these test sections (see
+ *        utils/cbatGuideRetrieval.js). Null renders every one, which is both
+ *        the default and the fallback when a question matches nothing.
+ *        The ROSTER still names every test either way — the bot must never
+ *        read "not included in this request" as "not covered by the guide".
  */
-function renderGuideCorpus(sections = {}) {
+function renderGuideCorpus(sections = {}, { tests = null } = {}) {
   const out = [];
 
   out.push('=== CBAT COMMUNITY GUIDE ===');
@@ -199,7 +206,41 @@ function renderGuideCorpus(sections = {}) {
   );
   out.push('');
 
-  for (const test of sections.TESTS ?? []) {
+  // A roster line, computed here rather than left for the bot to work out.
+  //
+  // "How many tests are there?" is one of the most obvious things anyone asks,
+  // and the answer was "I don't have a complete list" — because the count is
+  // not written anywhere in the guide, only implied by the sections below it.
+  // Asking a language model to count headings is unreliable in a way that
+  // counting them in code is not, so the count is stated as a fact it can read.
+  const named = (sections.TESTS ?? [])
+    .filter(Boolean)
+    .map(t => [clean(t.name), clean(t.abbr) && `(${clean(t.abbr)})`].filter(Boolean).join(' '))
+    .filter(Boolean);
+  if (named.length) {
+    out.push('## THE TESTS DESCRIBED HERE');
+    out.push(
+      `${named.length} tests are described below, in this order: ${named.join('; ')}.`,
+    );
+    out.push(
+      'This is what candidates have described, so treat it as at least this many ' +
+      'rather than a definitive roster of the battery.',
+    );
+    // Only some test sections were included this time. Without this line the
+    // bot reads the absent ones as unknown and says it has nothing on them,
+    // when in fact it simply was not sent them for this question.
+    if (tests && tests.length < named.length) {
+      out.push(
+        'Only the tests relevant to the current question are written out in full below. ' +
+        'Every test named above is covered; if you are asked about one that is not ' +
+        'detailed here, say you can go into it if they ask, rather than saying you ' +
+        'have nothing on it.',
+      );
+    }
+    out.push('');
+  }
+
+  for (const test of tests ?? sections.TESTS ?? []) {
     if (!test) continue;
     const title = [clean(test.name), clean(test.abbr) && `(${clean(test.abbr)})`]
       .filter(Boolean).join(' ');
