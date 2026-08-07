@@ -9,8 +9,9 @@
 const {
   generateBotReply, buildSystemPrompt, looksLikeLeak, REFUSALS, MAX_REPLY_CHARS,
 } = require('../../utils/chatBot');
+const { CONF_CODE } = require('../../utils/cbatGuideParser');
 
-const CORPUS = '=== CBAT COMMUNITY GUIDE ===\n## TEST: Figures, Logistics and Groups (FLAG)\n  - [WELL ESTABLISHED] Core rule: only circled aircraft count.\n=== END OF GUIDE ===';
+const CORPUS = '=== CBAT COMMUNITY GUIDE ===\n## TEST: Figures, Logistics and Groups (FLAG)\n  [G] Core rule: only circled aircraft count.\n=== END OF GUIDE ===';
 
 const aiReturning = (content) => jest.fn().mockResolvedValue({
   choices: [{ message: { content } }],
@@ -133,6 +134,16 @@ describe('source narration', () => {
     const prompt = buildSystemPrompt(CORPUS);
     expect(prompt).toMatch(/several people who sat it said/i);
     expect(prompt).toMatch(/Saying who reported something .* is required/i);
+  });
+
+  it('teaches every confidence code the renderer can emit', () => {
+    // The corpus spends one letter per fact and expands it in a legend. If the
+    // renderer gains a grade the prompt does not know about, the bot grades
+    // that claim off a bare letter — so assert the two stay in step.
+    const prompt = buildSystemPrompt(CORPUS);
+    for (const code of Object.values(CONF_CODE)) {
+      expect(prompt).toContain(`[${code}]`);
+    }
   });
 
   it('allows the source on explicit request', () => {
@@ -749,6 +760,6 @@ describe('where an answer ends', () => {
     // account must not be sitting there.
     const prompt = buildSystemPrompt(CORPUS);
     expect(prompt).toMatch(/Finish on your best-supported point, not your weakest/i);
-    expect(prompt).toMatch(/A SINGLE ACCOUNT never gets the last word/i);
+    expect(prompt).toMatch(/\[A\] or \[P\] point never gets the last word/i);
   });
 });

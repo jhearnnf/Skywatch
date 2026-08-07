@@ -162,11 +162,23 @@ function parseCbatGuide(html) {
 
 // ── Corpus rendering ────────────────────────────────────────────────────────
 
-const CONF_LABEL = {
-  green: 'WELL ESTABLISHED (several people who sat the test)',
-  amber: 'SINGLE ACCOUNT (one source, or someone who had not sat it — unconfirmed)',
-  red:   'OUTDATED (no longer seems to hold)',
-};
+// Confidence is a one-letter code, expanded once in the legend, rather than a
+// full sentence repeated on all ~150 facts.
+//
+// The long form cost roughly 60 characters per fact — about 9,000 characters,
+// an eighth of the whole corpus, spent restating the same four labels. The
+// model reads a legend perfectly well, and every token here is paid on every
+// question. `grey` is included because it used to fall through to "UNRATED",
+// which silently threw away the one thing that grade means: the claim comes
+// from the published test guides and nobody who sat the test confirmed it.
+const CONF_CODE = { green: 'G', amber: 'A', red: 'R', grey: 'P' };
+
+const CONF_LEGEND =
+  'CONFIDENCE CODE on every point below — [G] well established, several people who sat the test. ' +
+  '[A] single account: one source, or someone who had not sat it; unconfirmed. ' +
+  '[R] outdated: no longer seems to hold. ' +
+  '[P] from the published test guides only; nobody who sat it has confirmed it. ' +
+  'Anything after " | " on a point is the caveat or supporting detail for that point.';
 
 const clean = (s) => (typeof s === 'string' ? s.trim() : '');
 
@@ -174,9 +186,10 @@ function renderFacts(facts = [], indent = '  ') {
   const lines = [];
   for (const f of facts) {
     if (!f || !clean(f.t)) continue;
-    const conf = CONF_LABEL[f.c] || 'UNRATED';
-    lines.push(`${indent}- [${conf}] ${clean(f.tag) ? clean(f.tag) + ': ' : ''}${clean(f.t)}`);
-    if (clean(f.n)) lines.push(`${indent}  Caveat: ${clean(f.n)}`);
+    const code = CONF_CODE[f.c] || '?';
+    const tag = clean(f.tag) ? `${clean(f.tag)}: ` : '';
+    const note = clean(f.n);
+    lines.push(`${indent}[${code}] ${tag}${clean(f.t)}${note ? ` | ${note}` : ''}`);
   }
   return lines;
 }
@@ -204,6 +217,7 @@ function renderGuideCorpus(sections = {}, { tests = null } = {}) {
     'Everything below is compiled from what candidates reported after sitting the test. ' +
     'It is not official material and it is not the test itself.',
   );
+  out.push(CONF_LEGEND);
   out.push('');
 
   // A roster line, computed here rather than left for the bot to work out.
@@ -314,4 +328,8 @@ module.exports = {
   matchBracket,
   normalise,
   WANTED,
+  // Exported so the bot's system prompt can be asserted to teach every code
+  // this renderer emits, rather than the two drifting apart silently.
+  CONF_CODE,
+  CONF_LEGEND,
 };

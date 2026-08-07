@@ -118,9 +118,31 @@ describe('renderGuideCorpus', () => {
     // claim — a single header would be lost the moment one fact is quoted.
     const { sections } = parseCbatGuide(MINIMAL);
     const corpus = renderGuideCorpus(sections);
-    expect(corpus).toMatch(/\[WELL ESTABLISHED[^\]]*\] Core rule: Only circled aircraft count\./);
-    expect(corpus).toMatch(/\[SINGLE ACCOUNT[^\]]*\] Scoring: Partial points for near misses\./);
-    expect(corpus).toContain('Caveat: Reported once only.');
+    expect(corpus).toContain('[G] Core rule: Only circled aircraft count.');
+    expect(corpus).toContain('[A] Scoring: Partial points for near misses.');
+    expect(corpus).toContain('| Reported once only.');
+  });
+
+  it('expands the confidence codes once, so the codes themselves are readable', () => {
+    // The codes are only cheap because the legend carries their meaning. Ship
+    // the codes without it and the bot is grading claims off single letters.
+    const { sections } = parseCbatGuide(MINIMAL);
+    const corpus = renderGuideCorpus(sections);
+    expect(corpus).toMatch(/\[G\] well established/i);
+    expect(corpus).toMatch(/\[A\] single account/i);
+    expect(corpus).toMatch(/\[R\] outdated/i);
+    expect(corpus).toMatch(/\[P\] from the published test guides only/i);
+  });
+
+  it('grades a published-guides fact as P rather than dropping it to unrated', () => {
+    // `grey` used to fall through to "UNRATED", which threw away the whole
+    // point of that grade: nobody who sat the test has confirmed it.
+    const html = MINIMAL.replace("c:'amber'", "c:'grey'");
+    const { sections } = parseCbatGuide(html);
+    const corpus = renderGuideCorpus(sections);
+    expect(corpus).toContain('[P] Scoring: Partial points for near misses.');
+    expect(corpus).not.toContain('UNRATED');
+    expect(corpus).not.toContain('[?]');
   });
 
   it('marks the open questions as having no answer', () => {
