@@ -7,6 +7,8 @@ import FactLedger from '../components/clipper/FactLedger'
 import IdeaGenerator from '../components/clipper/IdeaGenerator'
 import ScriptEditor from '../components/clipper/ScriptEditor'
 import AgentStatusPill from '../components/clipper/AgentStatusPill'
+import AgentPanel from '../components/clipper/AgentPanel'
+import MusicPanel from '../components/clipper/MusicPanel'
 import FootagePicker from '../components/clipper/FootagePicker'
 import VoicePanel from '../components/clipper/VoicePanel'
 import CaptionStyler from '../components/clipper/CaptionStyler'
@@ -37,8 +39,12 @@ const TABS = [
   { id: 'voice',    label: 'Voice',    needsScript: true },
   { id: 'captions', label: 'Captions', needsScript: true },
   { id: 'sfx',      label: 'Sound FX', needsScript: true },
+  { id: 'music',    label: 'Music',    needsScript: true },
   { id: 'overlays', label: 'Overlays', needsScript: true },
   { id: 'render',   label: 'Render',   needsScript: true },
+  // Not a pipeline stage — it is the machinery every stage runs on, so it
+  // sits at the end and is reachable without a script open.
+  { id: 'agent',    label: 'Agent'   },
 ]
 
 export default function Clipper() {
@@ -207,6 +213,52 @@ export default function Clipper() {
     setActive(a => ({ ...a, footage: data.footage }))
   })
 
+  // Trim changes arrive continuously while the scrubber is dragged, so local
+  // state updates on every one and the write is debounced per beat. Routing
+  // each pointer move through `run` would flip the whole panel into its busy
+  // state dozens of times a second and queue a PATCH behind every frame.
+  const trimTimers = useRef({})
+  const handleTrimFootage = useCallback((beatId, inMs) => {
+    const scriptId = active?._id
+    if (!scriptId) return
+
+    setActive(a => {
+      if (!a) return a
+      const footage = { ...(a.footage || {}) }
+      const entry = { ...(footage[beatId] || {}) }
+      entry.trim = { ...(entry.trim || {}), inMs }
+      footage[beatId] = entry
+      return { ...a, footage }
+    })
+
+    clearTimeout(trimTimers.current[beatId])
+    trimTimers.current[beatId] = setTimeout(() => {
+      call(`/scripts/${scriptId}/footage`, {
+        method: 'PATCH', body: JSON.stringify({ beatId, trim: { inMs } }),
+      }).catch(e => setError(e.message))
+    }, 400)
+  }, [call, active?._id])
+
+  // Drop pending writes when the script changes, or a debounce from the script
+  // you just left would land on it.
+  useEffect(() => {
+    const timers = trimTimers.current
+    return () => { Object.values(timers).forEach(clearTimeout) }
+  }, [active?._id])
+
+  // Track choice and levels go through one endpoint: both live on the script,
+  // and the levels are meaningless without a track.
+  const handleMusicChange = (patch) => run(async () => {
+    const data = await call(`/scripts/${active._id}/music`, {
+      method: 'PATCH', body: JSON.stringify(patch),
+    })
+    setActive(a => ({ ...a, music: data.music }))
+  })
+
+  const handleRevealRender = (localPath) => run(async () => {
+    await call('/renders/reveal', { method: 'POST', body: JSON.stringify({ path: localPath }) })
+  })
+
   const handleCapture = (beatId) => run(async () => {
     const data = await call(`/scripts/${active._id}/capture`, {
       method: 'POST', body: JSON.stringify({ beatId }),
@@ -229,9 +281,11 @@ export default function Clipper() {
   useEffect(() => { if (voices.length) setRefreshingVoices(false) }, [voices.length])
 
   // ── Stage 3: voice ────────────────────────────────────────────────────────
-  const handleGenerateVoice = ({ provider, profileId, instruct }) => run(async () => {
+  // beatIds narrows the job to a single line for a redo; omitted it narrates
+  // the whole script.
+  const handleGenerateVoice = ({ provider, profileId, instruct, beatIds }) => run(async () => {
     const data = await call(`/scripts/${active._id}/voice/generate`, {
-      method: 'POST', body: JSON.stringify({ provider, profileId, instruct }),
+      method: 'POST', body: JSON.stringify({ provider, profileId, instruct, beatIds }),
     })
     setActiveJob(data.job)
   })
@@ -421,6 +475,17 @@ export default function Clipper() {
           </p>
         )}
 
+        {tab === 'agent' && <AgentPanel call={call} />}
+
+        {tab === 'music' && active && (
+          <MusicPanel
+            script={active}
+            call={call}
+            onChanged={handleMusicChange}
+            busy={busy}
+          />
+        )}
+
         {tab === 'facts' && (
           <FactLedger
             facts={facts}
@@ -487,10 +552,12 @@ export default function Clipper() {
             providers={providers}
             job={activeJob}
             agentOnline={agentOnline}
+            mediaBaseUrl={mediaBaseUrl}
             onSearchAll={handleSearchAllFootage}
             onSearch={handleSearchFootage}
             onChoose={handleChooseFootage}
             onCapture={handleCapture}
+            onTrim={handleTrimFootage}
             onApprove={handleApproveFootage}
             busy={busy}
           />
@@ -505,6 +572,7 @@ export default function Clipper() {
             refreshingVoices={refreshingVoices}
             onRefreshVoices={handleRefreshVoices}
             job={activeJob?.type === 'voice' ? activeJob : null}
+            mediaBaseUrl={mediaBaseUrl}
             onGenerate={handleGenerateVoice}
             onApprove={handleApproveVoice}
             busy={busy}
@@ -553,6 +621,7 @@ export default function Clipper() {
               mediaBaseUrl={mediaBaseUrl}
               onRender={handleRender}
               onRefresh={loadTimeline}
+              onReveal={handleRevealRender}
               busy={busy}
             />
           </Suspense>
