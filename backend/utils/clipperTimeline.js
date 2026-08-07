@@ -11,6 +11,7 @@
 // warn about length before any audio exists.
 
 const { resolveCue, sfxPath } = require('../constants/clipperSfx');
+const { MUSIC_DIR } = require('../constants/clipperMusic');
 
 const MIN_BEAT_MS = 800;       // a beat with no audio still needs to be seen
 const END_CARD_MS = 2200;
@@ -167,11 +168,61 @@ function buildTimeline(script) {
     });
   }
 
+  const totalDurationMs = out.reduce((n, b) => n + b.durationMs, 0);
+
   return {
     beats: out,
     captionStyle: script?.captions?.style ?? {},
-    totalDurationMs: out.reduce((n, b) => n + b.durationMs, 0),
+    music: buildMusic(script, out, totalDurationMs),
+    totalDurationMs,
   };
 }
 
-module.exports = { buildTimeline, buildCaptionPages, MIN_BEAT_MS, END_CARD_MS };
+// The background track, plus the windows where it has to get out of the way.
+//
+// Ducking is computed here rather than in the composition for the same reason
+// beat timing is: this is the one place that knows when narration actually
+// plays, so the preview and the render cannot disagree about it. Music at a
+// constant level buries the voice; music that ducks on a guess drifts out of
+// step with it.
+//
+// Windows are absolute milliseconds from the start of the video, which is what
+// the composition needs to turn them into frames.
+function buildMusic(script, beats, totalDurationMs) {
+  const music = script?.music;
+  if (!music?.file) return null;
+
+  const duckWindows = [];
+  let cursor = 0;
+  for (const beat of beats) {
+    // Only narration ducks. SFX are short and deliberately sit on top, and an
+    // end card with no voice is where a track is allowed to come back up.
+    if (beat.audioUrl) {
+      const last = duckWindows[duckWindows.length - 1];
+      // Merge touching windows so a run of narrated beats is one duck rather
+      // than a level that pumps between every line.
+      if (last && cursor - last.endMs <= 120) last.endMs = cursor + beat.durationMs;
+      else duckWindows.push({ startMs: cursor, endMs: cursor + beat.durationMs });
+    }
+    cursor += beat.durationMs;
+  }
+
+  return {
+    src: `${MUSIC_DIR}/${music.file}`,
+    title: music.title || '',
+    licence: music.licence || '',
+    volume:     Number.isFinite(music.volume) ? music.volume : 0.18,
+    duckVolume: Number.isFinite(music.duckVolume) ? music.duckVolume : 0.06,
+    fadeOutMs:  Number.isFinite(music.fadeOutMs) ? music.fadeOutMs : 1500,
+    // A track shorter than the video loops; one longer is cut off by the
+    // composition's length. Either way the fade lands on the video's end.
+    trackDurationMs: Number(music.durationMs) || 0,
+    totalDurationMs,
+    duckWindows,
+  };
+}
+
+module.exports = {
+  buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, buildMusic,
+  MIN_BEAT_MS, END_CARD_MS,
+};

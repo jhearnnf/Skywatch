@@ -202,16 +202,85 @@ function EndCard({ text }) {
   )
 }
 
+// ── Background music ────────────────────────────────────────────────────────
+
+// How long the level takes to move in or out of a duck. Long enough not to
+// click, short enough that the first word is not spoken over full-level music.
+const RAMP_MS = 250
+
+// One track under the whole video, ducked while anyone is speaking.
+//
+// The duck windows come from the timeline rather than being worked out here,
+// because the backend is the only place that knows when narration actually
+// plays — the same reason beat timing lives there. What this owns is the
+// shape of the level change: a short ramp rather than a step, because an
+// instant drop is audible as a click and reads as a mistake.
+//
+// `loop` covers a track shorter than the video. A longer one is simply cut off
+// by the composition's length, which is why the fade is anchored to the end of
+// the video and not to the end of the track.
+function BackgroundMusic({ music, durationInFrames }) {
+  const { fps } = useVideoConfig()
+
+  const toFrames = (ms) => (ms / 1000) * fps
+  const rampFrames = Math.max(1, toFrames(RAMP_MS))
+
+  const windows = (music.duckWindows ?? []).map(w => ({
+    from: toFrames(w.startMs),
+    to:   toFrames(w.endMs),
+  }))
+
+  const fadeFrames = Math.max(0, toFrames(music.fadeOutMs ?? 0))
+  const full = music.volume ?? 0.18
+  const ducked = music.duckVolume ?? 0.06
+
+  const volumeAt = (frame) => {
+    // Ramp in and out of each duck rather than stepping. interpolate clamps, so
+    // a frame outside every window keeps the full level.
+    let level = full
+    for (const w of windows) {
+      if (frame < w.from - rampFrames || frame > w.to + rampFrames) continue
+      level = Math.min(level, interpolate(
+        frame,
+        [w.from - rampFrames, w.from, w.to, w.to + rampFrames],
+        [full, ducked, ducked, full],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+      ))
+    }
+
+    if (fadeFrames > 0 && frame > durationInFrames - fadeFrames) {
+      const out = interpolate(
+        frame,
+        [durationInFrames - fadeFrames, durationInFrames],
+        [1, 0],
+        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+      )
+      level *= out
+    }
+
+    return Math.max(0, level)
+  }
+
+  return <Audio src={staticFile(music.src)} loop volume={volumeAt} />
+}
+
 // ── Composition ─────────────────────────────────────────────────────────────
 
 export function ClipperVideo({ timeline }) {
   const beats = timeline?.beats ?? []
   const captionStyle = timeline?.captionStyle ?? {}
+  const music = timeline?.music ?? null
 
   let cursor = 0
 
   return (
     <AbsoluteFill style={{ background: BACKDROP }}>
+      {/* Outside the beat Sequences, because it runs the length of the video
+          rather than belonging to any one beat. */}
+      {music?.src && (
+        <BackgroundMusic music={music} durationInFrames={timelineDurationInFrames(timeline)} />
+      )}
+
       {beats.map((beat) => {
         const durationInFrames = msToFrames(beat.durationMs)
         const from = cursor

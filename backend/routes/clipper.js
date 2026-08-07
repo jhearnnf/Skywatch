@@ -21,6 +21,7 @@ const ClipperSource = require('../models/ClipperSource');
 const ClipperFact   = require('../models/ClipperFact');
 const ClipperScript = require('../models/ClipperScript');
 const ClipperJob    = require('../models/ClipperJob');
+const ClipperMusic  = require('../models/ClipperMusic');
 
 const { parseGuideSource, DEFAULT_GUIDE_PATH } = require('../utils/clipperFactParser');
 const { validateScript } = require('../utils/clipperGuardrails');
@@ -29,6 +30,8 @@ const { searchFootage, configuredProviders } = require('../utils/clipperFootage'
 const { buildTimeline } = require('../utils/clipperTimeline');
 const { buildCaptions } = require('../utils/clipperCaptions');
 const { SFX, SFX_BY_ID, SFX_DIR, resolveCue } = require('../constants/clipperSfx');
+const { MUSIC_DIR, MUSIC_ABS_DIR, slugify, musicPath } = require('../constants/clipperMusic');
+const { searchMusic, isFreeLicence } = require('../utils/clipperMusicSearch');
 
 const SOURCE_SLUG = 'cbat-guide';
 
@@ -1159,6 +1162,187 @@ router.patch('/scripts/:id/captions', async (req, res) => {
 // writer's free-text cues map onto it.
 router.get('/sfx/library', (_req, res) => {
   res.json({ status: 'success', data: { sfx: SFX, dir: SFX_DIR } });
+});
+
+// ── Music ───────────────────────────────────────────────────────────────────
+
+// GET /api/clipper/music/library — the tracks available to put under a video.
+router.get('/music/library', async (_req, res) => {
+  try {
+    const tracks = await ClipperMusic.find({}).sort({ title: 1 }).lean();
+    res.json({
+      status: 'success',
+      data: {
+        dir: MUSIC_DIR,
+        // Reported so the UI can say why a library is empty on a fresh clone,
+        // rather than looking broken.
+        writable: fs.existsSync(path.dirname(MUSIC_ABS_DIR)),
+        tracks: tracks.map(t => ({ ...t, src: musicPath(t.file) })),
+      },
+    });
+  } catch (err) { fail(res, err); }
+});
+
+// GET /api/clipper/music/search?q= — CC0 / public-domain candidates.
+router.get('/music/search', async (req, res) => {
+  try {
+    const term = String(req.query.q || '').trim();
+    if (!term) { const e = new Error('A search term is required'); e.status = 400; throw e; }
+
+    // Openverse rate-limits anonymous callers, so its refusal is a 400-class
+    // problem the admin can act on, not a 500 that reads as our fault.
+    let results;
+    try {
+      results = await searchMusic(term, { limit: 24 });
+    } catch (err) {
+      err.status = 502;
+      throw err;
+    }
+
+    // Which are already in the library, so the UI can say "added" rather than
+    // offering to import a second copy.
+    const ids = results.map(r => r.providerId);
+    const have = await ClipperMusic.find({ providerId: { $in: ids } }).select('providerId').lean();
+    const haveIds = new Set(have.map(t => t.providerId));
+
+    res.json({
+      status: 'success',
+      data: { results: results.map(r => ({ ...r, imported: haveIds.has(r.providerId) })) },
+    });
+  } catch (err) { fail(res, err); }
+});
+
+// POST /api/clipper/music/import   { candidate }
+//
+// Downloads a track into public/sounds/music/ and registers it.
+//
+// The licence is checked here as well as at search time. This is the last point
+// before a file becomes something that can end up under a published video, and
+// the request body comes from a browser — so "the search only returns CC0" is
+// not a guarantee this route may rely on.
+router.post('/music/import', async (req, res) => {
+  try {
+    const c = req.body?.candidate;
+    if (!c?.downloadUrl || !c?.title) {
+      const e = new Error('A track to import is required'); e.status = 400; throw e;
+    }
+
+    // Licence, restated from the source of truth rather than trusted from the
+    // client: a request could otherwise relabel a CC-BY track as CC0 simply by
+    // sending a different string.
+    const licence = String(c.licence || '');
+    const code = licence.split(/\s+/)[0].toLowerCase();
+    if (!isFreeLicence(code)) {
+      const e = new Error(
+        `Refusing to import "${c.title}": its licence (${licence || 'unknown'}) is not CC0 or ` +
+        'public domain. Only licences that require no attribution are imported automatically.',
+      );
+      e.status = 400; throw e;
+    }
+
+    if (!fs.existsSync(path.dirname(MUSIC_ABS_DIR))) {
+      const e = new Error(
+        'public/sounds/ is not present, so there is nowhere to put the file. Clipper imports ' +
+        'run on the workstation, against the repo.',
+      );
+      e.status = 400; throw e;
+    }
+    fs.mkdirSync(MUSIC_ABS_DIR, { recursive: true });
+
+    const ext = ['mp3', 'ogg', 'wav', 'flac', 'm4a'].includes(String(c.filetype)) ? c.filetype : 'mp3';
+    let slug = slugify(c.title);
+    // Two tracks can share a title; the slug is a filename and a key.
+    if (await ClipperMusic.exists({ slug })) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+    const file = `${slug}.${ext}`;
+
+    const download = await fetch(c.downloadUrl, { headers: { 'User-Agent': 'SkyWatch/1.0' } });
+    if (!download.ok) {
+      const e = new Error(`Could not download the track (${download.status})`); e.status = 502; throw e;
+    }
+    const bytes = Buffer.from(await download.arrayBuffer());
+    fs.writeFileSync(path.join(MUSIC_ABS_DIR, file), bytes);
+
+    const track = await ClipperMusic.create({
+      slug,
+      title: String(c.title).slice(0, 200),
+      creator: String(c.creator || '').slice(0, 120),
+      file,
+      durationMs: Number(c.durationMs) || 0,
+      bytes: bytes.length,
+      licence,
+      licenceUrl: String(c.licenceUrl || ''),
+      sourceUrl: String(c.sourceUrl || ''),
+      attribution: String(c.attribution || ''),
+      provider: 'openverse',
+      providerId: String(c.providerId || ''),
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: { track: { ...track.toObject(), src: musicPath(track.file) } },
+    });
+  } catch (err) { fail(res, err); }
+});
+
+// DELETE /api/clipper/music/:slug
+//
+// Removes the file as well as the row. A track left on disk with no entry is
+// invisible clutter that still ships in the Remotion bundle.
+router.delete('/music/:slug', async (req, res) => {
+  try {
+    const track = await ClipperMusic.findOne({ slug: req.params.slug });
+    if (!track) { const e = new Error('Track not found'); e.status = 404; throw e; }
+
+    const inUse = await ClipperScript.countDocuments({ 'music.slug': track.slug });
+    if (inUse > 0) {
+      const e = new Error(`That track is used by ${inUse} script(s). Change those first.`);
+      e.status = 409; throw e;
+    }
+
+    fs.rmSync(path.join(MUSIC_ABS_DIR, track.file), { force: true });
+    await track.deleteOne();
+    res.json({ status: 'success', data: { deleted: track.slug } });
+  } catch (err) { fail(res, err); }
+});
+
+// PATCH /api/clipper/scripts/:id/music   { slug, volume?, duckVolume?, fadeOutMs? }
+//
+// One track per video, chosen here. Levels live on the script rather than the
+// track: the same bed sits differently under a busy read than a sparse one.
+router.patch('/scripts/:id/music', async (req, res) => {
+  try {
+    const doc = await ClipperScript.findById(req.params.id);
+    if (!doc) { const e = new Error('Script not found'); e.status = 404; throw e; }
+
+    const slug = req.body?.slug;
+    if (slug === null || slug === '') {
+      doc.music = null;
+    } else if (slug !== undefined) {
+      const track = await ClipperMusic.findOne({ slug }).lean();
+      if (!track) { const e = new Error('Track not found'); e.status = 400; throw e; }
+      doc.music = {
+        ...(doc.music || {}),
+        slug: track.slug,
+        title: track.title,
+        file: track.file,
+        licence: track.licence,
+        sourceUrl: track.sourceUrl,
+        durationMs: track.durationMs,
+      };
+    }
+
+    if (doc.music) {
+      const clamp01 = (v, fallback) =>
+        (v === undefined ? fallback : Math.max(0, Math.min(1, Number(v) || 0)));
+      doc.music.volume     = clamp01(req.body?.volume, doc.music.volume ?? 0.18);
+      doc.music.duckVolume = clamp01(req.body?.duckVolume, doc.music.duckVolume ?? 0.06);
+      doc.music.fadeOutMs  = Math.max(0, Number(req.body?.fadeOutMs ?? doc.music.fadeOutMs ?? 1500));
+    }
+
+    doc.markModified('music');
+    await doc.save();
+    res.json({ status: 'success', data: { music: doc.music } });
+  } catch (err) { fail(res, err); }
 });
 
 // PATCH /api/clipper/scripts/:id/sfx   { sfx: [{ beatId, sfxId, atMs, gain, enabled }] }

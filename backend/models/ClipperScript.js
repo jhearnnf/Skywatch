@@ -80,6 +80,10 @@ const clipperScriptSchema = new mongoose.Schema({
   voice:    { type: mongoose.Schema.Types.Mixed, default: null },
   captions: { type: mongoose.Schema.Types.Mixed, default: null },
   sfx:      { type: mongoose.Schema.Types.Mixed, default: [] },
+  // One background track for the whole video: { slug, title, file, licence,
+  // sourceUrl, volume, duckVolume, fadeOutMs }. Levels live here rather than on
+  // the track because the same bed sits differently under a busy read.
+  music:    { type: mongoose.Schema.Types.Mixed, default: null },
   overlays: { type: mongoose.Schema.Types.Mixed, default: [] },
   timeline: { type: mongoose.Schema.Types.Mixed, default: null },
   renders:  { type: mongoose.Schema.Types.Mixed, default: [] },

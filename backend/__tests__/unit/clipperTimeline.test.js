@@ -228,3 +228,62 @@ describe('pathToFileUrl', () => {
     expect(pathToFileUrl('file:///C:/Temp/a.wav')).toBe('file:///C:/Temp/a.wav');
   });
 });
+
+// Background music runs the length of the video and has to get out of the way
+// of the narration. The duck windows are computed here, not in the composition,
+// for the same reason beat timing is: this is the only place that knows when
+// anyone is actually speaking.
+describe('background music', () => {
+  const withMusic = (music, over = {}) => script({
+    music: { file: 'bed.mp3', title: 'Bed', licence: 'CC0 1.0', ...music },
+    ...over,
+  });
+
+  it('is absent when no track is chosen', () => {
+    expect(buildTimeline(script()).music).toBeNull();
+    expect(buildTimeline(script({ music: {} })).music).toBeNull();
+  });
+
+  it('resolves the track under the music folder for staticFile', () => {
+    expect(buildTimeline(withMusic({})).music.src).toBe('sounds/music/bed.mp3');
+  });
+
+  it('carries the licence through to the render', () => {
+    expect(buildTimeline(withMusic({})).music.licence).toBe('CC0 1.0');
+  });
+
+  it('ducks across the beats that have narration', () => {
+    // b1 0-3000 narrated, b2 3000-7000 narrated: one merged window.
+    const m = buildTimeline(withMusic({})).music;
+    expect(m.duckWindows).toEqual([{ startMs: 0, endMs: 7000 }]);
+  });
+
+  // An end card with no voice is exactly where a track should come back up.
+  it('leaves a silent beat unducked', () => {
+    const t = buildTimeline(withMusic({}, {
+      outro: { enabled: true, copy: 'More at skywatch.academy' },
+    }));
+    const m = t.music;
+    // The outro has no narration line, so the duck stops at the end of b2.
+    expect(m.duckWindows).toEqual([{ startMs: 0, endMs: 7000 }]);
+    expect(m.totalDurationMs).toBeGreaterThan(7000);
+  });
+
+  it('does not duck at all when nothing is narrated', () => {
+    const t = buildTimeline(withMusic({}, { voice: null }));
+    expect(t.music.duckWindows).toEqual([]);
+  });
+
+  it('uses sensible levels by default and honours overrides', () => {
+    expect(buildTimeline(withMusic({})).music).toMatchObject({
+      volume: 0.18, duckVolume: 0.06, fadeOutMs: 1500,
+    });
+    expect(buildTimeline(withMusic({ volume: 0.4, duckVolume: 0, fadeOutMs: 0 })).music)
+      .toMatchObject({ volume: 0.4, duckVolume: 0, fadeOutMs: 0 });
+  });
+
+  it('reports the video length so the fade can land on the end', () => {
+    const t = buildTimeline(withMusic({}));
+    expect(t.music.totalDurationMs).toBe(t.totalDurationMs);
+  });
+});
