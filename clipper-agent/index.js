@@ -8,15 +8,20 @@
 // no browser and no scratch disk, so none of that can live server-side.
 //
 // The design is deliberately dumb: poll for a job, run it, report back. No
-// inbound ports, no webhooks, nothing to expose. That means the workstation can
+// webhooks and nothing exposed beyond loopback. That means the workstation can
 // sleep, move networks or sit behind a router with no configuration, and the
 // queue simply waits in Mongo until it comes back.
+//
+// The one listening socket is the media server (mediaServer.js), bound to
+// 127.0.0.1 so the preview player can play back screen recordings that only
+// exist on this disk.
 
 require('dotenv').config();
 
 const pkg = require('./package.json');
 const { heartbeat, claimJob, reportProgress, reportResult, BASE, AGENT } = require('./api');
 const { getHandler, handlers } = require('./handlers');
+const mediaServer = require('./mediaServer');
 const voicebox = require('./voicebox');
 
 const POLL_MS = Math.max(1, Number(process.env.CLIPPER_POLL_SECONDS) || 5) * 1000;
@@ -62,9 +67,13 @@ async function refreshVoices() {
   } catch { /* not fatal — the picker just shows what it had */ }
 }
 
+// Advertised on every heartbeat rather than stored anywhere: the port is
+// ephemeral, so a value that outlived the process would point at nothing.
+let mediaBaseUrl = null;
+
 async function beat() {
   try {
-    await heartbeat(pkg.version, cachedVoices);
+    await heartbeat(pkg.version, cachedVoices, mediaBaseUrl);
   } catch (err) {
     // A missed heartbeat only means the pill in the UI goes grey. Log it once
     // per failure and carry on — the poll loop reports connectivity anyway.
@@ -78,6 +87,18 @@ async function main() {
   log(`  agent id ${AGENT}`);
   const known = Object.keys(handlers);
   log(`  handlers ${known.length ? known.join(', ') : '(none registered yet)'}`);
+
+  // Not fatal if it cannot bind. Everything the agent actually produces still
+  // works without it; the only casualty is previewing screen recordings, and
+  // losing the whole agent over that would be a poor trade.
+  let media = null;
+  try {
+    media = await mediaServer.start();
+    mediaBaseUrl = media.baseUrl;
+    log(`  media    ${media.baseUrl} (serving ${mediaServer.ROOT})`);
+  } catch (err) {
+    log(`media server did not start (${err.message}) — screen recordings will not preview`);
+  }
 
   await refreshVoices();
   await beat();
@@ -110,6 +131,7 @@ async function main() {
 
   clearInterval(heartbeatTimer);
   clearInterval(voicesTimer);
+  await media?.close().catch(() => {});
   // Only kills a voicebox-server we spawned ourselves — see voicebox.js.
   voicebox.shutdown();
   log('stopped');

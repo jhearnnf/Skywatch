@@ -43,7 +43,25 @@ function fail(res, err) {
 // is a liveness signal with a 30-second useful life, so persisting it would
 // only let a stale value survive a restart and report an agent that is not
 // there. A fresh process correctly starts out believing the agent is offline.
-const agentPresence = { at: null, agentId: null, version: null, voices: [] };
+const agentPresence = { at: null, agentId: null, version: null, voices: [], mediaBaseUrl: null };
+
+// Where the agent is serving its own temp files, if it managed to bind a port.
+//
+// Only loopback is accepted. The value is handed to the admin's browser as a
+// media origin, and the agent is by definition on the same machine as that
+// browser, so anything else is either a misconfiguration or a way to make the
+// UI fetch from somewhere it has no business fetching from.
+function sanitiseMediaBaseUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(String(value));
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!['127.0.0.1', 'localhost', '[::1]', '::1'].includes(url.hostname)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
 
 const AGENT_ONLINE_MS = 30 * 1000;   // agent beats every 10s
 
@@ -95,9 +113,14 @@ async function applyJobResult(job) {
           provider: 'capture',
           providerId: String(job._id),
           title: job.result.label || 'Screen recording',
-          // file:// so the agent's renderer can read it. The browser preview
-          // cannot load this scheme, so a captured beat previews black until
-          // the clip is uploaded somewhere addressable.
+          // Stored as file:// because a path is the only durable identity the
+          // clip has — it lives in the agent's temp folder and nowhere else.
+          // Neither consumer can open that scheme (the browser refuses it from
+          // an http page, the Remotion renderer downloads over http/https
+          // only), so both rewrite it to the agent's media server at use time:
+          // src/utils/clipperPreview.js and clipper-agent/handlers/render.js.
+          // Rewriting here instead would bake in a port that dies with the
+          // agent.
           playbackUrl: `file:///${String(job.result.localPath).replace(/\\/g, '/')}`,
           localPath: job.result.localPath,
           durationSec: job.result.frames && job.result.fps
@@ -136,6 +159,7 @@ router.post('/agent/heartbeat', clipperAgentAuth, (req, res) => {
   agentPresence.at = Date.now();
   agentPresence.agentId = req.agentId;
   agentPresence.version = String(req.body?.version || '').slice(0, 32);
+  agentPresence.mediaBaseUrl = sanitiseMediaBaseUrl(req.body?.mediaBaseUrl);
 
   // Voice profiles are reported by the agent rather than fetched by the server:
   // Voicebox only listens on the workstation's loopback address, so a hosted
@@ -713,6 +737,9 @@ router.get('/voices', (_req, res) => {
     data: {
       voices: agentPresence.voices || [],
       online: agentIsOnline(),
+      // Only meaningful while the agent is up — the port dies with it, so
+      // reporting a stale one would have the preview retry a dead socket.
+      mediaBaseUrl: agentIsOnline() ? agentPresence.mediaBaseUrl : null,
       providers: {
         voicebox:   { available: agentIsOnline(), reason: agentIsOnline() ? null : 'agent offline' },
         elevenlabs: {
@@ -999,4 +1026,5 @@ module.exports._resetAgentPresenceForTests = () => {
   agentPresence.agentId = null;
   agentPresence.version = null;
   agentPresence.voices = [];
+  agentPresence.mediaBaseUrl = null;
 };

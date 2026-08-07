@@ -1,14 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Player } from '@remotion/player'
 import { ClipperVideo, timelineDurationInFrames, FPS, WIDTH, HEIGHT } from '../../remotion/ClipperVideo'
+import { previewTimeline, unplayableCaptureCount } from '../../utils/clipperPreview'
 
 // Stage 7 — preview and export.
 //
 // The player mounts the same ClipperVideo component the agent renders, so this
 // is a true preview rather than an approximation. Anything that looks wrong
 // here will look wrong in the MP4.
+//
+// Screen recordings are the one thing neither end can take as stored: they are
+// files on the agent's disk, and both the browser and the Remotion renderer
+// speak http only. The preview routes them through the agent's media server
+// here; the agent's render handler does the same on its side, so the stored
+// timeline stays free of a port number that dies with the agent.
 
-export default function RenderPanel({ script, timeline, job, agentOnline, onRender, onRefresh, busy }) {
+export default function RenderPanel({ script, timeline, job, agentOnline, mediaBaseUrl, onRender, onRefresh, busy }) {
   const [showJson, setShowJson] = useState(false)
 
   // Timelines are rebuilt server-side from the current stage data, so refresh
@@ -21,6 +28,9 @@ export default function RenderPanel({ script, timeline, job, agentOnline, onRend
 
   const durationInFrames = hasBeats ? timelineDurationInFrames(timeline) : FPS
 
+  const playable = useMemo(() => previewTimeline(timeline, mediaBaseUrl), [timeline, mediaBaseUrl])
+  const unreachableCaptures = unplayableCaptureCount(timeline, mediaBaseUrl)
+
   return (
     <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
       <div>
@@ -28,7 +38,7 @@ export default function RenderPanel({ script, timeline, job, agentOnline, onRend
           <div className="rounded-2xl overflow-hidden border border-slate-200 bg-black">
             <Player
               component={ClipperVideo}
-              inputProps={{ timeline }}
+              inputProps={{ timeline: playable }}
               durationInFrames={durationInFrames}
               fps={FPS}
               compositionWidth={WIDTH}
@@ -41,6 +51,14 @@ export default function RenderPanel({ script, timeline, job, agentOnline, onRend
         ) : (
           <p className="text-sm text-slate-500 py-10 text-center border border-dashed border-slate-200 rounded-2xl">
             Nothing to preview yet.
+          </p>
+        )}
+
+        {unreachableCaptures > 0 && (
+          <p className="mt-2 text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-2.5 py-1.5">
+            {unreachableCaptures} screen {unreachableCaptures === 1 ? 'recording' : 'recordings'} cannot
+            be reached - those beats show the backdrop instead of the clip. The agent serves recordings
+            to both the preview and the renderer, so start it before rendering.
           </p>
         )}
       </div>

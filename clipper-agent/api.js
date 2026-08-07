@@ -34,8 +34,8 @@ async function call(path, { method = 'GET', body } = {}) {
   return json.data;
 }
 
-const heartbeat = (version, voices) =>
-  call('/agent/heartbeat', { method: 'POST', body: { version, voices } });
+const heartbeat = (version, voices, mediaBaseUrl) =>
+  call('/agent/heartbeat', { method: 'POST', body: { version, voices, mediaBaseUrl } });
 const claimJob   = () => call('/agent/jobs');
 const reportProgress = (id, progress, stepLabel) =>
   call(`/agent/jobs/${id}/progress`, { method: 'POST', body: { progress, stepLabel } });

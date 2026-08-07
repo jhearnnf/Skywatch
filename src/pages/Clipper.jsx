@@ -62,6 +62,9 @@ export default function Clipper() {
   const [sfxLibrary,  setSfxLibrary]  = useState([])
   const [sfxDir,      setSfxDir]      = useState('sounds/sound_effects')
   const [agentOnline, setAgentOnline] = useState(false)
+  // Where the agent serves its temp files, so the preview can play screen
+  // recordings that only exist on this disk. Null when the agent is down.
+  const [mediaBaseUrl, setMediaBaseUrl] = useState(null)
   const [activeJob,   setActiveJob]   = useState(null)
   const [refreshingVoices, setRefreshingVoices] = useState(false)
   const [timeline,    setTimeline]    = useState(null)
@@ -335,6 +338,7 @@ export default function Clipper() {
       .then(d => {
         setVoices(d.voices)
         setAgentOnline(d.online)
+        setMediaBaseUrl(d.mediaBaseUrl ?? null)
         setVoiceProviders(d.providers ?? {})
       })
       .catch(() => {})
@@ -546,6 +550,7 @@ export default function Clipper() {
               timeline={timeline}
               job={activeJob?.type === 'render' ? activeJob : null}
               agentOnline={agentOnline}
+              mediaBaseUrl={mediaBaseUrl}
               onRender={handleRender}
               onRefresh={loadTimeline}
               busy={busy}

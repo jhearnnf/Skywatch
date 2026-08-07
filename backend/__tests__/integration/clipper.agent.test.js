@@ -309,3 +309,54 @@ describe('agent status', () => {
     expect(res.body.data.queue.failed).toBe(1);
   });
 });
+
+// Screen recordings live only on the agent's disk. The preview player can play
+// them only if the agent is serving them, so the base URL it reports has to
+// reach the UI — and has to disappear the moment the agent does.
+describe('agent media server', () => {
+  const heartbeat = (body) => request(app)
+    .post('/api/clipper/agent/heartbeat').set('Authorization', AGENT).send(body).expect(200);
+
+  const voices = () => request(app)
+    .get('/api/clipper/voices').set('Cookie', adminCookie).expect(200);
+
+  it('passes a loopback media URL through to the UI', async () => {
+    await heartbeat({ version: '0.1.0', mediaBaseUrl: 'http://127.0.0.1:52341' });
+    expect((await voices()).body.data.mediaBaseUrl).toBe('http://127.0.0.1:52341');
+  });
+
+  it('normalises the URL down to its origin', async () => {
+    await heartbeat({ mediaBaseUrl: 'http://localhost:9001/file?path=x' });
+    expect((await voices()).body.data.mediaBaseUrl).toBe('http://localhost:9001');
+  });
+
+  it('rejects a non-loopback host', async () => {
+    await heartbeat({ mediaBaseUrl: 'http://evil.example.com:8080' });
+    expect((await voices()).body.data.mediaBaseUrl).toBeNull();
+  });
+
+  it('rejects a non-http scheme', async () => {
+    await heartbeat({ mediaBaseUrl: 'file:///C:/Users/James/AppData/Local/Temp' });
+    expect((await voices()).body.data.mediaBaseUrl).toBeNull();
+  });
+
+  it('reports nothing when the agent could not bind a port', async () => {
+    await heartbeat({ version: '0.1.0' });
+    expect((await voices()).body.data.mediaBaseUrl).toBeNull();
+  });
+
+  // A port dies with the process that opened it, so serving a remembered one
+  // would have the preview retry a socket that is no longer there.
+  it('drops the URL once the agent goes offline', async () => {
+    await heartbeat({ mediaBaseUrl: 'http://127.0.0.1:52341' });
+
+    // Past the 30s liveness window, without waiting 30 seconds for it.
+    const later = Date.now() + 31 * 1000;
+    jest.spyOn(Date, 'now').mockReturnValue(later);
+    const res = await voices();
+    Date.now.mockRestore();
+
+    expect(res.body.data.online).toBe(false);
+    expect(res.body.data.mediaBaseUrl).toBeNull();
+  });
+});
