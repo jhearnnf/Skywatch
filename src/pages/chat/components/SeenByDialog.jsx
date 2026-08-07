@@ -54,7 +54,9 @@ export default function SeenByDialog({ message, onClose }) {
             <p className="text-sm text-red-600 py-4 text-center">{err}</p>
           ) : readers.length === 0 ? (
             <p className="text-sm text-slate-400 py-4 text-center">
-              Nobody has opened this channel since you posted.
+              {/* Neutral wording: an admin can open this on anyone's message,
+                  where "since you posted" would be wrong. */}
+              Nobody has opened this conversation since it was sent.
             </p>
           ) : (
             <ul className="divide-y divide-slate-200">

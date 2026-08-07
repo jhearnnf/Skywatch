@@ -207,11 +207,37 @@ describe('MessageList — seen by', () => {
     expect(screen.queryByTitle('Seen by')).toBeNull()
   })
 
-  it('does not offer it on a removed message', () => {
-    renderList([mine('gone', { deleted: true })], { onSeenBy: vi.fn(), viewerIsAdmin: true })
+  it('does not offer it to a user on a removed message', () => {
+    renderList([mine('gone', { deleted: true })], { onSeenBy: vi.fn() })
     expect(screen.queryByTitle('Seen by')).toBeNull()
   })
 
+  it('offers it to an admin on anyone\'s message', () => {
+    // Moderation needs "who saw this", not just "who saw mine".
+    const onSeenBy = vi.fn()
+    renderList([msg('u1', 'theirs')], { onSeenBy, viewerIsAdmin: true })
+    fireEvent.click(screen.getByTitle('Seen by'))
+    expect(onSeenBy).toHaveBeenCalledWith(expect.objectContaining({ body: 'theirs' }))
+  })
+
+  it('offers it to an admin on a message they removed', () => {
+    // "Who saw this before I took it down" is the question that matters after
+    // a removal, and the endpoint serves admins the deleted rows.
+    renderList([msg('u1', 'gone', { deleted: true })], { onSeenBy: vi.fn(), viewerIsAdmin: true })
+    expect(screen.getByTitle('Seen by')).toBeTruthy()
+  })
+
+  it('withholds it from a user in support, but not from an admin', () => {
+    // Support collapses every admin into one identity for the user, so the
+    // list there would hand them a roster of staff. An admin already sees who
+    // replied, so the concern does not apply.
+    renderList([mine('help')], { onSeenBy: vi.fn(), conversationType: 'support' })
+    expect(screen.queryByTitle('Seen by')).toBeNull()
+
+    cleanup()
+    renderList([mine('help')], { onSeenBy: vi.fn(), conversationType: 'support', viewerIsAdmin: true })
+    expect(screen.getByTitle('Seen by')).toBeTruthy()
+  })
 })
 
 describe('MessageList — edited messages', () => {

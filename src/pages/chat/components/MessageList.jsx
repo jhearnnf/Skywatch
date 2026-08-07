@@ -259,7 +259,11 @@ function MessageRow({
   const canDelete   = Boolean(onDelete)   && viewerIsAdmin && !m.deleted
   const canEdit     = Boolean(onEdit)     && viewerIsAdmin && !m.deleted
   const canReply    = Boolean(onReply)    && !m.deleted
-  const canSeenBy   = Boolean(onSeenBy)   && mine && !m.deleted
+  // Admins can inspect any message, including one they removed — "who saw this
+  // before I took it down" is a moderation question, and the endpoint already
+  // serves them the deleted ones. Everyone else gets it on their own live
+  // messages only.
+  const canSeenBy   = Boolean(onSeenBy)   && (viewerIsAdmin || (mine && !m.deleted))
 
   // Inline edit, admin only. Kept local to the row rather than lifted, so
   // typing a correction does not re-render the whole thread on every keystroke.
@@ -511,9 +515,10 @@ export default function MessageList({
             onEdit={onEdit}
             onReply={onReply}
             onReact={onReact}
-            // Support collapses every admin into one identity, so "who has read
-            // this" there would be a list of staff — not something to publish.
-            onSeenBy={conversationType === 'support' ? undefined : onSeenBy}
+            // Support collapses every admin into one identity for the user, so
+            // "who has read this" there would hand them a list of staff. An
+            // admin already sees who replied, so the concern does not apply.
+            onSeenBy={conversationType === 'support' && !viewerIsAdmin ? undefined : onSeenBy}
             onJump={jumpTo}
             highlighted={String(highlightId) === String(m._id)}
           />

@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
 import MessageList from './components/MessageList'
 import ComposeBox from './components/ComposeBox'
+import SeenByDialog from './components/SeenByDialog'
 import { agentLabel, formatTime } from './format'
 
 const POLL_MESSAGES_MS = 10_000
@@ -34,6 +35,10 @@ export default function AdminChatView() {
   const [senders,       setSenders]       = useState({})
   const [busy,          setBusy]          = useState(false)
   const [err,           setErr]           = useState('')
+  // Which message's readership is open, if any. Admins can inspect any
+  // message here, not only their own — see the seen-by route in
+  // backend/routes/chat.js.
+  const [seenByMsg,     setSeenByMsg]     = useState(null)
   // Guards against React 18 StrictMode double-invoking the initialUserId effect
   // and creating two conversations before the first POST lands.
   const resolvedInitialRef = useRef(null)
@@ -426,6 +431,7 @@ export default function AdminChatView() {
               senders={senders}
               onDelete={handleDelete}
               onEdit={handleEdit}
+              onSeenBy={setSeenByMsg}
               emptyLabel="No messages in this conversation."
             />
 
@@ -451,6 +457,14 @@ export default function AdminChatView() {
           </>
         )}
       </div>
+
+      {seenByMsg && (
+        <SeenByDialog
+          key={seenByMsg._id}
+          message={seenByMsg}
+          onClose={() => setSeenByMsg(null)}
+        />
+      )}
     </div>
   )
 }
