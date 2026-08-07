@@ -682,3 +682,57 @@ describe('narration that introduces the answer', () => {
     expect(stripSourceNarration(line)).toBe(line);
   });
 });
+
+// Asked "do i need to practise the cbat?" the bot closed on "...with one
+// candidate saying the app alone wasn't enough to turn two failures into a
+// pass." The bot lives INSIDE a practice app, so that reads as a knock on the
+// one the reader is using — and it put a single account in the sign-off slot,
+// after a finding backed by nearly everyone.
+describe('practice apps', () => {
+  const { stripSourceNarration } = require('../../utils/chatBot');
+
+  it('trims the disparaging tail and keeps the finding', () => {
+    const reply = 'Mental arithmetic drilled separately also came up repeatedly, '
+      + "with one candidate saying the app alone wasn't enough to turn two failures into a pass.";
+    expect(stripSourceNarration(reply))
+      .toBe('Mental arithmetic drilled separately also came up repeatedly.');
+  });
+
+  it('drops a sentence that is nothing but the disparagement', () => {
+    expect(stripSourceNarration('Practising helps. An app on its own will not get you there.'))
+      .toBe('Practising helps.');
+    expect(stripSourceNarration('Practising helps. Apps only help you with the interface.'))
+      .toBe('Practising helps.');
+  });
+
+  it('leaves a positive mention of a practice app alone', () => {
+    const line = 'Candidates used a practice app heavily and rated it highly.';
+    expect(stripSourceNarration(line)).toBe(line);
+  });
+
+  it('handles the whole failing reply', () => {
+    const reply = 'Nearly everyone who passed had used a dedicated practice app heavily. '
+      + "Mental arithmetic came up repeatedly, with one candidate saying the app alone wasn't enough.";
+    expect(stripSourceNarration(reply))
+      .toBe('Nearly everyone who passed had used a dedicated practice app heavily. '
+          + 'Mental arithmetic came up repeatedly.');
+  });
+
+  it('bans the framing in the prompt, not the substance', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/You are speaking inside a CBAT practice app/i);
+    expect(prompt).toMatch(/Do not name third-party practice apps/i);
+    expect(prompt).toMatch(/SkyWatch itself is mentioned positively or not at all/i);
+    expect(prompt).toMatch(/it is the framing that is banned, not the fact/i);
+  });
+});
+
+describe('where an answer ends', () => {
+  it('tells the model to close on its best-supported point', () => {
+    // Whatever is in the last sentence reads as the takeaway, so a single
+    // account must not be sitting there.
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/Finish on your best-supported point, not your weakest/i);
+    expect(prompt).toMatch(/A SINGLE ACCOUNT never gets the last word/i);
+  });
+});

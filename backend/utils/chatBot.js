@@ -130,6 +130,16 @@ HOUSE RULES
 - Never state or imply that SkyWatch helps people apply to the RAF. Keep any such reference general.
 - No political commentary.
 
+PRACTICE APPS
+- You are speaking inside a CBAT practice app. Never say anything that reads as a practice app falling short: not "the app alone wasn't enough", not "an app on its own won't get you there", not "apps only help with X". A reader takes that as being about the one they are using.
+- Do not name third-party practice apps or rank them against each other. Say "practising the formats" or "a practice app" and leave it there.
+- SkyWatch itself is mentioned positively or not at all. If you have nothing good to say about it, say nothing about it.
+- The substance behind those caveats is still worth giving - it is the framing that is banned, not the fact. "Drilling mental arithmetic separately came up as often as practising the formats" says the useful thing without running anything down.
+
+WHERE TO END
+- Finish on your best-supported point, not your weakest. Whatever is in the last sentence reads as the takeaway.
+- A SINGLE ACCOUNT never gets the last word. Put it mid-answer, as a clause, and close on what several people reported.
+
 STYLE
 - Be brief by default: two or three sentences, under 60 words. This is a chat channel, not a briefing document.
 - Go longer ONLY when the user asks for more - "tell me more", "what are they", "break that down", a follow-up on one specific test. Then you may use up to 120 words and a short dashed list.
@@ -159,6 +169,8 @@ const LEAK_MARKERS = [
   'CARRY THE CONFIDENCE THROUGH',
   'WHICH CBAT',
   'HOUSE RULES',
+  'PRACTICE APPS',
+  'WHERE TO END',
 ];
 
 function looksLikeLeak(text) {
@@ -262,6 +274,40 @@ function trimLeadIn(sentence) {
   return sentence;
 }
 
+// "The app alone wasn't enough."
+//
+// The bot is speaking INSIDE a practice app, so any line about a practice app
+// falling short reads as being about the one the reader is using. The guide
+// really does carry that caveat and the substance behind it is fair — it is the
+// framing that has to go, not the fact.
+//
+// Trimmed as a trailing clause first, because it usually arrives bolted onto a
+// sentence that is otherwise worth keeping: "Mental arithmetic came up
+// repeatedly, with one candidate saying the app alone wasn't enough" is a good
+// finding with a bad tail. Only a sentence that is nothing BUT the disparagement
+// gets deleted outright.
+const APP_DISPARAGEMENT = [
+  /\bapps?\b[^.!?]{0,40}\b(alone|on (its|their) own|by (itself|themselves))\b/i,
+  /\b(alone|on (its|their) own)\b[^.!?]{0,20}\bwas(n'?t| not) enough\b/i,
+  /\bapps?\b[^.!?]{0,30}\b(only|just) (help|helps|helped|get|gets|got) you\b/i,
+  /\bapps?\b[^.!?]{0,30}\b(won'?t|will not|can'?t|cannot) (get|take) you\b/i,
+];
+
+const disparagesApps = (s) => APP_DISPARAGEMENT.some(re => re.test(s));
+
+// Drop a trailing subordinate clause when it is the disparaging part. Returns
+// the sentence unchanged when the problem is not confined to a tail.
+function trimAppDisparagement(sentence) {
+  if (!disparagesApps(sentence)) return sentence;
+
+  const m = sentence.match(/^(.*?),\s*(?:with|and|though|although|but)\b/i);
+  if (m && m[1].trim() && !disparagesApps(m[1])) {
+    const punct = sentence.match(/[.!?]\s*$/);
+    return m[1].trim() + (punct ? punct[0] : '. ');
+  }
+  return sentence;   // whole sentence is the problem; the filter drops it
+}
+
 function stripSourceNarration(text) {
   const lines = String(text ?? '').split('\n');
   const kept = lines.map(line => {
@@ -269,10 +315,12 @@ function stripSourceNarration(text) {
     // Keep the delimiter with each sentence so spacing and punctuation survive.
     const sentences = line.match(/[^.!?]+[.!?]*\s*/g) ?? [line];
     return sentences
-      // Trim lead-ins BEFORE testing, so a sentence whose only narration was
-      // its opening phrase is kept rather than deleted whole.
+      // Trim lead-ins and disparaging tails BEFORE testing, so a sentence whose
+      // only problem was an opening phrase or a trailing clause is kept rather
+      // than deleted whole.
       .map(trimLeadIn)
-      .filter(s => !NARRATION_PATTERNS.some(re => re.test(s)))
+      .map(trimAppDisparagement)
+      .filter(s => !NARRATION_PATTERNS.some(re => re.test(s)) && !disparagesApps(s))
       .join('')
       .trim();
   });
