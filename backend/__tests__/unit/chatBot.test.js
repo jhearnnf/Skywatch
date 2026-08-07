@@ -140,6 +140,21 @@ describe('source narration', () => {
     expect(prompt).toMatch(/if the user explicitly asks where something comes from/i);
   });
 
+  it('names the provenance so the bot never pleads ignorance about it', () => {
+    // Asked "based on reddit?" the bot used to say it did not know where the
+    // accounts came from, which is both wrong and makes the material look
+    // untraceable. It has an answer, so the prompt gives it the answer.
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/Reddit and other forums/i);
+    expect(prompt).toMatch(/sent in directly by SkyWatch users/i);
+    expect(prompt).toMatch(/Never say you do not know/i);
+  });
+
+  it('keeps Discord out of the provenance answer', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/Do not name Discord/i);
+  });
+
   it('has no refusal that narrates a source to a normal user', () => {
     // noGuide is the deliberate exception: it is an operational message telling
     // an admin what to upload and where.
