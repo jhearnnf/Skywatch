@@ -5,7 +5,9 @@
  * the captions cannot disagree. Everything here is about that guarantee.
  */
 
-const { buildTimeline, buildCaptionPages, MIN_BEAT_MS } = require('../../utils/clipperTimeline');
+const {
+  buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, MIN_BEAT_MS,
+} = require('../../utils/clipperTimeline');
 
 const script = (over = {}) => ({
   script: {
@@ -44,6 +46,52 @@ describe('buildTimeline', () => {
     expect(t.beats[0].videoUrl).toBe('a.mp4');
     expect(t.beats[0].trimInMs).toBe(500);
     expect(t.beats[1].videoUrl).toBeNull();
+  });
+
+  // A trim is an offset into one clip for one beat length, and both can move
+  // under it — re-record the beat and the clip gets shorter, re-record the
+  // voice and the window gets longer. A stale offset seeks past the end and
+  // renders a frozen frame, which is the failure trimming exists to avoid.
+  it('pulls a trim back when it would seek past the end of the clip', () => {
+    const t = buildTimeline(script({
+      footage: { b1: { chosen: { downloadUrl: 'a.mp4', durationSec: 4 }, trim: { inMs: 3500 } } },
+    }));
+    // 4s clip, 3s beat, so the latest usable start is 1s.
+    expect(t.beats[0].trimInMs).toBe(1000);
+  });
+
+  it('pins to the start when the clip is shorter than the beat', () => {
+    const t = buildTimeline(script({
+      footage: { b1: { chosen: { downloadUrl: 'a.mp4', durationSec: 2 }, trim: { inMs: 1500 } } },
+    }));
+    expect(t.beats[0].trimInMs).toBe(0);
+  });
+
+  it('leaves the trim alone when the clip length is unknown', () => {
+    const t = buildTimeline(script({
+      footage: { b1: { chosen: { downloadUrl: 'a.mp4' }, trim: { inMs: 9000 } } },
+    }));
+    expect(t.beats[0].trimInMs).toBe(9000);
+  });
+});
+
+describe('clampTrimIn', () => {
+  it('keeps an in-point that leaves room for the beat', () => {
+    expect(clampTrimIn(2000, 10, 3000)).toBe(2000);
+  });
+
+  it('clamps to clip length minus beat length', () => {
+    expect(clampTrimIn(9000, 10, 3000)).toBe(7000);
+  });
+
+  it('treats a missing or zero clip length as unknown, not as empty', () => {
+    expect(clampTrimIn(5000, null, 3000)).toBe(5000);
+    expect(clampTrimIn(5000, 0, 3000)).toBe(5000);
+  });
+
+  it('never returns a negative offset', () => {
+    expect(clampTrimIn(-100, 10, 3000)).toBe(0);
+    expect(clampTrimIn(1000, 1, 3000)).toBe(0);
   });
 
   it('falls back to the script overlay when none was hand-edited', () => {

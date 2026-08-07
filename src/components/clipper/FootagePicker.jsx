@@ -1,10 +1,19 @@
 import { useState } from 'react'
+import TrimScrubber from './TrimScrubber'
+import { toPreviewUrl } from '../../utils/clipperPreview'
+import { beatWindow } from '../../utils/clipperTrim'
 
-// Stage 2 — pick the filler clip that plays under each spoken beat.
+// Stage 2 — pick the filler clip that plays under each spoken beat, and choose
+// which part of it plays.
 //
 // Candidates are shown per beat rather than in one big grid: a clip is only
 // good or bad relative to the line being spoken over it, so the script text
 // stays on screen next to the choices.
+//
+// Picking a clip is only half the job. A beat is a couple of seconds long and
+// takes those seconds from the start of the clip unless told otherwise, which
+// is how a screen recording contributed nothing but its loading spinner. The
+// trim scrubber under each chosen clip is where that gets fixed.
 
 const PROVIDER_STYLE = {
   dvids:   'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -42,7 +51,33 @@ function Candidate({ clip, chosen, onChoose }) {
   )
 }
 
-function BeatRow({ beat, index, entry, onSearch, onChoose, onCapture, job, agentOnline, busy }) {
+// The trim control for whichever clip this beat ended up with. Shared by the
+// stock and capture branches — where the footage came from makes no difference
+// to which part of it you want.
+function BeatTrim({ beat, chosen, trim, window: win, mediaBaseUrl, onTrim }) {
+  const src = toPreviewUrl(chosen.playbackUrl || chosen.downloadUrl || null, mediaBaseUrl)
+
+  return (
+    <div className="pt-2 border-t border-slate-200">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+        Trim &mdash; which {(win.ms / 1000).toFixed(1)}s of this clip plays
+      </p>
+      <TrimScrubber
+        src={src}
+        clipDurationMs={chosen.durationSec ? chosen.durationSec * 1000 : null}
+        windowMs={win.ms}
+        estimated={win.estimated}
+        inMs={Number(trim?.inMs) || 0}
+        onChange={inMs => onTrim(beat.id, inMs)}
+        emptyMessage={chosen.provider === 'capture'
+          ? 'Start the agent to preview and trim this recording - it serves the file.'
+          : 'This provider gives no direct video file, so the clip cannot be previewed or trimmed here.'}
+      />
+    </div>
+  )
+}
+
+function BeatRow({ beat, index, entry, window: win, mediaBaseUrl, onSearch, onChoose, onCapture, onTrim, job, agentOnline, busy }) {
   // A job only belongs to this row if it is a capture for this beat.
   const mine = job?.type === 'capture' && job.payload?.beatId === beat.id ? job : null
   const captureJob = mine && (mine.status === 'queued' || mine.status === 'claimed') ? mine : null
@@ -111,6 +146,13 @@ function BeatRow({ beat, index, entry, onSearch, onChoose, onCapture, job, agent
               Recording failed: {failedJob.error}
             </p>
           )}
+
+          {chosen && !captureJob && (
+            <BeatTrim
+              beat={beat} chosen={chosen} trim={entry?.trim} window={win}
+              mediaBaseUrl={mediaBaseUrl} onTrim={onTrim}
+            />
+          )}
         </div>
       ) : (
         <>
@@ -147,13 +189,20 @@ function BeatRow({ beat, index, entry, onSearch, onChoose, onCapture, job, agent
               {entry?.searchedAt ? 'No clips found for those terms.' : 'Not searched yet.'}
             </p>
           )}
+
+          {chosen && (
+            <BeatTrim
+              beat={beat} chosen={chosen} trim={entry?.trim} window={win}
+              mediaBaseUrl={mediaBaseUrl} onTrim={onTrim}
+            />
+          )}
         </>
       )}
     </div>
   )
 }
 
-export default function FootagePicker({ script, footage, providers, job, agentOnline, onSearchAll, onSearch, onChoose, onCapture, onApprove, busy }) {
+export default function FootagePicker({ script, footage, providers, job, agentOnline, mediaBaseUrl, onSearchAll, onSearch, onChoose, onCapture, onTrim, onApprove, busy }) {
   const beats = script?.script?.beats ?? []
 
   if (beats.length === 0) {
@@ -214,9 +263,12 @@ export default function FootagePicker({ script, footage, providers, job, agentOn
             beat={b}
             index={i}
             entry={footage?.[b.id]}
+            window={beatWindow(script, b.id)}
+            mediaBaseUrl={mediaBaseUrl}
             onSearch={onSearch}
             onChoose={onChoose}
             onCapture={onCapture}
+            onTrim={onTrim}
             job={job}
             agentOnline={agentOnline}
             busy={busy}

@@ -135,6 +135,65 @@ describe('footage search', () => {
     expect(res.body.data.footage.b1.chosen).toBeNull();
   });
 
+  // The trim scrubber sends inMs on its own while you drag it.
+  describe('trim', () => {
+    const clip = { provider: 'dvids', providerId: 'video:1', licence: 'PD' };
+    const patch = (id, body) => request(app)
+      .patch(`/api/clipper/scripts/${id}/footage`)
+      .set('Cookie', adminCookie).send({ beatId: 'b1', ...body });
+
+    it('saves an in-point without disturbing the chosen clip', async () => {
+      const doc = await makeScript();
+      await patch(doc._id, { chosen: clip }).expect(200);
+
+      const res = await patch(doc._id, { trim: { inMs: 2400 } }).expect(200);
+      expect(res.body.data.footage.b1.trim.inMs).toBe(2400);
+      expect(res.body.data.footage.b1.chosen.providerId).toBe('video:1');
+    });
+
+    it('merges rather than replacing, so one field does not zero the other', async () => {
+      const doc = await makeScript();
+      await patch(doc._id, { chosen: clip, trim: { inMs: 1000, outMs: 5000 } }).expect(200);
+
+      const res = await patch(doc._id, { trim: { inMs: 2000 } }).expect(200);
+      expect(res.body.data.footage.b1.trim).toEqual({ inMs: 2000, outMs: 5000 });
+    });
+
+    it('refuses a negative in-point', async () => {
+      const doc = await makeScript();
+      const res = await patch(doc._id, { trim: { inMs: -500 } }).expect(200);
+      expect(res.body.data.footage.b1.trim.inMs).toBe(0);
+    });
+
+    // An offset into a 30s stock clip is meaningless once a 6s recording takes
+    // its place, and would seek past the end of it.
+    it('drops the trim when a different clip is chosen', async () => {
+      const doc = await makeScript();
+      await patch(doc._id, { chosen: clip, trim: { inMs: 4000 } }).expect(200);
+
+      const res = await patch(doc._id, {
+        chosen: { provider: 'pexels', providerId: '99', licence: 'Pexels' },
+      }).expect(200);
+      expect(res.body.data.footage.b1.trim).toBeUndefined();
+    });
+
+    it('drops the trim when the pick is cleared', async () => {
+      const doc = await makeScript();
+      await patch(doc._id, { chosen: clip, trim: { inMs: 4000 } }).expect(200);
+
+      const res = await patch(doc._id, { chosen: null }).expect(200);
+      expect(res.body.data.footage.b1.trim).toBeUndefined();
+    });
+
+    it('keeps the trim when the same clip is re-sent', async () => {
+      const doc = await makeScript();
+      await patch(doc._id, { chosen: clip, trim: { inMs: 4000 } }).expect(200);
+
+      const res = await patch(doc._id, { chosen: clip }).expect(200);
+      expect(res.body.data.footage.b1.trim.inMs).toBe(4000);
+    });
+  });
+
   it('marks an approved footage stage stale when the search is rerun', async () => {
     mockProviders();
     const doc = await makeScript();

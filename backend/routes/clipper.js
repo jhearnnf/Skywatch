@@ -934,8 +934,27 @@ router.patch('/scripts/:id/footage', async (req, res) => {
     const footage = { ...(doc.footage || {}) };
     const entry = { ...(footage[beatId] || {}) };
 
-    if (chosen !== undefined) entry.chosen = chosen;   // null clears the pick
-    if (trim) entry.trim = { inMs: Number(trim.inMs) || 0, outMs: Number(trim.outMs) || 0 };
+    if (chosen !== undefined) {
+      // A trim is an offset into one specific clip, so it cannot survive being
+      // pointed at a different one — 4s into a 30s stock clip is past the end
+      // of the 6s recording that replaced it.
+      const before = entry.chosen;
+      const changed = !before || !chosen
+        || before.provider !== chosen.provider || before.providerId !== chosen.providerId;
+      if (changed) delete entry.trim;
+
+      entry.chosen = chosen;   // null clears the pick
+    }
+
+    // Merge rather than replace. The scrubber sends inMs alone, and rebuilding
+    // the whole object from one field silently zeroed the other.
+    if (trim) {
+      const keep = entry.trim || {};
+      entry.trim = {
+        inMs:  trim.inMs  === undefined ? (Number(keep.inMs)  || 0) : Math.max(0, Number(trim.inMs)  || 0),
+        outMs: trim.outMs === undefined ? (Number(keep.outMs) || 0) : Math.max(0, Number(trim.outMs) || 0),
+      };
+    }
     footage[beatId] = entry;
 
     doc.footage = footage;

@@ -45,6 +45,41 @@ function buildCaptionPages(words, { maxWords = 4, maxGapMs = 700 } = {}) {
   return pages;
 }
 
+// A local path as a file: URL, matching how chosen screen recordings are
+// stored (see the note in routes/clipper.js where playbackUrl is written).
+//
+// The voice stage records only `wavPath`, because the agent's job is to put a
+// file on disk. Nothing ever turned that into something playable, so
+// `line.audioUrl` was always undefined and every beat rendered silent — in the
+// preview and in the MP4 alike. Deriving it here rather than in the agent fixes
+// scripts that were already narrated, which would otherwise have to be
+// regenerated to gain a voice track.
+function pathToFileUrl(localPath) {
+  if (!localPath) return null;
+  const normalised = String(localPath).replace(/\\/g, '/');
+  return normalised.startsWith('file:') ? normalised : `file:///${normalised.replace(/^\/+/, '')}`;
+}
+
+// Keep a trim in-point inside its clip.
+//
+// The in-point is stored against a clip and the beat's length is set by the
+// narration, so either can move under it: re-recording a beat shortens the
+// clip, re-recording the voice lengthens the window. Left alone, a stale
+// offset seeks past the end and the beat renders as a frozen last frame — the
+// same silent nothing the trim was added to prevent.
+//
+// Clamping to the same rule the scrubber enforces (start no later than
+// clipLength - beatLength) also keeps preview and render honest with each
+// other. A clip whose length we do not know is left alone; guessing would be
+// worse than trusting what was set.
+function clampTrimIn(inMs, clipDurationSec, beatDurationMs) {
+  const wanted = Math.max(0, Number(inMs) || 0);
+  if (!clipDurationSec) return wanted;
+
+  const latestStart = Math.max(0, clipDurationSec * 1000 - beatDurationMs);
+  return Math.min(wanted, Math.round(latestStart));
+}
+
 function buildTimeline(script) {
   const beats = script?.script?.beats ?? [];
   const footage = script?.footage ?? {};
@@ -98,13 +133,15 @@ function buildTimeline(script) {
         endMs:   Math.max(0, w.endMs   - (line?.startMs ?? 0)),
       }));
 
+    const durationMs = Math.max(MIN_BEAT_MS, line?.durationMs ?? 0) || MIN_BEAT_MS;
+
     out.push({
       id: beat.id,
       text: beat.text,
-      durationMs: Math.max(MIN_BEAT_MS, line?.durationMs ?? 0) || MIN_BEAT_MS,
+      durationMs,
       videoUrl: chosen?.playbackUrl || chosen?.downloadUrl || null,
-      trimInMs: Number(trim.inMs) || 0,
-      audioUrl: line?.audioUrl || null,
+      trimInMs: clampTrimIn(trim.inMs, chosen?.durationSec, durationMs),
+      audioUrl: line?.audioUrl || pathToFileUrl(line?.wavPath),
       overlay,
       sfx: sfxFor(beat),
       captionPages: beatWords.length ? buildCaptionPages(beatWords) : [],
