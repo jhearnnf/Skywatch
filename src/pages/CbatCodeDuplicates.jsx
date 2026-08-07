@@ -8,6 +8,7 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
@@ -132,6 +133,12 @@ export default function CbatCodeDuplicates() {
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
 
+  // Set by the admin round jump (?round=N). The rounds before the jump were
+  // never played, so the run is not a result — it must not reach the
+  // leaderboard. Mirrors cheatUsed in DPT and debugUsed in ACT.
+  const [debugUsed, setDebugUsed] = useState(false)
+  const debugUsedRef = useRef(false)
+
   const tierLabel = round <= 5 ? 'Easy' : round <= 10 ? 'Medium' : 'Hard'
 
   // Fetch personal best
@@ -154,6 +161,12 @@ export default function CbatCodeDuplicates() {
 
     setScoreSaved(false)
     setQueued(false)
+
+    // A jumped run skipped rounds it is still scored out of, so submitting it
+    // would put a meaningless number on the leaderboard. Read from the ref:
+    // this runs from a timer whose closure predates the flag being set.
+    if (debugUsedRef.current) return
+
     markGameCompleted({ score: correct })
     submitCbatResult(`code-duplicates`, {
         correctCount: correct,
@@ -242,8 +255,22 @@ export default function CbatCodeDuplicates() {
     startTracking('code-duplicates')
     setRoundResults([])
     setElapsed(0)
+    setDebugUsed(false)
+    debugUsedRef.current = false
     startRound(1)
-  }, [startRound, apiFetch, API])
+  }, [startRound, apiFetch, API, setDebugUsed])
+
+  // ?round=N — start on a later, harder sequence instead of playing through
+  // the five easy ones. See utils/cbat/adminRoundParam.js.
+  useAdminRoundParam({
+    totalRounds: TOTAL_ROUNDS,
+    ready: phase === 'displaying' || phase === 'answering',
+    onJump: (roundNum) => {
+      setDebugUsed(true)
+      debugUsedRef.current = true
+      startRound(roundNum)
+    },
+  })
 
   const goToIntro = useCallback(() => {
     clearTimeout(displayTimerRef.current)
@@ -389,6 +416,10 @@ export default function CbatCodeDuplicates() {
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-300">{round}</span>/{TOTAL_ROUNDS}
+                  {/* Same badge as DPT and ACT: an admin who jumped a round
+                      needs to see that the run will not be submitted, rather
+                      than find out from a leaderboard that never moved. */}
+                  {debugUsed && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
                 </span>
                 <span className="text-slate-400">
                   <span className="text-brand-300">{tierLabel}</span>

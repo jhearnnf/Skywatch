@@ -9,6 +9,7 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
@@ -335,6 +336,12 @@ export default function CbatSymbols() {
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
 
+  // Set by the admin round jump (?round=N). The skipped rounds still count
+  // toward the score's denominator, so the result is meaningless and must not
+  // reach the leaderboard. Mirrors cheatUsed in DPT and debugUsed in ACT.
+  const [debugUsed, setDebugUsed] = useState(false)
+  const debugUsedRef = useRef(false)
+
   // Fetch personal best
   useEffect(() => {
     if (!user) return
@@ -355,6 +362,11 @@ export default function CbatSymbols() {
 
     setScoreSaved(false)
     setQueued(false)
+
+    // Read from the ref: this is reached from an advance timeout whose closure
+    // predates the flag being set.
+    if (debugUsedRef.current) return
+
     markGameCompleted({ score: correct })
     submitCbatResult(`symbols`, {
         correctCount: correct,
@@ -417,10 +429,28 @@ export default function CbatSymbols() {
     setWasCorrect(null)
     setLastRoundTime(0)
     setElapsed(0)
+    setDebugUsed(false)
+    debugUsedRef.current = false
     startTimeRef.current = Date.now()
     roundStartRef.current = 0
     setPhase('playing')
-  }, [apiFetch, API])
+  }, [apiFetch, API, setDebugUsed])
+
+  // ?round=N — open on a harder tier instead of playing up to it. Moving the
+  // cursor is the whole jump here: the rounds are pre-built, so round N is
+  // already sitting in the array waiting. See utils/cbat/adminRoundParam.js.
+  useAdminRoundParam({
+    totalRounds: TOTAL_ROUNDS,
+    ready: phase === 'playing' && rounds.length > 0,
+    onJump: (roundNum) => {
+      setDebugUsed(true)
+      debugUsedRef.current = true
+      setCurrentIdx(roundNum - 1)
+      setPickedSymbol(null)
+      setWasCorrect(null)
+      roundStartRef.current = readElapsed()
+    },
+  })
 
   // Fast restart — abandons whatever is on screen and runs the countdown first.
   // Deliberately not confirmed: the point of the button is to be instant.
@@ -623,6 +653,10 @@ export default function CbatSymbols() {
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-300">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
+                  {/* Same badge as DPT and ACT: an admin who jumped a round
+                      needs to see that the run will not be submitted, rather
+                      than find out from a leaderboard that never moved. */}
+                  {debugUsed && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
                 </span>
                 <span className="text-slate-400">
                   Tier <span className="text-brand-300">{currentRound.tier + 1}</span>

@@ -34,6 +34,7 @@ import {
 } from '../utils/cbat/cbatActPlan'
 import CodeRecall from './CbatAct/CodeRecall'
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
+import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5
@@ -1465,6 +1466,16 @@ export default function CbatAct() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [user, isTouchDevice, phase, jumpToRound])
+
+  // ?round=N — the route the typed codes above cannot take. They are disabled
+  // on touch devices (digits belong to the memory-code pad there), and every
+  // Clipper capture reports touch to get the mobile layout, so this is the only
+  // way a recording starts anywhere but round 1. See adminRoundParam.js.
+  useAdminRoundParam({
+    totalRounds: TOTAL_ROUNDS,
+    ready: phase === 'playing',
+    onJump: jumpToRound,
+  })
 
   // Auto-advance from callsign reveal to playing after 3s.
   useEffect(() => {

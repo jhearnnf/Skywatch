@@ -34,6 +34,7 @@ import {
   trace1KeyToTurn, trace1InitialPlaneStates, buildTrace1Round,
 } from '../utils/cbat/trace1Generator'
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
+import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 
 function forwardToMoveState(forwardVec, prevDir) {
   const x = Math.round(forwardVec.x), y = Math.round(forwardVec.y), z = Math.round(forwardVec.z)
@@ -1038,6 +1039,20 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
       trace1ClearTimers()
     }
   }, [phase, gameModeTrace1, trace1Generation, trace1ScheduleTick, trace1BeginRound, trace1ClearTimers])
+
+  // ?round=N — same jump as the typed codes, no keyboard needed. Only Trace 1
+  // has rounds; the practise modes are single continuous runs.
+  //
+  // Declared AFTER the boot effect above, and that ordering is load-bearing:
+  // effects run in declaration order, so a jump placed before it was
+  // immediately undone by the boot's `trace1BeginRound(0)`. The flag was set
+  // and the round was not — which looks exactly like a jump that half worked.
+  // See utils/cbat/adminRoundParam.js.
+  useAdminRoundParam({
+    totalRounds: TRACE1_ROUNDS,
+    ready: gameModeTrace1 && phase === 'playing',
+    onJump: trace1JumpToRound,
+  })
 
   // Trace 1 input — keyboard + D-pad share this handler.
   const trace1HandleInput = useCallback((turnKey) => {

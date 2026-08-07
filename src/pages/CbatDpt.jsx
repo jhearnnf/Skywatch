@@ -14,6 +14,7 @@ import { has3DModel, getModelUrl } from '../data/aircraftModels'
 import DptAircraftLayer from '../components/DptAircraftLayer'
 import { useGLTF } from '@react-three/drei'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 8
@@ -1280,6 +1281,18 @@ export default function CbatDpt() {
     fractionalPenaltyRef.current = 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, fighterPool])
+
+  // ?round=N — the same jump as the typed 555 codes, without needing a
+  // keyboard or a game that will accept digits. See adminRoundParam.js.
+  useAdminRoundParam({
+    totalRounds: TOTAL_ROUNDS,
+    ready: phase === 'playing',
+    onJump: (roundNum) => {
+      setCheatUsed(true)
+      cheatUsedRef.current = true
+      startRound(roundNum)
+    },
+  })
 
   // Entering intro/playing phase → kick off round 1 INLINE (not via startRound),
   // so this effect's closure doesn't depend on startRound's identity — that

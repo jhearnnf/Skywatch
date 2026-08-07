@@ -11,6 +11,7 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import {
   buildRounds,
   regularPolygonVertices,
@@ -496,6 +497,12 @@ export default function CbatVisualisation({ forcedMode = null }) {
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [animationData, setAnimationData] = useState(null)
+
+  // Set by the admin round jump (?round=N). The skipped rounds still count
+  // toward the score's denominator, so the result is meaningless and must not
+  // reach the leaderboard. Mirrors cheatUsed in DPT and debugUsed in ACT.
+  const [debugUsed, setDebugUsed] = useState(false)
+  const debugUsedRef = useRef(false)
   const promptSvgRefs = useRef([])
   const tileSvgRefs = useRef([])
 
@@ -519,6 +526,11 @@ export default function CbatVisualisation({ forcedMode = null }) {
 
     setScoreSaved(false)
     setQueued(false)
+
+    // Read from the ref: this is reached from a feedback-advance closure that
+    // predates the flag being set.
+    if (debugUsedRef.current) return
+
     markGameCompleted({ score: correct })
     submitCbatResult(`${gameKey}`, {
         correctCount: correct,
@@ -647,9 +659,27 @@ export default function CbatVisualisation({ forcedMode = null }) {
     setLastRoundTime(0)
     setElapsed(0)
     setAnimationData(null)
+    setDebugUsed(false)
+    debugUsedRef.current = false
     roundStartRef.current = 0
     setPhase('playing')
-  }, [gameKey, is3D, startTracking])
+  }, [gameKey, is3D, startTracking, setDebugUsed])
+
+  // ?round=N — open on a harder tier instead of playing up to it. The rounds
+  // are pre-built, so moving the cursor is the whole jump.
+  // See utils/cbat/adminRoundParam.js.
+  useAdminRoundParam({
+    totalRounds: TOTAL_ROUNDS,
+    ready: phase === 'playing' && rounds.length > 0,
+    onJump: (roundNum) => {
+      setDebugUsed(true)
+      debugUsedRef.current = true
+      setCurrentIdx(roundNum - 1)
+      setPickedKey(null)
+      setWasCorrect(null)
+      setAnimationData(null)
+    },
+  })
 
   const goToIntro = useCallback(() => {
     clearInterval(timerRef.current)
@@ -781,6 +811,10 @@ export default function CbatVisualisation({ forcedMode = null }) {
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-300">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
+                  {/* Same badge as DPT and ACT: an admin who jumped a round
+                      needs to see that the run will not be submitted, rather
+                      than find out from a leaderboard that never moved. */}
+                  {debugUsed && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
                 </span>
                 <span className="text-slate-400">
                   {'✓'} <span className="text-green-400">{answers.filter(a => a.correct).length}</span>
