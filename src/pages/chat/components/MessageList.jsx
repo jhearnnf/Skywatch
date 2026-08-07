@@ -285,6 +285,12 @@ export default function MessageList({
   onDelete,
   onReply,
   onReact,
+  // Runs collapse consecutive messages from one sender under a single avatar,
+  // name and timestamp. That is right for a conversation and wrong for a feed:
+  // in the medals channel every message is from the same bot, so grouping them
+  // would hide the time each one was posted behind whichever came first. Feeds
+  // pass false and get one self-contained entry per message.
+  groupRuns = true,
   highlightId = null,
   emptyLabel = 'No messages yet — say hi to get started.',
 }) {
@@ -330,6 +336,7 @@ export default function MessageList({
         // own run, so the quote is never orphaned above someone else's name.
         const prev = visible[i - 1]
         const startsRun =
+          !groupRuns ||
           !prev ||
           prev.senderRole === 'system' ||
           Boolean(m.replyTo) ||

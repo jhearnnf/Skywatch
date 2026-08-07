@@ -191,6 +191,21 @@ describe('MessageList — replies', () => {
   })
 })
 
+describe('MessageList — feeds', () => {
+  it('gives every message its own name and timestamp when grouping is off', () => {
+    // The medals channel: one bot posts everything, so grouped runs would hide
+    // when each entry was actually posted behind the first one's timestamp.
+    renderList([msg('u1', 'one'), msg('u1', 'two'), msg('u1', 'three')], { groupRuns: false })
+    expect(screen.getAllByText('Falcon')).toHaveLength(3)
+    expect(avatars()).toHaveLength(3)
+  })
+
+  it('still groups by default', () => {
+    renderList([msg('u1', 'one'), msg('u1', 'two')])
+    expect(screen.getAllByText('Falcon')).toHaveLength(1)
+  })
+})
+
 describe('MessageList — name colours', () => {
   it('gives different agents different colours, stably', () => {
     const { container } = renderList([msg('u1', 'a'), msg('u2', 'b')])

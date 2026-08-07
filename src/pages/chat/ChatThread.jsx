@@ -240,6 +240,9 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           onReact={handleReact}
           onReport={m => { setReportDone(false); setReporting(m) }}
           onDelete={user?.isAdmin ? handleDelete : undefined}
+          // A bot feed is a log, not a conversation: every entry is from the
+          // same poster, so each one keeps its own name and timestamp.
+          groupRuns={postPolicy !== 'bot'}
           emptyLabel={type === 'channel'
             ? 'Nothing here yet — be the first to post.'
             : 'No messages yet — say hi to get started.'}
