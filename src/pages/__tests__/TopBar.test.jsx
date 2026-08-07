@@ -116,6 +116,11 @@ describe('TopBar — airstar display', () => {
     expect(img.getAttribute('src')).toBe('https://cdn/typhoon.png')
   })
 
+  it('hides the avatar on md+ — the sidebar footer carries it there', () => {
+    render(<TopBar />)
+    expect(screen.getByLabelText('View RAF ranks').className).toContain('md:hidden')
+  })
+
   it('shows Sign In link when no user is logged in', () => {
     setupAuth(null)
     render(<TopBar />)

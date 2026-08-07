@@ -80,7 +80,10 @@ export default function TopBar() {
                 </button>
               )}
 
-              {/* Avatar — in slim mode always routes to profile; otherwise rank
+              {/* Avatar — mobile only. On md+ the sidebar footer carries the
+                  same badge with the same click targets (Sidebar.jsx), so a
+                  second copy up here is pure duplication.
+                  In slim mode it always routes to profile; otherwise the rank
                   badge routes to RAF ranks and an aircraft cutout to the badge picker. */}
               {(() => {
                 const hasCutout = Boolean(user?.selectedBadge?.cutoutUrl)
@@ -90,7 +93,7 @@ export default function TopBar() {
                 return (
                   <button
                     onClick={onClick}
-                    className="w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors outline-none focus:outline-none"
+                    className="md:hidden w-8 h-8 rounded-full bg-brand-100 border-2 border-brand-200 flex items-center justify-center text-sm font-bold text-brand-700 hover:border-brand-400 transition-colors outline-none focus:outline-none"
                     aria-label={hasCutout ? 'Change profile badge' : slim ? 'View profile' : 'View RAF ranks'}
                   >
                     <ProfileBadge user={user} size={hasCutout ? 26 : 20} />
