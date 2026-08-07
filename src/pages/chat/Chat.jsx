@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useAppSettings } from '../../context/AppSettingsContext'
+import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 import { NATIVE_APP } from '../../utils/appMode'
 import SEO from '../../components/SEO'
 import ChatShell from './ChatShell'
@@ -39,6 +40,12 @@ function ChatRoute({ view }) {
   useEffect(() => {
     if (!user) navigate('/login', { replace: true })
   }, [user, navigate])
+
+  // Admins can select text anywhere in Community — see the rule in main.css.
+  // Applied here rather than in ChatShell because this gate is common to the
+  // channel list, threads and the admin console, and moderation reads all
+  // three. Called before the early returns below, as a hook must be.
+  useGameBodyClass('community-selectable', Boolean(user?.isAdmin))
 
   // Chat is not part of the native app: user-to-user messaging with a
   // potentially under-18 audience is a store-policy problem on both Play and

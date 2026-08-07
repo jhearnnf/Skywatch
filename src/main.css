@@ -318,6 +318,28 @@ body.chat-wide .app-shell-content {
   padding-bottom: 0.75rem;
 }
 
+/* Selectable Community, for admins only.
+ *
+ * `body` sets `user-select: none` app-wide so the site feels like an app rather
+ * than a document — dragging across a game or a nav label must not paint a blue
+ * selection. Moderation needs the opposite: quoting what someone actually said
+ * into a report, a ban reason or a reply means being able to select it.
+ *
+ * Scoped to `.app-shell-content` rather than the whole body, so the surrounding
+ * chrome (sidebar, top bar, bottom nav) keeps its app feel — a drag that starts
+ * on a nav item should still not select it. Toggled from
+ * src/pages/chat/Chat.jsx, which is the single gate every Community route
+ * passes through, so it covers the channel list, threads and the console alike.
+ *
+ * `-webkit-touch-callout: default` restores the iOS long-press menu, which is
+ * how selection is reached on a touch device at all. */
+body.community-selectable .app-shell-content,
+body.community-selectable .app-shell-content * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 /* RTT gameplay: widen the shell so the sensor picture gets the screen. Field of
    view is fixed, so a wider arena is literally more warning of a crossing
    target. Toggled from src/pages/CbatRtt.jsx while playing. */
