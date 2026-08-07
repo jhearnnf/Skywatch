@@ -30,13 +30,10 @@ describe('SocialLinks', () => {
     expect(x.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
-  it('renders the live Discord link with the invite href', () => {
-    render(<SocialLinks source="landing" />)
-    const discord = screen.getByLabelText('Discord')
-    expect(discord.tagName).toBe('A')
-    expect(discord.getAttribute('href')).toBe('https://discord.gg/dnZsA3R4qZ')
-    expect(discord.getAttribute('target')).toBe('_blank')
-    expect(discord.getAttribute('rel')).toBe('noopener noreferrer')
+  it('offers TikTok and X, and nothing else', () => {
+    const { container } = render(<SocialLinks source="landing" />)
+    expect(container.querySelectorAll('a')).toHaveLength(2)
+    expect(screen.queryByLabelText('Discord')).toBeNull()
   })
 
   it('captures social_click for live links with coming_soon=false and the source prop', () => {
