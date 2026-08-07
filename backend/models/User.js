@@ -273,6 +273,22 @@ userSchema.pre('save', async function () {
     this.password = await bcrypt.hash(this.password, 12);
   }
 
+  // Keep displayNameLower in step with displayName.
+  //
+  // It used to be written only by the display-name endpoint, which was fine
+  // while its only job was backing the uniqueness index — every route that set
+  // a name set both. @mentions changed that: resolving "@Falcon" is a lookup on
+  // displayNameLower, so a row that has a name but no lowercase mirror is a
+  // person who can never be mentioned. Silently. The invariant belongs here
+  // rather than in each caller.
+  //
+  // Clearing a name goes through $unset in routes/users.js rather than save(),
+  // so this deliberately does not handle the null case — writing null here
+  // would collide on the partial unique index.
+  if (this.isModified('displayName') && typeof this.displayName === 'string' && this.displayName) {
+    this.displayNameLower = this.displayName.toLowerCase();
+  }
+
   // Generate unique 7-digit agent number on first save
   if (!this.agentNumber) {
     let agentNumber;

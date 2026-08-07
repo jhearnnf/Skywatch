@@ -1,13 +1,48 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import MentionPicker from './MentionPicker'
+import { activeMention } from '../mentions'
 
-export default function ComposeBox({ disabled, busy, onSend, placeholder, replyTo, onCancelReply }) {
+export default function ComposeBox({
+  disabled, busy, onSend, placeholder, replyTo, onCancelReply,
+  // Enables the @ autocomplete. Absent in support threads, where there is
+  // nobody to mention.
+  mentionConversationId,
+}) {
   const [body, setBody] = useState('')
+  const [caret, setCaret] = useState(0)
+  // The offset of an "@" the user pressed Escape on, so dismissing stays
+  // dismissed until they start a different mention.
+  const [dismissed, setDismissed] = useState(null)
+  const inputRef = useRef(null)
+
+  const mention = mentionConversationId ? activeMention(body, caret) : null
+  const showPicker = Boolean(mention) && mention.start !== dismissed
+
+  const syncCaret = (e) => setCaret(e.target.selectionStart ?? 0)
 
   const handleSend = () => {
     const text = body.trim()
     if (!text || disabled || busy) return
     onSend(text)
     setBody('')
+    setDismissed(null)
+  }
+
+  // Replace the half-typed "@fal" with the full "@Falcon ", and put the caret
+  // after it so typing carries straight on.
+  const pickMention = (user) => {
+    const insert = `@${user.displayName} `
+    const next = body.slice(0, mention.start) + insert + body.slice(caret)
+    const nextCaret = mention.start + insert.length
+    setBody(next)
+    setCaret(nextCaret)
+    setDismissed(null)
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(nextCaret, nextCaret)
+    })
   }
 
   return (
@@ -31,13 +66,29 @@ export default function ComposeBox({ disabled, busy, onSend, placeholder, replyT
           </button>
         </div>
       )}
-      <div className="p-3 flex items-end gap-2">
+      <div className="p-3 flex items-end gap-2 relative">
+      {showPicker && (
+        <MentionPicker
+          conversationId={mentionConversationId}
+          query={mention.query}
+          onPick={pickMention}
+          onDismiss={() => setDismissed(mention.start)}
+        />
+      )}
       <textarea
+        ref={inputRef}
         rows={1}
         disabled={disabled}
         value={body}
-        onChange={e => setBody(e.target.value)}
+        onChange={e => { setBody(e.target.value); syncCaret(e) }}
+        onSelect={syncCaret}
+        onKeyUp={syncCaret}
+        onClick={syncCaret}
         onKeyDown={e => {
+          // While the picker is open it owns Enter — it completes the mention
+          // rather than sending a half-typed name. See its capture-phase
+          // listener, which runs before this.
+          if (showPicker && ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) return
           if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
         }}
         placeholder={placeholder ?? (disabled ? 'This chat is closed.' : 'Type a message…')}

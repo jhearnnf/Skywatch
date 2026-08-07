@@ -27,6 +27,17 @@ const chatMessageSchema = new mongoose.Schema({
     excerpt:     { type: String, default: null },
   },
 
+  // Users @mentioned in this message, resolved from the body at send time (see
+  // utils/chatMentions.js). Stored rather than re-parsed on read because "which
+  // messages mention me" is a query — it drives the mention jump when you open
+  // a channel — and re-parsing every body to answer it would mean reading the
+  // whole channel.
+  //
+  // Resolved ONCE, at send time. If someone later changes their display name
+  // the old mention still points at the right person; the text just stops
+  // highlighting, which is the same trade the reply snapshots make.
+  mentions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
   // Emoji reactions, embedded rather than in their own collection: they are
   // read with the message every single time and never queried on their own, so
   // a join would cost more than it saved. Bounded by a fixed emoji whitelist,
@@ -61,5 +72,8 @@ const chatMessageSchema = new mongoose.Schema({
 chatMessageSchema.index({ conversationId: 1, createdAt: 1 });
 // Backs the admin "everything this user has said" transcript view.
 chatMessageSchema.index({ senderUserId: 1, createdAt: -1 });
+// Backs "has anyone mentioned me in here since I last looked", which runs on
+// every channel open.
+chatMessageSchema.index({ mentions: 1, conversationId: 1, createdAt: 1 });
 
 module.exports = mongoose.model('ChatMessage', chatMessageSchema);

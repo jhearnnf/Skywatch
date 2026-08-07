@@ -13,7 +13,9 @@ const { resolveSelectedBadges } = require('../utils/selectedBadge');
 const { medalsForUsers } = require('../utils/cbatMedalHolders');
 const BotKnowledge = require('../models/BotKnowledge');
 const { parseCbatGuide, renderGuideCorpus } = require('../utils/cbatGuideParser');
+
 const { generateBotReply } = require('../utils/chatBot');
+const { resolveMentions, MENTION_LIMIT } = require('../utils/chatMentions');
 
 // One knowledge document for now. A second bot would key off its own slug.
 const BOT_KNOWLEDGE_SLUG = 'cbat-guide';
@@ -181,6 +183,7 @@ function postRefusal(convo, user) {
 // marking it read for the sender (sending implies reading everything up to now).
 async function appendMessage({
   conversation, senderUserId, senderRole, body, senderDisplayName = null, replyTo = null,
+  mentions = [],
 }) {
   const message = await ChatMessage.create({
     conversationId: conversation._id,
@@ -189,6 +192,7 @@ async function appendMessage({
     body,
     senderDisplayName,
     ...(replyTo ? { replyTo } : {}),
+    ...(mentions.length ? { mentions } : {}),
   });
 
   const update = {
@@ -306,6 +310,10 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
     editedAt:          m.editedAt ?? null,
     ...(viewerIsAdmin ? { originalBody: m.originalBody ?? null } : {}),
     createdAt:         m.createdAt,
+    // Ids only. The client already has every sender's profile in `senders`, and
+    // the highlight is driven by matching the literal "@Name" text in the body,
+    // so all this has to answer is "was I one of them".
+    mentions:          (m.mentions ?? []).map(id => String(id)),
     reactions:         (m.reactions ?? [])
       .filter(r => (r.userIds ?? []).length)
       .map(r => ({
@@ -339,12 +347,17 @@ const channelTitle = (c) =>
 async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
   const collapseAdmins = conversationType === 'support' && !viewerIsAdmin;
 
-  const ids = [...new Set(
-    messages
+  const ids = [...new Set([
+    ...messages
       .filter(m => m.senderUserId && m.senderRole !== 'system')
       .filter(m => !(collapseAdmins && m.senderRole === 'admin'))
       .map(m => String(m.senderUserId)),
-  )];
+    // Mentioned users too, even if they have never posted here. The client
+    // renders an @mention by matching the mentioned person's display name
+    // against the body, so without their name in this map the highlight would
+    // silently not happen for anyone who has not spoken in the thread.
+    ...messages.flatMap(m => (m.mentions ?? []).map(String)),
+  ])];
   if (!ids.length) return {};
 
   const users = await User.find({ _id: { $in: ids } })
@@ -688,10 +701,32 @@ router.get('/conversations/:id/messages', async (req, res) => {
     const hasMore = messages.length > limit;
     const items   = (hasMore ? messages.slice(0, limit) : messages).reverse();
 
-    const senders = await senderProfiles(items, {
-      conversationType: convo.type,
-      viewerIsAdmin:    Boolean(req.user.isAdmin),
-    });
+    // Read state as it was BEFORE this visit. The client marks the
+    // conversation read in a separate call once it has rendered, so this still
+    // describes where the viewer got to last time — which is exactly what the
+    // "new messages" divider and the mention jump need.
+    const [senders, readRow] = await Promise.all([
+      senderProfiles(items, {
+        conversationType: convo.type,
+        viewerIsAdmin:    Boolean(req.user.isAdmin),
+      }),
+      ChatRead.findOne({ userId: req.user._id, conversationId: convo._id }).lean(),
+    ]);
+
+    // The oldest message since then that mentions the viewer. Answered by a
+    // query rather than by scanning `items`, because the mention may well be
+    // older than the 50 messages on screen — which is the entire reason the
+    // client offers to scroll up to it.
+    const mentionFilter = {
+      conversationId: convo._id,
+      mentions:       req.user._id,
+      deletedAt:      null,
+      ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+    };
+    const [firstMention, unreadMentions] = await Promise.all([
+      ChatMessage.findOne(mentionFilter).sort({ createdAt: 1 }).select('_id createdAt').lean(),
+      ChatMessage.countDocuments(mentionFilter),
+    ]);
 
     res.json({ status: 'success', data: {
       messages: items.map(m => serializeMessage(m, {
@@ -701,6 +736,14 @@ router.get('/conversations/:id/messages', async (req, res) => {
       })),
       senders,
       hasMore,
+      // Where this viewer got up to last time, and whether anything since then
+      // was addressed to them. Null lastReadAt means "never opened", which
+      // draws no divider — a first visit is not a pile of unread messages.
+      lastReadAt:          readRow?.lastReadAt ?? null,
+      unreadMentionCount:  unreadMentions,
+      firstUnreadMention:  firstMention
+        ? { _id: firstMention._id, createdAt: firstMention.createdAt }
+        : null,
       conversation: {
         _id:        convo._id,
         type:       convo.type,
@@ -762,6 +805,14 @@ router.post('/conversations/:id/messages', async (req, res) => {
       }
     }
 
+    // Resolved from the body rather than trusted from the client — typing a
+    // name by hand and picking it from the autocomplete are the same thing.
+    // Support threads are excluded: there is nobody to mention in a private
+    // thread with staff, and the bot has no business in one.
+    const mentioned = convo.type === 'support'
+      ? []
+      : await resolveMentions(body, { findUsers: findMentionableByName });
+
     const message = await appendMessage({
       conversation:      convo,
       senderUserId:      req.user._id,
@@ -769,8 +820,12 @@ router.post('/conversations/:id/messages', async (req, res) => {
       body,
       senderDisplayName: req.user.displayName ?? null,
       replyTo,
+      mentions:          mentioned.map(u => u._id),
     });
 
+    // In a channel the bot speaks only when @mentioned — never on its own, and
+    // never in a thread it was not addressed in. A bot that mentions itself
+    // cannot start a loop for the same reason.
     res.json({ status: 'success', data: {
       message: serializeMessage(message.toObject(), {
         viewerIsAdmin:    Boolean(req.user.isAdmin),
@@ -787,10 +842,20 @@ router.post('/conversations/:id/messages', async (req, res) => {
         console.error('[chat] bot reply failed:', err?.message);
       });
     }
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+// Who an "@name" may resolve to. Bots are included (that is how Guide Bot gets
+// addressed); banned accounts are not, so a removed user's name stops pinging.
+function findMentionableByName(lowerNames) {
+  return User.find({
+    displayNameLower: { $in: lowerNames },
+    isBanned: { $ne: true },
+  }).select('displayName displayNameLower isBot botAnswersDms').lean();
+}
 
 // Generate and post the bot's answer to the latest message in a bot DM.
 //
@@ -937,6 +1002,73 @@ router.post('/conversations/:id/read', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// GET /api/chat/conversations/:id/mention-suggestions?q= — the @ autocomplete.
+//
+// With no query it offers the bots and nobody else: "@" on its own is almost
+// always someone reaching for Guide Bot, and a list of arbitrary strangers is
+// not a useful default. Typing then searches real agents.
+//
+// Only accounts with a DISPLAY NAME are ever offered. An agent number is an
+// account identifier, not a name someone chose to be known by, and putting
+// "Agent #1234567" in an autocomplete would turn the picker into a directory
+// of everyone who has ever signed up.
+const MENTION_SUGGESTION_LIMIT = 8;
+
+router.get('/conversations/:id/mention-suggestions', async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Conversation not found' });
+
+    const convo = await ChatConversation.findById(req.params.id);
+    if (!convo) return res.status(404).json({ message: 'Conversation not found' });
+    if (!canRead(convo, req.user)) return res.status(403).json({ message: 'Forbidden' });
+
+    const q = (req.query.q ?? '').toString().trim().slice(0, 20);
+
+    // Bots that answer are always offered, and always first: the bot is the
+    // reason most people type "@" at all.
+    const bots = await User.find({
+      isBot: true, botAnswersDms: true, isBanned: { $ne: true },
+      displayName: { $ne: null },
+      ...(q ? { displayNameLower: { $regex: `^${escapeRegex(q.toLowerCase())}` } } : {}),
+    }).select('displayName agentNumber isBot botDescription').lean();
+
+    let people = [];
+    if (q) {
+      people = await User.find({
+        isBot: { $ne: true },
+        isBanned: { $ne: true },
+        chatBannedAt: null,
+        displayNameLower: { $regex: `^${escapeRegex(q.toLowerCase())}` },
+        _id: { $ne: req.user._id },
+      })
+        .select('displayName agentNumber isAdmin')
+        .sort({ displayNameLower: 1 })
+        .limit(MENTION_SUGGESTION_LIMIT)
+        .lean();
+    }
+
+    res.json({ status: 'success', data: {
+      suggestions: [...bots, ...people]
+        .slice(0, MENTION_SUGGESTION_LIMIT)
+        .map(u => ({
+          _id:         u._id,
+          displayName: u.displayName,
+          isBot:       Boolean(u.isBot),
+          isAdmin:     Boolean(u.isAdmin),
+          description: u.botDescription ?? null,
+        })),
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Prefix search runs the query string into a regex, so it has to be neutralised
+// first — otherwise typing "(" is a crash and ".*" is a full table scan.
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // GET /api/chat/reactions — the emoji a client may offer
 router.get('/reactions', (req, res) => {

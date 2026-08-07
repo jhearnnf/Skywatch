@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import ProfileBadge from '../../../components/ProfileBadge'
 import { formatTime, SUPPORT_LABEL } from '../format'
 import { nameColour } from '../nameColour'
 import { REACTION_EMOJI } from '../reactionEmoji'
+import { splitMentions, mentionsMe } from '../mentions'
 
 // Discord-style rows rather than chat bubbles. Bubbles alternate sides and
 // carry a lot of padding, which is fine for two people and unreadable once a
@@ -184,12 +185,51 @@ function ReplyQuote({ replyTo, onJump }) {
   )
 }
 
+// Message text with any @mentions picked out. A mention OF YOU is loud (it is
+// the thing you came back to the channel for); a mention of someone else is
+// just tinted, so a busy channel does not turn into confetti.
+function MessageBody({ message, senders, currentUserId }) {
+  const mentioned = (message.mentions ?? [])
+    .map(id => senders[String(id)])
+    .filter(Boolean)
+
+  if (!mentioned.length) return <>{message.body}</>
+
+  return splitMentions(message.body, mentioned).map((run, i) => {
+    if (!run.user) return <span key={i}>{run.text}</span>
+    const isMe = String(run.user._id) === String(currentUserId)
+    return (
+      <span
+        key={i}
+        className={`rounded px-1 font-semibold ${isMe
+          ? 'bg-brand-200/70 text-brand-800'
+          : 'text-brand-600'}`}
+      >
+        {run.text}
+      </span>
+    )
+  })
+}
+
+// The Discord line: where you got up to last time. Rendered above the first
+// message you have not seen, and frozen for the whole visit — it must not creep
+// down the screen as the poll marks things read underneath you.
+function NewMessagesDivider() {
+  return (
+    <div className="flex items-center gap-2 mt-3 mb-1" aria-label="New messages">
+      <span className="flex-1 h-px bg-red-400/60" />
+      <span className="text-[10px] font-bold uppercase tracking-wider text-red-500">New</span>
+      <span className="flex-1 h-px bg-red-400/60" />
+    </div>
+  )
+}
+
 // Module scope, not nested — a component defined inside another's render
 // remounts its whole subtree on every parent render.
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine,
   viewerIsAdmin, onOpenUser, onReport, onDelete, onEdit, onReply, onReact, onSeenBy,
-  onJump, highlighted,
+  onJump, highlighted, senders, currentUserId,
 }) {
   const m = message
   const name = isSupportIdentity
@@ -226,7 +266,11 @@ function MessageRow({
       id={`msg-${m._id}`}
       className={`group relative flex gap-2.5 px-2 -mx-2 rounded transition-colors
         ${startsRun ? 'mt-2' : 'mt-0'}
-        ${highlighted ? 'bg-brand-100/60' : 'hover:bg-slate-100/60'}`}
+        ${highlighted ? 'bg-brand-100/60'
+          // A message addressed to you keeps a standing tint, so it is still
+          // findable after the jump banner has been dismissed.
+          : mentionsMe(m, currentUserId) ? 'bg-amber-100/40 hover:bg-amber-100/60'
+            : 'hover:bg-slate-100/60'}`}
     >
       <Avatar profile={profile} show={startsRun} support={isSupportIdentity} />
 
@@ -292,7 +336,7 @@ function MessageRow({
           </div>
         ) : (
           <p className={`text-sm text-slate-800 whitespace-pre-wrap break-words ${m.deleted ? 'line-through opacity-60' : ''}`}>
-            {m.body}
+            <MessageBody message={m} senders={senders} currentUserId={currentUserId} />
             {m.edited && !m.deleted && (
               <span className="text-[10px] text-slate-400 ml-1.5" title="Edited by a moderator">(edited)</span>
             )}
@@ -361,6 +405,10 @@ export default function MessageList({
   // pass false and get one self-contained entry per message.
   groupRuns = true,
   highlightId = null,
+  // Where this viewer got up to last time, frozen at entry by ChatThread. Null
+  // means "never been here", which draws no line — a first visit is not a pile
+  // of unread messages.
+  dividerAfter = null,
   emptyLabel = 'No messages yet — say hi to get started.',
 }) {
   const scrollRef = useRef(null)
@@ -384,19 +432,33 @@ export default function MessageList({
     if (el) el.scrollIntoView({ block: 'center' })
   }
 
+  // The first message the viewer had not seen last time they were here. Found
+  // once per render pass rather than tested per row, so the line can only ever
+  // be drawn in one place.
+  const firstUnseen = dividerAfter
+    ? visible.find(m => new Date(m.createdAt) > new Date(dividerAfter))
+    : null
+
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
       {visible.length === 0 && (
         <p className="text-center text-xs text-slate-400 py-8">{emptyLabel}</p>
       )}
       {visible.map((m, i) => {
+        const divider = firstUnseen && firstUnseen._id === m._id
+          ? <NewMessagesDivider key={`divider-${m._id}`} />
+          : null
+
         if (m.senderRole === 'system') {
           return (
-            <div key={m._id} className="flex justify-center py-1 mt-2">
-              <span className="text-[11px] text-slate-400 italic px-2 py-1 rounded-full bg-slate-100">
-                {m.body}
-              </span>
-            </div>
+            <Fragment key={m._id}>
+              {divider}
+              <div className="flex justify-center py-1 mt-2">
+                <span className="text-[11px] text-slate-400 italic px-2 py-1 rounded-full bg-slate-100">
+                  {m.body}
+                </span>
+              </div>
+            </Fragment>
           )
         }
 
@@ -412,12 +474,15 @@ export default function MessageList({
           identityKey(prev, collapseAdmins) !== identityKey(m, collapseAdmins)
 
         return (
+          <Fragment key={m._id}>
+          {divider}
           <MessageRow
-            key={m._id}
             message={m}
             startsRun={startsRun}
             mine={String(m.senderUserId) === String(currentUserId)}
             profile={senders[String(m.senderUserId)]}
+            senders={senders}
+            currentUserId={currentUserId}
             isSupportIdentity={collapseAdmins && m.senderRole === 'admin'}
             viewerIsAdmin={viewerIsAdmin}
             onOpenUser={conversationType === 'channel' ? onOpenUser : undefined}
@@ -432,6 +497,7 @@ export default function MessageList({
             onJump={jumpTo}
             highlighted={String(highlightId) === String(m._id)}
           />
+          </Fragment>
         )
       })}
     </div>

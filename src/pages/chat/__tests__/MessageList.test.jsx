@@ -211,6 +211,7 @@ describe('MessageList — seen by', () => {
     renderList([mine('gone', { deleted: true })], { onSeenBy: vi.fn(), viewerIsAdmin: true })
     expect(screen.queryByTitle('Seen by')).toBeNull()
   })
+
 })
 
 describe('MessageList — edited messages', () => {
@@ -406,5 +407,71 @@ describe('MessageList — support identity', () => {
       conversationType: 'support', viewerIsAdmin: true, senders: {},
     })
     expect(screen.queryAllByTitle('SkyWatch Support')).toHaveLength(0)
+  })
+})
+
+describe('MessageList — mentions', () => {
+  const pinged = (body, ids) => msg('u1', body, { mentions: ids })
+
+  it('highlights a mention of someone else', () => {
+    renderList([pinged('nice one @Viper', ['u2'])])
+    // The name is lifted out of the paragraph into its own element.
+    expect(screen.getByText('@Viper')).toBeTruthy()
+  })
+
+  it('leaves an @word that nobody was mentioned by as plain text', () => {
+    // Driven by the resolved mention list, so "@nobody" is not a ping.
+    renderList([pinged('@nobody at all', [])])
+    expect(screen.queryByText('@nobody')).toBeNull()
+    expect(screen.getByText('@nobody at all')).toBeTruthy()
+  })
+
+  it('tints the whole row when the mention is of you', () => {
+    // Still findable after the jump banner has been dismissed.
+    const { container } = renderList([pinged('over here @Falcon', ['me'])])
+    expect(container.querySelector('[class*="amber"]')).toBeTruthy()
+  })
+
+  it('does not tint a row that mentions somebody else', () => {
+    const { container } = renderList([pinged('over here @Viper', ['u2'])])
+    expect(container.querySelector('[class*="amber"]')).toBeNull()
+  })
+})
+
+describe('MessageList — the new-messages line', () => {
+  const at = (iso, body) => msg('u1', body, { createdAt: iso })
+
+  const OLD = '2026-08-01T10:00:00.000Z'
+  const MID = '2026-08-01T11:00:00.000Z'
+  const NEW = '2026-08-01T12:00:00.000Z'
+
+  it('draws the line above the first message you have not seen', () => {
+    const { container } = renderList(
+      [at(OLD, 'before'), at(NEW, 'after')],
+      { dividerAfter: MID },
+    )
+    const line = container.querySelector('[aria-label="New messages"]')
+    expect(line).toBeTruthy()
+    // Above the unread one, below the read one.
+    expect(line.nextElementSibling.textContent).toContain('after')
+  })
+
+  it('draws it exactly once, however many messages are unread', () => {
+    const { container } = renderList(
+      [at(OLD, 'before'), at(NEW, 'one'), at(NEW, 'two'), at(NEW, 'three')],
+      { dividerAfter: MID },
+    )
+    expect(container.querySelectorAll('[aria-label="New messages"]')).toHaveLength(1)
+  })
+
+  it('draws nothing on a first visit', () => {
+    // Never been here is not the same as a pile of unread messages.
+    const { container } = renderList([at(NEW, 'hello')], { dividerAfter: null })
+    expect(container.querySelector('[aria-label="New messages"]')).toBeNull()
+  })
+
+  it('draws nothing when everything has already been seen', () => {
+    const { container } = renderList([at(OLD, 'hello')], { dividerAfter: NEW })
+    expect(container.querySelector('[aria-label="New messages"]')).toBeNull()
   })
 })

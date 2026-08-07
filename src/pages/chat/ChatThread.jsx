@@ -32,9 +32,16 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
   const [reportDone,   setReportDone]   = useState(false)
   const [replyTo,      setReplyTo]      = useState(null)
   const [seenByMsg,    setSeenByMsg]    = useState(null)
+  // Both frozen at entry. The server's answers change the moment we mark the
+  // conversation read, so if these tracked the polls the "new" line would creep
+  // down the screen and the mention banner would vanish while being read.
+  const [entryState,   setEntryState]   = useState(null)
+  const [highlightId,  setHighlightId]  = useState(null)
+  const [jumping,      setJumping]      = useState(false)
 
-  const fetchMessages = useCallback(async () => {
-    const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages`, {
+  const fetchMessages = useCallback(async ({ limit } = {}) => {
+    const qs = limit ? `?limit=${limit}` : ''
+    const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages${qs}`, {
       credentials: 'include',
     })
     const d = await r.json().catch(() => null)
@@ -57,6 +64,11 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
         setMessages(d.messages)
         setSenders(d.senders ?? {})
         setConversation(d.conversation)
+        setEntryState({
+          lastReadAt:         d.lastReadAt ?? null,
+          unreadMentionCount: d.unreadMentionCount ?? 0,
+          firstUnreadMention: d.firstUnreadMention ?? null,
+        })
         setLoading(false)
         markRead()
       })
@@ -162,6 +174,39 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
     setMessages(prev => prev.map(m => (m._id === d.data.message._id ? d.data.message : m)))
   }
 
+  // Scroll to the oldest message that mentioned the viewer.
+  //
+  // It may well be older than the 50 messages on screen — which is the whole
+  // reason this control exists rather than leaving people to scroll. When it is
+  // not loaded, pull a bigger page first and then jump.
+  const jumpToMention = async () => {
+    const target = entryState?.firstUnreadMention
+    if (!target) return
+
+    const scroll = (id) => {
+      const el = document.getElementById(`msg-${id}`)
+      if (!el) return false
+      el.scrollIntoView({ block: 'center' })
+      setHighlightId(id)
+      return true
+    }
+
+    if (scroll(target._id)) return
+
+    setJumping(true)
+    try {
+      const d = await fetchMessages({ limit: 200 })
+      setMessages(d.messages)
+      setSenders(d.senders ?? {})
+      // The DOM has not painted the new rows yet, so the scroll waits a frame.
+      requestAnimationFrame(() => { scroll(target._id) })
+    } catch {
+      setErr('Could not load far enough back to find that message.')
+    } finally {
+      setJumping(false)
+    }
+  }
+
   // Admin correction. The response carries the updated message, so swap it in
   // place rather than refetching — the 5s poll would otherwise briefly show the
   // old text back again on a slow round trip.
@@ -203,6 +248,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
   const gateOnName = (needsName || displayNameRequired) && type !== 'support'
 
   const heading = title || conversation?.title || 'Chat'
+  const mentionCount = entryState?.firstUnreadMention ? (entryState.unreadMentionCount ?? 0) : 0
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
@@ -243,6 +289,35 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
         )}
       </div>
 
+      {/* Someone addressed you while you were away. Shown on entry and
+          dismissible, because the mention may be far enough up the channel that
+          scrolling to find it is not obvious. */}
+      {mentionCount > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-amber-100/60 border-b border-amber-200">
+          <span className="text-xs font-semibold text-amber-800">
+            {mentionCount === 1
+              ? 'You were mentioned while you were away'
+              : `You were mentioned ${mentionCount} times while you were away`}
+          </span>
+          <button
+            type="button"
+            onClick={jumpToMention}
+            disabled={jumping}
+            className="ml-auto shrink-0 text-[11px] font-bold px-2 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white transition-colors"
+          >
+            {jumping ? 'Finding…' : 'Scroll up to it'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEntryState(s => ({ ...s, unreadMentionCount: 0 }))}
+            className="shrink-0 text-amber-700 hover:text-amber-800 px-1"
+            aria-label="Dismiss mention notice"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-sm text-slate-400">Loading…</div>
       ) : err && !conversation ? (
@@ -261,6 +336,8 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           onDelete={user?.isAdmin ? handleDelete : undefined}
           onEdit={user?.isAdmin ? handleEdit : undefined}
           onSeenBy={setSeenByMsg}
+          dividerAfter={entryState?.lastReadAt ?? null}
+          highlightId={highlightId}
           // A bot feed is a log, not a conversation: every entry is from the
           // same poster, so each one keeps its own name and timestamp.
           groupRuns={postPolicy !== 'bot'}
@@ -319,6 +396,9 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           onSend={handleSend}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
+          // No @ picker in support: it is a private thread with staff, so there
+          // is nobody to mention and no bot to summon.
+          mentionConversationId={type === 'support' ? null : conversationId}
         />
       )}
 
