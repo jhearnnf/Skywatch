@@ -457,10 +457,8 @@ describe('stripSourceNarration', () => {
       .toBe('FLAG is about circled aircraft. Practise counting.');
   });
 
-  it('catches the other ways of naming a source', () => {
+  it('deletes a sentence that is nothing but narration', () => {
     for (const line of [
-      'Answer. Based on my information, that is right.',
-      'Answer. From what I have, nobody said.',
       'Answer. My material does not go into it.',
       'Answer. It does not specify the exact number.',
     ]) {
@@ -468,11 +466,21 @@ describe('stripSourceNarration', () => {
     }
   });
 
-  it('keeps the allowed way of saying you have nothing', () => {
-    // "I don't have anything on that" is how a person says it; only the
-    // "definitive/complete count" hedge is a retraction.
-    const line = "I don't have anything on that.";
-    expect(stripSourceNarration(line)).toBe(line);
+  it('trims narration off a sentence that also carries a claim', () => {
+    // "From what I have, nobody said" is a source narration wrapped around a
+    // real finding. Deleting the sentence would throw the finding away.
+    expect(stripSourceNarration('Answer. From what I have, nobody said.'))
+      .toBe('Answer. Nobody said.');
+    expect(stripSourceNarration('Answer. Based on my information, that is right.'))
+      .toBe('Answer. That is right.');
+  });
+
+  it('strips "I have nothing" here, and the reply-level fallback restores it', () => {
+    // The carve-out that used to keep this sentence was the bug: the model
+    // opened with it and then answered the question anyway. Stripping it
+    // unconditionally is safe because generateBotReply sends REFUSALS.nothing
+    // — the same sentence — when nothing survives. See the denial tests below.
+    expect(stripSourceNarration("I don't have anything on that.")).toBe('');
   });
 
   it('does not strip the bot introducing itself', () => {
@@ -586,10 +594,91 @@ describe('stripSourceNarration — retractions phrased around contents', () => {
     }
   });
 
-  it('still keeps the allowed way of saying you have nothing', () => {
-    // "on that" ends the sentence; the banned form needs a trailing clause
-    // describing what the material fails to contain.
-    expect(stripSourceNarration("I don't have anything on that."))
-      .toBe("I don't have anything on that.");
+  it('leaves a real answer alone', () => {
+    const line = 'Only circled aircraft count towards the score.';
+    expect(stripSourceNarration(line)).toBe(line);
+  });
+});
+
+// Asked "do i need to practise to pass the cbat?" the bot replied:
+//   "I don't have anything on whether you need to practise to pass. What I do
+//    have is what candidates said helped: a dedicated CBAT practice app came up
+//    far more often than anything else..."
+//
+// It denied having the answer and then gave it. The earlier filter let this
+// through because "I don't have anything on that" was carved out as the one
+// legitimate way to say you have nothing.
+describe('denying and then answering', () => {
+  const { stripSourceNarration } = require('../../utils/chatBot');
+
+  it('strips a false disclaimer that is followed by an answer', () => {
+    const reply = "I don't have anything on whether you need to practise to pass. "
+      + 'Nearly everyone who passed credited a dedicated practice app.';
+    expect(stripSourceNarration(reply))
+      .toBe('Nearly everyone who passed credited a dedicated practice app.');
+  });
+
+  it('still answers plainly when the disclaimer really is the whole reply', async () => {
+    // Everything is stripped, and the fallback sends the same sentence — so a
+    // genuine "I have nothing" is unchanged from the reader's point of view.
+    const out = await generateBotReply({
+      question: 'what is in Trace 2?',
+      corpus: CORPUS,
+      callAi: aiReturning("I don't have anything on that."),
+    });
+    expect(out.text).toBe(REFUSALS.nothing);
+  });
+
+  it('strips the longer forms too', () => {
+    for (const line of [
+      "I don't have any information on that. Candidates reported otherwise.",
+      'I do not have anything about the pass mark. Candidates reported otherwise.',
+    ]) {
+      expect(stripSourceNarration(line)).toBe('Candidates reported otherwise.');
+    }
+  });
+
+  it('tells the model not to deny and then answer', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/NEVER deny and then answer/i);
+    expect(prompt).toMatch(/Delete the denial and open with Y/i);
+  });
+
+  it('tells it how to answer a "do I need to" question', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/answered by what people did and how it went/i);
+    expect(prompt).toMatch(/not by looking for a sentence that says "you must practise"/i);
+  });
+});
+
+describe('narration that introduces the answer', () => {
+  const { stripSourceNarration } = require('../../utils/chatBot');
+
+  it('trims the lead-in instead of deleting the sentence that carries the answer', () => {
+    const reply = 'What I do have is what candidates said helped: a dedicated practice app '
+      + 'came up far more often than anything else.';
+    expect(stripSourceNarration(reply))
+      .toBe('A dedicated practice app came up far more often than anything else.');
+  });
+
+  it('handles the whole failing reply end to end', () => {
+    const reply = "I don't have anything on whether you need to practise to pass. "
+      + 'What I do have is what candidates said helped: a dedicated practice app came up '
+      + 'far more often than anything else. Mental arithmetic came up repeatedly too.';
+    expect(stripSourceNarration(reply))
+      .toBe('A dedicated practice app came up far more often than anything else. '
+          + 'Mental arithmetic came up repeatedly too.');
+  });
+
+  it('trims a lead-in with no colon', () => {
+    expect(stripSourceNarration('What I can tell you is candidates found it hard.'))
+      .toBe('Candidates found it hard.');
+    expect(stripSourceNarration('From what I have, nobody timed it.'))
+      .toBe('Nobody timed it.');
+  });
+
+  it('leaves an answer that merely contains "have" alone', () => {
+    const line = 'Candidates have reported two versions of that test.';
+    expect(stripSourceNarration(line)).toBe(line);
   });
 });

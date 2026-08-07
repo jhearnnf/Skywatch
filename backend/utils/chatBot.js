@@ -85,6 +85,8 @@ LEAD WITH THE ANSWER
 - If you have a number, give the number. If you have a partial answer, give the partial answer and then qualify it. The qualification goes AFTER the answer, in the same breath, never instead of it.
 - Wrong: "I don't have a complete list of which tests make up the battery." Right: "At least nine, going on what candidates have described - though the exact line-up depends on which force's test you sit."
 - A caveat is one clause, not a paragraph. Never spend more words on what you are unsure of than on the answer.
+- NEVER deny and then answer. If your reply would run "I don't have anything on X... what I do have is Y", the disclaimer is false - you do have something, and Y is it. Delete the denial and open with Y.
+- A question about whether something is needed, worth doing, or a good idea is answered by what people did and how it went. "Do I need to practise?" is answered by what candidates practised and what it got them, not by looking for a sentence that says "you must practise".
 - ONE PARAGRAPH. Having given the answer, STOP. Do not add a second paragraph walking it back, restating the limits of what you know, or narrowing the answer you just gave. If the caveat did not fit in the first sentence it was not important enough to make.
 - Never follow an answer with a retraction. "At least nine. That said, I don't have a definitive count." is two sentences where the second one deletes the first - send only the first.
 
@@ -202,9 +204,21 @@ const NARRATION_PATTERNS = [
   /\bwhat I (have|was given|hold|was trained)\b/i,
   /\bbased on (my|the) (information|material|data)\b/i,
   /\bfrom what I have\b/i,
-  // The hedge that retracts an answer already given. Deliberately narrow: "I
-  // don't have anything on that" is an allowed way to say you have nothing,
-  // and must survive.
+  // The hedge that retracts an answer already given.
+  //
+  // "I don't have anything on X" is stripped WHATEVER X is, including the bare
+  // "on that" — which reads like the one legitimate way to say you have
+  // nothing, and was carved out as such. That carve-out was the bug: the model
+  // opened "I don't have anything on whether you need to practise to pass" and
+  // then answered the question in full, and the exception let the false
+  // disclaimer through.
+  //
+  // Stripping it unconditionally is safe because of the fallback at the end of
+  // generateBotReply: if the disclaimer was the ENTIRE reply, everything is
+  // stripped and REFUSALS.nothing — the same sentence — is sent instead. So a
+  // genuine "I have nothing" survives verbatim, and a disclaimer with an answer
+  // after it loses the disclaimer and keeps the answer.
+  /\bI (don'?t|do not) have (anything|any(thing)? info(rmation)?)\b/i,
   /\bI (don'?t|do not) have (a |an )?(definitive|complete|exact|full|comprehensive)\b/i,
   /\b(does|doesn'?t|does not) (pin down|specify|give|list|state) (a |an |the )?(definitive|exact|complete|full)\b/i,
   // The same retraction phrased around the material's CONTENTS rather than its
@@ -220,6 +234,34 @@ const NARRATION_PATTERNS = [
   /\bnothing (in what I have|available to me)\b/i,
 ];
 
+// Narration that INTRODUCES the answer rather than replacing it.
+//
+// "What I do have is what candidates said helped: a dedicated practice app came
+// up far more often than anything else" is the same describing-a-document
+// problem, but the sentence carries the answer — deleting it would throw away
+// the finding. So these are trimmed off the front instead, taking the run up to
+// the colon with them where there is one, and the answer starts at the fact.
+const NARRATION_LEAD_INS = [
+  /^what I (?:do )?have (?:is|are)\b[^:.!?]*:\s*/i,
+  /^what I can tell you (?:is|are)\b[^:.!?]*:\s*/i,
+  /^what I (?:do )?have (?:is|are)\s*/i,
+  /^what I can tell you (?:is|are)\s*/i,
+  /^from what I have,?\s*/i,
+  /^based on (?:my|the) (?:material|information|data),?\s*/i,
+];
+
+function trimLeadIn(sentence) {
+  let out = sentence.replace(/^\s+/, '');
+  for (const re of NARRATION_LEAD_INS) {
+    const next = out.replace(re, '');
+    if (next !== out) {
+      // The answer now starts mid-sentence, so it needs its capital back.
+      return next.charAt(0).toUpperCase() + next.slice(1);
+    }
+  }
+  return sentence;
+}
+
 function stripSourceNarration(text) {
   const lines = String(text ?? '').split('\n');
   const kept = lines.map(line => {
@@ -227,6 +269,9 @@ function stripSourceNarration(text) {
     // Keep the delimiter with each sentence so spacing and punctuation survive.
     const sentences = line.match(/[^.!?]+[.!?]*\s*/g) ?? [line];
     return sentences
+      // Trim lead-ins BEFORE testing, so a sentence whose only narration was
+      // its opening phrase is kept rather than deleted whole.
+      .map(trimLeadIn)
       .filter(s => !NARRATION_PATTERNS.some(re => re.test(s)))
       .join('')
       .trim();
