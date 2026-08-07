@@ -32,6 +32,14 @@ const WANTED = [
   'TESTS', 'DAY_GROUPS', 'FELT', 'HELPED', 'TOOLKINDS', 'OTHER', 'OPEN', 'CONF',
 ];
 
+// Blocks the guide is allowed not to have. Still parsed when present, but their
+// absence is not reported: TOOLKINDS (the practice-tool checklist) and OPEN
+// (known unknowns) were both cut from the guide, and a section that no longer
+// exists is not a truncated upload. Reporting them would leave a permanent
+// amber "Missing sections" on every upload, which is how a warning that does
+// mean something ends up being ignored.
+const OPTIONAL = new Set(['TOOLKINDS', 'OPEN']);
+
 const EVAL_TIMEOUT_MS = 2000;
 const MAX_STRING      = 4000;
 const MAX_DEPTH       = 8;
@@ -134,7 +142,7 @@ function parseCbatGuide(html) {
     // `const NAME = [` or `= {`, tolerating let/var and whitespace.
     const re = new RegExp(`(?:const|let|var)\\s+${name}\\s*=\\s*([\\[{])`);
     const m = re.exec(html);
-    if (!m) { missing.push(name); continue; }
+    if (!m) { if (!OPTIONAL.has(name)) missing.push(name); continue; }
 
     const openIndex = m.index + m[0].length - 1;
     const closeIndex = matchBracket(html, openIndex);
@@ -467,7 +475,7 @@ function parseGuideCorpusText(text) {
   // CONF is the confidence-chip config for the HTML page; the renderer never
   // emits it and the bot never reads it, so listing it as missing would put a
   // permanent amber "Missing sections: CONF" on every .txt upload.
-  const missing = CORPUS_SECTIONS.filter(k => !found.includes(k));
+  const missing = CORPUS_SECTIONS.filter(k => !found.includes(k) && !OPTIONAL.has(k));
   return { sections: normalise(sections), found, missing };
 }
 

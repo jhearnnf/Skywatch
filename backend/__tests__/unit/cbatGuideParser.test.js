@@ -39,6 +39,15 @@ describe('parseCbatGuide', () => {
     expect(missing).toContain('FELT');
   });
 
+  it('does not report the optional blocks the guide no longer carries', () => {
+    // TOOLKINDS and OPEN were cut from the guide. Their absence is the normal
+    // state, not a truncated upload, and warning about it on every upload is
+    // how the admin learns to ignore the warning that matters.
+    const { missing } = parseCbatGuide(MINIMAL.replace(/const OPEN = .*/, ''));
+    expect(missing).not.toContain('TOOLKINDS');
+    expect(missing).not.toContain('OPEN');
+  });
+
   it('rejects a file that is not the guide', () => {
     expect(() => parseCbatGuide(guide('const SOMETHING = [1,2,3];')))
       .toThrow(/does not look like the CBAT guide/i);
@@ -230,6 +239,16 @@ describe('parseGuideCorpusText — uploading the minified guide', () => {
     // "Missing sections" warning on the admin screen after every .txt upload.
     const { missing } = parseGuideCorpusText(renderGuideCorpus(parseCbatGuide(FULL).sections));
     expect(missing).not.toContain('CONF');
+    expect(missing).toEqual([]);
+  });
+
+  it('reports nothing missing for a corpus without the optional sections', () => {
+    // The live guide has neither TOOLKINDS nor OPEN, so this is what every
+    // real upload now looks like.
+    const { sections } = parseCbatGuide(FULL);
+    delete sections.TOOLKINDS;
+    delete sections.OPEN;
+    const { missing } = parseGuideCorpusText(renderGuideCorpus(sections));
     expect(missing).toEqual([]);
   });
 });
