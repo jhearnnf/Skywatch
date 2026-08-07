@@ -73,6 +73,16 @@ async function main() {
   const password = await bcrypt.hash('clipper-demo-password', 10);
 
   // The account the bot signs in as.
+  //
+  // Admin, deliberately. The games' debug shortcuts are gated on isAdmin, and
+  // recipes need them: DPT's round-skip (555 → round 5) is what puts a busy
+  // board on camera instead of round one's two aircraft. Using them flags the
+  // run as debug so it never reaches a leaderboard — which is what a recording
+  // should do regardless.
+  //
+  // Safe only because this database is disposable and local: the same flag on
+  // the real database would hand the capture account the admin site. Nothing
+  // outside this file should grant it.
   const primary = DEMO_AGENTS[0];
   await User.findOneAndUpdate(
     { email: 'clipper-demo@skywatch.local' },
@@ -81,7 +91,7 @@ async function main() {
         username: primary,
         email: 'clipper-demo@skywatch.local',
         password,
-        isAdmin: false,
+        isAdmin: true,
         totalAirstars: 4820,
         cycleAirstars: 1180,
       },

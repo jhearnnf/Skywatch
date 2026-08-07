@@ -88,8 +88,21 @@ async function signIn(page) {
   await page.goto(`${baseUrl()}/login`, { waitUntil: 'domcontentloaded' });
 
   // The login page opens on a chooser; the email form is behind this.
-  await page.click('text=Sign In with Email', { timeout: 10000 });
-  await page.waitForSelector('#email', { timeout: 10000 });
+  //
+  // Clicked in a retry loop because Playwright considers a button clickable as
+  // soon as it is painted and stable, which on a cold page load is before React
+  // has attached its onClick. That first click then does nothing at all, and
+  // the failure surfaces ten seconds later as "#email never appeared" — a
+  // hydration race wearing a missing-selector costume.
+  let revealed = false;
+  for (let attempt = 0; attempt < 4 && !revealed; attempt++) {
+    await page.click('text=Sign In with Email', { timeout: 10000 }).catch(() => {});
+    revealed = await page.waitForSelector('#email', { timeout: 4000 })
+      .then(() => true).catch(() => false);
+  }
+  if (!revealed) {
+    throw new Error(`The email sign-in form never appeared at ${page.url()}`);
+  }
 
   await page.fill('#email', email);
   await page.fill('#password', password);
@@ -123,15 +136,82 @@ async function signIn(page) {
   }
 }
 
+// A reload wipes the page's JS context, so a marker set on `window` is a
+// direct test for "did this document survive". Deliberately not a navigation
+// listener: SPA route changes fire those too, and an in-app navigation is not
+// what ruins a recording — a full boot is, because the clip then shows the
+// splash screen and the app starting up instead of whatever it was pointed at.
+const MARK = '__clipperCaptureDocument';
+
+const RELOADED =
+  'The page reloaded part-way through the recording, so most of the clip is the app booting '
+  + 'rather than what the recipe was filming. A Vite dev-server HMR reload does this - do not '
+  + 'edit files while a capture runs, or point CLIPPER_CAPTURE_BASE_URL at a built preview '
+  + '(npm run build && npm run preview) instead of the dev server.';
+
+const markDocument = (page) => page.evaluate((k) => { window[k] = true; }, MARK);
+const documentSurvived = (page) =>
+  page.evaluate((k) => Boolean(window[k]), MARK).catch(() => false);
+
 async function runStep(page, step, progress) {
   switch (step.do) {
     case 'goto':
       await page.goto(`${baseUrl()}${step.path}`, { waitUntil: 'domcontentloaded' });
+      // Re-mark: this navigation is the recipe's own doing, not a reload.
+      await markDocument(page);
       break;
 
     case 'wait':
       await page.waitForTimeout(step.ms ?? 500);
       break;
+
+    // Wait for the thing itself instead of guessing how long it takes. Fixed
+    // sleeps are why an idle step could start while a 1.8s intro animation was
+    // still playing and spend its whole budget filming a curtain.
+    case 'waitFor':
+      try {
+        await page.waitForSelector(step.selector, {
+          state: 'visible',
+          timeout: step.timeoutMs ?? 15000,
+        });
+      } catch {
+        throw new Error(
+          `Timed out waiting for "${step.selector}". The recipe expected it on screen by now — ` +
+          'the UI has probably moved, or the step before this one did not do what it used to.',
+        );
+      }
+      break;
+
+    // Wait for something to go away. The counterpart to waitFor, and the only
+    // reliable way past a curtain: a game mounts its arena behind the logo
+    // intro, so waiting for the arena says nothing about whether the game is
+    // accepting input yet.
+    case 'waitForGone':
+      try {
+        await page.waitForSelector(step.selector, {
+          state: 'hidden',
+          timeout: step.timeoutMs ?? 15000,
+        });
+      } catch {
+        throw new Error(
+          `"${step.selector}" was still on screen after ${step.timeoutMs ?? 15000}ms. ` +
+          'The recipe is waiting for it to clear before carrying on.',
+        );
+      }
+      break;
+
+    // The end-of-recipe check. A run that quit early records the menu, which
+    // looks exactly like success in the job log.
+    case 'assertVisible': {
+      const visible = await page.isVisible(step.selector).catch(() => false);
+      if (!visible) {
+        throw new Error(
+          `"${step.selector}" was gone by the end of the recipe, so the recording does not show ` +
+          'what it was meant to. The run ended early - check the clip before trusting it.',
+        );
+      }
+      break;
+    }
 
     case 'click':
       await page.click(step.selector, { timeout: 5000 });
@@ -162,11 +242,53 @@ async function runStep(page, step, progress) {
       break;
 
     case 'idle':
-      // Let a game run. We do not try to play well — the footage is the point,
-      // and a bot chasing a good score would need game-specific logic that
-      // breaks every time the game changes.
+      // Let a game run untouched. Fine for menus and scroll-throughs; for a
+      // game, prefer `play` — an idle arena reads as a screensaver.
       await page.waitForTimeout(step.ms ?? 5000);
       break;
+
+    // Press a sequence of keys once, human-paced.
+    //
+    // Keyboard rather than clicking the on-screen controls: DPT's numpad fires
+    // on pointerdown with a double-fire guard, so synthesising pointer events
+    // means reproducing that timing exactly. Its key handler takes the same
+    // commands and is what the UI itself dispatches through.
+    case 'keys':
+      for (const key of step.keys ?? []) {
+        await page.keyboard.press(key);
+        await page.waitForTimeout(step.keyGapMs ?? 140);
+      }
+      break;
+
+    // Drive the game for a stretch, issuing real commands.
+    //
+    // This is what makes footage look played rather than merely running: an
+    // untouched DPT arena is four aircraft drifting in straight lines, which is
+    // exactly as dull on camera as it sounds.
+    //
+    // Commands are spelled out in the recipe rather than generated here. A
+    // sequence like ['a','ArrowRight','0','9','0'] is reviewable as "select
+    // CA-A, turn right, steer 090" by anyone who knows the game, and keeps this
+    // runner free of per-game knowledge that would rot.
+    case 'play': {
+      const commands = step.commands ?? [];
+      const until = Date.now() + (step.ms ?? 10000);
+      let i = 0;
+
+      while (Date.now() < until) {
+        if (commands.length) {
+          for (const key of commands[i % commands.length]) {
+            await page.keyboard.press(key);
+            await page.waitForTimeout(step.keyGapMs ?? 140);
+          }
+          i++;
+        }
+        // Pause between commands whether or not any were sent, so a recipe with
+        // no commands degrades to an idle rather than spinning the CPU.
+        await page.waitForTimeout(step.gapMs ?? 1800);
+      }
+      break;
+    }
 
     default:
       throw new Error(`Unknown capture step "${step.do}"`);
@@ -220,12 +342,31 @@ module.exports = async function captureHandler({ job, progress }) {
       width: OUTPUT.width, height: OUTPUT.height,
     });
 
-    for (let i = 0; i < recipe.steps.length; i++) {
-      await progress(
-        Math.round(15 + (i / recipe.steps.length) * 70),
-        `${recipe.label}: step ${i + 1}/${recipe.steps.length}`,
-      );
-      await runStep(page, recipe.steps[i], progress);
+    await markDocument(page);
+
+    // A reload mid-capture is not a small blemish: the app takes seconds to
+    // boot and lands back on its first screen, so most of what follows is the
+    // splash and the menu. One verified clip lost twenty-two of its thirty-six
+    // seconds that way and still read as a successful capture in the job log.
+    //
+    // Checked around the whole recipe rather than only at the end, because a
+    // reload usually surfaces first as some later step failing to find an
+    // element — and "timed out waiting for the arena" sends you looking for a
+    // selector change that never happened.
+    try {
+      for (let i = 0; i < recipe.steps.length; i++) {
+        await progress(
+          Math.round(15 + (i / recipe.steps.length) * 70),
+          `${recipe.label}: step ${i + 1}/${recipe.steps.length}`,
+        );
+        await runStep(page, recipe.steps[i], progress);
+      }
+      if (!(await documentSurvived(page))) throw new Error(RELOADED);
+    } catch (err) {
+      if (err.message !== RELOADED && !(await documentSurvived(page))) {
+        throw new Error(`${RELOADED} (surfaced as: ${err.message.split('\n')[0]})`);
+      }
+      throw err;
     }
 
     await progress(88, 'encoding');

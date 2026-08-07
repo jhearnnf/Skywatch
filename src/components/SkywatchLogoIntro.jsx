@@ -29,7 +29,12 @@ export default function SkywatchLogoIntro({ onComplete }) {
   const dur = SKYWATCH_LOGO_INTRO_MS / 1000
 
   return (
-    <Overlay zIndex={1100} backdrop={false} respectSafeArea={false}>
+    // data-testid so callers can wait for the curtain to lift. A game mounts
+    // its arena *behind* this, so "the arena is on screen" is true a full
+    // 1.8s before the game is playable — and a Clipper capture that started
+    // sending keystrokes then had them swallowed, because the key listener is
+    // only attached once the phase leaves 'intro'.
+    <Overlay zIndex={1100} backdrop={false} respectSafeArea={false} data-testid="skywatch-logo-intro">
       {/* Black curtain — independent opacity timeline from the logo so it
           can fade out while the lettering persists on its own curve. */}
       <motion.div

@@ -13,7 +13,8 @@
     "optimize-models": "node scripts/optimize-models.mjs",
     "predev": "node scripts/optimize-models.mjs",
     "prebuild": "node scripts/optimize-models.mjs",
-    "postinstall": "node scripts/fix-google-auth-gradle.cjs"
+    "postinstall": "node scripts/fix-google-auth-gradle.cjs",
+    "dev:clipper": "node scripts/clipperCaptureSite.mjs"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^8.0.2",

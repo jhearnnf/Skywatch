@@ -28,7 +28,8 @@
     "dedupe-media:apply": "node scripts/dedupeMedia.js --apply",
     "dedupe-media:apply-cloudinary": "node scripts/dedupeMedia.js --apply --cloudinary",
     "dedupe-media:orphans": "node scripts/dedupeMedia.js --orphans",
-    "dedupe-media:orphans:apply": "node scripts/dedupeMedia.js --orphans --apply --cloudinary"
+    "dedupe-media:orphans:apply": "node scripts/dedupeMedia.js --orphans --apply --cloudinary",
+    "dev:clipper": "node scripts/clipperCaptureServer.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

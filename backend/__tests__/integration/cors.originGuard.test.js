@@ -29,6 +29,17 @@ describe('CORS origin guard', () => {
     expect(res.headers['access-control-allow-origin']).toBe('https://www.skywatch.academy');
   });
 
+  // The Clipper capture site runs on its own port against the throwaway
+  // database. Without this the recording bot cannot sign in, and the failure
+  // surfaces as a browser CORS error inside a job log nobody is watching.
+  it('allows the local dev and Clipper capture origins', async () => {
+    for (const origin of ['http://localhost:5173', 'http://localhost:5174']) {
+      const res = await request(app).get('/api/health').set('Origin', origin);
+      expect(res.status).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe(origin);
+    }
+  });
+
   it('allows the Capacitor origins used by the native app', async () => {
     for (const origin of ['https://localhost', 'capacitor://localhost']) {
       const res = await request(app).get('/api/health').set('Origin', origin);

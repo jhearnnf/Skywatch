@@ -21,6 +21,10 @@ const allowedOrigins = new Set([
   'https://www.skywatch.academy',
   'http://localhost:5173',
   'http://localhost:4173',
+  // The Clipper capture site (scripts/clipperCaptureSite.mjs). A separate
+  // origin because it runs against the throwaway capture database, so a
+  // recording session's game results never touch real data.
+  'http://localhost:5174',
   'https://localhost',       // Capacitor Android WebView
   'capacitor://localhost',   // Capacitor Android scheme
 ].filter(Boolean))
@@ -52,6 +56,10 @@ app.use('/api/admin/reports', require('./routes/adminReports'));
 app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/users',  require('./routes/users'));
 app.use('/api/chat',   require('./routes/chat'));
+// Public: the CBAT guide page reads this signed out. Mounted after /api/chat so
+// the two are obviously separate — the guide is not part of the chat feature and
+// is not behind its chatGate.
+app.use('/api/guide',  require('./routes/guide'));
 app.use('/api/tutorials', require('./routes/tutorials'));
 app.use('/api/stripe',        require('./routes/stripe'));
 app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));
