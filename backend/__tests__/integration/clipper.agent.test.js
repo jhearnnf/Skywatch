@@ -10,6 +10,8 @@ process.env.CLIPPER_AGENT_TOKEN = 'test_agent_token';
 
 const request = require('supertest');
 const fs = require('fs');
+const path = require('path');
+const childProcess = require('child_process');
 const mongoose = require('mongoose');
 const app = require('../../app');
 const db  = require('../helpers/setupDb');
@@ -307,6 +309,62 @@ describe('agent status', () => {
     expect(res.body.data.configured).toBe(true);
     expect(res.body.data.queue.queued).toBe(1);
     expect(res.body.data.queue.failed).toBe(1);
+  });
+});
+
+// A render lands in a temp folder nobody would guess, so the UI offers to open
+// it. The path comes from the client, which makes the containment check the
+// whole point of the endpoint.
+describe('revealing a render', () => {
+  const os = require('os');
+  const RENDER_DIR = path.join(os.tmpdir(), 'skywatch-clipper', 'renders');
+  const FILE = path.join(RENDER_DIR, 'reveal-test.mp4');
+
+  let spawn;
+  beforeEach(() => {
+    fs.mkdirSync(RENDER_DIR, { recursive: true });
+    fs.writeFileSync(FILE, 'x');
+    spawn = jest.spyOn(childProcess, 'spawn')
+      .mockReturnValue({ unref: jest.fn(), on: jest.fn() });
+  });
+  afterEach(() => { fs.rmSync(FILE, { force: true }); });
+
+  const reveal = (p) => request(app)
+    .post('/api/clipper/renders/reveal').set('Cookie', adminCookie).send({ path: p });
+
+  it('opens the folder for a real render', async () => {
+    const res = await reveal(FILE).expect(200);
+    expect(res.body.data.folder).toBe(RENDER_DIR);
+    expect(spawn).toHaveBeenCalled();
+  });
+
+  it('never passes the path through a shell', async () => {
+    await reveal(FILE).expect(200);
+    const [, args, opts] = spawn.mock.calls[0];
+    expect(Array.isArray(args)).toBe(true);
+    expect(opts.shell).toBeUndefined();
+  });
+
+  it('refuses a path outside the renders folder', async () => {
+    await reveal(path.join(os.homedir(), '.ssh', 'id_rsa')).expect(400);
+    await reveal(path.join(RENDER_DIR, '..', 'capture', 'x.mp4')).expect(400);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('refuses an empty path rather than opening the folder itself', async () => {
+    await reveal('').expect(400);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('404s a render the OS has already swept', async () => {
+    await reveal(path.join(RENDER_DIR, 'gone.mp4')).expect(404);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('is admin-only', async () => {
+    await request(app).post('/api/clipper/renders/reveal')
+      .set('Cookie', userCookie).send({ path: FILE }).expect(403);
+    expect(spawn).not.toHaveBeenCalled();
   });
 });
 
