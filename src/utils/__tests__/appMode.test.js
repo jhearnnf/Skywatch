@@ -79,6 +79,10 @@ describe('appMode', () => {
     it('does not let /cbat swallow /cbat-game-history via prefix', () => {
       // /cbat-game-history is allowed on its own merit, not because it starts
       // with /cbat — guard against a regression to a bare startsWith.
+      //
+      // The CBAT guide needs no entry here: it is a static document
+      // (public/cbat-guide.html), so opening it is a full page load and this
+      // gate — which only runs inside the SPA — never sees it.
       expect(isSlimAllowed('/cbat-game-history')).toBe(true)
       expect(isSlimAllowed('/cbatxyz')).toBe(false)
     })

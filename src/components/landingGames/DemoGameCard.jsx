@@ -34,6 +34,10 @@ export default function DemoGameCard({
   cycleMs = 26000,
   startDelayMs = 0,
   stage = STAGE,
+  // Where the tap target opens. Only the embed passes this: a card iframed into
+  // another page would otherwise load the game INSIDE the iframe, so it needs
+  // '_top' to take the reader's whole window with it.
+  linkTarget,
 }) {
   const { label, poster, path, props: gameProps, answerIntervalMs } = entry
 
@@ -200,6 +204,7 @@ export default function DemoGameCard({
       {/* Tap target — covers the card, above everything else. */}
       <Link
         to={to}
+        target={linkTarget}
         aria-label={`${label} — CBAT practice game`}
         className="absolute inset-0 z-10"
       />

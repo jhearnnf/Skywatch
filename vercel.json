@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/cbat-guide", "destination": "/cbat-guide.html" },
     { "source": "/((?!assets/|sounds/|images/|models/|.*\\..*).*)", "destination": "/index.html" }
   ]
 }

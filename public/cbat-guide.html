@@ -1,0 +1,1205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Complete Guide to CBAT</title>
+<style>
+/* ═══ CBAT field guide — editorial print-manual styling ═════════════════════
+   Design brief: this is a document people read for twenty minutes at a stretch
+   and then scan repeatedly for one fact. So it is built like a printed manual,
+   not like an app: warm paper, a real reading measure, and a hard split between
+   the CLAIM (sans, tight, coloured by confidence) and the REASONING (serif,
+   generous, near-black). That contrast is what makes 151 findings skimmable.
+
+   Legibility rules held throughout:
+     · body copy never exceeds ~68 characters a line
+     · every text colour clears 4.5:1 on its own background, small text 7:1
+     · confidence is carried by THREE channels — colour, a left rule and a
+       worded chip — so it survives colour-blindness and greyscale printing
+     · nothing meaningful is below 13px
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  /* Paper */
+  --paper:#faf8f4; --surface:#fff; --surface2:#f3f0e9;
+  --line:#e4dfd4; --line-2:#cfc8b9;
+
+  /* Ink. Warm near-black; ink2 is the prose grey, ink3 the label grey. */
+  --ink:#1b1a17; --ink2:#46433c; --ink3:#6d675c;
+
+  /* Accent: deep ink navy. Reads as printed, not as a UI chrome blue. */
+  --brand:#1d3f76; --brand-dim:#5c7aa8; --brand-wash:#eef2f8;
+
+  /* Confidence. Chosen dark enough to be READ as text, unlike the usual
+     traffic-light set — these sit on white at 5:1 or better. */
+  --good:#2f6b3f; --good-ink:#245730; --good-bg:#eef4ee;
+  --warn:#8a6300; --warn-ink:#6f4f00; --warn-bg:#f8f2e2;
+  --crit:#9e2b25; --crit-ink:#87241f; --crit-bg:#f9edec;
+  --grey-ink:#5f594e; --grey-bg:#f1efea;
+
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,ui-serif,serif;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+  --measure:68ch;
+  --lift:0 1px 2px rgba(40,32,16,.05), 0 1px 0 rgba(40,32,16,.03);
+  --lift-2:0 6px 22px -10px rgba(40,32,16,.28), 0 1px 2px rgba(40,32,16,.06);
+}
+
+/* Reading at night. Same tokens, warm dark paper — every rule below inherits
+   it, so the two themes cannot drift apart. */
+/* Night reading. Deliberately a WARM charcoal — ink on dimmed paper — rather
+   than the blue-black an app would use, so the manual keeps its identity at
+   2am instead of turning back into a dashboard. */
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#17150f; --surface:#201d16; --surface2:#28241c;
+    --line:#3a352b; --line-2:#514a3c;
+    --ink:#f0eade; --ink2:#c2b9a7; --ink3:#948b79;
+    --brand:#a9c6f0; --brand-dim:#6a7d9c; --brand-wash:#1e2230;
+    --good:#6fb87f; --good-ink:#96d3a3; --good-bg:#1b261c;
+    --warn:#dcae4d; --warn-ink:#eec773; --warn-bg:#2b2415;
+    --crit:#e0736a; --crit-ink:#f5a096; --crit-bg:#2c1c19;
+    --grey-ink:#ada494; --grey-bg:#272319;
+    --lift:0 1px 2px rgba(0,0,0,.45);
+    --lift-2:0 6px 22px -10px rgba(0,0,0,.75), 0 1px 0 rgba(255,255,255,.045) inset;
+  }
+}
+
+*{box-sizing:border-box}
+/* scroll-padding cleared the sticky search bar; with that gone an anchor jump
+   only needs a little breathing room above the heading. */
+html{scroll-behavior:smooth;scroll-padding-top:24px;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:17px/1.7 var(--serif);
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility}
+p,li{text-wrap:pretty}
+h1,h2,h3,.h2sub,.testhead .tn,.apphead .nm,.tile .l{text-wrap:balance}
+a{color:var(--brand);text-decoration:underline;text-decoration-thickness:1px;
+  text-underline-offset:2px;text-decoration-color:var(--brand-dim)}
+a:hover{text-decoration-color:currentColor}
+::selection{background:#fde68a;color:#1b1a17}
+@media (prefers-color-scheme:dark){::selection{background:#3c4a6b;color:#fff}}
+:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:3px}
+.tile .n,.score,ol.key li::before,.tag{font-variant-numeric:tabular-nums}
+*{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+*::-webkit-scrollbar{width:12px;height:12px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid var(--paper)}
+
+/* ── Masthead ───────────────────────────────────────────────────────────── */
+.masthead{border-bottom:1px solid var(--line-2);background:var(--surface2)}
+/* Two columns on wide screens: the standfirst reads at a proper measure on the
+   left, the provenance note sits beside it as a set-off sidenote. Without this
+   both stack in one narrow column and leave half the masthead empty. No markup
+   change needed — the children are placed onto the grid by name. */
+.masthead .wrap{max-width:1240px;margin:0 auto;padding:64px 32px 54px;
+  display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:0 60px;align-items:start}
+.masthead .kicker,.masthead h1{grid-column:1/-1}
+.kicker{font:700 11.5px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--brand)}
+h1{margin:.5em 0 .32em;font:600 clamp(38px,6vw,62px)/1.06 var(--serif);letter-spacing:-.02em;color:var(--ink)}
+h1 span{color:var(--brand);font-style:italic}
+.sub{grid-column:1;color:var(--ink2);max-width:56ch;font-size:19.5px;line-height:1.6;margin:0}
+.byline{grid-column:2;margin:9px 0 0;padding:2px 0 2px 30px;
+  border-left:2px solid var(--line-2);color:var(--ink3);font-size:15px;line-height:1.66;max-width:46ch}
+@media (max-width:1024px){
+  .masthead .wrap{grid-template-columns:1fr;gap:0}
+  .sub,.byline{grid-column:1;max-width:62ch}
+  .byline{margin-top:28px;padding:20px 0 0;border-left:0;border-top:2px solid var(--line-2)}
+}
+
+/* ── Shell + contents rail ──────────────────────────────────────────────── */
+.shell{max-width:1240px;margin:0 auto;padding:0 32px 100px;display:grid;
+  grid-template-columns:236px minmax(0,1fr);gap:56px;align-items:start}
+nav.toc{position:sticky;top:24px;max-height:calc(100vh - 44px);overflow:auto;
+  padding:34px 0 40px;font-family:var(--sans);border-right:1px solid var(--line);
+  margin-right:-24px;padding-right:20px}
+nav.toc h4{margin:22px 0 8px;font:700 10.5px/1 var(--sans);letter-spacing:.15em;
+  text-transform:uppercase;color:var(--ink3)}
+nav.toc a{display:block;padding:6px 10px 6px 13px;color:var(--ink2);font-size:13.5px;
+  line-height:1.35;border-left:2px solid transparent;text-decoration:none;border-radius:0 5px 5px 0}
+nav.toc a:hover{background:var(--surface2);color:var(--ink)}
+nav.toc a.on{color:var(--brand);border-left-color:var(--brand);font-weight:650;background:var(--brand-wash)}
+nav.toc a.sub{padding-left:24px;font-size:12.8px;color:var(--ink3)}
+nav.toc a.sub.on{color:var(--brand)}
+main{padding-top:38px;min-width:0}
+
+/* ── Section headings ───────────────────────────────────────────────────── */
+section{margin-bottom:72px;scroll-margin-top:84px}
+h2{font:700 11.5px/1 var(--sans);letter-spacing:.19em;text-transform:uppercase;
+  color:var(--brand);margin:0 0 10px}
+h2+.h2sub{margin:0 0 26px;font:600 33px/1.18 var(--serif);letter-spacing:-.018em;color:var(--ink);
+  padding-bottom:16px;border-bottom:2px solid var(--ink)}
+h3{font:600 21px/1.3 var(--serif);margin:40px 0 12px;color:var(--ink)}
+p.lead{color:var(--ink2);max-width:var(--measure);font-size:17px}
+.note{border-left:3px solid var(--brand);background:var(--brand-wash);
+  border-radius:0 8px 8px 0;padding:16px 20px;color:var(--ink2);font-size:15.5px;
+  line-height:1.62;margin:22px 0;max-width:var(--measure)}
+.note strong{color:var(--ink)}
+
+/* ── Confidence chips ───────────────────────────────────────────────────── */
+.chip{display:inline-flex;align-items:center;gap:6px;font:700 10.5px/1 var(--sans);
+  letter-spacing:.09em;text-transform:uppercase;padding:4px 9px;border-radius:4px;
+  border:1px solid;white-space:nowrap;flex:none}
+.chip .dot{width:7px;height:7px;border-radius:2px;flex:none}
+.c-green{color:var(--good-ink);background:var(--good-bg);border-color:color-mix(in srgb,var(--good) 34%,transparent)}
+.c-green .dot{background:var(--good)}
+.c-amber{color:var(--warn-ink);background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 34%,transparent)}
+.c-amber .dot{background:var(--warn)}
+.c-red{color:var(--crit-ink);background:var(--crit-bg);border-color:color-mix(in srgb,var(--crit) 36%,transparent)}
+.c-red .dot{background:var(--crit)}
+.c-grey{color:var(--grey-ink);background:var(--grey-bg);border-color:var(--line-2)}
+.c-grey .dot{background:var(--ink3)}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 6px}
+
+/* ── Findings ───────────────────────────────────────────────────────────── */
+.facts{display:flex;flex-direction:column;gap:12px;margin-top:20px}
+.item{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--ink3);
+  border-radius:5px;padding:17px 21px;box-shadow:var(--lift);
+  transition:box-shadow .16s ease,border-color .16s ease}
+.item:hover{box-shadow:var(--lift-2);border-color:var(--line-2)}
+.item.green{border-left-color:var(--good)}
+.item.amber{border-left-color:var(--warn)}
+.item.red{border-left-color:var(--crit)}
+.item.grey{border-left-color:var(--ink3)}
+/* The claim: sans, tight, coloured. Scans in one pass. */
+.item .stmt{font:650 16px/1.48 var(--sans);letter-spacing:-.006em;max-width:var(--measure);color:var(--ink)}
+.item.green .stmt{color:var(--good-ink)}
+.item.amber .stmt{color:var(--warn-ink)}
+.item.red   .stmt{color:var(--crit-ink)}
+.item.grey  .stmt{color:var(--grey-ink)}
+/* The reasoning: serif, generous, near-black. This is the part people read. */
+.item .note2{margin-top:10px;color:var(--ink2);font:16px/1.66 var(--serif);max-width:var(--measure)}
+.item .meta{margin-top:13px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.tag{font:600 10.5px/1 var(--sans);letter-spacing:.07em;text-transform:uppercase;
+  padding:4px 8px;border-radius:4px;background:var(--surface2);color:var(--ink3);
+  border:1px solid var(--line)}
+
+/* ── Test headers ───────────────────────────────────────────────────────── */
+.testhead{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;
+  border-bottom:1px solid var(--line-2);padding-bottom:12px;margin-top:52px}
+.testhead .tn{font:600 25px/1.2 var(--serif);letter-spacing:-.015em;color:var(--ink)}
+.testhead .ta{font:700 12px/1 var(--mono);color:var(--brand);background:var(--brand-wash);
+  padding:5px 9px;border-radius:4px;border:1px solid color-mix(in srgb,var(--brand) 26%,transparent)}
+.aka{font:15px/1.5 var(--serif);font-style:italic;color:var(--ink3)}
+.brief{border:1px solid var(--line);border-left:4px solid var(--brand-dim);background:var(--surface2);
+  border-radius:0 6px 6px 0;padding:16px 20px;margin:18px 0 0;font:16px/1.68 var(--serif);
+  color:var(--ink2);max-width:var(--measure)}
+.brief .bh{display:block;font:700 10.5px/1 var(--sans);letter-spacing:.15em;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:9px}
+.brief .bsrc{display:block;margin-top:11px;font:13px/1.5 var(--sans);color:var(--ink3)}
+
+/* ── SkyWatch simulation beside the format panel ────────────────────────────
+   The panel keeps its reading measure and the square sits beside it, so the
+   two read as one row: this is the test, and this is our version of it. The
+   column only splits when there is room for the panel to stay at a proper
+   measure — below that the square goes under it at full width rather than
+   squeezing the prose into a gutter. */
+.briefrow{display:grid;grid-template-columns:minmax(0,1fr) 272px;gap:0 26px;align-items:start}
+.briefrow.nosim{display:block}
+.briefcol{min-width:0}
+
+/* The frame is given the full 640px viewport the game is laid out for, then
+   scaled down as a whole — like a video, not like a shrunken web page.
+   Sizing the iframe to the box instead would make the game's own viewport 272px
+   wide, and every `vw`/`dvh` measurement inside it would answer 272: the games
+   would lay themselves out for a phone and then be scaled again on top. --simw
+   is unitless so it can drive both the box's size and the scale factor. */
+.sim{--simw:272;--simstage:640;margin:18px 0 0;padding:0}
+.simbox{position:relative;width:calc(var(--simw)*1px);height:calc(var(--simw)*1px);
+  border:1px solid var(--line-2);border-radius:8px;overflow:hidden;
+  background:#06101e;box-shadow:var(--lift-2)}
+/* Scenery: it plays itself and must never take the caret or a scroll gesture
+   away from the document. */
+.simbox iframe{position:absolute;top:0;left:0;border:0;display:block;
+  width:calc(var(--simstage)*1px);height:calc(var(--simstage)*1px);
+  transform-origin:top left;transform:scale(calc(var(--simw)/var(--simstage)))}
+.sim figcaption{margin-top:9px;font:13px/1.5 var(--sans);color:var(--ink3);
+  max-width:calc(var(--simw)*1px)}
+.sim figcaption strong{color:var(--ink2);font-weight:650}
+@media (max-width:1180px){
+  .briefrow{grid-template-columns:1fr;gap:0}
+  .sim{--simw:340}
+}
+
+/* ── Lists ──────────────────────────────────────────────────────────────── */
+ul.tight{margin:14px 0;padding-left:22px;color:var(--ink2);max-width:var(--measure)}
+ul.tight li{margin:9px 0}
+ul.tight li::marker{color:var(--brand-dim)}
+ol.key{counter-reset:k;list-style:none;padding:0;margin:22px 0}
+ol.key li{counter-increment:k;position:relative;padding:16px 20px 16px 62px;margin-bottom:10px;
+  background:var(--surface);border:1px solid var(--line);border-radius:5px;color:var(--ink2);
+  font:16px/1.62 var(--serif);box-shadow:var(--lift);max-width:calc(var(--measure) + 62px)}
+ol.key li::before{content:counter(k);position:absolute;left:20px;top:16px;width:27px;height:27px;
+  border-radius:4px;background:var(--brand);color:#fff;font:700 13px/27px var(--sans);
+  text-align:center}
+ol.key li strong{color:var(--ink);font-family:var(--sans);font-size:15px;font-weight:650}
+
+/* ── Data displays ──────────────────────────────────────────────────────── */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:14px;margin:24px 0}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:20px;
+  box-shadow:var(--lift)}
+.tile .n{font:600 38px/1 var(--serif);letter-spacing:-.03em;color:var(--ink)}
+.tile .n.acc{color:var(--brand)}
+.tile .l{margin-top:9px;font:13px/1.42 var(--sans);color:var(--ink3)}
+
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);
+  box-shadow:var(--lift)}
+table{border-collapse:collapse;width:100%;min-width:560px;font:15px/1.55 var(--serif)}
+th{text-align:left;padding:13px 17px;font:700 10.5px/1 var(--sans);letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink3);border-bottom:1px solid var(--line-2);
+  white-space:nowrap;background:var(--surface2)}
+td{padding:13px 17px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink2)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface2)}
+td strong{color:var(--ink)}
+
+.stack{display:flex;height:28px;border-radius:5px;overflow:hidden;gap:2px;background:var(--surface2);margin-top:8px}
+.stack i{display:block;height:100%;border-radius:2px}
+.legend{display:flex;flex-wrap:wrap;gap:18px;margin-top:13px;font:13.5px var(--sans);color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.legend b{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+.crit-row{display:grid;grid-template-columns:minmax(150px,1.15fr) 1fr auto;gap:16px;align-items:center;
+  padding:12px 0;border-bottom:1px solid var(--line)}
+.crit-row:last-child{border-bottom:none}
+.crit-row .cn{font:650 15px/1.35 var(--sans);color:var(--ink)}
+.crit-row .cn em{display:block;font-style:normal;font-size:12.5px;color:var(--ink3);font-weight:400;margin-top:3px}
+.meter{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden;border:1px solid var(--line)}
+.meter i{display:block;height:100%;border-radius:4px;background:var(--brand)}
+.score{font:700 14px var(--mono);color:var(--ink);white-space:nowrap}
+.score small{color:var(--ink3);font-weight:400}
+
+.appcard{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:26px;
+  margin-bottom:20px;box-shadow:var(--lift)}
+.apphead{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;
+  padding-bottom:17px;border-bottom:1px solid var(--line);margin-bottom:17px}
+.apphead .nm{font:600 23px/1.22 var(--serif);letter-spacing:-.014em;color:var(--ink)}
+.apphead .by{font:13.5px/1.5 var(--sans);color:var(--ink3);margin-top:5px}
+
+.btn{background:var(--surface);border:1px solid var(--line-2);color:var(--ink2);border-radius:6px;
+  padding:10px 15px;font:600 14px var(--sans);cursor:pointer;box-shadow:var(--lift)}
+.btn:hover{border-color:var(--brand);color:var(--brand)}
+
+/* ── Utility + filtering ────────────────────────────────────────────────── */
+.hidden{display:none !important}
+body.filtering section{margin-bottom:38px}
+body.filtering .testhead{margin-top:26px}
+body.filtering h3{margin-top:22px}
+
+footer{border-top:1px solid var(--line-2);padding:34px 32px 72px;color:var(--ink3);
+  font:14px/1.65 var(--sans);background:var(--surface2)}
+footer .wrap{max-width:76ch;margin:0 auto}
+
+/* ── Narrow screens ─────────────────────────────────────────────────────── */
+@media (max-width:960px){
+  body{font-size:16.5px}
+  .shell{grid-template-columns:1fr;gap:0;padding:0 20px 72px}
+  .masthead .wrap{padding:44px 20px 36px}
+  nav.toc{position:static;max-height:none;border-right:0;margin-right:0;padding:0 0 16px;
+    border-bottom:1px solid var(--line)}
+  nav.toc .tocbody{display:none}
+  nav.toc.open .tocbody{display:block}
+  .toctoggle{display:block;width:100%;text-align:left;margin-top:16px}
+  main{padding-top:28px}
+  h2+.h2sub{font-size:27px}
+  .testhead .tn{font-size:22px}
+  ol.key li{padding-left:56px}
+  .crit-row{grid-template-columns:1fr;gap:8px}
+  footer{padding:28px 20px 56px}
+}
+@media (min-width:961px){.toctoggle{display:none}}
+
+/* ── Print. A guide people take to Cranwell. ────────────────────────────── */
+@media print{
+  :root{--paper:#fff;--surface:#fff;--surface2:#fff;--ink:#000;--ink2:#222;--ink3:#555;
+    --line:#bbb;--line-2:#888;--brand:#000;--brand-wash:#fff;--lift:none;--lift-2:none}
+  nav.toc,.toctoggle{display:none !important}
+  .shell{display:block;padding:0;max-width:none}
+  body{font-size:11pt;background:#fff}
+  .masthead .wrap{padding:0 0 18pt}
+  section{margin-bottom:24pt;page-break-inside:auto}
+  .item,.tile,ol.key li,.appcard,.brief,.note{page-break-inside:avoid;box-shadow:none}
+  .testhead{page-break-after:avoid;page-break-inside:avoid}
+  h2,h3,.h2sub{page-break-after:avoid}
+  a{text-decoration:none;color:#000}
+}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="kicker">A candidate’s field guide · updated for the current test</div>
+    <h1>The Complete Guide to <span>CBAT</span></h1>
+    <p class="sub">What each test actually looks like, where the practice apps get it wrong, how the day
+    runs, and the details that catch people out. I’ve tried to be honest about how sure I am of each thing,
+    because a fair amount of what gets passed around about the CBAT turns out to be shaky.</p>
+    <div class="byline">I started this because the information is scattered everywhere. A bit of it sits in
+    the official test guides. Much more of it is buried in candidate write-ups, forum threads, years of
+    archived discussion, and conversations with people who’d walked out of the test centre a few hours
+    earlier. None of those sources is complete on its own and a lot of it flatly contradicts itself. So I
+    put everything in one place, sorted out the contradictions where I could, and flagged the ones I
+    couldn’t. Where a number has changed — and the pass mark is the big one — I’ve gone with what the most
+    recent people through the door say, not with what gets repeated most often.</div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <button class="btn toctoggle" id="toctoggle">☰ Contents</button>
+    <div class="tocbody" id="tocbody"></div>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<footer><div class="wrap" id="foot"></div></footer>
+
+<script>
+const TESTS = [
+{
+ id:'flag', name:'Figures, Logistics and Groups', abbr:'FLAG', aka:'“the one with the triangles”',
+ brief:'Roughly ten minutes of multitasking with a short break at the halfway point, running three tasks at once. <em>Figures</em> — quickfire mental arithmetic answered on an on-screen keypad in about four seconds a question. <em>Logistics</em> — watch the circled aircraft and press the matching key as they cross green circles, yellow triangles or red rectangles. <em>Groups</em> — a two-letter callsign flashes up with a beep as aircraft enter and leave, and you get yes/no questions on which are still on screen. The load climbs throughout.',
+ verdict:'Probably the highest-stakes test on the CBAT, and the one that falls apart fastest once it gets going. If you’ve only got time to drill one thing properly, make it this.',
+ facts:[
+  {c:'green',tag:'Core rule',t:'You only have to recall the callsigns of aircraft with a circle around them. The uncircled ones carry deliberately similar callsigns to pull you off, so ignore them completely.',
+   n:'This is the most important fix to make to your practice, because at least one popular app has you recalling both. They’ll tell you clearly on the day, but if you already know it you won’t be relearning the task while the clock runs.'},
+  {c:'green',tag:'Real vs practice',t:'The aircraft move a lot faster and more erratically than in any practice tool.',
+   n:'Everyone says this. Your timing will feel wrong for the first thirty seconds or so. Expect that and it won’t throw you.'},
+  {c:'green',tag:'Strategy',t:'Almost everyone loses the callsigns by the final round. The play that works is to bank the maths and the shapes, then answer callsign questions on gut familiarity.',
+   n:'This is the most consistent advice from people who passed. Several gave up tracking callsigns entirely near the end, guessed on whether one "felt familiar", kept on top of everything else, and still scored well. Don’t burn attention defending the bit that was always going to collapse.'},
+  {c:'green',tag:'Timing',t:'Take your points early. The first 80% is manageable, so go hard at all three task types while you’ve still got spare capacity.',
+   n:'The difficulty ramps up, it doesn’t start high. Points you pick up in the calm phase cost you far less than points you fight for at the end.'},
+  {c:'amber',tag:'Scoring',t:'The on-screen instructions say you get partial points for “near misses” on shape crossings.',
+   n:'I’ve only seen this reported once. If it’s right, a marginal press beats skipping. Don’t build your whole approach on it though.'},
+  {c:'green',tag:'Weighting',t:'FLAG is the only test feeding the central information processing domain, so nothing else on the day can cover for it. The minimum is reported as 5 out of 9.',
+   n:'Two candidates confirmed this from their own results pages, one of them quoting the 5/9 figure and his own 6/9 against it. Because it stands alone in its domain, a weak FLAG fails you for the role outright no matter how good your total is — and that is exactly what happened to at least one candidate, who missed by a single point and lost all three aircrew roles he wanted. If you only drill one test properly, this is the one.'},
+  {c:'amber',tag:'Benchmark',t:'On the main practice app, around 60+ is treated as solid preparation, though at least one person went in on 40 to 55 and still did fine.',
+   n:'Careful with app scores here. One app has a bug that makes FLAG scores stack up across attempts, so if your personal best looks too good, it probably is.'},
+  {c:'amber',tag:'Detail',t:'The shapes are reasonably spread out but not big, so at that aircraft speed you sometimes get almost no window to press. Worst where a track clips the tip of a triangle.',
+   n:'So watch the tips. That’s where presses get missed.'},
+  {c:'amber',tag:'The spike',t:'At some point late on it can throw a huge number of aircraft up at once — one candidate counted something like thirty on screen.',
+   n:'He also went to the boarding officer expecting a sheet full of red and found his lowest score of the day was 142 out of 180. So treat the spike as the test doing its job rather than as evidence you’ve lost it.'},
+  {c:'amber',tag:'Not universal',t:'Don’t assume FLAG will show up if you’re sitting a different service’s version. At least one overseas candidate didn’t get it at all.',
+   n:'Their version seems to swap in a different test. There’s more on this further down.'}
+ ]},
+{
+ id:'ant', name:'Airbourne Numerical Test', abbr:'ANT', aka:'speed, distance, time and fuel',
+ brief:'Speed, distance and time problems built around a route map. A left-hand menu holds the data charts, the map shows the route between named checkpoints, and a solving table sits underneath. You read speed off a bar chart against package weight, take distances from the map, and work time as distance ÷ speed — about one minute per question including reading time. Bad weather between checkpoints adjusts your speed by a percentage rather than the distance, and partial credit is given for close answers, so rounding pays.',
+ verdict:'The best documented test there is, and the one where practice tools mislead you most. The arithmetic is easier than what you’ve been training on. The comprehension is much harder.',
+ facts:[
+  {c:'green',tag:'Real vs practice',t:'The numbers in the real ANT are rounder and kinder than the ones in the practice apps. The main app is deliberately built harder than the real thing.',
+   n:'Its developer has said so openly, and everyone who’s sat the test agrees the real figures are friendlier. You’ll turn up over-trained on the arithmetic, which is exactly where you want to be.'},
+  {c:'green',tag:'The catch',t:'The real questions carry far more variety and more steps though: storms and weather, two aircraft at once, fuel calculations, and traps in the wording.',
+   n:'A classic trap is a question phrased as "Alpha to Bravo is 67 miles" when the table says 43 miles remaining. The maths isn’t what fails people here. Misreading the question is. Read the last line of the objective box first, because that tells you what’s actually being asked.'},
+  {c:'green',tag:'Structure',t:'Two aircraft turn up later in the test, usually called Pluto and Jupiter, with different speeds and a separate chart each.',
+   n:'Typical question: one leaves point A with no package at 15:30, so what time does the other have to leave point B carrying 500kg for both to reach point C together? Check you’re reading the right aircraft’s chart. Careless errors cluster here.'},
+  {c:'green',tag:'Timing',t:'You get a full minute per question, plus reading time at the start.',
+   n:'Big difference from most practice tools, which push "as many as you can in the time". You’re not in a race here. Use the minute.'},
+  {c:'green',tag:'Mechanics',t:'Speed is in miles per minute and depends on package weight. Fuel consumption is given per distance and depends on speed.',
+   n:'So a fuel question is one extra lookup, not one extra calculation. Weight gives you speed, speed gives you consumption, then you work it exactly like a time question. Knowing that beforehand takes most of the sting out of it.'},
+  {c:'green',tag:'Preparation',t:'Get to comfortable full marks on the practice app’s speed-distance-time set before test day.',
+   n:'Two people who passed landed on the same target independently. The score isn’t really the point. Once the arithmetic is automatic you’ve got spare capacity for the wording, and the wording is what catches people.'},
+  {c:'amber',tag:'Interface',t:'You get three tabs: a short intro telling you to round and estimate, a speed against load chart, and a speed against fuel consumption chart. Plain bar charts, whole numbers.',
+   n:'One detailed first-hand description, and it fits everything else I’ve seen. Only one person described the tab layout though, so hold the specifics loosely.'},
+  {c:'amber',tag:'Mechanics',t:'Speed and fuel consumption values look to be single-digit whole numbers, and no single question asks for both a time and a fuel figure.',
+   n:'Both from one account, and hedged when it was given. Handy if you’re writing your own practice questions. Not something to lean on.'},
+  {c:'amber',tag:'Wind',t:'One question gives you a tailwind and makes you faster. The other wind questions slow you down. Your speed is always stated, and if it isn’t, assume the maximum for the parcel weight.',
+   n:'Read any weather question twice, because the effect flips direction.'},
+  {c:'amber',tag:'Interface',t:'You can backspace while typing an answer in the real test. At least one practice app won’t let you.',
+   n:'Small thing, but it removes a bit of panic that your practice may have trained into you.'},
+  {c:'amber',tag:'Tolerance',t:'Rounding is safe. Answers a couple of minutes off the exact figure still mark as correct.',
+   n:'Widely repeated, but I’ve never seen anyone quote the official tolerance. Round with confidence, just don’t get sloppy on the assumption that the margin is huge.'},
+  {c:'amber',tag:'Other tools',t:'Some of the speed-distance-time practice tools floating around online are far harder than the real test.',
+   n:'Fine for overtraining, useless for judging where you are. If one of them is wrecking your confidence, that’s the tool, not you.'},
+  {c:'amber',tag:'Practice trap',t:'The practice tools disagree about which way round the speed chart runs. Some show a heavier package flying slower, at least one published chart shows the opposite.',
+   n:'The first-hand accounts point at heavier being slower — one describes 7 miles a minute as the speed carrying a 200kg package, dropping as the load goes up. It matters less than it looks, because you read the number off the chart in front of you on the day rather than recalling it. What you should not do is drill until the relationship feels automatic, then meet a chart that runs the other way.'},
+  {c:'amber',tag:'Practice trap',t:'The apps mark you far harder on accuracy than the real test does. Being two to six minutes out can score you zero on an app while earning partial credit on the day.',
+   n:'People do get badly rattled by a run of zeroes on an app when their method is basically sound. Judge yourself on whether you got there inside the minute with a sensible estimate, not on whether the app lit up green.'}
+ ]},
+{
+ id:'numops', name:'Numerical Operations Test', abbr:'—', aka:'the quick arithmetic test',
+ brief:'Forty rapid-fire arithmetic questions, one operator at a time. There is no backspace and no second chance once a digit is entered. Nothing to interpret — it is pure speed and accuracy against the clock.',
+ verdict:'Short, brutal, and the one test you can properly train for away from any app.',
+ facts:[
+  {c:'green',tag:'Preparation',t:'Drill mental arithmetic away from the apps. Times tables, addition, subtraction, multiplication.',
+   n:'Everyone who described their prep in any detail did this separately from app practice, including the candidate who failed twice and then passed everything on his third go. He was blunt that the app on its own hadn’t been enough.'},
+  {c:'amber',tag:'Reality check',t:'Plenty of app practice still might not make you fast enough. One high scorer ran out of time on questions after spending about twenty seconds on 138 ÷ 4.',
+   n:'Awkward division is the weak spot. Practise the ugly sums, not the tidy ones.'},
+  {c:'amber',tag:'Format',t:'It runs for roughly a minute, and it’s realistically the only test where you’ll type with both hands.',
+   n:'Everywhere else, one hand is usually busy with something.'},
+  {c:'green',tag:'Technique',t:'Round to a friendly multiple, then fix the remainder.',
+   n:'Say 321 ÷ 7. Take 350 ÷ 7 = 50, then knock off 28 ÷ 7 = 4, so about 46. Or 183 ÷ 4: 160 ÷ 4 = 40, plus 20 ÷ 4 = 5, so 45. This one comes up again and again, and people find it clicks straight away.'}
+ ]},
+{
+ id:'cut', name:'Cognitive Updating Test', abbr:'CUT', aka:'the multitasking test',
+ brief:'Six aircraft displays — Message, Engine, Navigation, Sensor, Mission and System — of which only two can be open at once, switched from a row of index buttons. A warning panel and a clock stay fixed at the top, and the primary objective is to keep that warning panel empty: hold three fuel tanks within 50 litres of each other, keep airspeed within ±10 kt of the required figure, run the air and ground sensors on their 2- and 4-minute schedules, complete load-drop and video entries, and keep hydraulic pressure between 90 and 110 while entering comms codes before their countdowns expire. Scheduled events need you on the right display within five to ten seconds of the timestamp.',
+ verdict:'The best news in this whole guide. Everyone who sat it found the real version noticeably easier than the practice version.',
+ facts:[
+  {c:'green',tag:'Real vs practice',t:'The real test runs slower and feels lighter than the app version. More than one person had genuine idle moments on the day after feeling like they were drowning in practice.',
+   n:'Some of that is pacing and some of it is just ergonomics. A mouse on a desktop screen beats fingers covering half a phone. If the app version is overwhelming you, that says nothing about how test day will go.'},
+  {c:'green',tag:'Setup',t:'Keep one of your two windows permanently on the warnings and message panel, and use the other for tasks. Never close the warnings view.',
+   n:'The most repeated CUT tip there is, and near enough unanimous among people who passed.'},
+  {c:'green',tag:'Scoring',t:'You’re marked on speed, accuracy and warning count together. As few warnings as you can manage, cleared fast, correct inputs at the right time, airspeed held in range.',
+   n:'You get penalised for how long you sit in a warning state, not just for triggering one. A quick fix costs you very little. A slow one costs you a lot.'},
+  {c:'amber',tag:'Priorities',t:'Pressure takes the longest to clear, so it needs the closest watch. Airspeed is the one that drifts out of limits easiest.',
+   n:'Reported often, though mostly by people talking about practice. The one person who mentioned his real-test warnings said pressure was the only thing he got pulled up on.'},
+  {c:'amber',tag:'Technique',t:'Type the codes on the objective page as fast as you can, and aim for two or three correct codes per line.',
+   n:'A real target beats a vague "do the codes", and it makes it much easier to tell whether your practice is going anywhere.'},
+  {c:'amber',tag:'Benchmarks',t:'Quoted targets vary. Around 20 seconds average correction time is treated as very good, and 40 seconds was enough for at least one person to pass.',
+   n:'Careful here. Different tools report different things, and people mix up "seconds to correct" with a points total all the time. Work out which number yours is showing before you borrow someone else’s target.'}
+ ]},
+{
+ id:'trt', name:'Target Recognition Test', abbr:'TRT', aka:'target search',
+ brief:'Four target types monitored simultaneously. <em>Light</em> — a box shows three coloured lights and a panel cycles colours at random; you press when they match. <em>Scan</em> — a named vehicle (tank, aircraft, two-wheeler) must be picked out of a panel that a scan line reveals only in slivers. <em>System</em> — an alphanumeric code has to be found in a scrolling list, 19 rows visible at a time in the real test. <em>Scene</em> — click every instance of a specified target in the central map panel, identified by colour, shape and direction of travel, ignoring the distractor shapes.',
+ verdict:'The test where the real version throws in mechanics that most practice tools just don’t have.',
+ facts:[
+  {c:'amber',tag:'Real test',t:'The real test adds an “unknown” unit, shown as a yellow diamond, plus flashing red priority targets that appear for a few seconds and have to be clicked straight away.',
+   n:'Biggest single gap between practice and reality on this one. If your tool doesn’t have them, go in at least knowing they exist so they don’t cost you the whole first round.'},
+  {c:'amber',tag:'Real test',t:'Instructions get specific. You might get "damaged friendly truck heading north", and then only those count.',
+   n:'It isn’t always "click all enemy tanks". Read each instruction properly. Over-clicking hurts you as much as missing.'},
+  {c:'amber',tag:'Structure',t:'It runs as eight or nine rounds that build, each one adding more objects to find and more items in the list panel.',
+   n:'It starts gently, so use the early rounds to lock in your scan pattern before the load climbs.'},
+  {c:'green',tag:'Strategy',t:'Anchor on the list panel codes, because they’re the only thing running constantly. Keep colours and vehicles in your peripheral vision, and clear map tasks the second they appear.',
+   n:'The logic is that lights and vehicles only match now and then, and map tasks are instant, while the codes never stop. Several people worked out this same order on their own, which is usually a sign it’s right.'},
+  {c:'amber',tag:'Benchmarks',t:'Quoted practice scores run from about 42 to 60, with 50 treated as good. But at least one tool caps out at 29, so there are different scales floating about.',
+   n:'Don’t chase someone else’s number until you know you’re on the same scale. Go for a clean method and steady improvement instead.'},
+  {c:'amber',tag:'Improvement',t:'Once your method is right, all that’s left is raw speed, and speed only comes from repetition.',
+   n:'If you’ve plateaued with a sound approach, that’s normal. Keep grinding, don’t redesign.'}
+ ]},
+{
+ id:'insc', name:'Instrument Comprehension Test', abbr:'INSC', aka:'instruments 1 and 2',
+ brief:'Two parts. Part 1 shows an attitude indicator and a compass at the top and four aircraft images below; you pick the image that matches both readings at once. Part 2 shows six instruments — altimeter, attitude, speed, ascend/descend, heading and turn — with five written statements, and you pick the statement that fits. The published method is to start from the statements, find the data point that separates them, and read only the dial that settles it.',
+ verdict:'The most trainable test on the CBAT. Everyone agrees on the method, so the only thing that varies is how fast you can run it.',
+ facts:[
+  {c:'green',tag:'Method',t:'Work by elimination from the answers instead of reading the gauges. Take each option in turn and bin it the moment one stat doesn’t match.',
+   n:'Don’t read the instruments first and then go hunting for an answer that fits. Start at the options, find the stat that differs between them, and check only that. People report jumping to near full marks the same day they switch over.'},
+  {c:'green',tag:'Real vs practice',t:'The multiple choice format shifts slightly on every question in the real test. Practice apps tend to keep one fixed layout.',
+   n:'This matters more than it sounds. A fixed layout quietly trains you to look at one spot on the screen, and when that moves every question you lose seconds before you even notice why.'},
+  {c:'amber',tag:'Timing',t:'Reportedly about five minutes for twenty questions, so roughly ten seconds each. That’s reachable after a few weeks of daily drilling.',
+   n:'Both accounts of the timing were second-hand, so treat ten seconds as a training target and not a confirmed limit. It’s realistic though. People have got there on about ten minutes a day for three weeks.'},
+  {c:'amber',tag:'Trap',t:'The classic mistake is ascending versus descending. Every other stat matches, so elimination won’t save you if you skim that word.',
+   n:'Give the climb wording a deliberate half-second check before you commit.'},
+  {c:'amber',tag:'Benchmarks',t:'Quoted practice targets are 14 or 15 out of 15 on the first instruments set, and around 25 on the second.',
+   n:'If you’re at full marks and only speed is holding you back, you’re in good shape. The real test gets described as harder than the app, but manageable once you’ve got a solid score behind you.'},
+  {c:'amber',tag:'Other tools',t:'Some of the harder practice sites make all the options deliberately similar and give you ten seconds, which makes elimination too slow to work.',
+   n:'On those, read the gauges first and then scan for the match. Different tool, different best method, so don’t assume your technique carries over.'}
+ ]},
+{
+ id:'dpt', name:'Dynamic Projection Test', abbr:'DPT', aka:'the bearings test / directing aircraft through gates',
+ brief:'A 2D overhead radar picture with three aircraft: CA-A (red) and CA-N (yellow) flying ordered gate sequences — lettered waypoints for one, numbered for the other — plus a green interceptor chasing a moving enemy. All three continue on whatever heading you last assigned. Aircraft must keep at least 3,000 ft of vertical separation from each other and 1,000 ft clear of danger-area altitudes, shown as red circles: white outline for 2,000 ft, black outline for 3,000 ft. Interception works off the projected crossing point, not the enemy’s current position.',
+ verdict:'Comfortably the most feared test on the CBAT, the worst explained on the day, and the one people most often pass while being certain they’ve failed it. Read this section twice.',
+ facts:[
+  {c:'green',tag:'The key mechanic',t:'Aircraft turn relative to their OWN north, not to the bearing ring printed round the edge of the display. Typing 060 won’t point the aircraft at the 060 mark unless it happens to be sitting on the centre point.',
+   n:'This is the most useful single thing on this page. Nearly everyone who struggled with DPT struggled because they assumed the edge markings were the frame of reference. Think of the bearing you type as the heading you want that aircraft to turn onto in its own frame. The numbers round the edge are only a scale reference, handy for judging how big a 100° turn looks, and otherwise a distraction.'},
+  {c:'green',tag:'Expectation',t:'Everyone rates this the hardest and worst explained test on the CBAT. The instructions don’t make the controls clear.',
+   n:'Knowing that beforehand is worth something on its own. People who walked in expecting confusion handled it far better than the ones who assumed being confused meant they’d missed something obvious.'},
+  {c:'green',tag:'Reassurance',t:'You can score well on DPT, and pass overall, while feeling like you completely botched it. The markers clearly don’t expect anyone to nail this one.',
+   n:'One candidate got reset to the gate again and again, missed an intercept entirely, felt awful about the whole thing, and still scored well on that exact test. Another seriously thought about walking out at the halfway point and passed for both roles he wanted. Whatever happens here, finish the day.'},
+  {c:'green',tag:'Structure',t:'It builds. You start directing one aircraft through lettered gates, then juggle up to three at once, then there’s an intercept where you bring a marker onto a jet that’s manoeuvring.',
+   n:'Aircraft also have to keep vertical separation from each other and stay clear of marked danger areas. The early phase is where you can afford to get things wrong.'},
+  {c:'amber',tag:'Critical trap',t:'Hitting “clear” to fix a mistyped input also wipes the direction you’d selected. Re-enter it, or the aircraft will swing round the long way.',
+   n:'One person reported this and said it threw him more than anything else on the test. Costs you nothing to check during your practice run and could save the whole exercise.'},
+  {c:'amber',tag:'Unresolved',t:'Whether you type the destination heading or the size of the change is genuinely disputed among people who’ve sat it.',
+   n:'The published guidance leans towards the heading you want the aircraft to turn onto, in its own frame, which squares most of the disagreement. Sort this out first in your practice attempt.'},
+  {c:'amber',tag:'Practice run',t:'The practice attempt matters more here than anywhere else, though accounts differ on whether you get one go or two.',
+   n:'Assume one. Go in with a specific question you want answered, namely what exactly the input does, instead of treating it as a warm-up.'}
+ ]},
+{
+ id:'dad', name:'Directions and Distances', abbr:'DAD', aka:'the “ship leaves the harbour” questions',
+ brief:'A passage of text and four numbered answers, with no diagram to work on. Two question types: <em>static relationships</em>, where you chain fixed positions between landmarks, sum the offsets along one axis and read the direction off the sign of the net value; and <em>journeys</em>, where you follow a sequence of turns and distances and give the direction or distance back to the start. Everything is mental — the day allows no pen or paper.',
+ verdict:'The test that quietly rewards school-level geometry, inside an assessment that’s officially supposed to be impossible to prepare for.',
+ facts:[
+  {c:'green',tag:'Method',t:'For "how far from the start" questions, split each leg into north/south and east/west components, then put them back together with Pythagoras.',
+   n:'Add up all the northward distance and take off the southward. Same again for east and west. Your straight line distance is then the square root of the two squares added together. There’s no shortcut beyond estimating, and people who tried to picture it with their fingers did noticeably worse than the ones who just did the sums.'},
+  {c:'green',tag:'Technique',t:'It’s multiple choice, so round hard. Snap to the nearest square number instead of working out a precise root.',
+   n:'If your components give you something like 340,000, spotting that it sits closer to 600² than 500² is all the precision you need. Knowing your squares up to about 900 without thinking makes this test far easier.'},
+  {c:'amber',tag:'Technique',t:'Map the chain backwards, from the last point named.',
+   n:'Placing "D is 20km north of E" is much easier once you already know where E is. It takes most of the confusion out of the chains, and one bloke said it improved his prep straight away.'},
+  {c:'amber',tag:'Format',t:'Questions use plain directions and distances. No compass bearings.',
+   n:'So you shouldn’t get anything like "200 miles at 100°". One person who sat it said this, and nobody has contradicted it.'},
+  {c:'amber',tag:'Warning',t:'Don’t use a chatbot to check your DAD answers.',
+   n:'People who tried got different answers on re-asking, and it agreed with whatever they claimed was right. Work them by hand, or check against a worked example you already trust.'}
+ ]},
+{
+ id:'sat', name:'Situational Awareness Test', abbr:'SAT', aka:'the grid memory test',
+ brief:'A grid with columns 0–9 and rows A–J, each cell representing 2 km. Units appear as coloured icons with labels: yellow friendly, red hostile, white unknown. A right-hand panel carries the controller aircraft’s next waypoint, next waypoint time, altitude and comms channel. Information arrives through three unsynchronised channels at once — spoken audio, on-screen text and imagery — then everything disappears and you answer multiple choice from memory. Grid references are given chess-style, column first then row.',
+ verdict:'Widely agreed to be one of the hardest, and one of the few where people report getting partial credit.',
+ facts:[
+  {c:'green',tag:'Expectation',t:'Very hard, and there’s not much you can do to prepare beyond general memory technique.',
+   n:'People keep describing it as one of the toughest on the day. They also describe it as good fun, and plenty who found it brutal still passed.'},
+  {c:'amber',tag:'Scoring',t:'You get credit for being close on the grid. Positions don’t have to be exact.',
+   n:'This drives the whole strategy below, and it’s why you shouldn’t spend your memory on precise coordinates.'},
+  {c:'green',tag:'Strategy',t:'Spend your memory on callsigns, unit numbers and altitudes. Treat grid position as roughly right.',
+   n:'Knowing broadly where something sat is good enough to score. A wrong callsign is just wrong. Some people also track units physically with a finger on the screen.'},
+  {c:'amber',tag:'Scope',t:'Questions go well beyond unit positions. Next waypoint times, altitude, comm level and channel, and direction are all fair game.',
+   n:'The range is deliberately wide, so don’t sink everything into one type of detail. If a value is on screen, assume you can be asked about it.'}
+ ]},
+{
+ id:'sit', name:'Spatial Integration Test', abbr:'SIT', aka:'the grid layout and short clip test',
+ brief:'Eight or nine tabs, each showing one isolated layer of the same landscape — farm position, truck, troops, trees, aircraft flight paths with their speed and altitude charts, helicopter paths with theirs. No tab shows the full picture, and the whole sequence runs for one minute, so the time per tab is not equal. Afterwards you get a 3D rendered video of the scene and about 50 seconds of true/false questions on it, with no replay.',
+ verdict:'Barely documented anywhere, but there’s one technique that makes a huge difference.',
+ facts:[
+  {c:'amber',tag:'Format',t:'You study displays showing where things sit on a grid, then get a two or three second clip of an environment and have to say whether one specific detail in it was correct.',
+   n:'Something like "are the farms in this image correct?" As it goes on it adds more for you to learn, including aircraft, helicopters and their flight paths.'},
+  {c:'amber',tag:'Critical technique',t:'Only the detail being asked about has to be right. Everything else in the image can be wrong and it doesn’t matter.',
+   n:'This could be the difference between passing and failing, and it comes from one account, so confirm it during your reading time. Use fixed terrain like hills as reference points, find the thing they’ve asked about, and ignore the rest of the frame.'}
+ ]},
+{
+ id:'slt', name:'System Logic Test', abbr:'SLT', aka:'the tabs of system information',
+ brief:'A numbered index of 15 tabs down the right and a dual-pane display area on the left, so two tabs are readable at once — opening a third closes the oldest automatically. Each tab holds one category of data about a system, and roughly 30 multiple-choice questions require you to locate values across several tabs and calculate from them. No single tab answers a question. The whole thing runs in 20 to 25 minutes.',
+ verdict:'Nothing to practise on, but there’s one approach to the reading time that people swear by.',
+ facts:[
+  {c:'amber',tag:'Format',t:'You get tabs describing a system, mixing figures and text, things like how much oil something burns or how much power it puts out. Then questions that make you find and use the right figure.',
+   n:'It’s a search and apply task, not a memory task. Nobody expects you to have learned the content.'},
+  {c:'green',tag:'Strategy',t:'Use the reading time twice. Once properly for the content, then a quick second skim just to fix which tab holds which kind of information.',
+   n:'Under time pressure the bottleneck is finding the right tab, not doing the arithmetic. Knowing where everything lives beats knowing the numbers.'}
+ ]},
+{
+ id:'act', name:'Auditory Capacity Test', abbr:'ACT', aka:'the ball-through-hoops test with radio chatter',
+ brief:'A white ball inside a first-person tunnel, flown on a joystick and kept centred as the tunnel curves, rises and narrows — wall contact is penalised in proportion to how long you touch. Coloured shapes appear in the tunnel to be flown through, or avoided when an audio rule says so. Stacked on top: pull the trigger on irregular beeps, change the ball’s displayed number on spoken command with your other hand on the keyboard, hold a spoken 4–6 digit sequence for later recall, and act only on instructions carrying your NATO phonetic callsign. Instructions play once, under deliberate background chatter, and tasks accumulate across rounds without resetting.',
+ verdict:'People describe it as good fun at the start and punishing by the end.',
+ facts:[
+  {c:'amber',tag:'Format',t:'You fly a ball through hoops and pull the trigger when told, while the audio throws junk chatter at you along with real instructions for your callsign and fake ones using other callsigns.',
+   n:'The junk is overlapping voices reading filler. The whole discipline is filtering for your own callsign and acting only on that. Anything addressed to another callsign is a trap.'},
+  {c:'amber',tag:'Load',t:'You also have to hold a six digit number, and later on the instructions come with a delay attached.',
+   n:'Twelve seconds in you might be told to change colour to red at fifty-eight seconds. So you’re holding a pending action while still flying and still filtering.'},
+  {c:'amber',tag:'Difficulty curve',t:'It starts very easy and gets very hard.',
+   n:'Don’t read the opening stages as a sign of how it ends, and don’t let the late difficulty convince you you’ve fallen apart. The ramp is the design.'}
+ ]},
+{
+ id:'trac', name:'Trace Test 1 & Trace Test 2', abbr:'TRAC1 / TRAC2', aka:'trace 1 and trace 2',
+ brief:'<em>Trace 1</em> — an animated aircraft in flight whose control inputs you mirror on the arrow keys as if you were flying it. You always control whichever aircraft is currently red, and two more (blue and yellow) join later; when the aircraft faces you or flies inverted, the pilot’s left is your right. <em>Trace 2</em> — up to five coloured aircraft manoeuvre in an animation and you then answer multiple choice on what happened: which entered or left the scene and in what order, which made the most turns, which never climbed.',
+ verdict:'Two completely different tests with confusingly similar names, and the difference isn’t what most candidates assume.',
+ facts:[
+  {c:'green',tag:'Definition',t:'Trace 1 is copying the pilot’s control actions. Trace 2 is watching the scene and then answering questions on what you saw. It isn’t a second flying test.',
+   n:'Loads of candidates assume Trace 2 means estimating turns while you fly. It doesn’t, and going in with that idea puts your attention in completely the wrong place. Watch it properly and expect questions afterwards.'},
+  {c:'green',tag:'Difficulty',t:'Trace 1 is the easy one. Trace 2 is the overwhelming one.',
+   n:'Reported in that order every time, and Trace 2 keeps showing up on candidates’ lists of worries alongside DPT and FLAG.'},
+  {c:'amber',tag:'Real vs practice',t:'Trace 1 in the main practice app is said to be near identical to the real thing.',
+   n:'One of the few places where a practice tool tracks the real test closely enough that your score means something.'},
+  {c:'amber',tag:'Preparation',t:'Plenty of people passed without practising either trace test, and there’s very little material for Trace 2 anywhere.',
+   n:'If you can’t find anything, you haven’t missed a resource. There’s a real gap in what exists.'},
+  {c:'amber',tag:'Transferable',t:'Serious flight sim time is said to help with the 3D visualisation and the instrument work.',
+   n:'Note it gets reported as helping the spatial and instrument tests specifically, not the memory or arithmetic ones. It won’t replace targeted practice.'},
+  {c:'amber',tag:'Warning',t:'The trace tests are where tiredness hurts you most.',
+   n:'One candidate on a two-day overseas version put failing the trace and motor tests down to a sleepless night beforehand. Sleep counts for more on these than on the paper-style tests.'}
+ ]},
+{
+ id:'sma', name:'Sensory Motor Apparatus Test', abbr:'SMA', aka:'the joystick and pedals',
+ brief:'A red dot drifting continuously across the display and a crosshair fixed at its centre; the job is to keep the two aligned. The joystick handles the vertical axis — push away to bring the dot down, pull back to bring it up. Foot pedals handle the lateral axis, worked with forward ankle pressure like rudder pedals rather than pressing down: right pedal when the dot drifts left. The dot never holds position between corrections, so it is already moving while you respond to the last drift.',
+ verdict:'The only test where the kit itself is a known variable, and where you’re allowed to do something about it.',
+ facts:[
+  {c:'green',tag:'Hardware',t:'The stations aren’t identical. Sticks and pedals vary in dead zone, sensitivity and wear, and people regularly describe the pedals as sticky with low sensitivity.',
+   n:'It comes down to the settings profile loaded on each station and how much use it’s had. You’re not imagining it, and you’re not supposed to just put up with it.'},
+  {c:'green',tag:'What to do',t:'If your station feels unreasonable or unusable, say so at the start. Staff keep spares. Spend a minute getting the pedals positioned properly before you begin, too.',
+   n:'Reported by someone who did exactly that. It’s a normal request, not a complaint, and a minute on setup is a lot cheaper than a whole exercise fought against bad ergonomics.'},
+  {c:'green',tag:'Do this',t:'Take your shoes off before you use the pedals.',
+   n:'Straightforward advice from someone who passed, and it fits everything else people say about the pedals being stiff and unresponsive. You are trying to feel small amounts of ankle pressure through them, and a shoe sole is exactly the wrong thing in the way.'},
+  {c:'amber',tag:'Unresolved',t:'One candidate felt the sensitivity shifting mid-exercise and couldn’t tell whether it was a deliberate mechanic or a fault.',
+   n:'Never resolved. If it happens to you, keep flying it. Don’t try to diagnose it mid-run.'}
+ ]},
+{
+ id:'vissearch', name:'Visual Search Test', abbr:'—', aka:'the symbols and numbers test',
+ brief:'A grid of tiles, each holding either a red letter or a unique symbol, with a small black number in the bottom corner. A target tile is shown at the bottom of the screen with its number replaced by question marks; you find the matching tile in the grid and give the number that belongs to it. It sits with Target Recognition and Table Reading as the rapid visual-scanning family, so practice here pays off three times.',
+ verdict:'Straightforward enough in principle, with one quirk in the practice tools that’s worth knowing about.',
+ facts:[
+  {c:'amber',tag:'Real test',t:'In the real test the symbol to number mapping mostly holds still, but every ten questions or so it adds new symbols and shuffles the numbers attached to them.',
+   n:'Accounts differ, and some people think it changes every time. Safest approach is to use the mapping while it holds, then re-check it whenever new symbols appear, instead of trusting your memory across the whole test.'},
+  {c:'amber',tag:'Practice warning',t:'In at least one practice app the mapping never changes within a test, so you can memorise it and skip the actual skill.',
+   n:'If your tool does that, avoid the shortcut on purpose. Scoring well by learning a fixed key is training you for a test that doesn’t exist.'},
+  {c:'amber',tag:'Structure',t:'Both common versions of visual search show up in the real test, and the number of items you’re scanning keeps growing.',
+   n:'The skill carries into the table reading and vigilance tests as well, so time here isn’t narrowly spent.'}
+ ]},
+{
+ id:'vis', name:'Visualisation Tests', abbr:'—', aka:'spatial awareness',
+ brief:'Two tests. The first shows 3D shapes marked with black dots as reference points, to be mentally rotated and matched against the options underneath — only one is correct. The second shows several flat shapes whose edges are labelled with letters marking where they join (the edge labelled b meets the other edge labelled b), and asks which of the assembled figures at the bottom is right once everything is fitted together.',
+ verdict:'The published guides describe the format, but nobody who has sat it has ever confirmed it. Practise the shapes, not the specifics.',
+ facts:[
+  {c:'amber',tag:'No first-hand account',t:'I couldn’t find a credible first-hand account of what the Visualisation tests involve, including whether they use folded and unfolded 3D shapes.',
+   n:'The description above is from the published guides only. Be sceptical of any confident second-hand account of this one, even from people who are reliable on everything else, and be aware these tests weren’t in the official 2018 CBAT information at all.'},
+  {c:'amber',tag:'Transferable',t:'The only usable signal is that heavy flight sim experience is said to help with 3D visualisation work.',
+   n:'Thin, but it’s the only thing here I’d stand behind.'}
+ ]},
+{
+ id:'clan', name:'Colours, Letters and Numbers Test', abbr:'CLAN', aka:'the older sibling of FLAG',
+ brief:'Three components running at once. <em>Colours</em> — red, yellow and green dots travel horizontally toward colour-coded zones and you press the matching key at the moment of contact. <em>Letters</em> — a 4–6 letter sequence shows for about five seconds, then vanishes, and you pick it out of four scrambled options in the screen corners. <em>Numbers</em> — rapid arithmetic typed in before the timer moves on, with no review state and no way back to a previous answer.',
+ verdict:'Published as replaced by FLAG in the RAF battery back in 2021, but still live elsewhere. Check which one you’re sitting before you spend a week on it.',
+ facts:[
+  {c:'red',tag:'Probably not your test',t:'If you’re sitting the current RAF CBAT, you almost certainly get FLAG instead of CLAN. Nobody sitting the RAF version reports getting CLAN.',
+   n:'Graded red because practising CLAN for an RAF CBAT looks like wasted effort. It also explains a common source of confusion: one popular practice app carries CLAN, the other carries FLAG, and people compare scores across them without realising they’re preparing for different tests.'},
+  {c:'amber',tag:'Still live overseas',t:'At least one overseas candidate sat CLAN and got no FLAG at all.',
+   n:'So if you’re applying outside the RAF, don’t assume the FLAG advice higher up this page applies to you. Ask what your battery contains before you plan around it.'},
+  {c:'amber',tag:'Format',t:'It’s coloured diamonds, maths and remembering codes — structurally very close to FLAG.',
+   n:'Which is good news if you’ve been drilling FLAG and then find out you’re sitting this. The three concurrent tasks map across almost one for one, and the same advice applies: bank the maths, don’t defend the memory task to the death.'}
+ ]},
+{
+ id:'abd', name:'Angles, Bearings & Degrees Test', abbr:'ABD', aka:'angles and compass bearings',
+ brief:'Two separate visual-estimation sub-tests, both multiple choice. <em>Angles</em> — two lines form an angle on screen and you identify its value from the options; the angle rotates and the options narrow as it goes, so there’s nothing to anchor to. <em>Bearings</em> — a 360° compass circle carries lettered points (A, B, C…) plotted across it, and you estimate a named point’s bearing clockwise from north, again picking the closest option as they converge.',
+ verdict:'One of the few tests where raw repetition is genuinely the whole answer, and one of the easiest to practise for free.',
+ facts:[
+  {c:'grey',tag:'Technique',t:'On bearings, anchor to the four cardinal points first and count from the nearest one to the target rather than estimating from north every time.',
+   n:'This is from the published guides rather than from anyone who sat it, but it’s sound and it costs nothing to adopt. It cuts a good chunk off your estimation time, which matters because the multiple-choice options get closer together as you go.'},
+  {c:'grey',tag:'Preparation',t:'Angles is pure speed and accuracy built through repetition. There’s no clever method to find.',
+   n:'Free angle-estimation and protractor tools are all over the web and they’re a decent use of a spare twenty minutes a day. This is the least mysterious test on the battery — you just have to put the reps in.'},
+  {c:'amber',tag:'Reality check',t:'Almost no first-hand information exists on this test anywhere.',
+   n:'Nobody I found had described sitting it. That’s not a reason to worry, given how simple the format is, but treat any confident account of the exact question count or timing with suspicion.'}
+ ]},
+{
+ id:'drt', name:'Digit Recognition Test', abbr:'DRT', aka:'count the digit',
+ brief:'A single horizontal string of digits appears for exactly five seconds, then disappears and is replaced by one multiple-choice question: how many times did a given digit appear. The format never varies — always the frequency of one digit, always five seconds, always multiple choice. Only the string length grows, from around five digits to around fifteen.',
+ verdict:'Mechanically the simplest thing on the battery, and the one where knowing the format in advance genuinely changes how you play it.',
+ facts:[
+  {c:'grey',tag:'How it scales',t:'Difficulty comes from string length alone. Nothing else changes between the first question and the last.',
+   n:'That means the right strategy changes partway through. Short strings you can memorise whole and count afterwards. Once you’re past ten digits or so you have to track frequencies live while the string is still on screen, because there won’t be anything to recall.'},
+  {c:'grey',tag:'Technique',t:'Track the high-frequency digits in the closing seconds, not the rare ones.',
+   n:'A digit that appeared once or twice you can often recover by elimination. One that appeared four or five times you can’t. Spend the last second of the display window on whatever’s repeating.'},
+  {c:'grey',tag:'Timing',t:'Nothing is scored on how fast you answer afterwards. The whole test lives inside the five-second display window.',
+   n:'So don’t rush the answer. Once the string is gone, take the time to reconstruct properly — there’s no clock pressure left to react to.'},
+  {c:'grey',tag:'Not universal',t:'Listed as not included in the Royal Navy FAT version.',
+   n:'One of three tests dropped from the Navy version, along with Dynamic Projection and Numerical Operations. Worth checking against your own service before you build a schedule around it.'}
+ ]},
+{
+ id:'matf', name:'Table Reading Test', abbr:'MATF', aka:'the grid and table lookups',
+ brief:'A physical double-sided reference sheet worked against on-screen prompts, in two parts. <em>Part one</em> gives two values and a coordinate grid running −17 to +17 on both axes; you bring one value across and one down and read the intersection, which is the same whichever axis you assign each number to. <em>Part two</em> puts Air Speed, Wind Velocity and Wind Angle on screen and needs a three-step lookup: table by air speed, row by wind velocity, then column by wind angle under either Drift Correction or Ground Speed. Five numbered options each time.',
+ verdict:'The only test worked against a paper sheet rather than entirely on screen, which is a bigger adjustment than it sounds on a day that otherwise bans paper.',
+ facts:[
+  {c:'amber',tag:'Transferable',t:'Visual search practice is said to carry directly into this test.',
+   n:'From someone who passed. It’s the only thing anyone has said about MATF from experience, and it’s a good reason to treat visual search practice as three tests’ worth of value rather than one.'},
+  {c:'grey',tag:'Part one shortcut',t:'On the coordinate grid, the intersection value is the same whichever way round you assign the two numbers to the axes.',
+   n:'So don’t waste any time working out which value belongs on which axis. Bring one across, one down, read where they meet. That decision is a free half-second on every question in part one.'},
+  {c:'grey',tag:'The real difficulty',t:'Reading how a grid lookup works is easy. Running it fast and accurately while managing a physical sheet and a screen at the same time is the actual test.',
+   n:'If you practise this at all, practise it with a printed sheet beside you rather than everything on one display. The hand movement and the eye movement between two surfaces is the bit that costs you.'}
+ ]},
+{
+ id:'rtt', name:'Rapid Tracking Test', abbr:'RTT', aka:'the camera and joystick test',
+ brief:'A joystick, a first-person aircraft camera feed and a crosshair fixed at the centre of the display. Targets appear at varying distances and speeds, and each has to be photographed three times with the trigger before it disappears or is replaced — a replacement resets the capture count to zero. Targets pass behind obstructions, so reacquiring them means keeping the camera moving in the direction and at roughly the speed the target was travelling while it’s out of sight.',
+ verdict:'Built to overload you. What’s measured is where your tracking degrades, not whether it ever does — so don’t read the last thirty seconds as a verdict on how you did.',
+ facts:[
+  {c:'amber',tag:'It can fail you',t:'This test on its own can cost you the role. One candidate finished eight points under the pilot mark and named this as the test he failed.',
+   n:'Worth knowing because it’s easy to write this one off as unpreparable and therefore not worth thinking about. You can’t train the hardware, but you can arrive knowing to calibrate on the opening targets rather than lunging at the first one, and that alone is worth marks.'},
+  {c:'grey',tag:'Technique',t:'Don’t try to snap the crosshair onto a target in one big joystick movement. Close the distance with a coarse input, then fine-adjust before you trigger.',
+   n:'The single most useful thing in the published guidance on this test. Big corrections overshoot, and every overshoot costs you more than the slower approach would have.'},
+  {c:'grey',tag:'Calibration',t:'Joystick sensitivity differs from station to station, so the opening moments are effectively yours to calibrate with.',
+   n:'Make small deliberate inputs at the start and watch how far the camera actually moves before you commit to chasing anything. Going in assuming your practice sensitivity carries over is how the first target gets away from you.'},
+  {c:'grey',tag:'Occlusion',t:'When a target goes behind something, keep the camera moving in the direction and at the speed it was travelling rather than stopping to wait.',
+   n:'Stopping means reacquiring from scratch when it reappears. Tracking the gap keeps you roughly on it.'},
+  {c:'amber',tag:'Hardware',t:'This runs on the same joystick hardware as the motor test, where the stations are a documented variable — different dead zones, sensitivities and wear.',
+   n:'Which means the same rule applies: if your station feels genuinely unusable, say so at the start rather than fighting it. Staff keep spares. That’s reported from the motor test rather than this one, but it’s the same room and the same kit.'}
+ ]},
+{
+ id:'vlt', name:'Verbal Logic Test', abbr:'VLT', aka:'the reading and inference test',
+ brief:'Up to about thirteen pages of information on one broad subject — past topics include rocks, insects and plants, and renewable energy — with only two pages readable at a time. The questions are multiple choice and are deliberately not answered plainly anywhere in the text: you locate the relevant pieces across separate tabs and infer from them. Usually three parts of increasing size, roughly 15–20, 20–25 and 25–30 minutes, with around three minutes of familiarisation up front.',
+ verdict:'Structurally this is the System Logic Test with prose instead of figures, so prepare for them together.',
+ facts:[
+  {c:'grey',tag:'What it isn’t',t:'No subject knowledge is required. Whatever the topic turns out to be, everything you need is in the tabs.',
+   n:'Worth internalising, because the topic can look intimidating. You’re not being tested on rocks or renewable energy. You’re being tested on whether you can join two pieces of information from different pages.'},
+  {c:'grey',tag:'Method',t:'The answers aren’t written plainly in the text. You have to join the dots between separate sections.',
+   n:'So don’t keyword-hunt for a phrase from the question. If you find your answer sitting there in one sentence, check it — that’s usually the distractor rather than the answer.'},
+  {c:'grey',tag:'Timing',t:'You can skip questions and come back, and you get about three minutes up front to familiarise yourself.',
+   n:'Use that three minutes to learn where things are rather than to read for content. Same approach as the System Logic Test: the win is knowing which tab holds what, not memorising it.'},
+  {c:'amber',tag:'Reality check',t:'I couldn’t find a single usable first-hand account of what this test actually contains.',
+   n:'Asked about repeatedly and never answered, anywhere I looked. The format description above is from the published guides only.'}
+ ]},
+{
+ id:'vigil', name:'Vigilance Test', abbr:'—', aka:'the star grid',
+ brief:'A 9×9 grid filling with stars, cleared by typing coordinate pairs — row number first, then column, so a star at 2,7 is entered as those two digits. Two task types run: yellow priority tasks that appear during the test and carry bonus points if cleared quickly, and the routine task of cancelling every remaining star. The screen gets progressively more cluttered as it goes.',
+ verdict:'Mechanically the simplest test on the battery, which is exactly the point — it measures whether you can hold attention on something dull, not whether you can do it.',
+ facts:[
+  {c:'amber',tag:'Transferable',t:'Visual search practice is said to help here as well as on table reading.',
+   n:'The only thing anyone with experience has said about this test. Another reason visual search is the best-value thing to practise on the whole battery.'},
+  {c:'grey',tag:'Order',t:'Work along a row or column in sequence — 2,1 then 2,2 then 2,3 — rather than jumping around the grid.',
+   n:'You stop re-reading the labels for every entry, which is where the time actually goes.'},
+  {c:'grey',tag:'Technique',t:'Edge squares can be entered without checking the grid labels at all, so they’re quicker than anything in the middle.',
+   n:'Clear the edges when you’re under pressure and leave the interior for when you’ve got breathing room.'},
+  {c:'grey',tag:'Priorities',t:'Yellow priority tasks appear mid-test and carry bonus points if you deal with them quickly.',
+   n:'So the routine star-clearing is the background job, not the main one. Break off for a priority task the moment one appears.'},
+  {c:'grey',tag:'Preparation',t:'Use the practice session to drill the coordinate entry itself.',
+   n:'The bottleneck is the keying, not the finding. If typing a pair of digits is automatic before the test starts, you’ve already got most of what this test is measuring.'}
+ ]}
+];
+
+const DAY_GROUPS = [
+{ id:'regime', title:'What the day actually feels like', facts:[
+  {c:'green',tag:'Atmosphere',t:'It’s far more relaxed than almost anyone expects. Several people barely saw an invigilator all day.',
+   n:'One candidate went looking for the invigilator mid-test, couldn’t find him in the hall or the break room, went back to his seat and carried on. Bags, coats and phones usually go on a desk in the middle of the room. Don’t expect an exam hall.'},
+  {c:'green',tag:'Hard rule',t:'No pen, no paper, no ruler, at any point, for any test. It’s all on screen and in your head.',
+   n:'This is the one thing staff actually police, and it’s specifically about nothing on the desk you could work something out with. It’s also why the estimation and mental arithmetic techniques in this guide matter as much as they do.'},
+  {c:'green',tag:'Hardware',t:'You type on a Stream Deck style keypad, roughly half the length of a normal keyboard, with a 3×3 number pad.',
+   n:'You’ll fumble the first couple of presses and then get used to it. People rate it well above the older kit.'},
+  {c:'amber',tag:'Technique',t:'You can’t read anything out loud, but mouthing the words silently works fine and does help.',
+   n:'If talking yourself through a problem is part of how you think, that’s the workaround people use.'},
+  {c:'amber',tag:'Ergonomics',t:'Most of the day is one-handed, because your other hand is usually busy. Both hands only really come in for the quick arithmetic test.',
+   n:'Worth practising one-handed if you’ve been using two.'},
+  {c:'green',tag:'Length',t:'It’s eight to ten hours in front of a screen. The eye strain is real and it arrives long before the day ends.',
+   n:'Two separate accounts describe not being able to focus properly afterwards, one sitting in the car park for ten minutes before driving. On your breaks, look out of a window at something distant and stay off your phone — a screen break that is still a screen isn’t a break. Plan your journey home around being genuinely tired.'},
+  {c:'green',tag:'Breaks',t:'You get a short break roughly every hour and about thirty minutes for lunch. Five minutes is the recommendation, not a rule — you can take longer, and the only cost is finishing later.',
+   n:'The break room has a screen showing your predicted finish time and how much of your break is left, and the prediction gets more accurate as the day goes on. One candidate had the latest finish in the room by about an hour, took every break anyway, and passed comfortably. Nobody is scoring you on finishing early.'},
+  {c:'amber',tag:'Layout',t:'You sit in an individual booth, much like a driving theory test. The room holds around 45 but is often nowhere near full.',
+   n:'One sitting had 33 candidates. Everyone works through the tests in the same order, which is why your break-room conversations are with people who have just done exactly what you have just done.'},
+  {c:'amber',tag:'Practice runs',t:'You can read the instructions for each test twice, and most tests give you practice questions before the scored run.',
+   n:'This is free and a lot of people leave it on the table. It’s the single cheapest thing you can do on the day.'}
+]},
+{ id:'orders', title:'What everyone who passed tells you to do', facts:[
+  {c:'green',tag:'Do this',t:'Read the instructions fully, twice, and use every second of the practice run. Take all the time they give you.',
+   n:'The most repeated advice from people who passed, and it’s free marks. Nobody scores you for finishing early, and people finishing ahead of you means nothing at all. On DPT especially, go into the practice attempt with a specific question you want answered.'},
+  {c:'green',tag:'Do this',t:'Use every break. They come round every one to three tasks. Drink water, eat something, and don’t replay the test you’ve just done.',
+   n:'Chewing over a task you’ve already submitted costs you the next one and gains you nothing. It’s the most common way one bad exercise turns into a bad day.'},
+  {c:'green',tag:'Do this',t:'Protect your sleep. The rooms are decent but they run hot, mattresses can be springy, and it’s nerves that actually keep people awake.',
+   n:'Open the windows before you head to dinner. A sleeping bag comes up again and again. Some people bring melatonin, at least one brings a plug-in fan. The candidate who lost a night to nerves blames it directly for his failure, so this is a real performance issue and not fussiness.'},
+  {c:'amber',tag:'Logistics',t:'Bags have to be clearly labelled. You pick labels up at the candidates’ mess entrance, and staff will point you there.',
+   n:'They tell you on the day, so it isn’t worth worrying about in advance.'},
+  {c:'amber',tag:'Logistics',t:'Accounts differ on taking bags into the testing room. Some did, some weren’t allowed. Drinks go on the floor, and you generally keep your phone on you.',
+   n:'Plan for the stricter version and nothing can catch you out.'},
+  {c:'amber',tag:'Timings',t:'You report to the main guard room early, around 06:45, to pick up your site pass. Most people finish somewhere between 2pm and 4pm.',
+   n:'It’s a long day. Plan your travel and food around a mid-afternoon finish, not an early one.'},
+  {c:'green',tag:'Dress',t:'You are not assessed on what you wear at CBAT. Comfort beats smartness, and one candidate turned up in a tracksuit without any problem.',
+   n:'Anything from a suit down to a collared shirt and trousers is normal, but the people who’d sat it are consistent that you should optimise for being comfortable in a chair for ten hours. Don’t wear anything that gets in the way of working the controls.'},
+  {c:'green',tag:'Do this',t:'Take your shoes off for the rudder pedals.',
+   n:'Reported by someone who passed, and it costs you nothing. The pedals are worked with ankle pressure and the accounts consistently describe them as stiff and low on sensitivity, so anything between your foot and the pedal is working against you.'},
+  {c:'amber',tag:'Logistics',t:'Bags go in a cloakroom in the candidates’ mess with a tag on them, not into the test room.',
+   n:'If you drive, you can leave things in the car instead, which several people recommend for exactly this reason. Take water and snacks in with you.'},
+  {c:'amber',tag:'Accommodation',t:'Candidate accommodation has moved out of the old mess into a block, and the rooms are not en-suite.',
+   n:'Worth flagging because the published guidance hasn’t been updated and still describes the old arrangement. Showers and toilets are shared down the corridor, so bring something to walk down there in. Rooms run hot, which everyone mentions.'}
+]},
+{ id:'admin', title:'Scoring, scheduling and how long a pass lasts', facts:[
+  {c:'green',tag:'The number',t:'The pass mark for pilot is 112, out of a maximum of 180. It has been 112 for some time.',
+   n:'This is the single most repeated correction I found. A serving RAF pilot posted specifically to clear it up, and candidate after candidate quotes 112 against their own result — 104 and 105 as failures, 120 and 125 as passes. Other roles sit lower: weapons systems operator around 108, intelligence officer around 95. Check your own role rather than assuming the pilot figure applies.'},
+  {c:'red',tag:'Outdated',t:'The "128 cutoff for pilot" figure, and the "you need 130+ to be competitive" advice that goes with it, are both out of date.',
+   n:'128 and 130 still get repeated constantly, including by people trying to be helpful. The serving pilot who corrected it was blunt: the idea of a "competitive" score is a legacy term from when there was a large sift of applicants, and with pilot demand where it is, a pass is what is required. Don’t talk yourself out of applying over a number that stopped applying years ago.'},
+  {c:'green',tag:'Scoring',t:'Each test is marked 1 to 9 — a stanine. Those feed weighted domains, and the domain totals produce the overall score for each role.',
+   n:'Candidates use the word stanine constantly once they’ve had their results, and describe missing out "by one stanine" on a single domain. This is why one weak test can matter out of proportion to its share of the day.'},
+  {c:'green',tag:'The trap',t:'Clearing the overall score is not enough on its own. Each domain carries its own minimum, and falling one stanine short of any of them fails you for that role even with a comfortable total.',
+   n:'This is the most consequential mechanic in the whole assessment and it catches people constantly. One candidate cleared the overall mark at 101 against 90 and still lost the role on spatial reasoning. Another scored 117 against a 90 requirement and still saw red against the role. A third passed everything except intelligence, missed by a single point on FLAG, and lost the three aircrew roles he actually wanted. Do not write off any single test on the basis that your total will carry it.'},
+  {c:'amber',tag:'How it adds up',t:'The results page lists your domains with a weighting against each. One candidate’s, for intelligence officer, read: Perception ×10 (table reading, target recognition), short-term memory ×13 (situational awareness), spatial reasoning ×25 (directions and distances, spatial integration), symbolic reasoning ×41 (system logic, verbal logic) and central information processing ×11 (FLAG).',
+   n:'From two candidates quoting their own results pages, and the domains they list differ — the other, for a different role, had strategic task management covering the multitasking and auditory tests, perception covering target recognition and vigilance, and symbolic reasoning covering situational awareness and the numerical test. So both which domains apply and which tests feed them depend on the role you’re sitting for. Useful for working out where your effort pays, but don’t treat one candidate’s table as the universal scheme.'},
+  {c:'amber',tag:'Repeats',t:'Some tests are sat more than once. The published pilot rubric scores the multitasking test three times, the numerical test three times and the auditory test twice.',
+   n:'Thirteen scored tests, but more than thirteen sittings. It’s another reason the tests people rate as most tiring are the ones that come round again.'},
+  {c:'green',tag:'Scope',t:'Pilot and weapons systems operator candidates sit the entire battery. Other roles sit only the tests their role needs, plus any test shared with a role they’re also being scored for.',
+   n:'Which means going in for pilot leaves every other aircrew role open to you on the same day’s results, and it’s why so many people who fail pilot walk out qualified for something else they hadn’t considered.'},
+  {c:'green',tag:'Results',t:'You get your results the same day. A boarding officer takes you through a booklet role by role, colour coded, usually within minutes of you finishing.',
+   n:'One candidate’s officer hadn’t even read it himself yet and opened with "lots of green, well done". Green is a clear pass, red is a fail, and yellow appears to be a pass you scraped. It isn’t especially private, so expect to take the news standing at a desk while other people finish.'},
+  {c:'green',tag:'Scheduling',t:'CBAT isn’t limited to Tuesdays and Thursdays. It runs on other days too, and it overlaps with selection board dates.',
+   n:'Some recruiters still quote the Tuesday and Thursday rule. One candidate sat his on a Wednesday alongside about thirty others, and a call to the recruitment office confirmed other days do run occasionally. Worth checking rather than assuming.'},
+  {c:'amber',tag:'How long it lasts',t:'A CBAT pass expires. One candidate’s ran out almost exactly three years after he passed, and his appeal for an extension was turned down.',
+   n:'If there’s any chance of a gap between passing CBAT and getting to the selection board, find out your expiry date early. Being made to resit is easy to avoid with a bit of planning and brutal without it.'},
+  {c:'amber',tag:'Retakes',t:'The wait for a retake is around a year, and staff will warn you that most people don’t improve much. The accounts bear that out more often than not.',
+   n:'One candidate sat it twice and got the exact same scores both times, and says plainly he regrets the year he spent on it. Against that, one who ignored the same warning, went to university and flew with a University Air Squadron in between came back about 14 points up, then another 13 on a third attempt. The pattern seems to be that a retake on its own changes little, but a retake after a couple of years of genuinely relevant flying and study can. Aptitude is also reckoned to rise into your early twenties and tail off after your mid-twenties.'},
+  {c:'amber',tag:'What it doesn’t do',t:'Your score isn’t used to stream you once you’re in. Passing is what counts.',
+   n:'From the same serving pilot, stated flatly: you will never be held against that score after recruitment, and it has no influence on streaming. That contradicts a persistent belief that a higher score buys you fast jets. One well-placed source rather than several, but he’s the best-placed source I found on it.'}
+]}];
+
+const FELT = [
+ {who:'A candidate going for air traffic control', felt:'Reckoned he’d "bottled it" on the bearings test at the halfway point, and seriously wondered whether it was worth staying to finish the day.', actual:'Passed for air traffic control and weapons controller, which were the roles he wanted.', d:'better'},
+ {who:'A candidate going for weapons control', felt:'Felt awful about the bearings test. Got reset to the gate several times and missed an intercept completely.', actual:'Scored well on that same test, passed, and went on to pass the selection board.', d:'better'},
+ {who:'A third-time candidate', felt:'Had failed everything twice already and expected the same again.', actual:'Passed everything, and by his own account not narrowly.', d:'better'},
+ {who:'A candidate who applied as WSO', felt:'Applied for weapons systems officer because he didn’t think he was good enough for pilot.', actual:'Scored higher for pilot than he did for WSO.', d:'better'},
+ {who:'A high-scoring pilot candidate', felt:'Expected the real tests to be harder than the practice app.', actual:'Passed with one of the highest scores I’ve seen reported, and found the real thing technically easier in a lot of ways.', d:'better'},
+ {who:'A candidate on an overseas two-day version', felt:'Knew he was struggling after a sleepless night before day two.', actual:'Didn’t pass for pilot. The one case where the bad feeling turned out to be right.', d:'matched'},
+ {who:'A candidate drilling instruments', felt:'Thought the elimination method had made instruments watertight.', actual:'14 out of 15, losing one to reading "descending" as "ascending".', d:'matched'}
+];
+
+const HELPED = [
+ {tool:'A dedicated CBAT practice app', n:6,
+  note:'Credited far more often than anything else. The reason people give is usually interface familiarity and stamina rather than the content itself. Knowing where to look, and being able to hold concentration for the length of a task. Nearly everyone who passed and talked about their prep had used one heavily.'},
+ {tool:'Mental arithmetic drilled separately', n:5,
+  note:'Times tables, division, and speed distance time worked out by hand, away from any app. This is the one thing people say the apps don’t replace, and the candidate who turned two failures into a clean pass was blunt that the app alone hadn’t been enough.'},
+ {tool:'The official test guides', n:5,
+  note:'Best for working out what each test actually is before you try to get good at it. Some of the practice tools linked from them are a lot harder than the real test, which is fine for overtraining but misleading if you’re trying to judge whether you’re ready.'},
+ {tool:'Candidate write-ups and discussion',  n:4,
+  note:'This is where the corrections live. Nearly every difference between the practice tools and the real test in this guide came from someone who’d just sat it, not from anything published. If you read nothing else, read recent first-hand accounts.'},
+ {tool:'Flight simulators', n:2,
+  note:'Said to help with 3D visualisation and reading instruments. Nobody reports any benefit to the memory, arithmetic or multitasking tests. Enjoyable, but not an efficient route unless you already play.'},
+ {tool:'General practice websites', n:3,
+  note:'Speed distance time drills, instrument comprehension sets, angle estimation tools. Usually harder than the real test, so use them as conditioning and not as a benchmark.'}
+];
+
+const TOOLKINDS = [
+ { id:'coverage', name:'What to check before you commit to a practice tool',
+   items:[
+    ['Does it cover the hard tests?','The bearings and projection test gets rated the hardest on the CBAT and it’s missing from most tools. Trace 2, the auditory test, spatial integration and system logic are missing from nearly all of them. Coverage beats polish.'],
+    ['Does it pace like the real test?','The real test gives you an allowance per question plus reading time. Most tools push "as many as you can in the time". This is the most common reason practice scores don’t translate.'],
+    ['Is it harder or easier than the real thing?','Harder is fine, arguably ideal, so long as you know that’s what’s happening. What you can’t do is judge your readiness against a tool whose difficulty you’ve never calibrated.'],
+    ['Does it get the mechanics right?','Known gaps to check for: callsign recall on circled aircraft only, unknown and flashing priority targets on the target test, answer formats that change on instruments, and a symbol key that genuinely reshuffles.'],
+    ['Can you trust its scores?','Leaderboards and totals in some tools are unreliable. Scores stack across attempts, rankings come out wrong. If a personal best looks impossible, it probably is.'],
+    ['What does it cost, and how?','Both one-off purchases and subscriptions are out there. For something you’ll prepare with over a few weeks, how you pay matters more than the headline price.']
+   ]}
+];
+
+const OTHER = [
+{ id:'rn', flag:'Royal Navy, Fleet Air Arm', facts:[
+  {c:'green',tag:'Worth knowing',t:'Your CBAT result carries across to the Royal Navy. One candidate sat it for the RAF and had the same result count for a Navy pilot application.',
+   n:'That makes a single sitting a genuine second route rather than something you have to repeat, and it means applying to both services at once is a sensible hedge rather than a duplication of effort. A shared aptitude result wouldn’t automatically extend to medicals though, which are a separate question entirely.'},
+  {c:'amber',tag:'Harder in practice',t:'The Navy pass mark is reportedly higher than the RAF’s, and there are far fewer places.',
+   n:'One candidate was told by his recruiter that the Navy mark sits above the RAF’s, and reports the Navy taking on three pilots in a calendar year with the lowest successful CBAT score around 165. So "it carries across" is true but it doesn’t make the Navy the easier option — on these numbers it’s considerably harder.'},
+  {c:'amber',tag:'Eligibility',t:'The Navy pilot age limit runs higher than the RAF one, reportedly up to 26.',
+   n:'Relevant if you’re near the RAF age ceiling and worried about getting through the remaining stages in time.'},
+  {c:'amber',tag:'Role',t:'The Navy’s Observer role gets described as their version of a weapons systems officer, with navigation on top.',
+   n:'It covers weapons and sonar, mission command such as directing ships and aircraft, and navigation. The Observer is often the most senior aircrew on board.'}
+]},
+{ id:'adf', flag:'Australia, ADF', facts:[
+  {c:'amber',tag:'Key difference',t:'The Australian test didn’t include FLAG. It swapped in a different exercise built around coloured diamonds, arithmetic and code recall.',
+   n:'From one candidate writing it up the day he sat it. If you’re preparing for the Australian version, that’s the big structural difference to plan around.'},
+  {c:'green',tag:'Overlap',t:'Everything else lines up closely. Instruments, visual search, situational awareness, directions and distances and the trace tests all turn up in both.',
+   n:'So most UK-focused prep carries over directly. Don’t throw this guide out over one test.'},
+  {c:'amber',tag:'Rules',t:'Australia reportedly allows only two attempts, on the reasoning that people don’t improve enough after two.',
+   n:'Striking, given a UK candidate in this guide passed everything on his third go after two comprehensive failures. Where you get more than one attempt, take it.'}
+]},
+{ id:'ca', flag:'Canada, RCAF', facts:[
+  {c:'amber',tag:'Structure',t:'Canada runs it over two days, with the joystick and pedal work on day two.',
+   n:'That makes the first night’s sleep matter in a way the UK single day doesn’t. The one detailed account I have is of exactly that going wrong.'},
+  {c:'amber',tag:'Shared tests',t:'Both trace tests and a sensory motor test appear in the Canadian version too.',
+   n:'So the trace and motor advice in this guide applies.'}
+]}];
+
+const OPEN = [
+ {q:'What do the Visualisation tests actually contain, and do they use folded and unfolded 3D shapes?', note:'Candidates ask this everywhere. I’ve never seen anyone who sat it answer.'},
+ {q:'What comes up in the Verbal Logic Test?', note:'No usable first-hand description anywhere I looked.'},
+ {q:'How do you practise Trace 2?', note:'Asked constantly. There’s barely any material for it, and that looks like a real gap rather than me failing to find it.'},
+ {q:'On the bearings test, do you type the destination heading or the size of the change?', note:'Genuinely disputed among people who’ve sat it. Sort it out during your practice attempt.'},
+ {q:'Do practice tools use the same hostile, friendly and neutral symbols as the real target test?', note:'Asked directly of tool developers, never publicly answered.'},
+ {q:'Is the instruments test timed per question, or as many as you can get through?', note:'Even people who’d sat it that same day couldn’t remember.'},
+ {q:'Which domains apply to which role, and what is the minimum for each?', note:'Two candidates have published their own results pages and the domains differ between them. Nobody has set out the full role-by-role scheme, and it’s the thing most worth knowing given a single domain can fail you outright.'},
+ {q:'How exactly is the multitasking test scored on the day?', note:'The broad principles are clear enough, few warnings and fast corrections and accurate inputs, but nobody could describe the actual weighting.'}
+];
+
+</script>
+<script>
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const CONF = {
+  green:{cls:'c-green',label:'Well established',icon:'✓',
+    tip:'Backed up by several people who had sat the test.'},
+  amber:{cls:'c-amber',label:'Single account',icon:'!',
+    tip:'One source, or people who hadn’t sat it. Plausible, but unconfirmed.'},
+  red:{cls:'c-red',label:'Outdated',icon:'✕',
+    tip:'This no longer seems to hold.'},
+  grey:{cls:'c-grey',label:'From the published guides',icon:'?',
+    tip:'Taken from the published test guides, not from anyone who sat it. Nobody I found corroborated it.'}
+};
+const chip = c => {
+  const x = CONF[c] || CONF.amber;
+  return `<span class="chip ${x.cls}" title="${esc(x.tip)}"><span class="dot"></span>${x.icon} ${x.label}</span>`;
+};
+const itemEl = f => `<div class="item ${f.c}">
+  <div class="stmt">${esc(f.t)}</div>
+  ${f.n?`<div class="note2">${esc(f.n)}</div>`:''}
+  <div class="meta">${chip(f.c)}${f.tag?`<span class="tag">${esc(f.tag)}</span>`:''}</div>
+</div>`;
+const factsHTML = arr => `<div class="facts">${arr.map(itemEl).join('')}</div>`;
+
+/* ── SkyWatch simulations ───────────────────────────────────────────────────
+   A live, self-playing SkyWatch game beside the test it practises, iframed from
+   /embed/cbat/<id>.
+
+   Only tests we have a game for appear here, and the id on the right must be one
+   of the landing page's demo pool (src/components/landingGames/gameDemoPool.js).
+   That pool is the list of games proven to render and drive themselves in a
+   small box; anything outside it has no embed route, so a wrong id shows an
+   empty frame rather than a broken game. Tests we cover but that are not in the
+   pool — ANT, Numerical Operations, DAD, RTT — deliberately get nothing here
+   until they are.
+
+   These are OUR simulations, not the CBAT. The caption says so on every box:
+   we do not have the real subtests and must never imply otherwise. */
+const SIMS = {
+  flag:      { id:'flag',             name:'FLAG'                  },
+  cut:       { id:'cut',              name:'Cognitive Updating'    },
+  trt:       { id:'target',           name:'Target'                },
+  insc:      { id:'instruments',      name:'Instruments'           },
+  dpt:       { id:'dpt',              name:'DPT'                   },
+  sat:       { id:'sat',              name:'Situational Awareness' },
+  act:       { id:'act',              name:'ACT'                   },
+  trac:      { id:'trace-2',          name:'Trace 2'               },
+  vissearch: { id:'symbols',          name:'Symbols'               },
+  vis:       { id:'visualisation-2d', name:'Visualisation 2D'      },
+};
+
+/* data-src, not src: the loader below decides when a frame is worth booting.
+   Each one starts a whole React app, several with a WebGL context, and a
+   browser gives you well under twenty of those — ten frames loading eagerly
+   would exhaust them and stall a document people read for twenty minutes. */
+const simHTML = s => `<figure class="sim">
+  <div class="simbox"><iframe data-src="/embed/cbat/${s.id}" title="SkyWatch ${esc(s.name)} — a practice game playing itself"
+    loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
+  <figcaption>SkyWatch <strong>${esc(s.name)}</strong> playing itself — our practice
+  version, not the real test. <a href="/cbat" target="_top">Play it</a></figcaption>
+</figure>`;
+
+const main = document.getElementById('main');
+const out = [], nav = [];
+const sec = (id,kicker,title,inner)=>
+  out.push(`<section id="${id}"><h2>${kicker}</h2><div class="h2sub">${title}</div>${inner}</section>`);
+
+const ALL = [...TESTS.map(t=>t.facts), ...DAY_GROUPS.map(g=>g.facts), ...OTHER.map(o=>o.facts)].flat();
+const nG = ALL.filter(f=>f.c==='green').length;
+const nA = ALL.filter(f=>f.c==='amber').length;
+const nR = ALL.filter(f=>f.c==='red').length;
+const nP = ALL.filter(f=>f.c==='grey').length;
+
+/* ---- how to use ---- */
+sec('read','Start here','How to use this guide', `
+<p class="lead">The CBAT is a long day made up of short, unfamiliar tests. Nearly everything that goes
+wrong on it goes wrong for one of two reasons. Either you practised something that doesn’t match the real
+test, or you spent your attention defending a task that was always going to fall apart. I’ve built this
+guide around those two problems.</p>
+<div class="tiles">
+  <div class="tile"><div class="n acc">${ALL.length}</div><div class="l">specific findings,<br>graded for confidence</div></div>
+  <div class="tile"><div class="n">${TESTS.length}</div><div class="l">entries covering all<br>24 official tests</div></div>
+  <div class="tile"><div class="n">${nG}</div><div class="l">well established<br>by several candidates</div></div>
+  <div class="tile"><div class="n">${OPEN.length}</div><div class="l">questions I still<br>could not answer</div></div>
+</div>
+<h3>How sure am I about each point?</h3>
+<p class="lead">Every point carries a grade instead of being presented as equally solid. That matters here,
+because some of what gets passed around about the CBAT is reliable, some rests entirely on one person’s
+memory, and a bit of it is just out of date.</p>
+<div class="pills">${chip('green')}${chip('amber')}${chip('red')}${chip('grey')}</div>
+<ul class="tight">
+  <li><strong style="color:var(--good-ink)">Well established.</strong> Backed up by several people who’d
+  actually sat the test, usually at different times. Plan around these. ${nG} points.</li>
+  <li><strong style="color:var(--warn-ink)">Single account.</strong> One source, or people talking about
+  practice instead of the real thing. Often the most useful detail here, and also the most likely to be
+  wrong. Check these during your reading and practice time. ${nA} points.</li>
+  <li><strong style="color:var(--crit-ink)">Outdated.</strong> Still repeated everywhere, but it doesn’t
+  hold any more. Don’t calibrate against these. ${nR} points.</li>
+  <li><strong style="color:var(--ink3)">From the published guides.</strong> Taken from the published test
+  guides rather than from anyone who sat it. These are here because six of the twenty-four tests have almost
+  no first-hand information behind them, and a described test beats a blank page — but nobody has confirmed
+  them. ${nP} points.</li>
+</ul>
+<div class="note"><strong>What this is, and what it isn’t.</strong> The tests get revised, details vary
+between sittings, and memory is imperfect. People write these accounts up hours after a long, stressful
+day. So this is a preparation aid built from a lot of overlapping accounts. It isn’t official, and it
+doesn’t reproduce live test material. Where accounts contradict each other I’ve said so instead of quietly
+picking a winner.</div>`);
+nav.push(['read','Start here',0]);
+
+/* ---- ten things ---- */
+sec('key','The short version','Twelve things worth knowing before anything else', `
+<ol class="key">
+<li><strong>The pass mark for pilot is 112 out of 180, not 128.</strong> And "you need 130 to be
+competitive" is a leftover from when there were more applicants than places. A pass is what’s required.</li>
+<li><strong>Every domain carries its own minimum, and one stanine short fails you for that role.</strong>
+Even with a total well clear of the mark. This catches more people than any other single thing, and it’s
+why you can’t write off a test you’re bad at on the basis that the rest will carry it.</li>
+<li><strong>The real test is usually easier than the practice apps.</strong> It runs slower, the numbers
+are rounder, and you get a proper allowance per question. Drowning in practice predicts nothing.</li>
+<li><strong>Read every instruction fully, twice, and use the whole practice run.</strong> Nobody scores you
+for getting through the briefings quickly, and this is the advice people who passed repeat most.</li>
+<li><strong>On the bearings test, aircraft turn relative to their own north.</strong> Not to the compass
+ring printed round the display. That one fact clears up most of the confusion on the hardest test.</li>
+<li><strong>In FLAG, only the circled aircraft matter.</strong> The uncircled callsigns are there purely
+to pull you off.</li>
+<li><strong>You’ll lose the callsigns in FLAG near the end, so let it happen.</strong> Bank the maths and
+the shapes instead. People who did that still scored well.</li>
+<li><strong>No pen, no paper, for anything.</strong> Every calculation is mental, which is why estimating
+and rounding well beats being precise.</li>
+<li><strong>Feeling like you’ve failed a test means nothing.</strong> Nearly everyone who described
+walking out of one convinced they’d ruined it went on to pass, including a bloke who nearly left at
+lunchtime.</li>
+<li><strong>Drill mental arithmetic away from the apps.</strong> It’s the one thing app practice won’t do
+for you, and it feeds into several different tests.</li>
+<li><strong>Sleep counts, even though nobody marks it.</strong> Hot rooms, springy mattresses and nerves
+are behind at least one failure I know of.</li>
+<li><strong>Use every break, and never replay the test you’ve just done.</strong> That’s how one bad
+exercise turns into a bad day.</li>
+</ol>`);
+nav.push(['key','The short version',0]);
+
+/* ---- tests ---- */
+let th = `<p class="lead">All twenty-four official tests are here, in ${TESTS.length} entries — Trace 1 and
+Trace 2 share one. Each starts with a <strong>What the test is</strong> panel describing the format itself,
+taken from the published CBAT TMI and Air Defence Academy test guides, then my overall read, then the
+specific points. The panel tells you what you’re walking into; everything under it is what people who sat
+it actually found. They’re kept separate on purpose. Tests are ordered by how much reliable information
+exists, so the best documented come first and the blind spots come last.</p>`;
+TESTS.forEach(t=>{
+  const sim = SIMS[t.id];
+  th += `<div class="grp" id="test-${t.id}" style="scroll-margin-top:80px">
+    <div class="testhead"><span class="tn">${t.name}</span>
+      ${t.abbr && t.abbr!=='—'?`<span class="ta">${esc(t.abbr)}</span>`:''}
+      <span class="aka">${esc(t.aka)}</span></div>
+    <div class="briefrow${sim?'':' nosim'}">
+      <div class="briefcol">
+      ${t.brief?`<div class="brief"><span class="bh">What the test is</span>${t.brief}
+        <span class="bsrc">Format description from the published CBAT TMI test guides
+        (rafcbat.wordpress.com) and the Air Defence Academy test guides
+        (airdefenceacademy.com/testguides).</span></div>`:''}
+      </div>
+      ${sim?simHTML(sim):''}
+    </div>
+    <p class="lead" style="margin:12px 0 0">${esc(t.verdict)}</p>
+    ${factsHTML(t.facts)}</div>`;
+  nav.push(['test-'+t.id, (t.abbr && t.abbr!=='—')? t.abbr : t.name, 1]);
+});
+sec('tests','The tests','Test by test', th);
+nav.splice(nav.length-TESTS.length,0,['tests','The tests',0]);
+
+/* ---- day ---- */
+let dh = `<p class="lead">The tests are only half of it. Here’s how the day itself runs, from the kit and
+the rules to the bits of admin nobody warns you about.</p>`;
+DAY_GROUPS.forEach(g=>{ dh += `<div class="grp"><h3>${g.title}</h3>${factsHTML(g.facts)}</div>`; });
+sec('day','Test day','What the day is actually like', dh);
+nav.push(['day','Test day',0]);
+
+/* ---- psychology ---- */
+const better = FELT.filter(f=>f.d==='better').length;
+const rows = FELT.map(f=>{
+  const cls = f.d==='better'?'c-green':'c-amber';
+  const lbl = f.d==='better'?'✓ Did better than they felt':'! Feeling was accurate';
+  return `<tr><td><strong>${esc(f.who)}</strong></td><td>${esc(f.felt)}</td>
+    <td>${esc(f.actual)}</td><td><span class="chip ${cls}"><span class="dot"></span>${lbl}</span></td></tr>`;
+}).join('');
+sec('felt','The psychology','How people think they did versus how they actually did', `
+<p class="lead">This is the most consistent pattern I came across anywhere, and the one I’d most want you
+to take in before test day. Of the candidates who described both how a test felt at the time and what they
+actually scored, ${better} out of ${FELT.length} did a lot better than they thought. The only two whose
+pessimism turned out to be right were a candidate who’d lost a night’s sleep, and one who dropped a single
+mark to a misread word.</p>
+<div class="tiles">
+  <div class="tile"><div class="n acc">${better}/${FELT.length}</div><div class="l">did better than<br>they thought they had</div></div>
+  <div class="tile"><div class="n">3</div><div class="l">passers who nearly wrote<br>themselves off mid-test</div></div>
+  <div class="tile"><div class="n">1</div><div class="l">passed everything after<br>two previous failures</div></div>
+  <div class="tile"><div class="n">0</div><div class="l">people whose panic on one<br>test predicted the outcome</div></div>
+</div>
+<div class="tblwrap"><table>
+  <thead><tr><th>Candidate</th><th>How it felt at the time</th><th>What actually happened</th><th>Gap</th></tr></thead>
+  <tbody>${rows}</tbody></table></div>
+<div class="note"><strong>So what do you do with that?</strong> How you feel about a test you’ve just
+finished tells you nothing useful, so don’t let it bleed into the next one. The bloke who seriously
+thought about leaving at the halfway mark passed for both roles he wanted. Finish the day, whatever
+happens in the middle of it.</div>
+<div class="note"><strong>One caveat on all this optimism.</strong> People who pass tend to write up their
+experience. People who don’t usually go quiet. So the accounts that exist, including the ones behind this
+guide, lean heavily towards success. The "it felt worse than it scored" pattern is real and worth
+trusting. Any sense you get of an easy pass rate is not.</div>`);
+nav.push(['felt','The psychology',0]);
+
+/* ---- preparation ---- */
+const maxN = Math.max(...HELPED.map(h=>h.n));
+const helpHTML = HELPED.map(h=>`
+  <div class="item ${h.n>=4?'green':'amber'}">
+    <div class="stmt">${esc(h.tool)}</div>
+    <div class="note2">${esc(h.note)}</div>
+    <div style="margin-top:10px;max-width:420px" class="meter"><i style="width:${(h.n/maxN*100).toFixed(0)}%"></i></div>
+  </div>`).join('');
+sec('prep','Preparation','What actually helps', `
+<p class="lead">Ranked by how often people who passed give each one credit. The bar shows weight of
+recommendation, not measured effectiveness, because nobody has run a proper comparison.</p>
+<div class="facts">${helpHTML}</div>
+<div class="note"><strong>What a preparation that works looks like.</strong> An app for interface
+familiarity and stamina. Mental arithmetic drilled separately, by hand. The official guides so you know
+what each test is. And recent first-hand accounts for all the corrections that none of the published
+material carries. The candidate who failed twice and then passed everything did all four, and said
+plainly that leaning on the app alone had been his mistake.</div>`);
+nav.push(['prep','Preparation',0]);
+
+/* ---- tools ---- */
+let tk = `<p class="lead">There are several practice tools about and they vary enormously in what they cover
+and how faithfully they behave. I’ve not ranked products here, because that dates fast and depends on
+which tests you personally need. Instead, here’s what separates a useful one from a poor one, based on
+the differences candidates keep reporting between practice and the real test.</p>`;
+TOOLKINDS.forEach(k=>{
+  tk += `<div class="appcard"><div class="apphead"><div><div class="nm">${k.name}</div>
+    <div class="by">Six checks, in rough order of how much difference they make</div></div></div>
+    ${k.items.map(([a,b])=>`<div class="item amber" style="border-left-color:var(--brand-dim)">
+      <div class="stmt" style="color:var(--ink)">${esc(a)}</div>
+      <div class="note2">${esc(b)}</div></div>`).join('')}</div>`;
+});
+sec('tools','Practice tools','Choosing what to practise on', tk + `
+<div class="note"><strong>The gap worth planning around.</strong> Coverage is where tools differ most.
+The bearings and projection test, which nearly everyone who’s sat it rates the hardest on the CBAT, is
+missing from most of them. So are Trace 2, the auditory test, spatial integration and system logic. If a
+tool covers those, that’s a real reason to use it. If it doesn’t, accept you’ll walk into those tests cold
+and lean on your reading and practice time instead.</div>`);
+nav.push(['tools','Practice tools',0]);
+
+/* ---- other services ---- */
+let oh = `<p class="lead">If you’re sitting another service’s aptitude test, most of this guide still
+applies. Here’s what’s known to be different.</p>`;
+OTHER.forEach(o=>{ oh += `<div class="grp"><h3>${o.flag}</h3>${factsHTML(o.facts)}</div>`; });
+sec('other','Other services','The Navy, Australian and Canadian equivalents', oh + `
+<div class="note"><strong>The short version.</strong> The Royal Navy is said to run the same test under a
+different name, with the result recognised by the RAF. That could be a useful second route, but it rests
+on one account, so check it with a recruiter. The Australian version is clearly the same family of tests
+with one swap. Canada splits it over two days, which puts a lot of weight on the first night’s sleep.</div>`);
+nav.push(['other','Other services',0]);
+
+/* ---- open questions ---- */
+sec('open','Known unknowns','Questions I could not answer', `
+<p class="lead">I’d rather tell you what I don’t know than paper over it with confident guesswork. These
+came up again and again and I’ve never seen a reliable answer to any of them. If you sit the test and can
+settle one, the next person along will be grateful.</p>
+<div class="tblwrap"><table>
+  <thead><tr><th>Question</th><th>Where it stands</th></tr></thead>
+  <tbody>${OPEN.map(o=>`<tr><td><strong>${esc(o.q)}</strong></td><td>${esc(o.note)}</td></tr>`).join('')}</tbody>
+</table></div>`);
+nav.push(['open','Known unknowns',0]);
+
+main.innerHTML = out.join('');
+document.getElementById('tocbody').innerHTML = '<h4>Contents</h4>' +
+  nav.map(([id,l,lv])=>`<a href="#${id}" class="${lv?'sub':''}" data-t="${id}">${esc(l)}</a>`).join('');
+document.getElementById('foot').innerHTML =
+  `<strong style="color:var(--ink2)">About this guide.</strong> Put together from published test guides,
+   published candidate write-ups, and first-hand accounts from people who’d recently sat the test. Test
+   names, abbreviations and the “What the test is” format descriptions come from the CBAT TMI test guides
+   (rafcbat.wordpress.com) and the Air Defence Academy test guides (airdefenceacademy.com/testguides);
+   everything below those panels comes from candidates. Details vary between sittings and the tests get revised over time, so
+   take all of this as preparation guidance and not as a description of the test you’ll sit. Nothing here
+   reproduces live test material. Not affiliated with, endorsed by, or produced on behalf of the Royal Air
+   Force or the Ministry of Defence.`;
+
+document.getElementById('toctoggle').onclick=()=>document.getElementById('toc').classList.toggle('open');
+
+/* scrollspy */
+const links=[...document.querySelectorAll('nav.toc a')];
+const targets=links.map(a=>document.getElementById(a.dataset.t)).filter(Boolean);
+const spy=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting){
+  links.forEach(l=>l.classList.toggle('on', l.dataset.t===e.target.id));}});},
+  {rootMargin:'-80px 0px -70% 0px'});
+targets.forEach(t=>spy.observe(t));
+
+/* ── Simulation frames: load on approach, unload on departure ──────────────
+   Each frame boots a React app and several take a WebGL context, of which a
+   browser grants somewhere under twenty per page. Ten frames left running as
+   the reader scrolls would exhaust them — the earliest games lose their context
+   and go black — and would keep a dozen animation loops burning through a
+   document meant for twenty minutes of reading.
+
+   So a frame gets a src only as it comes within a screen of the viewport, and
+   loses it again once it is two screens away. Re-entering re-boots it, which is
+   cheap next to keeping it alive and is invisible: the reader is looking at
+   whatever is on screen, not at what they scrolled past. */
+(function(){
+  const frames = [...document.querySelectorAll('.simbox iframe')];
+  if (!frames.length) return;
+
+  /* No IntersectionObserver: load them all rather than show empty boxes. The
+     cost is real but a blank square next to every test is worse. */
+  if (typeof IntersectionObserver === 'undefined') {
+    frames.forEach(f => { f.src = f.dataset.src; });
+    return;
+  }
+
+  const load   = f => { if (!f.src) f.src = f.dataset.src; };
+  /* about:blank first: dropping the attribute alone leaves the old document —
+     and its WebGL context — alive in some browsers. */
+  const unload = f => { if (f.src) { f.src = 'about:blank'; f.removeAttribute('src'); } };
+
+  const near = new IntersectionObserver(
+    es => es.forEach(e => { if (e.isIntersecting) load(e.target); }),
+    { rootMargin: '100% 0px' },
+  );
+  const far = new IntersectionObserver(
+    es => es.forEach(e => { if (!e.isIntersecting) unload(e.target); }),
+    { rootMargin: '200% 0px' },
+  );
+  frames.forEach(f => { near.observe(f); far.observe(f); });
+})();
+
+if(location.hash){const t=document.getElementById(location.hash.slice(1));
+  if(t) requestAnimationFrame(()=>t.scrollIntoView());}
+</script>
+</body>
+</html>

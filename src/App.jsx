@@ -83,6 +83,7 @@ import ReportProblem  from './pages/ReportProblem'
 import Chat, { ChatAdminRoute } from './pages/chat/Chat'
 import Contact        from './pages/Contact'
 import Privacy        from './pages/Privacy'
+import CbatDemoEmbed  from './pages/CbatDemoEmbed'
 import DeleteAccount  from './pages/DeleteAccount'
 import Subscription   from './pages/Subscription'
 import Share          from './pages/Share'
@@ -225,6 +226,21 @@ function AppRoutes() {
 
   if (loading) return <LoadingScreen />
 
+  // Embeds render bare: no shell, no nav, no page transition. They exist to be
+  // iframed by pages outside the SPA (the CBAT guide), where app chrome would
+  // be a second navigation inside somebody else's document.
+  //
+  // Returned ahead of both redirects below on purpose. The slim-mode gate would
+  // bounce /embed/* to /cbat — an iframe showing the games hub instead of the
+  // game — and neither redirect means anything for a frame with no user in it.
+  if (location.pathname.startsWith('/embed/')) {
+    return (
+      <Routes location={location}>
+        <Route path="/embed/cbat/:demoId" element={<CbatDemoEmbed />} />
+      </Routes>
+    )
+  }
+
   // No landing page to show — go straight to the CBAT games page. That's the
   // native app always, and web slim mode when an admin has turned the landing
   // page off. See useLandingPageEnabled.
@@ -306,6 +322,9 @@ function AppRoutes() {
               alive. Paired with transitionKeyFor() — both are needed. */}
           <Route path="/chat/:conversationId" element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
+          {/* The CBAT community guide is deliberately NOT a route. It is a
+              standalone document served straight from public/cbat-guide.html —
+              its own typography and layout, not the app's. See appMode.js. */}
           <Route path="/privacy"          element={<PageWrapper><Privacy /></PageWrapper>} />
           <Route path="/delete-account"   element={<PageWrapper><DeleteAccount /></PageWrapper>} />
           <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />

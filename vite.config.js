@@ -135,12 +135,37 @@ function publicModelsManifest() {
   }
 }
 
+// Standalone documents in public/ that also answer on a clean, extensionless
+// URL — the CBAT guide is one, and it is what Community › Guides links to.
+//
+// Without this the clean URL falls through to index.html, the SPA boots, and
+// slim mode bounces the unknown path to /cbat: the page "redirects to the CBAT
+// menu" rather than 404ing, which reads as the guide being broken. Production
+// closes the same hole with a rewrite in vercel.json; this is the dev half, so
+// both environments answer the clean URL identically instead of dev being the
+// only place it fails.
+function staticDocRoutes() {
+  const DOCS = { '/cbat-guide': '/cbat-guide.html' }
+  return {
+    name: 'static-doc-routes',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const [pathname] = (req.url || '').split('?')
+        const target = DOCS[pathname]
+        if (target) req.url = target + (req.url.slice(pathname.length) || '')
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
     publicModelsManifest(),
+    staticDocRoutes(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false, // registered manually (web only) in src/main.jsx
@@ -152,7 +177,13 @@ export default defineConfig({
         globIgnores: ['**/models/**'],
         additionalManifestEntries: offlineGlbPrecacheEntries(),
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 3D/vendor chunks
-        navigateFallbackDenylist: [/^\/api\//],
+        // The service worker answers EVERY navigation with the precached
+        // index.html unless the path is denied here — which would hand the SPA
+        // a path it has no route for, and slim mode would redirect it to /cbat.
+        // The guide is a standalone document, not an app route, so it has to
+        // opt out of the fallback or it breaks in production only: dev has no
+        // service worker, so it works right up until it is deployed.
+        navigateFallbackDenylist: [/^\/api\//, /^\/cbat-guide(\.html)?$/],
         runtimeCaching: [
           {
             // Aircraft cutout images live on Cloudinary — cache on first use so
