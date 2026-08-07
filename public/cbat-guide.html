@@ -76,7 +76,7 @@ body{margin:0;background:var(--paper);color:var(--ink);
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
   text-rendering:optimizeLegibility}
 p,li{text-wrap:pretty}
-h1,h2,h3,.h2sub,.testhead .tn,.apphead .nm,.tile .l{text-wrap:balance}
+h1,h2,h3,.h2sub,.testhead .tn,.tile .l{text-wrap:balance}
 a{color:var(--brand);text-decoration:underline;text-decoration-thickness:1px;
   text-underline-offset:2px;text-decoration-color:var(--brand-dim)}
 a:hover{text-decoration-color:currentColor}
@@ -272,13 +272,6 @@ td strong{color:var(--ink)}
 .score{font:700 14px var(--mono);color:var(--ink);white-space:nowrap}
 .score small{color:var(--ink3);font-weight:400}
 
-.appcard{background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:26px;
-  margin-bottom:20px;box-shadow:var(--lift)}
-.apphead{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;justify-content:space-between;
-  padding-bottom:17px;border-bottom:1px solid var(--line);margin-bottom:17px}
-.apphead .nm{font:600 23px/1.22 var(--serif);letter-spacing:-.014em;color:var(--ink)}
-.apphead .by{font:13.5px/1.5 var(--sans);color:var(--ink3);margin-top:5px}
-
 .btn{background:var(--surface);border:1px solid var(--line-2);color:var(--ink2);border-radius:6px;
   padding:10px 15px;font:600 14px var(--sans);cursor:pointer;box-shadow:var(--lift)}
 .btn:hover{border-color:var(--brand);color:var(--brand)}
@@ -321,7 +314,7 @@ footer .wrap{max-width:76ch;margin:0 auto}
   body{font-size:11pt;background:#fff}
   .masthead .wrap{padding:0 0 18pt}
   section{margin-bottom:24pt;page-break-inside:auto}
-  .item,.tile,ol.key li,.appcard,.brief,.note{page-break-inside:avoid;box-shadow:none}
+  .item,.tile,ol.key li,.brief,.note{page-break-inside:avoid;box-shadow:none}
   .testhead{page-break-after:avoid;page-break-inside:avoid}
   h2,h3,.h2sub{page-break-after:avoid}
   a{text-decoration:none;color:#000}
@@ -816,18 +809,6 @@ const HELPED = [
   note:'Speed distance time drills, instrument comprehension sets, angle estimation tools. Usually harder than the real test, so use them as conditioning and not as a benchmark.'}
 ];
 
-const TOOLKINDS = [
- { id:'coverage', name:'What to check before you commit to a practice tool',
-   items:[
-    ['Does it cover the hard tests?','The bearings and projection test gets rated the hardest on the CBAT and it’s missing from most tools. Trace 2, the auditory test, spatial integration and system logic are missing from nearly all of them. Coverage beats polish.'],
-    ['Does it pace like the real test?','The real test gives you an allowance per question plus reading time. Most tools push "as many as you can in the time". This is the most common reason practice scores don’t translate.'],
-    ['Is it harder or easier than the real thing?','Harder is fine, arguably ideal, so long as you know that’s what’s happening. What you can’t do is judge your readiness against a tool whose difficulty you’ve never calibrated.'],
-    ['Does it get the mechanics right?','Known gaps to check for: callsign recall on circled aircraft only, unknown and flashing priority targets on the target test, answer formats that change on instruments, and a symbol key that genuinely reshuffles.'],
-    ['Can you trust its scores?','Leaderboards and totals in some tools are unreliable. Scores stack across attempts, rankings come out wrong. If a personal best looks impossible, it probably is.'],
-    ['What does it cost, and how?','Both one-off purchases and subscriptions are out there. For something you’ll prepare with over a few weeks, how you pay matters more than the headline price.']
-   ]}
-];
-
 const OTHER = [
 { id:'rn', flag:'Royal Navy, Fleet Air Arm', facts:[
   {c:'green',tag:'Worth knowing',t:'Your CBAT result carries across to the Royal Navy. One candidate sat it for the RAF and had the same result count for a Navy pilot application.',
@@ -853,17 +834,6 @@ const OTHER = [
   {c:'amber',tag:'Shared tests',t:'Both trace tests and a sensory motor test appear in the Canadian version too.',
    n:'So the trace and motor advice in this guide applies.'}
 ]}];
-
-const OPEN = [
- {q:'What do the Visualisation tests actually contain, and do they use folded and unfolded 3D shapes?', note:'Candidates ask this everywhere. I’ve never seen anyone who sat it answer.'},
- {q:'What comes up in the Verbal Logic Test?', note:'No usable first-hand description anywhere I looked.'},
- {q:'How do you practise Trace 2?', note:'Asked constantly. There’s barely any material for it, and that looks like a real gap rather than me failing to find it.'},
- {q:'On the bearings test, do you type the destination heading or the size of the change?', note:'Genuinely disputed among people who’ve sat it. Sort it out during your practice attempt.'},
- {q:'Do practice tools use the same hostile, friendly and neutral symbols as the real target test?', note:'Asked directly of tool developers, never publicly answered.'},
- {q:'Is the instruments test timed per question, or as many as you can get through?', note:'Even people who’d sat it that same day couldn’t remember.'},
- {q:'Which domains apply to which role, and what is the minimum for each?', note:'Two candidates have published their own results pages and the domains differ between them. Nobody has set out the full role-by-role scheme, and it’s the thing most worth knowing given a single domain can fail you outright.'},
- {q:'How exactly is the multitasking test scored on the day?', note:'The broad principles are clear enough, few warnings and fast corrections and accurate inputs, but nobody could describe the actual weighting.'}
-];
 
 </script>
 <script>
@@ -948,7 +918,7 @@ guide around those two problems.</p>
   <div class="tile"><div class="n acc">${ALL.length}</div><div class="l">specific findings,<br>graded for confidence</div></div>
   <div class="tile"><div class="n">${TESTS.length}</div><div class="l">entries covering all<br>24 official tests</div></div>
   <div class="tile"><div class="n">${nG}</div><div class="l">well established<br>by several candidates</div></div>
-  <div class="tile"><div class="n">${OPEN.length}</div><div class="l">questions I still<br>could not answer</div></div>
+  <div class="tile"><div class="n">${nA}</div><div class="l">resting on a single<br>account so far</div></div>
 </div>
 <h3>How sure am I about each point?</h3>
 <p class="lead">Every point carries a grade instead of being presented as equally solid. That matters here,
@@ -1095,26 +1065,6 @@ material carries. The candidate who failed twice and then passed everything did 
 plainly that leaning on the app alone had been his mistake.</div>`);
 nav.push(['prep','Preparation',0]);
 
-/* ---- tools ---- */
-let tk = `<p class="lead">There are several practice tools about and they vary enormously in what they cover
-and how faithfully they behave. I’ve not ranked products here, because that dates fast and depends on
-which tests you personally need. Instead, here’s what separates a useful one from a poor one, based on
-the differences candidates keep reporting between practice and the real test.</p>`;
-TOOLKINDS.forEach(k=>{
-  tk += `<div class="appcard"><div class="apphead"><div><div class="nm">${k.name}</div>
-    <div class="by">Six checks, in rough order of how much difference they make</div></div></div>
-    ${k.items.map(([a,b])=>`<div class="item amber" style="border-left-color:var(--brand-dim)">
-      <div class="stmt" style="color:var(--ink)">${esc(a)}</div>
-      <div class="note2">${esc(b)}</div></div>`).join('')}</div>`;
-});
-sec('tools','Practice tools','Choosing what to practise on', tk + `
-<div class="note"><strong>The gap worth planning around.</strong> Coverage is where tools differ most.
-The bearings and projection test, which nearly everyone who’s sat it rates the hardest on the CBAT, is
-missing from most of them. So are Trace 2, the auditory test, spatial integration and system logic. If a
-tool covers those, that’s a real reason to use it. If it doesn’t, accept you’ll walk into those tests cold
-and lean on your reading and practice time instead.</div>`);
-nav.push(['tools','Practice tools',0]);
-
 /* ---- other services ---- */
 let oh = `<p class="lead">If you’re sitting another service’s aptitude test, most of this guide still
 applies. Here’s what’s known to be different.</p>`;
@@ -1125,17 +1075,6 @@ different name, with the result recognised by the RAF. That could be a useful se
 on one account, so check it with a recruiter. The Australian version is clearly the same family of tests
 with one swap. Canada splits it over two days, which puts a lot of weight on the first night’s sleep.</div>`);
 nav.push(['other','Other services',0]);
-
-/* ---- open questions ---- */
-sec('open','Known unknowns','Questions I could not answer', `
-<p class="lead">I’d rather tell you what I don’t know than paper over it with confident guesswork. These
-came up again and again and I’ve never seen a reliable answer to any of them. If you sit the test and can
-settle one, the next person along will be grateful.</p>
-<div class="tblwrap"><table>
-  <thead><tr><th>Question</th><th>Where it stands</th></tr></thead>
-  <tbody>${OPEN.map(o=>`<tr><td><strong>${esc(o.q)}</strong></td><td>${esc(o.note)}</td></tr>`).join('')}</tbody>
-</table></div>`);
-nav.push(['open','Known unknowns',0]);
 
 main.innerHTML = out.join('');
 document.getElementById('tocbody').innerHTML = '<h4>Contents</h4>' +
