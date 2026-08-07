@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../../context/AuthContext'
 import Overlay from '../../../components/ui/Overlay'
+import BotBadge from '../../../components/BotBadge'
 import { agentLabel } from '../format'
 
 // Tapping a name in a channel opens this. It is the only route into a DM, by
@@ -53,7 +54,18 @@ export default function UserCard({ userId, onClose, onOpenDm }) {
           <p className="text-sm text-slate-400 py-4">That agent is no longer available.</p>
         ) : (
           <>
-            <div className="text-3xl mb-2">🎖️</div>
+            {/* A bot gets its own face here too, so the card you open from a
+                channel matches the avatar you tapped to open it. */}
+            {profile.isBot ? (
+              <BotBadge
+                botKey={profile.botKey}
+                size={40}
+                title={profile.displayName}
+                className="mx-auto mb-2"
+              />
+            ) : (
+              <div className="text-3xl mb-2">🎖️</div>
+            )}
             <p className="text-base font-extrabold text-slate-800 truncate">{agentLabel(profile)}</p>
             {profile.agentNumber && (
               <p className="text-[11px] text-slate-400 mt-0.5">Agent #{profile.agentNumber}</p>

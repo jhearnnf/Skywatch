@@ -1,10 +1,20 @@
 import RankBadge from './RankBadge'
+import BotBadge from './BotBadge'
 
 // Centralised badge renderer for the user avatar across Profile, Sidebar, and
-// BottomNav. Precedence: selectedBadge cutout → RankBadge SVG → "AC" text.
-// Caller owns the surrounding container (size/shape/background); this just
-// fills it with the chosen badge content.
+// BottomNav. Precedence: bot mark → selectedBadge cutout → RankBadge SVG →
+// "AC" text. Caller owns the surrounding container (size/shape/background);
+// this just fills it with the chosen badge content.
 export default function ProfileBadge({ user, size = 32, color = '#5baaff', className = '' }) {
+  // Bots first, and unconditionally: a bot has no rank and never earns an
+  // aircraft, so every later branch would land it on the "AC" text that every
+  // brand-new account shows.
+  if (user?.isBot) {
+    return (
+      <BotBadge botKey={user.botKey} size={size} title={user.displayName} className={className} />
+    )
+  }
+
   const cutoutUrl = user?.selectedBadge?.cutoutUrl
   if (cutoutUrl) {
     return (

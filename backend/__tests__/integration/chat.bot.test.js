@@ -13,6 +13,7 @@ const { createUser, createSettings, authCookie } = require('../helpers/factories
 const seedChatBot = require('../../seeds/seedChatBot');
 const ChatConversation = require('../../models/ChatConversation');
 const BotKnowledge     = require('../../models/BotKnowledge');
+const ChatMessage      = require('../../models/ChatMessage');
 const User             = require('../../models/User');
 
 beforeAll(async () => { await db.connect(); await ChatConversation.syncIndexes(); });
@@ -135,6 +136,77 @@ describe('bots describe themselves', () => {
     // Left as-is, the medal bot would answer DMs with CBAT guide answers.
     expect(medal.botAnswersDms).toBe(false);
     expect(medal.botDescription).toMatch(/medals channel/i);
+  });
+});
+
+describe('bots have a face of their own', () => {
+  it('gives each bot a stable key to pick its avatar from', async () => {
+    const { guideBotId, medalBotId } = await seedChatBot();
+
+    expect((await User.findById(guideBotId)).botKey).toBe('guide');
+    expect((await User.findById(medalBotId)).botKey).toBe('medal');
+  });
+
+  it('keeps the key when a bot is renamed', async () => {
+    // The avatar must not follow the display name: an admin retitling the medal
+    // bot would otherwise silently swap the face it has been posting under.
+    const { medalBotId } = await seedChatBot();
+    await User.updateOne({ _id: medalBotId }, { $set: { displayName: 'Podium' } });
+
+    await seedChatBot();
+    const medal = await User.findById(medalBotId);
+    expect(medal.displayName).toBe('Podium');
+    expect(medal.botKey).toBe('medal');
+  });
+
+  it('repairs a bot row that predates the key', async () => {
+    const { guideBotId } = await seedChatBot();
+    await User.updateOne({ _id: guideBotId }, { $unset: { botKey: 1 } });
+
+    await seedChatBot();
+    expect((await User.findById(guideBotId)).botKey).toBe('guide');
+  });
+
+  it('sends isBot and the key with the sender profile', async () => {
+    // Without these the client falls through to the rank badge, and a bot —
+    // which has no rank — ends up wearing the "AC" every new account shows.
+    const { medalBotId } = await seedChatBot();
+    const admin = await createUser({ isAdmin: true, displayName: 'Control' });
+
+    const made = await request(app).post('/api/chat/admin/channels')
+      .set('Cookie', authCookie(admin._id)).send({ name: 'General' });
+    const channelId = made.body.data.channel._id;
+    await ChatMessage.create({
+      conversationId:    channelId,
+      senderUserId:      medalBotId,
+      senderRole:        'user',
+      senderDisplayName: 'Medal Bot',
+      body:              'Falcon takes gold on Target.',
+    });
+
+    const res = await request(app).get(`/api/chat/conversations/${channelId}/messages`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.senders[String(medalBotId)]).toMatchObject({
+      isBot: true, botKey: 'medal',
+    });
+  });
+
+  it('sends the key with the sidebar bot list', async () => {
+    await seedChatBot();
+    const admin = await createUser({ isAdmin: true, displayName: 'Control' });
+
+    const res = await request(app).get('/api/chat/overview').set('Cookie', authCookie(admin._id));
+    expect(res.body.data.bots[0].botKey).toBe('guide');
+  });
+
+  it('sends the key with the user card', async () => {
+    const { guideBotId } = await seedChatBot();
+    const admin = await createUser({ isAdmin: true, displayName: 'Control' });
+
+    const res = await request(app).get(`/api/chat/users/${guideBotId}/card`)
+      .set('Cookie', authCookie(admin._id));
+    expect(res.body.data.user).toMatchObject({ isBot: true, botKey: 'guide' });
   });
 });
 

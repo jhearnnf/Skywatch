@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import BotBadge from '../../components/BotBadge'
 import { formatRelative, SUPPORT_LABEL } from './format'
 
 function Row({ to, icon, title, subtitle, preview, unread, timestamp, active }) {
@@ -120,7 +121,9 @@ export default function ChatSidebar({
                 <Row
                   key={b.userId}
                   to={`/chat/${b.conversationId}`}
-                  icon="🤖"
+                  // The same face it posts under in the thread — a generic 🤖
+                  // next to "Guide Bot" made every bot look interchangeable.
+                  icon={<BotBadge botKey={b.botKey} size={20} title={b.title} />}
                   title={b.title}
                   subtitle={b.description}
                   unread={b.unread}
@@ -134,7 +137,7 @@ export default function ChatSidebar({
                   onClick={() => onOpenBot?.(b.userId)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-100 transition-colors text-left"
                 >
-                  <div className="text-lg leading-none shrink-0">🤖</div>
+                  <BotBadge botKey={b.botKey} size={20} title={b.title} />
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-slate-700">{b.title}</p>
                     <p className="text-[11px] text-slate-400">{b.description}</p>

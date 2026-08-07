@@ -19,12 +19,14 @@ const ChatConversation = require('../models/ChatConversation');
 const BOTS = {
   guide: {
     email: 'bot@skywatch.invalid',
+    botKey: 'guide',
     displayName: 'Guide Bot',
     botDescription: 'Answers questions from the CBAT community guide',
     botAnswersDms: true,
   },
   medal: {
     email: 'medalbot@skywatch.invalid',
+    botKey: 'medal',
     displayName: 'Medal Bot',
     botDescription: 'Posts podium finishes to the Medals channel',
     // A poster, not a correspondent. Nothing to ask it.
@@ -34,15 +36,16 @@ const BOTS = {
 
 const MEDALS_CHANNEL_SLUG = 'medals';
 
-async function ensureBot({ email, displayName, botDescription, botAnswersDms }) {
+async function ensureBot({ email, botKey, displayName, botDescription, botAnswersDms }) {
   const existing = await User.findOne({ email }).select('_id isBot');
   if (existing) {
     // Keep the flags in step on a row that predates them. Everything downstream
-    // keys off isBot (a bot without it would be DM-able by anyone) and off
+    // keys off isBot (a bot without it would be DM-able by anyone), off
     // botAnswersDms (a poster without it would answer DMs it has no answers
-    // for), so these are repaired rather than left as the seed found them.
+    // for), and off botKey (without it the bot falls back to a generic avatar),
+    // so these are repaired rather than left as the seed found them.
     await User.updateOne({ _id: existing._id }, {
-      $set: { isBot: true, botDescription, botAnswersDms },
+      $set: { isBot: true, botKey, botDescription, botAnswersDms },
     });
     return existing._id;
   }
@@ -53,6 +56,7 @@ async function ensureBot({ email, displayName, botDescription, botAnswersDms }) 
   const bot = await User.create({
     email,
     isBot:            true,
+    botKey,
     botDescription,
     botAnswersDms,
     displayName,

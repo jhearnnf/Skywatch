@@ -156,7 +156,14 @@ function Avatar({ profile, show, support }) {
       >
         <ProfileBadge
           user={profile}
-          size={profile?.selectedBadge?.cutoutUrl ? AVATAR_PX : AVATAR_PX - 12}
+          size={
+            profile?.selectedBadge?.cutoutUrl ? AVATAR_PX
+              // The bot mark is a ring, so it wants to sit just inside the
+              // circle's border rather than float in the middle of it like a
+              // rank badge does.
+              : profile?.isBot ? AVATAR_PX - 4
+                : AVATAR_PX - 12
+          }
         />
       </span>
       <MedalBar medals={profile?.medals} />

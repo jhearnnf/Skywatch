@@ -32,6 +32,24 @@ describe('ProfileBadge', () => {
     expect(container.textContent).toBe('AC')
   })
 
+  it('gives a bot the SkyWatch mark rather than the default "AC"', () => {
+    // A bot has no rank and never earns an aircraft, so every other branch
+    // lands it on the abbreviation every brand-new account shows.
+    const { container } = render(<ProfileBadge user={{ isBot: true, botKey: 'guide' }} size={26} />)
+    expect(container.textContent).toBe('')
+    expect(container.querySelector('svg')).not.toBeNull()
+  })
+
+  it('prefers the bot mark over anything hung on the bot account', () => {
+    const user = {
+      isBot: true, botKey: 'medal',
+      rank: { rankNumber: 5, rankAbbreviation: 'Sgt' },
+      selectedBadge: { briefId: 'b1', title: 'Typhoon', cutoutUrl: 'https://cdn/typhoon.png' },
+    }
+    const { container } = render(<ProfileBadge user={user} size={26} />)
+    expect(container.querySelector('img')).toBeNull()
+  })
+
   it('prefers cutout over rank even if both are present', () => {
     const user = {
       rank: { rankNumber: 10, rankAbbreviation: 'Fg Off' },

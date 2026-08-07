@@ -74,6 +74,13 @@ const userSchema = new mongoose.Schema(
     // the homepage showcase, and only admins may message it.
     isBot: { type: Boolean, default: false },
 
+    // Which bot this row is ('guide', 'medal'), independent of its display
+    // name. The avatar is chosen from this rather than from the name because
+    // the name is editable in the admin panel, and renaming a bot must not
+    // silently change the face it has been posting under. An unknown or absent
+    // key still gets the plain SkyWatch mark, so a new bot is never faceless.
+    botKey: { type: String, trim: true, maxlength: 24, default: null },
+
     // What this bot is for, in its own words. Stored per-bot rather than
     // hardcoded in the UI: the sidebar used to label every bot "Answers from
     // the CBAT community guide", which is true of the guide bot and nonsense

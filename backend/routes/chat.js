@@ -365,7 +365,7 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
   if (!ids.length) return {};
 
   const users = await User.find({ _id: { $in: ids } })
-    .select('displayName agentNumber selectedBadgeBriefId rank')
+    .select('displayName agentNumber selectedBadgeBriefId rank isBot botKey')
     .populate('rank', 'rankNumber rankAbbreviation')
     .lean();
 
@@ -384,10 +384,14 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
       agentNumber:   u.agentNumber ?? null,
       // Shape matches what <ProfileBadge> expects, so the chat avatar renders
       // through exactly the same precedence as everywhere else in the app:
-      // cutout → rank badge → rank abbreviation.
+      // bot mark → cutout → rank badge → rank abbreviation.
       selectedBadge: badges.get(String(u.selectedBadgeBriefId)) ?? null,
       rank:          u.rank ?? null,
       isBot:         Boolean(u.isBot),
+      // Picks which bot avatar to draw. A bot has no rank and no aircraft
+      // badge, so without this it would fall all the way through to the "AC"
+      // text every unranked account shows.
+      botKey:        u.botKey ?? null,
       medals:        medals[String(u._id)] ?? [],
     };
   }
@@ -491,11 +495,12 @@ router.get('/overview', async (req, res) => {
       // reply it has no way to give.
       const botUsers = await User.find({
         isBot: true, isBanned: { $ne: true }, botAnswersDms: true,
-      }).select('displayName agentNumber botDescription').lean();
+      }).select('displayName agentNumber botDescription botKey').lean();
       bots = botUsers.map(b => {
         const thread = convos.find(c => String(c.botUserId) === String(b._id));
         return {
           userId:         b._id,
+          botKey:         b.botKey ?? null,
           title:          b.displayName || 'Bot',
           description:    b.botDescription || null,
           conversationId: thread?._id ?? null,
@@ -532,7 +537,7 @@ router.get('/users/:id/card', async (req, res) => {
   try {
     if (!isValidId(req.params.id)) return res.status(404).json({ message: 'User not found' });
     const target = await User.findById(req.params.id)
-      .select('displayName agentNumber isAdmin isBanned isBot').lean();
+      .select('displayName agentNumber isAdmin isBanned isBot botKey').lean();
     if (!target || target.isBanned) return res.status(404).json({ message: 'User not found' });
 
     res.json({ status: 'success', data: { user: {
@@ -541,6 +546,7 @@ router.get('/users/:id/card', async (req, res) => {
       agentNumber: target.agentNumber ?? null,
       isAdmin:     Boolean(target.isAdmin),
       isBot:       Boolean(target.isBot),
+      botKey:      target.botKey ?? null,
       isSelf:      String(target._id) === String(req.user._id),
     } } });
   } catch (err) {

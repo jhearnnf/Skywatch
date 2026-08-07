@@ -15,6 +15,11 @@ const SENDERS = {
     selectedBadge: null,
     rank: { rankNumber: 5, rankAbbreviation: 'Sgt' },
   },
+  b1: {
+    _id: 'b1', displayName: 'Medal Bot', agentNumber: null,
+    selectedBadge: null, rank: null,
+    isBot: true, botKey: 'medal',
+  },
 }
 
 let seq = 0
@@ -91,6 +96,12 @@ describe('MessageList — avatars', () => {
     expect(avatars()).toHaveLength(0)
     // ProfileBadge renders a RankBadge SVG for rank > 1 rather than nothing.
     expect(document.querySelector('svg')).toBeTruthy()
+  })
+
+  it('gives a bot its own mark, not the rankless "AC" placeholder', () => {
+    renderList([msg('b1', 'Falcon takes gold on Target.')])
+    expect(screen.queryByText('AC')).toBeNull()
+    expect(screen.getByRole('img', { name: 'Medal Bot' })).toBeTruthy()
   })
 
   it('reserves the avatar gutter so a run stays aligned', () => {
