@@ -267,4 +267,23 @@ const CBAT_GAMES = {
   },
 };
 
-module.exports = { CBAT_GAMES };
+// A game with an Easier/Hard split keeps two registry keys — `flag` and
+// `flag-easier` — each with its own collection and its own board. Only the
+// Easier label says which it is; the Hard one is just the game's name, which
+// reads as ambiguous rather than as Hard anywhere a single result is announced
+// on its own (the Medals channel). This names BOTH halves, the same way the
+// Recent Scores feed chips both.
+//
+// Derived from the registry rather than from a second list, so a new split game
+// is covered by adding its `-easier` entry above and nothing else. Games with no
+// split keep their plain label.
+const EASIER_SUFFIX = '-easier';
+
+function cbatLabelWithDifficulty(gameKey) {
+  const cfg = CBAT_GAMES[gameKey];
+  if (!cfg) return null;
+  if (gameKey.endsWith(EASIER_SUFFIX)) return cfg.label;   // already carries "(Easier)"
+  return CBAT_GAMES[`${gameKey}${EASIER_SUFFIX}`] ? `${cfg.label} (Hard)` : cfg.label;
+}
+
+module.exports = { CBAT_GAMES, cbatLabelWithDifficulty };

@@ -42,6 +42,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // One-shot repair of medal messages posted while agentLabel() escaped
     // markdown for Discord, which the plain-text chat feed showed literally.
     await require('./migrations/unescapeMedalMessages')();
+    // Name the difficulty on medal messages posted before both halves of a
+    // split game were qualified ("FLAG" → "FLAG (Hard)"). Idempotent.
+    await require('./migrations/labelMedalDifficulty')();
     // The guide bot's account. Idempotent; see seeds/seedChatBot.js.
     await require('./seeds/seedChatBot')();
     // Add the clientResultId path/index to CBAT result schemas so offline score

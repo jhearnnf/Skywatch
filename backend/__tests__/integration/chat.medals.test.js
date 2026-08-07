@@ -107,13 +107,20 @@ describe('buildMedalMessage', () => {
     expect(buildMedalMessage({ ...DETAIL, previousRank: null }))
       .toBe('🥇 Falcon took Gold on Trace Practise 2D with 940.');
   });
+
+  it('carries the difficulty through for a split game', () => {
+    // Easier and Hard are separate boards, so the label detection hands over
+    // already names which one — see cbatLabelWithDifficulty.
+    expect(buildMedalMessage({ ...DETAIL, gameLabel: 'FLAG (Hard)', previousRank: null }))
+      .toBe('🥇 Falcon took Gold on FLAG (Hard) with 940.');
+  });
 });
 
 describe('names in the feed', () => {
   it('shows a name with an underscore as typed, not markdown-escaped', () => {
-    // The bug: agentLabel escaped markdown for Discord's benefit, so the chat
-    // feed - which renders plain text - printed "SkyWatch\_Dev".
-    const { agentLabel } = require('../../utils/discordMedals');
+    // The bug: agentLabel escaped markdown for the old Discord sink's benefit,
+    // so the chat feed - which renders plain text - printed "SkyWatch\_Dev".
+    const { agentLabel } = require('../../utils/medals');
     const label = agentLabel({ displayName: 'SkyWatch_Dev' });
 
     expect(label).toBe('SkyWatch_Dev');
@@ -123,27 +130,14 @@ describe('names in the feed', () => {
   });
 
   it('leaves every markdown character alone in chat', () => {
-    const { agentLabel } = require('../../utils/discordMedals');
+    const { agentLabel } = require('../../utils/medals');
     for (const name of ['a_b', 'a*b', 'a~b', 'a`b', 'a|b', 'a[b]']) {
       expect(agentLabel({ displayName: name })).toBe(name);
     }
   });
 
-  it('still escapes for Discord, which needs it', () => {
-    // Escaping is a property of the destination, not the name. Discord renders
-    // markdown; the chat channel does not.
-    const { agentLabel, buildMedalPayload } = require('../../utils/discordMedals');
-    const payload = buildMedalPayload({
-      medal: { emoji: '🥇', word: 'Gold', place: '1st', colour: 0 },
-      gameLabel: 'Target', gameKey: 'target',
-      agent: agentLabel({ displayName: 'SkyWatch_Dev' }),
-      score: 940, primaryField: 'score',
-    });
-    expect(payload.embeds[0].description).toContain('SkyWatch\\_Dev');
-  });
-
   it('falls back to the agent number, then to a placeholder', () => {
-    const { agentLabel } = require('../../utils/discordMedals');
+    const { agentLabel } = require('../../utils/medals');
     expect(agentLabel({ agentNumber: '1234567' })).toBe('Agent 1234567');
     expect(agentLabel({})).toBe('An agent');
   });

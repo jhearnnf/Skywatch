@@ -283,16 +283,6 @@ const appSettingsSchema = new mongoose.Schema({
   // Chat (user↔admin help) feature
   chatEnabled:                { type: Boolean,  default: true },
 
-  // Discord medal broadcasts — posts a celebration into the SkyWatch Discord
-  // when a player takes 1st, 2nd or 3rd on a CBAT game's all-time leaderboard.
-  // Ordinary scores are never posted; they stay on the site's Recent Scores feed.
-  //
-  // Off by default, and needs the DISCORD_WEBHOOK_URL env var as well — the
-  // webhook URL is a secret and so lives in the environment, never in the
-  // database or the public settings response. Either half missing = silence.
-  // See backend/utils/discordMedals.js.
-  discordBroadcastEnabled:    { type: Boolean,  default: false },
-
   // Slim "CBAT-only" mode applied site-wide (web). The native Android app is
   // always slim regardless of this flag; this only forces the same slimmed
   // experience on the website. Admins are exempt on the client so enabling it

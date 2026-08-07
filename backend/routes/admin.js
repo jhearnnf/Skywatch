@@ -772,11 +772,7 @@ router.get('/openrouter/logs', async (req, res) => {
 router.get('/settings', async (_req, res) => {
   try {
     const settings = await AppSettings.getSettings();
-    // Whether the Discord webhook secret is present in the environment — a
-    // boolean only, never the URL itself. The admin UI needs it to warn that
-    // turning the broadcast toggle on would do nothing on this deployment.
-    const discordWebhookConfigured = !!(process.env.DISCORD_WEBHOOK_URL || '').trim();
-    res.json({ status: 'success', data: { settings, discordWebhookConfigured } });
+    res.json({ status: 'success', data: { settings } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1023,36 +1019,6 @@ router.post('/test-email', async (req, res) => {
   try {
     await sendWelcomeEmail({ email: req.user.email, agentNumber: req.user.agentNumber, userId: req.user._id });
     res.json({ status: 'success', message: `Test email sent to ${req.user.email}` });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
-  }
-});
-
-// POST /api/admin/discord/test — post a sample medal message to the configured webhook.
-// The only way to confirm the URL pasted into Railway actually reaches the right
-// channel, since the webhook itself is write-only and never echoes back.
-router.post('/discord/test', async (req, res) => {
-  try {
-    const { postToDiscord, agentLabel, escapeMarkdown, MEDALS } = require('../utils/discordMedals');
-    if (!(process.env.DISCORD_WEBHOOK_URL || '').trim()) {
-      return res.status(400).json({ status: 'error', message: 'DISCORD_WEBHOOK_URL is not set on the server' });
-    }
-    const medal = MEDALS[1];
-    const ok = await postToDiscord({
-      username: 'SkyWatch',
-      allowed_mentions: { parse: [] },
-      content: `${medal.emoji} Test message from SkyWatch admin`,
-      embeds: [{
-        title: `${medal.emoji} ${medal.word} medal — Target`,
-        description: `**${escapeMarkdown(agentLabel(req.user))}** is now ${medal.place} on the Target all-time leaderboard.`,
-        color: medal.colour,
-        fields: [{ name: 'Score', value: '4,250', inline: true }],
-        footer: { text: 'SkyWatch · test message' },
-        timestamp: new Date().toISOString(),
-      }],
-    });
-    if (!ok) return res.status(502).json({ status: 'error', message: 'Discord rejected the message — check the webhook URL' });
-    res.json({ status: 'success', message: 'Test message posted to Discord' });
   } catch (err) {
     res.status(500).json({ status: 'error', message: err.message });
   }

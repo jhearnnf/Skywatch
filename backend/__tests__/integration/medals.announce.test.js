@@ -1,11 +1,12 @@
 /**
- * discord.medal-broadcast.test.js
+ * medals.announce.test.js
  *
- * Discord medal broadcasts: a CBAT score that takes a NEW 1st/2nd/3rd place on a
- * game's all-time leaderboard is announced in the SkyWatch Discord. Everything
- * else stays quiet.
+ * CBAT medal announcements: a score that takes a NEW 1st/2nd/3rd place on a
+ * game's all-time leaderboard is announced in the Medals channel. Everything
+ * else stays quiet, and nothing leaves SkyWatch — the Discord webhook sink was
+ * removed on 2026-08-07.
  *
- * All cases use plane-turn-2d (lower rotations is better). With one real player
+ * Most cases use plane-turn-2d (lower rotations is better). With one real player
  * on the board, padLeaderboard injects 19 demo rows scored
  * [42,45,48,52,55,58,62,65,68,72,75,78,82,85,88,92,95,98,102] — so 30 rotations
  * is 1st, 44 is 2nd, 47 is 3rd and 50 is only 4th. Medals are ranked against
@@ -19,36 +20,30 @@ const app = require('../../app');
 const db = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 const GameSessionCbatPlaneTurnResult = require('../../models/GameSessionCbatPlaneTurnResult');
-const { announceCbatMedal, resetDiscordCache } = require('../../utils/discordMedals');
+const GameSessionCbatFlagResult      = require('../../models/GameSessionCbatFlagResult');
+const GameSessionCbatFlagEasierResult = require('../../models/GameSessionCbatFlagEasierResult');
+const ChatMessage = require('../../models/ChatMessage');
+const seedChatBot = require('../../seeds/seedChatBot');
+const { announceCbatMedal } = require('../../utils/medals');
+const { resetChatMedalsCache } = require('../../utils/chatMedals');
 
 const PLANE_TURN_RESULT = '/api/games/cbat/plane-turn-2d/result';
-const WEBHOOK = 'https://discord.com/api/webhooks/test/token';
 
-let originalWebhook;
-
-beforeAll(async () => {
-  await db.connect();
-  originalWebhook = process.env.DISCORD_WEBHOOK_URL;
-});
+beforeAll(async () => { await db.connect(); });
 
 beforeEach(async () => {
-  process.env.DISCORD_WEBHOOK_URL = WEBHOOK;
-  global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 204 });
-  resetDiscordCache();
-  await createSettings({ discordBroadcastEnabled: true });
+  await createSettings();
+  await seedChatBot();          // creates the Medals channel + its bot
+  resetChatMedalsCache();
 });
 
 afterEach(async () => {
   await db.clearDatabase();
-  resetDiscordCache();
+  resetChatMedalsCache();
   jest.restoreAllMocks();
 });
 
-afterAll(async () => {
-  if (originalWebhook === undefined) delete process.env.DISCORD_WEBHOOK_URL;
-  else process.env.DISCORD_WEBHOOK_URL = originalWebhook;
-  await db.closeDatabase();
-});
+afterAll(async () => { await db.closeDatabase(); });
 
 // Save a plane-turn-2d session straight to the collection and run the announcer
 // over it, so the assertion doesn't race the fire-and-forget call in the route.
@@ -64,127 +59,91 @@ async function score(user, totalRotations, totalTime = 30, extra = {}) {
   return announceCbatMedal(GameSessionCbatPlaneTurnResult, doc.toObject());
 }
 
-describe('medal broadcasts — the two switches', () => {
-  it('posts nothing when DISCORD_WEBHOOK_URL is unset, however good the score', async () => {
-    delete process.env.DISCORD_WEBHOOK_URL;
+const posted = () => ChatMessage.find({}).sort({ createdAt: 1 }).lean();
+const lastPosted = async () => (await posted()).at(-1);
+
+describe('medal announcements — the switch', () => {
+  it('says nothing, and does no ranking work, without a Medals channel', async () => {
+    await db.clearDatabase();
+    await createSettings();       // no seedChatBot, so no channel
+    resetChatMedalsCache();
     const user = await createUser({ agentNumber: '4000001' });
 
+    const find = jest.spyOn(GameSessionCbatPlaneTurnResult, 'find');
     expect(await score(user, 30)).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(await posted()).toHaveLength(0);
+    // The channel check runs before detection: an announcement nobody can read
+    // must not cost a leaderboard query on every score submission.
+    expect(find).not.toHaveBeenCalled();
   });
 
-  it('posts nothing when the admin kill switch is off', async () => {
-    await createSettings({ discordBroadcastEnabled: false });
-    resetDiscordCache();
+  it('says nothing once an admin archives the channel', async () => {
+    const ChatConversation = require('../../models/ChatConversation');
+    await ChatConversation.updateOne({ 'channel.slug': 'medals' }, { $set: { isArchived: true } });
+    resetChatMedalsCache();
     const user = await createUser({ agentNumber: '4000002' });
 
     expect(await score(user, 30)).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('defaults the kill switch to off on a fresh settings document', async () => {
-    const AppSettings = require('../../models/AppSettings');
-    await db.clearDatabase();
-    const s = await AppSettings.getSettings();
-    expect(s.discordBroadcastEnabled).toBe(false);
-  });
-
-  it('lets an admin flip the kill switch, and nobody else', async () => {
-    const AppSettings = require('../../models/AppSettings');
-    const admin = await createUser({ isAdmin: true });
-    const player = await createUser({ agentNumber: '4000003' });
-
-    const denied = await request(app)
-      .patch('/api/admin/settings')
-      .set('Cookie', authCookie(player._id))
-      .send({ discordBroadcastEnabled: false, reason: 'try disable' });
-    expect(denied.status).toBe(403);
-
-    const allowed = await request(app)
-      .patch('/api/admin/settings')
-      .set('Cookie', authCookie(admin._id))
-      .send({ discordBroadcastEnabled: false, reason: 'pause broadcasts' });
-    expect(allowed.status).toBe(200);
-    expect((await AppSettings.findOne()).discordBroadcastEnabled).toBe(false);
-  });
-
-  it('tells the admin UI whether the webhook secret is present, without leaking it', async () => {
-    const admin = await createUser({ isAdmin: true });
-
-    const res = await request(app)
-      .get('/api/admin/settings')
-      .set('Cookie', authCookie(admin._id));
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.discordWebhookConfigured).toBe(true);
-    expect(JSON.stringify(res.body)).not.toContain(WEBHOOK);
+    expect(await posted()).toHaveLength(0);
   });
 });
 
-describe('medal broadcasts — which scores qualify', () => {
+describe('medal announcements — which scores qualify', () => {
   it('announces a first-ever score that lands 1st as a gold medal', async () => {
     const user = await createUser({ agentNumber: '4100001', displayName: 'Maverick', displayNameLower: 'maverick' });
 
-    const payload = await score(user, 30, 25);
+    const detail = await score(user, 30, 25);
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch.mock.calls[0][0]).toBe(WEBHOOK);
-    expect(payload.content).toContain('🥇');
-    expect(payload.embeds[0].title).toBe('🥇 Gold medal — Trace Practise 2D');
-    expect(payload.embeds[0].description).toContain('**Maverick**');
-    expect(payload.embeds[0].description).toContain('1st');
+    expect(detail.medal.word).toBe('Gold');
+    expect((await lastPosted()).body)
+      .toBe('🥇 Maverick took Gold on Trace Practise 2D with 30.');
   });
 
   it('announces 2nd as silver and 3rd as bronze', async () => {
     const silverUser = await createUser({ agentNumber: '4100002' });
-    const silver = await score(silverUser, 44);
-    expect(silver.embeds[0].title).toContain('Silver medal');
+    expect((await score(silverUser, 44)).medal.word).toBe('Silver');
 
     await db.clearDatabase();
-    await createSettings({ discordBroadcastEnabled: true });
-    resetDiscordCache();
+    await createSettings();
+    await seedChatBot();
+    resetChatMedalsCache();
 
     const bronzeUser = await createUser({ agentNumber: '4100003' });
-    const bronze = await score(bronzeUser, 47);
-    expect(bronze.embeds[0].title).toContain('Bronze medal');
+    expect((await score(bronzeUser, 47)).medal.word).toBe('Bronze');
   });
 
   it('stays quiet for a score just outside the podium', async () => {
     const user = await createUser({ agentNumber: '4100004' });
 
     expect(await score(user, 50)).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(await posted()).toHaveLength(0);
   });
 
   it('reports the position the player is moving up from', async () => {
     const user = await createUser({ agentNumber: '4100005' });
 
-    await score(user, 47);          // bronze
+    await score(user, 47);              // bronze
     const gold = await score(user, 30); // now 1st
 
-    expect(gold.embeds[0].title).toContain('Gold medal');
-    const previous = gold.embeds[0].fields.find(f => f.name === 'Previous position');
-    expect(previous.value).toBe('3rd');
+    expect(gold.medal.word).toBe('Gold');
+    expect(gold.previousRank).toBe(3);
+    expect((await lastPosted()).body).toContain('Up from 3rd.');
   });
 
   it('does not re-announce a medal the player already holds', async () => {
     const user = await createUser({ agentNumber: '4100006' });
 
-    await score(user, 30, 25);      // gold
-    global.fetch.mockClear();
-
+    await score(user, 30, 25);          // gold
     expect(await score(user, 25, 20)).toBeNull(); // still gold, nothing new
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(await posted()).toHaveLength(1);
   });
 
   it('ignores a run that does not beat the player own best', async () => {
     const user = await createUser({ agentNumber: '4100007' });
 
     await score(user, 30, 25);
-    global.fetch.mockClear();
-
     expect(await score(user, 60, 40)).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(await posted()).toHaveLength(1);
   });
 
   it('ignores an offline score that synced in more than 24h after it was played', async () => {
@@ -193,7 +152,7 @@ describe('medal broadcasts — which scores qualify', () => {
     const stale = await score(user, 30, 25, { createdAt: new Date(Date.now() - 26 * 60 * 60 * 1000) });
 
     expect(stale).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(await posted()).toHaveLength(0);
   });
 
   it('does not announce twice when an offline flush is retried', async () => {
@@ -206,79 +165,79 @@ describe('medal broadcasts — which scores qualify', () => {
 
     // The route announces fire-and-forget, so let the first call land before counting.
     await new Promise(r => setTimeout(r, 250));
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(await posted()).toHaveLength(1);
     expect(await GameSessionCbatPlaneTurnResult.countDocuments({ userId: user._id })).toBe(1);
   });
 });
 
-describe('medal broadcasts — what reaches the channel', () => {
+describe('medal announcements — what reaches the channel', () => {
   it('names a player without a display name by agent number, never by email', async () => {
     const user = await createUser({ email: 'private@test.com', agentNumber: '4200001' });
 
-    const payload = await score(user, 30);
+    await score(user, 30);
 
-    expect(payload.embeds[0].description).toContain('Agent 4200001');
-    expect(JSON.stringify(payload)).not.toContain('private@test.com');
+    const message = await lastPosted();
+    expect(message.body).toContain('Agent 4200001');
+    expect(message.body).not.toContain('private@test.com');
   });
 
-  it('defuses a display name that would otherwise ping the server', async () => {
+  it('leaves markdown characters in a display name exactly as typed', async () => {
+    // The chat renders plain text, so escaping would print the backslashes.
     const user = await createUser({
       agentNumber: '4200002',
-      displayName: '@everyone **boom**',
-      displayNameLower: '@everyone **boom**',
+      displayName: 'SkyWatch_Dev',
+      displayNameLower: 'skywatch_dev',
     });
 
-    const payload = await score(user, 30);
+    await score(user, 30);
 
-    expect(payload.allowed_mentions).toEqual({ parse: [] });
-    expect(payload.embeds[0].description).toContain('\\*\\*boom\\*\\*');
+    expect((await lastPosted()).body).toContain('SkyWatch_Dev took Gold');
   });
 
-  // Display names are capped at 20 characters, which is still room enough for a
-  // working markdown link — embed descriptions render [text](url) as a real one.
-  it('stops a display name from becoming a clickable link', async () => {
-    const user = await createUser({
-      agentNumber: '4200005',
-      displayName: '[win](https://x.co)',
-      displayNameLower: '[win](https://x.co)',
-    });
-
-    const payload = await score(user, 30);
-
-    expect(payload.embeds[0].description).toContain('\\[win\\]');
-  });
-
-  it('leaves hyphens alone so ordinary names are not littered with backslashes', async () => {
-    const user = await createUser({
-      agentNumber: '4200006',
-      displayName: 'Top-Gun',
-      displayNameLower: 'top-gun',
-    });
-
-    const payload = await score(user, 30);
-
-    expect(payload.embeds[0].description).toContain('**Top-Gun**');
-  });
-
-  it('links back to the all-time board it is talking about', async () => {
-    process.env.CLIENT_URL = 'https://skywatch.academy';
-    const user = await createUser({ agentNumber: '4200003' });
-
-    const payload = await score(user, 30);
-
-    expect(payload.embeds[0].url).toBe('https://skywatch.academy/cbat/plane-turn-2d/leaderboard?period=all-time');
-  });
-
-  it('survives a webhook outage without failing the score submission', async () => {
-    global.fetch = jest.fn().mockRejectedValue(new Error('ECONNRESET'));
+  it('survives a channel post failing without failing the score submission', async () => {
+    jest.spyOn(ChatMessage, 'create').mockRejectedValue(new Error('write conflict'));
     jest.spyOn(console, 'error').mockImplementation(() => {});
     const user = await createUser({ agentNumber: '4200004' });
-    const cookie = authCookie(user._id);
 
-    const res = await request(app).post(PLANE_TURN_RESULT).set('Cookie', cookie)
+    const res = await request(app).post(PLANE_TURN_RESULT).set('Cookie', authCookie(user._id))
       .send({ totalRotations: 30, totalTime: 25 });
 
     expect(res.status).toBe(201);
     expect(await GameSessionCbatPlaneTurnResult.countDocuments({ userId: user._id })).toBe(1);
+  });
+});
+
+// A split game keeps a separate board per difficulty, so "took Gold on FLAG"
+// says nothing on its own about which board was won. Both halves are named.
+describe('medal announcements — difficulty', () => {
+  const flagScore = async (Model, user, totalScore) => {
+    const doc = await Model.create({ userId: user._id, totalScore, totalTime: 60 });
+    return announceCbatMedal(Model, doc.toObject());
+  };
+
+  it('names the Hard board as Hard, not by the bare game name', async () => {
+    // FLAG's demo board tops out at 380.
+    const user = await createUser({ agentNumber: '4300001', displayName: 'Viper', displayNameLower: 'viper' });
+
+    const detail = await flagScore(GameSessionCbatFlagResult, user, 500);
+
+    expect(detail.gameLabel).toBe('FLAG (Hard)');
+    expect((await lastPosted()).body).toBe('🥇 Viper took Gold on FLAG (Hard) with 500.');
+  });
+
+  it('names the Easier board as Easier', async () => {
+    // flag-easier's demo board tops out at 260.
+    const user = await createUser({ agentNumber: '4300002', displayName: 'Nomad', displayNameLower: 'nomad' });
+
+    const detail = await flagScore(GameSessionCbatFlagEasierResult, user, 400);
+
+    expect(detail.gameLabel).toBe('FLAG (Easier)');
+    expect((await lastPosted()).body).toContain('on FLAG (Easier) with 400.');
+  });
+
+  it('leaves a game with no difficulty split unqualified', async () => {
+    const user = await createUser({ agentNumber: '4300003' });
+
+    expect((await score(user, 30)).gameLabel).toBe('Trace Practise 2D');
   });
 });

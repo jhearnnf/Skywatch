@@ -1,34 +1,34 @@
-// Discord medal broadcasts.
+// CBAT medal detection.
 //
 // When a player takes 1st, 2nd or 3rd on a CBAT game's all-time leaderboard, we
-// post a celebration into the SkyWatch Discord. Only medals — ordinary scores
-// stay on the site's Recent Scores feed, so the channel is worth having
-// notifications on for.
+// announce it in the in-app Medals channel. Only medals — ordinary scores stay
+// on the site's Recent Scores feed, so the channel is worth reading.
 //
-// Three things this must never do:
+// This module decides *whether* a result earned a medal; chatMedals.js decides
+// what the announcement looks like and where it lands. They were split when
+// there were two sinks: medals used to be mirrored to a Discord webhook as well.
+// That was removed on 2026-08-07 — nothing about a player's scores leaves
+// SkyWatch now — but the split is still worth keeping, since detection is the
+// expensive half and runs on the hot path of every score submission.
+//
+// Two things this must never do:
 //   • Break a score submission. Every entry point is fire-and-forget and
-//     swallows its own errors; Discord being down is not the player's problem.
-//   • Leak an email address. The channel is as public as the server it sits in,
-//     so agents are named exactly as the leaderboard names them — display name,
-//     else agent number.
-//   • Let a display name reach into Discord. Names are user-controlled, so they
-//     are markdown-escaped and every post disables mention parsing. Otherwise a
-//     player called "@everyone" pings the whole server on every medal.
+//     swallows its own errors; the announcement is not the player's problem.
+//   • Leak an email address. Agents are named exactly as the leaderboard names
+//     them — display name, else agent number.
 //
-// Off unless BOTH the DISCORD_WEBHOOK_URL env var is set and an admin has turned
-// on the kill switch (AppSettings.discordBroadcastEnabled). With either missing
+// Off unless the Medals channel exists and has a bot assigned. With it missing
 // this module does nothing and costs nothing — the enable check runs before any
 // ranking work.
 
-const AppSettings = require('../models/AppSettings');
 const User = require('../models/User');
-const { CBAT_GAMES } = require('../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { rankOnPaddedBoard, isBetterScore } = require('./cbatBoardRank');
 
 const MEDALS = {
-  1: { emoji: '🥇', word: 'Gold', place: '1st', colour: 0xf5c542 },
-  2: { emoji: '🥈', word: 'Silver', place: '2nd', colour: 0xc7d2de },
-  3: { emoji: '🥉', word: 'Bronze', place: '3rd', colour: 0xcd7f32 },
+  1: { emoji: '🥇', word: 'Gold' },
+  2: { emoji: '🥈', word: 'Silver' },
+  3: { emoji: '🥉', word: 'Bronze' },
 };
 
 // A replayed offline score can arrive days after it was set (the outbox stamps
@@ -36,87 +36,16 @@ const MEDALS = {
 // be wrong, and the site's own Recent Scores feed uses the same 24h horizon.
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-const POST_TIMEOUT_MS = 5000;
-
-// Field label for the score line, keyed by the registry's primaryField so a new
-// game inherits a sensible label without touching this file.
-const SCORE_LABEL = {
-  totalScore: 'Score',
-  correctCount: 'Correct',
-  correctTurns: 'Correct turns',
-  totalRotations: 'Rotations',
-  correctPercentage: 'Accuracy',
-};
-
-let settingsCache = { value: null, at: 0 };
-const SETTINGS_TTL_MS = 60 * 1000;
-
-// Tests clear the database between cases, which would otherwise be masked by the
-// cache above.
-function resetDiscordCache() {
-  settingsCache = { value: null, at: 0 };
-}
-
-function webhookUrl() {
-  return (process.env.DISCORD_WEBHOOK_URL || '').trim();
-}
-
-async function broadcastEnabled() {
-  const now = Date.now();
-  if (settingsCache.value !== null && now - settingsCache.at < SETTINGS_TTL_MS) {
-    return settingsCache.value;
-  }
-  const s = await AppSettings.findOne().select('discordBroadcastEnabled').lean();
-  const enabled = s?.discordBroadcastEnabled === true;
-  settingsCache = { value: enabled, at: now };
-  return enabled;
-}
-
-// Neutralise Discord markdown in user-controlled text and flatten it to one line.
-//
-// Only characters that are special *inline* are escaped. `#`, `>` and `-` are
-// markdown only at the start of a line, and a name always lands mid-sentence, so
-// escaping them would just print stray backslashes in ordinary names like
-// "Top-Gun". `[` and `]` are in the set on purpose: embed descriptions render
-// [text](url) as a real link, so a display name could otherwise become a
-// clickable link to anywhere.
-function escapeMarkdown(text) {
-  return String(text)
-    .replace(/[\\*_~`|[\]]/g, m => `\\${m}`)
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 // Exactly what the leaderboard shows: display name, else agent number. Never email.
 //
-// Returns the name RAW. Escaping is a property of where the name is going, not
-// of the name itself: Discord needs markdown escaped, and the in-app Medals
-// channel renders plain text and must not show the backslashes. Escaping here
-// meant a name like SkyWatch_Dev reached chat as "SkyWatch\_Dev".
-// Each sink escapes for itself — see buildMedalPayload.
+// Returns the name RAW — the Medals channel renders plain text, so escaping here
+// would print the backslashes. A name like SkyWatch_Dev reached chat as
+// "SkyWatch\_Dev" back when this escaped markdown for the Discord sink's benefit.
+// Escaping is a property of where the name is going, not of the name itself.
 function agentLabel(user) {
   if (user?.displayName) return user.displayName.replace(/\s+/g, ' ').trim();
   if (user?.agentNumber) return `Agent ${String(user.agentNumber).replace(/\s+/g, ' ').trim()}`;
   return 'An agent';
-}
-
-function formatScore(primaryField, value) {
-  if (value === null || value === undefined) return '—';
-  if (primaryField === 'correctPercentage') return `${Math.round(value)}%`;
-  return Number(value).toLocaleString('en-GB');
-}
-
-function formatTime(seconds) {
-  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return null;
-  const total = Math.round(seconds);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
-
-function ordinal(n) {
-  if (n === 1) return '1st';
-  if (n === 2) return '2nd';
-  if (n === 3) return '3rd';
-  return `${n}th`;
 }
 
 // Resolve a result document back to its CBAT_GAMES key. Several games share one
@@ -131,67 +60,7 @@ function gameKeyForResult(Model, doc) {
   return [null, null];
 }
 
-function buildMedalPayload({ medal, gameLabel, gameKey, agent, score, time, primaryField, previousRank }) {
-  // Escape at the sink: this payload is Discord markdown, so a user-controlled
-  // display name has to be defused here rather than upstream.
-  const safeAgent = escapeMarkdown(agent);
-  const fields = [
-    { name: SCORE_LABEL[primaryField] || 'Score', value: formatScore(primaryField, score), inline: true },
-  ];
-  const timeText = formatTime(time);
-  if (timeText) fields.push({ name: 'Time', value: timeText, inline: true });
-  if (previousRank) {
-    fields.push({ name: 'Previous position', value: ordinal(previousRank), inline: true });
-  }
-
-  const clientUrl = (process.env.CLIENT_URL || '').replace(/\/$/, '');
-
-  return {
-    username: 'SkyWatch',
-    // Display names are user-controlled; escaping handles markdown, this handles pings.
-    allowed_mentions: { parse: [] },
-    content: `${medal.emoji} New ${medal.word.toLowerCase()} medal on ${gameLabel}`,
-    embeds: [
-      {
-        title: `${medal.emoji} ${medal.word} medal — ${gameLabel}`,
-        description: `**${safeAgent}** is now ${medal.place} on the ${gameLabel} all-time leaderboard.`,
-        color: medal.colour,
-        ...(clientUrl ? { url: `${clientUrl}/cbat/${gameKey}/leaderboard?period=all-time` } : {}),
-        fields,
-        footer: { text: 'SkyWatch' },
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  };
-}
-
-async function postToDiscord(payload) {
-  const url = webhookUrl();
-  if (!url) return false;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), POST_TIMEOUT_MS);
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      console.error(`[discord] webhook returned ${res.status}`);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error(`[discord] webhook post failed: ${err.message}`);
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Decide whether a freshly saved CBAT result earned a NEW medal, and post it.
+// Decide whether a freshly saved CBAT result earned a NEW medal.
 //
 // "New" is three conditions, all required:
 //   1. the result is the player's new personal best on that game — the board is
@@ -201,18 +70,8 @@ async function postToDiscord(payload) {
 //      a player who already owns 1st would be re-announced every time they beat
 //      their own score.
 //
-// Returns the payload it posted (or null), which is what the tests assert on.
 // Never throws: the caller is a score submission.
 /**
- * Work out whether this result earned a medal, independent of where it gets
- * announced.
- *
- * Split out of announceCbatMedal so the same detection feeds both sinks —
- * Discord and the in-app Medals channel. Running it twice would double every
- * ranking query on a hot path (it runs on every CBAT score submission), so the
- * caller checks that at least one sink is on BEFORE calling this, preserving
- * the original property that a fully disabled feature costs nothing.
- *
  * @returns {Promise<Object|null>} medal detail, or null if this is not a medal
  */
 async function detectCbatMedal(Model, doc) {
@@ -262,7 +121,12 @@ async function detectCbatMedal(Model, doc) {
     const user = await User.findById(doc.userId).select('displayName agentNumber').lean();
 
     return {
-      medal, gameKey, gameLabel: cfg.label, primaryField: cfg.primaryField,
+      medal, gameKey,
+      // Difficulty spelled out, not the bare registry label: the split games
+      // keep a separate board per difficulty, so a score means nothing without
+      // knowing which one it was set on.
+      gameLabel: cbatLabelWithDifficulty(gameKey),
+      primaryField: cfg.primaryField,
       agent: agentLabel(user), userId: doc.userId, score, time, previousRank,
     };
   } catch (err) {
@@ -272,32 +136,22 @@ async function detectCbatMedal(Model, doc) {
 }
 
 /**
- * Announce a medal everywhere it should go.
+ * Announce a medal, if this result earned one.
  *
- * Sinks are independent and never block each other: Discord being down must not
- * stop the in-app feed, and neither may break a score submission. Both are
- * awaited through allSettled purely so a test can wait on them.
+ * Returns the medal detail it announced, or null. Never throws and never
+ * rejects: the caller is a score submission.
  */
 async function announceCbatMedal(Model, doc) {
   try {
-    const discordOn = Boolean(webhookUrl()) && await broadcastEnabled();
     const { chatMedalsEnabled, postMedalToChannel } = require('./chatMedals');
-    const chatOn = await chatMedalsEnabled();
     // Nothing listening — skip the ranking work entirely.
-    if (!discordOn && !chatOn) return null;
+    if (!await chatMedalsEnabled()) return null;
 
     const detail = await detectCbatMedal(Model, doc);
     if (!detail) return null;
 
-    // Returns the Discord payload, unchanged from before the second sink was
-    // added, so callers and tests that inspect it still work.
-    const payload = discordOn ? buildMedalPayload(detail) : null;
-    await Promise.allSettled([
-      payload ? postToDiscord(payload) : null,
-      chatOn ? postMedalToChannel(detail) : null,
-    ].filter(Boolean));
-
-    return payload;
+    await postMedalToChannel(detail);
+    return detail;
   } catch (err) {
     console.error(`[medals] announcement failed: ${err.message}`);
     return null;
@@ -307,11 +161,7 @@ async function announceCbatMedal(Model, doc) {
 module.exports = {
   announceCbatMedal,
   detectCbatMedal,
-  buildMedalPayload,
-  postToDiscord,
-  resetDiscordCache,
   agentLabel,
-  escapeMarkdown,
   gameKeyForResult,
   MEDALS,
 };

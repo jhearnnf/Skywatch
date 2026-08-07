@@ -4,12 +4,10 @@
  * The in-app half of medal announcements: posting a podium finish into the
  * Medals channel as the Medal Bot.
  *
- * The sibling of discordMedals.js, sharing its detection (detectCbatMedal) so
- * the ranking work runs once per score rather than once per sink. This module
- * owns only the "where it lands in SkyWatch" part.
+ * The sibling of medals.js, which owns detection (detectCbatMedal); this module
+ * owns only the "what it says and where it lands" part.
  *
- * Three things it must never do, inherited from the Discord sink and just as
- * true here:
+ * Three things it must never do:
  *   • Break a score submission. Every entry point is fire-and-forget.
  *   • Leak an email address. Agents are named exactly as the leaderboard names
  *     them — display name, else agent number.

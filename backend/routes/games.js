@@ -3161,8 +3161,8 @@ async function cbatPersonalBest(req, res, gameKey) {
 }
 
 // cbatPaddedFakes (the demo rows the all-time board injects for one game) lives in
-// utils/cbatBoardRank.js — shared with the Discord medal broadcaster so both rank
-// against exactly the same padded board a player sees.
+// utils/cbatBoardRank.js — shared with the medal announcer so both rank against
+// exactly the same padded board a player sees.
 
 // GET /api/games/cbat/showcase — the landing page's proof wall. Public (it runs for logged-out
 // visitors, which is the entire point) and read-only: one randomly picked top-ten player per
