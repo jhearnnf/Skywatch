@@ -5,6 +5,7 @@ import {
 
 const MEDIA = 'http://127.0.0.1:52341'
 const CAPTURE = 'file:///C:/Users/James/AppData/Local/Temp/skywatch-clipper/capture/abc123.mp4'
+const STOCK = 'https://videos.pexels.com/video-files/7092133/x.mp4'
 
 describe('fileUrlToPath', () => {
   it('strips the slash before a Windows drive letter', () => {
@@ -90,6 +91,43 @@ describe('previewTimeline', () => {
   it('blanks captures rather than leaving a URL the browser cannot load', () => {
     const out = previewTimeline(timeline, null)
     expect(out.beats[1].videoUrl).toBeNull()
+  })
+})
+
+// Narration is a local file too — the voice stage writes a wav to the agent's
+// disk. Rewriting only the video left every beat silent in the preview.
+describe('previewTimeline — narration', () => {
+  const NARRATION = 'file:///C:/Users/James/AppData/Local/Temp/skywatch-clipper/s1/b1.wav'
+
+  it('routes narration through the media server', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: STOCK, audioUrl: NARRATION }] }
+    const out = previewTimeline(timeline, MEDIA)
+
+    expect(out.beats[0].audioUrl).toBe(toPreviewUrl(NARRATION, MEDIA))
+    expect(out.beats[0].videoUrl).toBe(STOCK)
+  })
+
+  it('rewrites both fields on the same beat', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: CAPTURE, audioUrl: NARRATION }] }
+    const out = previewTimeline(timeline, MEDIA)
+
+    expect(out.beats[0].videoUrl).toMatch(/^http:/)
+    expect(out.beats[0].audioUrl).toMatch(/^http:/)
+  })
+
+  it('rewrites a beat whose only local media is its narration', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: null, audioUrl: NARRATION }] }
+    expect(previewTimeline(timeline, MEDIA).beats[0].audioUrl).toMatch(/^http:/)
+  })
+
+  it('blanks narration rather than leaving a URL the browser cannot load', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: STOCK, audioUrl: NARRATION }] }
+    expect(previewTimeline(timeline, null).beats[0].audioUrl).toBeNull()
+  })
+
+  it('still returns the same object when nothing is local', () => {
+    const timeline = { beats: [{ id: 'b1', videoUrl: STOCK, audioUrl: 'https://x/a.wav' }] }
+    expect(previewTimeline(timeline, MEDIA)).toBe(timeline)
   })
 })
 

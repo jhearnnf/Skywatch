@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Player } from '@remotion/player'
 import { ClipperVideo, timelineDurationInFrames, FPS, WIDTH, HEIGHT } from '../../remotion/ClipperVideo'
-import { previewTimeline, unplayableCaptureCount } from '../../utils/clipperPreview'
+import { previewTimeline, unplayableCaptureCount, mediaUrl } from '../../utils/clipperPreview'
 
 // Stage 7 — preview and export.
 //
@@ -15,8 +15,16 @@ import { previewTimeline, unplayableCaptureCount } from '../../utils/clipperPrev
 // here; the agent's render handler does the same on its side, so the stored
 // timeline stays free of a port number that dies with the agent.
 
-export default function RenderPanel({ script, timeline, job, agentOnline, mediaBaseUrl, onRender, onRefresh, busy }) {
+export default function RenderPanel({ script, timeline, job, agentOnline, mediaBaseUrl, onRender, onRefresh, onReveal, busy }) {
   const [showJson, setShowJson] = useState(false)
+  const [copied, setCopied] = useState(null)
+
+  const copyPath = (p) => {
+    if (!p) return
+    navigator.clipboard?.writeText(p)
+      .then(() => setCopied(p))
+      .catch(() => { /* a denied clipboard is not worth an error banner */ })
+  }
 
   // Timelines are rebuilt server-side from the current stage data, so refresh
   // whenever the script changes underneath us.
@@ -30,6 +38,10 @@ export default function RenderPanel({ script, timeline, job, agentOnline, mediaB
 
   const playable = useMemo(() => previewTimeline(timeline, mediaBaseUrl), [timeline, mediaBaseUrl])
   const unreachableCaptures = unplayableCaptureCount(timeline, mediaBaseUrl)
+
+  // Taken from the newest render rather than hard-coded: the agent decides
+  // where its output goes, and a path duplicated here would drift from it.
+  const renderFolder = renders[0]?.localPath?.replace(/[\\/][^\\/]*$/, '') || null
 
   return (
     <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
@@ -109,22 +121,56 @@ export default function RenderPanel({ script, timeline, job, agentOnline, mediaB
         {renders.length > 0 && (
           <div className="space-y-1.5">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Renders</p>
-            {renders.map((r, i) => (
-              <div key={r.jobId || i} className="flex items-center gap-3 border border-slate-200 rounded-lg bg-slate-50 px-3 py-2">
-                <span className="text-xs text-slate-700 font-mono flex-1 truncate" title={r.localPath}>
-                  {r.localPath?.split(/[\\/]/).pop() || r.url}
-                </span>
-                {r.bytes ? (
-                  <span className="text-xs text-slate-500">{(r.bytes / 1_000_000).toFixed(1)} MB</span>
-                ) : null}
-                {i === 0 && (
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">latest</span>
-                )}
-              </div>
-            ))}
-            <p className="text-xs text-slate-500">
-              Files are written to the agent&rsquo;s temp folder on this machine.
-            </p>
+
+            {/* The folder, spelled out. A render lands in a temp path nobody
+                would guess, and the file is the whole point of the stage. */}
+            {renderFolder && (
+              <p className="text-[11px] text-slate-500 font-mono break-all">{renderFolder}</p>
+            )}
+
+            {renders.map((r, i) => {
+              const playable = mediaUrl(r.localPath, mediaBaseUrl)
+              return (
+                <div key={r.jobId || i} className="flex flex-wrap items-center gap-2 border border-slate-200 rounded-lg bg-slate-50 px-3 py-2">
+                  <span className="text-xs text-slate-700 font-mono flex-1 min-w-0 truncate" title={r.localPath}>
+                    {r.localPath?.split(/[\\/]/).pop() || r.url}
+                  </span>
+                  {r.bytes ? (
+                    <span className="text-xs text-slate-500">{(r.bytes / 1_000_000).toFixed(1)} MB</span>
+                  ) : null}
+                  {i === 0 && (
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">latest</span>
+                  )}
+
+                  {playable && (
+                    <a
+                      href={playable}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-brand-600 font-semibold hover:underline"
+                    >
+                      Play
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onReveal?.(r.localPath)}
+                    disabled={!r.localPath}
+                    className="text-xs text-brand-600 font-semibold hover:underline disabled:opacity-40 disabled:no-underline"
+                  >
+                    Show in folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => copyPath(r.localPath)}
+                    disabled={!r.localPath}
+                    className="text-xs text-slate-500 font-semibold hover:underline disabled:opacity-40 disabled:no-underline"
+                  >
+                    {copied === r.localPath ? 'Copied' : 'Copy path'}
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
 

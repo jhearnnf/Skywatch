@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const fs     = require('fs');
+const os     = require('os');
 const path   = require('path');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -1224,6 +1225,52 @@ router.post('/scripts/:id/render', async (req, res) => {
     });
 
     res.status(202).json({ status: 'success', data: { job: job.toObject() } });
+  } catch (err) { fail(res, err); }
+});
+
+// Where the agent writes finished MP4s. Mirrors OUT_DIR in
+// clipper-agent/handlers/render.js — both derive it from the OS temp dir, so
+// they agree without the backend importing agent code it cannot rely on being
+// present (Railway ships backend/ alone).
+const RENDER_DIR = path.join(os.tmpdir(), 'skywatch-clipper', 'renders');
+
+// POST /api/clipper/renders/reveal   { path }
+//
+// Opens the containing folder with the file selected. The render lands in a
+// temp directory nobody would find by guessing, and "it's on the machine
+// somewhere" is not an answer when the whole point of the stage is to hand you
+// a file to upload.
+//
+// The path comes from the client, so it is resolved and checked against
+// RENDER_DIR before it goes anywhere near a shell. Only renders — not the
+// capture folder, not the rest of the disk.
+router.post('/renders/reveal', async (req, res) => {
+  try {
+    const wanted = path.resolve(String(req.body?.path || ''));
+    const rel = path.relative(RENDER_DIR, wanted);
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+      const e = new Error('That file is not in the Clipper renders folder'); e.status = 400; throw e;
+    }
+    if (!fs.existsSync(wanted)) {
+      // Temp files get swept. Say so plainly rather than opening an empty
+      // folder and leaving you to work out which file went missing.
+      const e = new Error('That render is no longer on disk - render it again'); e.status = 404; throw e;
+    }
+
+    // Argument arrays throughout, never a shell string: the path is
+    // user-supplied and a quoted concatenation is one stray character away
+    // from being a command. explorer.exe is the exception it looks like — it
+    // insists on the single `/select,<path>` token — but that is still one
+    // argv entry, not shell syntax.
+    if (process.platform === 'win32') {
+      childProcess.spawn('explorer.exe', [`/select,${wanted}`], { detached: true, stdio: 'ignore' }).unref();
+    } else if (process.platform === 'darwin') {
+      childProcess.spawn('open', ['-R', wanted], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      childProcess.spawn('xdg-open', [path.dirname(wanted)], { detached: true, stdio: 'ignore' }).unref();
+    }
+
+    res.json({ status: 'success', data: { revealed: wanted, folder: path.dirname(wanted) } });
   } catch (err) { fail(res, err); }
 });
 
