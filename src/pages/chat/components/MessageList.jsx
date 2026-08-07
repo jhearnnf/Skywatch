@@ -188,7 +188,7 @@ function ReplyQuote({ replyTo, onJump }) {
 // remounts its whole subtree on every parent render.
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine,
-  viewerIsAdmin, onOpenUser, onReport, onDelete, onReply, onReact, onSeenBy,
+  viewerIsAdmin, onOpenUser, onReport, onDelete, onEdit, onReply, onReact, onSeenBy,
   onJump, highlighted,
 }) {
   const m = message
@@ -200,8 +200,26 @@ function MessageRow({
   const canOpenUser = Boolean(onOpenUser) && !mine && m.senderUserId && !isSupportIdentity
   const canReport   = Boolean(onReport)   && !mine && !m.deleted
   const canDelete   = Boolean(onDelete)   && viewerIsAdmin && !m.deleted
+  const canEdit     = Boolean(onEdit)     && viewerIsAdmin && !m.deleted
   const canReply    = Boolean(onReply)    && !m.deleted
   const canSeenBy   = Boolean(onSeenBy)   && mine && !m.deleted
+
+  // Inline edit, admin only. Kept local to the row rather than lifted, so
+  // typing a correction does not re-render the whole thread on every keystroke.
+  const [draft,  setDraft]  = useState(null)   // null = not editing
+  const [saving, setSaving] = useState(false)
+
+  const saveEdit = async () => {
+    const next = draft.trim()
+    if (!next || next === m.body) { setDraft(null); return }
+    setSaving(true)
+    try {
+      await onEdit(m, next)
+      setDraft(null)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div
@@ -238,9 +256,48 @@ function MessageRow({
           </div>
         )}
 
-        <p className={`text-sm text-slate-800 whitespace-pre-wrap break-words ${m.deleted ? 'line-through opacity-60' : ''}`}>
-          {m.body}
-        </p>
+        {draft !== null ? (
+          <div className="mt-0.5">
+            <textarea
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Escape') { e.preventDefault(); setDraft(null) }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() }
+              }}
+              rows={2}
+              autoFocus
+              maxLength={4000}
+              className="w-full text-sm text-slate-800 bg-slate-100 border border-slate-300 rounded-lg px-2 py-1.5 resize-y focus:outline-none focus:border-brand-400"
+              aria-label="Edit message"
+            />
+            <div className="flex items-center gap-2 mt-1">
+              <button
+                type="button"
+                onClick={saveEdit}
+                disabled={saving}
+                className="text-[11px] font-bold px-2 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white transition-colors"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraft(null)}
+                className="text-[11px] font-bold px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <span className="text-[10px] text-slate-400">Enter saves, Shift+Enter for a new line</span>
+            </div>
+          </div>
+        ) : (
+          <p className={`text-sm text-slate-800 whitespace-pre-wrap break-words ${m.deleted ? 'line-through opacity-60' : ''}`}>
+            {m.body}
+            {m.edited && !m.deleted && (
+              <span className="text-[10px] text-slate-400 ml-1.5" title="Edited by a moderator">(edited)</span>
+            )}
+          </p>
+        )}
         {/* Admin-only: users never receive a removed message. */}
         {m.deleted && (
           <p className="text-[10px] italic text-slate-400">Removed by a moderator</p>
@@ -258,6 +315,10 @@ function MessageRow({
         {canReply && (
           <button type="button" onClick={() => onReply(m)} title="Reply"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">↰</button>
+        )}
+        {canEdit && (
+          <button type="button" onClick={() => setDraft(m.body ?? '')} title="Edit"
+            className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">✎</button>
         )}
         {canReport && (
           <button type="button" onClick={() => onReport(m)} title="Report"
@@ -289,6 +350,7 @@ export default function MessageList({
   onOpenUser,
   onReport,
   onDelete,
+  onEdit,
   onReply,
   onReact,
   onSeenBy,
@@ -361,6 +423,7 @@ export default function MessageList({
             onOpenUser={conversationType === 'channel' ? onOpenUser : undefined}
             onReport={conversationType === 'support' ? undefined : onReport}
             onDelete={onDelete}
+            onEdit={onEdit}
             onReply={onReply}
             onReact={onReact}
             // Support collapses every admin into one identity, so "who has read

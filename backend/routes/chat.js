@@ -299,6 +299,12 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
     body:              hideBody ? null : m.body,
     deleted,
     deletedAt:         m.deletedAt ?? null,
+    // Shown to everyone, not just admins: a moderator quietly rewriting what
+    // someone said and leaving no mark would be worse than leaving it alone.
+    // The pre-edit text goes only to admins — it is the moderation record.
+    edited:            Boolean(m.editedAt),
+    editedAt:          m.editedAt ?? null,
+    ...(viewerIsAdmin ? { originalBody: m.originalBody ?? null } : {}),
     createdAt:         m.createdAt,
     reactions:         (m.reactions ?? [])
       .filter(r => (r.userIds ?? []).length)
@@ -1811,6 +1817,76 @@ router.delete('/admin/messages/:id', adminOnly, async (req, res) => {
 
     res.json({ status: 'success', data: {
       message: serializeMessage(updated.toObject(), { viewerIsAdmin: true, viewerId: req.user._id }),
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/chat/admin/messages/:id { body } — correct a message in place.
+//
+// The edit is never silent: `editedAt` puts an "(edited)" marker on the message
+// for every reader, and the pre-edit text is kept in `originalBody` so the
+// moderation record still shows what was actually posted. Captured on the first
+// edit only, so a second pass cannot launder the original away.
+//
+// Deleted and system messages are off limits — one has already been removed,
+// and the other is written by the server rather than by anyone.
+//
+// The reply-quote snapshots on any children are deliberately NOT rewritten:
+// they record what the replier was answering, which is the point of
+// snapshotting them at send time in the first place.
+router.patch('/admin/messages/:id', adminOnly, async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Message not found' });
+
+    const body = (req.body?.body ?? '').toString().trim();
+    if (!body) return res.status(400).json({ message: 'Message body is required' });
+    if (body.length > 4000) return res.status(400).json({ message: 'Message too long (max 4000 chars)' });
+
+    const message = await ChatMessage.findById(req.params.id);
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+    if (message.deletedAt) {
+      return res.status(400).json({ message: 'That message has been removed.' });
+    }
+    if (message.senderRole === 'system') {
+      return res.status(400).json({ message: 'System messages cannot be edited.' });
+    }
+    if (body === message.body) {
+      return res.json({ status: 'success', data: {
+        message: serializeMessage(message.toObject(), {
+          viewerIsAdmin: true, viewerId: req.user._id,
+        }),
+      } });
+    }
+
+    const updated = await ChatMessage.findByIdAndUpdate(
+      message._id,
+      {
+        $set: {
+          body,
+          editedAt:       new Date(),
+          editedByUserId: req.user._id,
+          ...(message.originalBody ? {} : { originalBody: message.body }),
+        },
+      },
+      { returnDocument: 'after' },
+    );
+
+    await AdminAction.create({
+      userId:       req.user._id,
+      actionType:   'chat_message_edit',
+      reason:       'Edited a chat message',
+      targetUserId: message.senderUserId ?? undefined,
+    });
+
+    const convo = await ChatConversation.findById(message.conversationId).select('type').lean();
+    res.json({ status: 'success', data: {
+      message: serializeMessage(updated.toObject(), {
+        viewerIsAdmin:    true,
+        conversationType: convo?.type,
+        viewerId:         req.user._id,
+      }),
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });

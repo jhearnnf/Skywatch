@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 import MessageList from '../components/MessageList'
 
@@ -210,6 +210,59 @@ describe('MessageList — seen by', () => {
   it('does not offer it on a removed message', () => {
     renderList([mine('gone', { deleted: true })], { onSeenBy: vi.fn(), viewerIsAdmin: true })
     expect(screen.queryByTitle('Seen by')).toBeNull()
+  })
+})
+
+describe('MessageList — edited messages', () => {
+  it('marks an edited message for every reader, not just admins', () => {
+    renderList([msg('u1', 'tidied up', { edited: true })])
+    expect(screen.getByText('(edited)')).toBeTruthy()
+  })
+
+  it('leaves an untouched message unmarked', () => {
+    renderList([msg('u1', 'as sent')])
+    expect(screen.queryByText('(edited)')).toBeNull()
+  })
+
+  it('offers the edit control to an admin only', () => {
+    renderList([msg('u1', 'hello')], { onEdit: vi.fn(), viewerIsAdmin: true })
+    expect(screen.getByTitle('Edit')).toBeTruthy()
+
+    cleanup()
+    renderList([msg('u1', 'hello')], { onEdit: vi.fn() })
+    expect(screen.queryByTitle('Edit')).toBeNull()
+  })
+
+  it('saves the corrected body', async () => {
+    const onEdit = vi.fn().mockResolvedValue(undefined)
+    renderList([msg('u1', 'somethign')], { onEdit, viewerIsAdmin: true })
+
+    fireEvent.click(screen.getByTitle('Edit'))
+    const box = screen.getByLabelText('Edit message')
+    expect(box.value).toBe('somethign')
+    fireEvent.change(box, { target: { value: 'something' } })
+    fireEvent.click(screen.getByText('Save'))
+
+    expect(onEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ body: 'somethign' }),
+      'something',
+    )
+  })
+
+  it('cancels without calling out', () => {
+    const onEdit = vi.fn()
+    renderList([msg('u1', 'hello')], { onEdit, viewerIsAdmin: true })
+
+    fireEvent.click(screen.getByTitle('Edit'))
+    fireEvent.click(screen.getByText('Cancel'))
+
+    expect(onEdit).not.toHaveBeenCalled()
+    expect(screen.getByText('hello')).toBeTruthy()
+  })
+
+  it('does not offer editing on a removed message', () => {
+    renderList([msg('u1', 'gone', { deleted: true })], { onEdit: vi.fn(), viewerIsAdmin: true })
+    expect(screen.queryByTitle('Edit')).toBeNull()
   })
 })
 

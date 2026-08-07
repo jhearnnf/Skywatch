@@ -49,6 +49,7 @@ const ACTION_TYPES = [
   'chat_channel_unarchive',
   'chat_channel_delete',
   'chat_message_delete',
+  'chat_message_edit',
   'chat_ban',
   'chat_unban',
   'chat_bot_knowledge_upload',

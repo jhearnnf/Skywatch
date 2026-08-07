@@ -64,20 +64,20 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
     return () => { cancelled = true }
   }, [fetchMessages, markRead])
 
-  // Compares the newest id rather than just the length, so a moderator deleting
-  // a message (which changes content but not count) still refreshes the view.
+  // Compares a signature rather than just the length, so a moderator deleting
+  // or editing a message — either of which changes the content without changing
+  // the count — still refreshes the view. `editedAt` rather than the `edited`
+  // flag, so a second edit of an already-edited message lands too.
   useEffect(() => {
+    const signature = (list) => list
+      .map(m => `${m._id}:${m.deleted ? 'x' : ''}${m.editedAt ?? ''}`)
+      .join(',')
+
     const tick = async () => {
       if (document.hidden) return
       try {
         const d = await fetchMessages()
-        setMessages(prev => {
-          const same =
-            prev.length === d.messages.length &&
-            prev[prev.length - 1]?._id === d.messages[d.messages.length - 1]?._id &&
-            prev.filter(m => m.deleted).length === d.messages.filter(m => m.deleted).length
-          return same ? prev : d.messages
-        })
+        setMessages(prev => (signature(prev) === signature(d.messages) ? prev : d.messages))
         setSenders(d.senders ?? {})
         const newest = d.messages[d.messages.length - 1]
         if (newest && String(newest.senderUserId) !== String(user?._id)) markRead()
@@ -162,6 +162,23 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
     setMessages(prev => prev.map(m => (m._id === d.data.message._id ? d.data.message : m)))
   }
 
+  // Admin correction. The response carries the updated message, so swap it in
+  // place rather than refetching — the 5s poll would otherwise briefly show the
+  // old text back again on a slow round trip.
+  const handleEdit = async (message, body) => {
+    setErr('')
+    const r = await apiFetch(`${API}/api/chat/admin/messages/${message._id}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    }).catch(() => null)
+    const d = await r?.json().catch(() => null)
+    if (!r?.ok) { setErr(d?.message || 'Could not edit that message'); return }
+    setMessages(prev => prev.map(m => (m._id === d.data.message._id ? d.data.message : m)))
+    onChanged?.()
+  }
+
   const handleDelete = async (message) => {
     if (!window.confirm('Remove this message for everyone? Admins can still see it.')) return
     await apiFetch(`${API}/api/chat/admin/messages/${message._id}`, {
@@ -242,6 +259,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           onReact={handleReact}
           onReport={m => { setReportDone(false); setReporting(m) }}
           onDelete={user?.isAdmin ? handleDelete : undefined}
+          onEdit={user?.isAdmin ? handleEdit : undefined}
           onSeenBy={setSeenByMsg}
           // A bot feed is a log, not a conversation: every entry is from the
           // same poster, so each one keeps its own name and timestamp.

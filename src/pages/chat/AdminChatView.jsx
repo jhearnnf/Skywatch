@@ -207,6 +207,21 @@ export default function AdminChatView() {
     await refreshBoth()
   }
 
+  // Editing sits alongside deleting: both are moderation of someone else's
+  // message, and this transcript is where a reported one gets read. The edit
+  // is marked "(edited)" for every reader — see PATCH /admin/messages/:id.
+  const handleEdit = async (message, body) => {
+    const r = await apiFetch(`${API}/api/chat/admin/messages/${message._id}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    }).catch(() => null)
+    const d = await r?.json().catch(() => null)
+    if (!r?.ok) { setErr(d?.message || 'Could not edit that message'); return }
+    await refreshBoth()
+  }
+
   const handleChatBan = async (targetUserId, targetLabel) => {
     const reason = window.prompt(`Ban ${targetLabel} from channels and DMs?\n\nReason (shown to them):`)
     if (reason === null) return
@@ -410,6 +425,7 @@ export default function AdminChatView() {
               viewerIsAdmin
               senders={senders}
               onDelete={handleDelete}
+              onEdit={handleEdit}
               emptyLabel="No messages in this conversation."
             />
 

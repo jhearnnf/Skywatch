@@ -42,6 +42,15 @@ const chatMessageSchema = new mongoose.Schema({
   // already been announced rather than offering it again.
   announcedCommitShas: { type: [String], default: undefined },
 
+  // Admin edit. `editedAt` is what renders the "(edited)" marker to everyone —
+  // a moderator silently rewriting what someone said would be worse than
+  // leaving it up. `originalBody` is captured on the FIRST edit only, so the
+  // moderation record still holds what was actually posted no matter how many
+  // times the text is subsequently tidied.
+  editedAt:       { type: Date, default: null },
+  editedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  originalBody:   { type: String, default: null },
+
   // Soft delete. The body is preserved so admins can still read what was said
   // — a moderation record that erases the evidence is useless. Non-admin
   // readers get a "Message removed by a moderator" placeholder instead.

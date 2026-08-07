@@ -100,6 +100,81 @@ describe('DELETE /api/chat/admin/messages/:id', () => {
   });
 });
 
+describe('PATCH /api/chat/admin/messages/:id', () => {
+  it('rewrites the body and marks the message edited for everyone', async () => {
+    const { admin, reader, channelId, messageId } = await seedChannelWithMessage();
+
+    const res = await request(app).patch(`/api/chat/admin/messages/${messageId}`)
+      .set('Cookie', authCookie(admin._id)).send({ body: 'something civil' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.message.body).toBe('something civil');
+    expect(res.body.data.message.edited).toBe(true);
+
+    // The marker is not an admin-only detail — a moderator quietly rewriting
+    // what someone said and leaving no trace would be worse than leaving it.
+    const asUser = await request(app).get(`/api/chat/conversations/${channelId}/messages`)
+      .set('Cookie', authCookie(reader._id));
+    expect(asUser.body.data.messages[0].body).toBe('something civil');
+    expect(asUser.body.data.messages[0].edited).toBe(true);
+  });
+
+  it('keeps the original body as the moderation record, admin-only', async () => {
+    const { admin, reader, channelId, messageId } = await seedChannelWithMessage();
+    const ca = authCookie(admin._id);
+
+    await request(app).patch(`/api/chat/admin/messages/${messageId}`)
+      .set('Cookie', ca).send({ body: 'first correction' });
+    // A second pass must not launder the original away.
+    await request(app).patch(`/api/chat/admin/messages/${messageId}`)
+      .set('Cookie', ca).send({ body: 'second correction' });
+
+    expect((await ChatMessage.findById(messageId)).originalBody).toBe('something rude');
+
+    const asAdmin = await request(app).get(`/api/chat/conversations/${channelId}/messages`)
+      .set('Cookie', ca);
+    expect(asAdmin.body.data.messages[0].originalBody).toBe('something rude');
+
+    const asUser = await request(app).get(`/api/chat/conversations/${channelId}/messages`)
+      .set('Cookie', authCookie(reader._id));
+    expect(asUser.body.data.messages[0].originalBody).toBeUndefined();
+  });
+
+  it('leaves an unedited message unmarked', async () => {
+    const { reader, channelId } = await seedChannelWithMessage();
+    const res = await request(app).get(`/api/chat/conversations/${channelId}/messages`)
+      .set('Cookie', authCookie(reader._id));
+    expect(res.body.data.messages[0].edited).toBe(false);
+  });
+
+  it('refuses to edit a removed message', async () => {
+    const { admin, messageId } = await seedChannelWithMessage();
+    const ca = authCookie(admin._id);
+    await request(app).delete(`/api/chat/admin/messages/${messageId}`).set('Cookie', ca);
+
+    const res = await request(app).patch(`/api/chat/admin/messages/${messageId}`)
+      .set('Cookie', ca).send({ body: 'resurrected' });
+    expect(res.status).toBe(400);
+  });
+
+  it('requires a non-empty body', async () => {
+    const { admin, messageId } = await seedChannelWithMessage();
+    const res = await request(app).patch(`/api/chat/admin/messages/${messageId}`)
+      .set('Cookie', authCookie(admin._id)).send({ body: '   ' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects non-admins — including the message author', async () => {
+    const { author, reader, messageId } = await seedChannelWithMessage();
+
+    for (const u of [author, reader]) {
+      const res = await request(app).patch(`/api/chat/admin/messages/${messageId}`)
+        .set('Cookie', authCookie(u._id)).send({ body: 'mine now' });
+      expect(res.status).toBe(403);
+    }
+    expect((await ChatMessage.findById(messageId)).body).toBe('something rude');
+  });
+});
+
 describe('chat ban', () => {
   it('blocks channel posts but leaves support reachable', async () => {
     const { admin, author, channelId } = await seedChannelWithMessage();
