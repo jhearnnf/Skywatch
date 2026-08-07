@@ -188,7 +188,8 @@ function ReplyQuote({ replyTo, onJump }) {
 // remounts its whole subtree on every parent render.
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine,
-  viewerIsAdmin, onOpenUser, onReport, onDelete, onReply, onReact, onJump, highlighted,
+  viewerIsAdmin, onOpenUser, onReport, onDelete, onReply, onReact, onSeenBy,
+  onJump, highlighted,
 }) {
   const m = message
   const name = isSupportIdentity
@@ -200,6 +201,7 @@ function MessageRow({
   const canReport   = Boolean(onReport)   && !mine && !m.deleted
   const canDelete   = Boolean(onDelete)   && viewerIsAdmin && !m.deleted
   const canReply    = Boolean(onReply)    && !m.deleted
+  const canSeenBy   = Boolean(onSeenBy)   && mine && !m.deleted
 
   return (
     <div
@@ -249,6 +251,10 @@ function MessageRow({
 
       {/* Hover actions, floated so they never take layout space per row. */}
       <div className="absolute right-1 -top-2 hidden group-hover:flex items-center gap-1 bg-surface border border-slate-200 rounded-lg px-1 py-0.5 card-shadow">
+        {canSeenBy && (
+          <button type="button" onClick={() => onSeenBy(m)} title="Seen by"
+            className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">👁</button>
+        )}
         {canReply && (
           <button type="button" onClick={() => onReply(m)} title="Reply"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">↰</button>
@@ -285,6 +291,7 @@ export default function MessageList({
   onDelete,
   onReply,
   onReact,
+  onSeenBy,
   // Runs collapse consecutive messages from one sender under a single avatar,
   // name and timestamp. That is right for a conversation and wrong for a feed:
   // in the medals channel every message is from the same bot, so grouping them
@@ -356,6 +363,9 @@ export default function MessageList({
             onDelete={onDelete}
             onReply={onReply}
             onReact={onReact}
+            // Support collapses every admin into one identity, so "who has read
+            // this" there would be a list of staff — not something to publish.
+            onSeenBy={conversationType === 'support' ? undefined : onSeenBy}
             onJump={jumpTo}
             highlighted={String(highlightId) === String(m._id)}
           />

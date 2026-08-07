@@ -191,6 +191,28 @@ describe('MessageList — replies', () => {
   })
 })
 
+describe('MessageList — seen by', () => {
+  // `mine` is decided by currentUserId, so 'me' is the sender under test.
+  const mine = (body, extra = {}) => msg('u1', body, { senderUserId: 'me', ...extra })
+
+  it('opens the list from the eye control on your own message', () => {
+    const onSeenBy = vi.fn()
+    renderList([mine('hello')], { onSeenBy })
+    fireEvent.click(screen.getByTitle('Seen by'))
+    expect(onSeenBy).toHaveBeenCalledWith(expect.objectContaining({ body: 'hello' }))
+  })
+
+  it('does not offer it on someone else\'s message', () => {
+    renderList([msg('u1', 'theirs')], { onSeenBy: vi.fn() })
+    expect(screen.queryByTitle('Seen by')).toBeNull()
+  })
+
+  it('does not offer it on a removed message', () => {
+    renderList([mine('gone', { deleted: true })], { onSeenBy: vi.fn(), viewerIsAdmin: true })
+    expect(screen.queryByTitle('Seen by')).toBeNull()
+  })
+})
+
 describe('MessageList — feeds', () => {
   it('gives every message its own name and timestamp when grouping is off', () => {
     // The medals channel: one bot posts everything, so grouped runs would hide

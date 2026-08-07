@@ -7,6 +7,7 @@ import ComposeBox from './components/ComposeBox'
 import DisplayNameGate from './components/DisplayNameGate'
 import UserCard from './components/UserCard'
 import ReportMessageDialog from './components/ReportMessageDialog'
+import SeenByDialog from './components/SeenByDialog'
 import AnnouncementDrafter from './components/AnnouncementDrafter'
 
 const POLL_MS = 5_000
@@ -30,6 +31,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
   const [reporting,    setReporting]    = useState(null)
   const [reportDone,   setReportDone]   = useState(false)
   const [replyTo,      setReplyTo]      = useState(null)
+  const [seenByMsg,    setSeenByMsg]    = useState(null)
 
   const fetchMessages = useCallback(async () => {
     const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages`, {
@@ -240,6 +242,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           onReact={handleReact}
           onReport={m => { setReportDone(false); setReporting(m) }}
           onDelete={user?.isAdmin ? handleDelete : undefined}
+          onSeenBy={setSeenByMsg}
           // A bot feed is a log, not a conversation: every entry is from the
           // same poster, so each one keeps its own name and timestamp.
           groupRuns={postPolicy !== 'bot'}
@@ -307,6 +310,9 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           onClose={() => setCardUserId(null)}
           onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`); onChanged?.() }}
         />
+      )}
+      {seenByMsg && (
+        <SeenByDialog key={seenByMsg._id} message={seenByMsg} onClose={() => setSeenByMsg(null)} />
       )}
       {reporting && (
         <ReportMessageDialog

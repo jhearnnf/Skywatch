@@ -998,6 +998,89 @@ router.post('/messages/:id/reactions', async (req, res) => {
   }
 });
 
+// How many readers the seen-by list will name before it stops counting them
+// individually. A busy channel could have hundreds of rows; the list is a
+// "who has seen this" reassurance, not a register.
+const SEEN_BY_LIMIT = 200;
+
+// GET /api/chat/messages/:id/seen-by — who has read one of YOUR messages.
+//
+// Derived from the existing ChatRead rows rather than a per-message receipt
+// collection: a read marker already says "this user had the conversation open
+// at time T", so everyone whose marker is at or past the message's timestamp
+// has necessarily had it on screen. A receipt per (user × message) would be
+// thousands of rows saying the same thing.
+//
+// Scoped to your OWN messages (admins excepted, who can already read every
+// transcript). Letting anyone inspect anyone else's readership would turn a
+// reassurance about your own post into a surveillance tool aimed at other
+// people's.
+//
+// The sender is left out — appendMessage marks the conversation read for them
+// as it writes, so they would otherwise always be the first name on the list.
+router.get('/messages/:id/seen-by', async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Message not found' });
+
+    const message = await ChatMessage.findById(req.params.id)
+      .select('conversationId senderUserId createdAt deletedAt').lean();
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+    if (message.deletedAt && !req.user.isAdmin) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    const convo = await ChatConversation.findById(message.conversationId);
+    if (!convo || !canRead(convo, req.user)) return res.status(403).json({ message: 'Forbidden' });
+
+    const isMine = String(message.senderUserId ?? '') === String(req.user._id);
+    if (!isMine && !req.user.isAdmin) {
+      return res.status(403).json({ message: 'You can only see who has read your own messages.' });
+    }
+
+    const filter = {
+      conversationId: convo._id,
+      lastReadAt:     { $gte: message.createdAt },
+      ...(message.senderUserId ? { userId: { $ne: message.senderUserId } } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      ChatRead.find(filter).sort({ lastReadAt: 1 }).limit(SEEN_BY_LIMIT).lean(),
+      ChatRead.countDocuments(filter),
+    ]);
+
+    // Bots mark threads read as a side effect of posting into them; naming one
+    // as a reader would be noise.
+    const users = await User.find({ _id: { $in: rows.map(r => r.userId) }, isBot: { $ne: true } })
+      .select('displayName agentNumber isAdmin').lean();
+    const byId = new Map(users.map(u => [String(u._id), u]));
+
+    const readers = rows
+      .map(r => {
+        const u = byId.get(String(r.userId));
+        if (!u) return null;
+        return {
+          _id:         u._id,
+          displayName: u.displayName ?? null,
+          agentNumber: u.agentNumber ?? null,
+          isAdmin:     Boolean(u.isAdmin),
+          seenAt:      r.lastReadAt,
+        };
+      })
+      .filter(Boolean);
+
+    res.json({ status: 'success', data: {
+      readers,
+      // `total` counts read markers; `readers` drops bots and deleted accounts,
+      // so the client shows the length it can actually name and only mentions
+      // the remainder when the limit truncated the list.
+      total,
+      truncated: total > rows.length,
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/chat/messages/:id/report — report a message to the admins.
 // Lands in the same ProblemReport queue as bug reports, tagged kind
 // 'chat_message' so Admin › Intel › Reports can filter it.
