@@ -283,6 +283,11 @@ const appSettingsSchema = new mongoose.Schema({
   // Chat (user↔admin help) feature
   chatEnabled:                { type: Boolean,  default: true },
 
+  // One-shot marker for seeds/seedChatGuides.js. Not a feature switch: it is
+  // how "seed the Guides section once" stays once, so removing or renaming the
+  // seeded guide is not undone on the next boot.
+  communityGuidesSeeded:      { type: Boolean,  default: false },
+
   // Slim "CBAT-only" mode applied site-wide (web). The native Android app is
   // always slim regardless of this flag; this only forces the same slimmed
   // experience on the website. Admins are exempt on the client so enabling it

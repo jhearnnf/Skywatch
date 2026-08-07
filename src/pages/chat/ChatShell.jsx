@@ -119,6 +119,7 @@ export default function ChatShell() {
       <div className={`w-full md:w-80 lg:w-96 md:shrink-0 ${conversationId ? 'hidden md:flex' : 'flex'} flex-col`}>
         <ChatSidebar
           support={data?.support}
+          guides={data?.guides}
           channels={data?.channels}
           dms={data?.dms}
           bots={data?.bots}

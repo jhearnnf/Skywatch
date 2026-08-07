@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import AdminChatView from './AdminChatView'
 import ChatChannelsEditor from '../admin/ChatChannelsEditor'
+import ChatGuidesEditor from '../admin/ChatGuidesEditor'
 import ChatBotEditor from '../admin/ChatBotEditor'
 import CommunitySoundEditor from '../admin/CommunitySoundEditor'
 import { useAuth } from '../../context/AuthContext'
@@ -18,6 +19,7 @@ import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 // "Console" rather than "moderation": moderation is one tab of four now.
 const TABS = [
   { id: 'conversations', label: 'Conversations', hint: 'Read any thread, moderate, ban' },
+  { id: 'guides',        label: 'Guides',        hint: 'Links out to the best CBAT reading' },
   { id: 'channels',      label: 'Channels',      hint: 'Create, order, who can post' },
   { id: 'bots',          label: 'Bots',          hint: 'The guide the bot answers from' },
   { id: 'sound',         label: 'Sound',         hint: 'The Community soundtrack' },
@@ -66,6 +68,12 @@ export default function CommunityConsole() {
       {/* Conversations keeps its own full-height two-pane layout, so it is not
           wrapped in a card the way the settings tabs are. */}
       {tab === 'conversations' && <AdminChatView />}
+
+      {tab === 'guides' && (
+        <div className="bg-surface rounded-2xl border border-slate-200 card-shadow p-4">
+          <ChatGuidesEditor API={API} />
+        </div>
+      )}
 
       {tab === 'channels' && (
         <div className="bg-surface rounded-2xl border border-slate-200 card-shadow p-4">

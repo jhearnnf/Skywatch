@@ -47,6 +47,8 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     await require('./migrations/labelMedalDifficulty')();
     // The guide bot's account. Idempotent; see seeds/seedChatBot.js.
     await require('./seeds/seedChatBot')();
+    // The CBAT guide's row in Community › Guides. Runs once ever.
+    await require('./seeds/seedChatGuides')();
     // Add the clientResultId path/index to CBAT result schemas so offline score
     // submissions can be deduplicated on flush retries.
     require('./utils/cbatResult').ensureCbatResultPaths();

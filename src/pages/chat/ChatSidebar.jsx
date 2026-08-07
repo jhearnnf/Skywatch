@@ -32,6 +32,44 @@ function Row({ to, icon, title, subtitle, preview, unread, timestamp, active }) 
   )
 }
 
+// A guide is one of three things, and each needs a different link.
+//
+//   • an app route ("/rankings")            → react-router Link
+//   • a document on our domain              → plain anchor: a static file like
+//     ("/cbat-guide.html")                    public/cbat-guide.html is outside
+//                                             the SPA, so routing to it with
+//                                             Link would just render the 404
+//   • anywhere off-site                     → anchor, new tab, and an ↗, since
+//                                             a rail row that looks like a
+//                                             channel and silently leaves the
+//                                             site is a small trap
+//
+// A trailing file extension is what separates the first two. No unread dot or
+// timestamp on any of them: nothing here to keep up with.
+function GuideRow({ guide }) {
+  const onSite   = guide.url?.startsWith('/')
+  const internal = onSite && !/\.[a-z0-9]+$/i.test(guide.url)
+  const body = (
+    <>
+      <div className="text-lg leading-none pt-0.5 shrink-0">{guide.emoji || '📖'}</div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-bold text-slate-700 truncate">{guide.title}</p>
+          {!onSite && <span aria-hidden="true" className="text-[10px] text-slate-400 shrink-0">↗</span>}
+        </div>
+        {guide.description && (
+          <p className="text-[11px] text-slate-400 truncate">{guide.description}</p>
+        )}
+      </div>
+    </>
+  )
+  const className = 'flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-100 transition-colors'
+
+  if (internal) return <Link to={guide.url} className={className}>{body}</Link>
+  if (onSite)   return <a href={guide.url} className={className}>{body}</a>
+  return <a href={guide.url} target="_blank" rel="noopener noreferrer" className={className}>{body}</a>
+}
+
 function SectionLabel({ children }) {
   return (
     <p className="px-3 pt-3 pb-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
@@ -45,7 +83,7 @@ function SectionLabel({ children }) {
 // Purely presentational — ChatShell owns the data and the polling, so the rail
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
-  support, channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
+  support, guides = [], channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
   onStartSupport, onOpenBot,
 }) {
   return (
@@ -85,6 +123,15 @@ export default function ChatSidebar({
               <p className="text-[11px] text-slate-400">Start a chat with the SkyWatch team</p>
             </div>
           </button>
+        )}
+
+        {/* Nothing to show when the team has not added any — an empty section
+            with a "coming soon" line would be noise above every channel. */}
+        {guides.length > 0 && (
+          <>
+            <SectionLabel>Guides</SectionLabel>
+            {guides.map(g => <GuideRow key={g._id} guide={g} />)}
+          </>
         )}
 
         <SectionLabel>Channels</SectionLabel>

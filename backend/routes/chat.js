@@ -4,6 +4,7 @@ const { protect, adminOnly } = require('../middleware/auth');
 const ChatConversation = require('../models/ChatConversation');
 const ChatMessage      = require('../models/ChatMessage');
 const ChatRead         = require('../models/ChatRead');
+const ChatGuide        = require('../models/ChatGuide');
 const AppSettings      = require('../models/AppSettings');
 const AdminAction      = require('../models/AdminAction');
 const ProblemReport    = require('../models/ProblemReport');
@@ -407,7 +408,7 @@ router.get('/overview', async (req, res) => {
   try {
     const convos = await visibleConversations(req.user);
     const ids    = convos.map(c => c._id);
-    const [reads, previews, dmUsers] = await Promise.all([
+    const [reads, previews, dmUsers, guides] = await Promise.all([
       readMap(req.user._id, ids),
       previewMap(ids),
       (async () => {
@@ -420,6 +421,9 @@ router.get('/overview', async (req, res) => {
           .select('displayName agentNumber isAdmin').lean();
         return new Map(users.map(u => [String(u._id), u]));
       })(),
+      // Off-site reading, curated by the team. Same call as everything else in
+      // the rail so the section costs no extra round trip.
+      ChatGuide.find({ isHidden: false }).sort({ order: 1, title: 1 }).lean(),
     ]);
 
     const decorate = (c) => {
@@ -514,6 +518,13 @@ router.get('/overview', async (req, res) => {
       support: supportConvo
         ? { ...decorate(supportConvo), title: SUPPORT_LABEL, status: supportConvo.status }
         : null,
+      guides: guides.map(g => ({
+        _id:         g._id,
+        title:       g.title,
+        url:         g.url,
+        description: g.description ?? '',
+        emoji:       g.emoji ?? null,
+      })),
       channels,
       // A bot DM is listed under `bots`, not here — it is a tool, not a person
       // you are talking to, and mixing them would bury real conversations.
@@ -2122,6 +2133,161 @@ router.delete('/admin/channels/:id', adminOnly, async (req, res) => {
     });
 
     res.json({ status: 'success', data: { deletedMessages: deletedCount } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Admin: guides ────────────────────────────────────────────────────────────
+//
+// Links out to the best CBAT reading, shown above Channels in the rail.
+//
+// The URL is admin-entered and becomes a real anchor in every user's browser,
+// so it is validated on the way IN rather than trusted on the way out: only
+// http/https, and only with a hostname. Without that check a `javascript:` URL
+// stored here would run in the reader's page the moment they clicked it.
+//
+// A site-relative path is allowed too, and is how the guide page on SkyWatch
+// itself is linked ("/cbat-guide"). The rail routes those through react-router
+// rather than opening a tab. `//evil.com` is rejected with everything else: it
+// looks relative and is not — the browser reads it as protocol-relative and
+// leaves the site.
+
+// Returns the normalised URL, or null if it is not one we will render.
+function safeGuideUrl(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw || raw.length > 500) return null;
+
+  if (raw.startsWith('/')) {
+    if (raw.startsWith('//')) return null;
+    if (/[\s\\]/.test(raw)) return null;
+    return raw;
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  if (!parsed.hostname) return null;
+  return parsed.toString();
+}
+
+const serializeGuide = (g) => ({
+  _id:         g._id,
+  title:       g.title,
+  url:         g.url,
+  description: g.description ?? '',
+  emoji:       g.emoji ?? null,
+  order:       g.order ?? 0,
+  isHidden:    Boolean(g.isHidden),
+  updatedAt:   g.updatedAt,
+});
+
+// GET /api/chat/admin/guides — every guide, hidden ones included
+router.get('/admin/guides', adminOnly, async (_req, res) => {
+  try {
+    const guides = await ChatGuide.find({}).sort({ isHidden: 1, order: 1, title: 1 }).lean();
+    res.json({ status: 'success', data: { guides: guides.map(serializeGuide) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/chat/admin/guides — add a link
+router.post('/admin/guides', adminOnly, async (req, res) => {
+  try {
+    const title = (req.body?.title ?? '').toString().trim();
+    if (!title) return res.status(400).json({ message: 'Guide title is required' });
+    if (title.length > 60) return res.status(400).json({ message: 'Guide title must be 60 characters or fewer' });
+
+    const url = safeGuideUrl(req.body?.url);
+    if (!url) return res.status(400).json({ message: 'Enter a full web address starting with http:// or https://' });
+
+    const created = await ChatGuide.create({
+      title,
+      url,
+      description: (req.body?.description ?? '').toString().trim().slice(0, 200),
+      emoji:       (req.body?.emoji ?? '').toString().trim().slice(0, 8) || null,
+      order:       Number.isFinite(Number(req.body?.order)) ? Number(req.body.order) : 0,
+      isHidden:    req.body?.isHidden === true,
+    });
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'chat_guide_create',
+      reason:     `Added community guide "${title}"`,
+    });
+
+    res.json({ status: 'success', data: { guide: serializeGuide(created) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/chat/admin/guides/:id — retitle / repoint / reorder / hide
+router.patch('/admin/guides/:id', adminOnly, async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Guide not found' });
+    const guide = await ChatGuide.findById(req.params.id);
+    if (!guide) return res.status(404).json({ message: 'Guide not found' });
+
+    if (req.body?.title !== undefined) {
+      const title = String(req.body.title).trim();
+      if (!title) return res.status(400).json({ message: 'Guide title is required' });
+      if (title.length > 60) return res.status(400).json({ message: 'Guide title must be 60 characters or fewer' });
+      guide.title = title;
+    }
+    if (req.body?.url !== undefined) {
+      const url = safeGuideUrl(req.body.url);
+      if (!url) return res.status(400).json({ message: 'Enter a full web address starting with http:// or https://' });
+      guide.url = url;
+    }
+    if (req.body?.description !== undefined) {
+      guide.description = String(req.body.description).trim().slice(0, 200);
+    }
+    if (req.body?.emoji !== undefined) {
+      guide.emoji = String(req.body.emoji).trim().slice(0, 8) || null;
+    }
+    if (req.body?.order !== undefined && Number.isFinite(Number(req.body.order))) {
+      guide.order = Number(req.body.order);
+    }
+    if (req.body?.isHidden !== undefined) {
+      guide.isHidden = req.body.isHidden === true;
+    }
+    guide.updatedAt = new Date();
+    await guide.save();
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'chat_guide_edit',
+      reason:     `Edited community guide "${guide.title}"`,
+    });
+
+    res.json({ status: 'success', data: { guide: serializeGuide(guide) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/chat/admin/guides/:id — remove the link.
+// No archive step: a guide holds no transcript, so there is nothing to lose
+// beyond the URL itself, and hiding is already offered for that.
+router.delete('/admin/guides/:id', adminOnly, async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Guide not found' });
+    const guide = await ChatGuide.findByIdAndDelete(req.params.id);
+    if (!guide) return res.status(404).json({ message: 'Guide not found' });
+
+    await AdminAction.create({
+      userId:     req.user._id,
+      actionType: 'chat_guide_delete',
+      reason:     `Removed community guide "${guide.title}"`,
+    });
+
+    res.json({ status: 'success' });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

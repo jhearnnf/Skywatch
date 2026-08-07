@@ -148,6 +148,49 @@ describe('ChatShell', () => {
     expect(screen.getByText(/still message the SkyWatch team/)).toBeTruthy()
   })
 
+  it('lists guides above channels, as links that leave the site', async () => {
+    overview({
+      support: null,
+      guides: [{ _id: 'g1', title: 'CBAT Guide', url: 'https://cbatguide.com/', description: 'Everything on the tests', emoji: '📖' }],
+      channels: [CHANNEL], dms: [], viewer: VIEWER,
+    })
+    render(<ChatShell />)
+
+    const guide = await screen.findByText('CBAT Guide')
+    const link = guide.closest('a')
+    expect(link.getAttribute('href')).toBe('https://cbatguide.com/')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+
+    // Above Channels: the section label and the guide both precede the first channel.
+    const order = screen.getByText('Guides').compareDocumentPosition(screen.getByText('Channels'))
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('links a document on our own domain in the same tab, with no ↗', async () => {
+    // public/cbat-guide.html is a standalone file, not an app route, so it has
+    // to be a plain anchor — routing to it would render the SPA's 404.
+    overview({
+      support: null,
+      guides: [{ _id: 'g2', title: 'CBAT Community Guide', url: '/cbat-guide.html', description: 'What candidates reported', emoji: '📖' }],
+      channels: [], dms: [], viewer: VIEWER,
+    })
+    render(<ChatShell />)
+
+    const link = (await screen.findByText('CBAT Community Guide')).closest('a')
+    expect(link.getAttribute('href')).toBe('/cbat-guide.html')
+    expect(link.getAttribute('target')).toBeNull()
+    expect(link.textContent).not.toContain('↗')
+  })
+
+  it('hides the Guides section entirely when there are none', async () => {
+    overview({ support: null, guides: [], channels: [CHANNEL], dms: [], viewer: VIEWER })
+    render(<ChatShell />)
+
+    await waitFor(() => expect(screen.getByText('General')).toBeTruthy())
+    expect(screen.queryByText('Guides')).toBeNull()
+  })
+
   it('points users at channels as the way into a DM', async () => {
     overview({ support: null, channels: [], dms: [], viewer: VIEWER })
     render(<ChatShell />)
