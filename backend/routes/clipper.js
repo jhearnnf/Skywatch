@@ -43,7 +43,14 @@ function fail(res, err) {
 // is a liveness signal with a 30-second useful life, so persisting it would
 // only let a stale value survive a restart and report an agent that is not
 // there. A fresh process correctly starts out believing the agent is offline.
-const agentPresence = { at: null, agentId: null, version: null, voices: [], mediaBaseUrl: null };
+const agentPresence = {
+  at: null, agentId: null, version: null, voices: [], mediaBaseUrl: null,
+  // Reported by the agent so a force-stop can name the exact process. Killing
+  // by name would take down every node process on the machine.
+  pid: null,
+  // Set by POST /agent/stop, handed to the agent on its next heartbeat.
+  stopRequested: false,
+};
 
 // Where the agent is serving its own temp files, if it managed to bind a port.
 //
@@ -85,8 +92,57 @@ const JOB_RESULT_FIELD = {
   render:   null,
 };
 
+// Fold a partial voice result into the lines a script already has.
+//
+// A regenerate narrates one beat, so the agent returns one line. Replacing
+// `voice` wholesale with that would delete every other take.
+//
+// The offsets then have to be rebuilt from scratch. `startMs` is where a line
+// sits in the finished narration, and it is what buildTimeline rebases caption
+// words against — so a replacement take that is even 200ms longer or shorter
+// silently slides every caption after it out of step with the audio. They are
+// recomputed here, in the script's own beat order (outro last, exactly as
+// buildTimeline lays them out), rather than trusted from the job.
+function mergeVoiceLines(script, result) {
+  const existing = Array.isArray(script.voice?.lines) ? script.voice.lines : [];
+  const incoming = Array.isArray(result?.lines) ? result.lines : [];
+
+  const byId = new Map(existing.map(l => [l.beatId, l]));
+  for (const line of incoming) byId.set(line.beatId, line);
+
+  const order = [...(script.script?.beats ?? []).map(b => b.id), 'outro'];
+  const ordered = order.map(id => byId.get(id)).filter(Boolean);
+
+  // Anything whose beat has since been deleted from the script would otherwise
+  // linger for ever, contributing its duration to a beat that no longer exists.
+  let offsetMs = 0;
+  const lines = ordered.map(line => {
+    const placed = { ...line, startMs: offsetMs };
+    offsetMs += Number(line.durationMs) || 0;
+    return placed;
+  });
+
+  return {
+    ...(script.voice || {}),
+    ...result,
+    lines,
+    totalDurationMs: offsetMs,
+  };
+}
+
 async function applyJobResult(job) {
   const field = JOB_RESULT_FIELD[job.type];
+
+  // Handled before the script lookup, because it is the one result that has
+  // nothing to do with a script: the job carries an arbitrary scriptId only
+  // because the model requires one. Behind the lookup, a voices result was
+  // dropped whenever that borrowed script had since been deleted — and the
+  // symptom would be the profile picker staying empty for no visible reason.
+  if (job.type === 'voices') {
+    if (Array.isArray(job.result?.voices)) agentPresence.voices = job.result.voices;
+    return;
+  }
+
   const script = await ClipperScript.findById(job.scriptId);
   if (!script) return;
 
@@ -95,11 +151,6 @@ async function applyJobResult(job) {
     renders.unshift({ ...(job.result || {}), jobId: String(job._id), createdAt: new Date() });
     script.renders = renders;
     script.markModified('renders');
-  } else if (job.type === 'voices') {
-    // Not script data — it belongs to the agent, so it lands on the presence
-    // record the picker reads rather than on this (arbitrary) script.
-    if (Array.isArray(job.result?.voices)) agentPresence.voices = job.result.voices;
-    return;
   } else if (job.type === 'capture') {
     // A recording becomes that beat's chosen footage directly — there is
     // nothing to pick between, and making the admin choose a single candidate
@@ -160,17 +211,34 @@ router.post('/agent/heartbeat', clipperAgentAuth, (req, res) => {
   agentPresence.agentId = req.agentId;
   agentPresence.version = String(req.body?.version || '').slice(0, 32);
   agentPresence.mediaBaseUrl = sanitiseMediaBaseUrl(req.body?.mediaBaseUrl);
+  agentPresence.pid = Number.isInteger(req.body?.pid) ? req.body.pid : null;
 
   // Voice profiles are reported by the agent rather than fetched by the server:
   // Voicebox only listens on the workstation's loopback address, so a hosted
   // backend could never reach it. The agent is the only thing that can see them.
-  if (Array.isArray(req.body?.voices)) {
+  // An EMPTY list means "I could not ask" — Voicebox was not running when the
+  // agent last looked — not "there are none". Storing it anyway is why the
+  // picker kept emptying: a /voices refresh would fetch the profiles, and the
+  // next heartbeat ten seconds later would wipe them again, so the admin had to
+  // press Reload voices over and over. Absence of knowledge is not knowledge of
+  // absence, so a heartbeat can only ever add to what is known here.
+  if (Array.isArray(req.body?.voices) && req.body.voices.length > 0) {
     agentPresence.voices = req.body.voices.slice(0, 100).map(v => ({
       id:   String(v.id ?? ''),
       name: String(v.name ?? '').slice(0, 80),
     })).filter(v => v.id);
   }
-  res.json({ status: 'success', data: { ok: true } });
+  // The heartbeat is how a stop reaches the agent. Nothing can push to it — it
+  // has no inbound port by design — so the reply carries the instruction, and
+  // the agent decides when to act on it. That lets it finish the render in hand
+  // instead of being killed mid-encode.
+  //
+  // Cleared on the way out: it is a one-shot instruction, and an agent that
+  // read it has already begun stopping.
+  const stop = agentPresence.stopRequested;
+  agentPresence.stopRequested = false;
+
+  res.json({ status: 'success', data: { ok: true, stop } });
 });
 
 // GET /api/clipper/agent/jobs — claim the oldest queued job, if any.
@@ -316,9 +384,194 @@ router.get('/agent/status', async (_req, res) => {
         lastSeenAt: agentPresence.at ? new Date(agentPresence.at).toISOString() : null,
         agentId: agentPresence.agentId,
         version: agentPresence.version,
+        pid: agentPresence.pid,
+        stopping: agentPresence.stopRequested,
+        installed: fs.existsSync(path.join(AGENT_DIR, 'index.js')),
         queue,
       },
     });
+  } catch (err) { fail(res, err); }
+});
+
+// POST /api/clipper/agent/stop   { force? }
+//
+// Cooperative by default: the agent is told to stop on its next heartbeat and
+// exits once the job in hand is done. A render can be minutes of work, and
+// killing it wastes all of it — the file is only written at the end.
+//
+// `force` kills the process the agent reported instead. Reserved for an agent
+// that has stopped heartbeating altogether, because it loses whatever was
+// running. Always by PID: killing by name would take down every node process on
+// the machine, this backend included.
+router.post('/agent/stop', async (req, res) => {
+  try {
+    if (!agentIsOnline() && !req.body?.force) {
+      return res.json({ status: 'success', data: { alreadyStopped: true } });
+    }
+
+    if (req.body?.force) {
+      const pid = agentPresence.pid;
+      if (!pid) {
+        const e = new Error('The agent has not reported a process id, so it cannot be force-stopped');
+        e.status = 400; throw e;
+      }
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch (err) {
+        // ESRCH means it is already gone, which is the outcome we wanted.
+        if (err.code !== 'ESRCH') throw err;
+      }
+      // Presence is in-memory; clearing it makes the UI show offline at once
+      // rather than waiting out the 30-second liveness window.
+      agentPresence.at = null;
+      agentPresence.pid = null;
+      agentPresence.stopRequested = false;
+      return res.json({ status: 'success', data: { forced: true } });
+    }
+
+    agentPresence.stopRequested = true;
+    res.status(202).json({ status: 'success', data: { requested: true } });
+  } catch (err) { fail(res, err); }
+});
+
+// POST /api/clipper/agent/restart
+//
+// The reason this exists: node loads a module once, so an agent started before
+// an edit keeps running the old code. Two bugs looked unfixed for exactly that
+// reason before anyone thought to check the process start time.
+//
+// Force-stops rather than asking nicely, because a restart is usually wanted
+// now; the response says whether work was interrupted so the UI can say so.
+router.post('/agent/restart', async (_req, res) => {
+  try {
+    const entry = path.join(AGENT_DIR, 'index.js');
+    if (!fs.existsSync(entry)) {
+      const e = new Error('The Clipper agent is not installed on this machine');
+      e.status = 400; throw e;
+    }
+
+    const busy = await ClipperJob.countDocuments({ status: 'claimed' });
+    const pid = agentPresence.pid;
+
+    if (pid) {
+      try { process.kill(pid, 'SIGKILL'); } catch (err) { if (err.code !== 'ESRCH') throw err; }
+    }
+    agentPresence.at = null;
+    agentPresence.pid = null;
+    agentPresence.stopRequested = false;
+
+    const child = childProcess.spawn(process.execPath, [entry], {
+      cwd: AGENT_DIR, detached: true, stdio: 'ignore', windowsHide: true,
+    });
+    child.unref();
+
+    res.status(202).json({ status: 'success', data: { pid: child.pid, interrupted: busy } });
+  } catch (err) { fail(res, err); }
+});
+
+// GET /api/clipper/agent/queue
+//
+// Newest first, across every script. The per-script view already exists; this
+// is for the times when something is stuck and you do not yet know which script
+// it belongs to.
+router.get('/agent/queue', async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 40));
+
+    const jobs = await ClipperJob.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      // Payloads carry whole timelines and base64 nothing-in-particular; the
+      // queue view wants none of it and the response should not be a megabyte.
+      .select('-payload -result')
+      .lean();
+
+    const counts = await ClipperJob.aggregate([{ $group: { _id: '$status', n: { $sum: 1 } } }]);
+    const queue = { queued: 0, claimed: 0, done: 0, failed: 0 };
+    for (const row of counts) if (row._id in queue) queue[row._id] = row.n;
+
+    // Titles, so a row reads as "the render for the DPT video" rather than an
+    // ObjectId. One query rather than one per job.
+    const scriptIds = [...new Set(jobs.map(j => String(j.scriptId)).filter(Boolean))];
+    const scripts = await ClipperScript.find({ _id: { $in: scriptIds } }).select('title').lean();
+    const titleById = new Map(scripts.map(s => [String(s._id), s.title]));
+
+    res.json({
+      status: 'success',
+      data: {
+        queue,
+        jobs: jobs.map(j => ({ ...j, scriptTitle: titleById.get(String(j.scriptId)) || null })),
+      },
+    });
+  } catch (err) { fail(res, err); }
+});
+
+// DELETE /api/clipper/agent/jobs/:id
+//
+// Refuses a job the agent is running. Deleting it would not stop the work — the
+// agent already has the payload — and the result would then land on a job that
+// no longer exists, so the stage would silently never update.
+router.delete('/agent/jobs/:id', async (req, res) => {
+  try {
+    const job = await ClipperJob.findById(req.params.id);
+    if (!job) { const e = new Error('Job not found'); e.status = 404; throw e; }
+
+    if (job.status === 'claimed') {
+      const e = new Error(
+        'That job is running right now. Stop the agent first, or wait for it to finish.',
+      );
+      e.status = 409; throw e;
+    }
+
+    await job.deleteOne();
+    res.json({ status: 'success', data: { deleted: String(job._id) } });
+  } catch (err) { fail(res, err); }
+});
+
+// POST /api/clipper/agent/jobs/:id/retry
+//
+// Requeue a failed job as it was. The usual cause of a failure is something
+// outside the job — Voicebox not running, the agent on stale code — so the
+// payload is still exactly right and re-driving the UI to rebuild it is busywork.
+router.post('/agent/jobs/:id/retry', async (req, res) => {
+  try {
+    const job = await ClipperJob.findById(req.params.id);
+    if (!job) { const e = new Error('Job not found'); e.status = 404; throw e; }
+    if (job.status !== 'failed') {
+      const e = new Error('Only a failed job can be retried'); e.status = 400; throw e;
+    }
+
+    job.status = 'queued';
+    job.error = '';
+    job.progress = 0;
+    job.stepLabel = '';
+    job.claimedAt = null;
+    job.claimedBy = '';
+    job.finishedAt = null;
+    // Reset the count too: attempts exists to stop a broken job looping for
+    // ever, and this is a deliberate human decision to try it again.
+    job.attempts = 0;
+    await job.save();
+
+    res.json({ status: 'success', data: { job: job.toObject() } });
+  } catch (err) { fail(res, err); }
+});
+
+// POST /api/clipper/agent/jobs/clear   { status: 'failed' | 'done' }
+//
+// Clearing failures is the point: a failed job sits in the queue for ever and
+// its error is the first thing shown, long after it has been fixed.
+router.post('/agent/jobs/clear', async (req, res) => {
+  try {
+    const status = String(req.body?.status || '');
+    if (!['failed', 'done'].includes(status)) {
+      // Never queued or claimed: those are live work, and clearing them is
+      // deleting a job, which has its own endpoint and its own guard.
+      const e = new Error('Only failed or done jobs can be cleared'); e.status = 400; throw e;
+    }
+
+    const { deletedCount } = await ClipperJob.deleteMany({ status });
+    res.json({ status: 'success', data: { deleted: deletedCount } });
   } catch (err) { fail(res, err); }
 });
 
@@ -1027,4 +1280,6 @@ module.exports._resetAgentPresenceForTests = () => {
   agentPresence.version = null;
   agentPresence.voices = [];
   agentPresence.mediaBaseUrl = null;
+  agentPresence.pid = null;
+  agentPresence.stopRequested = false;
 };

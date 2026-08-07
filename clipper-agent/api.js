@@ -34,8 +34,13 @@ async function call(path, { method = 'GET', body } = {}) {
   return json.data;
 }
 
+// The reply is not ignored: it is the only channel back to this process. The
+// agent opens no inbound port, so a stop request rides home on the heartbeat.
 const heartbeat = (version, voices, mediaBaseUrl) =>
-  call('/agent/heartbeat', { method: 'POST', body: { version, voices, mediaBaseUrl } });
+  call('/agent/heartbeat', {
+    method: 'POST',
+    body: { version, voices, mediaBaseUrl, pid: process.pid },
+  });
 const claimJob   = () => call('/agent/jobs');
 const reportProgress = (id, progress, stepLabel) =>
   call(`/agent/jobs/${id}/progress`, { method: 'POST', body: { progress, stepLabel } });

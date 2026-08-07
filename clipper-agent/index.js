@@ -42,6 +42,17 @@ async function runJob(job) {
     const handler = getHandler(job.type);
     const result = await handler({ job, progress });
     await reportResult(job._id, true, result ?? {});
+
+    // A voices job is the one thing that STARTS Voicebox, so it is also the
+    // moment this process first learns what profiles exist. Without adopting
+    // the answer, our own cache stays empty until the 60-second refresh
+    // happens to find Voicebox up — and every heartbeat in between reports
+    // "no profiles" for a machine that plainly has some.
+    if (job.type === 'voices' && Array.isArray(result?.voices) && result.voices.length) {
+      cachedVoices = result.voices;
+      log(`cached ${cachedVoices.length} voice profiles`);
+    }
+
     log(`job ${job._id} done`);
   } catch (err) {
     // Report the failure rather than swallowing it: the server decides whether
@@ -73,7 +84,16 @@ let mediaBaseUrl = null;
 
 async function beat() {
   try {
-    await heartbeat(pkg.version, cachedVoices, mediaBaseUrl);
+    const reply = await heartbeat(pkg.version, cachedVoices, mediaBaseUrl);
+
+    // A stop asked for from the UI. Handled exactly like Ctrl-C: the flag ends
+    // the poll loop after the current job, so a render that is minutes in still
+    // gets to write its file. The panel offers a force-stop for an agent that
+    // is wedged and never reads this.
+    if (reply?.stop && !stopping) {
+      log('stop requested from the admin panel - finishing current work…');
+      stopping = true;
+    }
   } catch (err) {
     // A missed heartbeat only means the pill in the UI goes grey. Log it once
     // per failure and carry on — the poll loop reports connectivity anyway.
