@@ -27,10 +27,11 @@ describe('grounding', () => {
     expect(messages[messages.length - 1].content).toContain('What does FLAG involve?');
   });
 
-  it('uses the generic OpenRouter key', async () => {
+  it('bills against the Community key, not the shared one', async () => {
+    // An exhausted key should stop the bot and nothing else.
     const callAi = aiReturning('ok');
     await generateBotReply({ question: 'hi', corpus: CORPUS, callAi });
-    expect(callAi.mock.calls[0][0].key).toBe('main');
+    expect(callAi.mock.calls[0][0].key).toBe('community');
   });
 
   it('refuses when no guide has been uploaded, without calling the model', async () => {

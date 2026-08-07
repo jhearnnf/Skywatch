@@ -7,7 +7,7 @@ import SEO from '../components/SEO'
 // filter row matches the tile order on the Admin stats page. Adding a key
 // backend-side without adding it here means its calls are logged but cannot be
 // filtered for on this page.
-const OPENROUTER_KEYS = ['main', 'aptitude', 'socials', 'casefiles', 'briefreel', 'clipper']
+const OPENROUTER_KEYS = ['main', 'aptitude', 'socials', 'casefiles', 'briefreel', 'clipper', 'community']
 
 const KEY_BADGE = {
   main:      'bg-brand-50 text-brand-700',
@@ -16,6 +16,7 @@ const KEY_BADGE = {
   casefiles: 'bg-violet-50 text-violet-700',
   briefreel: 'bg-sky-50 text-sky-700',
   clipper:   'bg-rose-50 text-rose-700',
+  community: 'bg-indigo-50 text-indigo-700',
 }
 
 const RANGE_PRESETS = [

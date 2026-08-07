@@ -99,9 +99,10 @@ async function generateAnnouncementDrafts({
   }
 
   const data = await callAi({
-    // The generic OpenRouter key — this is an occasional admin action, not a
-    // feature with its own budget line.
-    key: 'main',
+    // Community's own key. Drafting an announcement is a Community action even
+    // though only admins trigger it, so it bills where the rest of Community
+    // bills rather than against the shared key.
+    key: 'community',
     feature: 'announcements',
     body: {
       model,

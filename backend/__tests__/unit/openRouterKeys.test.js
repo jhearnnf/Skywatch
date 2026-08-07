@@ -109,3 +109,15 @@ describe('clipper calls are billed and logged', () => {
     }
   });
 });
+
+describe('the Community key', () => {
+  it('is registered, so its calls can be logged and filtered', () => {
+    // Everything downstream — the usage-log enum, the admin summary tiles, the
+    // spend page filters, the log query allowlist — is derived from this table.
+    // A key used backend-side but missing here bills silently: logUsage swallows
+    // write errors by design, so the cost never appears anywhere.
+    expect(OPENROUTER_KEY_NAMES).toContain('community');
+    expect(OPENROUTER_KEYS.community.env).toBe('OPENROUTER_KEY_COMMUNITY');
+    expect(OPENROUTER_KEYS.community.title).toBe('SkyWatch Community');
+  });
+});

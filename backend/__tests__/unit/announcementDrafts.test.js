@@ -79,13 +79,15 @@ describe('generateAnnouncementDrafts', () => {
     expect(callAi).not.toHaveBeenCalled();
   });
 
-  it('uses the generic OpenRouter key', async () => {
+  it('bills against the Community key', async () => {
+    // Drafting an announcement is a Community action even though only admins
+    // trigger it, so it bills where the rest of Community bills.
     const fetchCommits = jest.fn().mockResolvedValue([commit('aaa1111', 'Add a thing')]);
     const callAi = aiReturning('{"updates":[{"text":"A thing.","shas":["aaa1111"]}]}');
 
     await generateAnnouncementDrafts({ fetchCommits, callAi });
 
-    expect(callAi.mock.calls[0][0].key).toBe('main');
+    expect(callAi.mock.calls[0][0].key).toBe('community');
   });
 
   it('discards SHAs the model invented', async () => {

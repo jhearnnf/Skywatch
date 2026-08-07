@@ -480,7 +480,7 @@ async function generateBotReply({
   let data;
   try {
     data = await callAi({
-      key: 'main',
+      key: 'community',
       feature: 'chatbot',
       body: { model, messages, temperature: 0.2, max_tokens: 500 },
     });

@@ -21,6 +21,11 @@ const OPENROUTER_KEYS = {
   casefiles: { env: 'OPENROUTER_KEY_CASEFILES', title: 'SkyWatch Case Files' },
   briefreel: { env: 'OPENROUTER_KEY_BRIEFREEL', title: 'SkyWatch Brief Reel' },
   clipper:   { env: 'OPENROUTER_KEY_CLIPPER',   title: 'SkyWatch Clipper' },
+  // Everything Community bills: the guide bot answering @mentions and DMs, and
+  // the announcement drafter. Kept off `main` so a chat bot sitting in a public
+  // channel can never take the brief pipeline down with it — an exhausted key
+  // stops the bot and nothing else.
+  community: { env: 'OPENROUTER_KEY_COMMUNITY', title: 'SkyWatch Community' },
 };
 
 const OPENROUTER_KEY_NAMES = Object.keys(OPENROUTER_KEYS);
