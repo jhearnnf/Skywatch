@@ -2210,7 +2210,7 @@ router.get('/problems', async (req, res) => {
     const problems = await ProblemReport.find(filter)
       .populate('userId', 'email agentNumber displayName')
       .populate('reportedUserId', 'email agentNumber displayName chatBannedAt')
-      .populate('updates.adminUserId', 'agentNumber email')
+      .populate('updates.adminUserId', 'agentNumber email displayName')
       .populate('intelligenceBrief', 'title')
       .sort({ time: -1 });
 

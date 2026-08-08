@@ -4485,6 +4485,22 @@ function UsersTab({ API, onViewEmailHistory }) {
 // PROBLEMS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Who filed a report / left an update. Leads with whatever names the person —
+// their chosen display name, else their email — and keeps the agent number as a
+// trailing identifier, since it's what the Users list is searched by.
+//
+// A report row previously showed the agent number alone and fell back to
+// "Unknown agent" whenever it was absent, which hid the display name and email
+// the API already sends. `unknown` is only reached when the populate returned
+// nothing at all (a since-deleted account).
+function reportUserLabel(u, unknown = 'Unknown agent') {
+  if (!u) return unknown
+  const name = u.displayName || u.email
+  const agent = u.agentNumber ? `Agent ${u.agentNumber}` : null
+  if (name && agent) return `${name} · ${agent}`
+  return name || agent || unknown
+}
+
 function ProblemsTab({ API, onOpenBrief }) {
   const { apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -4761,7 +4777,7 @@ function ProblemsTab({ API, onOpenBrief }) {
                   <p className="font-semibold text-slate-600 mb-1 uppercase tracking-wider text-[10px]">Original report</p>
                   <p className="whitespace-pre-wrap leading-relaxed">{p.description}</p>
                   <p className="mt-1 text-slate-600">
-                    {p.userId?.agentNumber ? `Agent ${p.userId.agentNumber}` : 'Unknown agent'}
+                    {reportUserLabel(p.userId)}
                     {' · '}{new Date(p.time || p.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
                   </p>
                 </div>
@@ -4775,7 +4791,7 @@ function ProblemsTab({ API, onOpenBrief }) {
                         <p className="whitespace-pre-wrap leading-relaxed mb-1">{u.description}</p>
                         <p className="text-slate-600 flex items-center gap-2">
                           <span>
-                            {u.adminUserId?.agentNumber ? `Agent ${u.adminUserId.agentNumber}` : 'Admin'}
+                            {reportUserLabel(u.adminUserId, 'Admin')}
                             {' · '}{new Date(u.time).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
                           </span>
                           {u.isUserVisible && (
