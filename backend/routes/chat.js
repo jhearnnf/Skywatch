@@ -744,9 +744,22 @@ router.get('/conversations/:id/messages', async (req, res) => {
       deletedAt:      null,
       ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
     };
-    const [firstMention, unreadMentions] = await Promise.all([
+    const [firstMention, unreadMentions, dmTitle] = await Promise.all([
       ChatMessage.findOne(mentionFilter).sort({ createdAt: 1 }).select('_id createdAt').lean(),
       ChatMessage.countDocuments(mentionFilter),
+      // Name the other person, because the rail cannot always do it: the
+      // overview hides DMs with no messages, so a thread opened from the admin
+      // search would sit under a header reading "Chat" until the first reply.
+      (async () => {
+        if (convo.type !== 'dm') return null;
+        const otherId = (convo.participantIds ?? [])
+          .find(id => String(id) !== String(req.user._id));
+        if (!otherId) return null;
+        const other = await User.findById(otherId).select('displayName agentNumber').lean();
+        if (!other) return null;
+        return other.displayName
+          || (other.agentNumber ? `Agent #${other.agentNumber}` : null);
+      })(),
     ]);
 
     res.json({ status: 'success', data: {
@@ -776,7 +789,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
         isArchived: convo.isArchived,
         postPolicy: convo.channel?.postPolicy ?? 'everyone',
         adminOnly:  (convo.channel?.postPolicy ?? 'everyone') !== 'everyone',
-        title:      convo.type === 'channel' ? channelTitle(convo) : null,
+        title:      convo.type === 'channel' ? channelTitle(convo) : dmTitle,
       },
     } });
   } catch (err) {
@@ -1316,6 +1329,11 @@ router.post('/conversations/:id/read', async (req, res) => {
 // "Agent #1234567" in an autocomplete would turn the picker into a directory
 // of everyone who has ever signed up.
 const MENTION_SUGGESTION_LIMIT = 8;
+
+// Higher than the mention picker's: that one drops into a composer mid-sentence
+// and wants one obvious answer, whereas the admin search is a directory you
+// scroll to find the right "Alex".
+const ADMIN_USER_SEARCH_LIMIT = 20;
 
 router.get('/conversations/:id/mention-suggestions', async (req, res) => {
   try {

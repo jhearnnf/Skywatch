@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import BotBadge from '../../components/BotBadge'
+import AdminDmSearch from './components/AdminDmSearch'
 import { formatRelative, SUPPORT_LABEL } from './format'
 
 function Row({ to, icon, title, subtitle, preview, unread, timestamp, active }) {
@@ -84,7 +85,7 @@ function SectionLabel({ children }) {
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
   support, guides = [], channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
-  onStartSupport, onOpenBot,
+  onStartSupport, onOpenBot, onOpenDm,
 }) {
   return (
     <div className="flex-1 flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
@@ -196,6 +197,11 @@ export default function ChatSidebar({
         )}
 
         <SectionLabel>Direct messages</SectionLabel>
+
+        {/* Admins can start a thread with anyone, not just people who have
+            posted somewhere they can tap a name. */}
+        {isAdmin && <AdminDmSearch onOpenDm={onOpenDm} />}
+
         {dms.length === 0 ? (
           <p className="text-[11px] text-slate-400 px-3 pb-3">
             No direct messages. Tap someone&rsquo;s name in a channel to message them.

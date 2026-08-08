@@ -70,20 +70,27 @@ export default function ChatShell() {
   // calls it after you send or delete. Firing it on every 30s overview poll as
   // well just doubled up on requests that return the same answer.
 
-  // Opening a bot for the first time has no thread yet — create it, then go.
-  const openBot = async (botUserId) => {
+  // Open a DM with someone, creating the thread if this is the first one.
+  // Shared by the bot rows and the admin search, since POST /dm coalesces on
+  // the participant key either way.
+  const openDm = async (userId) => {
     const r = await apiFetch(`${API}/api/chat/dm`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: botUserId }),
+      body: JSON.stringify({ userId }),
     })
     const d = await r.json().catch(() => null)
-    if (d?.data?.conversation) {
-      refreshOverview()
-      navigate(`/chat/${d.data.conversation._id}`)
+    if (!r.ok || !d?.data?.conversation) {
+      throw new Error(d?.message || 'Could not open that conversation')
     }
+    refreshOverview()
+    navigate(`/chat/${d.data.conversation._id}`)
   }
+
+  // The bot rows have nowhere to show an error, and never had one — a failure
+  // there just leaves the rail as it was.
+  const openBot = (botUserId) => openDm(botUserId).catch(() => {})
 
   const startSupport = async () => {
     const r = await apiFetch(`${API}/api/chat/conversations`, {
@@ -128,6 +135,7 @@ export default function ChatShell() {
           isAdmin={Boolean(user?.isAdmin)}
           onStartSupport={startSupport}
           onOpenBot={openBot}
+          onOpenDm={openDm}
         />
       </div>
 
