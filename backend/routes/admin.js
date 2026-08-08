@@ -2223,10 +2223,23 @@ router.get('/problems', async (req, res) => {
 // POST /api/admin/problems/:id/update
 router.post('/problems/:id/update', async (req, res) => {
   try {
-    const { description, solved, notifyUser, sendEmail } = req.body;
+    const { description, solved, notifyUser, sendEmail, sendNotification } = req.body;
 
     const isUserVisible = notifyUser === true;
-    const updateEntry   = { adminUserId: req.user._id, description, isUserVisible, emailSent: false };
+    // Email and in-app notification are independent channels — an admin can pick
+    // either or both. `sendNotification` is absent on clients built before the
+    // split (cached web bundles, un-updated native installs); for those, fall
+    // back to the old either/or so their requests keep behaving as they did.
+    const wantEmail  = isUserVisible && sendEmail === true;
+    const wantNotif  = isUserVisible && (sendNotification === undefined ? sendEmail !== true : sendNotification === true);
+
+    const updateEntry = {
+      adminUserId: req.user._id,
+      description,
+      isUserVisible,
+      emailSent: false,
+      notificationSent: false,
+    };
 
     const mongoUpdate = { $push: { updates: updateEntry } };
     if (solved !== undefined) mongoUpdate.$set = { solved };
@@ -2236,8 +2249,9 @@ router.post('/problems/:id/update', async (req, res) => {
 
     if (isUserVisible && report?.userId) {
       const { email, agentNumber } = report.userId;
+      const idx = report.updates.length - 1;
 
-      if (sendEmail) {
+      if (wantEmail) {
         // Fire email — errors caught inside sendReportReplyEmail
         await sendReportReplyEmail({
           email,
@@ -2245,13 +2259,9 @@ router.post('/problems/:id/update', async (req, res) => {
           pageReported: report.pageReported,
           replyMessage: description,
         });
-        // Mark the update entry as email-sent
-        await ProblemReport.updateOne(
-          { _id: report._id },
-          { $set: { [`updates.${report.updates.length - 1}.emailSent`]: true } }
-        );
-      } else {
-        // In-app notification
+      }
+
+      if (wantNotif) {
         await UserNotification.create({
           userId:          report.userId._id,
           type:            'report_reply',
@@ -2259,6 +2269,18 @@ router.post('/problems/:id/update', async (req, res) => {
           message:         description,
           relatedReportId: report._id,
         });
+      }
+
+      // One write for whichever channels actually went out, so the update
+      // history can show both.
+      if (wantEmail || wantNotif) {
+        await ProblemReport.updateOne(
+          { _id: report._id },
+          { $set: {
+            ...(wantEmail ? { [`updates.${idx}.emailSent`]: true }        : {}),
+            ...(wantNotif ? { [`updates.${idx}.notificationSent`]: true } : {}),
+          } }
+        );
       }
     }
 

@@ -1770,6 +1770,48 @@ router.get('/admin/users/:userId/messages', adminOnly, async (req, res) => {
   }
 });
 
+// GET /api/chat/admin/users/search?q= — find anyone to DM, from the rail.
+//
+// Deliberately looser than /conversations/:id/mention-suggestions, which only
+// prefix-matches a display name: an admin is usually working from a support
+// ticket or a report, so they half-remember an agent number or an email rather
+// than the name someone chose. Substring match on all three, so typing "333"
+// finds agent 333111666.
+//
+// Bots are omitted — the rail already lists the ones that answer, and a poster
+// bot would only 400 on the way to a thread it can never reply in. Chat-banned
+// users are *kept*: talking to someone is often the point of the ban.
+router.get('/admin/users/search', adminOnly, async (req, res) => {
+  try {
+    const q = (req.query.q ?? '').toString().trim();
+    if (!q) return res.json({ status: 'success', data: { users: [] } });
+
+    const rx = new RegExp(escapeRegex(q), 'i');
+    const users = await User.find({
+      isBot:     { $ne: true },
+      isBanned:  { $ne: true },
+      _id:       { $ne: req.user._id },
+      $or: [{ displayName: rx }, { agentNumber: rx }, { email: rx }],
+    })
+      .select('displayName agentNumber isAdmin chatBannedAt')
+      .sort({ displayNameLower: 1 })
+      .limit(ADMIN_USER_SEARCH_LIMIT)
+      .lean();
+
+    res.json({ status: 'success', data: {
+      users: users.map(u => ({
+        _id:         u._id,
+        displayName: u.displayName ?? null,
+        agentNumber: u.agentNumber ?? null,
+        isAdmin:     Boolean(u.isAdmin),
+        chatBanned:  Boolean(u.chatBannedAt),
+      })),
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/chat/admin/conversations { userId } — start (or coalesce) a support chat
 router.post('/admin/conversations', adminOnly, async (req, res) => {
   try {

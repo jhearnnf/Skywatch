@@ -5,7 +5,12 @@ const problemReportUpdateSchema = new mongoose.Schema({
   time:          { type: Date, default: Date.now },
   description:   { type: String, required: true, trim: true },
   isUserVisible: { type: Boolean, default: false },
-  emailSent:     { type: Boolean, default: false },
+  // The two delivery channels are independent — an update can go out as both an
+  // email and an in-app notification. Rows written before `notificationSent`
+  // existed have no value for it; read them as `!emailSent`, which is exactly
+  // the either/or the route used to enforce.
+  emailSent:        { type: Boolean, default: false },
+  notificationSent: { type: Boolean, default: false },
 });
 
 const problemReportSchema = new mongoose.Schema({

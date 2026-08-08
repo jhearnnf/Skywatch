@@ -7,6 +7,7 @@
  *   POST /api/admin/problems/:id/update — add note and/or mark solved/reopened
  *   POST /api/admin/problems/:id/update + notifyUser=true — in-app notification
  *   POST /api/admin/problems/:id/update + sendEmail=true  — email delivery flag
+ *   POST /api/admin/problems/:id/update + both channels   — email AND in-app
  *   GET  /api/users/me/notifications  — fetch unread notifications
  *   POST /api/users/me/notifications/:id/read — mark notification read
  *
@@ -367,6 +368,97 @@ describe('POST /api/admin/problems/:id/update — sendEmail flag', () => {
 
     const count = await UserNotification.countDocuments({ userId: user._id });
     expect(count).toBe(0);
+  });
+});
+
+// ── Both channels at once ─────────────────────────────────────────────────────
+// Email and in-app used to be an either/or radio choice. They are now separate
+// checkboxes, so a reply can go out on both.
+
+describe('POST /api/admin/problems/:id/update — sendEmail + sendNotification', () => {
+  it('emails AND notifies when both channels are picked', async () => {
+    const admin  = await createAdminUser();
+    const user   = await createUser();
+    const report = await submitReport(user, { description: 'Scores not saving' });
+
+    const res = await request(app)
+      .post(`/api/admin/problems/${report._id}/update`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: 'Fixed and deployed', notifyUser: true, sendEmail: true, sendNotification: true });
+
+    expect(res.status).toBe(200);
+
+    const updated = await ProblemReport.findById(report._id);
+    expect(updated.updates[0].emailSent).toBe(true);
+    expect(updated.updates[0].notificationSent).toBe(true);
+
+    const notif = await UserNotification.findOne({ userId: user._id });
+    expect(notif.message).toBe('Fixed and deployed');
+  });
+
+  it('records the in-app channel on a notification-only reply', async () => {
+    const admin  = await createAdminUser();
+    const user   = await createUser();
+    const report = await submitReport(user, { description: 'Typo on brief' });
+
+    await request(app)
+      .post(`/api/admin/problems/${report._id}/update`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: 'Corrected', notifyUser: true, sendEmail: false, sendNotification: true });
+
+    const updated = await ProblemReport.findById(report._id);
+    expect(updated.updates[0].emailSent).toBe(false);
+    expect(updated.updates[0].notificationSent).toBe(true);
+  });
+
+  it('sends email only — no notification — when in-app is unticked', async () => {
+    const admin  = await createAdminUser();
+    const user   = await createUser();
+    const report = await submitReport(user, { description: 'Account question' });
+
+    await request(app)
+      .post(`/api/admin/problems/${report._id}/update`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: 'Replied by email', notifyUser: true, sendEmail: true, sendNotification: false });
+
+    const updated = await ProblemReport.findById(report._id);
+    expect(updated.updates[0].emailSent).toBe(true);
+    expect(updated.updates[0].notificationSent).toBe(false);
+    expect(await UserNotification.countDocuments({ userId: user._id })).toBe(0);
+  });
+
+  it('falls back to the old either/or for clients that omit sendNotification', async () => {
+    const admin  = await createAdminUser();
+    const user   = await createUser();
+    const report = await submitReport(user, { description: 'Old client report' });
+
+    // A cached web bundle or un-updated native install sends sendEmail alone.
+    await request(app)
+      .post(`/api/admin/problems/${report._id}/update`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: 'Emailed only', notifyUser: true, sendEmail: true });
+
+    const updated = await ProblemReport.findById(report._id);
+    expect(updated.updates[0].emailSent).toBe(true);
+    expect(updated.updates[0].notificationSent).toBe(false);
+    expect(await UserNotification.countDocuments({ userId: user._id })).toBe(0);
+  });
+
+  it('sends nothing when notifyUser is false, whatever the channel flags say', async () => {
+    const admin  = await createAdminUser();
+    const user   = await createUser();
+    const report = await submitReport(user, { description: 'Internal only' });
+
+    await request(app)
+      .post(`/api/admin/problems/${report._id}/update`)
+      .set('Cookie', authCookie(admin._id))
+      .send({ description: 'Admin note', notifyUser: false, sendEmail: true, sendNotification: true });
+
+    const updated = await ProblemReport.findById(report._id);
+    expect(updated.updates[0].isUserVisible).toBe(false);
+    expect(updated.updates[0].emailSent).toBe(false);
+    expect(updated.updates[0].notificationSent).toBe(false);
+    expect(await UserNotification.countDocuments({ userId: user._id })).toBe(0);
   });
 });
 

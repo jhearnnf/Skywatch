@@ -4501,6 +4501,15 @@ function reportUserLabel(u, unknown = 'Unknown agent') {
   return name || agent || unknown
 }
 
+// Which channels an update actually went out on. `notificationSent` is absent on
+// updates written before the channels could be combined — back then "not emailed"
+// meant "notified", so read a missing value that way rather than showing nothing.
+function deliveryBadge(u) {
+  const notified = u.notificationSent ?? !u.emailSent
+  if (u.emailSent && notified) return 'emailed + notified'
+  return u.emailSent ? 'emailed' : 'notified'
+}
+
 function ProblemsTab({ API, onOpenBrief }) {
   const { apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -4515,8 +4524,11 @@ function ProblemsTab({ API, onOpenBrief }) {
   const [expanded, setExpanded] = useState(null)
   const [updates,  setUpdates]  = useState({})       // { reportId: text }
   const [notify,   setNotify]   = useState({})        // { reportId: bool }
-  const [delivery, setDelivery] = useState({})        // { reportId: 'email'|'notif' }
-  const [confirm,  setConfirm]  = useState(null)      // { id, description, solved, sendEmail } | null
+  // { reportId: { notif: bool, email: bool } } — the two channels are
+  // independent, so a reply can go out as both. In-app is the default because
+  // it always lands; email can bounce.
+  const [delivery, setDelivery] = useState({})
+  const [confirm,  setConfirm]  = useState(null)      // { id, description, solved, sendEmail, sendNotification } | null
   const [busy,     setBusy]     = useState(null)
   const [toast,    setToast]    = useState('')
   const [tick,     setTick]     = useState(0)
@@ -4536,7 +4548,19 @@ function ProblemsTab({ API, onOpenBrief }) {
     ? problems.filter(p => p.description.toLowerCase().includes(search.toLowerCase()) || p.pageReported?.toLowerCase().includes(search.toLowerCase()))
     : problems
 
-  const executeUpdate = async ({ id, description, solved, notifyUser, sendEmail }) => {
+  const DELIVERY_DEFAULT = { notif: true, email: false }
+  const deliveryFor = (id) => delivery[id] ?? DELIVERY_DEFAULT
+  const setChannel  = (id, channel, on) =>
+    setDelivery(prev => ({ ...prev, [id]: { ...(prev[id] ?? DELIVERY_DEFAULT), [channel]: on } }))
+  // "Send update to user" is on but both channels are off — there is nothing to
+  // send, so the action buttons stay disabled rather than silently no-op.
+  const noChannelPicked = (id) => {
+    if (!notify[id]) return false
+    const { email, notif } = deliveryFor(id)
+    return !email && !notif
+  }
+
+  const executeUpdate = async ({ id, description, solved, notifyUser, sendEmail, sendNotification }) => {
     setBusy(id)
     setConfirm(null)
     await apiFetch(`${API}/api/admin/problems/${id}/update`, {
@@ -4545,7 +4569,7 @@ function ProblemsTab({ API, onOpenBrief }) {
       body: JSON.stringify({
         description,
         ...(solved !== undefined ? { solved } : {}),
-        ...(notifyUser ? { notifyUser: true, sendEmail } : {}),
+        ...(notifyUser ? { notifyUser: true, sendEmail, sendNotification } : {}),
       }),
     })
     setUpdates(p => ({ ...p, [id]: '' }))
@@ -4596,28 +4620,30 @@ function ProblemsTab({ API, onOpenBrief }) {
     await executeUpdate({ id: p._id, description: 'Chat ban lifted.', notifyUser: false })
   }
 
+  // Shared by both action buttons: a reply that's flagged to go to the user goes
+  // through the confirmation modal, an internal-only note doesn't.
+  const submitUpdate = (p, { description, solved }) => {
+    const notifyUser = notify[p._id] ?? false
+    if (!notifyUser) {
+      executeUpdate({ id: p._id, description, solved, notifyUser: false })
+      return
+    }
+    const { email, notif } = deliveryFor(p._id)
+    if (!email && !notif) return   // guarded in the UI; nothing to send
+    setConfirm({ id: p._id, description, solved, notifyUser, sendEmail: email, sendNotification: notif })
+  }
+
   const handleSaveNote = (p) => {
     const description = updates[p._id]
     if (!description?.trim()) return
-    const notifyUser = notify[p._id] ?? false
-    const sendEmail  = notifyUser && (delivery[p._id] ?? 'notif') === 'email'
-    if (notifyUser) {
-      setConfirm({ id: p._id, description, solved: undefined, notifyUser, sendEmail })
-    } else {
-      executeUpdate({ id: p._id, description, solved: undefined, notifyUser: false })
-    }
+    submitUpdate(p, { description, solved: undefined })
   }
 
   const handleToggleSolved = (p) => {
-    const description = updates[p._id]?.trim() || (p.solved ? 'Reopened' : 'Marked as solved')
-    const solved      = !p.solved
-    const notifyUser  = notify[p._id] ?? false
-    const sendEmail   = notifyUser && (delivery[p._id] ?? 'notif') === 'email'
-    if (notifyUser) {
-      setConfirm({ id: p._id, description, solved, notifyUser, sendEmail })
-    } else {
-      executeUpdate({ id: p._id, description, solved, notifyUser: false })
-    }
+    submitUpdate(p, {
+      description: updates[p._id]?.trim() || (p.solved ? 'Reopened' : 'Marked as solved'),
+      solved: !p.solved,
+    })
   }
 
   return (
@@ -4630,7 +4656,11 @@ function ProblemsTab({ API, onOpenBrief }) {
           <div className="bg-surface rounded-2xl shadow-xl border border-slate-700 max-w-md w-full p-6 space-y-4">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Confirm — send to user</h3>
             <p className="text-xs text-slate-600">
-              The user will receive the following {confirm.sendEmail ? 'via email' : 'as an in-app notification'}:
+              The user will receive the following {
+                confirm.sendEmail && confirm.sendNotification ? 'by email and as an in-app notification'
+                : confirm.sendEmail                           ? 'by email'
+                : 'as an in-app notification'
+              }:
             </p>
             <div className="bg-surface-raised border-l-4 border-brand-600 rounded-r-xl p-3 text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
               {confirm.description}
@@ -4796,7 +4826,7 @@ function ProblemsTab({ API, onOpenBrief }) {
                           </span>
                           {u.isUserVisible && (
                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${u.emailSent ? 'bg-violet-900/40 text-violet-300' : 'bg-sky-900/40 text-sky-300'}`}>
-                              {u.emailSent ? 'emailed' : 'notified'}
+                              {deliveryBadge(u)}
                             </span>
                           )}
                         </p>
@@ -4827,44 +4857,45 @@ function ProblemsTab({ API, onOpenBrief }) {
                   </label>
 
                   {(notify[p._id]) && (
-                    <div className="flex gap-4 pl-5 text-xs text-slate-700">
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`delivery-${p._id}`}
-                          value="notif"
-                          checked={(delivery[p._id] ?? 'notif') === 'notif'}
-                          onChange={() => setDelivery(prev => ({ ...prev, [p._id]: 'notif' }))}
-                          className="accent-brand-600"
-                        />
-                        In-app notification
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`delivery-${p._id}`}
-                          value="email"
-                          checked={(delivery[p._id] ?? 'notif') === 'email'}
-                          onChange={() => setDelivery(prev => ({ ...prev, [p._id]: 'email' }))}
-                          className="accent-brand-600"
-                        />
-                        Email
-                      </label>
-                    </div>
+                    <>
+                      <div className="flex gap-4 pl-5 text-xs text-slate-700">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={deliveryFor(p._id).notif}
+                            onChange={e => setChannel(p._id, 'notif', e.target.checked)}
+                            className="accent-brand-600"
+                          />
+                          In-app notification
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={deliveryFor(p._id).email}
+                            onChange={e => setChannel(p._id, 'email', e.target.checked)}
+                            className="accent-brand-600"
+                          />
+                          Email
+                        </label>
+                      </div>
+                      {noChannelPicked(p._id) && (
+                        <p className="pl-5 text-xs text-amber-400">Pick at least one way to reach them.</p>
+                      )}
+                    </>
                   )}
                 </div>
 
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleSaveNote(p)}
-                    disabled={busy === p._id || !updates[p._id]?.trim()}
+                    disabled={busy === p._id || !updates[p._id]?.trim() || noChannelPicked(p._id)}
                     className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {busy === p._id ? 'Saving…' : 'Save Note'}
                   </button>
                   <button
                     onClick={() => handleToggleSolved(p)}
-                    disabled={busy === p._id}
+                    disabled={busy === p._id || noChannelPicked(p._id)}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                       ${p.solved ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
                   >

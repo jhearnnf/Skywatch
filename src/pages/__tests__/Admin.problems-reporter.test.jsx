@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Admin from '../Admin'
 
@@ -137,3 +137,94 @@ describe('Admin ▸ Intel ▸ Reports — reporter byline', () => {
   })
 })
 
+// ── Replying to a report ───────────────────────────────────────────────────
+// Email and in-app used to be mutually exclusive radios; they are now
+// independent checkboxes, so a reply can go out on both at once.
+
+const reporter = { _id: 'u1', displayName: 'Falcon', email: 'falcon@test.com', agentNumber: '1234567' }
+
+async function startReply(note = 'We have fixed it') {
+  await openReport([makeProblem(reporter)])
+  fireEvent.change(await screen.findByPlaceholderText(/add admin note/i), { target: { value: note } })
+  fireEvent.click(screen.getByLabelText(/send update to user/i))
+}
+
+const channel = (name) => screen.getByLabelText(name)
+
+function sentBody() {
+  const call = global.fetch.mock.calls.find(
+    ([url, opts]) => url.includes('/api/admin/problems/') && opts?.method === 'POST',
+  )
+  return call ? JSON.parse(call[1].body) : null
+}
+
+describe('Admin ▸ Intel ▸ Reports — reply delivery channels', () => {
+  beforeEach(() => { global.Audio = class { play = vi.fn().mockResolvedValue(undefined) } })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('defaults to in-app only', async () => {
+    await startReply()
+    expect(channel(/in-app notification/i).checked).toBe(true)
+    expect(channel(/^email$/i).checked).toBe(false)
+  })
+
+  it('lets both channels be ticked at once', async () => {
+    await startReply()
+    fireEvent.click(channel(/^email$/i))
+
+    expect(channel(/in-app notification/i).checked).toBe(true)
+    expect(channel(/^email$/i).checked).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /save note/i }))
+    await screen.findByText(/by email and as an in-app notification/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+    await waitFor(() => expect(sentBody()).not.toBeNull())
+    expect(sentBody()).toMatchObject({ notifyUser: true, sendEmail: true, sendNotification: true })
+  })
+
+  it('sends email alone when in-app is unticked', async () => {
+    await startReply()
+    fireEvent.click(channel(/^email$/i))
+    fireEvent.click(channel(/in-app notification/i))
+
+    fireEvent.click(screen.getByRole('button', { name: /save note/i }))
+    await screen.findByText(/by email/i)
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+    await waitFor(() => expect(sentBody()).not.toBeNull())
+    expect(sentBody()).toMatchObject({ sendEmail: true, sendNotification: false })
+  })
+
+  it('blocks the reply while both channels are unticked', async () => {
+    await startReply()
+    fireEvent.click(channel(/in-app notification/i))   // leaves nothing ticked
+
+    expect(await screen.findByText(/pick at least one way to reach them/i)).toBeDefined()
+    expect(screen.getByRole('button', { name: /save note/i }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /mark solved/i }).disabled).toBe(true)
+  })
+
+  it('marks an update that went out both ways', async () => {
+    await openReport([makeProblem(reporter, { updates: [{
+      description: 'Fixed in build 42',
+      time: '2026-08-04T09:00:00Z',
+      adminUserId: { _id: 'admin1', displayName: 'Hawkeye', agentNumber: '7654321' },
+      isUserVisible: true,
+      emailSent: true,
+      notificationSent: true,
+    }] })])
+    expect(await screen.findByText('emailed + notified')).toBeDefined()
+  })
+
+  it('reads a pre-split update with no notificationSent as notified', async () => {
+    await openReport([makeProblem(reporter, { updates: [{
+      description: 'Legacy reply',
+      time: '2026-08-04T09:00:00Z',
+      adminUserId: { _id: 'admin1', agentNumber: '7654321' },
+      isUserVisible: true,
+      emailSent: false,
+    }] })])
+    expect(await screen.findByText('notified')).toBeDefined()
+  })
+})
