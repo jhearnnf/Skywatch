@@ -8,6 +8,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import usePagePresence from '../hooks/usePagePresence'
 import { useCbatDemo, useCbatDemoCanvas } from '../utils/cbat/demoMode'
 import { pickAim, steerInput, wobbleAt } from '../utils/cbat/actDemoPilot'
@@ -1453,6 +1454,12 @@ export default function CbatAct() {
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
+  // Desktop: let the round out of the shell's max-w-3xl so the tunnel can fill
+  // the screen (see body.cbat-act-wide in main.css). Held across 'callsign' as
+  // well as 'playing' — the arena is mounted behind that overlay, so widening
+  // only on 'playing' would resize it under the player as the round starts.
+  useGameBodyClass('cbat-act-wide', phase === 'callsign' || phase === 'playing')
+
   // Fetch personal best
   useEffect(() => {
     if (!user) return
@@ -1896,6 +1903,12 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
   const tutorialActive = state.tutorialActive
   const isTouch = useIsTouch()
 
+  // A demo mount lives inside a fixed 900×600 stage that is CSS-scaled into a
+  // card, so `lg:` — which reads the real browser window, not the stage — would
+  // hand it a viewport-sized arena and crop it. Demo tiles keep the max-w-2xl
+  // layout; see the same guard in useGameBodyClass.
+  const isDemo = !!useCbatDemo()
+
   // BLEEP press feedback is driven from JS, not CSS `:active`. On touch, the
   // `:active` pseudo-class only tracks the *primary* pointer, so a second
   // finger tapping BLEEP while the first is dragging the steer pad fires the
@@ -1924,7 +1937,15 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
   }, [])
 
   return (
-    <div className="w-full max-w-2xl">
+    // On lg+ the round drops the 2xl cap and sizes itself off the viewport
+    // height instead: the arena keeps its 4:3 shape, so the width that fits is
+    // (available height × 4/3). The 280px is everything else stacked around it
+    // — top bar 56, shell padding 60, page header 28, HUD row 24, BLEEP button
+    // 84, hint line 23 — so the round fills the screen without scrolling it.
+    // `max(42rem, …)` keeps a short window from making the arena any smaller
+    // than it is today; `min(100%, …)` keeps it inside the shell on a tall
+    // narrow one. Everything below lg is unchanged.
+    <div className={`w-full max-w-2xl${isDemo ? '' : ' lg:max-w-none lg:w-[min(100%,max(42rem,calc((100vh_-_280px)_*_4_/_3)))]'}`}>
       <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
         <span className="text-slate-400">Round <span className="text-brand-300">{roundIdx + 1}</span>/{TOTAL_ROUNDS}</span>
         <span className="text-slate-400">

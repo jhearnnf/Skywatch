@@ -351,6 +351,21 @@ body.community-selectable .app-shell-content * {
   }
 }
 
+/* ACT gameplay: same reasoning as DPT/RTT — the tunnel is the game, and inside
+   max-w-2xl it sits in a 672px letterbox with the rest of a widescreen monitor
+   unused. ACT keeps its 4:3 arena and grows it to whatever the viewport height
+   allows (see the lg: width on the round wrapper in src/pages/CbatAct.jsx), so
+   the shell has to stop capping it first. Toggled from CbatAct while the round
+   is on screen — the callsign phase included, so the arena is already at its
+   final size when the overlay lifts. */
+@media (min-width: 1024px) {
+  body.cbat-act-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
 /* ── RTT reticle ───────────────────────────────────────────────────────────
    Pinned to the centre of the sensor picture and sized as a PERCENTAGE of the
    arena height, not in pixels: the capture cone is an angle, the camera's
