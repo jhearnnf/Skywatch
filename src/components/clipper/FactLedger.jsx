@@ -136,7 +136,7 @@ export default function FactLedger({ facts, counts, ingested, onIngest, onRetire
 
       {!ingested ? (
         <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-xl p-4">
-          No reference guide ingested yet. Upload <code>CBAT_Complete_Guide_Public.html</code> to
+          No reference guide ingested yet. Upload <code>public/cbat-guide.html</code> to
           extract its findings, or re-ingest from the server file if you are running locally.
           Use the public edition, never the private one - anything ingested here can end up
           quoted in a published video.

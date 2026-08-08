@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 // Clipper reference source — one document per ingested reference guide.
 //
 // Why this exists rather than reading the guide off disk on demand: Railway
-// ships only `backend/`, so APPLICATION_INFO/chat_dumps/CBAT_Complete_Guide_Public.html
+// ships only `backend/`, so public/cbat-guide.html
 // does not exist in production (see project_railway_backend_only). Ingest is
 // therefore a one-off that accepts the guide's source text — pasted or uploaded
 // by an admin, or read from disk in local dev as a convenience — and everything

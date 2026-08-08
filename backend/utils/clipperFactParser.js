@@ -1,7 +1,7 @@
 // Clipper fact parser — extracts the source points for short-form video scripts
 // out of the CBAT reference guide.
 //
-// The guide (APPLICATION_INFO/chat_dumps/CBAT_Complete_Guide_Public.html) looks like a
+// The guide (public/cbat-guide.html) looks like a
 // document but is really a client-rendered data file: the content lives in a set
 // of top-level JS array literals inside its <script> block, and the page builds
 // itself from them at load time. So we do NOT parse the DOM — there is nothing
@@ -19,12 +19,18 @@ const vm   = require('vm');
 const path = require('path');
 const crypto = require('crypto');
 
-// The PUBLIC guide. There is also a private/admin edition
-// (CBAT_COMPLETE_GUIDE.HTML) in the same folder which carries real Discord
-// handles on every finding — it must never be the source for Clipper, because
-// anything ingested here can end up quoted in a published video.
+// The PUBLIC guide — the same file the site serves at /cbat-guide.html, which
+// is the only copy of it in version control. There is also a private/admin
+// edition (APPLICATION_INFO/chat_dumps/CBAT_COMPLETE_GUIDE.HTML) which carries
+// real Discord handles on every finding — it must never be the source for
+// Clipper, because anything ingested here can end up quoted in a published
+// video. clipperFactParser.test.js asserts this path is not that file.
+//
+// Local dev only: Railway ships just `backend/`, so this path does not exist in
+// production and ingest there goes through pasted or uploaded text instead.
+// See the note in models/ClipperSource.js.
 const DEFAULT_GUIDE_PATH = path.join(
-  __dirname, '..', '..', 'APPLICATION_INFO', 'chat_dumps', 'CBAT_Complete_Guide_Public.html',
+  __dirname, '..', '..', 'public', 'cbat-guide.html',
 );
 
 // The four arrays whose entries carry a `facts` list. `allFactArrays` in the

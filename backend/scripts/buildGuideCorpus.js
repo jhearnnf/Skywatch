@@ -25,7 +25,12 @@ const path = require('node:path');
 const { parseCbatGuide, renderGuideCorpus } = require('../utils/cbatGuideParser');
 
 const REPO = path.resolve(__dirname, '..', '..');
-const DEFAULT_IN = path.join(REPO, 'APPLICATION_INFO', 'chat_dumps', 'CBAT_Complete_Guide_Public.html');
+// public/cbat-guide.html is the one and only guide: it is what the site serves,
+// what gets bundled into the native builds, and the only copy in version
+// control. There used to be a second copy under APPLICATION_INFO/ that this
+// script defaulted to; the two silently drifted apart and a rebuild from the
+// stale one reverted live edits in the corpus. Don't reintroduce a second copy.
+const DEFAULT_IN = path.join(REPO, 'public', 'cbat-guide.html');
 const DEFAULT_OUT = path.join(REPO, 'APPLICATION_INFO', 'chat_dumps', 'CBAT_Guide_Minified.txt');
 
 function arg(flag, fallback) {

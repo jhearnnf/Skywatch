@@ -12,6 +12,7 @@
  */
 
 const fs = require('fs');
+const path = require('path');
 const {
   parseGuideSource,
   parseGuideFile,
@@ -161,6 +162,12 @@ describeIfGuide('the real public CBAT guide', () => {
   });
 
   it('points at the public guide, never the private one', () => {
-    expect(DEFAULT_GUIDE_PATH).toMatch(/Public\.html$/i);
+    // The private edition is the one with real handles on every finding. Assert
+    // against it by name rather than pattern-matching the public filename, so
+    // renaming or moving the public guide can never quietly satisfy this.
+    expect(DEFAULT_GUIDE_PATH).not.toMatch(/CBAT_COMPLETE_GUIDE\.HTML$/i);
+    expect(DEFAULT_GUIDE_PATH).not.toMatch(/APPLICATION_INFO/i);
+    expect(path.normalize(DEFAULT_GUIDE_PATH))
+      .toBe(path.normalize(path.join(__dirname, '..', '..', '..', 'public', 'cbat-guide.html')));
   });
 });
