@@ -27,6 +27,7 @@ vi.mock('../ChatThread', () => ({
 }))
 
 import ChatShell from '../ChatShell'
+import { clearChatCache, syncChatCacheOwner, fetchOverview } from '../../../utils/chatCache'
 
 const overview = (data) => {
   mockApiFetch.mockResolvedValue({ ok: true, json: async () => ({ status: 'success', data }) })
@@ -51,6 +52,10 @@ describe('ChatShell', () => {
     mockRefresh.mockReset()
     mockParams.value = {}
     document.body.className = ''
+    // The rail cache lives for the life of the page, so it outlives a test too.
+    // Each one starts cold unless it says otherwise.
+    syncChatCacheOwner(null)
+    clearChatCache()
   })
 
   it('renders the rail from a single overview call', async () => {
@@ -117,6 +122,68 @@ describe('ChatShell', () => {
     expect(screen.getByText('General')).toBeTruthy()
     expect(screen.getByText('Flight Deck')).toBeTruthy()
     expect(mockApiFetch).toHaveBeenCalledTimes(1)
+  })
+
+  // What "Community takes ages to load" actually was: the rail could not start
+  // fetching until you navigated, so the page sat blank for a round trip. It
+  // now paints whatever was last seen — from this session or from the nav
+  // prefetch — and lets the fetch below correct it.
+  describe('opening on a warm cache', () => {
+    it('paints the rail before its own fetch comes back', async () => {
+      syncChatCacheOwner('u1')
+      await fetchOverview('', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { support: null, channels: [CHANNEL], dms: [], viewer: VIEWER } }),
+      }))
+
+      // A refresh that never resolves — nothing on screen may depend on it.
+      mockApiFetch.mockReturnValue(new Promise(() => {}))
+      render(<ChatShell />)
+
+      expect(screen.getByText('General')).toBeTruthy()
+    })
+
+    it('shows a cold rail as loading, not as empty', () => {
+      mockApiFetch.mockReturnValue(new Promise(() => {}))
+      render(<ChatShell />)
+
+      // "No channels yet" is a different claim from "not fetched yet", and the
+      // wrong one to make while the request is still out.
+      expect(screen.queryByText(/No channels yet/)).toBeNull()
+      expect(screen.getAllByText('Loading…').length).toBeGreaterThan(0)
+    })
+
+    it('keeps a stale rail on screen when the refresh fails', async () => {
+      syncChatCacheOwner('u1')
+      await fetchOverview('', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { support: null, channels: [CHANNEL], dms: [], viewer: VIEWER } }),
+      }))
+
+      mockApiFetch.mockRejectedValue(new Error('Could not load chat'))
+      render(<ChatShell />)
+
+      await waitFor(() => expect(mockApiFetch).toHaveBeenCalled())
+      // Replacing a readable rail with an error page would be a downgrade —
+      // the 30s poll has always swallowed its own failures for the same reason.
+      expect(screen.getByText('General')).toBeTruthy()
+      expect(screen.queryByText('Could not load chat')).toBeNull()
+    })
+
+    it('never shows one viewer the rail cached for another', async () => {
+      syncChatCacheOwner('someone-else')
+      await fetchOverview('', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { support: null, channels: [CHANNEL], dms: [DM], viewer: VIEWER } }),
+      }))
+
+      // The mocked AuthContext viewer is u1, so the cache above is not theirs.
+      mockApiFetch.mockReturnValue(new Promise(() => {}))
+      render(<ChatShell />)
+
+      expect(screen.queryByText('General')).toBeNull()
+      expect(screen.queryByText('Viper')).toBeNull()
+    })
   })
 
   it('offers to start a support chat when none exists', async () => {

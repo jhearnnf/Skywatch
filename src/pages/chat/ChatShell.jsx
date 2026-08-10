@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
+import { fetchOverview, getCachedOverview, syncChatCacheOwner } from '../../utils/chatCache'
 import ChatSidebar from './ChatSidebar'
 import ChatThread from './ChatThread'
 
@@ -29,18 +30,21 @@ export default function ChatShell() {
   const { refresh: refreshUnread } = useChatUnread()
   const navigate = useNavigate()
 
-  const [data,    setData]    = useState(null)
-  const [loading, setLoading] = useState(true)
+  // Seeded from the last copy of the rail — either the one this session already
+  // fetched, or the one the nav prefetched when you hovered Community. The load
+  // below still runs and still wins; this only decides whether you look at the
+  // rail or at a spinner while it does. Read once, at mount, before any effect:
+  // the owner check has to happen before a stale rail can reach the screen.
+  const [data,    setData]    = useState(() => {
+    syncChatCacheOwner(user?._id)
+    return getCachedOverview()
+  })
+  const [loading, setLoading] = useState(() => !data)
   const [err,     setErr]     = useState('')
 
   useGameBodyClass('chat-wide')
 
-  const load = useCallback(async () => {
-    const r = await apiFetch(`${API}/api/chat/overview`, { credentials: 'include' })
-    const d = await r.json().catch(() => null)
-    if (!r.ok) throw new Error(d?.message || 'Could not load chat')
-    return d?.data ?? null
-  }, [API, apiFetch])
+  const load = useCallback(() => fetchOverview(API, apiFetch), [API, apiFetch])
 
   const refreshOverview = useCallback(() => {
     load().then(setData).catch(() => {})
@@ -114,10 +118,11 @@ export default function ChatShell() {
     return all.find(c => String(c._id) === String(conversationId))?.title ?? ''
   }, [conversationId, data])
 
-  if (loading) {
-    return <div className="text-center py-12 text-sm text-slate-400">Loading…</div>
-  }
-  if (err) {
+  // Only a genuinely cold rail — nothing cached, nothing prefetched — gets the
+  // whole page. With a copy to show, a failed refresh keeps the rail on screen
+  // rather than replacing it with an error, which is what the 30s poll above
+  // has always done with its own failures.
+  if (err && !data) {
     return <div className="text-center py-12 text-sm text-red-600">{err}</div>
   }
 
@@ -131,6 +136,10 @@ export default function ChatShell() {
           dms={data?.dms}
           bots={data?.bots}
           viewer={data?.viewer}
+          // Only true on a cold rail. Without it the empty lists would render
+          // as "No channels yet" — an answer, and the wrong one, to a question
+          // the request has not come back with.
+          loading={loading && !data}
           activeId={conversationId}
           isAdmin={Boolean(user?.isAdmin)}
           onStartSupport={startSupport}

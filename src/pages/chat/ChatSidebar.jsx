@@ -85,8 +85,14 @@ function SectionLabel({ children }) {
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
   support, guides = [], channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
-  onStartSupport, onOpenBot, onOpenDm,
+  loading = false, onStartSupport, onOpenBot, onOpenDm,
 }) {
+  // "No channels yet" and "Loading…" are different claims, and an empty prop
+  // cannot tell them apart on its own. Only a cold rail ever sees this — once
+  // anything has been fetched, the shell renders the last copy while it
+  // refreshes rather than emptying the sections out.
+  const placeholder = 'text-[11px] text-slate-400 px-3 pb-3'
+
   return (
     <div className="flex-1 flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
       {viewer?.chatBanned && (
@@ -112,6 +118,10 @@ export default function ChatSidebar({
             timestamp={support.lastMessageAt}
             active={String(activeId) === String(support._id)}
           />
+        ) : loading ? (
+          // Offering "start a chat" before the rail has loaded would invite
+          // someone with an open support thread to start a second one.
+          <p className={placeholder}>Loading…</p>
         ) : (
           <button
             type="button"
@@ -137,8 +147,10 @@ export default function ChatSidebar({
 
         <SectionLabel>Channels</SectionLabel>
         {channels.length === 0 ? (
-          <p className="text-[11px] text-slate-400 px-3 pb-3">
-            No channels yet. The SkyWatch team will open some soon.
+          <p className={placeholder}>
+            {loading
+              ? 'Loading…'
+              : 'No channels yet. The SkyWatch team will open some soon.'}
           </p>
         ) : channels.map(c => (
           <Row
@@ -203,8 +215,10 @@ export default function ChatSidebar({
         {isAdmin && <AdminDmSearch onOpenDm={onOpenDm} />}
 
         {dms.length === 0 ? (
-          <p className="text-[11px] text-slate-400 px-3 pb-3">
-            No direct messages. Tap someone&rsquo;s name in a channel to message them.
+          <p className={placeholder}>
+            {loading
+              ? 'Loading…'
+              : <>No direct messages. Tap someone&rsquo;s name in a channel to message them.</>}
           </p>
         ) : dms.map(d => (
           <Row

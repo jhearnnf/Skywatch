@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
+import { getCachedThread, setCachedThread } from '../../utils/chatCache'
 import MessageList from './components/MessageList'
 import ComposeBox from './components/ComposeBox'
 import DisplayNameGate from './components/DisplayNameGate'
@@ -20,10 +21,21 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
   const { refresh: refreshUnread } = useChatUnread()
   const navigate = useNavigate()
 
-  const [messages,     setMessages]     = useState([])
-  const [senders,      setSenders]      = useState({})
-  const [conversation, setConversation] = useState(null)
-  const [loading,      setLoading]      = useState(true)
+  // Whatever this thread last looked like, so switching back to a channel you
+  // have already opened paints instantly instead of blanking. ChatShell keys
+  // this component on the conversation, so these initialisers re-run per thread
+  // and each one gets its own cached copy or nothing.
+  //
+  // The read state below is deliberately NOT seeded: it is frozen at entry to
+  // place the "new messages" divider, and a divider drawn from the last visit
+  // would sit in the wrong place until the fetch corrected it. Better to draw
+  // it once, late, than to draw it wrong first.
+  const cached = getCachedThread(conversationId)
+
+  const [messages,     setMessages]     = useState(cached?.messages     ?? [])
+  const [senders,      setSenders]      = useState(cached?.senders      ?? {})
+  const [conversation, setConversation] = useState(cached?.conversation ?? null)
+  const [loading,      setLoading]      = useState(!cached)
   const [busy,         setBusy]         = useState(false)
   const [err,          setErr]          = useState('')
   const [needsName,    setNeedsName]    = useState(false)
@@ -52,7 +64,16 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
     })
     const d = await r.json().catch(() => null)
     if (!r.ok) throw new Error(d?.message || 'Could not load this conversation')
-    return d?.data ?? { messages: [], conversation: null, senders: {} }
+    const data = d?.data ?? { messages: [], conversation: null, senders: {} }
+    // Cached here rather than at each call site so every path that refreshes
+    // the thread — the poll, a moderator delete, the mention jump — leaves the
+    // cache agreeing with the screen.
+    setCachedThread(conversationId, {
+      messages:     data.messages,
+      senders:      data.senders ?? {},
+      conversation: data.conversation,
+    })
+    return data
   }, [API, apiFetch, conversationId])
 
   const markRead = useCallback(() => {
