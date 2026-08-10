@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import LeaderboardRow, { rowCols, rowPad } from '../components/LeaderboardRow'
-import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_GROUPS } from '../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_GROUPS, cbatTitleWithDifficulty } from '../data/cbatGames'
 import LeaderboardIntro, { INTRO_PILL_LAYOUT_ID } from '../components/LeaderboardIntro'
 import CbatProgressChart from '../components/CbatProgressChart'
 import { cbatTrend, cbatTrendPhrase } from '../utils/cbatProgress'
@@ -266,6 +266,8 @@ export default function CbatLeaderboard() {
   const cfg = CBAT_LEADERBOARD_CONFIG[gameKey]
   const planeTurnMode = cfg?.planeTurnMode ?? null
   const difficultyPills = cfg?.difficultyGroup ? CBAT_DIFFICULTY_GROUPS[cfg.difficultyGroup] : null
+  // For anywhere the pills aren't on screen to say which board this is.
+  const boardTitle = cbatTitleWithDifficulty(gameKey, cfg?.title)
 
   // Arrival animation: the "This Week" card floats up into this tab on every
   // mount, then (only when arriving straight from a game) the user's row slides
@@ -407,7 +409,10 @@ export default function CbatLeaderboard() {
 
   return (
     <div className="cbat-leaderboard-page">
-      <SEO title={`${cfg.title} Leaderboard — CBAT`} description={`Top scores for ${cfg.title}`} />
+      {/* Difficulty-qualified, unlike the <h1> below: the two boards are two
+          routes with two sets of scores, and in a tab strip or a search result
+          there are no pills alongside to say which one this is. */}
+      <SEO title={`${boardTitle} Leaderboard — CBAT`} description={`Top scores for ${boardTitle}`} />
 
       {!introDone && <LeaderboardIntro onDone={() => setIntroDone(true)} />}
 

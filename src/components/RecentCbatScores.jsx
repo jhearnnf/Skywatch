@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_GROUPS } from '../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_BY_KEY } from '../data/cbatGames'
 import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
 
 function timeAgo(iso) {
@@ -25,15 +25,11 @@ const EMOJI_BY_KEY = Object.fromEntries(
   Object.entries(CBAT_LEADERBOARD_CONFIG).map(([key, cfg]) => [key, cfg.emoji])
 )
 
-// gameKey → 'Easier' | 'Hard', for the games that ship a difficulty split. The
-// two difficulties are separate boards, so a score means nothing without
-// knowing which one it was set on. BOTH halves are chipped, not just Easier: a
-// bare "FLAG" sitting next to a "FLAG · Easier" row reads as ambiguous rather
-// than as Hard. Derived from the same table the leaderboard pills use, so a new
-// split game is labelled here automatically.
-const DIFFICULTY_BY_KEY = Object.fromEntries(
-  Object.values(CBAT_DIFFICULTY_GROUPS).flat().map(d => [d.gameKey, d.label])
-)
+// This feed shows the difficulty as its own chip rather than folded into the
+// title, so it reads the shared gameKey → 'Easier' | 'Hard' table directly
+// instead of going through cbatTitleWithDifficulty(). BOTH halves are chipped,
+// not just Easier: a bare "FLAG" sitting next to a "FLAG · Easier" row reads as
+// ambiguous rather than as Hard.
 
 export default function RecentCbatScores() {
   const { apiFetch, API, user } = useAuth()
@@ -96,7 +92,7 @@ export default function RecentCbatScores() {
         <div className="divide-y divide-[#1a3a5c]/50 max-h-[640px] overflow-y-auto">
           {rows.map((r) => {
             const emoji = EMOJI_BY_KEY[r.gameKey] || '🎯'
-            const difficulty = DIFFICULTY_BY_KEY[r.gameKey] || null
+            const difficulty = CBAT_DIFFICULTY_BY_KEY[r.gameKey] || null
             // Split games take the base title from the shared config — the
             // backend label carries its own "(Easier)" suffix, which would read
             // twice beside the chip (and is what truncates away first).

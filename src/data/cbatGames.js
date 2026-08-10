@@ -145,6 +145,31 @@ export const CBAT_DIFFICULTY_GROUPS = {
   ],
 }
 
+// gameKey → 'Easier' | 'Hard' for the games that ship a difficulty split;
+// undefined for the ones that don't. Derived from the pill table above rather
+// than hand-listed, so a new split game is covered by adding it there and
+// nothing else.
+export const CBAT_DIFFICULTY_BY_KEY = Object.fromEntries(
+  Object.values(CBAT_DIFFICULTY_GROUPS).flat().map(d => [d.gameKey, d.label])
+)
+
+// A game's name with its difficulty spelled out — "FLAG (Hard)",
+// "FLAG (Easier)", and a plain "Target" where the game has no split.
+//
+// BOTH halves are named, not just Easier. The two difficulties are separate
+// boards backed by separate collections, so a score means nothing without
+// knowing which one it was set on — and a bare "FLAG" sitting beside a
+// "FLAG (Easier)" reads as ambiguous rather than as Hard. Mirrors
+// cbatLabelWithDifficulty() in backend/constants/cbatGames.js.
+//
+// `baseTitle` overrides the board config's title, for the callers that already
+// hold a name from the API (a session's gameLabel) and only need the suffix.
+export function cbatTitleWithDifficulty(gameKey, baseTitle) {
+  const title = baseTitle ?? CBAT_LEADERBOARD_CONFIG[gameKey]?.title ?? gameKey
+  const difficulty = CBAT_DIFFICULTY_BY_KEY[gameKey]
+  return difficulty ? `${title} (${difficulty})` : title
+}
+
 // Admin-side list — one entry per backend cbatGameEnabled key. Diverges from
 // CBAT_GAMES at TRACE 1/2 and Visualisation 2D/3D: the hub shows one tile each
 // linking to a combined page, but the backend registry splits those keys into

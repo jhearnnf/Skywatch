@@ -168,6 +168,22 @@ describe('CbatGameHistory', () => {
     }
   })
 
+  // The pills for a split game sit side by side in that row, so a bare "FLAG"
+  // next to "FLAG (Easier)" reads as "all FLAG" rather than as the Hard board.
+  it('names the difficulty on both pills of every split game', async () => {
+    const mockFetch = makeFetch([makeSession()])
+    setup(mockFetch)
+    render(<CbatGameHistory />)
+    await waitFor(() => screen.getByText('All Games'))
+
+    const split = Object.entries(CBAT_LEADERBOARD_CONFIG).filter(([, c]) => c.difficultyGroup)
+    expect(split.length).toBeGreaterThan(0)
+    for (const [key] of split) {
+      expect(GAME_LABELS[key], `pill for "${key}" does not name its difficulty`)
+        .toMatch(/\((Easier|Hard)\)$/)
+    }
+  })
+
   it('filters by Trace 2', async () => {
     const mockFetch = makeFetch([makeSession()])
     setup(mockFetch)

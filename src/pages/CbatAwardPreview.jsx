@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
-import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, cbatTitleWithDifficulty } from '../data/cbatGames'
 import { AWARD_TIERS } from '../utils/cbatProgressAward'
 import CbatGameOver from '../components/CbatGameOver'
 
@@ -90,7 +90,7 @@ export default function CbatAwardPreview() {
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Players never see this card</p>
         </div>
         <p className="text-[11px] text-slate-400 mt-1">
-          Showing <span className="text-[#ddeaf8] font-bold">{cfg.title}</span> at the{' '}
+          Showing <span className="text-[#ddeaf8] font-bold">{cbatTitleWithDifficulty(run.gameKey, cfg.title)}</span> at the{' '}
           <span className="text-[#ddeaf8] font-bold">+{run.award.tier}%</span> tier. The score is
           made up; the progress and weekly panels below the award are your real data. Nothing here
           is saved.

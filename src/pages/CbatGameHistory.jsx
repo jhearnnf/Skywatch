@@ -6,6 +6,10 @@ import SEO from '../components/SEO'
 
 // Keyed by backend gameKey, mirroring the labels the backend CBAT_GAMES
 // registry uses. Drives the filter pills; must be extended when a game is added.
+//
+// A split game names BOTH its difficulties, matching cbatLabelWithDifficulty()
+// on the backend: these pills sit in one row, so an unqualified "FLAG" next to
+// "FLAG (Easier)" reads as "all FLAG" rather than as the Hard board.
 export const GAME_LABELS = {
   'plane-turn-2d':    'Trace Practise 2D',
   'plane-turn-3d':    'Trace Practise 3D',
@@ -15,7 +19,7 @@ export const GAME_LABELS = {
   'target':           'Target',
   'instruments':      'Instruments',
   'ant':              'Airborne Numerical Test',
-  'flag':             'FLAG',
+  'flag':             'FLAG (Hard)',
   'flag-easier':      'FLAG (Easier)',
   'visualisation-2d': 'Visualisation 2D',
   'visualisation-3d': 'Visualisation 3D',
@@ -23,14 +27,14 @@ export const GAME_LABELS = {
   'act':              'ACT',
   'trace-1':          'Trace 1',
   'trace-2':          'Trace 2',
-  'numerical-ops':    'Numerical Operations',
+  'numerical-ops':    'Numerical Operations (Hard)',
   'numerical-ops-easier': 'Numerical Operations (Easier)',
   'dad':              'Directions and Distances',
-  'sat':              'Situational Awareness Test',
+  'sat':              'Situational Awareness Test (Hard)',
   'sat-easier':       'Situational Awareness Test (Easier)',
-  'cut':              'Cognitive Updating Test',
+  'cut':              'Cognitive Updating Test (Hard)',
   'cut-easier':       'Cognitive Updating Test (Easier)',
-  'rtt':              'Rapid Tracking Test',
+  'rtt':              'Rapid Tracking Test (Hard)',
   'rtt-easier':       'Rapid Tracking Test (Easier)',
 }
 

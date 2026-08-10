@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useGameChrome } from '../context/GameChromeContext'
-import { CBAT_LEADERBOARD_CONFIG } from '../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, cbatTitleWithDifficulty } from '../data/cbatGames'
 import LeaderboardRow, { rowCols, rowPad } from './LeaderboardRow'
 import CbatProgressChart from './CbatProgressChart'
 import CbatProgressAward, { CbatDonationNote } from './CbatProgressAward'
@@ -530,7 +530,7 @@ export default function CbatGameOver({
             tier={award.tier}
             pct={award.pct}
             attempts={award.attempts}
-            gameTitle={cfg.title || gameKey}
+            gameTitle={cbatTitleWithDifficulty(gameKey, cfg.title)}
             gameEmoji={cfg.emoji || '📈'}
             onDismiss={() => setAwardDismissed(true)}
           />

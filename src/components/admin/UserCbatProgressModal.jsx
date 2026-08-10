@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import Overlay from '../ui/Overlay'
 import CbatProgressChart from '../CbatProgressChart'
 import { cbatTrend } from '../../utils/cbatProgress'
-import { CBAT_LEADERBOARD_CONFIG } from '../../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, cbatTitleWithDifficulty } from '../../data/cbatGames'
 
 // One user's CBAT score history, opened from the graph icon on the admin Users panel.
 //
@@ -110,7 +110,13 @@ export default function UserCbatProgressModal({ user, API, apiFetch, onClose }) 
   const cfg         = boardCfg(data?.gameKey)
   const formatScore = cfg.formatScore ?? ((s) => `${s}`)
   const lowerIsBetter = data?.lowerIsBetter ?? !!cfg.lowerIsBetter
-  const title       = cfg.title ?? data?.label ?? ''
+  // Difficulty-qualified: a split game charts two boards and the picker offers
+  // both, so the heading over the chart has to say which one is plotted.
+  // `cfg.title` is the bare name and takes the suffix here; `data.label` is the
+  // API's own label, which already carries it.
+  const title       = cfg.title
+    ? cbatTitleWithDifficulty(data?.gameKey, cfg.title)
+    : (data?.label ?? '')
   // Scores are whole numbers, but the averaged ends aren't — 1dp keeps "12.4/15" readable.
   const formatAvgScore = (v) => formatScore(Number(v.toFixed(1)))
 

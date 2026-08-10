@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import ImprovementChart from './ImprovementChart'
-import { CBAT_LEADERBOARD_CONFIG } from '../../data/cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, cbatTitleWithDifficulty } from '../../data/cbatGames'
 
 // Social proof for the landing page: three real players' score histories, each
 // picked at random from the top ten of that game's leaderboard by
@@ -77,7 +77,7 @@ function ProgressCard({ panel, index }) {
 
       <ImprovementChart
         series={panel.series}
-        game={cfg.title ?? panel.gameKey}
+        game={cbatTitleWithDifficulty(panel.gameKey, cfg.title)}
         lowerIsBetter={panel.lowerIsBetter}
         height={CHART_HEIGHT}
       />
