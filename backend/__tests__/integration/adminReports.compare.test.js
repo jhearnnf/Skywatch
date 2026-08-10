@@ -60,7 +60,7 @@ describe('GET /api/admin/reports/cbat — prior-period comparison', () => {
     // SAT — a registry-only addition — appears with prior-period figures.
     const sat = data.perGame.find(g => g.key === 'sat');
     expect(sat).toBeTruthy();
-    expect(sat.label).toBe('Situational Awareness Test');
+    expect(sat.label).toBe('Situational Awareness Test (Hard)');
     expect(sat.sessions).toBe(3);
     expect(sat.prevSessions).toBe(1);
     expect(sat.sessionsDelta).toBe(2);

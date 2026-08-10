@@ -5,6 +5,7 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
 const GameSessionCbatStart = require('../../models/GameSessionCbatStart');
+const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../../constants/cbatGames');
 
 let admin, cookie, u1, u2;
 
@@ -49,11 +50,15 @@ describe('GET /api/admin/reports/cbat — FLAG difficulties report separately', 
     const { data } = res.body;
 
     expect(data.gameKeys).toEqual(expect.arrayContaining(['flag', 'flag-easier']));
-    expect(data.gameLabels['flag']).toBe('FLAG');
+    // Both halves name their difficulty. The two sit in the same table and the
+    // same stacked chart, where a bare "FLAG" reads as "all FLAG", not as Hard.
+    expect(data.gameLabels['flag']).toBe('FLAG (Hard)');
     expect(data.gameLabels['flag-easier']).toBe('FLAG (Easier)');
 
     const hardRow = data.perGame.find(g => g.key === 'flag');
     const easyRow = data.perGame.find(g => g.key === 'flag-easier');
+    expect(hardRow.label).toBe('FLAG (Hard)');
+    expect(easyRow.label).toBe('FLAG (Easier)');
     expect(hardRow.sessions).toBe(1);
     expect(hardRow.players).toBe(1);
     expect(easyRow.sessions).toBe(2);
@@ -83,6 +88,39 @@ describe('GET /api/admin/reports/cbat — FLAG difficulties report separately', 
   });
 });
 
+// The two cases above pin FLAG and CUT by name because those are the ones an
+// admin reads most. This one covers the rest by walking the registry, so adding
+// a `-easier` entry without teaching the report to say "(Hard)" fails here
+// rather than shipping a chart legend nobody can read.
+describe('GET /api/admin/reports/cbat — every split game names both difficulties', () => {
+  it('labels each half of each split game, and leaves unsplit games bare', async () => {
+    const res = await request(app)
+      .get('/api/admin/reports/cbat?window=all')
+      .set('Cookie', cookie);
+
+    const { gameLabels } = res.body.data;
+    const easierKeys = Object.keys(CBAT_GAMES).filter(k => k.endsWith('-easier'));
+    expect(easierKeys.length).toBeGreaterThan(0);
+
+    for (const easierKey of easierKeys) {
+      const hardKey = easierKey.replace(/-easier$/, '');
+      expect(gameLabels[easierKey]).toContain('(Easier)');
+      expect(gameLabels[hardKey]).toBe(`${CBAT_GAMES[hardKey].label} (Hard)`);
+    }
+
+    for (const [key, cfg] of Object.entries(CBAT_GAMES)) {
+      if (key.endsWith('-easier') || CBAT_GAMES[`${key}-easier`]) continue;
+      expect(gameLabels[key]).toBe(cfg.label);
+    }
+
+    // And the table rows agree with the chart legend.
+    for (const row of res.body.data.perGame) {
+      if (row.isTutorial) continue;
+      expect(row.label).toBe(cbatLabelWithDifficulty(row.key));
+    }
+  });
+});
+
 describe('GET /api/admin/reports/cbat — CUT difficulties report separately', () => {
   const result = (score) => ({
     totalScore: score, totalTime: 180, tasksCompleted: 6, tasksMissed: 1, warningSeconds: 20,
@@ -100,7 +138,7 @@ describe('GET /api/admin/reports/cbat — CUT difficulties report separately', (
 
     const { data } = res.body;
     expect(data.gameKeys).toEqual(expect.arrayContaining(['cut', 'cut-easier']));
-    expect(data.gameLabels['cut']).toBe('Cognitive Updating Test');
+    expect(data.gameLabels['cut']).toBe('Cognitive Updating Test (Hard)');
     expect(data.gameLabels['cut-easier']).toBe('Cognitive Updating Test (Easier)');
     expect(data.perGame.find(g => g.key === 'cut').sessions).toBe(1);
     expect(data.perGame.find(g => g.key === 'cut-easier').sessions).toBe(1);

@@ -21,7 +21,7 @@
  * anyone ever set.
  */
 
-const { CBAT_GAMES } = require('../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { bestPerUserTop20, paddedFakesFrom, isBetterScore } = require('./cbatBoardRank');
 
 const CACHE_MS = 5 * 60 * 1000;
@@ -84,7 +84,10 @@ async function sweep() {
     for (const { userId, rank } of podium) {
       const key = String(userId);
       const list = holders.get(key) ?? [];
-      list.push({ gameKey, gameLabel: cfg.label, rank });
+      // Difficulty-qualified: an avatar medal is read one tooltip at a time
+      // ("Gold — FLAG"), with nothing beside it to say which board it was won
+      // on. Same label the Medals channel announces.
+      list.push({ gameKey, gameLabel: cbatLabelWithDifficulty(gameKey), rank });
       holders.set(key, list);
     }
   }

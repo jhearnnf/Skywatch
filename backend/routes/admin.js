@@ -17,7 +17,7 @@ const GameOrderOfBattle                   = require('../models/GameOrderOfBattle
 const GameFlashcardRecall                 = require('../models/GameFlashcardRecall');
 const GameSessionFlashcardRecallResult    = require('../models/GameSessionFlashcardRecallResult');
 const GameSessionWhereAircraftResult      = require('../models/GameSessionWhereAircraftResult');
-const { CBAT_GAMES }                      = require('../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { buildCbatProgress, parseProgressLimit, PROGRESS_MIN_FOR_CHART } = require('../utils/cbatProgressSeries');
 const GameSessionCbatStart                = require('../models/GameSessionCbatStart');
 const GameCaseFile                        = require('../models/GameCaseFile');
@@ -1618,6 +1618,9 @@ router.get('/users/:id/cbat-history', protect, adminOnly, async (req, res) => {
     const startsByGame = {};
     for (const s of allStarts) (startsByGame[s.gameKey] ??= []).push(s);
 
+    // gameLabel names the difficulty on both halves of a split game: the history
+    // list mixes every game together in one time-ordered feed, so a bare "FLAG"
+    // row sitting under a "FLAG (Easier)" one reads as ambiguous rather than as Hard.
     const sessions = [];
     cbatEntries.forEach(([gameKey, cfg], i) => {
       const starts   = (startsByGame[gameKey] ?? []).slice().sort((a, b) =>
@@ -1637,7 +1640,7 @@ router.get('/users/:id/cbat-history', protect, adminOnly, async (req, res) => {
           sessions.push({
             _id:              String(match._id),
             gameKey,
-            gameLabel:        cfg.label,
+            gameLabel:        cbatLabelWithDifficulty(gameKey),
             status:           'finished',
             startedAt:        start.startedAt,
             finishedAt:       match.createdAt,
@@ -1650,7 +1653,7 @@ router.get('/users/:id/cbat-history', protect, adminOnly, async (req, res) => {
           sessions.push({
             _id:              String(start._id),
             gameKey,
-            gameLabel:        cfg.label,
+            gameLabel:        cbatLabelWithDifficulty(gameKey),
             status:           'abandoned',
             startedAt:        start.startedAt,
             finishedAt:       null,
@@ -1668,7 +1671,7 @@ router.get('/users/:id/cbat-history', protect, adminOnly, async (req, res) => {
         sessions.push({
           _id:              String(f._id),
           gameKey,
-          gameLabel:        cfg.label,
+          gameLabel:        cbatLabelWithDifficulty(gameKey),
           status:           'finished',
           startedAt:        null,
           finishedAt:       f.createdAt,
@@ -1746,7 +1749,9 @@ router.get('/users/:id/cbat-progress', protect, adminOnly, async (req, res) => {
       if (!row?.attempts) return null;
       return {
         gameKey,
-        label: cfg.label,
+        // The picker lists both halves of a split game side by side, so each
+        // pill has to say which board it charts.
+        label: cbatLabelWithDifficulty(gameKey),
         attempts: row.attempts,
         chartable: row.attempts >= PROGRESS_MIN_FOR_CHART,
         firstPlayedAt: row.firstPlayedAt,
@@ -1783,7 +1788,7 @@ router.get('/users/:id/cbat-progress', protect, adminOnly, async (req, res) => {
         user: targetUser,
         games,
         gameKey,
-        label: cfg.label,
+        label: cbatLabelWithDifficulty(gameKey),
         lowerIsBetter: cfg.sortDir === 1,
         ...progress,
       },

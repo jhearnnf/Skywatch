@@ -10,7 +10,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const AppOpen = require('../models/AppOpen');
-const { CBAT_GAMES } = require('../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { OS_KEYS } = require('../constants/clientPlatforms');
 
 // Games whose names render greyed on the Reports page — tutorial/practice modes
@@ -24,6 +24,11 @@ const PRACTICE_GAME_KEYS = ['plane-turn-2d', 'plane-turn-3d'];
 // tutorial belongs to (what the GameSessionCbatTutorial rows store). Labels are
 // derived from CBAT_GAMES so a game rename can't leave the tutorial row stale.
 // Order here is the render order of the Tutorial Drop-off funnels.
+//
+// Deliberately the plain registry label, NOT cbatLabelWithDifficulty: a split
+// game has one tutorial shared by both difficulties (CbatFlag posts to
+// /cbat/flag/tutorial whichever difficulty is selected), so "FLAG (Hard)
+// (tutorial)" would name a row that doesn't exist.
 const TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat'];
 const TUTORIAL_GAMES = TUTORIAL_GAME_KEYS.map(gameKey => ({
   key: `${gameKey}-tutorial`,
@@ -187,7 +192,10 @@ async function cbatStreams(since, until = null) {
   return Promise.all(
     Object.entries(CBAT_GAMES).map(async ([key, g]) => ({
       key,
-      label: g.label,
+      // Names the difficulty on both halves of a split game. The report puts
+      // "FLAG" and "FLAG (Easier)" in the same table and the same stacked
+      // chart, where a bare "FLAG" reads as "all FLAG" rather than as Hard.
+      label: cbatLabelWithDifficulty(key),
       events: await dailyDistinctUsers(g.Model, 'createdAt', 'userId', since, g.modeFilter ?? {}, until),
       // also need raw count per day (sessions, not distinct-users)
       sessionsByDay: await dailyCount(g.Model, 'createdAt', since, g.modeFilter ?? {}, until),

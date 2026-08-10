@@ -20,7 +20,7 @@ const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
 const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
-const { CBAT_GAMES } = require('../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
@@ -3277,7 +3277,9 @@ router.get('/cbat/recent', protect, async (req, res) => {
         _id:         session._id,
         userId:      String(session.userId),
         gameKey,
-        gameLabel:   cfg.label,
+        // Difficulty-qualified, so the row names its board even where it isn't
+        // rendered through <RecentCbatScores> (which draws its own chip).
+        gameLabel:   cbatLabelWithDifficulty(gameKey),
         ...(isAdmin ? { email: u?.email || null } : {}),
         agentNumber: u?.agentNumber || null,
         displayName: u?.displayName || null,

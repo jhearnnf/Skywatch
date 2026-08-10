@@ -47,6 +47,25 @@ describe('getMedalHolders', () => {
     expect(mine[0].gameLabel).toBe(cfg().label);
   });
 
+  // An avatar medal is read one tooltip at a time ("Gold — FLAG"), with nothing
+  // beside it to say which of the two boards it was won on — so the label has to
+  // carry the difficulty, exactly as the Medals channel announcement does.
+  it('names the difficulty on both halves of a split game', async () => {
+    const hardCfg = CBAT_GAMES['flag'];
+    const easyCfg = CBAT_GAMES['flag-easier'];
+    const hardWinner = await createUser({ displayName: 'Falcon' });
+    const easyWinner = await createUser({ displayName: 'Viper' });
+    await hardCfg.Model.create({ userId: hardWinner._id, [hardCfg.primaryField]: 999999, totalTime: 60 });
+    await easyCfg.Model.create({ userId: easyWinner._id, [easyCfg.primaryField]: 999999, totalTime: 60 });
+
+    const holders = await getMedalHolders({ force: true });
+    const hardMedal = holders.get(String(hardWinner._id)).find(m => m.gameKey === 'flag');
+    const easyMedal = holders.get(String(easyWinner._id)).find(m => m.gameKey === 'flag-easier');
+
+    expect(hardMedal.gameLabel).toBe('FLAG (Hard)');
+    expect(easyMedal.gameLabel).toBe('FLAG (Easier)');
+  });
+
   it('counts a player once, not once per run', async () => {
     // The board is best-per-user; ten strong sessions occupy one row. Counting
     // documents would let one player take the whole podium.
