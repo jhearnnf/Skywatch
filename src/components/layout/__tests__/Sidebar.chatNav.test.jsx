@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 // The two rules this file exists to pin down:
@@ -43,12 +43,13 @@ vi.mock('../../../context/AppSettingsContext', () => ({
 }))
 
 import Sidebar from '../Sidebar'
+import { clearChatCache, syncChatCacheOwner, getCachedOverview } from '../../../utils/chatCache'
 
 const chatLink = () => document.querySelector('[data-nav="chat"]')
 const navLabels = () =>
   [...document.querySelectorAll('nav a')].map(a => a.textContent.replace(/[^\w ]/g, '').trim())
 
-function setupUser(overrides = {}) {
+function setupUser(overrides = {}, apiFetch = vi.fn()) {
   mockUseAuth.mockReturnValue({
     user: {
       _id: 'u1',
@@ -59,6 +60,8 @@ function setupUser(overrides = {}) {
       ...overrides,
     },
     logout: vi.fn(),
+    API: '',
+    apiFetch,
   })
 }
 
@@ -69,6 +72,8 @@ describe('Sidebar — chat nav entry', () => {
     mockChatEnabled.value = true
     mockChat.hasUnread = false
     mockUseAuth.mockReset()
+    syncChatCacheOwner(null)
+    clearChatCache()
   })
 
   it('shows chat with no open conversation', () => {
@@ -121,6 +126,49 @@ describe('Sidebar — chat nav entry', () => {
     mockUseAuth.mockReturnValue({ user: null, logout: vi.fn() })
     render(<Sidebar />)
     expect(chatLink()).toBeNull()
+  })
+
+  // Community's rail cannot start loading until you navigate, which is most of
+  // why it felt slow. Hovering the entry is a good enough signal of intent to
+  // start it early — and a bad enough one to spend a request on every visitor,
+  // hence "on intent" rather than "on app boot".
+  describe('prefetch on intent', () => {
+    const okOverview = () => vi.fn().mockResolvedValue({
+      ok: true, json: async () => ({ data: { channels: [{ _id: 'c1' }] } }),
+    })
+
+    it('warms the rail when the pointer reaches Community', async () => {
+      const apiFetch = okOverview()
+      setupUser({}, apiFetch)
+      render(<Sidebar />)
+
+      expect(apiFetch).not.toHaveBeenCalled()
+      fireEvent.mouseEnter(chatLink())
+
+      expect(apiFetch.mock.calls[0][0]).toMatch(/\/api\/chat\/overview$/)
+      await vi.waitFor(() => expect(getCachedOverview()).toBeTruthy())
+    })
+
+    it('does not warm it from any other nav entry', () => {
+      const apiFetch = okOverview()
+      setupUser({}, apiFetch)
+      render(<Sidebar />)
+
+      fireEvent.mouseEnter(screen.getByText('Home'))
+      fireEvent.mouseEnter(screen.getByText('Play'))
+      expect(apiFetch).not.toHaveBeenCalled()
+    })
+
+    it('fires once as the pointer crosses back and forth', () => {
+      const apiFetch = okOverview()
+      setupUser({}, apiFetch)
+      render(<Sidebar />)
+
+      fireEvent.mouseEnter(chatLink())
+      fireEvent.mouseEnter(chatLink())
+      fireEvent.focus(chatLink())
+      expect(apiFetch).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('shows the unread dot only when there is unread traffic', () => {

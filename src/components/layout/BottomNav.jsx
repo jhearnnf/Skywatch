@@ -9,6 +9,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
 import { getActiveNavTo } from '../../utils/navSections'
+import { prefetchOverview } from '../../utils/chatCache'
 import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, NATIVE_APP, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
@@ -33,7 +34,7 @@ const ADMIN_ITEM = { to: '/admin', emoji: '⚙️', label: 'Admin' }
 const CHAT_ITEM  = { to: '/chat',  emoji: '💬', label: 'Community' }
 
 export default function BottomNav() {
-  const { user } = useAuth()
+  const { user, API, apiFetch } = useAuth()
   const slim = useSlimMode()
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
@@ -96,12 +97,20 @@ export default function BottomNav() {
                 navigate('/learn-priority', target ? { state: { category: target } } : undefined)
               }
             : undefined
+          // Warmed on first touch rather than on tap, which on mobile is the
+          // ~100ms between finger down and finger up — small, but it is the
+          // whole of the gap the rail used to spend blank. See Sidebar.
+          const warmChat = to === '/chat' && user
+            ? () => prefetchOverview(API, apiFetch, user._id)
+            : undefined
           return (
             <NavLink
               key={to}
               ref={to === '/play' ? playBtnRef : undefined}
               data-nav={to === '/play' ? 'play' : isLearn ? 'learn' : undefined}
               to={slim || user || to === '/home' || to === '/rankings' ? to : '/login'}
+              onTouchStart={warmChat}
+              onMouseEnter={warmChat}
               onClick={handleLearnClick}
               className={`relative flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
                 ${isAdminItem

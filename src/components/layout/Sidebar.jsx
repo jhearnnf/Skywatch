@@ -9,6 +9,7 @@ import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
 import { isLocalEnvironment } from '../../utils/localEnvironment'
+import { prefetchOverview } from '../../utils/chatCache'
 import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, NATIVE_APP, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
@@ -40,7 +41,7 @@ function CrosshairLogo() {
 }
 
 export default function Sidebar() {
-  const { user, logout } = useAuth()
+  const { user, logout, API, apiFetch } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const slim = useSlimMode()
@@ -85,11 +86,21 @@ export default function Sidebar() {
               }
             : undefined
           const isActive = activeNavTo === to
+          // Community's rail is a request the page cannot start until you
+          // navigate, so it is the one entry worth warming on intent. Pointing
+          // at it buys the fetch most of a second before the click lands, and
+          // costs nothing for the many sessions that never come near it.
+          const warmChat = isChat && user
+            ? () => prefetchOverview(API, apiFetch, user._id)
+            : undefined
           return (
             <Link
               key={to}
               data-nav={isPlay ? 'play' : isLearn ? 'learn' : isChat ? 'chat' : undefined}
               to={to}
+              onMouseEnter={warmChat}
+              onFocus={warmChat}
+              onTouchStart={warmChat}
               onClick={handleLearnClick}
               aria-current={isActive ? 'page' : undefined}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors outline-none focus:outline-none border
