@@ -15,14 +15,17 @@
 
 const { padLeaderboard } = require('./cbatFakeLeaderboard');
 
-// Rebuild the demo (fake) rows the all-time board would inject for one game, so a
-// score can be ranked against the SAME padded board a player sees — not just the
-// real sessions. Mirrors cbatLeaderboard's real-board pipeline (top-20 best-per-user)
-// so padLeaderboard's short-circuit / gap-fill logic matches: games where real
-// entries already fill the board get no fakes here either.
-async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
+// The visible all-time board's own pipeline: one row per user, their best,
+// top 20. Mirrors cbatLeaderboard's real-board query so padLeaderboard's
+// short-circuit / gap-fill logic matches whatever the player is actually shown.
+//
+// Exported separately from cbatPaddedFakes because a caller that wants BOTH the
+// real podium and the demo rows padded around it needs the same rows twice, and
+// deriving them twice is a second full aggregation over the score collection for
+// an answer already in hand.
+async function bestPerUserTop20(cfg) {
   const modeFilter = cfg.modeFilter ?? null;
-  const real = await cfg.Model.aggregate([
+  return cfg.Model.aggregate([
     ...(modeFilter ? [{ $match: modeFilter }] : []),
     { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
     {
@@ -37,7 +40,19 @@ async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
     { $limit: 20 },
     { $project: { _id: 0, userId: 1, bestScore: `$${cfg.primaryField}`, bestTime: '$totalTime' } },
   ]);
+}
+
+// The demo rows the board would inject around real rows you already have.
+// Games where real entries already fill the board get none.
+function paddedFakesFrom(real, gameKey, isAdmin) {
   return padLeaderboard(real, gameKey, { limit: 20, isAdmin }).filter(e => e.isFake);
+}
+
+// Rebuild the demo (fake) rows the all-time board would inject for one game, so a
+// score can be ranked against the SAME padded board a player sees — not just the
+// real sessions.
+async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
+  return paddedFakesFrom(await bestPerUserTop20(cfg), gameKey, isAdmin);
 }
 
 // The board's comparator, as a plain predicate: is `score`/`time` strictly better
@@ -97,4 +112,6 @@ async function rankOnPaddedBoard(gameKey, cfg, { score, time, excludeUserId = nu
   return (realBetter[0]?.n ?? 0) + fakesBetter + 1;
 }
 
-module.exports = { cbatPaddedFakes, rankOnPaddedBoard, isBetterScore };
+module.exports = {
+  cbatPaddedFakes, bestPerUserTop20, paddedFakesFrom, rankOnPaddedBoard, isBetterScore,
+};

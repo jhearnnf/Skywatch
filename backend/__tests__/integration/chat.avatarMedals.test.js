@@ -13,7 +13,7 @@ const { createUser, createSettings, authCookie } = require('../helpers/factories
 const ChatConversation = require('../../models/ChatConversation');
 const { CBAT_GAMES }   = require('../../constants/cbatGames');
 const {
-  getMedalHolders, medalsForUsers, resetMedalHoldersCache,
+  getMedalHolders, medalsForUsers, resetMedalHoldersCache, CACHE_MS,
 } = require('../../utils/cbatMedalHolders');
 
 const GAME_KEY = 'target';
@@ -93,6 +93,88 @@ describe('getMedalHolders', () => {
   it('returns nothing for a game nobody has played', async () => {
     const holders = await getMedalHolders({ force: true });
     expect(holders.size).toBe(0);
+  });
+});
+
+// The sweep is on the critical path of opening a channel — chat asks for medals
+// with every message fetch — so how it behaves around the cache is a
+// performance property worth pinning down, not an implementation detail.
+describe('the sweep', () => {
+  it('asks the database once per game, not once per half of the board', async () => {
+    const a = await createUser({ displayName: 'Falcon' });
+    await score(a, 999999);
+    resetMedalHoldersCache();
+
+    const spy = jest.spyOn(cfg().Model, 'aggregate');
+    try {
+      await getMedalHolders();
+      // The real podium and the demo rows padded around it come from the same
+      // top-20 best-per-user query. Deriving them separately ran it twice.
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('runs one sweep for concurrent callers rather than one each', async () => {
+    const a = await createUser({ displayName: 'Falcon' });
+    await score(a, 999999);
+    resetMedalHoldersCache();
+
+    const spy = jest.spyOn(cfg().Model, 'aggregate');
+    try {
+      // Every open thread polls every 5s, so an expired cache is hit by a burst
+      // of callers at once. They must queue behind one sweep, not start five.
+      const [x, y, z] = await Promise.all([
+        getMedalHolders(), getMedalHolders(), getMedalHolders(),
+      ]);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(x).toBe(y);
+      expect(y).toBe(z);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('serves the last podium while it refreshes, so nobody waits on an expired cache', async () => {
+    const holder = await createUser({ displayName: 'Falcon' });
+    await score(holder, 999999);
+    await getMedalHolders({ force: true });
+
+    // Someone overtakes, and the cache ages past its life.
+    const rival = await createUser({ displayName: 'Viper' });
+    await score(rival, 1000000);
+
+    const realNow = Date.now;
+    Date.now = () => realNow() + CACHE_MS + 1;
+    let stale;
+    try {
+      stale = await getMedalHolders();
+    } finally {
+      Date.now = realNow;
+    }
+
+    // Answered from the cache: the expired call did not wait for the sweep.
+    expect(stale.get(String(holder._id))[0].rank).toBe(1);
+    expect(stale.get(String(rival._id))).toBeUndefined();
+
+    // ...and the refresh it kicked off in the background does land.
+    let landed = null;
+    for (let i = 0; i < 50 && !landed; i++) {
+      await new Promise(r => setTimeout(r, 20));
+      landed = (await getMedalHolders()).get(String(rival._id));
+    }
+    expect(landed?.[0].rank).toBe(1);
+  });
+
+  it('waits when there is nothing cached to serve', async () => {
+    const a = await createUser({ displayName: 'Falcon' });
+    await score(a, 999999);
+    resetMedalHoldersCache();
+
+    // A cold cache has no stale answer, so the first caller gets the real one
+    // rather than an empty map.
+    expect((await getMedalHolders()).get(String(a._id))[0].rank).toBe(1);
   });
 });
 
