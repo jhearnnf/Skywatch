@@ -18,6 +18,7 @@ import { useSlimMode } from '../hooks/useSlimMode'
 import { NATIVE_APP } from '../utils/appMode'
 import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
+import { PLAY_STORE_URL, forceUpdateWebApp, isNativeUpdateAvailable } from '../utils/appUpdate'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
@@ -80,12 +81,18 @@ export default function Profile() {
   // on web (build-time stamp) and via a bridge round-trip on Android (the real
   // store versionName/versionCode), so both platforms show their true release.
   const [clientInfo,  setClientInfo]  = useState(null)
+  // Newest native release the server has seen, used only to decide whether the
+  // "Update app" link is worth showing. Stays null on web, which has no version
+  // to compare against — it force-refreshes instead.
+  const [latestRelease, setLatestRelease] = useState(null)
+  const [updateBusy,  setUpdateBusy]  = useState(false)
 
   useEffect(() => {
     let alive = true
     getClientInfo().then((info) => { if (alive && info) setClientInfo(info) })
     return () => { alive = false }
   }, [])
+
   const [diffBusy,    setDiffBusy]    = useState(false)
   const [showcaseBusy, setShowcaseBusy] = useState(false)
   const [communityNotifsBusy, setCommunityNotifsBusy] = useState(false)
@@ -98,6 +105,29 @@ export default function Profile() {
   const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials'
   const [namePulse,   setNamePulse]   = useState(false)
   const [resetDone,   setResetDone]   = useState(false)
+
+  // Only ask on native. On web the answer is unusable (a commit sha has no
+  // ordering) so the request would be pure waste on every profile visit.
+  useEffect(() => {
+    if (clientInfo?.platform !== 'android' && clientInfo?.platform !== 'ios') return
+    let alive = true
+    apiFetch(`${API}/api/users/latest-release`)
+      .then(r => r.json())
+      .then(d => { if (alive) setLatestRelease(d?.data?.latest ?? null) })
+      .catch(() => { /* offline or endpoint down — just don't offer the link */ })
+    return () => { alive = false }
+  }, [clientInfo?.platform, API, apiFetch])
+
+  const updateAvailable = isNativeUpdateAvailable(clientInfo, latestRelease)
+
+  // No finally/reset: forceUpdateWebApp ends by replacing the document, so the
+  // busy state is torn down with the page. Resetting it would only matter if
+  // the reload silently failed, and leaving the button disabled is the right
+  // outcome there anyway — a second press would do no more than the first.
+  const runForceUpdate = () => {
+    setUpdateBusy(true)
+    forceUpdateWebApp().catch(() => setUpdateBusy(false))
+  }
 
   // Tapping the agent name in the header jumps to Settings and briefly pulses
   // the Display Name card so the "Change" control is easy to find.
@@ -778,14 +808,57 @@ export default function Profile() {
       )}
 
       {/* Build stamp — last thing on the page, shown to everyone (incl. Android).
-          Full version + build in the tooltip helps diagnose stale-bundle reports. */}
+          Full version + build in the tooltip helps diagnose stale-bundle reports.
+
+          The stamp carries the update control, because the two belong together:
+          the version is the evidence, and the control is what to do about it.
+          Which control depends on what actually stands in the way — the Play
+          Store on Android, the service worker's cached bundle on web. */}
       {clientInfo && (
-        <p
-          className="mt-6 text-center text-[10px] text-slate-400"
-          title={`${clientInfo.platform} · v${clientInfo.version}${clientInfo.build ? ` · ${clientInfo.build}` : ''}`}
-        >
-          v{clientInfo.version}
-        </p>
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <p
+            className="text-center text-[10px] text-slate-400"
+            title={`${clientInfo.platform} · v${clientInfo.version}${clientInfo.build ? ` · ${clientInfo.build}` : ''}`}
+          >
+            v{clientInfo.version}
+          </p>
+
+          {updateAvailable ? (
+            <>
+              {/* Native: nothing in the app can install a build, so the honest
+                  control is a link to the store. Only rendered once we know a
+                  newer build exists — see isNativeUpdateAvailable. */}
+              <a
+                href={PLAY_STORE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors no-underline"
+              >
+                ⬆️ Update app
+              </a>
+              <p className="text-[11px] text-slate-400 text-center max-w-xs">
+                A newer version is available on Google Play.
+              </p>
+            </>
+          ) : clientInfo.platform === 'web' ? (
+            /* Web: styled like the Sign out / Delete account footer actions —
+               a rarely-needed escape hatch, not something to draw the eye. */
+            <>
+              <button
+                onClick={runForceUpdate}
+                disabled={updateBusy}
+                className="text-sm text-slate-400 hover:text-slate-600 transition-colors py-2 px-4 disabled:opacity-50"
+              >
+                {updateBusy ? 'Getting latest version…' : 'Get the latest version'}
+              </button>
+              <p className="text-[11px] text-slate-400 text-center max-w-xs">
+                Clears the saved copy of the app and reloads it. Use this if
+                something looks out of date. Offline games re-download the next
+                time you play.
+              </p>
+            </>
+          ) : null}
+        </div>
       )}
 
       {showDelete && <DeleteAccountModal onClose={() => setShowDelete(false)} />}
