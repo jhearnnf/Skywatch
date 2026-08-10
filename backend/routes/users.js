@@ -25,6 +25,7 @@ const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
 const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
+const { latestNativeReleases } = require('../utils/latestNativeReleases');
 const AppOpen = require('../models/AppOpen');
 
 // True when the request should be treated as "slim" (CBAT-only) mode, in which
@@ -370,6 +371,24 @@ router.get('/ranks', async (req, res) => {
   try {
     const ranks = await Rank.find({}).sort({ rankNumber: 1 });
     res.json({ status: 'success', data: { ranks } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/latest-release — newest native release per platform (public).
+//
+// Lets the installed app tell whether it is out of date and offer a store link.
+// Public on purpose: the response is a version string per platform, which is
+// exactly what the store listing already shows the world. It names no account
+// and carries no timestamp, so it stays inside the public-surface minimisation
+// rule rather than being an exception to it.
+//
+// Web is absent by design — see utils/latestNativeReleases.js. The site answers
+// staleness by force-refreshing the service worker, not by comparing versions.
+router.get('/latest-release', async (req, res) => {
+  try {
+    res.json({ status: 'success', data: { latest: await latestNativeReleases() } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

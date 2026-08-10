@@ -47,6 +47,7 @@ const { validateBriefTitleForCategory } = require('../utils/airframeValidation')
 const { reprioritizeCategory } = require('../utils/priorityRanking');
 const { lookupRankOrderByTitle } = require('../constants/rankOrder');
 const { NATIVE_PLATFORMS, OS_KEYS } = require('../constants/clientPlatforms');
+const { latestNativeReleases } = require('../utils/latestNativeReleases');
 const {
   compactRankOrder,
   setRankOrder: setLeadRankOrder,
@@ -1203,33 +1204,12 @@ async function enrichUsersWithStats(users) {
 }
 
 // The newest native release seen in the wild, per platform — the yardstick the
-// admin UI compares each account's last-known build against.
+// admin UI compares each account's last-known build against. Shared with the
+// app-facing GET /api/users/latest-release; see utils/latestNativeReleases.js
+// for why it is derived from heartbeats rather than configured.
 //
-// Derived from what users actually report rather than from configuration, so
-// there is nothing to remember to bump at release time. This is only sound
-// because Play/App Store rules require versionCode (Android) and build number
-// (iOS) to increase with every upload: the highest one anybody is running is
-// therefore the newest one that exists. Version *names* would not work here —
-// "1.10.0" sorts below "1.9.0" as a string, and nothing stops a name being
-// reused across builds.
-//
-// Web is deliberately absent: a commit sha has no ordering, so "latest web
-// build" cannot be derived this way. The admin's own browser answers that
-// question instead (see Admin › Users), since it is by definition running the
-// currently deployed bundle (NATIVE_PLATFORMS is imported at the top).
-
-async function latestNativeReleases() {
-  const entries = await Promise.all(NATIVE_PLATFORMS.map(async platform => {
-    const field = `lastClients.${platform}`;
-    const newest = await User.findOne({ [`${field}.buildNumber`]: { $ne: null } })
-      .sort({ [`${field}.buildNumber`]: -1 })
-      .select(field)
-      .lean();
-    const info = newest?.lastClients?.[platform];
-    return [platform, info ? { version: info.version, build: info.build } : null];
-  }));
-  return Object.fromEntries(entries);
-}
+// The admin's own browser answers the same question for web, since it is by
+// definition running the currently deployed bundle (see Admin › Users).
 
 // GET /api/admin/users — admins first, then oldest registration first
 router.get('/users', async (req, res) => {
