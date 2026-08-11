@@ -172,6 +172,13 @@ const userSchema = new mongoose.Schema(
 
     lastSeen: { type: Date, default: null },
 
+    // Which page they were on at that heartbeat, as a human label ("CBAT · ACT",
+    // "Reading a brief") — never the raw path. See backend/constants/
+    // presenceLocations.js for why: most of the interesting routes carry a
+    // record id, and this field would otherwise become a running log of what
+    // each user reads. Admin-only, and only ever shown alongside lastSeen.
+    lastLocation: { type: String, default: null },
+
     // Which build of the app this account was last running, kept per platform
     // so a user who plays on both keeps an answer for each — switching to the
     // phone must not erase what they were last on in the browser, and vice

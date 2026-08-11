@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
 import BotBadge from '../../components/BotBadge'
 import AdminDmSearch from './components/AdminDmSearch'
+import PresenceStrip, { OnlineDot } from './components/PresenceStrip'
 import { formatRelative, SUPPORT_LABEL } from './format'
 
-function Row({ to, icon, title, subtitle, preview, unread, timestamp, active }) {
+function Row({ to, icon, title, subtitle, preview, unread, timestamp, active, online = false }) {
   return (
     <Link
       to={to}
@@ -11,7 +12,12 @@ function Row({ to, icon, title, subtitle, preview, unread, timestamp, active }) 
       className={`flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 transition-colors
         ${active ? 'bg-brand-100' : 'hover:bg-slate-100'}`}
     >
-      <div className="text-lg leading-none pt-0.5 shrink-0">{icon}</div>
+      {/* The dot hangs off the icon rather than sitting beside the name, so it
+          cannot be mistaken for the red unread dot that lives there. */}
+      <div className="text-lg leading-none pt-0.5 shrink-0 relative">
+        {icon}
+        {online && <OnlineDot className="absolute -right-0.5 -bottom-0.5 w-2 h-2 ring-1 ring-surface" />}
+      </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className={`text-sm truncate ${unread ? 'font-extrabold text-slate-800' : 'font-bold text-slate-700'}`}>
@@ -86,6 +92,10 @@ function SectionLabel({ children }) {
 export default function ChatSidebar({
   support, guides = [], channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
   loading = false, onStartSupport, onOpenBot, onOpenDm,
+  // Admin-only presence. Empty for everyone else — ChatShell does not even fetch
+  // it — so the strip and the dots simply never appear rather than needing a
+  // second permission check per call site.
+  presence = null,
 }) {
   // "No channels yet" and "Loading…" are different claims, and an empty prop
   // cannot tell them apart on its own. Only a cold rail ever sees this — once
@@ -103,6 +113,13 @@ export default function ChatSidebar({
             {' '}You can still read, and you can still message the SkyWatch team.
           </p>
         </div>
+      )}
+
+      {/* Outside the scrolling column on purpose: presence is the one thing here
+          that changes minute to minute, so it stays put rather than scrolling
+          away behind a long channel list. */}
+      {presence?.enabled && (
+        <PresenceStrip online={presence.online} count={presence.count} />
       )}
 
       <div className="flex-1 overflow-y-auto">
@@ -230,6 +247,7 @@ export default function ChatSidebar({
             unread={d.unread}
             timestamp={d.lastMessageAt}
             active={String(activeId) === String(d._id)}
+            online={Boolean(d.otherUser && presence?.onlineIds?.has(String(d.otherUser._id)))}
           />
         ))}
       </div>

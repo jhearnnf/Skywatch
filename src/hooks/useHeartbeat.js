@@ -38,12 +38,24 @@ export default function useHeartbeat() {
       const opts   = authFetchOptions()
       const client = peekClientInfo()
 
+      // Which page they are on, for the admin presence strip in Community. Read
+      // from location at send time rather than taken from a router hook: the
+      // beat is on a timer, so "where are they now" is the only question worth
+      // answering, and depending on the router would re-subscribe this effect on
+      // every navigation to report something it would read again anyway.
+      //
+      // The pathname only — never the search or hash. The server maps it to a
+      // label and stores that, so nothing here is kept verbatim; see
+      // backend/constants/presenceLocations.js.
+      let path = null
+      try { path = window.location.pathname } catch { /* no location to read; presence still sends */ }
+
       try {
         await fetch(`${API}/api/users/heartbeat`, {
           method: 'POST',
           ...opts,
           headers: { ...(opts.headers ?? {}), 'Content-Type': 'application/json' },
-          body: JSON.stringify(client ? { client } : {}),
+          body: JSON.stringify({ ...(client ? { client } : {}), ...(path ? { path } : {}) }),
         })
       } catch {
         // ignore network errors silently

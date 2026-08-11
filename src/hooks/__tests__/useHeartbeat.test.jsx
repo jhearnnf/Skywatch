@@ -105,6 +105,7 @@ describe('useHeartbeat', () => {
     const opts = optsOf(global.fetch.mock.calls[0])
     expect(JSON.parse(opts.body)).toEqual({
       client: { platform: 'web', version: '1.2.3', build: 'a3f9c21' },
+      path: '/',
     })
     expect(opts.headers).toMatchObject({ 'Content-Type': 'application/json' })
   })
@@ -126,7 +127,42 @@ describe('useHeartbeat', () => {
     clientRef.value = null
     renderHook(() => useHeartbeat())
     expect(global.fetch).toHaveBeenCalledTimes(1)
-    expect(JSON.parse(optsOf(global.fetch.mock.calls[0]).body)).toEqual({})
+    expect(JSON.parse(optsOf(global.fetch.mock.calls[0]).body)).toEqual({ path: '/' })
+  })
+
+  // Feeds the admin presence strip in Community. The server turns the path into
+  // a label and stores only that — see backend/constants/presenceLocations.js.
+  describe('reporting which page they are on', () => {
+    const bodyOf = (i = 0) => JSON.parse(optsOf(global.fetch.mock.calls[i]).body)
+    const goTo = (path) => window.history.replaceState({}, '', path)
+
+    afterEach(() => { goTo('/') })
+
+    it('sends the current pathname', () => {
+      goTo('/cbat/act')
+      renderHook(() => useHeartbeat())
+      expect(bodyOf().path).toBe('/cbat/act')
+    })
+
+    it('sends the pathname only — never the query or hash', () => {
+      // A query string can carry search terms and ids, and neither is part of
+      // "what page are they on".
+      goTo('/admin?q=someone@example.com#users')
+      renderHook(() => useHeartbeat())
+      expect(bodyOf().path).toBe('/admin')
+    })
+
+    it('follows the user as they navigate, without resubscribing', () => {
+      goTo('/cbat')
+      renderHook(() => useHeartbeat())
+      expect(bodyOf(0).path).toBe('/cbat')
+
+      // The beat is on a timer and reads location when it fires, so a navigation
+      // needs no re-render and no router subscription to be reported.
+      goTo('/cbat/rtt')
+      act(() => { vi.advanceTimersByTime(30_000) })
+      expect(bodyOf(global.fetch.mock.calls.length - 1).path).toBe('/cbat/rtt')
+    })
   })
 
   it('stops sending after unmount', () => {

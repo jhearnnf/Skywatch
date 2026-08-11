@@ -3,6 +3,7 @@ const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const { effectiveTier } = require('../utils/subscription');
 const { clearShowcaseCache } = require('../utils/cbatShowcase');
+const { locationLabel } = require('../constants/presenceLocations');
 const GameSessionQuizResult              = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt             = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult     = require('../models/GameSessionOrderOfBattleResult');
@@ -770,6 +771,15 @@ router.post('/heartbeat', protect, async (req, res) => {
   try {
     const now    = new Date();
     const update = { lastSeen: now };
+
+    // Where they are, for the admin presence strip in Community. Resolved to a
+    // label here and stored as one — an unrecognised path stores null rather
+    // than the string, so a route we do not know about cannot leak its ids.
+    //
+    // Written unconditionally, including the null: a client that has navigated
+    // somewhere unlabelled must clear the last answer, not leave it showing the
+    // page they were on ten minutes ago as though they were still there.
+    update.lastLocation = locationLabel(req.body?.path);
 
     const client = sanitiseClientInfo(req.body?.client);
     if (client) {

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
+import useChatPresence from '../../hooks/useChatPresence'
 import { fetchOverview, getCachedOverview, syncChatCacheOwner } from '../../utils/chatCache'
 import ChatSidebar from './ChatSidebar'
 import ChatThread from './ChatThread'
@@ -43,6 +44,11 @@ export default function ChatShell() {
   const [err,     setErr]     = useState('')
 
   useGameBodyClass('chat-wide')
+
+  // Admin only, and gated here rather than inside the hook so a normal member
+  // never issues the request at all — see GET /api/chat/presence for why members
+  // do not get this yet.
+  const presence = useChatPresence(Boolean(user?.isAdmin))
 
   const load = useCallback(() => fetchOverview(API, apiFetch), [API, apiFetch])
 
@@ -142,6 +148,7 @@ export default function ChatShell() {
           loading={loading && !data}
           activeId={conversationId}
           isAdmin={Boolean(user?.isAdmin)}
+          presence={presence}
           onStartSupport={startSupport}
           onOpenBot={openBot}
           onOpenDm={openDm}
@@ -155,6 +162,7 @@ export default function ChatShell() {
             conversationId={conversationId}
             title={activeTitle}
             displayNameRequired={Boolean(data?.viewer?.displayNameRequired)}
+            onlineIds={presence.onlineIds}
             onChanged={refreshOverview}
           />
         ) : (

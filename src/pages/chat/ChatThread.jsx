@@ -16,7 +16,12 @@ const POLL_MS = 5_000
 // The right-hand pane. Owns its own messages and polling; everything it knows
 // about the wider chat (its title, whether the viewer still needs a display
 // name) comes from ChatShell, which already has the overview.
-export default function ChatThread({ conversationId, title, displayNameRequired, onChanged }) {
+export default function ChatThread({
+  conversationId, title, displayNameRequired, onChanged,
+  // Admin-only presence, owned and polled by ChatShell so the rail and the
+  // thread mark the same people online off one request.
+  onlineIds = null,
+}) {
   const { user, API, apiFetch } = useAuth()
   const { refresh: refreshUnread } = useChatUnread()
   const navigate = useNavigate()
@@ -371,6 +376,7 @@ export default function ChatThread({ conversationId, title, displayNameRequired,
           conversationType={type}
           viewerIsAdmin={Boolean(user?.isAdmin)}
           senders={senders}
+          onlineIds={onlineIds}
           onOpenUser={setCardUserId}
           onReply={canPost ? setReplyTo : undefined}
           onReact={handleReact}

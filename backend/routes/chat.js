@@ -11,6 +11,7 @@ const ProblemReport    = require('../models/ProblemReport');
 const User             = require('../models/User');
 const { generateAnnouncementDrafts } = require('../utils/announcementDrafts');
 const { resolveSelectedBadges } = require('../utils/selectedBadge');
+const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT } = require('../constants/presence');
 const { medalsForUsers } = require('../utils/cbatMedalHolders');
 const BotKnowledge = require('../models/BotKnowledge');
 const { parseGuideUpload, renderGuideCorpus } = require('../utils/cbatGuideParser');
@@ -1782,6 +1783,63 @@ router.get('/admin/users/:userId/messages', adminOnly, async (req, res) => {
           conversationTitle: c?.type === 'channel' ? channelTitle(c) : null,
         };
       }),
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/chat/presence — who is online right now. Admin only.
+//
+// Reads the same `lastSeen` the heartbeat writes (POST /api/users/heartbeat) and
+// the same window the dashboard's Users Online tile counts, so the two can never
+// disagree. No new presence tracking: this is a view onto a signal the app has
+// been recording all along.
+//
+// Admin-only by deliberate choice, not by oversight. Telling every member who
+// else is currently online is a real disclosure about people — it says when
+// someone is at their computer — and nobody has agreed to it. Until there is an
+// appear-offline setting to opt out with, this stays behind adminOnly.
+//
+// `count` is the true total even when `online` has been capped, so a busy day
+// reports "62 online" and lists the 50 most recent rather than quietly claiming
+// there are 50.
+router.get('/presence', adminOnly, async (req, res) => {
+  try {
+    const since = new Date(Date.now() - PRESENCE_WINDOW_MS);
+    // Bots never heartbeat, so they cannot appear here anyway — excluded
+    // explicitly so that stays true if one ever gets a client. Banned accounts
+    // are dropped: an admin scanning who is around does not need them, and a DM
+    // dot next to one would invite a conversation the ban already ended.
+    const filter = { lastSeen: { $gte: since }, isBot: { $ne: true }, isBanned: { $ne: true } };
+
+    const [users, count] = await Promise.all([
+      User.find(filter)
+        .select('displayName agentNumber isAdmin lastSeen lastLocation')
+        .sort({ lastSeen: -1 })
+        .limit(PRESENCE_LIST_LIMIT)
+        .lean(),
+      User.countDocuments(filter),
+    ]);
+
+    res.json({ status: 'success', data: {
+      online: users.map(u => {
+        // The viewer is reading this strip from Community, so telling them they
+        // are in Community is the one row that carries no information. `isSelf`
+        // lets the client mark the row instead.
+        const isSelf = String(u._id) === String(req.user._id);
+        return {
+          _id:         u._id,
+          displayName: u.displayName ?? null,
+          agentNumber: u.agentNumber ?? null,
+          isAdmin:     Boolean(u.isAdmin),
+          isSelf,
+          lastSeen:    u.lastSeen ?? null,
+          location:    isSelf ? null : (u.lastLocation ?? null),
+        };
+      }),
+      count,
+      windowMs: PRESENCE_WINDOW_MS,
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });
