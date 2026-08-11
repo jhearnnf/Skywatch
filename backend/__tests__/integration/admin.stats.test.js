@@ -657,3 +657,50 @@ describe('GET /api/admin/stats — games.wta section', () => {
     expect(res.body.data.games.wta.totalSeconds).toBe(75);
   });
 });
+
+// ── donation funnel drill-down ───────────────────────────────────────────────
+
+describe('GET /api/admin/stats/donation-funnel', () => {
+  it('returns 401 for a guest and 403 for a non-admin', async () => {
+    const user = await createUser();
+    expect((await request(app).get('/api/admin/stats/donation-funnel')).status).toBe(401);
+    expect((await request(app)
+      .get('/api/admin/stats/donation-funnel')
+      .set('Cookie', authCookie(user._id))).status).toBe(403);
+  });
+
+  it('lists only the users who have seen or clicked, with their own counts', async () => {
+    const admin = await createAdminUser();
+    const seen  = await createUser({ displayName: 'Goose',    donationPrompt: { impressionCount: 3, dismissCount: 2 } });
+    const clicked = await createUser({ displayName: 'Maverick', donationPrompt: { impressionCount: 2, clickCount: 1 } });
+    await createUser({ displayName: 'Untouched' });
+
+    const res = await request(app)
+      .get('/api/admin/stats/donation-funnel')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    const names = res.body.data.users.map(u => u.displayName);
+    expect(names).not.toContain('Untouched');
+    expect(names).toContain('Goose');
+    expect(names).toContain('Maverick');
+
+    const mav = res.body.data.users.find(u => String(u._id) === String(clicked._id));
+    expect(mav).toMatchObject({ impressionCount: 2, clickCount: 1, dismissCount: 0 });
+    const gse = res.body.data.users.find(u => String(u._id) === String(seen._id));
+    expect(gse).toMatchObject({ impressionCount: 3, clickCount: 0, dismissCount: 2 });
+  });
+
+  // Clickers are the half worth reading, so they must not be buried under the impressions.
+  it('puts the clickers first', async () => {
+    const admin = await createAdminUser();
+    await createUser({ displayName: 'SawOnly', donationPrompt: { impressionCount: 9 } });
+    await createUser({ displayName: 'Clicker', donationPrompt: { impressionCount: 1, clickCount: 1 } });
+
+    const res = await request(app)
+      .get('/api/admin/stats/donation-funnel')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.map(u => u.displayName)).toEqual(['Clicker', 'SawOnly']);
+  });
+});

@@ -91,8 +91,17 @@ const MOCK_OPENROUTER = {
   },
 }
 
+const MOCK_FUNNEL = [
+  { _id: 'u1', agentNumber: 101, displayName: 'Maverick', email: 'mav@example.com', impressionCount: 2, clickCount: 1, dismissCount: 0, lastShownAt: '2026-08-01T10:00:00.000Z' },
+  { _id: 'u2', agentNumber: 102, displayName: 'Goose',    email: 'goose@example.com', impressionCount: 3, clickCount: 0, dismissCount: 2, lastShownAt: '2026-07-30T10:00:00.000Z' },
+]
+
 function setupFetch() {
   return vi.fn().mockImplementation((url) => {
+    // Ahead of the /api/admin/stats branch below — the drill-down URL is a prefix match on it.
+    if (url.includes('/api/admin/stats/donation-funnel')) {
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: MOCK_FUNNEL } }) })
+    }
     if (url.includes('/api/admin/stats')) {
       return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: MOCK_STATS }) })
     }
@@ -139,6 +148,34 @@ describe('Admin — Stats tab: donation funnel', () => {
     await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
     expect(screen.getByText(/nobody has seen the card yet/)).toBeInTheDocument()
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
+  })
+
+  // The tile is a summary of people, so it has to be able to name them.
+  it('opens the list of who saw and who clicked when the tile is clicked', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
+    expect(screen.queryByText('Maverick')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Donation Link'))
+
+    await waitFor(() => expect(screen.getByText('Maverick')).toBeInTheDocument())
+    expect(screen.getByText('Goose')).toBeInTheDocument()
+    expect(screen.getByText('clicked ×1')).toBeInTheDocument()
+    expect(screen.getByText(/seen ×3 · dismissed ×2/)).toBeInTheDocument()
+    // Someone who only ever saw it must not read as a click-through.
+    expect(screen.getByText('seen only')).toBeInTheDocument()
+  })
+
+  it('closes the list again on a second click', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Donation Link'))
+    await waitFor(() => expect(screen.getByText('Maverick')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Donation Link'))
+    await waitFor(() => expect(screen.queryByText('Maverick')).not.toBeInTheDocument())
   })
 })
 

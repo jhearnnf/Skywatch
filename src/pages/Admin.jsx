@@ -223,7 +223,10 @@ function StatCard({ label, value, sub, color = 'slate', disabled = false, delta,
         {showDelta && <DeltaBadge value={delta} good={deltaGood} />}
       </div>
       <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
-      {sub && <p className="text-[10px] opacity-50 mt-0.5 whitespace-nowrap">{sub}</p>}
+      {/* Wraps rather than nowrap: a card in the 4-up grid is ~160px wide and a
+          nowrap sub longer than that spilled straight out past the border. Cards
+          in a grid row stretch to a common height, so wrapping costs nothing. */}
+      {sub && <p className="text-[10px] opacity-50 mt-0.5 break-words">{sub}</p>}
     </div>
   )
 }
@@ -276,6 +279,83 @@ function StatsSection({ title, defaultOpen = false, children }) {
   )
 }
 
+// The people behind the Donation Link tile: who saw the card, and who clicked
+// through to the payment link.
+//
+// Fetched when the tile is opened rather than folded into /api/admin/stats —
+// the stats payload is refetched every 30 seconds by every admin who opens the
+// tab, and this is a drill-down almost none of those loads ask for.
+//
+// The tile counts people, so the list is one row per person carrying their own
+// impression/click totals, not one row per event.
+function DonationFunnelList({ API }) {
+  const { apiFetch } = useAuth()
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`${API}/api/admin/stats/donation-funnel`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (d.status === 'success') setRows(d.data.users ?? [])
+        else setError('Failed to load the donation funnel')
+      })
+      .catch(() => { if (!cancelled) setError('Failed to load the donation funnel') })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API])
+
+  if (error)  return <p className="mt-3 text-xs text-red-500">{error}</p>
+  if (!rows)  return <p className="mt-3 text-xs text-slate-400 animate-pulse">Loading donation funnel…</p>
+  if (!rows.length) {
+    return <p className="mt-3 text-xs text-slate-400">Nobody has seen the donation card yet.</p>
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+      <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          Saw the donation card
+        </p>
+        <p className="text-[10px] text-slate-400">
+          {rows.filter(r => r.clickCount > 0).length} clicked · {rows.length} saw it
+        </p>
+      </div>
+      <ul className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+        {rows.map(r => (
+          <li key={r._id} className="px-4 py-2.5 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800 truncate">
+                {r.displayName || r.email || '—'}
+                {r.agentNumber != null && (
+                  <span className="ml-1.5 font-mono font-normal text-slate-400">#{r.agentNumber}</span>
+                )}
+              </p>
+              <p className="text-[10px] text-slate-400 truncate">{r.email}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              {/* Clicking through is the whole point of the funnel, so it reads as a
+                  badge; everything else stays quiet grey supporting detail. */}
+              <p className="text-[10px] font-bold">
+                {r.clickCount > 0
+                  ? <span className="px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700">clicked ×{r.clickCount}</span>
+                  : <span className="text-slate-400">seen only</span>}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                seen ×{r.impressionCount}
+                {r.dismissCount > 0 && ` · dismissed ×${r.dismissCount}`}
+                {r.lastShownAt && ` · ${fmtDateTime(r.lastShownAt)}`}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   const { apiFetch } = useAuth()
   const { settings: appSettings } = useAppSettings()
@@ -287,6 +367,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   // site, the store release on native. Resolves synchronously on web; native
   // needs the bridge round-trip.
   const [clientInfo, setClientInfo] = useState(() => peekClientInfo())
+  const [showDonationFunnel, setShowDonationFunnel] = useState(false)
 
   // Refetched on an interval, not just on mount: Users Online is a live 5-minute
   // window, and the first read races the heartbeat that marks *this* admin as
@@ -391,15 +472,23 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             (it reports its own impression), so the rate is a real click-through rate rather than
             clicks over everyone who merely earned a milestone. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard
-            label="Donation Link"
-            value={`${fmtNum(users.donationLinkClicked ?? 0)} / ${fmtNum(users.donationCardSeen ?? 0)}`}
-            color="amber"
-            sub={users.donationCardSeen
-              ? `${Math.round((users.donationLinkClicked / users.donationCardSeen) * 100)}% of those who saw it clicked through`
-              : 'nobody has seen the card yet'}
-          />
+          <button
+            type="button"
+            onClick={() => setShowDonationFunnel(o => !o)}
+            aria-expanded={showDonationFunnel}
+            className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl [&>div]:flex-1"
+          >
+            <StatCard
+              label="Donation Link"
+              value={`${fmtNum(users.donationLinkClicked ?? 0)} / ${fmtNum(users.donationCardSeen ?? 0)}`}
+              color="amber"
+              sub={users.donationCardSeen
+                ? `${Math.round((users.donationLinkClicked / users.donationCardSeen) * 100)}% of those who saw it clicked through`
+                : 'nobody has seen the card yet'}
+            />
+          </button>
         </div>
+        {showDonationFunnel && <DonationFunnelList API={API} />}
       </StatsSection>
 
       {/* Server / Performance */}

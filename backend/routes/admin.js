@@ -624,6 +624,48 @@ router.get('/stats', async (_req, res) => {
   }
 });
 
+// GET /api/admin/stats/donation-funnel
+//
+// The names behind the Donation Link tile: who saw the card and who clicked
+// through. The tile counts people, so this lists people too — one row per user
+// with their own impression/click totals, rather than one row per event.
+//
+// Clickers first (they are the interesting half), then by most recently shown,
+// so the list opens on what just happened rather than on the oldest impression.
+router.get('/stats/donation-funnel', async (_req, res) => {
+  try {
+    const users = await User.find({
+      $or: [
+        { 'donationPrompt.impressionCount': { $gt: 0 } },
+        { 'donationPrompt.clickCount':      { $gt: 0 } },
+      ],
+    })
+      .select('agentNumber displayName email subscriptionTier donationPrompt')
+      .sort({ 'donationPrompt.clickCount': -1, 'donationPrompt.lastShownAt': -1 })
+      .limit(500)
+      .lean();
+
+    res.json({
+      status: 'success',
+      data: {
+        users: users.map(u => ({
+          _id:             u._id,
+          agentNumber:     u.agentNumber,
+          displayName:     u.displayName,
+          email:           u.email,
+          subscriptionTier: u.subscriptionTier,
+          impressionCount: u.donationPrompt?.impressionCount ?? 0,
+          clickCount:      u.donationPrompt?.clickCount ?? 0,
+          dismissCount:    u.donationPrompt?.dismissCount ?? 0,
+          lastShownAt:     u.donationPrompt?.lastShownAt ?? null,
+        })),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── OpenRouter usage ────────────────────────────────────────────────────────
 
 const OpenRouterUsageLog = require('../models/OpenRouterUsageLog');
