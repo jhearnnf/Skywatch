@@ -13,6 +13,9 @@ vi.mock('../../utils/appMode', () => ({
   get SLIM_APP() { return mockSlimApp.value },
 }))
 
+const mockCapture = vi.hoisted(() => vi.fn())
+vi.mock('../../lib/posthog', () => ({ captureEvent: mockCapture }))
+
 vi.mock('../../lib/net', () => ({ isOnline: () => true, onNetworkChange: () => () => {} }))
 vi.mock('../../lib/apiHealth', () => ({ getApiHealth: () => ({ status: 'ok' }), onApiHealthChange: () => () => {} }))
 vi.mock('../../lib/cbatOutbox', () => ({ pendingCount: async () => 0, onOutboxChange: () => () => {} }))
@@ -250,5 +253,83 @@ describe('CbatGameOver — award then, separately, the ask', () => {
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
     expect(apiFetch.mock.calls.filter(([u]) => String(u).includes('progress-award'))).toHaveLength(0)
+  })
+})
+
+// ── PostHog: shown → clicked as a funnel ─────────────────────────────────────────────────────
+//
+// Three distinct event names rather than one event with an `action` property, because PostHog
+// funnels are built from distinct events and shown → clicked is the funnel worth having.
+describe('CbatGameOver — donation ask analytics', () => {
+  const claimUrl = '/progress-award/claim'
+
+  function setup({ award = null, donate = null } = {}) {
+    const apiFetch = vi.fn().mockImplementation((url) => {
+      const u = String(url)
+      if (u.includes(claimUrl)) return Promise.resolve({ ok: true, json: async () => ({ data: { award, donate } }) })
+      return Promise.resolve({ ok: true, json: async () => ({ data: null }) })
+    })
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch })
+    return apiFetch
+  }
+
+  const props = {
+    gameKey: 'symbols', score: 14, scoreSaved: true, queued: false,
+    personalBest: { bestScore: 15, attempts: 12 }, onPlayAgain: vi.fn(),
+  }
+
+  const donationEvents = () => mockCapture.mock.calls.filter(([n]) => n.startsWith('donation_note_'))
+
+  it('fires donation_note_shown with the game and the milestone behind it', async () => {
+    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+    render(<CbatGameOver {...props}><div /></CbatGameOver>)
+
+    await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
+    // Nothing yet — the note is still behind the celebration, so nobody has seen it.
+    expect(donationEvents()).toHaveLength(0)
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+
+    expect(mockCapture).toHaveBeenCalledWith('donation_note_shown', {
+      gameKey: 'symbols', awardTier: 30, awardPct: 34, awardAttempts: 12, score: 14,
+    })
+  })
+
+  it('fires donation_note_clicked on the click-through and _dismissed on the ✕', async () => {
+    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+    const { unmount } = render(<CbatGameOver {...props}><div /></CbatGameOver>)
+
+    await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    fireEvent.click(screen.getByRole('link', { name: /support skywatch/i }))
+
+    expect(donationEvents().map(([n]) => n)).toEqual(['donation_note_shown', 'donation_note_clicked'])
+    unmount()
+
+    mockCapture.mockClear()
+    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+    render(<CbatGameOver {...props}><div /></CbatGameOver>)
+    await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
+
+    expect(donationEvents().map(([n]) => n)).toEqual(['donation_note_shown', 'donation_note_dismissed'])
+  })
+
+  // An admin checking the copy must not land in the funnel they are trying to read.
+  it('sends nothing from the admin preview', async () => {
+    setup()
+    render(
+      <CbatGameOver
+        {...props}
+        previewAward={{ award: { tier: 50, pct: 61, attempts: 22 }, donate: { url: 'https://ko-fi.com/x' } }}
+      >
+        <div />
+      </CbatGameOver>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }))
+    fireEvent.click(screen.getByRole('link', { name: /support skywatch/i }))
+    expect(donationEvents()).toHaveLength(0)
   })
 })

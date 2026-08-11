@@ -14,6 +14,7 @@ import { SLIM_APP } from '../utils/appMode'
 import { isOnline, onNetworkChange } from '../lib/net'
 import { onApiHealthChange, getApiHealth } from '../lib/apiHealth'
 import { onOutboxChange, pendingCount } from '../lib/cbatOutbox'
+import { captureEvent } from '../lib/posthog'
 
 // Shared CBAT game-completion screen. Every CBAT game renders this at
 // phase === 'results', passing its results breakdown as `children` (with its
@@ -209,6 +210,14 @@ const MIN_ATTEMPTS_FOR_CHART = 3
 // where neither `scoreSaved` nor `queued` ever flips — we query anyway after this
 // long rather than leaving the panels spinning forever.
 const SAVE_WAIT_FALLBACK_MS = 5000
+
+// PostHog names for the donation ask, one per action the note reports. Keyed by the same action
+// strings the server takes, so the analytics funnel and the admin funnel can never drift apart.
+const DONATION_EVENTS = {
+  shown:     'donation_note_shown',
+  clicked:   'donation_note_clicked',
+  dismissed: 'donation_note_dismissed',
+}
 
 // One plain-English verdict off a cbatTrend. The wording itself lives in cbatTrendPhrase so the
 // leaderboard's "You" tab reads a given delta exactly the same way this screen does.
@@ -482,13 +491,31 @@ export default function CbatGameOver({
 
   // Fire-and-forget: what the user did with the ask only affects whether we ask again later,
   // so a failed write costs one extra prompt in a month's time and is not worth surfacing.
+  //
+  // The same three actions also go to PostHog, as three separate event names rather than one event
+  // with an `action` property — shown → clicked is a funnel, and PostHog funnels are built from
+  // distinct events. The admin tile answers "how many"; these answer "who, on what page, having
+  // just done what", and give a handle for finding the session replays either side of the ask.
+  //
+  // $current_url, session id and person are attached by the SDK, so the properties here are only
+  // the things it cannot know: which game produced the milestone and how big that milestone was.
   const recordDonation = (action) => {
-    if (previewAward) return   // a preview must not write to the admin's real prompt state
+    if (previewAward) return   // a preview must not write to the admin's real prompt state — or their analytics
     apiFetch(`${API}/api/games/cbat/progress-award/donation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action }),
     }).catch(() => {})
+    const event = DONATION_EVENTS[action]
+    if (event) {
+      captureEvent(event, {
+        gameKey,
+        awardTier:     award?.tier ?? null,
+        awardPct:      award?.pct ?? null,
+        awardAttempts: award?.attempts ?? null,
+        score,
+      })
+    }
   }
 
   const formatScore = cfg.formatScore || ((s) => `${s}`)
