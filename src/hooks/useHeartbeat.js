@@ -4,11 +4,11 @@ import { getClientInfo, peekClientInfo } from '../utils/appVersion'
 
 const INTERVAL_MS = 30_000
 
-// Must stay >= the server's online window (5 minutes in GET /api/admin/stats).
-// When this was shorter, someone reading a page without touching the mouse went
-// quiet at 2 minutes and dropped out of the count at 5, so the dashboard showed
-// fewer people than were actually looking at it. Anything the server still
-// counts as online must keep sending.
+// Must stay under the server's online window (PRESENCE_WINDOW_MS, 10 minutes —
+// backend/constants/presence.js). When this was longer, someone reading a page
+// without touching the mouse went quiet at 2 minutes and dropped out of the
+// count, so the dashboard showed fewer people than were actually looking at it.
+// Anything the server still counts as online must keep sending.
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000
 
 export default function useHeartbeat() {

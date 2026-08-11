@@ -59,6 +59,7 @@ const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
 const { fetchRssHeadlines }    = require('../utils/rssFetcher');
+const { PRESENCE_WINDOW_MS }   = require('../constants/presence');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
 // Single source of truth for answer format rules and core question rules,
@@ -461,7 +462,9 @@ router.get('/stats', async (_req, res) => {
       donationCardSeen, donationLinkClicked,
     ] = await Promise.all([
       User.countDocuments(),
-      User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - 10 * 60 * 1000) } }),
+      // Same window as GET /api/chat/presence, from one constant — this tile and
+      // the community rail's presence strip must never report different numbers.
+      User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - PRESENCE_WINDOW_MS) } }),
       User.countDocuments({ subscriptionTier: 'free' }),
       User.countDocuments({ subscriptionTier: 'trial' }),
       // Silver/gold counts are restricted to real Stripe payers — excludes
