@@ -2,19 +2,27 @@ import { Suspense, useCallback, useState } from 'react'
 import Lighting from './Lighting'
 import ImmerseModel from './ImmerseModel'
 import PerimeterColliders from './PerimeterColliders'
+import SceneColliders from './SceneColliders'
 import CharacterController from '../character/CharacterController'
+import { SPAWN } from '../data/sceneColliders'
 
-const SPAWN = [0, 0, 0]
+// Set ?colliders=1 on /immerse to draw every collision box as a wireframe.
+// Read per render rather than at module load so arriving on the route by a
+// client-side navigation picks it up, not just a full page load.
+function debugColliders() {
+  if (typeof window === 'undefined') return false
+  return new URLSearchParams(window.location.search).get('colliders') === '1'
+}
 
 // Whole-world scene graph. Lighting + the authored scene.glb (auto-fitted to a
-// sensible scale, floor at y=0, centred on the origin) + the player. A perimeter
-// boundary is registered once the model reports its footprint so the player can
-// roam the floor but not walk out of the shell. No interactables are wired up to
-// the new scene yet — that comes later.
+// sensible scale, floor at y=0, centred on the origin) + the player. Once the
+// model reports its fit, two collider sets are registered: the hangar shell and
+// its props (SceneColliders), plus a perimeter at the model's outer footprint
+// that backstops the player inside the world should the shell ever not.
 
 export default function BaseScene() {
-  const [footprint, setFootprint] = useState(null)
-  const onFit = useCallback((fit) => setFootprint(fit.footprint), [])
+  const [fit, setFit] = useState(null)
+  const onFit = useCallback((f) => setFit(f), [])
 
   return (
     <>
@@ -27,7 +35,8 @@ export default function BaseScene() {
       <Suspense fallback={null}>
         <ImmerseModel onFit={onFit} />
       </Suspense>
-      {footprint ? <PerimeterColliders footprint={footprint} /> : null}
+      {fit ? <PerimeterColliders footprint={fit.footprint} /> : null}
+      {fit ? <SceneColliders fit={fit} debug={debugColliders()} /> : null}
       <CharacterController spawn={SPAWN} />
     </>
   )
