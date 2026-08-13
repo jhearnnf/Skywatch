@@ -60,3 +60,39 @@ describe('resolveMove', () => {
     expect(out.x).toBeCloseTo(2.1, 5)
   })
 })
+
+describe('circle colliders', () => {
+  it('blocks head-on, and the block narrows off-centre as a disc should', () => {
+    // r=2 disc at the origin, player radius 0.5 -> grown disc r=2.5.
+    registerCollider('drum', { x: 0, z: 0, r: 2 })
+    const headOn = resolveMove({ x: -6, z: 0 }, { x: 6, z: 0 }, 0.5)
+    expect(headOn.x).toBeCloseTo(-2.5, 6)
+    // Approaching 1.5 off-centre, the disc only reaches sqrt(2.5^2-1.5^2)=2.
+    const offset = resolveMove({ x: -6, z: 1.5 }, { x: 6, z: 0 }, 0.5)
+    expect(offset.x).toBeCloseTo(-2, 6)
+  })
+
+  it('lets the player walk past the corner a box would have blocked', () => {
+    // A box around this drum would deny (2.1, 2.1); the disc does not.
+    registerCollider('drum', { x: 0, z: 0, r: 2 })
+    const out = resolveMove({ x: 4, z: 2.1 }, { x: -1.9, z: 0 }, 0.5)
+    expect(out.x).toBeCloseTo(2.1, 6) // unobstructed
+  })
+
+  it('clears the character when it starts inside a disc', () => {
+    registerCollider('drum', { x: 0, z: 0, r: 2 })
+    const out = resolveMove({ x: 0.2, z: 0 }, { x: 0, z: 0 }, 0.5)
+    expect(Math.abs(out.x)).toBeCloseTo(2.5, 6)
+  })
+
+  it('resolves a mixed registry of rects and circles together', () => {
+    registerCollider('wall', { x: 0, z: -3, halfX: 8, halfZ: 0.5 })
+    registerCollider('drum', { x: 0, z: 0, r: 1 })
+    // Walking north into the drum, then the wall behind it.
+    const atDrum = resolveMove({ x: 0, z: 4 }, { x: 0, z: -3 }, 0.5)
+    expect(atDrum.z).toBeCloseTo(1.5, 6)
+    // Sidestep the drum and the wall is what stops you.
+    const atWall = resolveMove({ x: 5, z: 4 }, { x: 0, z: -6 }, 0.5)
+    expect(atWall.z).toBeCloseTo(-2, 6)
+  })
+})
