@@ -10,7 +10,7 @@ process.env.SOCIAL_TOKEN_KEY  = crypto.randomBytes(32).toString('base64');
 process.env.X_CLIENT_ID       = 'cid';
 process.env.X_CLIENT_SECRET   = 'csec';
 process.env.X_REDIRECT_URI    = 'http://localhost:5000/api/admin/social/x/callback';
-process.env.GITHUB_REPO       = 'jhearnnf/Skywatch';
+process.env.GITHUB_REPO       = 'jhearnnf/SkyWatch';
 process.env.GITHUB_TOKEN      = 'ghp_test';
 
 const request = require('supertest');

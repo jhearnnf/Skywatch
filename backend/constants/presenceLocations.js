@@ -36,6 +36,12 @@ const LOCATIONS = [
   [/^\/cbat\/sat\/?$/,              'CBAT · Situational Awareness'],
   [/^\/cbat\/cut\/?$/,              'CBAT · Cognitive Updating'],
   [/^\/cbat\/rtt\/?$/,              'CBAT · Rapid Tracking'],
+  [/^\/cbat\/sit\/?$/,              'CBAT · Spatial Integration'],
+  [/^\/cbat\/slt\/?$/,              'CBAT · System Logic'],
+  [/^\/cbat\/vlt\/?$/,              'CBAT · Verbal Logic'],
+  [/^\/cbat\/matf\/?$/,             'CBAT · Table Reading'],
+  [/^\/cbat\/vigilance\/?$/,        'CBAT · Vigilance'],
+  [/^\/cbat\/sma\/?$/,              'CBAT · Sensory Motor'],
   [/^\/cbat\/[^/]+\/leaderboard\/?$/, 'CBAT · Leaderboard'],
   [/^\/cbat\/?$/,                   'CBAT menu'],
 
