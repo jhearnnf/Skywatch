@@ -336,19 +336,33 @@ const FAKE_TUNING = {
     floor: 2, ceiling: 8, seedTime: 402.3, timeStep: 10.6,
     scoreSequence: [7, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2],
   },
+  // Both MATF boards were lowered by about a third on 2026-08-13. The first cut
+  // put the top row above the game's own Outstanding threshold (34 against 32 on
+  // Hard, 42 against 40 on Easier), which is the wrong way round: the demo board
+  // is the field a new player is measured against, not the record. It also
+  // assumed a pace nobody sustains. Part two is a three-step lookup — pick the
+  // air-speed table, find the row, find the angle column — so a 90-second part
+  // yields single figures, and part one's ±17 grid is not the instant scan it
+  // looks like. The bands now top out at a strong run rather than an
+  // exceptional one, and the grade thresholds in src/utils/cbat/matfDifficulty.js
+  // are untouched, so a player who beats this board is properly Good.
   'matf': {
     // Speeded, so there's no ceiling — a better player answers more inside the
     // same two 90-second parts. Both parts always run their full clock, so the
     // times barely vary (the same shape as `instruments`), and timeStep stays
     // fractional only so the rounded display isn't twenty identical .0s.
-    floor: 8, ceiling: 40, seedTime: 180.4, timeStep: 0.1,
-    scoreSequence: [34, 32, 30, 29, 27, 26, 25, 23, 22, 21, 20, 19, 17, 16, 15, 13, 12, 11, 10, 8],
+    //
+    // Repeated values in the sequence are deliberate: on a speeded count in the
+    // teens, two players landing the same total is what a real board looks like.
+    floor: 5, ceiling: 26, seedTime: 180.4, timeStep: 0.1,
+    scoreSequence: [22, 21, 20, 19, 19, 18, 17, 16, 16, 15, 14, 13, 13, 12, 11, 10, 9, 8, 7, 5],
   },
   'matf-easier': {
     // A ±8 grid instead of ±17, a smaller wind sheet, and 110s a part, so more
-    // answers land AND the run is longer. Both moves push the count up.
-    floor: 12, ceiling: 50, seedTime: 220.3, timeStep: 0.1,
-    scoreSequence: [42, 40, 38, 36, 35, 33, 32, 30, 29, 28, 26, 25, 24, 22, 21, 19, 18, 16, 14, 12],
+    // answers land AND the run is longer. Both moves push the count up, and the
+    // gap to Hard stays roughly what it was before the retune.
+    floor: 7, ceiling: 33, seedTime: 220.3, timeStep: 0.1,
+    scoreSequence: [28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 10, 9, 7],
   },
   'vigilance': {
     // Accumulating score over a fixed 180s, so no ceiling and near-identical
