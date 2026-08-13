@@ -38,18 +38,28 @@ export const CBAT_GAMES = [
   { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles',          image: '/images/Angles.png', estMinutes: 1 },
   { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments',     image: '/images/Instruments.png', estMinutes: 1.5 },
   { key: 'plane-turn',      emoji: '🗺️', title: 'Trace 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png', estMinutes: [1, 3] },
-  { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png', estMinutes: 1, badge: 'New Difficulty Modes' },
+  { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png', estMinutes: 1 },
   { key: 'visualisation',    emoji: '🧊', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png', estMinutes: [1, 2] },
   { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png', estMinutes: 15 },
   { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png', estMinutes: 5 },
-  { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', estMinutes: [1, 2], badge: 'New Difficulty Modes' },
+  { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', estMinutes: [1, 2] },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — track a journey of relative turns from text alone, then name the direction back to the start.', path: '/cbat/dad',             image: '/images/DAD.png', estMinutes: 5 },
   // `isNew: true` surfaces a "New Game" badge on the hub tile; `badge: '…'`
   // surfaces arbitrary announcement text in the same slot (for a game that
   // isn't new but has gained something).
-  { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', estMinutes: 3, badge: 'New Difficulty Modes' },
-  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [2, 3], badge: 'New Difficulty Modes' },
-  { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', estMinutes: [1, 2], isNew: true },
+  { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', estMinutes: 3 },
+  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [2, 3] },
+  { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', estMinutes: [1, 2] },
+  // The five tests that completed the roster.
+  { key: 'sit',              emoji: '🛰️', title: 'SIT',              desc: 'Spatial Integration Test. Study the ground one isolated layer at a time, then judge a rotated two-second clip of the whole scene on one detail alone.', path: '/cbat/sit',             image: '/images/SIT.png', estMinutes: [4, 6], isNew: true },
+  { key: 'slt',              emoji: '⚙️', title: 'SLT',              desc: 'System Logic Test. An index of fifteen tabs, two readable at once. No single tab answers a question, so find both figures before the search eats the time.', path: '/cbat/slt',             image: '/images/SLT.png', estMinutes: [5, 6], isNew: true },
+  { key: 'vlt',              emoji: '📖', title: 'VLT',              desc: 'Verbal Logic Test. Eight tabs of briefing prose, two readable at once. Every answer needs two of them joined, and the plainly-stated one is the trap.', path: '/cbat/vlt',             image: '/images/VLT.png', estMinutes: [10, 20], isNew: true },
+  { key: 'matf',             emoji: '📋', title: 'MATF',             desc: 'Table Reading Test. A coordinate grid running minus 17 to plus 17, then a wind sheet read in three steps, both against the clock.', path: '/cbat/matf',            image: '/images/MATF.png', estMinutes: [3, 4], isNew: true },
+  { key: 'vigilance',        emoji: '⭐', title: 'Vigilance',        desc: 'The star grid. Three minutes of clearing coordinates off a 9 by 9, row first then column, with priority tasks that appear when the job has gone quiet.', path: '/cbat/vigilance',       image: '/images/Vigilance.png', estMinutes: 3, isNew: true },
+  // The psychomotor test the Aptitude Report had no game for. SMA carries 15% of
+  // the Pilot battery and 12% of Pilot ISR (RPAS) through the Psychomotor domain,
+  // so it was the largest single uncovered weight left on the report.
+  { key: 'sma',              emoji: '🕹️', title: 'SMA',              desc: 'Sensory Motor Apparatus Test. A red dot drifting across the display and a crosshair fixed at the centre. Keep the two aligned on a joystick, a mouse or a touch pad.', path: '/cbat/sma',             image: '/images/SMA.png', estMinutes: [0.5, 1], isNew: true },
 ]
 
 // Render a game's `estMinutes` for display. Returns null when a game has no
@@ -115,6 +125,28 @@ export const CBAT_LEADERBOARD_CONFIG = {
   // the column tells nobody anything — hidden, like CUT's and FLAG's.
   'rtt':             { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt' },
   'rtt-easier':      { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt' },
+  // SIT / SLT / VLT keep the same question count on both difficulties, so each
+  // pair shares a ceiling and one maxScore serves both.
+  'sit':             { title: 'Spatial Integration Test', emoji: '🛰️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`, backPath: '/cbat/sit', difficultyGroup: 'sit' },
+  'sit-easier':      { title: 'Spatial Integration Test', emoji: '🛰️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`, backPath: '/cbat/sit', difficultyGroup: 'sit' },
+  'slt':             { title: 'System Logic Test', emoji: '⚙️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 10, formatScore: (s) => `${s}/10`, backPath: '/cbat/slt', difficultyGroup: 'slt' },
+  'slt-easier':      { title: 'System Logic Test', emoji: '⚙️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 10, formatScore: (s) => `${s}/10`, backPath: '/cbat/slt', difficultyGroup: 'slt' },
+  'vlt':             { title: 'Verbal Logic Test', emoji: '📖', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`, backPath: '/cbat/vlt', difficultyGroup: 'vlt' },
+  'vlt-easier':      { title: 'Verbal Logic Test', emoji: '📖', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`, backPath: '/cbat/vlt', difficultyGroup: 'vlt' },
+  // Speeded — the score is how many you got through, so there is no "/N" and no
+  // maxScore. The time column is hidden for the same reason RTT's and CUT's are:
+  // both parts always run their full clock, so every real time is identical.
+  'matf':            { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
+  'matf-easier':     { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
+  // No difficultyGroup — Vigilance ships one difficulty on purpose.
+  'vigilance':       { title: 'Vigilance Test', emoji: '⭐', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/vigilance', hideTime: true },
+  // Accumulating score over a fixed clock, so no "/N" — and the clock is the
+  // same every run, so the time column is hidden for RTT's and CUT's reason.
+  // The two difficulties do NOT share a ceiling (1500 against 1000) and are not
+  // on one scale anyway, because Easier's wider tolerance ring pays more per
+  // second — hence no maxScore on either.
+  'sma':             { title: 'Sensory Motor Apparatus Test', emoji: '🕹️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/sma', hideTime: true, difficultyGroup: 'sma' },
+  'sma-easier':      { title: 'Sensory Motor Apparatus Test', emoji: '🕹️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/sma', hideTime: true, difficultyGroup: 'sma' },
 }
 
 // Games whose difficulties keep separate leaderboards. The leaderboard page
@@ -143,6 +175,28 @@ export const CBAT_DIFFICULTY_GROUPS = {
     { gameKey: 'rtt-easier', label: 'Easier' },
     { gameKey: 'rtt',        label: 'Hard' },
   ],
+  sit: [
+    { gameKey: 'sit-easier', label: 'Easier' },
+    { gameKey: 'sit',        label: 'Hard' },
+  ],
+  slt: [
+    { gameKey: 'slt-easier', label: 'Easier' },
+    { gameKey: 'slt',        label: 'Hard' },
+  ],
+  vlt: [
+    { gameKey: 'vlt-easier', label: 'Easier' },
+    { gameKey: 'vlt',        label: 'Hard' },
+  ],
+  matf: [
+    { gameKey: 'matf-easier', label: 'Easier' },
+    { gameKey: 'matf',        label: 'Hard' },
+  ],
+  sma: [
+    { gameKey: 'sma-easier', label: 'Easier' },
+    { gameKey: 'sma',        label: 'Hard' },
+  ],
+  // Vigilance is absent on purpose — it ships one difficulty. See
+  // backend/models/GameSessionCbatVigilanceResult.js for the reasoning.
 }
 
 // gameKey → 'Easier' | 'Hard' for the games that ship a difficulty split;

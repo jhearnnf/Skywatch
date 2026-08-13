@@ -44,9 +44,15 @@ function renderWithUser(user = { _id: '1', name: 'Test' }) {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CBAT_GAMES data', () => {
-  it('has 16 games, all visible and clickable with images', () => {
-    expect(CBAT_GAMES.length).toBe(16)
-    expect(GAMES_WITH_IMAGES.length).toBe(16)
+  it('has 22 games, all visible, and every one of them now carries tile art', () => {
+    // The six most recent — SIT, SLT, VLT, MATF, Vigilance and SMA — shipped
+    // without an image on purpose, because CardBgImage returns null when `image`
+    // is unset and a finished game should never be held back waiting on
+    // artwork. That art has now arrived, so the roster is fully illustrated.
+    // The invariant that matters is still the one below: a tile either has art
+    // or renders cleanly without it.
+    expect(CBAT_GAMES.length).toBe(22)
+    expect(GAMES_WITH_IMAGES.length).toBe(22)
     expect(GAMES_WITHOUT_IMAGES.length).toBe(0)
     expect(CBAT_GAMES.every(g => !g.hidden)).toBe(true)
   })
@@ -102,12 +108,21 @@ describe('Cbat page — background images', () => {
     mockUseAuth.mockReset()
   })
 
-  it('renders a bg image element for every game', () => {
+  it('renders a bg image element for every game that has art', () => {
     renderWithUser()
-    for (const game of CBAT_GAMES) {
+    for (const game of GAMES_WITH_IMAGES) {
       const img = screen.getByTestId(`card-bg-image-${game.key}`)
       expect(img).toBeInTheDocument()
       expect(img).toHaveAttribute('src', game.image)
+    }
+  })
+
+  it('renders no bg image element for a game without art, rather than an empty one', () => {
+    // A broken <img> with no src would show the browser's placeholder over the
+    // tile. CardBgImage returns null instead — this pins that.
+    renderWithUser()
+    for (const game of GAMES_WITHOUT_IMAGES) {
+      expect(screen.queryByTestId(`card-bg-image-${game.key}`)).toBeNull()
     }
   })
 
@@ -166,18 +181,24 @@ describe('Cbat page — background images', () => {
 describe('Cbat page — tile badges', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('announces the new difficulty modes on the tiles that have them', () => {
+  it('no longer announces the difficulty modes — they are not news any more', () => {
+    // FLAG, CUT, Numerical Operations and SAT all carried a "New Difficulty
+    // Modes" badge from when the split shipped. Every one of them has had it for
+    // months and half the roster now has a split, so the badge had stopped
+    // distinguishing anything and was only crowding the tiles.
     renderWithUser()
-    const badged = CBAT_GAMES.filter(g => g.badge === 'New Difficulty Modes').map(g => g.key)
-    expect(badged).toEqual(expect.arrayContaining(['flag', 'cut']))
-    expect(screen.getAllByText('New Difficulty Modes')).toHaveLength(badged.length)
+    expect(CBAT_GAMES.filter(g => g.badge === 'New Difficulty Modes')).toEqual([])
+    expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('flags RTT as the new game, and no longer CUT', () => {
+  it('flags the roster-completing tests and SMA as new, and no longer RTT or CUT', () => {
     renderWithUser()
-    expect(CBAT_GAMES.find(g => g.key === 'cut').isNew).toBeUndefined()
-    expect(CBAT_GAMES.find(g => g.key === 'rtt').isNew).toBe(true)
-    expect(screen.getAllByText('New Game')).toHaveLength(1)
+    for (const key of ['cut', 'rtt']) {
+      expect(CBAT_GAMES.find(g => g.key === key).isNew).toBeUndefined()
+    }
+    const isNew = CBAT_GAMES.filter(g => g.isNew).map(g => g.key)
+    expect(isNew).toEqual(['sit', 'slt', 'vlt', 'matf', 'vigilance', 'sma'])
+    expect(screen.getAllByText('New Game')).toHaveLength(isNew.length)
   })
 })
 

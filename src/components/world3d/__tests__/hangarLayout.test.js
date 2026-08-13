@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { HANGARS } from '../data/hangarLayout'
 import { CBAT_GAMES } from '../../../data/cbatGames'
-import { SLOTS } from '../hangars/CbatArcadeHangar'
+import { SLOTS, cabinetFootprint } from '../data/cbatArcadeSlots'
 
 describe('hangar layout integrity', () => {
   it('declares all four hangars by kind', () => {
@@ -45,5 +45,32 @@ describe('hangar layout integrity', () => {
   it('CBAT arcade has a cabinet slot for every visible CBAT game', () => {
     const visible = CBAT_GAMES.filter(g => !g.hidden)
     expect(SLOTS.length).toBeGreaterThanOrEqual(visible.length)
+  })
+
+  // The rows were packed tighter to fit the five games that completed the CBAT
+  // roster, so the gaps are no longer obvious by eye. Two cabinets sharing floor
+  // space is not subtle in the world, but it is invisible from the source.
+  it('no two arcade cabinets overlap on the floor', () => {
+    for (let i = 0; i < SLOTS.length; i++) {
+      for (let j = i + 1; j < SLOTS.length; j++) {
+        const a = cabinetFootprint(SLOTS[i])
+        const b = cabinetFootprint(SLOTS[j])
+        const overlaps = a.minX < b.maxX && b.minX < a.maxX && a.minZ < b.maxZ && b.minZ < a.maxZ
+        expect([i, j, overlaps]).toEqual([i, j, false])
+      }
+    }
+  })
+
+  it('every arcade cabinet stands inside the hangar and clear of the doorway', () => {
+    // The CBAT hangar is 16 × 14, so local x ∈ [-8, 8] and z ∈ [-7, 7], with the
+    // door gap spanning x ∈ [-2, 2] on the -Z face. A cabinet in the doorway
+    // would block the only way in.
+    for (const [i, slot] of SLOTS.entries()) {
+      const f = cabinetFootprint(slot)
+      expect([i, f.minX >= -8 && f.maxX <= 8]).toEqual([i, true])
+      expect([i, f.minZ >= -7 && f.maxZ <= 7]).toEqual([i, true])
+      const inDoorway = f.minZ < -5.5 && f.minX < 2 && f.maxX > -2
+      expect([i, inDoorway]).toEqual([i, false])
+    }
   })
 })

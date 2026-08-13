@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
 import RecentCbatScores from '../components/RecentCbatScores'
+import AptitudeReportCard from '../components/AptitudeReportCard'
 import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
 import { CBAT_GAMES, formatEstTime } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
@@ -319,6 +320,10 @@ export default function Cbat() {
           </Link>
         </div>
       )}
+
+      {/* Aptitude Report — the estimate of what this practice would score on a real role's
+          battery. Above the grid because it's the reason to pick one game over another. */}
+      {user && <AptitudeReportCard />}
 
       {/* Game grid — blurred when not signed in */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`} style={{ rowGap: '2rem' }}>
