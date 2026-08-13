@@ -38,6 +38,7 @@ import {
   readStoredSmaSensitivity, storeSmaSensitivity,
   MIN_SMA_SENSITIVITY, MAX_SMA_SENSITIVITY,
 } from '../utils/cbat/smaDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 
 // ── Display ──────────────────────────────────────────────────────────────────
 
@@ -187,7 +188,7 @@ export default function CbatSma() {
   const isDemo = !!useCbatDemo()
 
   const [phase, setPhase] = useState('intro')   // intro | launching | playing | results
-  const [difficulty, setDifficulty] = useState(readStoredSmaDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredSmaDifficulty))
   const tuning = smaTuning(difficulty)
   // The difficulty the run on screen is being played at. Pinned at launch so a
   // mid-results switch can't relabel or misfile a finished run. Held twice on

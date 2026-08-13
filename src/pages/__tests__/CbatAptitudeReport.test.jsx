@@ -154,9 +154,65 @@ describe('CbatAptitudeReport', () => {
 
     expect(screen.getByText('+4.9')).toBeInTheDocument()
     expect(screen.getByText('+1.2')).toBeInTheDocument()
-    expect(screen.getByText(/Average 409\+ to go from level 5 to 6/)).toBeInTheDocument()
-    expect(screen.getByText(/Play it 2 more times and it starts counting/)).toBeInTheDocument()
-    expect(screen.getAllByText('Play')[0]).toHaveAttribute('href', '/cbat/cut')
+    // Both instructions name the difficulty: CUT and SAT are split games and only their Hard runs
+    // feed this score, so "average 409+" on its own would be advice a user could follow on Easier
+    // and get nothing for.
+    expect(screen.getByText(/Average 409\+ on Hard to go from level 5 to 6/)).toBeInTheDocument()
+    expect(screen.getByText(/Play it on Hard 2 more times and it starts counting/)).toBeInTheDocument()
+    expect(screen.getAllByText('Play')[0]).toHaveAttribute('href', '/cbat/cut?difficulty=hard')
+  })
+
+  it('sends every play link to Hard, the only difficulty it scores', async () => {
+    // The report counts Hard runs and nothing else, and a game card opens on whatever difficulty
+    // that user last chose — Easier until they change it. Without the parameter the page would tell
+    // someone to play Hard and then hand them an Easier card.
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+
+    const play = screen.getAllByText('Play')[0]
+    expect(play).toHaveAttribute('href', '/cbat/cut?difficulty=hard')
+    expect(play.getAttribute('title')).toMatch(/Hard already selected/)
+    expect(screen.getByTitle(/^CUT · Cognitive Updating Test/)).toHaveAttribute('href', '/cbat/cut?difficulty=hard')
+  })
+
+  it('tells a player on a scored game to play more Hard runs to level up', async () => {
+    // The chip is the thing tapped to raise a score, so its tooltip is where "more of this, on
+    // Hard" has to be said. "You are on level 5" alone reads as a status, not an instruction.
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+
+    const cut = screen.getByTitle(/^CUT · Cognitive Updating Test/)
+    expect(cut.getAttribute('title')).toMatch(/You are on level 5\./)
+    expect(cut.getAttribute('title')).toMatch(/Play more Hard runs to level up/)
+    expect(cut.getAttribute('title')).toMatch(/Easier runs do not count/)
+  })
+
+  it('says nothing about Hard on a game that has only one difficulty', async () => {
+    // Target ships one difficulty. Telling a player to go and find its Hard button would send them
+    // looking for something that is not on the card.
+    global.fetch = vi.fn((url) => {
+      const target = {
+        ...report,
+        domains: [{
+          ...report.domains[0],
+          tests: [{ ...report.domains[0].tests[0], code: 'TRT', label: 'Target Recognition Test', games: ['target'],
+            played: [{ gameKey: 'target', label: 'Target Recognition Test', form: 80, runs: 5, stanine: 5 }] }],
+        }],
+        focus: [],
+      }
+      let body = summary
+      if (url.includes('/report-users')) body = { users: reportUsers }
+      else if (url.includes('/report/')) body = target
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+
+    const chip = screen.getByTitle(/^TRT · Target Recognition Test/)
+    expect(chip).toHaveAttribute('href', '/cbat/target')
+    expect(chip.getAttribute('title')).toMatch(/Play more runs to level up/)
+    expect(chip.getAttribute('title')).not.toMatch(/Hard/)
   })
 
   it('opens a domain to reveal the tests behind it', async () => {
@@ -184,13 +240,13 @@ describe('CbatAptitudeReport', () => {
     await screen.findByText('100')
 
     const cut = screen.getByTitle(/^CUT · Cognitive Updating Test/)
-    expect(cut).toHaveAttribute('href', '/cbat/cut')
+    expect(cut).toHaveAttribute('href', '/cbat/cut?difficulty=hard')
     // Labelled by the game the user recognises, with the real sheet code in the tooltip.
     expect(cut.textContent).toMatch(/Cognitive Updating Test/)
 
     const sat = screen.getByTitle(/^SAT · Situational Awareness Test/)
-    expect(sat).toHaveAttribute('href', '/cbat/sat')
-    expect(sat.getAttribute('title')).toMatch(/Play it 2 more time/)
+    expect(sat).toHaveAttribute('href', '/cbat/sat?difficulty=hard')
+    expect(sat.getAttribute('title')).toMatch(/Play it on Hard 2 more time/)
   })
 
   it('makes a game with no chip link inert when there is no game', async () => {

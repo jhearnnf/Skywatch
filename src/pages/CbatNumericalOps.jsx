@@ -13,6 +13,7 @@ import {
   NUMERICAL_OPS_DIFFICULTIES, NUMERICAL_OPS_LAUNCH_MS, numericalOpsTuning, computeGrade,
   readStoredNumericalOpsDifficulty, storeNumericalOpsDifficulty,
 } from '../utils/cbat/numericalOpsDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // Shared by both difficulties: the round structure, the question count and the
@@ -209,7 +210,7 @@ export default function CbatNumericalOps() {
 
   // The difficulty the instructions card is set to. Persisted, so the card opens
   // on whatever was played last.
-  const [difficulty, setDifficulty] = useState(readStoredNumericalOpsDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredNumericalOpsDifficulty))
   const tuning = numericalOpsTuning(difficulty)
   // The difficulty the run on screen is being played at. Pinned at launch so
   // flipping the card's selection mid-run could never redirect a finished score.

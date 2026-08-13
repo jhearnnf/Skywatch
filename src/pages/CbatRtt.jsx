@@ -21,6 +21,7 @@ import {
   readStoredRttDifficulty, storeRttDifficulty, computeGrade,
   readStoredSensitivity, storeSensitivity, MIN_SENSITIVITY, MAX_SENSITIVITY,
 } from '../utils/cbat/rttDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import {
   makeRttSim, rttStats, maxRttScore, captureRadius,
   CAMERA_FOV_DEG, RTT_FRAMES_PER_TARGET, SHUTTER_COOLDOWN_MS, RTT_KINDS,
@@ -153,7 +154,7 @@ export default function CbatRtt() {
   const isDemo = !!useCbatDemo()
 
   const [phase, setPhase] = useState('intro') // intro | launching | playing | results
-  const [difficulty, setDifficulty] = useState(readStoredRttDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredRttDifficulty))
   const tuning = rttTuning(difficulty)
   // The difficulty the run on screen is being played at. Pinned at launch so a
   // mid-results switch can't relabel or misfile a finished run. Held twice on

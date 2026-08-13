@@ -15,6 +15,7 @@ import {
   SAT_DIFFICULTIES, SAT_LAUNCH_MS, satTuning, satTotalQuestions, computeGrade,
   readStoredSatDifficulty, storeSatDifficulty,
 } from '../utils/cbat/satDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -477,7 +478,7 @@ export default function CbatSat() {
 
   // The difficulty the instructions card is set to. Persisted, so the card opens
   // on whatever was played last.
-  const [difficulty, setDifficulty] = useState(readStoredSatDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredSatDifficulty))
   const tuning = satTuning(difficulty)
   // The difficulty the run on screen is being played at. Pinned at launch so
   // flipping the card's selection mid-run could never redirect a finished score.

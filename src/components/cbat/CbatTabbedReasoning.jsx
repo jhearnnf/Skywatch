@@ -33,6 +33,7 @@ import { submitCbatResult } from '../../lib/cbatOutbox'
 import { useCbatTracking } from '../../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../../context/GameChromeContext'
 import { useCbatDemo } from '../../utils/cbat/demoMode'
+import { initialDifficulty } from '../../utils/cbat/difficultyParam'
 import SEO from '../SEO'
 import CbatQuitButton from '../CbatQuitButton'
 import CbatGameOver from '../CbatGameOver'
@@ -162,7 +163,7 @@ export default function CbatTabbedReasoning({
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
-  const [difficulty, setDifficulty] = useState(readStoredDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredDifficulty))
   // What the RENDER tree reads. Pinned when a run launches, so flipping the
   // selector mid-run could never retarget a board. Reading runTuningRef during
   // render would trip react-hooks/refs, hence the pair.

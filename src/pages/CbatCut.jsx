@@ -13,6 +13,7 @@ import {
   CUT_DIFFICULTIES, CUT_LAUNCH_MS, cutTuning,
   readStoredCutDifficulty, storeCutDifficulty,
 } from '../utils/cbat/cutDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import {
   GAME_MS, TICK_MS, SYSTEMS, SYSTEM_LABELS, SCORE, grade, award,
   makeSim, advanceSim, scheduleNextLoad, pushMessage, randRange, fmtWall, fmtClock,
@@ -377,7 +378,7 @@ export default function CbatCut() {
   const [phase, setPhase] = useState('intro') // intro | launching | playing | results
   // Defaults to 'easier'; a user who switches gets their most recent choice
   // back on the next visit.
-  const [difficulty, setDifficulty] = useState(readStoredCutDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredCutDifficulty))
   const tuning = cutTuning(difficulty)
   // The difficulty the run on screen is being played at. Pinned at launch so a
   // mid-results switch can't relabel or misfile a finished run. Held twice on
@@ -410,7 +411,7 @@ export default function CbatCut() {
   const [finalStats, setFinalStats] = useState(null)
 
   // One stable initial sim seeds both the mutable ref and the render snapshot.
-  const [initialSim] = useState(() => makeSim(readStoredCutDifficulty()))
+  const [initialSim] = useState(() => makeSim(initialDifficulty(readStoredCutDifficulty)))
   const simRef = useRef(initialSim)
   const lastTsRef = useRef(0)
   // Render from an immutable snapshot of the sim, never the live ref (reading a

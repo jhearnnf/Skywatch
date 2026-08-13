@@ -90,6 +90,25 @@ describe('SMA — difficulty wiring', () => {
     expect(difficultyButton(second.container, 'hard').getAttribute('aria-pressed')).toBe('true')
   })
 
+  // Arriving from the Aptitude Report, which scores Hard runs and nothing else.
+  // The card has to open on Hard or the report's advice quietly fails: the
+  // player follows the link, plays the remembered Easier, and the score they
+  // clicked to raise does not move.
+  it('opens on Hard when the link asked for it', () => {
+    const original = window.location.href
+    window.history.replaceState({}, '', '/cbat/sma?difficulty=hard')
+    try {
+      const { container } = renderPage()
+      expect(difficultyButton(container, 'hard').getAttribute('aria-pressed')).toBe('true')
+      expect(difficultyButton(container, 'easier').getAttribute('aria-pressed')).toBe('false')
+      // A link is not a preference. Leaving without pressing anything must leave
+      // the remembered choice as it was.
+      expect(localStorage.getItem('sw_cbat_sma_difficulty')).toBeNull()
+    } finally {
+      window.history.replaceState({}, '', original)
+    }
+  })
+
   it('puts the difficulty pair BELOW the title, where every other split game has it', () => {
     const { container } = renderPage()
     const title = container.querySelector('.text-xl.font-extrabold')

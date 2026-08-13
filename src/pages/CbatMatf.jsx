@@ -34,6 +34,7 @@ import {
   matfTuning, computeMatfGrade,
   readStoredMatfDifficulty, storeMatfDifficulty,
 } from '../utils/cbat/matfDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 
 // ── Reference panels ─────────────────────────────────────────────────────────
 // Top-level components, never defined inside the page's render — these hold the
@@ -201,7 +202,7 @@ export default function CbatMatf() {
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
-  const [difficulty, setDifficulty] = useState(readStoredMatfDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredMatfDifficulty))
   const [runDifficulty, setRunDifficulty] = useState(difficulty)
 
   const [grid, setGrid] = useState(null)

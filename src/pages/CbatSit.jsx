@@ -40,6 +40,7 @@ import {
   sitTuning, computeSitGrade, sitPhaseMs, sitRunEstimateMs,
   readStoredSitDifficulty, storeSitDifficulty,
 } from '../utils/cbat/sitDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 
 // ── Map rendering ────────────────────────────────────────────────────────────
 // The flat plan view, used for the STUDY LAYERS and the review diagram. The clip
@@ -239,7 +240,7 @@ export default function CbatSit() {
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
-  const [difficulty, setDifficulty] = useState(readStoredSitDifficulty)
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredSitDifficulty))
   const [runDifficulty, setRunDifficulty] = useState(difficulty)
   const runTuningRef = useRef(sitTuning(difficulty))
 

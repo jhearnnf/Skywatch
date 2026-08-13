@@ -16,6 +16,7 @@ import {
   buildQuestionSchedule, pickMathDifficulty, computeGrade,
   readStoredFlagDifficulty, storeFlagDifficulty,
 } from './CbatFlag/difficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import { generateUniqueSymbols } from './CbatFlag/symbols'
 import { generatePalette, ShapeIcon } from './CbatFlag/shapes'
 import PlayField from './CbatFlag/PlayField'
@@ -634,8 +635,9 @@ export default function CbatFlag() {
 
   const [phase, setPhase] = useState('intro')   // intro | launching | tutorial | playing | results
   // Defaults to 'easier'; a user who switches gets their most recent choice
-  // back on the next visit.
-  const [difficulty, setDifficulty] = useState(readStoredFlagDifficulty)
+  // back on the next visit. `?difficulty=` overrides both for one arrival — the
+  // Aptitude Report's links use it to land on Hard, the only runs it counts.
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredFlagDifficulty))
   const tuning = flagTuning(difficulty)
   // The difficulty in force for the run currently on screen. Pinned at launch so
   // a mid-results difficulty switch can't relabel or misfile a finished run.

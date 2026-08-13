@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import {
   MAX_SCORE, MAX_STANINE, BATTERY_GROUPS, BATTERY_BY_KEY,
-  gamePath, gameTitle, gameEmoji,
+  gamePath, gameTitle, gameEmoji, gameHasDifficulties,
   stanineBand, stanineBeatsPct, stanineTone, reportVerdict, statusColour, TONE_TEXT,
 } from '../data/cbatBatteries'
 
@@ -19,6 +19,25 @@ import {
 // one cold.
 
 // ── Small pieces ─────────────────────────────────────────────────────────────────────────────
+
+// Every "go and play this" on the page has to name the difficulty, because only Hard runs feed the
+// report. Saying just "play it more" is advice that quietly fails: the game card opens on the
+// difficulty that user last chose, which is Easier until they change it, so the runs they go away
+// and do would leave this score exactly where it was.
+//
+// Empty for a game with no split, where naming a difficulty would send someone hunting for a button
+// that isn't on the card. Both helpers key off the same registry field the links do, so the wording
+// and the ?difficulty=hard on the link can't disagree.
+function onHard(gameKey) {
+  return gameHasDifficulties(gameKey) ? ' on Hard' : ''
+}
+
+// The sentence that closes a tooltip on a game that is already counting: what to do to move it up.
+function levelUpHint(gameKey) {
+  return gameHasDifficulties(gameKey)
+    ? ' Play more Hard runs to level up. Easier runs do not count.'
+    : ' Play more runs to level up.'
+}
 
 // The 1-9 stanine bar. Green fill to the achieved stanine, a red tick at the target — exactly the
 // two marks the real sheet carries, for the same reason: the gap between them IS the message.
@@ -102,7 +121,9 @@ function TestRow({ test }) {
           <span className="text-amber-700">Easier games don&apos;t count. Play {test.games.map(gameTitle).join(' or ')} on Hard.</span>
         ) : (
           <Link to={gamePath(test.games[0])} className="text-brand-700 hover:text-brand-800 underline underline-offset-2">
-            {need ? `Play ${need.label} ${need.runsNeeded} more time${need.runsNeeded === 1 ? '' : 's'}` : `Play ${gameTitle(test.games[0])}`}
+            {need
+              ? `Play ${need.label}${onHard(need.gameKey)} ${need.runsNeeded} more time${need.runsNeeded === 1 ? '' : 's'}`
+              : `Play ${gameTitle(test.games[0])}${onHard(test.games[0])}`}
           </Link>
         )}
       </div>
@@ -172,9 +193,9 @@ function DomainTestChips({ tests }) {
             : 'bg-[#060e1a] border-[#1a3a5c] text-slate-700 hover:border-brand-400 hover:text-brand-700'
 
         const hint = t.state === 'needs-runs'
-          ? ` Play it ${t.needsRuns?.[0]?.runsNeeded ?? 3} more time(s) to start counting.`
-          : t.state === 'easier-only' ? ' Your runs were on Easier, which do not count.'
-          : ` You are on level ${Math.round(t.stanine)}.`
+          ? ` Play it${onHard(t.needsRuns?.[0]?.gameKey ?? t.games[0])} ${t.needsRuns?.[0]?.runsNeeded ?? 3} more time(s) to start counting.`
+          : t.state === 'easier-only' ? ' Your runs were on Easier, which do not count. Play it on Hard to start counting.'
+          : ` You are on level ${Math.round(t.stanine)}.${levelUpHint(t.games[0])}`
 
         return (
           <Link
@@ -698,7 +719,8 @@ export default function CbatAptitudeReport() {
               <h2 className="text-sm font-extrabold text-slate-900 mb-0.5">Play these next</h2>
               <p className="text-[11px] text-slate-600 mb-3">
                 The games that would add the most to your score for this role. The green number is roughly how many points
-                each one is worth.
+                each one is worth. Only runs on Hard count, so a game with two difficulties opens with Hard already
+                selected.
               </p>
               <div className="space-y-1.5">
                 {report.focus.map((f) => {
@@ -715,15 +737,18 @@ export default function CbatAptitudeReport() {
                           {f.kind === 'unlock'
                             ? (f.easierOnly
                                 ? `Play it on Hard and it starts counting. Helps your ${f.domainLabel}.`
-                                : `Play it ${f.needsRuns?.[0]?.runsNeeded ?? 3} more time${(f.needsRuns?.[0]?.runsNeeded ?? 3) === 1 ? '' : 's'} and it starts counting. Helps your ${f.domainLabel}.`)
+                                : `Play it${onHard(game)} ${f.needsRuns?.[0]?.runsNeeded ?? 3} more time${(f.needsRuns?.[0]?.runsNeeded ?? 3) === 1 ? '' : 's'} and it starts counting. Helps your ${f.domainLabel}.`)
                             : f.nextTarget
-                              ? `Average ${f.nextTarget.score}+ to go from level ${Math.round(f.stanine)} to ${Math.round(f.stanine) + 1}. Helps your ${f.domainLabel}.`
+                              ? `Average ${f.nextTarget.score}+${onHard(game)} to go from level ${Math.round(f.stanine)} to ${Math.round(f.stanine) + 1}. Helps your ${f.domainLabel}.`
                               : `You're on level ${Math.round(f.stanine)}. Helps your ${f.domainLabel}.`}
                         </span>
                       </span>
                       {game && (
                         <Link
                           to={gamePath(game)}
+                          title={gameHasDifficulties(game)
+                            ? `Opens ${gameTitle(game)} with Hard already selected. Only Hard runs count towards this report.`
+                            : `Opens ${gameTitle(game)}.`}
                           className="shrink-0 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold transition-colors no-underline"
                         >
                           Play
@@ -754,8 +779,8 @@ export default function CbatAptitudeReport() {
             <span className="inline-block w-[2px] h-3 bg-[#ff4d4d] align-middle mr-1.5" />
             The red line is level {targetStanine ? Math.round(targetStanine * 10) / 10 : '-'}. Reach it in every skill area and
             you land exactly on this role&apos;s pass mark. The chips under each row are the games that feed it, so tap one to
-            go and play it. Tap the row itself to see how you scored on each. Anything greyed out is a test we can&apos;t
-            measure yet.
+            go and play it. Games with two difficulties open on Hard, the only runs this report counts. Tap the row
+            itself to see how you scored on each. Anything greyed out is a test we can&apos;t measure yet.
           </p>
 
           {/* Gaps. */}

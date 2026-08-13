@@ -23,10 +23,27 @@ export const BATTERY_GROUPS = BATTERIES.reduce((acc, b) => {
   return acc
 }, [])
 
+// Whether a game ships an Easier/Hard split. Read off the leaderboard config's difficultyGroup —
+// the same field the leaderboard's pill pair is built from — so a newly split game is covered here
+// without a second list to keep in step.
+//
+// It matters on this page because the report scores Hard runs and nothing else. Anywhere the sheet
+// tells you to go and play something it has to name the difficulty, but ONLY for the games that
+// have one: "play more Target on Hard" would send a user looking for a setting that isn't there.
+export function gameHasDifficulties(gameKey) {
+  return Boolean(CBAT_LEADERBOARD_CONFIG[gameKey]?.difficultyGroup)
+}
+
 // Where a focus item sends the user. Every scorable game has a leaderboard config carrying the
 // route to its instructions page, which is where you'd want to land before a run anyway.
+//
+// Split games get ?difficulty=hard on the end. Only Hard runs feed this report, and a game's card
+// opens on whatever difficulty that user last chose (Easier until they change it), so without the
+// param the page would tell someone to play Hard and then hand them an Easier card. See
+// src/utils/cbat/difficultyParam.js for what the game does with it.
 export function gamePath(gameKey) {
-  return CBAT_LEADERBOARD_CONFIG[gameKey]?.backPath ?? '/cbat'
+  const path = CBAT_LEADERBOARD_CONFIG[gameKey]?.backPath ?? '/cbat'
+  return gameHasDifficulties(gameKey) ? `${path}?difficulty=hard` : path
 }
 
 export function gameTitle(gameKey) {
