@@ -41,6 +41,17 @@ const GAME_OFFSET = {
   'sat-easier':      17,
   'rtt':             23,
   'rtt-easier':      24,
+  'sit':             25,
+  'sit-easier':      26,
+  'slt':             27,
+  'slt-easier':      28,
+  'vlt':             29,
+  'vlt-easier':      30,
+  'matf':            31,
+  'matf-easier':     32,
+  'vigilance':       33,
+  'sma':             34,
+  'sma-easier':      35,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -280,6 +291,101 @@ const FAKE_TUNING = {
     floor: 175, ceiling: 675, seedTime: 80.6, timeStep: 0.3,
     scoreSequence: [673, 644, 621, 592, 571, 538, 517, 489, 466, 438, 412, 387, 361, 338, 309, 283, 261, 233, 209, 181],
   },
+
+  // ── The five tests added to complete the RAF roster ─────────────────────────
+  // SIT / SLT / VLT all keep the SAME question count on both difficulties (8,
+  // 10 and 8 respectively), so each pair shares a ceiling and Easier's demo band
+  // simply sits a little higher. Explicit sequences rather than the stepped
+  // generator: these bands are narrow enough that the generator's `+2` steps can
+  // skip a value and drop the board below the 6-distinct-scores invariant.
+  'sit': {
+    // 8 rounds, one point each. Rotating a studied layout to match a two-second
+    // clip is genuinely hard, so the top demo sits at 7 rather than 8 and the
+    // roster trails well down. ~18s a round → ~145s.
+    floor: 2, ceiling: 8, seedTime: 138.6, timeStep: 4.2,
+    scoreSequence: [7, 7, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2],
+  },
+  'sit-easier': {
+    // Two object classes instead of four and a four-second clip, so the same 8
+    // rounds land more often. Longer runs, because the study and clip windows
+    // are what got lengthened.
+    floor: 2, ceiling: 8, seedTime: 168.3, timeStep: 4.6,
+    scoreSequence: [7, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2],
+  },
+  'slt': {
+    // 10 questions. It's a search-and-apply task with the tabs still open, so
+    // scores run higher than a memory test would — the bottleneck is finding the
+    // right tab inside the clock. 60s reading + 10 × ~30s ≈ 360s.
+    floor: 2, ceiling: 10, seedTime: 288.4, timeStep: 8.7,
+    scoreSequence: [9, 9, 8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 2],
+  },
+  'slt-easier': {
+    // Four tabs and no two-tab joins, so the search is shorter and the band
+    // moves up. Longer reading window, so the runs aren't quicker.
+    floor: 3, ceiling: 10, seedTime: 262.6, timeStep: 7.9,
+    scoreSequence: [9, 9, 9, 8, 8, 8, 8, 7, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 3],
+  },
+  'vlt': {
+    // 8 questions, each needing two sections joined. Scores below SLT's share
+    // because the plainly-stated sentence is a deliberate distractor. 180s
+    // reading + 8 × ~50s ≈ 580s — the second-longest game after DPT.
+    floor: 2, ceiling: 8, seedTime: 470.5, timeStep: 12.4,
+    scoreSequence: [7, 7, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2],
+  },
+  'vlt-easier': {
+    floor: 2, ceiling: 8, seedTime: 402.3, timeStep: 10.6,
+    scoreSequence: [7, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2],
+  },
+  'matf': {
+    // Speeded, so there's no ceiling — a better player answers more inside the
+    // same two 90-second parts. Both parts always run their full clock, so the
+    // times barely vary (the same shape as `instruments`), and timeStep stays
+    // fractional only so the rounded display isn't twenty identical .0s.
+    floor: 8, ceiling: 40, seedTime: 180.4, timeStep: 0.1,
+    scoreSequence: [34, 32, 30, 29, 27, 26, 25, 23, 22, 21, 20, 19, 17, 16, 15, 13, 12, 11, 10, 8],
+  },
+  'matf-easier': {
+    // A ±8 grid instead of ±17, a smaller wind sheet, and 110s a part, so more
+    // answers land AND the run is longer. Both moves push the count up.
+    floor: 12, ceiling: 50, seedTime: 220.3, timeStep: 0.1,
+    scoreSequence: [42, 40, 38, 36, 35, 33, 32, 30, 29, 28, 26, 25, 24, 22, 21, 19, 18, 16, 14, 12],
+  },
+  'vigilance': {
+    // Accumulating score over a fixed 180s, so no ceiling and near-identical
+    // times. One difficulty only — see backend/models/GameSessionCbatVigilanceResult.js.
+    floor: 250, ceiling: 800, seedTime: 180.2, timeStep: 0.1,
+    scoreSequence: [780, 745, 715, 690, 660, 635, 610, 585, 560, 535, 510, 485, 455, 430, 405, 375, 350, 320, 290, 255],
+  },
+
+  // ── Sensory Motor Apparatus Test ────────────────────────────────────────────
+  // Accumulating totalScore over a fixed clock, so no ceiling on the board even
+  // though a flawless run tops out at 600 (10 points per scored second × 60).
+  // Flawless means the dot pinned exactly on the crosshair the whole way, which
+  // the drift makes impossible — the demo ceiling of 418 is a strong human run
+  // holding roughly two thirds of full accuracy, and the roster trails to 119.
+  //
+  // Every run reports the same totalTime (60 scored seconds plus the 2.5s
+  // lead-in = 62.5), so the fakes use it exactly with timeStep 0, the way
+  // FLAG's fixed-60s rows do. The column is hidden on this board anyway.
+  //
+  // Arbitrary integers rather than multiples of five, for RTT's reason: the
+  // score is an integral of a continuous accuracy value, so a real total is any
+  // integer at all and a board of round numbers would be the tell.
+  //
+  // Estimated, not measured — nobody has flown this with a stick. Retune this
+  // and the grade bands in smaDifficulty.js together once there are real runs.
+  'sma': {
+    floor: 98, ceiling: 419, seedTime: 62.5, timeStep: 0,
+    scoreSequence: [418, 402, 387, 371, 357, 342, 328, 315, 300, 286, 271, 256, 243, 228, 213, 198, 180, 163, 143, 119],
+  },
+  'sma-easier': {
+    // 30 scored seconds instead of 60 (a 300 ceiling) AND a tolerance ring half
+    // again as wide, which pays more per second for the same tracking. The two
+    // effects pull opposite ways, so the band lands at a HIGHER share of its own
+    // max than Hard's does while still totalling less.
+    floor: 56, ceiling: 223, seedTime: 32.5, timeStep: 0,
+    scoreSequence: [222, 214, 206, 199, 191, 183, 176, 169, 161, 154, 146, 138, 130, 122, 115, 107, 98, 87, 74, 61],
+  },
 };
 
 // Fixed delta tables — natural-looking variance without randomness.
@@ -414,6 +520,17 @@ const WEEKLY_PER_PLAY = {
   'cut-easier':      260,  // fewer scheduled tasks in the same 180s
   'rtt':             645,  // accumulating totalScore — a little below a decent single run
   'rtt-easier':      460,  // eight passes instead of twelve, so a lower total
+  'sit':               4,  // correctCount /6 — a little below a decent single run
+  'sit-easier':        3,  // correctCount /4 — same idea on the shorter run
+  'slt':               7,  // correctCount /10
+  'slt-easier':        6,  // correctCount /8, but single-hop, so a higher share
+  'vlt':               5,  // correctCount /8
+  'vlt-easier':        4,  // correctCount /6
+  'matf':             22,  // speeded correctCount — no ceiling, so this is a rate
+  'matf-easier':      28,  // smaller grid, longer clock, so more answers land
+  'vigilance':       540,  // accumulating totalScore over the fixed 180s
+  'sma':             280,  // accumulating totalScore over 60 scored seconds (max 600)
+  'sma-easier':      155,  // 30 scored seconds, but a wider ring pays more per second
 };
 
 // Six deterministic demo players: a couple of active ones, the rest light.

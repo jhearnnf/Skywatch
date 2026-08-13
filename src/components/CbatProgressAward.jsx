@@ -124,7 +124,7 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
 // Copy notes, both deliberate:
 //   - It names a concrete amount. An open-ended "support us" converts far worse than a small
 //     specific one, and the destination page is where a range of amounts belongs.
-//   - It states what Skywatch costs the user (nothing, no ads) and asks. It does NOT suggest the
+//   - It states what SkyWatch costs the user (nothing, no ads) and asks. It does NOT suggest the
 //     site or their progress is at risk without them. Manufactured jeopardy converts worse than
 //     gratitude and is a bad thing to do to someone who has just been congratulated.
 //
@@ -176,7 +176,7 @@ export function CbatDonationNote({ url, onRecord }) {
         ✕
       </button>
       <p className="text-xs text-[#ddeaf8] leading-relaxed">
-        Skywatch is free and has no ads. If it's helping, a one-off £3 helps keep it running.
+        SkyWatch is free and has no ads. If it's helping, a one-off £3 helps keep it running.
       </p>
       <a
         href={url}
@@ -185,7 +185,7 @@ export function CbatDonationNote({ url, onRecord }) {
         onClick={() => close('clicked')}
         className="inline-block mt-2.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors no-underline"
       >
-        Support Skywatch
+        Support SkyWatch
       </a>
     </motion.div>
   )

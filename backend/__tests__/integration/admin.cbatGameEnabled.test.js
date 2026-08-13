@@ -64,6 +64,47 @@ describe('PATCH /api/admin/settings — cbatGameEnabled validation', () => {
     expect(settings.cbatGameEnabled.get('dad')).toBe(true);
   });
 
+  // The five tests that completed the RAF roster. A key missing from
+  // CBAT_KNOWN_KEYS in routes/admin.js is dropped SILENTLY (see the first test
+  // in this file), so an unwired game's toggle would appear in the admin UI,
+  // flip on screen, save without error and do nothing at all.
+  it.each(['sit', 'slt', 'vlt', 'matf', 'vigilance'])(
+    'persists the %s toggle rather than dropping it as an unknown key',
+    async (gameKey) => {
+      const admin  = await createAdminUser();
+      const cookie = authCookie(admin._id);
+      const res = await patchSettings(cookie, { cbatGameEnabled: { [gameKey]: false } });
+      expect([gameKey, res.status]).toEqual([gameKey, 200]);
+
+      const settings = await AppSettings.findOne();
+      expect([gameKey, settings.cbatGameEnabled.get(gameKey)]).toEqual([gameKey, false]);
+    },
+  );
+
+  // The Easier halves have no admin toggle of their own — the parent game's
+  // toggle gates the page, because the route is /cbat/sit whichever difficulty
+  // is picked. They still have to be accepted here: the frontend echoes back
+  // the whole stored map on every save, so rejecting them would break the save.
+  it.each(['sit-easier', 'slt-easier', 'vlt-easier', 'matf-easier'])(
+    'accepts %s echoed back from the stored map',
+    async (gameKey) => {
+      const admin  = await createAdminUser();
+      const cookie = authCookie(admin._id);
+      const res = await patchSettings(cookie, { cbatGameEnabled: { [gameKey]: false } });
+      expect([gameKey, res.status]).toEqual([gameKey, 200]);
+
+      const settings = await AppSettings.findOne();
+      expect([gameKey, settings.cbatGameEnabled.get(gameKey)]).toEqual([gameKey, false]);
+    },
+  );
+
+  it('defaults every new game to enabled', async () => {
+    const settings = await AppSettings.getSettings();
+    for (const key of ['sit', 'slt', 'vlt', 'matf', 'vigilance']) {
+      expect([key, settings.cbatGameEnabled.get(key)]).toEqual([key, true]);
+    }
+  });
+
   it('accepts and persists a valid object', async () => {
     const admin  = await createAdminUser();
     const cookie = authCookie(admin._id);

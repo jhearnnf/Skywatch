@@ -36,6 +36,18 @@ export const GAME_LABELS = {
   'cut-easier':       'Cognitive Updating Test (Easier)',
   'rtt':              'Rapid Tracking Test (Hard)',
   'rtt-easier':       'Rapid Tracking Test (Easier)',
+  'sit':              'Spatial Integration Test (Hard)',
+  'sit-easier':       'Spatial Integration Test (Easier)',
+  'slt':              'System Logic Test (Hard)',
+  'slt-easier':       'System Logic Test (Easier)',
+  'vlt':              'Verbal Logic Test (Hard)',
+  'vlt-easier':       'Verbal Logic Test (Easier)',
+  'matf':             'Table Reading Test (Hard)',
+  'matf-easier':      'Table Reading Test (Easier)',
+  // No difficulty suffix — Vigilance ships one difficulty on purpose.
+  'vigilance':        'Vigilance Test',
+  'sma':              'Sensory Motor Apparatus Test (Hard)',
+  'sma-easier':       'Sensory Motor Apparatus Test (Easier)',
 }
 
 const PRIMARY_LABELS = {

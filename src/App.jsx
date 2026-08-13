@@ -73,7 +73,14 @@ import CbatDAD from './pages/CbatDAD'
 import CbatSat from './pages/CbatSat'
 import CbatCut from './pages/CbatCut'
 import CbatRtt from './pages/CbatRtt'
+import CbatSit from './pages/CbatSit'
+import CbatSlt from './pages/CbatSlt'
+import CbatVlt from './pages/CbatVlt'
+import CbatMatf from './pages/CbatMatf'
+import CbatVigilance from './pages/CbatVigilance'
+import CbatSma from './pages/CbatSma'
 import CbatLeaderboard from './pages/CbatLeaderboard'
+import CbatAptitudeReport from './pages/CbatAptitudeReport'
 import CbatGameGuard from './components/CbatGameGuard'
 import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
@@ -287,6 +294,10 @@ function AppRoutes() {
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
+          {/* Ahead of /cbat/:gameKey/leaderboard so "report" is never read as a game key. Not
+              behind RequireAuth: like /cbat itself, it renders its own sign-in card, which makes
+              it a landing page for the feature rather than a redirect. */}
+          <Route path="/cbat/report"            element={<PageWrapper><CbatAptitudeReport /></PageWrapper>} />
           <Route path="/cbat/trace"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="Trace 1/2"       ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/plane-turn"        element={<Navigate to="/cbat/trace" replace />} />
           <Route path="/cbat/plane-turn/leaderboard" element={<Navigate to="/cbat/plane-turn-2d/leaderboard" replace />} />
@@ -307,6 +318,12 @@ function AppRoutes() {
           <Route path="/cbat/sat"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="sat"               gameTitle="Situational Awareness Test"><CbatSat /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/cut"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="cut"               gameTitle="Cognitive Updating Test"><CbatCut /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/rtt"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="rtt"               gameTitle="Rapid Tracking Test"><CbatRtt /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/sit"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="sit"               gameTitle="Spatial Integration Test"><CbatSit /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/slt"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="slt"               gameTitle="System Logic Test"><CbatSlt /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/vlt"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="vlt"               gameTitle="Verbal Logic Test"><CbatVlt /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/matf"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="matf"              gameTitle="Table Reading Test"><CbatMatf /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/vigilance"        element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="vigilance"         gameTitle="Vigilance Test"><CbatVigilance /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/sma"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="sma"               gameTitle="Sensory Motor Apparatus Test"><CbatSma /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/:gameKey/leaderboard" element={<RequireAuth><PageWrapper><CbatLeaderboard /></PageWrapper></RequireAuth>} />
 
           {/* v2 protected pages */}

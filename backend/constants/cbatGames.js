@@ -22,6 +22,17 @@ const GameSessionCbatCutResult           = require('../models/GameSessionCbatCut
 const GameSessionCbatCutEasierResult     = require('../models/GameSessionCbatCutEasierResult');
 const GameSessionCbatRttResult           = require('../models/GameSessionCbatRttResult');
 const GameSessionCbatRttEasierResult     = require('../models/GameSessionCbatRttEasierResult');
+const GameSessionCbatSitResult           = require('../models/GameSessionCbatSitResult');
+const GameSessionCbatSitEasierResult     = require('../models/GameSessionCbatSitEasierResult');
+const GameSessionCbatSltResult           = require('../models/GameSessionCbatSltResult');
+const GameSessionCbatSltEasierResult     = require('../models/GameSessionCbatSltEasierResult');
+const GameSessionCbatVltResult           = require('../models/GameSessionCbatVltResult');
+const GameSessionCbatVltEasierResult     = require('../models/GameSessionCbatVltEasierResult');
+const GameSessionCbatMatfResult          = require('../models/GameSessionCbatMatfResult');
+const GameSessionCbatMatfEasierResult    = require('../models/GameSessionCbatMatfEasierResult');
+const GameSessionCbatVigilanceResult     = require('../models/GameSessionCbatVigilanceResult');
+const GameSessionCbatSmaResult           = require('../models/GameSessionCbatSmaResult');
+const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSmaEasierResult');
 
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
@@ -264,6 +275,105 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Rapid Tracking Test (Easier)',
+  },
+  'sit': {
+    Model: GameSessionCbatSitResult,
+    primaryField: 'correctCount',
+    sortDir: -1,           // higher is better
+    bestOp: '$max',
+    label: 'Spatial Integration Test',
+  },
+  // SIT's "Easier" difficulty — four rounds instead of six, fewer object
+  // classes on the map and a longer look at the clip. Scores out of 4, not 6,
+  // so the two boards do not share a ceiling. Its own collection; the page at
+  // /cbat/sit picks the key from the selected difficulty.
+  'sit-easier': {
+    Model: GameSessionCbatSitEasierResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Spatial Integration Test (Easier)',
+  },
+  'slt': {
+    Model: GameSessionCbatSltResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'System Logic Test',
+  },
+  // SLT's "Easier" difficulty — four tabs instead of six and single-hop
+  // lookups only (no question needs two tabs combined). Eight questions
+  // instead of ten, so the boards do not share a ceiling.
+  'slt-easier': {
+    Model: GameSessionCbatSltEasierResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'System Logic Test (Easier)',
+  },
+  'vlt': {
+    Model: GameSessionCbatVltResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Verbal Logic Test',
+  },
+  // VLT's "Easier" difficulty — five tabs instead of eight and six questions
+  // instead of eight, all of them two-tab joins rather than three.
+  'vlt-easier': {
+    Model: GameSessionCbatVltEasierResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Verbal Logic Test (Easier)',
+  },
+  // Speeded, so there is no question ceiling — a better player simply answers
+  // more inside the same clock. Ranks on correctCount like the fixed-length
+  // games, but its board carries no "/N".
+  'matf': {
+    Model: GameSessionCbatMatfResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Table Reading Test',
+  },
+  // MATF's "Easier" difficulty — a coordinate grid running ±8 instead of ±17, a
+  // smaller wind sheet, and a longer clock on each of the two parts.
+  'matf-easier': {
+    Model: GameSessionCbatMatfEasierResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Table Reading Test (Easier)',
+  },
+  // Deliberately has NO Easier key. The test measures sustained attention on a
+  // dull task over a fixed stretch; shortening or lightening it would remove
+  // what is being measured. See GameSessionCbatVigilanceResult.js.
+  'vigilance': {
+    Model: GameSessionCbatVigilanceResult,
+    primaryField: 'totalScore',
+    sortDir: -1,           // higher is better (accumulating score)
+    bestOp: '$max',
+    label: 'Vigilance Test',
+  },
+  'sma': {
+    Model: GameSessionCbatSmaResult,
+    primaryField: 'totalScore',
+    sortDir: -1,           // higher is better (accumulating score)
+    bestOp: '$max',
+    label: 'Sensory Motor Apparatus Test',
+  },
+  // SMA's "Easier" difficulty — a slower drift, no gusts, a run of 30 scored
+  // seconds instead of 60, and a tolerance ring of 0.24 of the display radius
+  // instead of 0.16. The ring is the reason this needs its own collection rather
+  // than a shared board with a lower ceiling: a wider ring pays more points for
+  // the same physical tracking, so the two scores are not on one scale.
+  'sma-easier': {
+    Model: GameSessionCbatSmaEasierResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Sensory Motor Apparatus Test (Easier)',
   },
 };
 

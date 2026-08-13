@@ -26,6 +26,7 @@ const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeade
 const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
 const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
 const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgressSeries');
+const { buildAptitudeReport, buildAllBatteryScores, buildCbatUserList } = require('../utils/cbatAptitudeReport');
 const { tierToAward, donationPromptDue } = require('../utils/cbatProgressAward');
 const { buildCbatShowcase } = require('../utils/cbatShowcase');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
@@ -52,6 +53,17 @@ const GameSessionCbatCutResult             = CBAT_GAMES['cut'].Model;
 const GameSessionCbatCutEasierResult       = CBAT_GAMES['cut-easier'].Model;
 const GameSessionCbatRttResult             = CBAT_GAMES['rtt'].Model;
 const GameSessionCbatRttEasierResult       = CBAT_GAMES['rtt-easier'].Model;
+const GameSessionCbatSitResult             = CBAT_GAMES['sit'].Model;
+const GameSessionCbatSitEasierResult       = CBAT_GAMES['sit-easier'].Model;
+const GameSessionCbatSltResult             = CBAT_GAMES['slt'].Model;
+const GameSessionCbatSltEasierResult       = CBAT_GAMES['slt-easier'].Model;
+const GameSessionCbatVltResult             = CBAT_GAMES['vlt'].Model;
+const GameSessionCbatVltEasierResult       = CBAT_GAMES['vlt-easier'].Model;
+const GameSessionCbatMatfResult            = CBAT_GAMES['matf'].Model;
+const GameSessionCbatMatfEasierResult      = CBAT_GAMES['matf-easier'].Model;
+const GameSessionCbatVigilanceResult       = CBAT_GAMES['vigilance'].Model;
+const GameSessionCbatSmaResult             = CBAT_GAMES['sma'].Model;
+const GameSessionCbatSmaEasierResult       = CBAT_GAMES['sma-easier'].Model;
 
 function getDisplayValue(orderType, gameData) {
   if (!gameData) return null;
@@ -2481,6 +2493,98 @@ async function submitRttResult(req, res, Model) {
 router.post('/cbat/rtt/result', protect, (req, res) => submitRttResult(req, res, GameSessionCbatRttResult));
 router.post('/cbat/rtt-easier/result', protect, (req, res) => submitRttResult(req, res, GameSessionCbatRttEasierResult));
 
+// POST /api/games/cbat/{sit,slt,vlt}/result and their -easier siblings.
+//
+// Three separate games sharing one handler because they submit the same shape:
+// a fixed number of questions, a count correct, and the time it took. Their
+// question counts differ (SIT 6/4, SLT 10/8, VLT 8/6) and that difference rides
+// in the body as totalQuestions rather than being pinned here. The difficulty is
+// fixed by the ROUTE, never read from the body, so a run can only ever land in
+// the collection its own board reads from.
+async function submitQuestionCountResult(req, res, Model) {
+  try {
+    const { correctCount, totalQuestions, totalTime, avgTimePerQuestionMs } = req.body;
+    const result = await saveCbatResult(Model, req, {
+      correctCount,
+      totalQuestions,
+      totalTime,
+      avgTimePerQuestionMs,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+router.post('/cbat/sit/result',        protect, (req, res) => submitQuestionCountResult(req, res, GameSessionCbatSitResult));
+router.post('/cbat/sit-easier/result', protect, (req, res) => submitQuestionCountResult(req, res, GameSessionCbatSitEasierResult));
+router.post('/cbat/slt/result',        protect, (req, res) => submitQuestionCountResult(req, res, GameSessionCbatSltResult));
+router.post('/cbat/slt-easier/result', protect, (req, res) => submitQuestionCountResult(req, res, GameSessionCbatSltEasierResult));
+router.post('/cbat/vlt/result',        protect, (req, res) => submitQuestionCountResult(req, res, GameSessionCbatVltResult));
+router.post('/cbat/vlt-easier/result', protect, (req, res) => submitQuestionCountResult(req, res, GameSessionCbatVltEasierResult));
+
+// POST /api/games/cbat/matf/result and /matf-easier/result
+// Speeded rather than fixed-length, so `attempted` comes up with the score —
+// without it a 20 tells you nothing about whether the player was accurate or
+// simply fast. gridCorrect + tableCorrect split the two parts.
+async function submitMatfResult(req, res, Model) {
+  try {
+    const { correctCount, attempted, gridCorrect, tableCorrect, totalTime } = req.body;
+    const result = await saveCbatResult(Model, req, {
+      correctCount,
+      attempted,
+      gridCorrect,
+      tableCorrect,
+      totalTime,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+router.post('/cbat/matf/result',        protect, (req, res) => submitMatfResult(req, res, GameSessionCbatMatfResult));
+router.post('/cbat/matf-easier/result', protect, (req, res) => submitMatfResult(req, res, GameSessionCbatMatfEasierResult));
+
+// POST /api/games/cbat/vigilance/result
+// One difficulty only — see the model for why.
+router.post('/cbat/vigilance/result', protect, async (req, res) => {
+  try {
+    const { totalScore, starsCleared, prioritiesCleared, misKeyed, totalTime } = req.body;
+    const result = await saveCbatResult(GameSessionCbatVigilanceResult, req, {
+      totalScore: totalScore ?? 0,
+      starsCleared,
+      prioritiesCleared,
+      misKeyed,
+      totalTime,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/games/cbat/sma/result and /sma-easier/result
+// `totalScore` is what the board ranks on, but it is a SkyWatch construction —
+// the three percentages beside it are the measurements a real tracking
+// apparatus is scored on, and they are what survives a retune of the points
+// formula. See backend/models/GameSessionCbatSmaResult.js.
+async function submitSmaResult(req, res, Model) {
+  try {
+    const { totalScore, onTargetPct, rmsErrorPct, worstErrorPct, totalTime } = req.body;
+    const result = await saveCbatResult(Model, req, {
+      totalScore: totalScore ?? 0,
+      onTargetPct,
+      rmsErrorPct,
+      worstErrorPct,
+      totalTime,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+router.post('/cbat/sma/result',        protect, (req, res) => submitSmaResult(req, res, GameSessionCbatSmaResult));
+router.post('/cbat/sma-easier/result', protect, (req, res) => submitSmaResult(req, res, GameSessionCbatSmaEasierResult));
+
 // POST /api/games/cbat/trace-2/result
 router.post('/cbat/trace-2/result', protect, async (req, res) => {
   try {
@@ -3131,6 +3235,17 @@ router.get('/cbat/cut/leaderboard', protect, (req, res) => cbatLeaderboard(req, 
 router.get('/cbat/cut-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'cut-easier'));
 router.get('/cbat/rtt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'rtt'));
 router.get('/cbat/rtt-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'rtt-easier'));
+router.get('/cbat/sit/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sit'));
+router.get('/cbat/sit-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sit-easier'));
+router.get('/cbat/slt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'slt'));
+router.get('/cbat/slt-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'slt-easier'));
+router.get('/cbat/vlt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'vlt'));
+router.get('/cbat/vlt-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'vlt-easier'));
+router.get('/cbat/matf/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'matf'));
+router.get('/cbat/matf-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'matf-easier'));
+router.get('/cbat/vigilance/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'vigilance'));
+router.get('/cbat/sma/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sma'));
+router.get('/cbat/sma-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sma-easier'));
 
 // Generic CBAT personal-best handler
 async function cbatPersonalBest(req, res, gameKey) {
@@ -3321,6 +3436,101 @@ router.get('/cbat/cut/personal-best', protect, (req, res) => cbatPersonalBest(re
 router.get('/cbat/cut-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'cut-easier'));
 router.get('/cbat/rtt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'rtt'));
 router.get('/cbat/rtt-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'rtt-easier'));
+router.get('/cbat/sit/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sit'));
+router.get('/cbat/sit-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sit-easier'));
+router.get('/cbat/slt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'slt'));
+router.get('/cbat/slt-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'slt-easier'));
+router.get('/cbat/vlt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'vlt'));
+router.get('/cbat/vlt-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'vlt-easier'));
+router.get('/cbat/matf/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'matf'));
+router.get('/cbat/matf-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'matf-easier'));
+router.get('/cbat/vigilance/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'vigilance'));
+router.get('/cbat/sma/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sma'));
+router.get('/cbat/sma-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sma-easier'));
+
+// ── Aptitude Report ──────────────────────────────────────────────────────────────────────────
+// An estimate of what the user's SkyWatch play would score on a real OASC battery. The maths and
+// the reasoning behind it live in utils/cbatAptitudeReport.js.
+//
+// Registered ahead of the /cbat/:gameKey/* param routes below so a future battery key can never be
+// mistaken for a game key.
+
+// Both report routes accept ?userId= so an admin can read the page as any player — a support tool
+// for "my report looks wrong", and the only way to see a populated report without playing.
+//
+// STRICTLY admin-only, and it resolves to a real subject rather than trusting the id: a non-admin
+// passing ?userId is silently served their OWN report rather than 403'd, because the parameter is
+// not part of the contract for them and an error would only advertise that it exists.
+//
+// Returns null when the id doesn't resolve, so the caller can 404 rather than quietly showing the
+// admin their own numbers under someone else's name.
+async function resolveReportSubject(req) {
+  const wanted = req.query.userId;
+  if (!wanted || !req.user.isAdmin) return { userId: req.user._id, viewingAs: null };
+
+  const subject = await User.findById(wanted).select('agentNumber displayName email cbatTargetBattery').lean();
+  if (!subject) return null;
+
+  return {
+    userId: subject._id,
+    viewingAs: {
+      _id: String(subject._id),
+      agentNumber: subject.agentNumber ?? null,
+      displayName: subject.displayName ?? null,
+      email: subject.email ?? null,
+    },
+    targetBattery: subject.cbatTargetBattery ?? null,
+  };
+}
+
+// GET /api/games/cbat/report-users?q= — admin-only picker feed: users ranked by finished CBAT runs,
+// filtered by an optional identity search.
+//
+// Named report-users rather than report/users so it can never be captured by the :batteryKey route
+// below, whatever order they end up registered in.
+router.get('/cbat/report-users', protect, async (req, res) => {
+  if (!req.user.isAdmin) return res.status(403).json({ message: 'Admins only' });
+  try {
+    const users = await buildCbatUserList(User, { q: req.query.q });
+    res.json({ status: 'success', data: { users } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/cbat/report — every battery scored, headline figures only. Backs the role picker
+// and the summary card on /cbat. One load of the user's form covers all thirteen.
+router.get('/cbat/report', protect, async (req, res) => {
+  try {
+    const subject = await resolveReportSubject(req);
+    if (!subject) return res.status(404).json({ message: 'Unknown user' });
+
+    const { batteries } = await buildAllBatteryScores(subject.userId);
+    res.json({ status: 'success', data: {
+      batteries,
+      // The subject's saved target, not the admin's — the page is showing their report.
+      targetBattery: subject.viewingAs ? subject.targetBattery : (req.user.cbatTargetBattery ?? null),
+      viewingAs: subject.viewingAs,
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/cbat/report/:batteryKey — one battery in full: every domain, every test, the
+// coverage caveat, the uncovered-test gaps and the ranked focus list.
+router.get('/cbat/report/:batteryKey', protect, async (req, res) => {
+  try {
+    const subject = await resolveReportSubject(req);
+    if (!subject) return res.status(404).json({ message: 'Unknown user' });
+
+    const report = await buildAptitudeReport(subject.userId, req.params.batteryKey);
+    if (!report) return res.status(404).json({ message: 'Unknown role' });
+    res.json({ status: 'success', data: { ...report, viewingAs: subject.viewingAs } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // GET /api/games/cbat/:gameKey/progress — the signed-in user's own score series for one game,
 // oldest → newest, backing the post-game trend sparkline and the leaderboard's "You" tab.

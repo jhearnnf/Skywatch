@@ -362,7 +362,7 @@ function QueuedScoreNote() {
     reason = 'Sign in and it uploads from here.'
     cta = <Link to="/login" className="text-brand-300 font-bold underline">Sign in</Link>
   } else if (health.status === 'unreachable') {
-    reason = "We can't reach Skywatch right now — it uploads by itself once we can."
+    reason = "We can't reach SkyWatch right now — it uploads by itself once we can."
   } else {
     reason = 'Uploading in the background.'
   }

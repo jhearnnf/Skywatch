@@ -27,6 +27,17 @@ const GAME_MAX = {
   'cut-easier':      null,   // accumulating score, no fixed ceiling
   'rtt':             null,   // accumulating score, no fixed ceiling
   'rtt-easier':      null,   // accumulating score, no fixed ceiling
+  // SIT / SLT / VLT keep the same question count on both difficulties, so each
+  // pair shares a ceiling — Easier lowers the load, not the length.
+  'sit':             8,      // 8 rounds, one point each
+  'sit-easier':      8,
+  'slt':             10,     // 10 questions, one point each
+  'slt-easier':      10,
+  'vlt':             8,      // 8 questions, one point each
+  'vlt-easier':      8,
+  'matf':            null,   // speeded — answer as many as you can, no ceiling
+  'matf-easier':     null,
+  'vigilance':       null,   // accumulating score, no fixed ceiling
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 
