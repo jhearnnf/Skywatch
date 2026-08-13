@@ -179,7 +179,7 @@ export default function CaseFilePlay() {
   if (loading || !chapter || sessionId === null) {
     return (
       <>
-        <SEO title="Loading… — Skywatch" />
+        <SEO title="Loading…" />
         <Spinner />
       </>
     )
@@ -213,7 +213,7 @@ export default function CaseFilePlay() {
   return (
     <>
       <TutorialModal />
-      <SEO title={`${chapter.title} — Skywatch`} />
+      <SEO title={chapter.title} />
 
       {/*
         Layout strategy:

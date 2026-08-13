@@ -1,43 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Only publicly reachable, indexable pages belong here.
+
+  Every /cbat/<game> route sits behind RequireAuth, so a logged-out crawler is
+  redirected to /login. Listing those URLs would fill Google Search Console with
+  "Page with redirect" exclusions and spend crawl budget on pages that can never
+  rank, so they are deliberately absent — they are reached by internal links
+  once a user signs in.
+
+  The guide is listed at its clean URL. vercel.json rewrites /cbat-guide to
+  /cbat-guide.html, and the document self-canonicalises to the clean form, so
+  the .html path must not appear here or the two compete as duplicates.
+-->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://skywatch.academy/</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://skywatch.academy/home</loc>
+    <loc>https://skywatch.academy/cbat-guide</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://skywatch.academy/learn-priority</loc>
+    <loc>https://skywatch.academy/cbat</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://skywatch.academy/play</loc>
+    <loc>https://skywatch.academy/cbat/report</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://skywatch.academy/cbat-guide.html</loc>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://skywatch.academy/rankings</loc>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://skywatch.academy/profile</loc>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://skywatch.academy/login</loc>
+    <loc>https://skywatch.academy/subscribe</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
     <loc>https://skywatch.academy/contact</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://skywatch.academy/subscribe</loc>
+    <loc>https://skywatch.academy/privacy</loc>
+    <lastmod>2026-08-13</lastmod>
+    <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 </urlset>

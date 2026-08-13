@@ -5,7 +5,7 @@ export default function CbatGameDisabled({ gameTitle }) {
   const title = gameTitle ? `${gameTitle.toUpperCase()} OFFLINE` : 'GAME OFFLINE'
   return (
     <>
-      <SEO title={`${gameTitle || 'CBAT Game'} Offline — Skywatch`} />
+      <SEO title={`${gameTitle || 'CBAT Game'} Offline`} />
       <div className="max-w-md mx-auto px-4 py-12">
         <div className="rounded-2xl border-2 border-slate-400/40 bg-slate-900/60 px-6 py-8 text-center font-mono">
           <p className="text-[10px] tracking-[0.3em] text-slate-400 mb-3">CBAT</p>

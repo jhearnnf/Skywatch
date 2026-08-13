@@ -1,6 +1,52 @@
+# SkyWatch — https://skywatch.academy
+#
+# The rules below exist to keep crawl budget on the pages that can actually
+# rank. Everything disallowed is either signed-in-only (a crawler gets a
+# redirect to /login, which Search Console logs as a "Page with redirect"
+# exclusion), admin-only, or a utility route with no search value.
+#
+# NOTE: never add a bare "Disallow: /cbat" — it would match every CBAT URL,
+# including the two public ones we want indexed (/cbat and /cbat/report).
+# The per-game routes are already excluded from the sitemap and unreachable
+# without an account, so they need no rule here.
+#
+# Do not disallow /assets/, /images/, /models/ or /sounds/. Google renders the
+# page to index this SPA and needs the CSS, JS and media to do it.
+
 User-agent: *
 Allow: /
+
+# Admin and internal tooling
 Disallow: /admin
+Disallow: /clipper
 Disallow: /api/
+
+# Account and session routes — no content, and they redirect when signed out
+Disallow: /login
+Disallow: /profile
+Disallow: /delete-account
+Disallow: /share
+
+# Signed-in-only areas
+Disallow: /chat
+Disallow: /immerse
+Disallow: /embed/
+Disallow: /aptitude-sync/
+Disallow: /quiz/
+Disallow: /battle-of-order/
+Disallow: /wheres-that-aircraft/
+Disallow: /play/
+
+# Personal history pages — per-user data, nothing to index
+Disallow: /airstar-history
+Disallow: /game-history
+Disallow: /cbat-game-history
+Disallow: /intel-brief-history
+
+# /cbat-guide.html is intentionally NOT disallowed. It serves the same document
+# as the clean /cbat-guide URL, and that document canonicalises to the clean
+# form — but a canonical tag only counts if Google is allowed to fetch the page
+# and read it. Blocking the .html would instead risk a URL-only "Indexed, though
+# blocked by robots.txt" entry.
 
 Sitemap: https://skywatch.academy/sitemap.xml

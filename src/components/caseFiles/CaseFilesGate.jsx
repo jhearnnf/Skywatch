@@ -36,7 +36,7 @@ export default function CaseFilesGate({ reason, usedToday, limitToday, minTier }
   if (reason === 'disabled') {
     return (
       <>
-        <SEO title="Case Files Offline — Skywatch" />
+        <SEO title="Case Files Offline" />
         <TerminalCard
           headline="CASE FILES OFFLINE"
           body={'SYSTEM OFFLINE — CASE FILES DISABLED\nSTAND DOWN, AGENT.'}
@@ -50,7 +50,7 @@ export default function CaseFilesGate({ reason, usedToday, limitToday, minTier }
     const lim  = limitToday ?? '?'
     return (
       <>
-        <SEO title="Daily Limit Reached — Skywatch" />
+        <SEO title="Daily Limit Reached" />
         <TerminalCard
           headline="DAILY DOSSIER LIMIT REACHED"
           body={`SESSIONS USED TODAY: ${used} / ${lim}\nREPORT BACK TOMORROW, AGENT.`}
@@ -65,7 +65,7 @@ export default function CaseFilesGate({ reason, usedToday, limitToday, minTier }
   const tier = minTier === 'silver' ? 'silver' : 'gold'
   return (
     <>
-      <SEO title="Case Files — Skywatch" />
+      <SEO title="Case Files" />
       <div className="min-h-[40vh]" />
       <LockedCategoryModal
         category="Case Files"

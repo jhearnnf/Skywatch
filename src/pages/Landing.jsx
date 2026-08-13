@@ -126,9 +126,12 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen" style={{ background: '#06101e' }}>
+      {/* Both descriptions lead on CBAT: it is the term people search for, and
+          the home page is what ranks for it. The full-site variant adds the
+          wider library afterwards rather than opening with it. */}
       <SEO description={slim
-        ? 'Practise for the aircrew CBAT with targeted training games — sharpen the aptitude subtests and track your scores.'
-        : 'Master military aviation knowledge with structured intel briefs, quizzes, and interactive games. Study aircraft, bases, ranks, and operations.'} />
+        ? 'Practise the aircrew CBAT-style aptitude subtests, from FLAG and ANT to DPT and ACT. Free to play in the browser, with every score tracked.'
+        : 'Free CBAT-style practice tests for every aircrew aptitude subtest, from FLAG and ANT to DPT and ACT, plus a full library of military aviation briefs.'} />
 
       {/* ── Header ─────────────────────────────────────────── */}
       <header className="fixed top-0 inset-x-0 z-40 bg-slate-50/80 backdrop-blur-md border-b border-slate-200/50">

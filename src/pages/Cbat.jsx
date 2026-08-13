@@ -93,6 +93,32 @@ function EstTime({ game }) {
 
 const IMAGE_GAMES = CBAT_GAMES.filter(g => g.image)
 
+// Structured data for the hub. This is the one CBAT page a logged-out crawler
+// can actually read — every /cbat/<game> route is behind RequireAuth and just
+// redirects to /login — so the ItemList is what tells Google the breadth of what
+// is here. It mirrors the same enabled/hidden filter the grid below uses, so a
+// game an admin has switched off is never advertised in search results.
+//
+// Deliberately no `url` per item: pointing Google at auth-gated routes would
+// earn a pile of "Page with redirect" exclusions in Search Console for URLs that
+// can never rank. Name and description carry the value on their own.
+function cbatHubJsonLd(isGameEnabled) {
+  const games = CBAT_GAMES.filter(g => !g.hidden && isGameEnabled(g.key))
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'CBAT-style practice tests on SkyWatch',
+    description: 'The aptitude subtests available to practise on SkyWatch.',
+    numberOfItems: games.length,
+    itemListElement: games.map((g, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: g.title,
+      description: g.desc,
+    })),
+  }
+}
+
 // Right-clicking (or long-pressing) a game tile jumps straight to that game's
 // all-time leaderboard. Most tiles' leaderboard key is the last segment of their
 // path. The two combined tiles (Trace 1/2, Visualisation 2D/3D) have no single
@@ -270,7 +296,11 @@ export default function Cbat() {
 
   return (
     <div className="cbat-page">
-      <SEO title="CBAT Games" description="Practise for CBAT with targeted training games." />
+      <SEO
+        title="CBAT Practice Tests"
+        description="Practise every CBAT-style aptitude subtest in one place: FLAG, ANT, DPT, ACT, Trace, Visualisation and more. Free to play, with every score tracked."
+        jsonLd={cbatHubJsonLd(isGameEnabled)}
+      />
 
       <h1 className="text-2xl font-extrabold text-slate-900 mb-1">CBAT Games</h1>
       <p className="text-sm text-slate-500 mb-6">Practise for CBAT with targeted training games.</p>

@@ -13,22 +13,86 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="SkyWatch" />
-    <title>SkyWatch — RAF Knowledge & Aptitude Training</title>
-    <meta name="description" content="Sharpen your RAF knowledge and aptitude with structured intel briefs, quizzes, and interactive learning. Master aircraft, bases, ranks, operations and more." />
+    <!--
+      Everything below is the no-JS fallback. react-helmet-async overwrites the
+      title/description/canonical per route once the app mounts, but this is what
+      a crawler sees before render and all a non-rendering bot ever sees, so it
+      leads on the term people actually search for: CBAT. Keep it in step with
+      the defaults in src/components/SEO.jsx.
+    -->
+    <title>CBAT Practice Tests for Aircrew Aptitude Training — SkyWatch</title>
+    <meta name="description" content="Free CBAT-style practice tests covering every aircrew aptitude subtest, from FLAG and ANT to DPT and ACT. Train against the clock and track your scores." />
+    <link rel="canonical" href="https://skywatch.academy/" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
 
     <!-- Open Graph (fallback for bots that don't run JS) -->
     <meta property="og:site_name" content="SkyWatch" />
-    <meta property="og:title" content="SkyWatch — RAF Knowledge & Aptitude Training" />
-    <meta property="og:description" content="Sharpen your RAF knowledge and aptitude with structured intel briefs, quizzes, and interactive learning. Master aircraft, bases, ranks, operations and more." />
-    <meta property="og:url" content="https://skywatch.academy" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:title" content="CBAT Practice Tests for Aircrew Aptitude Training — SkyWatch" />
+    <meta property="og:description" content="Free CBAT-style practice tests covering every aircrew aptitude subtest, from FLAG and ANT to DPT and ACT. Train against the clock and track your scores." />
+    <meta property="og:url" content="https://skywatch.academy/" />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="https://skywatch.academy/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="SkyWatch — CBAT-style aptitude training" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="SkyWatch — RAF Knowledge & Aptitude Training" />
-    <meta name="twitter:description" content="Sharpen your RAF knowledge and aptitude with structured intel briefs, quizzes, and interactive learning." />
+    <meta name="twitter:title" content="CBAT Practice Tests for Aircrew Aptitude Training — SkyWatch" />
+    <meta name="twitter:description" content="Free CBAT-style practice tests covering every aircrew aptitude subtest, from FLAG and ANT to DPT and ACT." />
     <meta name="twitter:image" content="https://skywatch.academy/og-image.png" />
+    <meta name="twitter:image:alt" content="SkyWatch — CBAT-style aptitude training" />
+
+    <!--
+      Site-level structured data. Static rather than injected by the app so it is
+      present on the pre-render pass. WebSite establishes the name Google shows
+      as the sitelinks brand; WebApplication is what makes a free browser-based
+      trainer eligible for a richer result. Per-page JSON-LD is layered on top
+      via the `jsonLd` prop on <SEO>.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "@id": "https://skywatch.academy/#website",
+          "url": "https://skywatch.academy/",
+          "name": "SkyWatch",
+          "description": "CBAT-style practice tests for aircrew aptitude training.",
+          "inLanguage": "en-GB",
+          "publisher": { "@id": "https://skywatch.academy/#organization" }
+        },
+        {
+          "@type": "Organization",
+          "@id": "https://skywatch.academy/#organization",
+          "name": "SkyWatch",
+          "url": "https://skywatch.academy/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://skywatch.academy/icon-512.png",
+            "width": 512,
+            "height": 512
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://skywatch.academy/#webapp",
+          "name": "SkyWatch CBAT Trainer",
+          "url": "https://skywatch.academy/cbat",
+          "applicationCategory": "EducationalApplication",
+          "operatingSystem": "Any modern web browser",
+          "browserRequirements": "Requires JavaScript.",
+          "inLanguage": "en-GB",
+          "publisher": { "@id": "https://skywatch.academy/#organization" },
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "GBP"
+          }
+        }
+      ]
+    }
+    </script>
 
     <!-- Google Identity Services — required for Google OAuth sign-in -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>

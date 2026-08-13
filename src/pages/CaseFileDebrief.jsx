@@ -146,7 +146,7 @@ export default function CaseFileDebrief() {
   if (loading) {
     return (
       <>
-        <SEO title="Debrief — Skywatch" />
+        <SEO title="Debrief" />
         <Spinner />
       </>
     )
@@ -156,7 +156,7 @@ export default function CaseFileDebrief() {
   if (noSession) {
     return (
       <>
-        <SEO title="Debrief — Skywatch" />
+        <SEO title="Debrief" />
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4">
           <p className="text-sm text-slate-500 text-center">
             Complete the chapter first to view your debrief.
@@ -186,7 +186,7 @@ export default function CaseFileDebrief() {
 
   return (
     <>
-      <SEO title={`Debrief: ${chapter?.title ?? 'Chapter'} — Skywatch`} />
+      <SEO title={`Debrief: ${chapter?.title ?? 'Chapter'}`} />
       <DebriefStage
         stage={debriefStage}
         sessionContext={sessionContext}
