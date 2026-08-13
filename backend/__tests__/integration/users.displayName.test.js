@@ -114,10 +114,10 @@ describe('PATCH /api/users/me/display-name', () => {
       const admin = await createUser({ email: 'admin@test.com', isAdmin: true });
       const cookie = authCookie(admin._id);
 
-      const res = await request(app).patch(ROUTE).set('Cookie', cookie).send({ displayName: 'Skywatch Mod' });
+      const res = await request(app).patch(ROUTE).set('Cookie', cookie).send({ displayName: 'SkyWatch Mod' });
 
       expect(res.status).toBe(200);
-      expect(res.body.data.user.displayName).toBe('Skywatch Mod');
+      expect(res.body.data.user.displayName).toBe('SkyWatch Mod');
     });
 
     it('still blocks profanity for admins', async () => {
@@ -134,7 +134,7 @@ describe('PATCH /api/users/me/display-name', () => {
       const user = await createUser();
       const cookie = authCookie(user._id);
 
-      const res = await request(app).patch(ROUTE).set('Cookie', cookie).send({ displayName: 'Skywatch Mod' });
+      const res = await request(app).patch(ROUTE).set('Cookie', cookie).send({ displayName: 'SkyWatch Mod' });
 
       expect(res.status).toBe(400);
       expect(res.body.message).toMatch(/reserved/i);

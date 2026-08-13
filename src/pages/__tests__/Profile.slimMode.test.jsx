@@ -126,7 +126,7 @@ describe('Profile — slim (native) mode', () => {
     await waitFor(() => screen.getByText('Games Played'))
     fireEvent.click(screen.getByText('⚙️ Settings'))
     await waitFor(() => screen.getByText('Display Name'))
-    expect(screen.getByText('Skywatch Volume')).toBeDefined()
+    expect(screen.getByText('SkyWatch Volume')).toBeDefined()
     expect(screen.queryByText('Recall Difficulty')).toBeNull()
     expect(screen.queryByText('Subscription')).toBeNull()
   })

@@ -112,6 +112,16 @@ const userSchema = new mongoose.Schema(
     // clears the showcase cache).
     hideFromShowcase: { type: Boolean, default: false },
 
+    // The role the user is aiming at, as a `key` from constants/cbatBatteries.json. Picks which
+    // battery the Aptitude Report leads with, and which one the summary card on /cbat shows. Null
+    // until they choose — the report then prompts for a target rather than guessing one, since the
+    // cutoff it would be measured against differs by 32 points across the roster.
+    //
+    // Deliberately NOT enum-validated against the battery list: roles are transcribed from OASC
+    // sheets that get revised, and a stored key that stops matching should degrade to "pick a
+    // target again", never block the user from saving their profile.
+    cbatTargetBattery: { type: String, default: null },
+
     // Subscription
     subscriptionTier: {
       type: String,

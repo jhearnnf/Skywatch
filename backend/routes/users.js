@@ -22,6 +22,7 @@ const AirstarLog = require('../models/AirstarLog');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const { CBAT_GAMES } = require('../constants/cbatGames');
+const { BATTERY_BY_KEY } = require('../constants/cbatBatteries');
 const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
@@ -150,6 +151,29 @@ router.patch('/me/difficulty', protect, async (req, res) => {
     const updated = await User.findByIdAndUpdate(
       req.user._id,
       { difficultySetting: difficulty },
+      { returnDocument: 'after' }
+    ).populate('rank');
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/target-battery — set (or clear) the role the Aptitude Report measures the
+// user against. Body { batteryKey: string | null }.
+//
+// Unknown keys are rejected here even though the schema doesn't enum them: a typo from a client
+// should 400 rather than quietly store a value that makes the report unresolvable later.
+router.patch('/me/target-battery', protect, async (req, res) => {
+  try {
+    const { batteryKey } = req.body ?? {};
+    if (batteryKey !== null && !BATTERY_BY_KEY[batteryKey]) {
+      return res.status(400).json({ status: 'error', message: 'Unknown role' });
+    }
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { cbatTargetBattery: batteryKey },
       { returnDocument: 'after' }
     ).populate('rank');
     const user = await withSelectedBadge(updated.toObject({ virtuals: true }));

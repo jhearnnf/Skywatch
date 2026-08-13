@@ -410,7 +410,7 @@ export default function Rankings() {
         >
           ← Back
         </button>
-        <p className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: C.muted }}>RAF Skywatch</p>
+        <p className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: C.muted }}>RAF SkyWatch</p>
         <h1 className="text-2xl font-extrabold" style={{ color: C.text }}>Progression</h1>
         <p className="text-sm mt-0.5" style={{ color: C.muted }}>Level up and earn RAF Ranks to unlock new pathways.</p>
       </div>

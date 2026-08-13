@@ -13,6 +13,7 @@ import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
 import ProfileBadge from '../components/ProfileBadge'
 import SocialLinks from '../components/SocialLinks'
+import AptitudeReportCard from '../components/AptitudeReportCard'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
 import { NATIVE_APP } from '../utils/appMode'
@@ -387,6 +388,14 @@ export default function Profile() {
             {!slim && <StatCard loading={user && statsLoading} label="Avg Score"    value={`${stats.winPercent}%`}    icon="✓"  onClick={user ? () => navigate('/game-history') : undefined} />}
             {!slim && <StatCard loading={user && statsLoading} label="Airstars"     value={totalCoins.toLocaleString()} icon="⭐" onClick={user ? () => navigate('/airstar-history') : undefined} />}
           </div>
+          {/* Aptitude Report — the one stat here that's about where the user is HEADING rather
+              than what they've done. Below the tiles because it's a bigger read than a number. */}
+          {user && (
+            <div className="mt-6">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Selection Readiness</p>
+              <AptitudeReportCard />
+            </div>
+          )}
           <SocialLinks source="profile" className="mt-6 pt-4 border-t border-slate-200" />
         </motion.div>
       )}
@@ -533,7 +542,7 @@ export default function Profile() {
           {/* Volume */}
           <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isIOS ? ' opacity-50' : ''}`}>
             <div className="flex justify-between items-center mb-3">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Skywatch Volume</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">SkyWatch Volume</p>
               {isIOS
                 ? <span className="text-xs text-slate-400">Use device buttons</span>
                 : <span className="text-sm font-bold text-brand-600">{masterVol}%</span>
@@ -616,7 +625,7 @@ export default function Profile() {
           <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Homepage Feature</p>
             <p className="text-[11px] text-slate-400 mb-3">
-              We sometimes show a player's score progress on the Skywatch homepage as an example of
+              We sometimes show a player's score progress on the SkyWatch homepage as an example of
               how practice pays off. You appear as your agent number only — never your display name,
               and never the date/time you played.
             </p>
