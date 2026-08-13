@@ -403,7 +403,7 @@ describe('CbatAptitudeReport', () => {
       fireEvent.click(screen.getByText('Change role'))
       await screen.findByText("How you'd do in every role")
       expect(screen.queryByText(/I'm aiming for/)).not.toBeInTheDocument()
-      expect(screen.getByText(/hasn't picked a role yet/)).toBeInTheDocument()
+      expect(screen.getByText('This player has not chosen a role yet.')).toBeInTheDocument()
     })
 
     it('says in the list whether each player has chosen a role', async () => {
@@ -418,6 +418,46 @@ describe('CbatAptitudeReport', () => {
       const none   = screen.getByText('No role chosen')
       expect(aiming.className).toMatch(/brand-700/)
       expect(none.className).not.toMatch(/brand-700/)
+    })
+
+    it('opens a picked player on their own chosen role', async () => {
+      // Their target only arrives with their summary, so the report must wait for it rather than
+      // fetch the sheet's first role and swap it out a moment later.
+      searchParams = new URLSearchParams({ as: 'busy1' })
+      global.fetch = vi.fn((url) => {
+        const viewingAs = { _id: 'busy1', agentNumber: '2000001', displayName: null }
+        let body = { ...summary, targetBattery: 'nco-control-atc', viewingAs }
+        if (url.includes('/report-users')) body = { users: reportUsers }
+        else if (url.includes('/report/')) body = { ...report, viewingAs }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+      })
+
+      render(<CbatAptitudeReport />)
+      await screen.findByText('100')
+
+      // Not a call count — every role fetch must have been for THEIR role, with the sheet's first
+      // role never requested on the way there.
+      const roleCalls = global.fetch.mock.calls
+        .map(c => c[0]).filter(u => u.includes('/report/'))
+      expect(roleCalls.length).toBeGreaterThan(0)
+      expect(roleCalls.every(u => u.includes('/report/nco-control-atc'))).toBe(true)
+    })
+
+    it('says so when the player being viewed has never chosen a role', async () => {
+      searchParams = new URLSearchParams({ as: 'quiet1' })
+      global.fetch = vi.fn((url) => {
+        const viewingAs = { _id: 'quiet1', agentNumber: '2000002', displayName: 'Maverick' }
+        let body = { ...summary, targetBattery: null, viewingAs }
+        if (url.includes('/report-users')) body = { users: reportUsers }
+        else if (url.includes('/report/')) body = { ...report, viewingAs }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+      })
+
+      render(<CbatAptitudeReport />)
+      await screen.findByText('100')
+
+      expect(screen.getByText('Role this player is aiming for')).toBeInTheDocument()
+      expect(screen.getByText(/has not chosen a role yet, so we are showing/)).toBeInTheDocument()
     })
   })
 

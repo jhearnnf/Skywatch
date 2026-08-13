@@ -345,7 +345,7 @@ function RolePicker({ batteries, selected, targetBattery, onSelect, onSetTarget,
         <p className="text-[10px] text-slate-600 text-center mt-2">
           {targetBattery
             ? <>This player is aiming for <span className="font-bold text-slate-700">{BATTERY_BY_KEY[targetBattery]?.label}</span>.</>
-            : <>This player hasn&apos;t picked a role yet.</>}
+            : <>This player has not chosen a role yet.</>}
         </p>
       )}
     </div>
@@ -490,8 +490,15 @@ export default function CbatAptitudeReport() {
 
   // When viewing another player it's THEIR saved target the page should open on, not the admin's.
   const targetBattery = (viewingId ? summary?.targetBattery : user?.cbatTargetBattery) ?? null
+
+  // Our own target is on the user object and known immediately; another player's only arrives with
+  // their summary. Until it does there is no role worth fetching — guessing one would render a
+  // report for a role nobody asked for and then swap it out from under the reader — so `selected`
+  // stays null and the page holds on its loading line.
+  const subjectReady = !viewingId || summary != null
   // URL wins (so a report is linkable), then the saved target, then the first role on the sheet.
-  const selected = params.get('role') ?? targetBattery ?? BATTERY_GROUPS[0].batteries[0].key
+  const selected = params.get('role')
+    ?? (subjectReady ? (targetBattery ?? BATTERY_GROUPS[0].batteries[0].key) : null)
 
   // The sheet is wide — a domain row carries a name, a weight, a nine-cell bar and a verdict.
   // Same shell override the CBAT picker uses.
@@ -503,6 +510,10 @@ export default function CbatAptitudeReport() {
   useEffect(() => {
     if (!user) return
     let cancelled = false
+    // Dropped before the fetch, not merged after it: the target role on a stale summary belongs to
+    // the player we've just navigated away from, and reading it as the new one's would open their
+    // report on a role they never chose.
+    setSummary(null)
     ;(async () => {
       try {
         const res = await apiFetch(`${API}/api/games/cbat/report${asParam}`)
@@ -515,8 +526,9 @@ export default function CbatAptitudeReport() {
 
   useEffect(() => {
     if (!user) return
-    let cancelled = false
     setLoading(true)
+    if (!selected) return   // still waiting on the viewed player's saved role
+    let cancelled = false
     ;(async () => {
       try {
         const res = await apiFetch(`${API}/api/games/cbat/report/${selected}${asParam}`)
@@ -630,11 +642,25 @@ export default function CbatAptitudeReport() {
         <AdminUserPicker current={viewingId} onPick={pickUser} onClose={() => setUserPickerOpen(false)} />
       )}
 
-      {/* Role bar */}
+      {/* Role bar. Reworded when an admin is reading someone else's report: the role on show is
+          that player's choice, and calling it the one "you're" aiming for would read as the
+          admin's own. */}
       <div className="flex items-center gap-3 mb-5">
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Role you&apos;re aiming for</p>
-          <p className="text-base font-extrabold text-slate-900 truncate">{report?.label ?? BATTERY_BY_KEY[selected]?.label}</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">
+            {viewingAs ? 'Role this player is aiming for' : "Role you're aiming for"}
+          </p>
+          <p className="text-base font-extrabold text-slate-900 truncate">
+            {report?.label ?? BATTERY_BY_KEY[selected]?.label ?? '-'}
+          </p>
+          {/* Said plainly rather than left to look like a choice they made: the role on screen is
+              our default, and an admin reading it as the player's goal would draw the wrong
+              conclusion from every number under it. */}
+          {viewingAs && !targetBattery && (
+            <p className="text-[10px] text-amber-700 truncate">
+              This player has not chosen a role yet, so we are showing the first one on the sheet.
+            </p>
+          )}
         </div>
         <button
           type="button"
