@@ -396,7 +396,7 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
   // Pull identity for the ranked ids. On a search we also want the zero-play matches, so the id
   // set is the union of both.
   const ids = [...new Set([...byId.keys(), ...(matchedIds ?? []).map(String)])];
-  const users = await User.find({ _id: { $in: ids } }, 'agentNumber email displayName isAdmin').lean();
+  const users = await User.find({ _id: { $in: ids } }, 'agentNumber email displayName isAdmin cbatTargetBattery').lean();
 
   const ranked = users
     .map(u => ({
@@ -405,6 +405,10 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
       email: u.email ?? null,
       displayName: u.displayName ?? null,
       isAdmin: !!u.isAdmin,
+      // The role they've said they're aiming for, or null if they never picked one. Carried on the
+      // list itself so the picker can say which players have chosen a role before one is opened,
+      // and so opening a player lands on their role rather than a default.
+      targetBattery: u.cbatTargetBattery ?? null,
       plays: byId.get(String(u._id)) ?? 0,
     }))
     .sort((a, b) => b.plays - a.plays || String(a.agentNumber).localeCompare(String(b.agentNumber)))

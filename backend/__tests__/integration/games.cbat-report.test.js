@@ -453,6 +453,21 @@ describe('GET /api/games/cbat/report-users', () => {
     expect(res.body.data.users).toHaveLength(0);
   });
 
+  it('says which listed players have chosen a role, and which have not', async () => {
+    // The picker shows this before anyone is opened, and the page then opens a player on their own
+    // role — both need the choice on the list itself.
+    const decided   = await createUser({ agentNumber: '7000001', cbatTargetBattery: 'pilot' });
+    const undecided = await createUser({ agentNumber: '7000002' });
+    await playAs(decided._id, 'cut', 2);
+    await playAs(undecided._id, 'cut', 1);
+
+    const res  = await request(app).get('/api/games/cbat/report-users').set('Cookie', adminCookie);
+    const rows = res.body.data.users;
+
+    expect(rows.find(u => u.agentNumber === '7000001').targetBattery).toBe('pilot');
+    expect(rows.find(u => u.agentNumber === '7000002').targetBattery).toBeNull();
+  });
+
   it('counts how many roles each listed player clears', async () => {
     // Median play across every scorable game scores 100 — which clears the ten roles with a cutoff
     // of 80/90/95/100 and misses Pilot (112). The exact split matters less than the two facts the

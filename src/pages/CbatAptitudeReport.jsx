@@ -443,6 +443,20 @@ function AdminUserPicker({ current, onPick, onClose }) {
                 </span>
               </span>
               <span className="block text-[10px] text-slate-600 truncate">{u.email}</span>
+              {/* Whether they've chosen a role, on its own line rather than as a chip by the name:
+                  role labels run to "WSOP (Air Signaller, Linguist)" and would crowd out the name
+                  they're being scanned against. Blue when set, grey when not, so the two states
+                  separate at a glance down the column. */}
+              <span
+                className={`block text-[10px] truncate ${u.targetBattery ? 'text-brand-700' : 'text-slate-500 italic'}`}
+                title={u.targetBattery
+                  ? 'Opening this player will show this role'
+                  : 'This player has not chosen a role, so their report opens on the first one on the sheet'}
+              >
+                {u.targetBattery
+                  ? `Aiming for ${BATTERY_BY_KEY[u.targetBattery]?.label ?? u.targetBattery}`
+                  : 'No role chosen'}
+              </span>
             </span>
             <span className="shrink-0 text-right">
               <span className="block font-mono text-sm font-extrabold text-slate-700">{u.plays}</span>

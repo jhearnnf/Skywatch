@@ -81,8 +81,8 @@ const report = {
 }
 
 const reportUsers = [
-  { _id: 'busy1', agentNumber: '2000001', email: 'busy@example.com', displayName: null, isAdmin: false, plays: 42, rolesPassed: 6, totalRoles: 13 },
-  { _id: 'quiet1', agentNumber: '2000002', email: 'quiet@example.com', displayName: 'Maverick', isAdmin: false, plays: 3, rolesPassed: 0, totalRoles: 13 },
+  { _id: 'busy1', agentNumber: '2000001', email: 'busy@example.com', displayName: null, isAdmin: false, plays: 42, rolesPassed: 6, totalRoles: 13, targetBattery: 'nco-control-atc' },
+  { _id: 'quiet1', agentNumber: '2000002', email: 'quiet@example.com', displayName: 'Maverick', isAdmin: false, plays: 3, rolesPassed: 0, totalRoles: 13, targetBattery: null },
 ]
 
 beforeEach(() => {
@@ -404,6 +404,20 @@ describe('CbatAptitudeReport', () => {
       await screen.findByText("How you'd do in every role")
       expect(screen.queryByText(/I'm aiming for/)).not.toBeInTheDocument()
       expect(screen.getByText(/hasn't picked a role yet/)).toBeInTheDocument()
+    })
+
+    it('says in the list whether each player has chosen a role', async () => {
+      // The thing being scanned for before opening anyone: a report read against a role its owner
+      // never picked is read against our default, and the two look identical once open.
+      render(<CbatAptitudeReport />)
+      await screen.findByText('100')
+      fireEvent.click(screen.getByText('View as…'))
+      await screen.findByText('Agent 2000001')
+
+      const aiming = screen.getByText('Aiming for Non-Commissioned Control (ATC)')
+      const none   = screen.getByText('No role chosen')
+      expect(aiming.className).toMatch(/brand-700/)
+      expect(none.className).not.toMatch(/brand-700/)
     })
   })
 
