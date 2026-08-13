@@ -7,7 +7,7 @@ import BriefReelPlayer  from './BriefReelPlayer';
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 // BriefReelSection — wraps a section's pre-rendered body (children) with the
-// Brief Reel affordance: a Skywatch logo button in the bottom-right of the
+// Brief Reel affordance: a SkyWatch logo button in the bottom-right of the
 // section card, an inline player below the body on desktop, and a fullscreen
 // sheet on mobile. The host (BriefReader) is responsible for the feature-flag
 // gate — only mount this when the flag allows for the current user.
@@ -307,7 +307,7 @@ export default function BriefReelSection({
               {playerEl}
             </div>
             {isAdmin && reelInfo?.status === 'pending' && (
-              // mr-16 reserves room on the right for the Skywatch logo
+              // mr-16 reserves room on the right for the SkyWatch logo
               // (w-12 button at -right-3 = 60px keep-out zone) so the
               // Publish / Discard buttons never sit behind the floating
               // logo. Keep the bar narrower than the player width.

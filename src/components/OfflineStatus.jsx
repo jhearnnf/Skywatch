@@ -104,7 +104,7 @@ export default function OfflineStatus() {
     action = { label: 'Sign in', onClick: () => navigate('/login') }
     tone = 'alert'
   } else if (unreachable) {
-    text = `Can't reach Skywatch — ${scores} saved on this device`
+    text = `Can't reach SkyWatch — ${scores} saved on this device`
     action = { label: 'Try again', onClick: () => flushOutbox({ apiFetch, API, userId }) }
     tone = 'alert'
   } else {

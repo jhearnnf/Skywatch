@@ -538,7 +538,7 @@ function playOutOfAmmo(volume) {
   audio.play().catch(done)
 }
 
-// ── Skywatch logo: singleton — only one instance plays at a time ─────────────
+// ── SkyWatch logo: singleton — only one instance plays at a time ─────────────
 let _skywatchLogoAudio = null
 
 // ── Keyword locked: bypasses the queue, plays immediately, max 5 concurrent ──
@@ -590,7 +590,7 @@ export function playSound(name, { onAudio } = {}) {
       return Promise.resolve()
     }
 
-    // Skywatch logo cue: bypasses the queue so it fires instantly alongside
+    // SkyWatch logo cue: bypasses the queue so it fires instantly alongside
     // any logo-reveal animation and isn't held back by other sounds.
     // Singleton — stop any prior instance before starting a new one so a
     // re-mount of <SkywatchLogoIntro> (StrictMode double-invoke, fast double

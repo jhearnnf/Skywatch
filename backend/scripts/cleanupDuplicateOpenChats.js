@@ -72,7 +72,7 @@ async function run() {
         conversationId: convo._id,
         senderUserId:   null,
         senderRole:     'system',
-        body:           'Auto-closed: duplicate open chat consolidated by Skywatch.',
+        body:           'Auto-closed: duplicate open chat consolidated by SkyWatch.',
       });
       await ChatConversation.findByIdAndUpdate(convo._id, {
         status:                'closed',

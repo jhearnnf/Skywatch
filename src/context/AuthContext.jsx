@@ -170,7 +170,7 @@ export function AuthProvider({ children }) {
       .catch((err) => {
         // Couldn't reach the API at all. The cached user deliberately survives
         // so offline play keeps working — but this is now recorded, so the app
-        // can say "can't reach Skywatch" instead of pretending all is well.
+        // can say "can't reach SkyWatch" instead of pretending all is well.
         if (err?.name !== 'AbortError') noteApiUnreachable(err)
         else noteApiUnreachable(new Error('auth check timed out'))
       })

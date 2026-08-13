@@ -4,7 +4,7 @@ function commit(sha, message) {
   return {
     sha,
     commit: { message, author: { name: 'James', date: '2026-04-20T10:00:00Z' } },
-    html_url: `https://github.com/jhearnnf/Skywatch/commit/${sha}`,
+    html_url: `https://github.com/jhearnnf/SkyWatch/commit/${sha}`,
   };
 }
 
@@ -17,9 +17,9 @@ function mockOk(body) {
 describe('githubCommits.fetchRecentCommits', () => {
   test('hits the right endpoint with auth + accept headers', async () => {
     const fetchImpl = mockOk([]);
-    await fetchRecentCommits({ repo: 'jhearnnf/Skywatch', token: 'tok_123', fetchImpl });
+    await fetchRecentCommits({ repo: 'jhearnnf/SkyWatch', token: 'tok_123', fetchImpl });
     const [url, opts] = fetchImpl.mock.calls[0];
-    expect(url).toContain('https://api.github.com/repos/jhearnnf/Skywatch/commits');
+    expect(url).toContain('https://api.github.com/repos/jhearnnf/SkyWatch/commits');
     expect(url).toContain('sha=main');
     expect(opts.headers.Authorization).toBe('Bearer tok_123');
     expect(opts.headers.Accept).toBe('application/vnd.github+json');

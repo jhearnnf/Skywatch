@@ -176,7 +176,14 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,woff,woff2,png,ico}'],
         globIgnores: ['**/models/**'],
         additionalManifestEntries: offlineGlbPrecacheEntries(),
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // 3D/vendor chunks
+        // 3D/vendor chunks. The app ships as a single eagerly-imported bundle,
+        // so this has to clear the whole thing — and it MUST, because offline
+        // CBAT play precaches the app shell. A bundle over the limit is not
+        // precached, which silently breaks offline play rather than failing
+        // loudly. Raised from 4 MiB when the SIT/SLT/VLT/MATF/Vigilance pages
+        // took the bundle past it (4.29 MB). If this needs raising again,
+        // consider lazy-loading the CBAT routes instead.
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         // The service worker answers EVERY navigation with the precached
         // index.html unless the path is denied here — which would hand the SPA
         // a path it has no route for, and slim mode would redirect it to /cbat.

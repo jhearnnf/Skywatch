@@ -3,7 +3,7 @@ import { playSound, playFlagBleep } from '../sound'
 import { beginDemo, __resetDemoCount } from '../cbat/demoMode'
 
 // The landing page mounts nine real CBAT games at once. Every cue they fire —
-// the Skywatch logo sting on a game start, FLAG's contact bleeps — would play
+// the SkyWatch logo sting on a game start, FLAG's contact bleeps — would play
 // over each other on a page nobody expects to make noise, so a demo mount
 // silences the shared sound module the same way it silences ACT and SAT.
 

@@ -47,7 +47,7 @@ async function fetchHead(url) {
     const res = await fetch(url, {
       signal: controller.signal,
       headers: {
-        'User-Agent':      'Mozilla/5.0 (compatible; Skywatch/1.0)',
+        'User-Agent':      'Mozilla/5.0 (compatible; SkyWatch/1.0)',
         'Accept':          'text/html,application/xhtml+xml',
         'Accept-Language': 'en-GB,en;q=0.9',
       },

@@ -1436,7 +1436,7 @@ export default function CbatAct() {
     })
   }, [audioReady, settings])
 
-  // Skywatch logo curtain — plays once per page mount on the first
+  // SkyWatch logo curtain — plays once per page mount on the first
   // start. Subsequent Play Again's skip it for snappy replays.
   const logoPlayedRef = useRef(false)
 
