@@ -366,6 +366,183 @@ body.community-selectable .app-shell-content * {
   }
 }
 
+/* Table Reading gameplay: the reference is a 17×17 grid of two-digit values, and
+   the whole test is how fast you can land on a cell. Capped at max-w-3xl the
+   cells shrink to the point where the eye loses its row on the way across, which
+   makes the game harder in a way the real test is not. Toggled from
+   src/pages/CbatMatf.jsx while a part is running. */
+@media (min-width: 1024px) {
+  body.cbat-matf-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Spatial Integration gameplay: the study layers and the 3D camera pass ARE the
+   test, and inside max-w-3xl they sat in a 448px column — a 360px map and a
+   420px clip on a widescreen monitor, with most of the screen unused. The clip
+   in particular is a landscape shot of a landscape; shown that small the hills
+   you are meant to navigate by are a few dozen pixels across. Toggled from
+   src/pages/CbatSit.jsx while a clip is being studied, watched or answered. */
+@media (min-width: 1024px) {
+  body.cbat-sit-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* System Logic and Verbal Logic gameplay: both show TWO tabs side by side (the
+   real tests only let you read two at a time), and two panes inside a 672px
+   column is two 320px columns of prose and figures. Widening lets each pane be
+   a readable width instead. Toggled from
+   src/components/cbat/CbatTabbedReasoning.jsx while reading or answering. */
+@media (min-width: 1024px) {
+  body.cbat-tabs-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Vigilance gameplay: a 9×9 grid of 22px cells is a 200px square, and the whole
+   test is holding attention on it for three minutes. Given the screen it becomes
+   a board you can actually scan, with the keypad beside it rather than under it.
+   Toggled from src/pages/CbatVigilance.jsx while a run is on. */
+@media (min-width: 1024px) {
+  body.cbat-vigilance-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* ── Vigilance board sizing ────────────────────────────────────────────────
+   The cell size lives here as a custom property rather than as Tailwind classes
+   on each cell, for one reason: the board must not move.
+
+   `table-layout: fixed` is what stops a cell resizing when a star lands in it —
+   under the default `auto` a column is sized to its widest content, so every
+   spawn and every clear re-flowed the grid and the cells visibly jittered
+   through the run. But fixed layout is IGNORED unless the table has a definite
+   width; with `width: auto` the browser quietly falls back to the automatic
+   algorithm, which is exactly what happened on the first attempt at this fix —
+   the table's overall width stayed pinned while the columns underneath it
+   carried on redistributing.
+
+   So the table needs a real width, and that width has to be the sum of the
+   column widths or the columns get scaled to fit. One variable for the cell and
+   one for the label gutter keeps that sum honest: CbatVigilance.jsx builds the
+   table width from these with the grid size, so the three can never drift. */
+.vigilance-board {
+  --vig-cell: 22px;
+  --vig-label: 20px;
+}
+@media (min-width: 640px) {
+  .vigilance-board { --vig-cell: 30px; --vig-label: 24px; }
+}
+@media (min-width: 1024px) {
+  .vigilance-board { --vig-cell: 44px; --vig-label: 32px; }
+}
+
+/* ── Clearing a star ───────────────────────────────────────────────────────
+   The payoff for keying a coordinate right. Three minutes of clearing a grid is
+   deliberately dull — that IS the test — so it is worth acknowledging a hit,
+   but the acknowledgement has to stay out of the way of the work.
+
+   DELIBERATELY RESTRAINED. The first cut of this threw six sparks, blew the star
+   up to two and a half times its size and glowed; on a board where clears come
+   a second apart it read as an arcade and competed with the task for attention,
+   which on an attention test is the one thing an effect must not do. What is
+   left is a quick confirming pulse and the number it paid — enough to feel like
+   something happened, little enough to ignore while you scan for the next star.
+
+   EVERY PART OF THIS IS OUT OF FLOW. The burst is absolutely positioned inside
+   its cell and contributes nothing to the cell's size, which matters more here
+   than anywhere else on the site: the board took two goes to stop it jittering
+   as stars came and went, and an effect that nudged a column would undo that.
+   Nothing below sets width, height, margin or padding on anything in flow.
+
+   Sized from --vig-cell throughout rather than in fixed pixels, so the effect
+   scales with the board instead of being a 44px-only design. */
+.vig-burst {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  color: #8ec5f0;
+}
+.vig-burst-priority { color: #e8c561; }
+
+.vig-burst-glyph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: calc(var(--vig-cell) * 0.55);
+  animation: vig-pop 240ms ease-out forwards;
+}
+@keyframes vig-pop {
+  0%   { transform: scale(1);    opacity: 0.85; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+.vig-burst-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--vig-cell);
+  height: var(--vig-cell);
+  margin-left: calc(var(--vig-cell) / -2);
+  margin-top: calc(var(--vig-cell) / -2);
+  border: 1px solid currentColor;
+  border-radius: 9999px;
+  animation: vig-ring 360ms ease-out forwards;
+}
+@keyframes vig-ring {
+  0%   { transform: scale(0.5);  opacity: 0.5; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+
+/* What the clear was actually worth. This is the part that earns its place: a
+   priority task's bonus decays with every second it is left, so the number is
+   different every time and seeing it is how the decay becomes visible rather
+   than a rule in the intro. Kept small and short — it is a readout, not a
+   celebration. */
+.vig-burst-score {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--vig-cell) * -0.1);
+  font-weight: 700;
+  white-space: nowrap;
+  font-size: calc(var(--vig-cell) * 0.32);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  animation: vig-score 560ms ease-out forwards;
+}
+@keyframes vig-score {
+  0%   { transform: translate(-50%, 15%) scale(0.85); opacity: 0; }
+  25%  { transform: translate(-50%, -10%) scale(1);   opacity: 0.95; }
+  100% { transform: translate(-50%, -80%) scale(1);   opacity: 0; }
+}
+
+/* A brief wash over the square itself, so the eye is drawn back to where the
+   clear happened. Low enough that a run of them does not strobe. */
+.vig-cell-cleared { animation: vig-cell-flash 300ms ease-out; }
+@keyframes vig-cell-flash {
+  0%   { background-color: color-mix(in srgb, #8ec5f0 20%, transparent); }
+  100% { background-color: transparent; }
+}
+/* Gold for a priority task, matching its burst. Clearing one is worth up to six
+   times a routine star, and every other cue on the board already says so. */
+.vig-cell-cleared-priority { animation-name: vig-cell-flash-priority; }
+@keyframes vig-cell-flash-priority {
+  0%   { background-color: color-mix(in srgb, #e8c561 22%, transparent); }
+  100% { background-color: transparent; }
+}
+
 /* ── RTT reticle ───────────────────────────────────────────────────────────
    Pinned to the centre of the sensor picture and sized as a PERCENTAGE of the
    arena height, not in pixels: the capture cone is an angle, the camera's
@@ -450,6 +627,87 @@ body.community-selectable .app-shell-content * {
   .rtt-shutter {
     display: flex;
   }
+}
+
+/* ── SMA (Sensory Motor Apparatus Test) ────────────────────────────────────
+   A red dot drifting across a round instrument face with a fixed crosshair at
+   its centre. Everything here is written by CbatSma's frame loop rather than
+   through React — the dot moves at 60 Hz, and a render a frame would cost more
+   than the whole simulation does.
+
+   The dot is centred in a full-face layer that the loop translates in PERCENT.
+   A percentage translate resolves against the layer's own box, which is the
+   face, so a normalised position of 1 lands exactly on the bezel at any size
+   with nothing measured and no resize handler — the same trick .rtt-reticle
+   uses for its size. */
+.sma-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.75);
+}
+
+/* The tolerance ring: the boundary inside which a run scores at all. Sized in
+   percent from the difficulty's ring radius, so the Easier ring is visibly the
+   wider one. Its colour is the lock indicator. */
+.sma-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+  pointer-events: none;
+  color: #1a3a5c;
+  transition: color 90ms linear;
+}
+.sma-ring[data-state='on']   { color: #22c55e; }
+/* The lead-in, before anything is being scored. Amber rather than green so a
+   player never reads those first seconds as points already banked. */
+.sma-ring[data-state='lead'] { color: #f59e0b; }
+
+/* The touch pad is for touch only, and for the same reason RTT's shutter is:
+   with a mouse the pointer's offset from the middle of the face IS the control,
+   so reaching down for the pad would peg the dot on the way there. */
+.sma-pad {
+  display: none;
+}
+@media (pointer: coarse) {
+  .sma-pad {
+    display: block;
+  }
+}
+
+/* Ring and knob for the virtual stick. Both are anchored at the pad's top-left
+   and translated to the gesture's origin in pixels, because the origin is
+   wherever the finger landed rather than a fixed point the CSS could know. The
+   negative margins are half each element's own size, which is what centres it
+   on the point it was translated to. */
+.sma-pad-ring,
+.sma-pad-knob {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.sma-pad-ring {
+  width: 76px;
+  height: 76px;
+  margin-left: -38px;
+  margin-top: -38px;
+  border: 1px solid rgba(91, 170, 255, 0.35);
+  background: rgba(91, 170, 255, 0.06);
+}
+.sma-pad-knob {
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  margin-top: -17px;
+  background: rgba(91, 170, 255, 0.3);
+  border: 2px solid #5baaff;
+  box-shadow: 0 0 14px rgba(91, 170, 255, 0.45);
 }
 
 /* Admin panel: the max-w-3xl reading column wasted most of a desktop monitor —
