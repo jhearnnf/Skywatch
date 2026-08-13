@@ -1226,16 +1226,17 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
     return () => clearTimeout(id)
   }, [enabled.scan, scanPanelAc, scanTargetAc, aircraftList])
 
-  // Section 5: once the System panel is shown, measure the visible height and
-  // inject the target code just below the fold so it scrolls into view rather
-  // than starting on screen. Runs inside rAF so it reads post-layout sizes.
+  // Section 5: once the System panel is shown, inject the target code just
+  // above the fold so it scrolls into view rather than starting on screen.
+  // Columns scroll downwards, so the rows waiting off-screen are the ones at
+  // the end of the list: two from the end enters after two rows of travel.
+  // Runs inside rAF so it reads post-layout sizes.
   useEffect(() => {
     if (!enabled.system || sysTargetPlaced) return
     const raf = requestAnimationFrame(() => {
       const colEl = systemRef.current?.querySelector('.sys-column')
       if (!colEl) return
-      const visibleRows = Math.max(1, Math.floor(colEl.clientHeight / 32))
-      const targetRow = Math.min(sysColumns[0].codes.length - 1, visibleRows + 1)
+      const targetRow = Math.max(0, sysColumns[0].codes.length - 2)
       const code = randomCode()
       setSysColumns(prev => {
         const next = prev.map(c => ({ ...c, codes: [...c.codes] }))
@@ -2195,12 +2196,12 @@ function initSysColumns() {
   // Row count scales with the column height so the duplicated list always
   // overflows and wraps with no visible edge — on tall desktops and short
   // phones alike. Keeping the list proportional to the column also keeps the
-  // reappear time sane: speed is constant, so a code that leaves the top
+  // reappear time sane: speed is constant, so a code that leaves the bottom
   // returns after list-length/speed. A fixed 20-row floor made short phones
   // wait out a list twice as long as their own column. +4 rows of buffer.
   const colPx = sysColumnHeightPx()
   const rows = Math.max(10, Math.ceil(colPx / SYS_ROW_PX) + 4)
-  // Constant scroll speed (px/ms) per column so a code that leaves the top
+  // Constant scroll speed (px/ms) per column so a code that leaves the bottom
   // returns after one list length — reasonably quick and readable. Staggered
   // so the three tracks don't march in lockstep.
   const speeds = [0.0265, 0.0234, 0.0209]

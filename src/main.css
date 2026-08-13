@@ -1583,9 +1583,11 @@ body.play-mode .card-shadow {
   flex: 0 0 32px;
 }
 
+/* Codes travel downwards: the list starts shifted up by one full copy and
+   slides back to 0, so rows enter at the top and leave at the bottom. */
 @keyframes sys-scroll {
-  from { transform: translateY(0); }
-  to   { transform: translateY(-50%); }
+  from { transform: translateY(-50%); }
+  to   { transform: translateY(0); }
 }
 
 /* ── CBAT game card background pan + bloom ───────────────────────────────── */
