@@ -1,0 +1,347 @@
+{
+  "_comment": [
+    "Single source of truth for the Aptitude Report — shared with the frontend, which imports",
+    "this file directly (same pattern as categories.json). Keep it data-only: the maths lives in",
+    "backend/utils/cbatStanine.js and backend/utils/cbatAptitudeReport.js, the wording in",
+    "src/data/cbatBatteries.js.",
+    "",
+    "Transcribed from real OASC 'Aptitude Scores' sheets (APPLICATION_INFO/cbat scores). Each",
+    "battery is one role. A battery scores a candidate across weighted domains; each domain is fed",
+    "by named tests with multipliers. Every test yields a stanine (1-9), a domain's stanine is the",
+    "multiplier-weighted mean of its tests, and the battery score is",
+    "  round(sum(domainWeight * domainStanine) / 100 * 20)   -> max 180",
+    "Pass is score >= cutoff. Domain weights sum to 100 in every battery (asserted in tests)."
+  ],
+
+  "maxScore": 180,
+  "maxStanine": 9,
+
+  "_minCoverageComment": [
+    "The score is renormalised over the weight we could actually measure, which is right at 90%",
+    "coverage and dangerous at 16%: it turns a sliver of evidence into a confident PASS. A player",
+    "who uses the Easier mode wherever it is offered lands at 14-18% on several batteries, because",
+    "the heavily weighted tests (CUT and SAT are 49% of Control Officer (ATC) between them) are",
+    "exactly the ones with an Easier mode.",
+    "",
+    "Below this much coverage the battery reports status 'provisional': the score is still returned,",
+    "but it is not a pass or a fail and no part of the UI may present it as one."
+  ],
+  "minCoverageForVerdict": 80,
+
+  "_domainsComment": [
+    "Blurbs are shown to the user, so they are written for someone who has never heard of the CBAT:",
+    "one plain sentence, no jargon, and no em dashes."
+  ],
+  "domains": {
+    "StrgcTM":  { "label": "Strategic Task Management", "blurb": "Keeping a plan on track when the picture keeps changing." },
+    "Percpt":   { "label": "Perceptual",                "blurb": "Spotting the right detail on a busy screen, fast." },
+    "STM_C":    { "label": "Short-Term Memory & Concentration", "blurb": "Holding information in your head while you stay focused." },
+    "SpaR":     { "label": "Spatial Reasoning",         "blurb": "Picturing position, heading and rotation in 3D." },
+    "SymR":     { "label": "Symbolic Reasoning",        "blurb": "Working with numbers, codes and symbols against the clock." },
+    "Psych":    { "label": "Psychomotor",               "blurb": "Hand-eye control, like flying the aircraft or aiming a sensor." },
+    "CIP":      { "label": "Concurrent Information Processing", "blurb": "Juggling several streams of information without dropping one." },
+    "PrcptSTM": { "label": "Perceptual & Short-Term Memory", "blurb": "Reading a display and remembering what you read." },
+    "StrgCIP":  { "label": "Strategic & Concurrent Processing", "blurb": "Planning ahead while juggling live tasks." },
+    "VR":       { "label": "Verbal Reasoning",          "blurb": "Following and testing an argument written in words." },
+    "NR":       { "label": "Numerical Reasoning",       "blurb": "Getting the right answer from numbers, fast." },
+    "SR":       { "label": "Spatial Reasoning",         "blurb": "Picturing position, heading and rotation in 3D." },
+    "WR":       { "label": "Work Rate",                 "blurb": "How much you get through without making mistakes." },
+    "AC":       { "label": "Attention & Concentration", "blurb": "Staying sharp on a long, repetitive task." }
+  },
+
+  "_testsComment": [
+    "games: which SkyWatch CBAT-style game(s) estimate this test. Empty = SkyWatch has no game for",
+    "it yet, so it is excluded from the estimate and reported as an uncovered gap.",
+    "match: 'direct'  — our game is a simulation of the same test",
+    "       'proxy'   — a different game that trains the same underlying skill; flagged in the UI",
+    "Where two games are listed the test stanine is the mean of whichever the user has played.",
+    "",
+    "The expansions below are the RAF's own, taken from the test list in the CBAT guide corpus",
+    "(APPLICATION_INFO/chat_dumps) rather than guessed from the initials — two of them are not what",
+    "the abbreviation suggests. MATF is the Table Reading Test, not a multi-attribute task battery.",
+    "TRT is the Target Recognition Test, which is what our Target game simulates; it was briefly",
+    "mapped the other way round, so check the corpus before re-reading any code by its initials.",
+    "",
+    "DRT is mapped but unreferenced: none of the 13 transcribed batteries uses it, so it scores",
+    "nothing today. It stays because the mapping is confirmed and a battery transcribed later will",
+    "pick it up for free. Our Symbols game is the glossary's Visual Search Test, which carries no",
+    "code at all on any sheet seen so far — hence no entry for it.",
+    "",
+    "OPEN QUESTION: VISS sits in the Perceptual domain, which fits the Visual Search Test (Symbols)",
+    "better than it fits Visualisation (a spatial task). It is mapped to Visualisation on the",
+    "strength of the name alone. Only WSOP (ISR) uses it, at about 7% of that battery.",
+    "",
+    "SMA was the single largest uncovered weight left after those five: it is 15% of the Pilot battery",
+    "and 12% of Pilot ISR (RPAS), sharing the Psychomotor domain with RTT, so every Pilot report was",
+    "renormalising over a missing seventh of its evidence. Our game is a 'direct' match on the",
+    "mechanic — the same compensatory tracking of a drifting dot against a fixed crosshair — but not on",
+    "the apparatus: the real test splits the axes across a joystick and foot pedals and ours puts both",
+    "on one control. That affects how hard it is to fly, not what it measures.",
+    "",
+    "SIT / SLT / VLT / MATF / VIG1 were all uncovered gaps until the games behind them were built.",
+    "They are not marginal: MATF and SIT both carry weight in the Pilot battery, and SLT sits in",
+    "its Symbolic Reasoning domain alongside ANT. VGIL_SPEED is a 'proxy' rather than a 'direct'",
+    "on purpose — it is a separate SPEED sub-score of the same Vigilance test, and our game reports",
+    "one accumulating score that conflates speed with accuracy, so it estimates that sub-score",
+    "rather than simulating it.",
+    "",
+    "Their anchors are the only ones in this file NOT sourced from production play — there is none",
+    "yet. They come from the demo bands in utils/cbatFakeLeaderboard.js, which is where every other",
+    "game's anchors started too. Requery and retune once these have real runs behind them."
+  ],
+  "tests": {
+    "CUT":        { "label": "Cognitive Updating Test",        "games": ["cut"],                                  "match": "direct" },
+    "SAT":        { "label": "Situational Awareness Test",     "games": ["sat"],                                  "match": "direct" },
+    "ACT":        { "label": "Auditory Capacity Test",         "games": ["act"],                                  "match": "direct" },
+    "DAD":        { "label": "Directions and Distances",       "games": ["dad"],                                  "match": "direct" },
+    "ANT":        { "label": "Airborne Numerical Test",        "games": ["ant"],                                  "match": "direct" },
+    "FLAG":       { "label": "FLAG",                           "games": ["flag"],                                 "match": "direct" },
+    "DPT":        { "label": "Dynamic Projection Test",        "games": ["dpt"],                                  "match": "direct" },
+    "RTT":        { "label": "Rapid Tracking Test",            "games": ["rtt"],                                  "match": "direct" },
+    "TRAC1":      { "label": "Trace 1",                        "games": ["trace-1"],                              "match": "direct" },
+    "TRAC2":      { "label": "Trace 2",                        "games": ["trace-2"],                              "match": "direct" },
+    "NOP":        { "label": "Numerical Operations",           "games": ["numerical-ops"],                        "match": "direct" },
+    "INSC":       { "label": "Instrument Comprehension",       "games": ["instruments"],                          "match": "direct" },
+    "VISS":       { "label": "Visualisation",                  "games": ["visualisation-2d", "visualisation-3d"], "match": "direct" },
+    "TRT":        { "label": "Target Recognition Test",        "games": ["target"],                               "match": "direct" },
+    "ABD5":       { "label": "Angles, Bearings & Degrees Test", "games": ["angles"],                              "match": "direct" },
+    "DRT":        { "label": "Digit Recognition Test",         "games": ["code-duplicates"],                      "match": "direct" },
+    "MATF":       { "label": "Table Reading Test",             "games": ["matf"],                                 "match": "direct" },
+    "SIT":        { "label": "Spatial Integration Test",       "games": ["sit"],                                  "match": "direct" },
+    "SLT":        { "label": "System Logic Test",              "games": ["slt"],                                  "match": "direct" },
+    "VLT":        { "label": "Verbal Logic Test",              "games": ["vlt"],                                  "match": "direct" },
+    "GSPA":       { "label": "GSPA",                           "games": [], "match": "none" },
+    "VIG1":       { "label": "Vigilance Test",                 "games": ["vigilance"],                            "match": "direct" },
+    "VGIL_SPEED": { "label": "Vigilance Test (Speed)",         "games": ["vigilance"],                            "match": "proxy" },
+    "RCOG":       { "label": "Recognition",                    "games": [], "match": "none" },
+    "SMA":        { "label": "Sensory Motor Apparatus Test",   "games": ["sma"],                                  "match": "direct" }
+  },
+
+  "_anchorsComment": [
+    "Two points per game turn a raw SkyWatch score into a stanine: `median` is the score of a",
+    "middling player (stanine 5, the centre of the curve) and `strong` is a clearly good run",
+    "(stanine 8). Everything else is linear from those two — see utils/cbatStanine.js.",
+    "",
+    "Sourced from the real medians already queried from production and recorded in",
+    "utils/cbatFakeLeaderboard.js (the WEEKLY_PER_PLAY comments), with `strong` taken from that",
+    "file's demo ceiling — the value that file already calls a strong-but-beatable run. Where the",
+    "two disagreed the production median won: `act` and `target` both really score far above the",
+    "band FAKE_TUNING was tuned to before there was real play to look at.",
+    "",
+    "These are SkyWatch's own norms, not the RAF's — see the disclaimer the report page carries.",
+    "Retune freely: nothing else depends on these numbers."
+  ],
+  "stanineAnchors": {
+    "cut":              { "median": 380,  "strong": 550  },
+    "sat":              { "median": 12,   "strong": 17   },
+    "act":              { "median": 1482, "strong": 2100 },
+    "dad":              { "median": 9,    "strong": 13   },
+    "ant":              { "median": 50,   "strong": 70   },
+    "flag":             { "median": 246,  "strong": 380  },
+    "dpt":              { "median": 3850, "strong": 5000 },
+    "rtt":              { "median": 645,  "strong": 960  },
+    "trace-1":          { "median": 29,   "strong": 37   },
+    "trace-2":          { "median": 5,    "strong": 7    },
+    "numerical-ops":    { "median": 90,   "strong": 98   },
+    "instruments":      { "median": 3,    "strong": 8    },
+    "visualisation-2d": { "median": 3,    "strong": 7    },
+    "visualisation-3d": { "median": 4,    "strong": 7    },
+    "target":           { "median": 602,  "strong": 900  },
+    "angles":           { "median": 16,   "strong": 19   },
+    "code-duplicates":  { "median": 12,   "strong": 14   },
+
+    "sit":              { "median": 4,    "strong": 7    },
+    "slt":              { "median": 7,    "strong": 9    },
+    "vlt":              { "median": 5,    "strong": 7    },
+    "matf":             { "median": 22,   "strong": 34   },
+    "vigilance":        { "median": 540,  "strong": 780  },
+    "sma":              { "median": 280,  "strong": 410  }
+  },
+
+  "batteries": [
+    {
+      "key": "pilot",
+      "label": "Pilot",
+      "group": "Officer aircrew",
+      "cutoff": 112,
+      "note": "This is the toughest role to get. Its pass mark is 22 points higher than any Control role.",
+      "domains": [
+        { "key": "StrgcTM", "weight": 17, "tests": [{ "code": "CUT", "mult": 3 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 14, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 11, "tests": [{ "code": "ACT", "mult": 3 }, { "code": "TRAC2", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 15, "tests": [{ "code": "INSC", "mult": 2 }, { "code": "TRAC1", "mult": 2 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "SymR",    "weight": 12, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "ANT", "mult": 3 }] },
+        { "key": "Psych",   "weight": 15, "tests": [{ "code": "SMA", "mult": 1 }, { "code": "RTT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 16, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "pilot-isr-rpas",
+      "label": "Pilot ISR (RPAS)",
+      "group": "Officer aircrew",
+      "cutoff": 100,
+      "domains": [
+        { "key": "StrgcTM", "weight": 15, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 16, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 10, "tests": [{ "code": "ACT", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 17, "tests": [{ "code": "INSC", "mult": 2 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "SymR",    "weight": 14, "tests": [{ "code": "ANT", "mult": 2 }, { "code": "SLT", "mult": 1 }] },
+        { "key": "Psych",   "weight": 12, "tests": [{ "code": "SMA", "mult": 1 }, { "code": "RTT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 16, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "wso",
+      "label": "Weapon Systems Officer",
+      "group": "Officer aircrew",
+      "cutoff": 100,
+      "domains": [
+        { "key": "StrgcTM", "weight": 30, "tests": [{ "code": "CUT", "mult": 2 }, { "code": "SAT", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 15, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight":  8, "tests": [{ "code": "ACT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 15, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "INSC", "mult": 1 }] },
+        { "key": "SymR",    "weight": 19, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "Psych",   "weight":  3, "tests": [{ "code": "RTT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "control-officer-atc",
+      "label": "Control Officer (ATC)",
+      "group": "Air & Space Operations",
+      "cutoff": 90,
+      "note": "Almost half of this role rides on Strategic Task Management, so CUT and SAT matter most.",
+      "domains": [
+        { "key": "StrgcTM", "weight": 49, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 14, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "STM_C",   "weight":  8, "tests": [{ "code": "ACT", "mult": 1 }] },
+        { "key": "SpaR",    "weight":  9, "tests": [{ "code": "SIT", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 10, "tests": [{ "code": "NOP", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "control-officer-wc",
+      "label": "Control Officer (WC)",
+      "group": "Air & Space Operations",
+      "cutoff": 90,
+      "domains": [
+        { "key": "StrgcTM", "weight": 42, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 13, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VIG1", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 12, "tests": [{ "code": "TRAC2", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 12, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 11, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "operations-officer",
+      "label": "Operations Officer",
+      "group": "Air & Space Operations",
+      "cutoff": 90,
+      "domains": [
+        { "key": "StrgcTM", "weight": 20, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 21, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VGIL_SPEED", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 11, "tests": [{ "code": "TRAC2", "mult": 2 }, { "code": "RCOG", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 14, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 20, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 14, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "intelligence",
+      "label": "Intelligence Officer",
+      "group": "Air & Space Operations",
+      "cutoff": 95,
+      "domains": [
+        { "key": "Percpt", "weight": 10, "tests": [{ "code": "MATF", "mult": 1 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "STM_C",  "weight": 13, "tests": [{ "code": "SAT", "mult": 1 }] },
+        { "key": "SpaR",   "weight": 25, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SymR",   "weight": 41, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "VLT", "mult": 1 }] },
+        { "key": "CIP",    "weight": 11, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "wsop-linguist",
+      "label": "WSOP (Air Signaller, Linguist)",
+      "group": "Non-commissioned aircrew",
+      "cutoff": 90,
+      "domains": [
+        { "key": "VR", "weight": 20, "tests": [{ "code": "VLT", "mult": 1 }] },
+        { "key": "NR", "weight":  7, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "NOP", "mult": 1 }] },
+        { "key": "SR", "weight": 22, "tests": [{ "code": "ABD5", "mult": 1 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "WR", "weight": 22, "tests": [{ "code": "MATF", "mult": 1 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "AC", "weight": 29, "tests": [{ "code": "FLAG", "mult": 2 }, { "code": "RCOG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "wsop-isr",
+      "label": "WSOP (ISR)",
+      "group": "Non-commissioned aircrew",
+      "cutoff": 90,
+      "domains": [
+        { "key": "StrgcTM", "weight":  9, "tests": [{ "code": "CUT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 20, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "VISS", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 16, "tests": [{ "code": "ACT", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 22, "tests": [{ "code": "ABD5", "mult": 1 }, { "code": "DAD", "mult": 1 }, { "code": "TRAC1", "mult": 1 }] },
+        { "key": "SymR",    "weight": 22, "tests": [{ "code": "ANT", "mult": 1 }, { "code": "SLT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 11, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "wsop-rw",
+      "label": "WSOP (RW)",
+      "group": "Non-commissioned aircrew",
+      "cutoff": 90,
+      "domains": [
+        { "key": "StrgcTM", "weight": 14, "tests": [{ "code": "CUT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 20, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 16, "tests": [{ "code": "ACT", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 22, "tests": [{ "code": "TRAC1", "mult": 1 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "SymR",    "weight": 14, "tests": [{ "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 14, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "wsop-am",
+      "label": "WSOP (AM)",
+      "group": "Non-commissioned aircrew",
+      "cutoff": 90,
+      "domains": [
+        { "key": "PrcptSTM", "weight": 44, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }, { "code": "CUT", "mult": 2 }] },
+        { "key": "SpaR",     "weight": 11, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "GSPA", "mult": 1 }] },
+        { "key": "SymR",     "weight": 36, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "VLT", "mult": 1 }] },
+        { "key": "StrgCIP",  "weight":  9, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "nco-control-atc",
+      "label": "Non-Commissioned Control (ATC)",
+      "group": "Non-commissioned",
+      "cutoff": 80,
+      "note": "Same tests as Control Officer (ATC), but with the lowest pass mark of any role.",
+      "domains": [
+        { "key": "StrgcTM", "weight": 49, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 14, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "STM_C",   "weight":  8, "tests": [{ "code": "ACT", "mult": 1 }] },
+        { "key": "SpaR",    "weight":  9, "tests": [{ "code": "SIT", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 10, "tests": [{ "code": "NOP", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    },
+    {
+      "key": "nco-control-wc",
+      "label": "Non-Commissioned Control (WC)",
+      "group": "Non-commissioned",
+      "cutoff": 90,
+      "domains": [
+        { "key": "StrgcTM", "weight": 42, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 13, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VIG1", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 12, "tests": [{ "code": "TRAC2", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 12, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 11, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+      ]
+    }
+  ]
+}

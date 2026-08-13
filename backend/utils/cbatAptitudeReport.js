@@ -1,0 +1,456 @@
+// The Aptitude Report — an estimate of what a user's SkyWatch play would score on a real OASC
+// battery, and what to practise next to move it.
+//
+// The chain, mirroring the real "Aptitude Scores" sheet exactly:
+//
+//   recent form on a game  →  test stanine (1-9)
+//   tests in a domain      →  domain stanine   (multiplier-weighted mean)
+//   domains in a battery   →  score out of 180 (weight-weighted mean × 20)
+//   score vs the battery's cutoff  →  pass / fail
+//
+// Two decisions worth stating up front, because they're what make the number honest:
+//
+// FORM, NOT BEST-EVER. A test stanine comes from the mean of the user's last FORM_WINDOW runs, not
+// their personal best. The real CBAT is one sitting on one morning; a best-ever taken from fifty
+// attempts is not what you'd walk in and reproduce. Best-ever also only ever climbs, so a report
+// built on it could never tell a user they'd gone off the boil. This is the same window and the
+// same reasoning as the recent-form percentile in routes/games.js.
+//
+// COVERAGE IS REPORTED, NOT PAPERED OVER. SkyWatch has no game for TRT, SIT, SLT, VLT and several
+// others, and a user may simply not have played the games we do have. Those tests are excluded and
+// the domain is scored on what's left; a domain with nothing left is excluded entirely and the
+// battery score is renormalised over the weight that remains. `coverage` reports the share of the
+// battery's weight the estimate actually rests on, so a 62%-covered score can be read for what it
+// is. Silently treating an unmeasured test as average would invent data.
+
+const mongoose = require('mongoose');
+const { CBAT_GAMES } = require('../constants/cbatGames');
+const { MAX_SCORE, MAX_STANINE, MIN_COVERAGE_FOR_VERDICT, DOMAINS, TESTS, BATTERY_BY_KEY, SCORED_GAME_KEYS } = require('../constants/cbatBatteries');
+const { scoreToStanine, scoreForStanine } = require('./cbatStanine');
+
+// Matches the recent-form window used by the leaderboard percentile, for the reasons given there:
+// one bad run shouldn't tank the estimate, and a lifetime average would permanently drag in a
+// user's worst early runs — punishing the very improvement the report exists to show.
+const FORM_WINDOW = 5;
+// Below this, a game's average is noise and the test is reported as "needs more runs" rather than
+// scored. It doubles as the report's core call to action.
+const FORM_MIN_RUNS = 3;
+
+// Only Hard counts. The real CBAT has one difficulty, so folding an Easier run into the estimate
+// would inflate it — and Easier collections are separate registry keys anyway (`cut-easier` et al),
+// so this is simply a matter of never looking them up. The report says so where a user has Easier
+// runs but no Hard ones.
+const EASIER_SUFFIX = '-easier';
+
+// ── Form ─────────────────────────────────────────────────────────────────────────────────────
+// One query per scorable game, run in parallel: the user's most recent FORM_WINDOW finished runs.
+// Every result model carries the { userId: 1, createdAt: -1 } index this sorts on.
+async function loadForm(userId, gameKeys = SCORED_GAME_KEYS) {
+  const entries = await Promise.all(gameKeys.map(async (gameKey) => {
+    const cfg = CBAT_GAMES[gameKey];
+    if (!cfg) return [gameKey, null];
+
+    const query = { ...(cfg.modeFilter ?? {}), userId };
+    const recent = await cfg.Model.find(query)
+      .select(`${cfg.primaryField} createdAt`)
+      .sort({ createdAt: -1 })
+      .limit(FORM_WINDOW)
+      .lean();
+
+    if (!recent.length) {
+      // Distinguish "never touched this game" from "only ever played it on Easier", so the report
+      // can tell the second group why their runs aren't counting.
+      const easierCfg = CBAT_GAMES[`${gameKey}${EASIER_SUFFIX}`];
+      const easierOnly = easierCfg
+        ? await easierCfg.Model.exists({ ...(easierCfg.modeFilter ?? {}), userId }).then(Boolean)
+        : false;
+      return [gameKey, { runs: 0, form: null, easierOnly, lastPlayedAt: null }];
+    }
+
+    const scores = recent.map(r => r[cfg.primaryField]).filter(Number.isFinite);
+    return [gameKey, {
+      runs: scores.length,
+      form: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+      easierOnly: false,
+      lastPlayedAt: recent[0].createdAt,
+    }];
+  }));
+
+  return Object.fromEntries(entries);
+}
+
+// The same form, for many users at once. One aggregation per scorable game — 15 round trips total
+// however many users are asked for — instead of loadForm's per-user query fan-out, which at 25
+// users would be 375.
+//
+// $push then $slice takes each user's most recent FORM_WINDOW runs in a single group, the same
+// trick the leaderboard's recent-form percentile uses, and it rides the same
+// { userId: 1, createdAt: -1 } index.
+//
+// One deliberate difference from loadForm: `easierOnly` is always false here. Establishing it costs
+// an extra existence check per user per game, and it changes only the WORDING of an unscored test
+// ("Easier runs don't count" vs "3 more runs"), never a stanine or a score. Callers that render
+// that wording must use loadForm; callers that only need numbers can use this.
+async function loadFormForUsers(userIds, gameKeys = SCORED_GAME_KEYS) {
+  const byUser = Object.fromEntries(userIds.map(id => [String(id), {}]));
+
+  await Promise.all(gameKeys.map(async (gameKey) => {
+    const cfg = CBAT_GAMES[gameKey];
+    if (!cfg) return;
+
+    const rows = await cfg.Model.aggregate([
+      { $match: { ...(cfg.modeFilter ?? {}), userId: { $in: userIds } } },
+      { $sort: { userId: 1, createdAt: -1 } },
+      { $group: { _id: '$userId', scores: { $push: `$${cfg.primaryField}` } } },
+      { $project: { recent: { $slice: ['$scores', FORM_WINDOW] } } },
+    ]);
+
+    for (const row of rows) {
+      const scores = row.recent.filter(Number.isFinite);
+      if (!byUser[String(row._id)]) continue;
+      byUser[String(row._id)][gameKey] = {
+        runs: scores.length,
+        form: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+        easierOnly: false,
+        lastPlayedAt: null,
+      };
+    }
+  }));
+
+  return byUser;
+}
+
+// ── Per-test scoring ─────────────────────────────────────────────────────────────────────────
+// A test's stanine is the mean of the stanines of whichever of its games the user has enough runs
+// on. VISS is the only test today backed by two games (Visualisation 2D and 3D); a user who has
+// played only one is scored on that one rather than blocked for missing the other.
+//
+// Returns a row for EVERY test in the battery, scored or not — the report's gap list and its
+// "play three runs of X" prompts are both built from the unscored ones, so they can't be dropped.
+function scoreTest(code, form) {
+  const test = TESTS[code];
+  const base = { code, label: test.label, match: test.match, games: test.games };
+
+  if (!test.games.length) {
+    return { ...base, stanine: null, state: 'no-game' };   // SkyWatch has no game for this test
+  }
+
+  const played = [];
+  const needsRuns = [];
+  let easierOnly = false;
+
+  for (const gameKey of test.games) {
+    const f = form[gameKey];
+    if (!f) continue;
+    if (f.easierOnly) easierOnly = true;
+    if (f.runs >= FORM_MIN_RUNS) {
+      played.push({
+        gameKey,
+        label: CBAT_GAMES[gameKey]?.label ?? gameKey,
+        form: Number(f.form.toFixed(1)),
+        runs: f.runs,
+        stanine: scoreToStanine(gameKey, f.form),
+        lastPlayedAt: f.lastPlayedAt,
+      });
+    } else {
+      needsRuns.push({
+        gameKey,
+        label: CBAT_GAMES[gameKey]?.label ?? gameKey,
+        runs: f.runs,
+        runsNeeded: FORM_MIN_RUNS - f.runs,
+      });
+    }
+  }
+
+  if (!played.length) {
+    return {
+      ...base,
+      stanine: null,
+      state: easierOnly ? 'easier-only' : 'needs-runs',
+      needsRuns,
+    };
+  }
+
+  const stanine = played.reduce((a, p) => a + p.stanine, 0) / played.length;
+  // The score to beat for the next stanine up, on whichever of the test's games is furthest along.
+  // Null at 9 — there is nothing above it.
+  const lead = played.reduce((a, b) => (b.stanine > a.stanine ? b : a));
+  const nextTarget = lead.stanine < MAX_STANINE
+    ? { gameKey: lead.gameKey, stanine: lead.stanine + 1, score: scoreForStanine(lead.gameKey, lead.stanine + 1) }
+    : null;
+
+  return { ...base, stanine, state: 'scored', played, needsRuns, nextTarget };
+}
+
+// ── Report ───────────────────────────────────────────────────────────────────────────────────
+// `form` is passed in rather than loaded here so a caller building several batteries at once (the
+// role picker, which shows an estimate against all thirteen) pays for one set of queries, not
+// thirteen.
+function buildBatteryReport(battery, form) {
+  const domains = battery.domains.map((d) => {
+    const tests = d.tests.map(t => ({ ...scoreTest(t.code, form), mult: t.mult }));
+
+    const scored = tests.filter(t => t.state === 'scored');
+    const totalMult = tests.reduce((a, t) => a + t.mult, 0);
+    const scoredMult = scored.reduce((a, t) => a + t.mult, 0);
+
+    // Multiplier-weighted mean over the tests we could score. A domain where nothing is scorable
+    // gets a null stanine and drops out of the battery total below.
+    const stanine = scoredMult
+      ? scored.reduce((a, t) => a + t.stanine * t.mult, 0) / scoredMult
+      : null;
+
+    return {
+      key: d.key,
+      label: DOMAINS[d.key].label,
+      blurb: DOMAINS[d.key].blurb,
+      weight: d.weight,
+      stanine: stanine === null ? null : Number(stanine.toFixed(2)),
+      // Share of this domain's own tests that fed the stanine — the caveat on the domain row.
+      coverage: totalMult ? Math.round((scoredMult / totalMult) * 100) : 0,
+      tests,
+    };
+  });
+
+  // Renormalise over the weight actually measured, so a partially covered battery reports the
+  // score implied by what we know rather than one dragged down by what we don't.
+  const measured = domains.filter(d => d.stanine !== null);
+  const measuredWeight = measured.reduce((a, d) => a + d.weight, 0);
+  const totalWeight = domains.reduce((a, d) => a + d.weight, 0);
+
+  const score = measuredWeight
+    ? Math.round((measured.reduce((a, d) => a + d.stanine * d.weight, 0) / measuredWeight) * (MAX_SCORE / MAX_STANINE))
+    : null;
+
+  // Weight-share of the battery the estimate rests on. Both legs matter: a domain can be fully
+  // weighted in but only half its tests scored, so this walks tests rather than domains.
+  const coveredWeight = domains.reduce((a, d) => a + (d.weight * d.coverage) / 100, 0);
+  const coverage = totalWeight ? Math.round((coveredWeight / totalWeight) * 100) : 0;
+
+  return {
+    key: battery.key,
+    label: battery.label,
+    group: battery.group,
+    note: battery.note ?? null,
+    cutoff: battery.cutoff,
+    maxScore: MAX_SCORE,
+    score,
+    // Signed distance from the cutoff — the number the UI leads with ("+28 clear" / "14 short").
+    margin: score === null ? null : score - battery.cutoff,
+    // 'provisional' is the guard on renormalisation. Dividing by measured weight is right at 90%
+    // coverage and actively misleading at 16%: the score stays confident-looking while the evidence
+    // behind it collapses, so a player who has touched two games gets told they are PASSING.
+    //
+    // The score is still returned, because it is the honest arithmetic on what we know and it gives
+    // a new player something to watch move. It just isn't a verdict, and nothing downstream may
+    // render it as one — `rolesPassed` counts 'pass' only, so a provisional battery is not claimed
+    // as cleared either.
+    status: score === null
+      ? 'unscored'
+      : coverage < MIN_COVERAGE_FOR_VERDICT
+        ? 'provisional'
+        : score >= battery.cutoff ? 'pass' : 'fail',
+    coverage,
+    domains,
+    focus: buildFocus(domains, measuredWeight),
+  };
+}
+
+// ── "What should I work on?" ─────────────────────────────────────────────────────────────────
+// Ranks every actionable test by how much the battery score would move if the user gained one
+// stanine on it. That marginal value is the whole reason a report beats a leaderboard: it accounts
+// for the fact that on Control Officer (ATC), one stanine of CUT is worth roughly five times one
+// stanine of ACT — a thing no amount of staring at per-game scores will tell you.
+//
+//   gain = (domainWeight / measuredWeight) × (testMult / domainScoredMult) × 20
+//
+// measuredWeight — not 100 — is the denominator because that's the base the score is renormalised
+// over, so the figure is what the user would actually see the number do.
+//
+// Two kinds of row come back, both actionable and deliberately in one ranked list rather than two:
+//   'improve' — scored, and one stanine better is worth `gain`
+//   'unlock'  — a game they've played fewer than three times, so it isn't counting yet. `gain` is
+//               what it would be worth at an average stanine of 5, which is the honest expectation
+//               for a run we haven't seen.
+// Tests with no SkyWatch game at all are gaps, not focus items — they're reported separately and
+// never appear here, because "work on TRT" is advice a user cannot act on.
+const FOCUS_LIMIT = 5;
+
+function buildFocus(domains, measuredWeight) {
+  if (!measuredWeight) return [];
+  const out = [];
+
+  for (const d of domains) {
+    const scored = d.tests.filter(t => t.state === 'scored');
+    const scoredMult = scored.reduce((a, t) => a + t.mult, 0);
+
+    for (const t of scored) {
+      if (t.stanine >= MAX_STANINE) continue;   // already topped out
+      out.push({
+        kind: 'improve',
+        code: t.code, label: t.label, match: t.match,
+        domainKey: d.key, domainLabel: d.label, domainWeight: d.weight,
+        stanine: t.stanine,
+        nextTarget: t.nextTarget,
+        gain: (d.weight / measuredWeight) * (t.mult / scoredMult) * (MAX_SCORE / MAX_STANINE),
+      });
+    }
+
+    // An unscored test would join its domain's scored pool, so its share is measured against that
+    // pool grown by its own multiplier.
+    for (const t of d.tests) {
+      if (t.state !== 'needs-runs' && t.state !== 'easier-only') continue;
+      out.push({
+        kind: 'unlock',
+        code: t.code, label: t.label, match: t.match,
+        domainKey: d.key, domainLabel: d.label, domainWeight: d.weight,
+        stanine: null,
+        needsRuns: t.needsRuns ?? [],
+        easierOnly: t.state === 'easier-only',
+        gain: (d.weight / measuredWeight) * (t.mult / (scoredMult + t.mult)) * (MAX_SCORE / MAX_STANINE),
+      });
+    }
+  }
+
+  return out
+    .sort((a, b) => b.gain - a.gain)
+    .slice(0, FOCUS_LIMIT)
+    .map(f => ({ ...f, gain: Number(f.gain.toFixed(1)) }));
+}
+
+// Tests in a battery that SkyWatch has no game for — the honest footnote under every score, and
+// the product's own roadmap. Deduplicated by code: FLAG appears in one domain, but TRT can appear
+// in two and shouldn't be listed twice.
+function buildGaps(battery) {
+  const seen = new Map();
+  for (const d of battery.domains) {
+    for (const t of d.tests) {
+      if (TESTS[t.code].games.length) continue;
+      if (!seen.has(t.code)) seen.set(t.code, { code: t.code, label: TESTS[t.code].label, domains: [] });
+      seen.get(t.code).domains.push(DOMAINS[d.key].label);
+    }
+  }
+  return [...seen.values()];
+}
+
+// Every battery scored against one load of the user's form — the role picker's list, and the
+// "roles you'd currently pass" summary. Trimmed to the headline fields; the full domain breakdown
+// is only built for the battery actually being viewed.
+async function buildAllBatteryScores(userId) {
+  const form = await loadForm(userId);
+  const batteries = Object.values(BATTERY_BY_KEY).map((b) => {
+    const { key, label, group, cutoff, score, margin, status, coverage } = buildBatteryReport(b, form);
+    return { key, label, group, cutoff, maxScore: MAX_SCORE, score, margin, status, coverage };
+  });
+  return { batteries, form };
+}
+
+// ── Admin: who is worth looking at? ──────────────────────────────────────────────────────────
+// Ranks users by finished CBAT runs so the admin picker opens on the people with a report worth
+// reading, rather than on whoever registered first.
+//
+// One aggregation, not one per collection: $unionWith stitches all 25 result collections into a
+// single stream of userIds and groups once. Each leg projects away everything but userId, so the
+// union carries the minimum. Easier collections are included here deliberately — this counts
+// ENGAGEMENT, to sort the list, and is not the report's score (which stays Hard-only).
+//
+// A search term matches identity, and matching users with no runs at all still come back, ranked
+// last: an admin looking up one specific person must find them whether or not they've played.
+const MAX_USER_MATCHES = 200;   // ceiling on identity matches fed into the count
+const USER_LIST_LIMIT  = 25;
+
+async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {}) {
+  const term = String(q).trim();
+
+  let matchedIds = null;
+  if (term) {
+    // Escaped so punctuation in the query is a literal, not a regex operator — same treatment the
+    // admin user search gives it.
+    const rx = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const matches = await User.find(
+      { $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }] },
+      '_id',
+    ).limit(MAX_USER_MATCHES).lean();
+    matchedIds = matches.map(m => m._id);
+    if (!matchedIds.length) return [];
+  }
+
+  const keys = Object.keys(CBAT_GAMES);
+  const leg = (gameKey) => {
+    const cfg = CBAT_GAMES[gameKey];
+    const match = { ...(cfg.modeFilter ?? {}), ...(matchedIds ? { userId: { $in: matchedIds } } : {}) };
+    return [{ $match: match }, { $project: { userId: 1, _id: 0 } }];
+  };
+
+  const [head, ...tail] = keys;
+  const counts = await CBAT_GAMES[head].Model.aggregate([
+    ...leg(head),
+    ...tail.map(k => ({ $unionWith: { coll: CBAT_GAMES[k].Model.collection.name, pipeline: leg(k) } })),
+    { $group: { _id: '$userId', plays: { $sum: 1 } } },
+    { $sort: { plays: -1 } },
+    { $limit: limit },
+  ]);
+
+  const byId = new Map(counts.map(c => [String(c._id), c.plays]));
+
+  // Pull identity for the ranked ids. On a search we also want the zero-play matches, so the id
+  // set is the union of both.
+  const ids = [...new Set([...byId.keys(), ...(matchedIds ?? []).map(String)])];
+  const users = await User.find({ _id: { $in: ids } }, 'agentNumber email displayName isAdmin').lean();
+
+  const ranked = users
+    .map(u => ({
+      _id: String(u._id),
+      agentNumber: u.agentNumber ?? null,
+      email: u.email ?? null,
+      displayName: u.displayName ?? null,
+      isAdmin: !!u.isAdmin,
+      plays: byId.get(String(u._id)) ?? 0,
+    }))
+    .sort((a, b) => b.plays - a.plays || String(a.agentNumber).localeCompare(String(b.agentNumber)))
+    .slice(0, limit);
+
+  // How many roles each listed player currently clears — the thing an admin is actually scanning
+  // for, since run count alone doesn't say whether there's a report worth opening.
+  //
+  // Scored only for the trimmed page (≤25 users), not the whole match set: the form load is one
+  // aggregation per game regardless of user count, but there is no reason to score people who
+  // won't be shown. Battery scoring itself is pure arithmetic — 25 users × 13 batteries costs
+  // nothing once the form is in memory.
+  const withPlays = ranked.filter(u => u.plays > 0);
+  const form = withPlays.length
+    ? await loadFormForUsers(withPlays.map(u => new mongoose.Types.ObjectId(u._id)))
+    : {};
+
+  const batteries = Object.values(BATTERY_BY_KEY);
+  return ranked.map(u => ({
+    ...u,
+    // A player with no runs clears nothing — no need to score them to find that out.
+    rolesPassed: form[u._id]
+      ? batteries.filter(b => buildBatteryReport(b, form[u._id]).status === 'pass').length
+      : 0,
+    totalRoles: batteries.length,
+  }));
+}
+
+async function buildAptitudeReport(userId, batteryKey) {
+  const battery = BATTERY_BY_KEY[batteryKey];
+  if (!battery) return null;
+  const form = await loadForm(userId);
+  return { ...buildBatteryReport(battery, form), gaps: buildGaps(battery) };
+}
+
+module.exports = {
+  buildAptitudeReport,
+  buildAllBatteryScores,
+  buildCbatUserList,
+  loadFormForUsers,
+  USER_LIST_LIMIT,
+  buildBatteryReport,
+  buildGaps,
+  loadForm,
+  scoreTest,
+  FORM_WINDOW,
+  FORM_MIN_RUNS,
+  FOCUS_LIMIT,
+};

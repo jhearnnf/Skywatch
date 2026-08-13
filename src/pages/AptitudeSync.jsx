@@ -31,7 +31,7 @@ const LINE_COLORS = {
   blank:     'transparent',
 }
 
-// ── Skywatch ASCII logo (crosshair) ──────────────────────────────────────────
+// ── SkyWatch ASCII logo (crosshair) ──────────────────────────────────────────
 const SKYWATCH_ASCII_LOGO = [
   '                                                ####                                                ',
   '                                          ################                                          ',
