@@ -32,7 +32,13 @@ export default function AptitudeReportCard() {
     return () => { cancelled = true }
   }, [user, API, apiFetch])
 
-  if (!data) return null
+  // Guards the SHAPE, not just the absence. `data` is whatever the endpoint
+  // returned, and every branch below walks `batteries` — so a response that came
+  // back without it (an error body, an empty payload, an older cached one) threw
+  // and took the whole page down with it, because a render error is not caught
+  // by the try above. This card is an extra, so the right answer to an
+  // unexpected payload is to show nothing and leave the page alone.
+  if (!Array.isArray(data?.batteries)) return null
 
   const targetKey = data.targetBattery
   const target = targetKey ? data.batteries.find(b => b.key === targetKey) : null
