@@ -1400,7 +1400,7 @@ const SOUND_GROUPS = [
       { key: 'volumeIntelBriefOpened',    enabledKey: 'soundEnabledIntelBriefOpened',    label: 'Brief Opened',          sound: 'intel_brief_opened'    },
       { key: 'volumeFirstBriefComplete',  enabledKey: 'soundEnabledFirstBriefComplete',  label: 'Brief Complete (Guest)', sound: 'first_brief_complete' },
       { key: 'volumeGridReveal',          enabledKey: 'soundEnabledGridReveal',          durationKey: 'durationGridReveal', durationMax: 50, durationDefault: 12, label: 'Image Grid Reveal',      sound: '__grid_reveal__'       },
-      { key: 'volumeSkywatchLogo',        enabledKey: 'soundEnabledSkywatchLogo',        label: 'Skywatch Logo',          sound: 'skywatch_logo'         },
+      { key: 'volumeSkywatchLogo',        enabledKey: 'soundEnabledSkywatchLogo',        label: 'SkyWatch Logo',          sound: 'skywatch_logo'         },
     ],
   },
   {
@@ -3067,7 +3067,7 @@ function SettingsTab({ API }) {
                   <div className="py-2.5 border-b border-slate-100">
                     <p className="text-sm font-semibold text-slate-700 mb-1">Donation link</p>
                     <p className="text-xs text-slate-400 mb-2">
-                      Where “Support Skywatch” points (Ko-fi, Buy Me a Coffee, Stripe payment link…).
+                      Where “Support SkyWatch” points (Ko-fi, Buy Me a Coffee, Stripe payment link…).
                       Leave empty and the note never renders, whatever the switch above says — a live
                       ask pointing nowhere is worse than no ask.
                     </p>
@@ -9969,7 +9969,7 @@ function describeDevice(ua = '') {
 // Plain-English read on a blocked origin so the "what is this?" answer sits on
 // the row itself. Distinguishes the harmless self-poke (the API's own address
 // opened in a browser / probed by a scanner — no real visitor affected) from a
-// genuine Skywatch address being turned away (which silently breaks the site
+// genuine SkyWatch address being turned away (which silently breaks the site
 // for those users and needs the CORS allowlist checked).
 function explainRejectedOrigin(origin = '') {
   let host = ''
@@ -9983,7 +9983,7 @@ function explainRejectedOrigin(origin = '') {
   if (/(^|\.)skywatch\.academy$/i.test(host)) {
     return {
       severity: 'investigate',
-      text: 'A real Skywatch address was blocked. This can silently break the site for anyone arriving on it — add this origin to the CORS allowlist in backend/app.js.',
+      text: 'A real SkyWatch address was blocked. This can silently break the site for anyone arriving on it — add this origin to the CORS allowlist in backend/app.js.',
     }
   }
   return {

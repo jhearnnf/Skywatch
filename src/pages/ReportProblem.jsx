@@ -141,7 +141,7 @@ export default function ReportProblem() {
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">1</span>
             <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Talk to a real person</p>
           </div>
-          <p className="text-sm text-slate-500 mb-3">Best for back-and-forth. Get a fast reply from the Skywatch team — usually within a few hours.</p>
+          <p className="text-sm text-slate-500 mb-3">Best for back-and-forth. Get a fast reply from the SkyWatch team — usually within a few hours.</p>
           <button
             type="button"
             onClick={startChat}

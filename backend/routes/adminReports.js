@@ -299,7 +299,7 @@ async function tutorialUsage(since) {
 // Day-of-week × hour-of-day session-start counts for the activity heatmap.
 // Grid is 7 rows (index 0 = Monday, via $isoDayOfWeek) × 24 hour columns,
 // bucketed in ACTIVITY_TZ. Sourced from GameSessionCbatStart (every start,
-// including abandoned sessions) — the broadest "when do people use Skywatch"
+// including abandoned sessions) — the broadest "when do people use SkyWatch"
 // signal. Respects the window (since = window start).
 async function activityHeatmap(since, until = null) {
   const dateCond = {};

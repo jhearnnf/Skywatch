@@ -852,6 +852,8 @@ router.patch('/settings', requireReason, async (req, res) => {
       'visualisation-2d', 'visualisation-3d',
       'dpt', 'act', 'numerical-ops', 'numerical-ops-easier', 'dad', 'sat', 'sat-easier', 'cut', 'cut-easier',
       'rtt', 'rtt-easier',
+      'sit', 'sit-easier', 'slt', 'slt-easier', 'vlt', 'vlt-easier',
+      'matf', 'matf-easier', 'vigilance', 'sma', 'sma-easier',
     ]);
     const CBAT_UNIMPLEMENTED = new Set();
     if ('cbatGameEnabled' in updates) {
@@ -6514,7 +6516,7 @@ router.post('/update-notifications/ai-summarize', async (req, res) => {
           {
             role: 'system',
             content:
-              'You write short product-update notes for end users of a web app called Skywatch. ' +
+              'You write short product-update notes for end users of a web app called SkyWatch. ' +
               'Given a list of recent commit messages, produce 2 to 3 friendly, plain-English sentences ' +
               'summarizing what is new — no SHAs, no internal jargon, no bullet lists, no markdown. ' +
               'Skip refactors, dependency bumps, and tests. Focus on user-visible improvements.',
