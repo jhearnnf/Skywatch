@@ -1198,6 +1198,27 @@ document.getElementById('foot').innerHTML =
 
 document.getElementById('toctoggle').onclick=()=>document.getElementById('toc').classList.toggle('open');
 
+/* ── Contents links must not grow the history stack ────────────────────────
+   A plain `href="#flag"` pushes an entry every time it is clicked. Read the
+   guide the way people actually do — jump to four or five tests from the rail —
+   and the browser's back button then walks back through those anchors one at a
+   time instead of returning to the page you arrived from (/cbat, chat, wherever).
+   Twenty-two entries deep, back is effectively broken.
+
+   So: scroll to the section ourselves and replaceState the hash instead of
+   pushing it. The URL still updates and is still copyable, but the stack keeps
+   exactly one entry for this document, and one press of back leaves the guide. */
+document.getElementById('tocbody').addEventListener('click', e => {
+  const a = e.target.closest('a[href^="#"]');
+  if (!a) return;
+  const target = document.getElementById(a.getAttribute('href').slice(1));
+  if (!target) return;
+  e.preventDefault();
+  target.scrollIntoView({ behavior: 'smooth' });
+  history.replaceState(null, '', a.getAttribute('href'));
+  document.getElementById('toc').classList.remove('open'); // the narrow-screen drawer
+});
+
 /* scrollspy */
 const links=[...document.querySelectorAll('nav.toc a')];
 const targets=links.map(a=>document.getElementById(a.dataset.t)).filter(Boolean);
@@ -1228,10 +1249,27 @@ targets.forEach(t=>spy.observe(t));
     return;
   }
 
-  const load   = f => { if (!f.src) f.src = f.dataset.src; };
-  /* about:blank first: dropping the attribute alone leaves the old document —
-     and its WebGL context — alive in some browsers. */
-  const unload = f => { if (f.src) { f.src = 'about:blank'; f.removeAttribute('src'); } };
+  const load = f => { if (!f.src) f.src = f.dataset.src; };
+
+  /* Unloading by pointing the frame at about:blank frees the WebGL context but
+     leaves a session-history entry behind: navigating a frame that already holds
+     a document appends to the *parent's* history in every browser. Ten frames
+     loading and unloading as the reader scrolls buries the entry they arrived
+     from, and the back button stops leaving the guide — it just sits here,
+     rewinding invisible iframe navigations one press at a time.
+
+     So discard the element instead of navigating it. A freshly created frame
+     sits on its initial about:blank, and a script navigation from *that*
+     replaces rather than appends — so neither unloading nor re-loading writes
+     history. The old document, and its WebGL context, go with the old node. */
+  const unload = f => {
+    if (!f.src) return;
+    const fresh = f.cloneNode(false);
+    fresh.removeAttribute('src');
+    near.unobserve(f); far.unobserve(f);
+    f.replaceWith(fresh);
+    near.observe(fresh); far.observe(fresh);
+  };
 
   const near = new IntersectionObserver(
     es => es.forEach(e => { if (e.isIntersecting) load(e.target); }),
