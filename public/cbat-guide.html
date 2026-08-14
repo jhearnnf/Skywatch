@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Complete Guide to CBAT — What Each Test Is Really Like</title>
+<title>The Complete Guide to CBAT 2026 — What Each Test Is Really Like</title>
 <meta name="description" content="A candidate's field guide to the CBAT: what each subtest actually looks like, how the test day runs, and the details that catch people out.">
 
 <!--
@@ -19,7 +19,7 @@
 
 <meta property="og:site_name" content="SkyWatch">
 <meta property="og:locale" content="en_GB">
-<meta property="og:title" content="The Complete Guide to CBAT — What Each Test Is Really Like">
+<meta property="og:title" content="The Complete Guide to CBAT 2026 — What Each Test Is Really Like">
 <meta property="og:description" content="A candidate's field guide to the CBAT: what each subtest actually looks like, how the test day runs, and the details that catch people out.">
 <meta property="og:url" content="https://skywatch.academy/cbat-guide">
 <meta property="og:type" content="article">
@@ -27,7 +27,7 @@
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="The Complete Guide to CBAT — What Each Test Is Really Like">
+<meta name="twitter:title" content="The Complete Guide to CBAT 2026 — What Each Test Is Really Like">
 <meta name="twitter:description" content="A candidate's field guide to the CBAT: what each subtest actually looks like, how the test day runs, and the details that catch people out.">
 <meta name="twitter:image" content="https://skywatch.academy/og-image.png">
 
@@ -153,6 +153,13 @@ a:hover{text-decoration-color:currentColor}
   display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:0 60px;align-items:start}
 .masthead .kicker,.masthead h1{grid-column:1/-1}
 .kicker{font:700 11.5px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--brand)}
+/* The way back to the site. A reader who arrived from Google has no history to
+   go back to, so the masthead has to carry the link itself. Underlined because
+   the whole kicker is already brand-coloured — colour alone wouldn't read as a
+   link here. */
+.kicker a{color:inherit;text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--brand) 45%,transparent);
+  padding-bottom:2px}
+.kicker a:hover{border-bottom-color:var(--brand)}
 h1{margin:.5em 0 .32em;font:600 clamp(38px,6vw,62px)/1.06 var(--serif);letter-spacing:-.02em;color:var(--ink)}
 h1 span{color:var(--brand);font-style:italic}
 .sub{grid-column:1;color:var(--ink2);max-width:56ch;font-size:19.5px;line-height:1.6;margin:0}
@@ -379,7 +386,7 @@ footer .wrap{max-width:76ch;margin:0 auto}
 
 <header class="masthead">
   <div class="wrap">
-    <div class="kicker">A candidate’s field guide · updated for the current test</div>
+    <div class="kicker"><a href="/">A SkyWatch Academy guide</a> · updated for 2026</div>
     <h1>The Complete Guide to <span>CBAT</span></h1>
     <p class="sub">What each test actually looks like, where the practice apps get it wrong, how the day
     runs, and the details that catch people out. I’ve tried to be honest about how sure I am of each thing,

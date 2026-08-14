@@ -156,6 +156,19 @@ describe('index.html', () => {
 describe('cbat-guide.html', () => {
   const html = readText('public', 'cbat-guide.html')
 
+  // The year is what makes a guide look current in a result list, and the one
+  // thing that dates it if nobody rolls it forward. It is in the <title>, the
+  // social titles, the Article headline and the <h1>; they move together.
+  it('dates its title, and keeps it inside the snippet width', () => {
+    const title = html.match(/<title>([^<]*)<\/title>/)[1]
+    expect(title).toMatch(/\b20\d{2}\b/)
+    expect(title.length).toBeLessThanOrEqual(MAX_TITLE)
+    for (const prop of ['og:title', 'twitter:title']) {
+      const social = html.match(new RegExp(`(?:property|name)="${prop}" content="([^"]*)"`))[1]
+      expect(social).toBe(title)
+    }
+  })
+
   it('canonicalises to the clean URL, not the .html one', () => {
     const canonical = html.match(/<link rel="canonical" href="([^"]*)"/)[1]
     expect(canonical).toBe(`${SITE_URL}/cbat-guide`)
