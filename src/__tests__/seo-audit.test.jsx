@@ -188,6 +188,32 @@ describe('cbat-guide.html', () => {
   })
 })
 
+// ── Internal links to the guide ───────────────────────────────────────────
+//
+// Google reported the guide as "URL is not on Google" with no crawl history at
+// all: it had never fetched the page. The sitemap listed it, but nothing on the
+// public site linked to it, and a sitemap-only URL with zero internal links is
+// the lowest crawl priority there is.
+//
+// So the two indexable pages that can reach it must keep doing so. These assert
+// the anchor exists and is a real one — a react-router <Link to="/cbat-guide">
+// would navigate inside the SPA, never hit the server rewrite, and render the
+// 404 instead of the document.
+describe('internal links to the guide', () => {
+  for (const page of ['Landing.jsx', 'Cbat.jsx']) {
+    const src = readText('src', 'pages', page)
+
+    it(`${page} links the guide at its canonical clean URL`, () => {
+      expect(src).toMatch(/href="\/cbat-guide"/)
+    })
+
+    it(`${page} links it as a document, not an app route`, () => {
+      expect(src).not.toMatch(/to="\/cbat-guide"/)
+      expect(src).not.toMatch(/href="\/cbat-guide\.html"/)
+    })
+  }
+})
+
 // ── sitemap.xml ───────────────────────────────────────────────────────────
 describe('sitemap.xml', () => {
   const xml = readText('public', 'sitemap.xml')

@@ -305,6 +305,57 @@ export default function Landing() {
         </Suspense>
       )}
 
+      {/* ── CBAT field guide ───────────────────────────────────
+          Sits directly under the games in both modes, because that is where the
+          question it answers gets asked: someone who has just watched the games
+          play themselves and doesn't yet know what CBAT *is* needs the reading,
+          not another button. Blue rather than the hero badge's amber — amber is
+          this page's "go and play", blue its "go and read", and keeping them
+          apart stops the two CBAT routes competing for the same glance.
+
+          A plain <a>, not a react-router <Link>: the guide is a standalone
+          document in public/, not an app route (see App.jsx), so a <Link> would
+          push a history entry and land on the SPA's 404. That also makes it a
+          real crawlable anchor, which matters — the landing page is the site's
+          most-crawled URL and until this card existed nothing on the public site
+          linked to the guide at all. Google had only the sitemap to find it by
+          and reported "URL is not on Google", never having fetched it once.
+
+          Rendered unconditionally, deliberately. Every other CBAT block here is
+          gated behind a settings flag that arrives over the network, and a crawl
+          that missed that request would see no link. The guide is a public
+          document that stands up on its own even with the games switched off. */}
+      {/* py-8 sm:py-12 is the rhythm every band on this page uses (PreviewWindow,
+          LiveGameGrid). Top padding alone left the card jammed against the proof
+          wall below it, which carries pb only and leans on its predecessor for
+          the gap above. */}
+      <section className="py-8 sm:py-12 px-5 max-w-4xl mx-auto">
+        <motion.a
+          href="/cbat-guide"
+          onClick={() => captureEvent('landing_cbat_guide_clicked')}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.45 }}
+          className="group relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6 card-intel rounded-2xl p-5 sm:p-7 no-underline transition-all hover:-translate-y-0.5"
+        >
+          <CornerBrackets size={14} />
+          <span className="text-4xl sm:text-5xl shrink-0 group-hover:scale-110 transition-transform">📖</span>
+          <div className="min-w-0 flex-1">
+            <span className="intel-tag inline-block">FIELD GUIDE</span>
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 mt-2.5 mb-1.5">The Complete Guide to CBAT</h3>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              What each subtest is really like, how the test day runs, and the details that catch
+              people out. Free to read, no account needed.
+            </p>
+          </div>
+          <span className="shrink-0 inline-flex items-center gap-2 text-sm font-bold text-brand-600">
+            Read the guide
+            <span className="text-base leading-none group-hover:translate-x-0.5 transition-transform">→</span>
+          </span>
+        </motion.a>
+      </section>
+
       {/* Subject areas + Features — RAF-learning sections, hidden in slim CBAT mode */}
       {!slim && (<>
       {/* ── Subject areas ──────────────────────────────────── */}
@@ -484,6 +535,14 @@ export default function Landing() {
         <p className="text-slate-500 intel-mono text-xs">© {new Date().getFullYear()} SKYWATCH · BUILT FOR THOSE WHO TAKE AVIATION SERIOUSLY</p>
         <SocialLinks source="landing" className="mt-4" />
         <div className="mt-4 flex items-center justify-center gap-3">
+          {/* Second, always-present path to the guide. The card above can scroll
+              past unread; a footer link is the one anchor every crawl of this
+              page is guaranteed to reach. Plain <a> for the same reason as the
+              card — it is a document, not a route. */}
+          <a href="/cbat-guide" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
+            CBAT Guide
+          </a>
+          <span className="text-xs text-slate-300">·</span>
           <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
             Privacy Policy
           </Link>
