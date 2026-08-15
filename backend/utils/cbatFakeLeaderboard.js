@@ -325,15 +325,37 @@ const FAKE_TUNING = {
     floor: 3, ceiling: 10, seedTime: 262.6, timeStep: 7.9,
     scoreSequence: [9, 9, 9, 8, 8, 8, 8, 7, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 3],
   },
+  // Both VLT boards were re-timed on 2026-08-15 against the real runs. The
+  // original tuning budgeted "180s reading + 8 × ~50s ≈ 580s" and was about 3x
+  // every run players actually posted, for two reasons:
+  //
+  //   1. The reading window is NOT in totalTime. CbatTabbedReasoning only adds
+  //      up per-question elapsed time (see recordAnswer), so the 180s study
+  //      phase — and the feedback pause between questions — costs nothing on
+  //      the clock. Counting it double-charged the board by three minutes.
+  //   2. Nobody spends 50s on a question. The clock allows 180s, but a player
+  //      who has read the tabs knows which two to join; real avg/question ran
+  //      10s, 12s, 19s and 30s.
+  //
+  // Scores are untouched — those bands are about the distractor, not the clock.
   'vlt': {
     // 8 questions, each needing two sections joined. Scores below SLT's share
-    // because the plainly-stated sentence is a deliberate distractor. 180s
-    // reading + 8 × ~50s ≈ 580s — the second-longest game after DPT.
-    floor: 2, ceiling: 8, seedTime: 470.5, timeStep: 12.4,
+    // because the plainly-stated sentence is a deliberate distractor.
+    //
+    // Times here are an ESTIMATE — no Hard run has been posted yet. Taken as
+    // Easier's band × ~1.35, which is the extra searching eight tabs costs over
+    // five on the same eight questions. ~15s a question at the top of the board
+    // to ~42s at the foot. Retune against real runs when there are some.
+    floor: 2, ceiling: 8, seedTime: 118.7, timeStep: 8.6,
     scoreSequence: [7, 7, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 2],
   },
   'vlt-easier': {
-    floor: 2, ceiling: 8, seedTime: 402.3, timeStep: 10.6,
+    // Band runs 88.4s → 248.4s, which brackets the real spread (83.1s to
+    // 237.4s) and works out at ~11s a question at the top to ~31s at the foot —
+    // the same range the real avg/question covers. The quickest real run still
+    // tops the board, which is the point: the demo field is competitive, not
+    // unbeatable.
+    floor: 2, ceiling: 8, seedTime: 88.4, timeStep: 6.4,
     scoreSequence: [7, 7, 7, 6, 6, 6, 6, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2],
   },
   // Both MATF boards were lowered by about a third on 2026-08-13. The first cut
