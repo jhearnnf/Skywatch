@@ -2,6 +2,7 @@ import { Component, Suspense, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
+import { createCraftAttitude, turnRates } from '../../utils/cbat/actCraftAttitude'
 
 // What ACT draws at the player's position: the original white ball, or the
 // aircraft GLB the player picked on the instructions screen (see actCraft.js).
@@ -87,14 +88,21 @@ function CraftModel({ ballPosRef, ballForwardRef, url }) {
   }, [model])
 
   // Scratch vectors, allocated once — this runs every frame.
-  const nose = useRef(new THREE.Vector3()).current
+  const aft = useRef(new THREE.Vector3()).current
   const right = useRef(new THREE.Vector3()).current
   const up = useRef(new THREE.Vector3()).current
   const side = useRef(new THREE.Vector3()).current
+  const craftFwd = useRef(new THREE.Vector3()).current
+  const craftUp = useRef(new THREE.Vector3()).current
+  const wing = useRef(new THREE.Vector3()).current
+  const prevFwd = useRef(new THREE.Vector3()).current
   const basis = useRef(new THREE.Matrix4()).current
   const worldUp = useRef(new THREE.Vector3(0, 1, 0)).current
+  const attitude = useRef(createCraftAttitude()).current
+  // First frame has no previous heading to measure a turn against.
+  const seeded = useRef(false)
 
-  useFrame(() => {
+  useFrame((_, dt) => {
     const g = groupRef.current
     if (!g) return
     g.position.copy(ballPosRef.current)
@@ -108,11 +116,31 @@ function CraftModel({ ballPosRef, ballForwardRef, url }) {
     right.crossVectors(fwd, worldUp).normalize()
     up.crossVectors(right, fwd).normalize()
 
-    // Map the model's local -X (its nose) onto the heading: local +X is the
-    // reverse of forward, local +Y is up, local +Z completes the basis.
-    nose.copy(fwd).multiplyScalar(-1)
-    side.crossVectors(nose, up)
-    basis.makeBasis(nose, up, side)
+    // How hard the heading is being pulled around, and therefore how the
+    // aircraft should be sitting while it happens. Measured off the heading
+    // rather than off the input, so every steering device banks the aircraft
+    // without this knowing any of them exist. See actCraftAttitude.js.
+    if (!seeded.current) { prevFwd.copy(fwd); seeded.current = true }
+    const { yawRate, pitchRate } = turnRates(prevFwd, fwd, right, up, dt)
+    prevFwd.copy(fwd)
+    const { bank, aoa } = attitude.update(yawRate, pitchRate, dt)
+
+    // Roll about the direction of flight, then lift the nose off the flight
+    // path about the rolled wing line — in that order, so the bank carries the
+    // pitch with it the way it would on a real aircraft.
+    craftFwd.copy(fwd)
+    craftUp.copy(up).applyAxisAngle(fwd, bank)
+    wing.crossVectors(craftFwd, craftUp).normalize()
+    if (aoa !== 0) {
+      craftFwd.applyAxisAngle(wing, aoa)
+      craftUp.applyAxisAngle(wing, aoa)
+    }
+
+    // The models are authored nose-along -X, so the basis X axis is the tail
+    // direction; +Y is up and +Z completes it.
+    aft.copy(craftFwd).multiplyScalar(-1)
+    side.crossVectors(aft, craftUp)
+    basis.makeBasis(aft, craftUp, side)
     g.quaternion.setFromRotationMatrix(basis)
   })
 
