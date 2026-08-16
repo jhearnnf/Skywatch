@@ -43,6 +43,15 @@ import {
 } from '../utils/cbat/actStickInput'
 import { useMockStick } from '../utils/cbat/useMockStick'
 import StickSetup from '../components/cbat/StickSetup'
+import ActCraftPicker from '../components/cbat/ActCraftPicker'
+import ActPlayerCraft from '../components/cbat/ActPlayerCraft'
+import { getAircraftRoster } from '../lib/offlineRoster'
+import {
+  actCraftOptions,
+  craftModelUrl,
+  readStoredActCraft,
+  storeActCraft,
+} from '../utils/cbat/actCraft'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5
@@ -413,21 +422,6 @@ function ShapeGate({ event, curve, ballT }) {
         </mesh>
       ))}
     </group>
-  )
-}
-
-// The white player ball — reads ballPosRef directly (world coords).
-function PlayerBall({ ballPosRef }) {
-  const ref = useRef()
-  useFrame(() => {
-    if (!ref.current) return
-    ref.current.position.copy(ballPosRef.current)
-  })
-  return (
-    <mesh ref={ref}>
-      <sphereGeometry args={[BALL_RADIUS, 16, 16]} />
-      <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.6} />
-    </mesh>
   )
 }
 
@@ -1210,7 +1204,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
 
 // Wraps the canvas + ball/camera/shape components so they share the live
 // refs without forcing top-level re-renders every frame.
-function ActScene({ state }) {
+function ActScene({ state, craftUrl }) {
   // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
   // for real players.
   const demoCanvas = useCbatDemoCanvas()
@@ -1258,7 +1252,12 @@ function ActScene({ state }) {
         ))
       })()}
 
-      <PlayerBall   ballPosRef={state.ballPosRef} />
+      <ActPlayerCraft
+        ballPosRef={state.ballPosRef}
+        ballForwardRef={state.ballForwardRef}
+        modelUrl={craftUrl}
+        radius={BALL_RADIUS}
+      />
       <ChaseCamera
         ballPosRef={state.ballPosRef}
         ballForwardRef={state.ballForwardRef}
@@ -1400,6 +1399,19 @@ export default function CbatAct() {
   // without one. See mockGamepad.js.
   const mockStick = useMockStick()
 
+  // Player craft (cosmetic — see actCraft.js). The roster is only needed for
+  // the picker's tiles; the ball needs none of it, so a failed fetch just
+  // leaves the default in place.
+  const [roster, setRoster] = useState([])
+  const [rosterLoading, setRosterLoading] = useState(true)
+  const [craftId, setCraftId] = useState(readStoredActCraft)
+  const craftOptions = useMemo(() => actCraftOptions(roster), [roster])
+  const craftUrl = craftModelUrl(craftOptions, craftId)
+  const changeCraft = useCallback((id) => {
+    setCraftId(id)
+    storeActCraft(id)
+  }, [])
+
   // Round-5 memory code. Generated once per run and held here, above the round
   // component — ActRound unmounts when the round ends, but the answer is typed
   // in and scored after that.
@@ -1459,6 +1471,15 @@ export default function CbatAct() {
   // well as 'playing' — the arena is mounted behind that overlay, so widening
   // only on 'playing' would resize it under the player as the round starts.
   useGameBodyClass('cbat-act-wide', phase === 'callsign' || phase === 'playing')
+
+  // Fetch the aircraft roster for the craft picker.
+  useEffect(() => {
+    if (!user) return
+    getAircraftRoster('aircraft-cutouts', { apiFetch, API })
+      .then(d => setRoster(d.data || []))
+      .catch(() => {})
+      .finally(() => setRosterLoading(false))
+  }, [user])
 
   // Fetch personal best
   useEffect(() => {
@@ -1696,6 +1717,10 @@ export default function CbatAct() {
               personalBest={personalBest}
               onStart={startGame}
               mockStick={mockStick}
+              craftOptions={craftOptions}
+              craftId={craftId}
+              onCraftChange={changeCraft}
+              craftLoading={rosterLoading}
             />
           )}
 
@@ -1714,6 +1739,7 @@ export default function CbatAct() {
               onTutorialFired={onTutorialFired}
               memoryCode={roundIdx === CODE_ROUND_IDX ? memoryCode : null}
               debug={debugUsed}
+              craftUrl={craftUrl}
             />
           )}
 
@@ -1754,7 +1780,7 @@ export default function CbatAct() {
 }
 
 // ── Intro screen ─────────────────────────────────────────────────────────────
-function IntroScreen({ personalBest, onStart, mockStick }) {
+function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, onCraftChange, craftLoading }) {
   const [stickRate, setStickRate] = useState(readStoredActStickRate)
   const changeStickRate = (value) => {
     setStickRate(value)
@@ -1806,6 +1832,13 @@ function IntroScreen({ personalBest, onStart, mockStick }) {
         </div>
       </div>
 
+      <ActCraftPicker
+        options={craftOptions}
+        value={craftId}
+        onChange={onCraftChange}
+        loading={craftLoading}
+      />
+
       {/* Joystick. The steer rate lives inside the panel rather than beside it
           because it only means anything with a stick attached — on a mouse the
           drag distance is the rate. */}
@@ -1854,7 +1887,7 @@ function IntroScreen({ personalBest, onStart, mockStick }) {
 }
 
 // ── Round wrapper (mounts game-state hook + canvas + HUD) ────────────────────
-function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutorialDone, onTutorialFired, memoryCode, debug }) {
+function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutorialDone, onTutorialFired, memoryCode, debug, craftUrl }) {
   const state = useActRoundState(roundIdx, audio, onRoundComplete, memoryCode)
   const stats = state.statsRef.current
 
@@ -1955,7 +1988,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
       </div>
 
       <div className="relative aspect-square sm:aspect-[4/3] bg-[#020812] border border-[#1a3a5c] rounded-xl overflow-hidden">
-        <ActScene state={state} />
+        <ActScene state={state} craftUrl={craftUrl} />
 
         {showCallsignOverlay && (
           <motion.div
