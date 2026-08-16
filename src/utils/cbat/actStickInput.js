@@ -20,7 +20,8 @@
 //
 // Signs line up with the mouse exactly, so there is no flip at the call site:
 // +x is right, and the game reads dx>0 as a turn to the right; +y is stick
-// forward, and the game reads dy>0 (a downward drag) as pitching down.
+// BACK — pulled toward you, the same hand motion as a downward mouse drag —
+// and the game reads dy>0 as pitching down.
 
 import { createStickReader, loadProfile, defaultProfile } from './gamepad'
 

@@ -47,8 +47,9 @@ describe('stickDelta', () => {
   })
 
   it('keeps the mouse sign convention, so nothing downstream needs a flip', () => {
-    // +x is right and ACT reads dx>0 as a turn right; +y is stick forward and
-    // ACT reads dy>0 (a downward drag) as pitching down.
+    // +x is right and ACT reads dx>0 as a turn right; +y is stick BACK, the
+    // same hand motion as a downward mouse drag, and ACT reads dy>0 as
+    // pitching down.
     const d = stickDelta({ x: 1, y: 1 }, 1, 200)
     expect(d.dx).toBeGreaterThan(0)
     expect(d.dy).toBeGreaterThan(0)
@@ -174,8 +175,8 @@ describe('createActStick', () => {
     const s = createActStick({ rate: 200 })
     const d = s.poll(1)
     expect(d.dx).toBeGreaterThan(150)
-    // Stick forward reads -1 on this device; the sign turns it into a
-    // downward pitch, which is what forward means.
+    // This device reports the positive end of pitch as -1, and the profile's
+    // sign is what turns that back into +y.
     expect(d.dy).toBeGreaterThan(150)
   })
 

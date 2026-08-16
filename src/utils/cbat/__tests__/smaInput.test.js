@@ -195,7 +195,9 @@ describe('createSmaInput source priority', () => {
     input.poll(16)
     expect(input.source()).toBe('gamepad')
     expect(input.axes().x).toBeGreaterThan(0.5)
-    expect(input.axes().y).toBeLessThan(-0.5)
+    // Raw pitch of -0.9 is the stick pushed away on the usual driver
+    // convention, and SMA sends the dot DOWN for that — see STICK_PITCH_SIGN.
+    expect(input.axes().y).toBeGreaterThan(0.5)
 
     // And it keeps the job once centred again — a centred stick is a command to
     // hold still, not an absence of input, so the mouse must not grab it back.
@@ -203,6 +205,30 @@ describe('createSmaInput source priority', () => {
     input.poll(16)
     expect(input.source()).toBe('gamepad')
     expect(input.axes()).toEqual({ x: 0, y: 0 })
+  })
+
+  it('flies the stick the way the real apparatus does, unlike RTT and ACT', () => {
+    // SMA is the one game that inverts stick pitch: push away, dot down. The
+    // shared gamepad layer hands out the opposite sign because RTT and ACT
+    // follow the mouse, so if this flip is ever lost the game silently starts
+    // teaching the reverse of the habit it exists to train.
+    const pad = { id: 'Fake Stick', connected: true, axes: [0, 0], buttons: [] }
+    navigator.getGamepads = () => [pad]
+    input = createSmaInput({ el: arena() })
+
+    pad.axes = [0, -1]          // pushed away, as nearly every driver reports it
+    input.poll(16)
+    expect(input.source()).toBe('gamepad')
+    expect(input.axes().y).toBeGreaterThan(0.5)
+
+    pad.axes = [0, 1]           // pulled back
+    input.poll(16)
+    expect(input.axes().y).toBeLessThan(-0.5)
+
+    // Roll is untouched by the flip: right is still right.
+    pad.axes = [1, 0]
+    input.poll(16)
+    expect(input.axes().x).toBeGreaterThan(0.5)
   })
 
   it('falls back to the mouse when the stick is unplugged mid-run', () => {

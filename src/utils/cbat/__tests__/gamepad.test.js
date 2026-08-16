@@ -73,7 +73,8 @@ describe('readStickAxes', () => {
     const p = pad({ axes: [0.01, 0, -1, 1, -1, 0] })
     const out = readStickAxes(p, profile)
     expect(out.x).toBeCloseTo(applyCurve(1))
-    // sign -1 on a raw -1 means full positive: stick forward, nose down.
+    // sign -1 on a raw -1 means full positive, whichever way round the device
+    // happens to report its pitch axis.
     expect(out.y).toBeCloseTo(applyCurve(1))
   })
 
@@ -137,19 +138,52 @@ describe('createCalibration', () => {
     expect(out.ok).toBe(true)
     expect(out.profile.x.index).toBe(3)
     expect(out.profile.y.index).toBe(4)
-    // Forward read -1, so forward is the negative end: sign flips.
-    expect(out.profile.y.sign).toBe(-1)
+    // Back is the positive end of pitch and this device reads back as +1, so
+    // pitch needs no inversion here.
+    expect(out.profile.y.sign).toBe(1)
     expect(out.profile.x.sign).toBe(1)
     expect(out.profile.calibrated).toBe(true)
   })
 
   it('produces a profile that flies the right way round', () => {
     const { profile } = walk(createCalibration('Test Stick')).result()
+    const back = pad({ axes: [0, 0, -1, 0, 1, 0] })
     const forward = pad({ axes: [0, 0, -1, 0, -1, 0] })
     const right = pad({ axes: [0, 0, -1, 1, 0, 0] })
-    // +y is stick forward; +x is right. Both games read those signs directly.
-    expect(readStickAxes(forward, profile).y).toBeCloseTo(applyCurve(1))
+    // +y is stick BACK, the same sense as a mouse dragged down the screen;
+    // +x is right. Both games read those signs directly.
+    expect(readStickAxes(back, profile).y).toBeCloseTo(applyCurve(1))
+    expect(readStickAxes(forward, profile).y).toBeCloseTo(-applyCurve(1))
     expect(readStickAxes(right, profile).x).toBeCloseTo(applyCurve(1))
+  })
+
+  it('does not flip pitch relative to the mapping the same stick flew on uncalibrated', () => {
+    // The bug this exists for: an ordinary stick on axes 0 and 1 flew correctly
+    // out of the box, and calibrating it inverted up and down. Both mappings
+    // read the same device, so they have to agree on every sign — a calibration
+    // that reverses the controls is worse than no calibration at all.
+    const cal = createCalibration('Ordinary Stick')
+    const at = (roll, pitch) => pad({ axes: [roll, pitch], down: [] })
+    const commit = (p) => { cal.observe(p); cal.commit() }
+    cal.observe(at(0, 0))
+    commit(at(0, 0))       // centre
+    commit(at(1, 0))       // right
+    commit(at(-1, 0))      // left
+    commit(at(0, -1))      // forward — negative, as nearly every driver reports
+    commit(at(0, 1))       // back
+    cal.skip(); cal.skip()
+
+    const { ok, profile } = cal.result()
+    expect(ok).toBe(true)
+
+    const uncalibrated = defaultProfile('Ordinary Stick')
+    for (const [roll, pitch] of [[0, -1], [0, 1], [1, 0], [-1, 0], [0.5, -0.5]]) {
+      const frame = at(roll, pitch)
+      const before = readStickAxes(frame, uncalibrated)
+      const after = readStickAxes(frame, profile)
+      expect(after.x).toBeCloseTo(before.x)
+      expect(after.y).toBeCloseTo(before.y)
+    }
   })
 
   it('never picks the parked throttle, which moves further than anything', () => {
@@ -231,6 +265,17 @@ describe('profile storage', () => {
 
   it('rejects a stored profile of the wrong shape rather than crashing mid-run', () => {
     localStorage.setItem('sw_cbat_stick_profiles', JSON.stringify({ 'Stick A': { x: {} } }))
+    expect(loadProfile('Stick A')).toBe(null)
+  })
+
+  it('drops a profile saved by an older learner instead of flying it', () => {
+    // Version 1 learned pitch inverted. Its profiles are structurally fine, so
+    // nothing else here would catch them — and keeping one means the stick that
+    // worked before the player calibrated it still flies upside down after the
+    // fix. Dropping it falls back to the default mapping, which is correct.
+    const stale = { ...defaultProfile('Stick A'), calibrated: true }
+    delete stale.version
+    localStorage.setItem('sw_cbat_stick_profiles', JSON.stringify({ 'Stick A': stale }))
     expect(loadProfile('Stick A')).toBe(null)
   })
 
@@ -412,14 +457,14 @@ describe('mock stick', () => {
     expect(out.ok).toBe(true)
     expect(out.profile.x.index).toBe(3)
     expect(out.profile.y.index).toBe(4)
-    // Mouse-up is stick-forward and the mock reports it negative, so the
-    // learner has to invert pitch. Getting this wrong is the single most
-    // likely real-hardware bug, which is why the mock inverts.
-    expect(out.profile.y.sign).toBe(-1)
+    // The mock reports pitch the way a real driver does — negative when the
+    // stick is pushed forward — and back is the positive end, so no inversion.
+    expect(out.profile.y.sign).toBe(1)
 
-    // And the learned profile flies correctly: forward gives +y.
-    const forward = at(0, -1)
-    expect(readStickAxes(forward, out.profile).y).toBeGreaterThan(0.5)
+    // And the learned profile flies correctly: pulling back gives +y, which is
+    // the same sense as dragging a mouse down the screen.
+    expect(readStickAxes(at(0, 1), out.profile).y).toBeGreaterThan(0.5)
+    expect(readStickAxes(at(0, -1), out.profile).y).toBeLessThan(-0.5)
     mock.dispose()
   })
 })

@@ -27,9 +27,16 @@
 //   const { x, y } = input.axes()   // curved, dead-zoned, [-1,1]
 //   input.dispose()
 //
-// +x is right, +y is DOWN — see the sign note at the top of smaSim.js. The
-// gamepad layer's +y is already stick-forward, and the guide says pushing the
-// stick away brings the dot down, so a real stick needs no flip here either.
+// +x is right, +y is DOWN — see the sign note at the top of smaSim.js. Three of
+// the four sources feed that straight through: a mouse below the middle, a
+// thumb dragged down the pad and the down arrow all read +y.
+//
+// The joystick is the exception, and deliberately. gamepad.js hands out +y for
+// stick BACK, because RTT and ACT were built around a mouse and want the stick
+// to move the picture the way the hand moves. The real SMA apparatus is flown
+// the other way — push the stick away and the dot goes down, like an aircraft
+// stick — so this game, and only this game, inverts pitch on the stick path.
+// See STICK_PITCH_SIGN below.
 
 import {
   createStickReader, applyCurve, clamp1, loadProfile, defaultProfile, listPads,
@@ -44,6 +51,14 @@ export { pointerAxes }
 // comfortable thumb sweep and the fine control lives in the first few
 // millimetres, which is where a tracking task needs it.
 export const PAD_RADIUS_FRACTION = 1 / 3
+
+// What the stick's pitch is multiplied by on its way into this game. -1, so
+// pushing the stick away sends the dot DOWN, which is how the real apparatus is
+// flown and what the instructions card promises. It is a per-game flip rather
+// than a change to the shared profile, because the same calibrated stick has to
+// keep pitching the other way in RTT and ACT, where the mouse is the reference
+// and the picture follows the hand.
+export const STICK_PITCH_SIGN = -1
 
 // Where a pad gesture is centred. The origin is where the finger LANDED, not the
 // middle of the pad: a fixed centre would have to be found by feel every time,
@@ -267,7 +282,11 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
       }
 
       if (state.source === 'gamepad' && stick.connected()) {
-        state.axes = stick.axes()
+        const a = stick.axes()
+        // A centred stick would come out as -0 from the multiply. Nothing here
+        // flies differently on it, but it compares unequal to 0 and would put a
+        // baffling minus sign in front of a HUD readout.
+        state.axes = { x: a.x, y: a.y === 0 ? 0 : a.y * STICK_PITCH_SIGN }
         return
       }
 

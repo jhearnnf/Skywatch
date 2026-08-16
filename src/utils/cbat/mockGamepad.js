@@ -99,8 +99,9 @@ export function installMockStick() {
     axes[ROLL_AXIS] = clamp1(ROLL_CENTRE + d.x * (1 - Math.abs(ROLL_CENTRE)) + noise())
     // Pitch as most flight drivers report it: pushing the stick forward reads
     // NEGATIVE. Screen-Y grows downward, so mouse-up (forward) gives d.y < 0
-    // and this axis passes it straight through — which is the inverted case
-    // the calibration has to discover rather than assume.
+    // and this axis passes it straight through — the same pass-through the
+    // uncalibrated default profile does, which is why a calibration run over
+    // this mock has to come back with the pitch sign left alone.
     axes[PITCH_AXIS] = clamp1(d.y + noise())
     axes[5] = 0
 

@@ -43,9 +43,10 @@ describe('SMA control law', () => {
   })
 
   it('sends the dot down on a positive y and up on a negative one', () => {
-    // The sign that matters most: gamepad.js defines +y as STICK FORWARD, and
-    // the guide says pushing the stick away brings the dot down. A flip here
-    // would teach the reverse of the one control habit this test trains.
+    // The sign that matters most: +y is the dot going down, which is what a
+    // mouse below the middle asks for and — after smaInput's per-game pitch
+    // flip — what pushing the stick away asks for. A flip here would teach the
+    // reverse of the one control habit this test trains.
     const down = createSmaSim({ rng: halves, tuning: still })
     run(down, 500, { x: 0, y: 1 })
     expect(down.state.y).toBeGreaterThan(0)

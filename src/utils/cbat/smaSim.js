@@ -26,8 +26,9 @@
 //
 // SIGNS. +x moves the dot RIGHT, +y moves the dot DOWN. Both match what the
 // input layer already produces without a flip anywhere:
-//   • gamepad.js defines +y as STICK FORWARD, and the guide says pushing away
-//     brings the dot down. Pull back for up falls out of the same sign.
+//   • the stick reaches here through smaInput's STICK_PITCH_SIGN, which
+//     inverts gamepad.js's stick-back convention for this game alone, so
+//     pushing the stick away brings the dot down as the real apparatus does.
 //   • a pointer below the middle of the arena reads +y, and pushing the dot
 //     down is what you want the low half of the screen to mean.
 //   • the right pedal is +x and moves the dot right, which is what you press

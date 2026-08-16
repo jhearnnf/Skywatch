@@ -21,9 +21,16 @@
 //   const { x, y } = reader.axes()    // calibrated, dead-zoned, curved, [-1,1]
 //   const n = reader.consumeEdges('trigger')
 //
-// +x is right. +y is STICK FORWARD, which is nose down — the same sense as
-// screen-Y growing downward, so both games can treat a stick and a mouse as the
-// same number without a sign flip at the call site.
+// +x is right. +y is STICK BACK — pulled toward you — which is the same sense
+// as screen-Y growing downward, so a stick and a mouse are the same number and
+// no call site needs a sign flip.
+//
+// That sign is not a free choice. Every game here was built around a mouse, and
+// a mouse dragged toward you reads +y; the hand motion that has to match it is
+// pulling the stick toward you, not pushing it away. It is also what the
+// uncalibrated default mapping already produces on the usual driver convention
+// (pitch axis negative when pushed forward), so a calibrated stick and an
+// uncalibrated one fly identically — see the note in result().
 
 // A stick has mechanical slop around centre and a hand on a mouse has its own;
 // without a dead zone the camera never quite stops.
@@ -48,6 +55,14 @@ const MIN_AXIS_TRAVEL = 0.35
 const MIN_HALF_RANGE = 0.05
 
 const PROFILE_STORE_KEY = 'sw_cbat_stick_profiles'
+
+// Bumped whenever a stored profile would fly differently from a freshly
+// calibrated one. Version 1 learned pitch with FORWARD as the positive end,
+// which inverted up and down against the uncalibrated mapping the same stick
+// flew on before calibration; a profile saved by it is wrong on the hardware it
+// was measured from, so it is dropped rather than migrated and the player is
+// shown the default mapping and an invitation to calibrate again.
+export const PROFILE_VERSION = 2
 
 export function clamp1(v) {
   return v < -1 ? -1 : v > 1 ? 1 : v
@@ -75,6 +90,7 @@ export function applyCurve(v, deadZone = STICK_DEAD_ZONE, expo = STICK_EXPO) {
 export function defaultProfile(id = '') {
   return {
     id,
+    version: PROFILE_VERSION,
     calibrated: false,
     x: { index: 0, centre: 0, min: -1, max: 1, sign: 1 },
     y: { index: 1, centre: 0, min: -1, max: 1, sign: 1 },
@@ -190,8 +206,11 @@ export function loadProfile(id) {
   if (!id) return null
   const p = loadProfiles()[id]
   // A stored profile from an older shape would blow up readStickAxes on the
-  // first frame of a run, which is the worst possible moment to find out.
+  // first frame of a run, which is the worst possible moment to find out — and
+  // one from an older VERSION would fly the wrong way round, which is worse
+  // still because nothing about it looks broken until the stick is in a hand.
   if (!p || !p.x || !p.y || typeof p.x.index !== 'number' || typeof p.y.index !== 'number') return null
+  if (p.version !== PROFILE_VERSION) return null
   return p
 }
 
@@ -221,8 +240,8 @@ export const CALIBRATION_STEPS = [
   { key: 'centre',  kind: 'axes',   prompt: 'Let the stick sit centred',        hint: 'Take your hand off it' },
   { key: 'right',   kind: 'axes',   prompt: 'Hold the stick fully RIGHT',       hint: 'All the way over' },
   { key: 'left',    kind: 'axes',   prompt: 'Hold the stick fully LEFT',        hint: 'All the way over' },
-  { key: 'forward', kind: 'axes',   prompt: 'Push the stick fully FORWARD',     hint: 'Away from you — nose down' },
-  { key: 'back',    kind: 'axes',   prompt: 'Pull the stick fully BACK',        hint: 'Towards you — nose up' },
+  { key: 'forward', kind: 'axes',   prompt: 'Push the stick fully FORWARD',     hint: 'Away from you' },
+  { key: 'back',    kind: 'axes',   prompt: 'Pull the stick fully BACK',        hint: 'Towards you' },
   { key: 'trigger', kind: 'button', prompt: 'Squeeze the trigger',              hint: 'This takes the picture' },
   { key: 'action',  kind: 'button', prompt: 'Press the button you want for BLEEP', hint: 'Any other button on the stick' },
 ]
@@ -329,13 +348,21 @@ export function createCalibration(id = '') {
 
       const x = learn('right', 'left', -1)
       if (!x) return { ok: false, reason: 'No axis moved far enough left and right. Check the stick is the selected device.' }
-      const y = learn('forward', 'back', x.index)
+      // BACK is the positive end of pitch, not forward. Getting this backwards
+      // is the bug this ordering exists to prevent: the uncalibrated default
+      // profile passes the raw pitch axis straight through, and on the usual
+      // driver convention that axis is positive when the stick is pulled back.
+      // Learning forward-as-positive therefore produced a calibrated stick that
+      // flew inverted relative to the same stick before calibration — the one
+      // comparison none of the tests were making.
+      const y = learn('back', 'forward', x.index)
       if (!y) return { ok: false, reason: 'No axis moved far enough forward and back.' }
 
       return {
         ok: true,
         profile: {
           id,
+          version: PROFILE_VERSION,
           calibrated: true,
           x,
           y,

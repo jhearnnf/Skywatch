@@ -79,12 +79,13 @@ describe('StickSetup', () => {
     await waitFor(() => expect(screen.getByText('SAVED')).toBeInTheDocument())
 
     // The profile it learned has to match what the mock actually is: axes at
-    // 3 and 4, with pitch inverted.
+    // 3 and 4, and a pitch axis that already reads the way the games want it,
+    // so calibrating leaves the sign alone rather than reversing the stick.
     const profile = loadProfile('Mock Sidestick (Vendor: dead Product: beef)')
     expect(profile.calibrated).toBe(true)
     expect(profile.x.index).toBe(3)
     expect(profile.y.index).toBe(4)
-    expect(profile.y.sign).toBe(-1)
+    expect(profile.y.sign).toBe(1)
 
     await frames()
     expect(screen.getByText('CALIBRATED')).toBeInTheDocument()
