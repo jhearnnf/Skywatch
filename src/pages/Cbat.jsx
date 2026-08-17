@@ -306,25 +306,27 @@ export default function Cbat() {
       <h1 className="text-2xl font-extrabold text-slate-900 mb-1">CBAT Games</h1>
       <p className="text-sm text-slate-500 mb-4">Practise for CBAT with targeted training games.</p>
 
-      {/* Guide strip — above the grid, and above the sign-in lock card, because
-          for a signed-out visitor the grid below is blurred and this is the only
-          thing on the page they can actually use. Someone who arrives not
-          knowing what a subtest is wants the reading before the games.
+      {/* Guide strip — signed-out only. For a visitor the grid below is blurred
+          and this is the only thing on the page they can actually use, so it
+          earns its space; once you are signed in you are here to play, and it
+          just pushes the games down. Crawlers are always signed out, so this
+          still gives the guide its crawl path from an indexable page.
 
           Plain <a>: the guide is a standalone document in public/, not an app
-          route, so a <Link> would 404 inside the SPA. It is also the internal
-          link that gives the guide a crawl path from an indexable page. */}
-      <a
-        href="/cbat-guide"
-        className="group flex items-center gap-3 mb-6 rounded-xl border border-slate-200 bg-surface px-4 py-3 no-underline card-shadow transition-colors hover:border-brand-300 hover:bg-brand-50"
-      >
-        <span className="text-xl shrink-0">📖</span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold text-slate-800">New to CBAT? Read the guide first</span>
-          <span className="block text-xs text-slate-500">What each subtest is really like, and how the test day runs. Free to read.</span>
-        </span>
-        <span className="shrink-0 text-brand-600 text-base leading-none group-hover:translate-x-0.5 transition-transform">→</span>
-      </a>
+          route, so a <Link> would 404 inside the SPA. */}
+      {!user && (
+        <a
+          href="/cbat-guide"
+          className="group flex items-center gap-3 mb-6 rounded-xl border border-slate-200 bg-surface px-4 py-3 no-underline card-shadow transition-colors hover:border-brand-300 hover:bg-brand-50"
+        >
+          <span className="text-xl shrink-0">📖</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-slate-800">New to CBAT? Read the guide first</span>
+            <span className="block text-xs text-slate-500">What each subtest is really like, and how the test day runs. Free to read.</span>
+          </span>
+          <span className="shrink-0 text-brand-600 text-base leading-none group-hover:translate-x-0.5 transition-transform">→</span>
+        </a>
+      )}
 
       <div className="lg:flex lg:gap-6 lg:items-start">
         <div className="lg:flex-1 lg:min-w-0">
