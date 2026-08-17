@@ -820,7 +820,8 @@ export default function CbatAptitudeReport() {
             The red line is level {targetStanine ? Math.round(targetStanine * 10) / 10 : '-'}. Reach it in every skill area and
             you land exactly on this role&apos;s pass mark. The chips under each row are the games that feed it, so tap one to
             go and play it. Games with two difficulties open on Hard, the only runs this report counts. Tap the row
-            itself to see how you scored on each. Anything greyed out is a test we can&apos;t measure yet.
+            itself to see how you scored on each. Anything greyed out isn&apos;t counting yet, almost always because you
+            haven&apos;t played its game enough times.
           </p>
 
           {/* Gaps. */}
@@ -869,8 +870,15 @@ export default function CbatAptitudeReport() {
               </li>
               <li>
                 <span className="block text-slate-700 font-bold mb-0.5">Why some rows are greyed out</span>
-                A few tests in the real CBAT have no SkyWatch game yet. We grey those out and leave them out of your score
-                instead of guessing, so your number only reflects what we can actually measure.
+                A greyed row is a test that isn&apos;t counting yet. Nearly always that just means you haven&apos;t played
+                its game enough: three goes on Hard and it starts counting.
+                {report.gaps?.length > 0 && (
+                  <> The exception{report.gaps.length === 1 ? ' is the test' : 's are the tests'} listed further up under
+                  &ldquo;Tests we don&apos;t have a game for&rdquo;, which {report.gaps.length === 1 ? 'is' : 'are'} on
+                  this role&apos;s paper but {report.gaps.length === 1 ? 'has' : 'have'} no SkyWatch game yet.</>
+                )}
+                {' '}Either way we leave it out of your score instead of guessing, so your number only reflects what we
+                can actually measure.
               </li>
               <li>
                 <span className="block text-slate-700 font-bold mb-0.5">We use your recent scores, not your best</span>

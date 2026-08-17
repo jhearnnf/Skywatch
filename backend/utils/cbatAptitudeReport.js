@@ -16,8 +16,9 @@
 // built on it could never tell a user they'd gone off the boil. This is the same window and the
 // same reasoning as the recent-form percentile in routes/games.js.
 //
-// COVERAGE IS REPORTED, NOT PAPERED OVER. SkyWatch has no game for TRT, SIT, SLT, VLT and several
-// others, and a user may simply not have played the games we do have. Those tests are excluded and
+// COVERAGE IS REPORTED, NOT PAPERED OVER. The roster now covers all but two tests — GSPA and RCOG,
+// which between them appear on three roles — and a user may simply not have played the games we do
+// have. Either way the test is excluded and
 // the domain is scored on what's left; a domain with nothing left is excluded entirely and the
 // battery score is renormalised over the weight that remains. `coverage` reports the share of the
 // battery's weight the estimate actually rests on, so a 62%-covered score can be read for what it
