@@ -24,6 +24,33 @@ const MESSAGE_LIMIT = 40
 // Only used when the stream is down. Deliberately slower than the main thread's
 // 5s: this is a degraded mode on a page whose real job is the games.
 const FALLBACK_POLL_MS = 10_000
+// The activity counters are a 7-day and a same-day figure, so they barely move
+// within a session. Slow on purpose.
+const ACTIVITY_REFRESH_MS = 5 * 60_000
+
+// How busy the site has been, under the lounge header.
+//
+// Both numbers are counted, never padded, and both are cumulative rather than a
+// live "N online" — see backend/utils/cbatActivityStats.js for the reasoning. It
+// renders nothing at all when the server reports a quiet week, because a real
+// but tiny number answers "is anyone here" with a no.
+function ActivityStrip({ activity }) {
+  const plays7d = activity?.plays7d
+  const agentsToday = activity?.agentsToday
+  if (!Number.isFinite(plays7d) || activity.quiet) return null
+
+  const parts = [`${plays7d.toLocaleString()} ${plays7d === 1 ? 'game' : 'games'} played this week`]
+  if (agentsToday > 0) {
+    parts.push(`${agentsToday.toLocaleString()} ${agentsToday === 1 ? 'agent' : 'agents'} today`)
+  }
+
+  return (
+    <p className="shrink-0 px-4 py-1.5 border-b border-[#1a3a5c] text-[10px] text-slate-500 truncate">
+      {parts.join(' · ')}
+    </p>
+  )
+}
+
 export default function CbatLoungeChat({ open, onToggle }) {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
@@ -39,6 +66,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const [needsName, setNeedsName] = useState(false)
   const [typingName, setTypingName] = useState(null)
   const [streaming, setStreaming] = useState(false)
+  const [activity, setActivity] = useState(null)
 
   const scrollRef = useRef(null)
   const inputRef  = useRef(null)
@@ -73,6 +101,21 @@ export default function CbatLoungeChat({ open, onToggle }) {
       setNeedsName(Boolean(data.displayNameRequired))
     }).catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
+  }, [enabled, get])
+
+  // How busy the site has been lately, shown under the lounge header. Refreshed
+  // on a slow timer rather than with the messages: the numbers move over days,
+  // and the endpoint is cached server-side for a minute anyway. A failure leaves
+  // `activity` null and the strip simply doesn't render.
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+    const load = () => get('/api/games/cbat/activity')
+      .then(({ ok, data }) => { if (!cancelled && ok && data) setActivity(data) })
+      .catch(() => {})
+    load()
+    const id = setInterval(load, ACTIVITY_REFRESH_MS)
+    return () => { cancelled = true; clearInterval(id) }
   }, [enabled, get])
 
   const loadMessages = useCallback(async () => {
@@ -262,6 +305,8 @@ export default function CbatLoungeChat({ open, onToggle }) {
           Close
         </button>
       </div>
+
+      <ActivityStrip activity={activity} />
 
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5">
         {loading ? (

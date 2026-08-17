@@ -306,3 +306,53 @@ describe('posting', () => {
     expect(await screen.findByText(/sending messages too quickly/i)).toBeTruthy()
   })
 })
+
+// The activity strip. Every number it shows is a real count from
+// /api/games/cbat/activity — the component's only job is to render or withhold.
+describe('activity strip', () => {
+  function stubWithActivity(activity) {
+    const json = (status, data) => Promise.resolve({
+      ok: status < 400, status,
+      json: async () => ({ status: 'success', data }),
+    })
+    global.fetch = vi.fn((url) => {
+      if (String(url).includes('/api/chat/lounge')) return json(200, LOUNGE)
+      if (String(url).includes('/api/games/cbat/activity')) return json(200, activity)
+      if (String(url).includes('/messages')) return json(200, { messages: MESSAGES, botTyping: null })
+      return json(200, {})
+    })
+  }
+
+  it('shows both counters when the site has been busy', async () => {
+    stubWithActivity({ plays7d: 1340, agentsToday: 84, quiet: false })
+    renderOpen()
+    expect(await screen.findByText(/1,340 games played this week · 84 agents today/)).toBeDefined()
+  })
+
+  it('drops the agents half when nobody has played today yet', async () => {
+    stubWithActivity({ plays7d: 400, agentsToday: 0, quiet: false })
+    renderOpen()
+    const strip = await screen.findByText(/400 games played this week/)
+    expect(strip.textContent).not.toMatch(/agents/)
+  })
+
+  it('says nothing at all on a quiet week rather than showing a small number', async () => {
+    stubWithActivity({ plays7d: 4, agentsToday: 1, quiet: true })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.queryByText(/games played this week/)).toBeNull()
+  })
+
+  it('renders nothing when the activity request fails', async () => {
+    stubWithActivity({})
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.queryByText(/games played this week/)).toBeNull()
+  })
+
+  it('singularises a lone game and a lone agent', async () => {
+    stubWithActivity({ plays7d: 1, agentsToday: 1, quiet: false })
+    renderOpen()
+    expect(await screen.findByText('1 game played this week · 1 agent today')).toBeDefined()
+  })
+})

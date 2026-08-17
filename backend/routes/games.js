@@ -29,6 +29,7 @@ const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgress
 const { buildAptitudeReport, buildAllBatteryScores, buildCbatUserList } = require('../utils/cbatAptitudeReport');
 const { tierToAward, donationPromptDue } = require('../utils/cbatProgressAward');
 const { buildCbatShowcase } = require('../utils/cbatShowcase');
+const { buildCbatActivityStats } = require('../utils/cbatActivityStats');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
@@ -3286,6 +3287,17 @@ async function cbatPersonalBest(req, res, gameKey) {
 router.get('/cbat/showcase', async (_req, res) => {
   try {
     res.json({ status: 'success', data: { panels: await buildCbatShowcase() } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/games/cbat/activity — the two "is anyone here" counters on the CBAT lounge.
+// Real counts of real starts, cached for a minute; see utils/cbatActivityStats.js for why the
+// window is cumulative rather than a live concurrent count.
+router.get('/cbat/activity', protect, async (req, res) => {
+  try {
+    res.json({ status: 'success', data: await buildCbatActivityStats() });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

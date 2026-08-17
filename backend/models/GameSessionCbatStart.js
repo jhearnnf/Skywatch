@@ -12,6 +12,9 @@ const schema = new mongoose.Schema({
 });
 
 schema.index({ userId: 1, gameKey: 1 });
+// Time-only lookups: the lounge activity counters (last 7 days / today) and the
+// admin reports heatmap both scan by startedAt alone.
+schema.index({ startedAt: -1 });
 // Sparse so the many null rows (legacy + online starts) don't bloat the index.
 schema.index({ userId: 1, clientStartId: 1 }, { sparse: true });
 
