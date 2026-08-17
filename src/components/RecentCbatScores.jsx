@@ -31,12 +31,16 @@ const EMOJI_BY_KEY = Object.fromEntries(
 // not just Easier: a bare "FLAG" sitting next to a "FLAG · Easier" row reads as
 // ambiguous rather than as Hard.
 
+// `fill` swaps the card's own height cap for "take exactly the height my parent
+// gives me". Used on the CBAT hub, where this card and the lounge chat below it
+// split one viewport-tall column between them; everywhere else the card sizes
+// itself and stops at 640px.
 // "Top" means a score that landed inside the all-time top 20 for its game — the
 // same cut the leaderboard page shows, so a row badged #14 here is a row you can
 // go and find there.
 const TOP_RANK_CUTOFF = 20
 
-export default function RecentCbatScores() {
+export default function RecentCbatScores({ fill = false }) {
   const { apiFetch, API, user } = useAuth()
   const navigate = useNavigate()
   // Agent view is the hub toggle asking for the board a player would get, so it
@@ -77,8 +81,10 @@ export default function RecentCbatScores() {
   const visible = view === 'top' ? rows.filter(r => r.rank <= TOP_RANK_CUTOFF) : rows
 
   return (
-    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#1a3a5c] flex items-center justify-between gap-2">
+    <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden${
+      fill ? ' h-full flex flex-col min-h-0' : ''
+    }`}>
+      <div className="shrink-0 px-4 py-3 border-b border-[#1a3a5c] flex items-center justify-between gap-2">
         <div className="flex items-baseline gap-2 min-w-0">
           <p className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">Recent Scores</p>
           <span className="text-[10px] text-slate-500 truncate">All-time rank</span>
@@ -133,7 +139,9 @@ export default function RecentCbatScores() {
           )}
         </div>
       ) : (
-        <div className="divide-y divide-[#1a3a5c]/50 max-h-[640px] overflow-y-auto">
+        <div className={`divide-y divide-[#1a3a5c]/50 overflow-y-auto ${
+          fill ? 'flex-1 min-h-0' : 'max-h-[640px]'
+        }`}>
           {visible.map((r) => {
             const emoji = EMOJI_BY_KEY[r.gameKey] || '🎯'
             const difficulty = CBAT_DIFFICULTY_BY_KEY[r.gameKey] || null

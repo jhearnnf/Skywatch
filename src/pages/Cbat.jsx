@@ -7,6 +7,9 @@ import SEO from '../components/SEO'
 import RecentCbatScores from '../components/RecentCbatScores'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
+import CbatLoungeChat from '../components/CbatLoungeChat'
+import { useLoungeOpen } from '../hooks/useLoungeOpen'
+import { useFixedColumn } from '../hooks/useFixedColumn'
 import { CBAT_GAMES, formatEstTime } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 
@@ -265,6 +268,13 @@ export default function Cbat() {
   const cancelLongPress = () => clearTimeout(longPressRef.current.timer)
   useEffect(() => () => clearTimeout(longPressRef.current.timer), [])
   const [flickeringKey, setFlickeringKey] = useState(null)
+  // Owned here rather than inside the widget: the split between Recent Scores
+  // and the chat depends on it, so both halves of the column need to see it.
+  const [loungeOpen, setLoungeOpen] = useLoungeOpen()
+  // The side column does not move with the page: only the game grid scrolls.
+  // Fixed rather than sticky, and measured off the spacer aside — see the hook.
+  const sideColumnRef = useRef(null)
+  const sideColumn    = useFixedColumn(sideColumnRef)
   const showNewBadge = Date.now() < NEW_GAME_DEADLINE.getTime()
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
   const isGameEnabled = (key) => isCbatGameEnabled(cbatGameEnabled, key)
@@ -460,19 +470,43 @@ export default function Cbat() {
 
         </div>
 
-        {/* Recent scores side column — desktop (lg+) only, requires sign-in */}
+        {/* Recent scores side column — desktop (lg+) only, requires sign-in.
+            A flex column exactly as tall as the viewport below it, so the two
+            cards can split that height: Recent Scores takes 60% and the lounge
+            chat 40% while the chat is open, and Recent Scores takes all of it
+            while the chat is collapsed to its tab. The height is measured
+            rather than set in CSS — see useStickyFillHeight for why. */}
         {user && (
-          <aside className="hidden lg:block lg:w-[340px] lg:shrink-0 lg:sticky lg:top-4">
-            {/* Admin-only tab docked to the top edge of the card below: admins see
-                player emails on every CBAT board, and this drops them back to the
-                agent view a player gets. Inset from the right so it meets the
-                straight part of the card's edge rather than its rounded corner. */}
-            {user.isAdmin && (
-              <div className="flex justify-end pr-4">
-                <CbatAdminViewToggle />
+          <aside ref={sideColumnRef} className="hidden lg:block lg:w-[340px] lg:shrink-0">
+            <div
+              className="flex flex-col"
+              style={sideColumn
+                ? {
+                  position: 'fixed',
+                  top:      sideColumn.top,
+                  left:     sideColumn.left,
+                  width:    sideColumn.width,
+                  height:   sideColumn.height,
+                }
+                // Until the first measurement lands, sit in flow at the column's
+                // natural size. One frame, and never a panel drawn at 0,0.
+                : undefined}
+            >
+              {/* Admin-only tab docked to the top edge of the card below: admins see
+                  player emails on every CBAT board, and this drops them back to the
+                  agent view a player gets. Inset from the right so it meets the
+                  straight part of the card's edge rather than its rounded corner.
+                  No gap under it — it is meant to read as part of the card. */}
+              {user.isAdmin && (
+                <div className="shrink-0 flex justify-end pr-4">
+                  <CbatAdminViewToggle />
+                </div>
+              )}
+              <div className={`${loungeOpen ? 'flex-[3]' : 'flex-1'} min-h-0`}>
+                <RecentCbatScores fill />
               </div>
-            )}
-            <RecentCbatScores />
+              <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} />
+            </div>
           </aside>
         )}
       </div>

@@ -763,3 +763,74 @@ describe('where an answer ends', () => {
     expect(prompt).toMatch(/\[A\] or \[P\] point never gets the last word/i);
   });
 });
+
+// ── Brief mode ───────────────────────────────────────────────────────────────
+//
+// What the CBAT lounge asks for: a ten-line panel needs a one-line answer, and
+// the room for a real one is in Community. The length rule is enforced twice —
+// asked for in the prompt, then cut here — because a fixed-height panel cannot
+// be built on a rule the model follows most of the time.
+describe('brief mode', () => {
+  const {
+    trimToSentence, BRIEF_POINTER, MAX_BRIEF_REPLY_CHARS,
+  } = require('../../utils/chatBot');
+
+  it('adds the length rules to the prompt and says they beat the STYLE section', () => {
+    const brief = buildSystemPrompt(CORPUS, { brief: true });
+    expect(brief).toMatch(/ANSWER IN ONE OR TWO SENTENCES/);
+    expect(brief).toMatch(/These length rules replace the STYLE section above/i);
+    // ...and stays out of a normal reply's prompt.
+    expect(buildSystemPrompt(CORPUS)).not.toMatch(/ANSWER IN ONE OR TWO SENTENCES/);
+  });
+
+  it('asks the model for fewer tokens, because the rest would be cut anyway', async () => {
+    const callAi = aiReturning('Only circled aircraft count.');
+    await generateBotReply({ question: 'What is FLAG?', corpus: CORPUS, callAi, brief: true });
+    expect(callAi.mock.calls[0][0].body.max_tokens).toBeLessThan(200);
+  });
+
+  it('points at the full-size channel underneath the answer', async () => {
+    const callAi = aiReturning('Only circled aircraft count.');
+    const out = await generateBotReply({ question: 'What is FLAG?', corpus: CORPUS, callAi, brief: true });
+
+    expect(out.text).toContain('Only circled aircraft count.');
+    expect(out.text).toContain(BRIEF_POINTER);
+    // On its own line, so the answer and the signpost never read as one sentence.
+    expect(out.text).toMatch(/\n\n/);
+  });
+
+  it('cuts a long answer at a sentence rather than mid-word', async () => {
+    const long = `${'A'.repeat(180)} ends here. ${'B'.repeat(200)} and keeps going.`;
+    const callAi = aiReturning(long);
+    const out = await generateBotReply({ question: 'tell me', corpus: CORPUS, callAi, brief: true });
+
+    const answer = out.text.replace(`\n\n${BRIEF_POINTER}`, '');
+    expect(answer.endsWith('ends here.')).toBe(true);
+    expect(answer.length).toBeLessThanOrEqual(MAX_BRIEF_REPLY_CHARS);
+  });
+
+  it('leaves an answer that already fits exactly as it was', () => {
+    expect(trimToSentence('Only circled aircraft count.')).toBe('Only circled aircraft count.');
+  });
+
+  it('falls back to a word boundary when the first sentence is already too long', () => {
+    const out = trimToSentence(`${'word '.repeat(100)}end.`);
+    expect(out.length).toBeLessThanOrEqual(MAX_BRIEF_REPLY_CHARS + 1);
+    expect(out.endsWith('…')).toBe(true);
+    expect(out).not.toMatch(/wor…$/);
+  });
+
+  it('still points at the full channel when there was nothing to say', async () => {
+    // Everything the model sent was narration about its own material, so the
+    // cleanup removed all of it. The signpost is the useful half of that reply.
+    const callAi = aiReturning('The guide does not cover that.');
+    const out = await generateBotReply({ question: 'what is X?', corpus: CORPUS, callAi, brief: true });
+    expect(out.text).toContain(BRIEF_POINTER);
+  });
+
+  it('does none of this for a normal reply', async () => {
+    const callAi = aiReturning('Only circled aircraft count.');
+    const out = await generateBotReply({ question: 'What is FLAG?', corpus: CORPUS, callAi });
+    expect(out.text).toBe('Only circled aircraft count.');
+  });
+});

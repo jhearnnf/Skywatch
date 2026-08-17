@@ -52,6 +52,28 @@ const MAX_REPLY_CHARS = 1200;
 const MAX_QUESTION_CHARS = 2000;
 const HISTORY_TURNS = 6;
 
+// ── Brief mode ───────────────────────────────────────────────────────────────
+//
+// For the CBAT Lounge, the mini chat docked on the games hub. That panel is
+// roughly ten lines tall and sits beside a leaderboard: a normal reply would
+// fill it entirely and push the actual conversation off screen, so the bot
+// answers in a line or two there and points at the full-size room for the rest.
+//
+// The cap is enforced twice on purpose — asked for in the prompt, then cut to
+// length here. A rule the model follows most of the time is not a layout you
+// can build a fixed-height panel on.
+const MAX_BRIEF_REPLY_CHARS = 300;
+
+// Appended verbatim rather than left to the model, so it is always there, always
+// says the same thing, and never eats into the answer's own budget.
+const BRIEF_POINTER = 'Ask me in the General channel in Community for a fuller answer.';
+
+const BRIEF_RULES = `
+ANSWER IN ONE OR TWO SENTENCES
+- This reply is going into a small chat panel about ten lines tall, next to a leaderboard. Space is the binding constraint.
+- Give the single most useful fact and stop. Under 40 words. Never a list, never a second paragraph, never an example.
+- If the honest answer does not fit, give the part that does. Do not apologise for the length and do not offer to say more.`;
+
 // Fixed refusals, so the bot's failure modes read consistently and never look
 // like the model improvising an answer.
 const REFUSALS = {
@@ -70,7 +92,7 @@ const REFUSALS = {
   budget:    'I have hit my daily usage limit. I will be back tomorrow.',
 };
 
-function buildSystemPrompt(corpus) {
+function buildSystemPrompt(corpus, { brief = false } = {}) {
   return `You are the SkyWatch guide bot. You answer questions about the CBAT - the tests and the assessment day - using only the material reproduced below, and you answer nothing else.
 
 THE MATERIAL BELOW IS YOUR ONLY SOURCE
@@ -153,7 +175,9 @@ STYLE
 - Do not pre-empt the follow-up. Give the short answer and let them ask; do not append "let me know if you want more detail" either, it is obvious.
 - Plain text, no markdown headings, no bullet symbols beyond a simple dash.
 - British English. NEVER use an em dash or an en dash. Use a hyphen, a comma or a full stop. Em dashes are the clearest sign a person did not write something.
-
+${brief ? `${BRIEF_RULES}
+- These length rules replace the STYLE section above wherever the two disagree. There is no case here where you may go longer.
+` : ''}
 ${corpus}`;
 }
 
@@ -340,6 +364,34 @@ function stripSourceNarration(text) {
     .trim();
 }
 
+// ── Brief mode trimming ──────────────────────────────────────────────────────
+
+// Cut to a whole sentence within `max` characters.
+//
+// A hard slice mid-word reads as a bug rather than as brevity, and the panel
+// this feeds is short enough that a truncated sentence is very visible. When
+// even the first sentence is over the limit there is nothing to fall back on,
+// so that one is cut at the last space and given an ellipsis — the only case
+// where the reply visibly stops early.
+function trimToSentence(text, max = MAX_BRIEF_REPLY_CHARS) {
+  const flat = String(text ?? '').replace(/\s*\n+\s*/g, ' ').trim();
+  if (flat.length <= max) return flat;
+
+  const head = flat.slice(0, max + 1);
+  const lastEnd = Math.max(head.lastIndexOf('. '), head.lastIndexOf('! '), head.lastIndexOf('? '));
+  if (lastEnd > 0) return flat.slice(0, lastEnd + 1);
+
+  const lastSpace = flat.slice(0, max).lastIndexOf(' ');
+  return `${flat.slice(0, lastSpace > 0 ? lastSpace : max).trim()}…`;
+}
+
+// The reply plus its pointer at the full-size channel, on its own line so the
+// answer and the signpost never read as one sentence.
+function withPointer(text) {
+  const body = String(text ?? '').trim();
+  return body ? `${body}\n\n${BRIEF_POINTER}` : BRIEF_POINTER;
+}
+
 // ── Channel screening ────────────────────────────────────────────────────────
 //
 // Runs on the raw mention text BEFORE the model is called, so an attack costs
@@ -446,6 +498,9 @@ function stripMention(body, botDisplayName) {
  * @param {boolean}  opts.silent     channel mode: every refusal returns text
  *                                   null so the caller posts nothing at all,
  *                                   rather than announcing that it refused
+ * @param {boolean}  opts.brief      lounge mode: one or two sentences, cut to
+ *                                   MAX_BRIEF_REPLY_CHARS, with a pointer at
+ *                                   the full-size channel appended
  * @returns {Promise<{ text: string|null, refused: boolean, reason: string|null }>}
  */
 async function generateBotReply({
@@ -455,6 +510,7 @@ async function generateBotReply({
   model = DEFAULT_MODEL,
   callAi = callOpenRouter,
   silent = false,
+  brief = false,
 } = {}) {
   // In a channel a refusal is a reward: it confirms the attack landed and lets
   // anyone fill a public room with bot messages. Silence gives back nothing.
@@ -475,7 +531,7 @@ async function generateBotReply({
   // Prior turns are replayed as real assistant/user roles so the bot can follow
   // a thread, but every user turn stays wrapped as untrusted data — an earlier
   // message is no more trustworthy than the current one.
-  const messages = [{ role: 'system', content: buildSystemPrompt(corpus) }];
+  const messages = [{ role: 'system', content: buildSystemPrompt(corpus, { brief }) }];
   for (const turn of history.slice(-HISTORY_TURNS)) {
     const body = (turn?.body ?? '').toString().slice(0, MAX_QUESTION_CHARS);
     if (!body) continue;
@@ -490,7 +546,10 @@ async function generateBotReply({
     data = await callAi({
       key: 'community',
       feature: 'chatbot',
-      body: { model, messages, temperature: 0.2, max_tokens: 500 },
+      // A tighter ceiling in brief mode is a cost control as much as a layout
+      // one: the reply is going to be cut to two sentences either way, so
+      // paying for 500 tokens of it would be paying for text nobody sees.
+      body: { model, messages, temperature: 0.2, max_tokens: brief ? 160 : 500 },
     });
   } catch {
     return refuse('error', 'api-error');
@@ -516,7 +575,17 @@ async function generateBotReply({
   // material. Say the same thing plainly rather than posting an empty message
   // or letting the narration through.
   if (!cleaned) {
-    return { text: REFUSALS.nothing, refused: false, reason: 'all-narration', costUsd };
+    const text = brief ? withPointer(REFUSALS.nothing) : REFUSALS.nothing;
+    return { text, refused: false, reason: 'all-narration', costUsd };
+  }
+
+  if (brief) {
+    return {
+      text: withPointer(trimToSentence(cleaned, MAX_BRIEF_REPLY_CHARS)),
+      refused: false,
+      reason: null,
+      costUsd,
+    };
   }
 
   return { text: cleaned.slice(0, MAX_REPLY_CHARS), refused: false, reason: null, costUsd };
@@ -531,6 +600,9 @@ module.exports = {
   stripSourceNarration,
   screenChannelMention,
   stripMention,
+  trimToSentence,
+  BRIEF_POINTER,
+  MAX_BRIEF_REPLY_CHARS,
   LEAK_MARKERS,
   INJECTION_PATTERNS,
   ABUSE_PATTERNS,

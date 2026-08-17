@@ -19,6 +19,8 @@ const { parseGuideUpload, renderGuideCorpus } = require('../utils/cbatGuideParse
 const {
   generateBotReply, screenChannelMention, stripMention, looksHostile, REFUSALS,
 } = require('../utils/chatBot');
+const chatStream = require('../utils/chatStream');
+const { LOUNGE_SLUG } = require('../seeds/seedCbatLounge');
 const { resolveMentions, MENTION_LIMIT } = require('../utils/chatMentions');
 const { selectGuideSlice } = require('../utils/cbatGuideRetrieval');
 const { overDailyBudget, noteBotSpend } = require('../utils/chatBotBudget');
@@ -215,6 +217,27 @@ async function appendMessage({
   });
 
   if (senderUserId) await markRead(senderUserId, conversation._id, message.createdAt);
+
+  // Push to anyone holding a live stream on this conversation. Done here rather
+  // than at each call site so every writer — a user, the guide bot, the medal
+  // feed — pushes without having to remember to.
+  //
+  // The payload is the NON-ADMIN view, deliberately: a stream carries one
+  // rendering to every listener, so it must be the one that is safe for all of
+  // them. In practice that only matters in a support thread, where the admin
+  // who replied stays behind the shared support identity.
+  chatStream.publish(conversation._id, 'message', {
+    _id:               String(message._id),
+    conversationId:    String(conversation._id),
+    senderUserId:      senderUserId ? String(senderUserId) : null,
+    senderRole,
+    senderDisplayName: conversation.type === 'support' && senderRole === 'admin'
+      ? SUPPORT_LABEL
+      : senderDisplayName,
+    body,
+    createdAt:         message.createdAt,
+    mentions:          mentions.map(String),
+  });
 
   return message;
 }
@@ -543,6 +566,53 @@ router.get('/overview', async (req, res) => {
   }
 });
 
+// GET /api/chat/lounge — everything the mini chat on the CBAT hub needs to
+// start, in one request: which conversation it is, whether this user may post
+// in it, and whether there is anything new since they last looked.
+//
+// A named endpoint rather than the widget hunting for the slug in /overview:
+// the widget wants one small answer, and /overview is the whole rail.
+router.get('/lounge', async (req, res) => {
+  try {
+    const convo = await ChatConversation.findOne({
+      type: 'channel', 'channel.slug': LOUNGE_SLUG, isArchived: false,
+    });
+    // Archived or deleted by an admin. Not an error — the widget simply does
+    // not render, and the CBAT hub carries on without it.
+    if (!convo) return res.status(404).json({ status: 'error', message: 'The lounge is not available.' });
+
+    const [readRow, bot] = await Promise.all([
+      ChatRead.findOne({ userId: req.user._id, conversationId: convo._id }).lean(),
+      User.findOne({ isBot: true, botAnswersDms: true, isBanned: { $ne: true } })
+        .select('displayName').lean(),
+    ]);
+
+    // The widget's own dot, computed here rather than read off isUnread():
+    // this channel is muted for the Community badge on purpose (see
+    // seeds/seedCbatLounge.js), and isUnread() honours that. The panel's own
+    // dot is a different signal and must ignore it.
+    const unread = Boolean(convo.messageCount)
+      && (!readRow || new Date(readRow.lastReadAt) < new Date(convo.lastMessageAt));
+
+    const refusal = postRefusal(convo, req.user);
+    const code = refusal?.body?.code ?? null;
+
+    res.json({ status: 'success', data: {
+      conversationId:      convo._id,
+      title:               channelTitle(convo),
+      unread,
+      lastMessageAt:       convo.lastMessageAt,
+      canPost:             !refusal,
+      displayNameRequired: code === 'DISPLAY_NAME_REQUIRED',
+      chatBanned:          code === 'CHAT_BANNED',
+      postBlockedMessage:  refusal && !code ? refusal.body.message : null,
+      botName:             bot?.displayName ?? null,
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/chat/users/:id/card — the tap-a-name card in a channel.
 // Deliberately minimal: enough to recognise someone and open a DM, nothing more.
 router.get('/users/:id/card', async (req, res) => {
@@ -685,6 +755,75 @@ router.get('/unread/me', async (req, res) => {
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Live stream ──────────────────────────────────────────────────────────────
+
+// How often to write a comment line down an idle stream. Proxies and load
+// balancers close connections that say nothing; 25s is comfortably inside the
+// usual 30-60s idle timeouts, and a comment is two bytes of nothing.
+const STREAM_HEARTBEAT_MS = 25_000;
+
+// GET /api/chat/conversations/:id/stream — server-sent events for one
+// conversation. Read access is the same gate as the messages themselves.
+//
+// Push, not polling, because the CBAT lounge is meant to read as a room with
+// people in it. See utils/chatStream.js for why SSE rather than websockets, and
+// for the single-instance caveat.
+router.get('/conversations/:id/stream', async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Conversation not found' });
+
+    const convo = await ChatConversation.findById(req.params.id).lean();
+    if (!convo) return res.status(404).json({ message: 'Conversation not found' });
+    if (!canRead(convo, req.user)) return res.status(403).json({ message: 'Forbidden' });
+
+    // No socket timeout: this response is meant to stay open.
+    res.setTimeout?.(0);
+    res.writeHead(200, {
+      'Content-Type':      'text/event-stream',
+      // no-transform matters as much as no-cache: a proxy that "helpfully"
+      // buffers or gzips the body would hold every event until it closed.
+      'Cache-Control':     'no-cache, no-transform',
+      Connection:          'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write(': open\n\n');
+
+    const send = (event, data) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const unsubscribe = chatStream.subscribe(convo._id, {
+      userId: req.user._id,
+      send,
+      close: () => res.end(),
+    });
+
+    // Every slot taken. Tell the client rather than dropping it silently, so it
+    // can fall back to polling instead of sitting on a stream that never
+    // delivers anything.
+    if (!unsubscribe) {
+      send('unavailable', { reason: 'too-many-connections' });
+      return res.end();
+    }
+
+    send('ready', { conversationId: String(convo._id) });
+
+    const heartbeat = setInterval(() => {
+      try { res.write(': ping\n\n'); } catch { /* closing */ }
+    }, STREAM_HEARTBEAT_MS);
+    heartbeat.unref?.();
+
+    const stop = () => { clearInterval(heartbeat); unsubscribe(); };
+    req.on('close', stop);
+    req.on('error', stop);
+  } catch (err) {
+    // Headers may already be out, in which case there is nothing to say but
+    // goodbye — the client's EventSource will reconnect on its own.
+    if (res.headersSent) res.end();
+    else res.status(500).json({ message: err.message });
   }
 });
 
@@ -998,9 +1137,17 @@ const historySince = () => new Date(Date.now() - HISTORY_WINDOW_MS);
 const BOT_TYPING_TTL = 60_000;
 const botTyping = new Map();            // convoId -> { name, expiresAt }
 
-const markBotTyping  = (id, name) =>
+// Pushed as well as stored: a poller picks the flag up on its next tick, but a
+// panel holding a live stream should see "Guide Bot is typing…" the moment the
+// generation starts, including for the people who did not ask.
+const markBotTyping  = (id, name) => {
   botTyping.set(String(id), { name: name || 'Guide Bot', expiresAt: Date.now() + BOT_TYPING_TTL });
-const clearBotTyping = (id) => botTyping.delete(String(id));
+  chatStream.publish(id, 'typing', { name: name || 'Guide Bot' });
+};
+const clearBotTyping = (id) => {
+  botTyping.delete(String(id));
+  chatStream.publish(id, 'typing', { name: null });
+};
 // Returns the NAME of the bot composing a reply, or null. The name rather than
 // a boolean so the indicator can say which bot, without the client having to
 // guess or hardcode one.
@@ -1112,6 +1259,10 @@ async function replyAsBotInChannel(convo, triggerMessage, bot, asker) {
       history,
       // Channel mode: a refusal becomes null and nothing is posted.
       silent:  true,
+      // The lounge is a ten-line panel on the CBAT hub, not a full-height
+      // thread. The bot answers in a sentence there and points at the General
+      // channel for anything longer.
+      brief:   convo.channel?.slug === LOUNGE_SLUG,
     });
     noteBotSpend(costUsd);
     if (!text) return null;
@@ -2522,6 +2673,12 @@ router.delete('/admin/messages/:id', adminOnly, async (req, res) => {
       targetUserId: message.senderUserId ?? undefined,
     });
 
+    // A moderated message must vanish from a live panel too, not linger until
+    // its reader reloads. The event carries no body — the client refetches, so
+    // there is one rule about what a non-admin may see and it lives in the
+    // messages route.
+    chatStream.publish(message.conversationId, 'refresh', { reason: 'moderated' });
+
     res.json({ status: 'success', data: {
       message: serializeMessage(updated.toObject(), { viewerIsAdmin: true, viewerId: req.user._id }),
     } });
@@ -2586,6 +2743,8 @@ router.patch('/admin/messages/:id', adminOnly, async (req, res) => {
       reason:       'Edited a chat message',
       targetUserId: message.senderUserId ?? undefined,
     });
+
+    chatStream.publish(message.conversationId, 'refresh', { reason: 'edited' });
 
     const convo = await ChatConversation.findById(message.conversationId).select('type').lean();
     res.json({ status: 'success', data: {
