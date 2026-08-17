@@ -170,3 +170,54 @@ describe('RecentCbatScores — difficulty chip', () => {
     expect(link.getAttribute('href')).toBe('/cbat/flag-easier/leaderboard?period=all-time')
   })
 })
+
+describe('RecentCbatScores — All / Top filter', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const at = new Date().toISOString()
+  const scored = (id, rank) => ({
+    _id: id, userId: 'other', gameKey: 'angles', gameLabel: 'Angles',
+    rank, agentNumber: `A${id}`, displayName: `Pilot ${id}`, achievedAt: at,
+  })
+
+  it('shows every row on All, which is the default', async () => {
+    setupAuth({ apiFetch: mockFetch([scored('a', 3), scored('b', 21), scored('c', 40)]) })
+    render(<RecentCbatScores />)
+
+    await waitFor(() => expect(screen.getByText('Pilot a')).toBeDefined())
+    expect(screen.getByText('Pilot b')).toBeDefined()
+    expect(screen.getByText('Pilot c')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('keeps only top-20 rows on Top', async () => {
+    setupAuth({ apiFetch: mockFetch([scored('a', 3), scored('b', 20), scored('c', 21)]) })
+    render(<RecentCbatScores />)
+
+    await waitFor(() => expect(screen.getByText('Pilot a')).toBeDefined())
+    await userEvent.click(screen.getByRole('button', { name: 'Top' }))
+
+    expect(screen.getByText('Pilot a')).toBeDefined()
+    expect(screen.getByText('Pilot b')).toBeDefined()   // rank 20 is inside the cut
+    expect(screen.queryByText('Pilot c')).toBeNull()
+  })
+
+  it('offers a way back to All when Top filters everything out', async () => {
+    setupAuth({ apiFetch: mockFetch([scored('a', 44)]) })
+    render(<RecentCbatScores />)
+
+    await waitFor(() => expect(screen.getByText('Pilot a')).toBeDefined())
+    await userEvent.click(screen.getByRole('button', { name: 'Top' }))
+
+    expect(screen.getByText(/No top 20 scores in the last 24 hours/)).toBeDefined()
+    await userEvent.click(screen.getByRole('button', { name: /Show all recent scores/ }))
+    expect(screen.getByText('Pilot a')).toBeDefined()
+  })
+
+  it('still says "No scores yet" when the feed itself is empty', async () => {
+    setupAuth({ apiFetch: mockFetch([]) })
+    render(<RecentCbatScores />)
+
+    await waitFor(() => expect(screen.getByText('No scores yet.')).toBeDefined())
+  })
+})

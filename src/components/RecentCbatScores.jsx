@@ -31,6 +31,11 @@ const EMOJI_BY_KEY = Object.fromEntries(
 // not just Easier: a bare "FLAG" sitting next to a "FLAG · Easier" row reads as
 // ambiguous rather than as Hard.
 
+// "Top" means a score that landed inside the all-time top 20 for its game — the
+// same cut the leaderboard page shows, so a row badged #14 here is a row you can
+// go and find there.
+const TOP_RANK_CUTOFF = 20
+
 export default function RecentCbatScores() {
   const { apiFetch, API, user } = useAuth()
   const navigate = useNavigate()
@@ -42,6 +47,10 @@ export default function RecentCbatScores() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // 'all' (everything from the last 24h) or 'top' (only runs that placed inside
+  // the all-time top 20). Filtered client-side: the feed is already capped at 25
+  // rows and every row carries its rank, so a second endpoint would buy nothing.
+  const [view, setView] = useState('all')
 
   useEffect(() => {
     let cancelled = false
@@ -65,14 +74,36 @@ export default function RecentCbatScores() {
     return () => { cancelled = true; clearInterval(id) }
   }, [apiFetch, API, adminView])
 
+  const visible = view === 'top' ? rows.filter(r => r.rank <= TOP_RANK_CUTOFF) : rows
+
   return (
     <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
-      <div className="px-4 py-3 border-b border-[#1a3a5c] flex items-center justify-between">
-        <div className="flex items-baseline gap-2">
+      <div className="px-4 py-3 border-b border-[#1a3a5c] flex items-center justify-between gap-2">
+        <div className="flex items-baseline gap-2 min-w-0">
           <p className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">Recent Scores</p>
-          <span className="text-[10px] text-slate-500">All-time rank</span>
+          <span className="text-[10px] text-slate-500 truncate">All-time rank</span>
         </div>
-        <span className="text-[10px] text-slate-500">Auto-refreshing</span>
+        <div className="flex shrink-0 rounded-lg border border-[#1a3a5c] overflow-hidden" role="group" aria-label="Filter recent scores">
+          {[
+            ['all', 'All', 'Every score from the last 24 hours'],
+            ['top', 'Top', `Only scores that placed in the all-time top ${TOP_RANK_CUTOFF}`],
+          ].map(([key, label, hint]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              aria-pressed={view === key}
+              title={hint}
+              className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                view === key
+                  ? 'bg-brand-600/15 text-brand-600'
+                  : 'text-slate-500 hover:text-slate-400 hover:bg-[#102040]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -84,13 +115,26 @@ export default function RecentCbatScores() {
         <div className="px-4 py-8 text-center">
           <p className="text-xs text-slate-500">{error}</p>
         </div>
-      ) : rows.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div className="px-4 py-8 text-center">
-          <p className="text-xs text-slate-500">No scores yet.</p>
+          <p className="text-xs text-slate-500">
+            {view === 'top' && rows.length > 0
+              ? `No top ${TOP_RANK_CUTOFF} scores in the last 24 hours.`
+              : 'No scores yet.'}
+          </p>
+          {view === 'top' && rows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setView('all')}
+              className="mt-2 text-[11px] text-brand-600 hover:text-brand-700 underline underline-offset-2"
+            >
+              Show all recent scores
+            </button>
+          )}
         </div>
       ) : (
         <div className="divide-y divide-[#1a3a5c]/50 max-h-[640px] overflow-y-auto">
-          {rows.map((r) => {
+          {visible.map((r) => {
             const emoji = EMOJI_BY_KEY[r.gameKey] || '🎯'
             const difficulty = CBAT_DIFFICULTY_BY_KEY[r.gameKey] || null
             // Split games take the base title from the shared config — the
