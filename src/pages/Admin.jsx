@@ -4014,6 +4014,31 @@ function UsersTab({ API, onViewEmailHistory }) {
     }
   }
 
+  // Record that this agent passed the real CBAT at OASC. Nothing in the app can
+  // observe this, so it is admin-entered from what the user told us. Same
+  // instant, no-confirm save as the tester flag; reverts on failure.
+  const toggleCbatPassed = async (id, next) => {
+    setUsers(prev => prev.map(u => u._id === id
+      ? { ...u, cbatPassed: next, cbatPassedAt: next ? new Date().toISOString() : null }
+      : u))
+    try {
+      const res = await apiFetch(`${API}/api/admin/users/${id}/cbat-passed`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cbatPassed: next }),
+      })
+      if (!res.ok) throw new Error('request failed')
+      const data = await res.json().catch(() => ({}))
+      const at = data.data?.cbatPassedAt ?? null
+      setUsers(prev => prev.map(u => u._id === id ? { ...u, cbatPassedAt: at } : u))
+    } catch {
+      setUsers(prev => prev.map(u => u._id === id
+        ? { ...u, cbatPassed: !next, cbatPassedAt: next ? null : u.cbatPassedAt }
+        : u))
+      setToast('Could not update CBAT pass')
+    }
+  }
+
   const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
 
   const confirmAction = async (reason) => {
@@ -4185,6 +4210,23 @@ function UsersTab({ API, onViewEmailHistory }) {
                         className="accent-amber-500"
                       />
                       tester
+                    </label>
+                  )}
+                  {isExpanded && (
+                    <label
+                      className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 cursor-pointer select-none"
+                      title={u.cbatPassed && u.cbatPassedAt
+                        ? `Marked as having passed the CBAT on ${fmtDateTime(u.cbatPassedAt)}`
+                        : 'Mark this account as having passed the CBAT'}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!u.cbatPassed}
+                        onChange={e => toggleCbatPassed(u._id, e.target.checked)}
+                        className="accent-emerald-500"
+                      />
+                      passed CBAT
                     </label>
                   )}
                 </p>

@@ -1363,6 +1363,28 @@ router.patch('/users/:id/tester', async (req, res) => {
   }
 });
 
+// PATCH /api/admin/users/:id/cbat-passed — record that this account passed the
+// real CBAT at OASC. Same lightweight shape as the tester toggle: no reason
+// required, no AdminAction audit entry, since it is a fact about the user being
+// written down rather than an action taken against their account.
+//
+// The timestamp is written alongside the flag and cleared when it is unset, so
+// an account can never carry a pass date without the flag that explains it.
+router.patch('/users/:id/cbat-passed', async (req, res) => {
+  try {
+    const cbatPassed = !!req.body.cbatPassed;
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { cbatPassed, cbatPassedAt: cbatPassed ? new Date() : null },
+      { returnDocument: 'after' }
+    );
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+    res.json({ status: 'success', data: { cbatPassed, cbatPassedAt: updated.cbatPassedAt } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/users/:id/email — send an admin-composed email to a user.
 // The admin has already reviewed/edited the draft and confirmed in the modal, so
 // the request itself is the confirmation. Fields are re-validated server-side and

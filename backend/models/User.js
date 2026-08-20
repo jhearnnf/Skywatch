@@ -104,6 +104,16 @@ const userSchema = new mongoose.Schema(
     // a red/amber "TESTER" watermark.
     isTester: { type: Boolean, default: false },
 
+    // Admin-set flag recording that this account went on to pass the real CBAT
+    // at OASC. Nothing in the app can know this — it comes from the user telling
+    // us — so it is only ever set by hand from the Admin > Users list. Kept
+    // admin-facing: it never appears on a public profile or leaderboard.
+    // `cbatPassedAt` stamps when the flag was set and is cleared when it is
+    // unset, so the pair can never claim a pass date for an account not marked
+    // as passed.
+    cbatPassed:   { type: Boolean, default: false },
+    cbatPassedAt: { type: Date,    default: null },
+
     // Opt-OUT of the public progress wall on the landing page (see
     // utils/cbatShowcase.js). Stored as the objection rather than as consent so
     // the default — included, anonymised behind an agent number — needs no
