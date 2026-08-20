@@ -44,22 +44,21 @@ export const CBAT_GAMES = [
   { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png', estMinutes: 5 },
   { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', estMinutes: [1, 2] },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — track a journey of relative turns from text alone, then name the direction back to the start.', path: '/cbat/dad',             image: '/images/DAD.png', estMinutes: 5 },
-  // `isNew: true` surfaces a "New Game" badge on the hub tile; `badge: '…'`
-  // surfaces arbitrary announcement text in the same slot (for a game that
-  // isn't new but has gained something).
+  // `badge: '…'` surfaces announcement text in the tile's top-right slot
+  // (for a game that has gained something worth pointing at).
   { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', estMinutes: 3 },
   { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [2, 3] },
   { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', estMinutes: [1, 2] },
   // The five tests that completed the roster.
-  { key: 'sit',              emoji: '🛰️', title: 'SIT',              desc: 'Spatial Integration Test. Study the ground one isolated layer at a time, then judge a rotated two-second clip of the whole scene on one detail alone.', path: '/cbat/sit',             image: '/images/SIT.png', estMinutes: [4, 6], isNew: true },
-  { key: 'slt',              emoji: '⚙️', title: 'SLT',              desc: 'System Logic Test. An index of fifteen tabs, two readable at once. No single tab answers a question, so find both figures before the search eats the time.', path: '/cbat/slt',             image: '/images/SLT.png', estMinutes: [5, 6], isNew: true },
-  { key: 'vlt',              emoji: '📖', title: 'VLT',              desc: 'Verbal Logic Test. Eight tabs of briefing prose, two readable at once. Every answer needs two of them joined, and the plainly-stated one is the trap.', path: '/cbat/vlt',             image: '/images/VLT.png', estMinutes: [10, 20], isNew: true },
-  { key: 'matf',             emoji: '📋', title: 'MATF',             desc: 'Table Reading Test. A coordinate grid running minus 17 to plus 17, then a wind sheet read in three steps, both against the clock.', path: '/cbat/matf',            image: '/images/MATF.png', estMinutes: [3, 4], isNew: true },
-  { key: 'vigilance',        emoji: '⭐', title: 'Vigilance',        desc: 'The star grid. Three minutes of clearing coordinates off a 9 by 9, row first then column, with priority tasks that appear when the job has gone quiet.', path: '/cbat/vigilance',       image: '/images/Vigilance.png', estMinutes: 3, isNew: true },
+  { key: 'sit',              emoji: '🛰️', title: 'SIT',              desc: 'Spatial Integration Test. Study the ground one isolated layer at a time, then judge a rotated two-second clip of the whole scene on one detail alone.', path: '/cbat/sit',             image: '/images/SIT.png', estMinutes: [4, 6] },
+  { key: 'slt',              emoji: '⚙️', title: 'SLT',              desc: 'System Logic Test. An index of fifteen tabs, two readable at once. No single tab answers a question, so find both figures before the search eats the time.', path: '/cbat/slt',             image: '/images/SLT.png', estMinutes: [5, 6] },
+  { key: 'vlt',              emoji: '📖', title: 'VLT',              desc: 'Verbal Logic Test. Eight tabs of briefing prose, two readable at once. Every answer needs two of them joined, and the plainly-stated one is the trap.', path: '/cbat/vlt',             image: '/images/VLT.png', estMinutes: [10, 20] },
+  { key: 'matf',             emoji: '📋', title: 'MATF',             desc: 'Table Reading Test. A coordinate grid running minus 17 to plus 17, then a wind sheet read in three steps, both against the clock.', path: '/cbat/matf',            image: '/images/MATF.png', estMinutes: [3, 4] },
+  { key: 'vigilance',        emoji: '⭐', title: 'Vigilance',        desc: 'The star grid. Three minutes of clearing coordinates off a 9 by 9, row first then column, with priority tasks that appear when the job has gone quiet.', path: '/cbat/vigilance',       image: '/images/Vigilance.png', estMinutes: 3 },
   // The psychomotor test the Aptitude Report had no game for. SMA carries 15% of
   // the Pilot battery and 12% of Pilot ISR (RPAS) through the Psychomotor domain,
   // so it was the largest single uncovered weight left on the report.
-  { key: 'sma',              emoji: '🕹️', title: 'SMA',              desc: 'Sensory Motor Apparatus Test. A red dot drifting across the display and a crosshair fixed at the centre. Keep the two aligned on a joystick, a mouse or a touch pad.', path: '/cbat/sma',             image: '/images/SMA.png', estMinutes: [0.5, 1], isNew: true },
+  { key: 'sma',              emoji: '🕹️', title: 'SMA',              desc: 'Sensory Motor Apparatus Test. A red dot drifting across the display and a crosshair fixed at the centre. Keep the two aligned on a joystick, a mouse or a touch pad.', path: '/cbat/sma',             image: '/images/SMA.png', estMinutes: [0.5, 1] },
 ]
 
 // Render a game's `estMinutes` for display. Returns null when a game has no

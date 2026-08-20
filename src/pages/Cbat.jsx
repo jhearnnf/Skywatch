@@ -71,7 +71,7 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
 }
 
 // Estimated run length, pinned to the tile's top-left corner, opposite the
-// New Game / announcement badges. Deliberately not a badge itself — it's
+// announcement badge slot. Deliberately not a badge itself — it's
 // standing information on every tile, so it carries no fill at all and sits
 // right back at 35% opacity — a detail you find when you look for it rather
 // than one the tile presents to you.
@@ -164,13 +164,6 @@ const SPLIT_TILES = {
 }
 const persistMode = (key, mode) => { try { localStorage.setItem(key, mode) } catch { /* storage unavailable */ } }
 
-// Display the "NEW GAME" badge on the TRACE 1/2 card until midnight at the
-// start of 22 May 2026 (i.e. visible up to and including 21st May).
-// Month is 0-indexed (4 = May), so `Date.now() < deadline` is still true at
-// any point on May 21.
-const NEW_GAME_KEY = 'plane-turn'
-const NEW_GAME_DEADLINE = new Date(2026, 4, 22)
-
 // A combined tile (Trace 1/2, Visualisation 2D/3D). Identical to the normal tile
 // off-hover; on hover (desktop only — `group-hover` in Tailwind v4 fires solely
 // on hover-capable devices) it greys the card and floats two half-width mode
@@ -178,7 +171,7 @@ const NEW_GAME_DEADLINE = new Date(2026, 4, 22)
 // its clicks never trip the anchor's navigation and touch devices — where the
 // overlay stays inert — fall through to the Link's tap / long-press exactly as
 // before. Whichever half is hovered is the active (brand) one; the other dims.
-function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, showNewBadge, navigate, baseHandlers }) {
+function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, navigate, baseHandlers }) {
   return (
     <div className="relative h-full group">
       <Link
@@ -189,14 +182,6 @@ function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, sho
       >
         <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
         <EstTime game={game} />
-        {showNewBadge && game.key === NEW_GAME_KEY && enabled && (
-          <span
-            className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
-            style={{ zIndex: 4 }}
-          >
-            New Game
-          </span>
-        )}
         {!enabled && isAdmin && (
           <span
             className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-slate-300 text-slate-700 text-[10px] font-extrabold tracking-wider uppercase"
@@ -275,7 +260,6 @@ export default function Cbat() {
   // Fixed rather than sticky, and measured off the spacer aside — see the hook.
   const sideColumnRef = useRef(null)
   const sideColumn    = useFixedColumn(sideColumnRef)
-  const showNewBadge = Date.now() < NEW_GAME_DEADLINE.getTime()
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
   const isGameEnabled = (key) => isCbatGameEnabled(cbatGameEnabled, key)
 
@@ -400,7 +384,6 @@ export default function Cbat() {
                   flickeringKey={flickeringKey}
                   enabled={enabled}
                   isAdmin={!!user?.isAdmin}
-                  showNewBadge={showNewBadge}
                   navigate={navigate}
                   baseHandlers={baseHandlers}
                 />
@@ -413,18 +396,9 @@ export default function Cbat() {
                 >
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
                   <EstTime game={game} />
-                  {(game.isNew || (showNewBadge && game.key === NEW_GAME_KEY)) && enabled && (
-                    <span
-                      className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
-                      style={{ zIndex: 4 }}
-                    >
-                      New Game
-                    </span>
-                  )}
                   {/* Announcement badge for an existing game that's gained
-                      something — same slot as New Game, which no game carrying
-                      one also has. */}
-                  {game.badge && !game.isNew && enabled && (
+                      something. */}
+                  {game.badge && enabled && (
                     <span
                       className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase whitespace-nowrap ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
                       style={{ zIndex: 4 }}

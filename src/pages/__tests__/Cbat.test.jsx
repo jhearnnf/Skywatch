@@ -191,14 +191,13 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('flags the roster-completing tests and SMA as new, and no longer RTT or CUT', () => {
+  it('no longer flags any game as new — the badge is gone entirely', () => {
+    // The roster is complete, so "New Game" had stopped meaning "look here"
+    // and was just decorating a third of the grid. The mechanism went with it:
+    // no game carries `isNew` and the hub renders no such badge.
     renderWithUser()
-    for (const key of ['cut', 'rtt']) {
-      expect(CBAT_GAMES.find(g => g.key === key).isNew).toBeUndefined()
-    }
-    const isNew = CBAT_GAMES.filter(g => g.isNew).map(g => g.key)
-    expect(isNew).toEqual(['sit', 'slt', 'vlt', 'matf', 'vigilance', 'sma'])
-    expect(screen.getAllByText('New Game')).toHaveLength(isNew.length)
+    expect(CBAT_GAMES.filter(g => g.isNew)).toEqual([])
+    expect(screen.queryByText('New Game')).toBeNull()
   })
 })
 
