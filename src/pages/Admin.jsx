@@ -3941,14 +3941,20 @@ function UsersTab({ API, onViewEmailHistory }) {
 
   useEffect(() => { loadAll() }, [loadAll])
 
-  // Default expansion: all rows collapsed when browsing; all rows when in search mode
+  // Default expansion: all rows collapsed when browsing; all rows when in search mode.
+  //
+  // Keyed on which accounts are listed rather than on the `users` array itself:
+  // the row toggles (tester, passed CBAT) rewrite that array optimistically, and
+  // depending on it would collapse the open row out from under the admin the
+  // moment they ticked a box — taking the checkbox they were using with it.
+  const listKey = useMemo(() => users.map(u => u._id).join(','), [users])
   useEffect(() => {
     if (search) {
-      setExpanded(new Set(users.map(u => u._id)))
+      setExpanded(new Set(listKey ? listKey.split(',') : []))
     } else {
       setExpanded(new Set())
     }
-  }, [users, search, currentUser?._id])
+  }, [listKey, search, currentUser?._id])
 
   const toggleExpanded = (id) => {
     const isOpen = expanded.has(id)
