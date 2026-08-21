@@ -56,7 +56,10 @@ const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSma
 // → more points. Clamped at 0 so a disastrous run never subtracts from the
 // week. Constants are tuned per mode off the realistic ranges in
 // cbatFakeLeaderboard.js and are safe to retune without touching the all-time
-// board. $round keeps weekly totals integer.
+// board. $round keeps weekly totals integer. Retuning is retroactive though —
+// the expression runs over stored sessions at query time — so runs finished
+// earlier in the current week are re-scored under the new constants (the 25/9
+// rescale below clamps pre-change long runs to 0 for the rest of that week).
 const tracePointsExpr = (base, rotW, timeW) => ({
   $round: [{
     $max: [0, {
@@ -79,10 +82,13 @@ const CBAT_GAMES = {
     bestOp: '$min',
     label: 'Trace Practise 2D',
     modeFilter: { mode: '2d' },
-    // Validated against real 2D sessions (n=42): rotations 40–99 (med 54),
-    // time 66–137s (med 88). Yields best ≈177, median ≈152, worst ≈82 — all
-    // positive (no clamping), higher = better, so weekly sums sensibly.
-    weeklyExpr: tracePointsExpr(250, 1, 0.5),
+    // Was validated against real 2D sessions (n=42) of the old 5×5 run:
+    // rotations 40–99 (med 54), time 66–137s (med 88). The run is now 3×3, so a
+    // finished run costs ~9/25 of the rotations and seconds it used to. The
+    // weights are scaled by 25/9 to compensate, which leaves the points
+    // distribution exactly where it was: best ≈174, median ≈152, worst ≈72 —
+    // all positive (no clamping), higher = better, so weekly sums sensibly.
+    weeklyExpr: tracePointsExpr(250, 2.8, 1.4),
   },
   'plane-turn-3d': {
     Model: GameSessionCbatPlaneTurnResult,
@@ -91,10 +97,11 @@ const CBAT_GAMES = {
     bestOp: '$min',
     label: 'Trace Practise 3D',
     modeFilter: { mode: '3d' },
-    // Validated against real 3D sessions (n=9): rotations 160–267 (med 184),
-    // time 149–244s (med 173). Lower per-rotation weight since counts are
-    // larger. Yields best ≈193, median ≈169, worst ≈90 — all positive.
-    weeklyExpr: tracePointsExpr(350, 0.7, 0.3),
+    // Was validated against real 3D sessions (n=9) of the old 5×5 run: rotations
+    // 160–267 (med 184), time 149–244s (med 173). Lower per-rotation weight
+    // since counts are larger. Weights scaled by 25/9 for the 3×3 run, as
+    // above: best ≈192, median ≈170, worst ≈90 — all positive.
+    weeklyExpr: tracePointsExpr(350, 1.95, 0.83),
   },
   'angles': {
     Model: GameSessionCbatAnglesResult,

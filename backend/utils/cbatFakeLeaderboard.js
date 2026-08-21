@@ -80,17 +80,22 @@ const GAME_OFFSET = {
 // `flag-easier` are fixed-60s games where every real run also displays 60.0,
 // so their fakes match.
 const FAKE_TUNING = {
+  // Both trace practise modes were retuned when the run went from 5 levels of 5
+  // packages to 3 of 3: a finished run is now 9 packages instead of 25, so real
+  // rotations and times land at roughly 9/25 of the ranges these sequences were
+  // built from. The old numbers would have left every demo row beatable by any
+  // completed run. These are scaled estimates, not measured — requery
+  // production once post-change sessions have built up and reseat them.
   'plane-turn-2d': {
-    floor: 42, ceiling: 107, seedTime: 80.4, timeStep: 3.3,
-    scoreSequence: [42, 45, 48, 52, 55, 58, 62, 65, 68, 72, 75, 78, 82, 85, 88, 92, 95, 98, 102, 107],
+    floor: 15, ceiling: 39, seedTime: 29.0, timeStep: 1.2,
+    scoreSequence: [15, 16, 17, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29, 31, 32, 33, 34, 35, 37, 39],
   },
   'plane-turn-3d': {
-    // 3D adds vertical navigation, climbs/dives, and quaternion rotations —
-    // real best runs land closer to ~180 rotations, not the ~65 the early
-    // tuning assumed. Top demo of 180 keeps the board feeling competitive
-    // without giving users a trivially-beatable target.
-    floor: 180, ceiling: 265, seedTime: 220.7, timeStep: 4.7,
-    scoreSequence: [180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 244, 248, 252, 256, 260, 263, 265],
+    // 3D adds vertical navigation, climbs/dives, and quaternion rotations, so
+    // its rotation counts stay several times the 2D ones even over the same
+    // nine packages.
+    floor: 65, ceiling: 95, seedTime: 79.5, timeStep: 1.7,
+    scoreSequence: [65, 67, 68, 70, 72, 74, 76, 77, 79, 81, 83, 84, 86, 88, 89, 90, 91, 93, 94, 95],
   },
   'angles':          { floor: 1,  ceiling: 19,  seedScore: 18,  seedTime: 38.4, scoreStep: 1,  timeStep: 2.5 },
   'code-duplicates': {

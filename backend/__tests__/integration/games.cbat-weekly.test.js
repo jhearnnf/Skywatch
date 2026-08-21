@@ -93,12 +93,12 @@ describe('CBAT weekly leaderboard', () => {
 describe('CBAT weekly — Trace Practise derived points', () => {
   it('ranks fewer rotations higher and grows with more runs', async () => {
     // Two runs accumulate; fewer rotations => more derived points.
-    await post('plane-turn-2d', { totalRotations: 50, totalTime: 90, mode: '2d', playedAt: inWeek });
+    await post('plane-turn-2d', { totalRotations: 18, totalTime: 30, mode: '2d', playedAt: inWeek });
     const after1 = await request(app).get('/api/games/cbat/plane-turn-2d/leaderboard?period=weekly').set('Cookie', cookie);
     const total1 = after1.body.data.myBest.weekTotal;
     expect(total1).toBeGreaterThan(0);
 
-    await post('plane-turn-2d', { totalRotations: 60, totalTime: 100, mode: '2d', playedAt: inWeek });
+    await post('plane-turn-2d', { totalRotations: 22, totalTime: 36, mode: '2d', playedAt: inWeek });
     const after2 = await request(app).get('/api/games/cbat/plane-turn-2d/leaderboard?period=weekly').set('Cookie', cookie);
     expect(after2.body.data.myBest.weekTotal).toBeGreaterThan(total1); // sum grew
     expect(after2.body.data.myBest.plays).toBe(2);
@@ -177,13 +177,13 @@ describe('CBAT weekly/me reveal endpoint', () => {
     });
 
     it('reports derived points for a lower-is-better game, not the rotations score', async () => {
-      await post('plane-turn-2d', { totalRotations: 50, totalTime: 90, mode: '2d', playedAt: inWeek });
-      await post('plane-turn-2d', { totalRotations: 60, totalTime: 100, mode: '2d', playedAt: inWeek });
+      await post('plane-turn-2d', { totalRotations: 18, totalTime: 30, mode: '2d', playedAt: inWeek });
+      await post('plane-turn-2d', { totalRotations: 22, totalTime: 36, mode: '2d', playedAt: inWeek });
 
       const res = await request(app).get('/api/games/cbat/plane-turn-2d/weekly/me').set('Cookie', cookie);
       const { weekTotal, lastRunPoints } = res.body.data;
       expect(lastRunPoints).toBeGreaterThan(0);
-      expect(lastRunPoints).not.toBe(60);              // not the raw score on screen
+      expect(lastRunPoints).not.toBe(22);              // not the raw score on screen
       expect(weekTotal - lastRunPoints).toBeGreaterThan(0); // and the earlier run is still in there
     });
 
