@@ -10,6 +10,7 @@ import CbatProgressChart from '../components/CbatProgressChart'
 import { cbatTrend, cbatTrendPhrase } from '../utils/cbatProgress'
 import { cbatLastRankKey } from '../utils/storageKeys'
 import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
+import { MAX_LEVEL } from '../utils/cbat/tracePractise'
 
 // 'you' is the odd one out: it's the user's own score history rather than a board of other
 // people, and it reads from /progress instead of /leaderboard. It lives here anyway because
@@ -483,7 +484,7 @@ export default function CbatLeaderboard() {
             : isProgress
               ? 'Every run you\'ve finished, oldest to newest'
               : planeTurnMode
-                ? `All-time best ${planeTurnMode === '3d' ? '3D' : '2D'} scores · fewest rotations through 5 levels`
+                ? `All-time best ${planeTurnMode === '3d' ? '3D' : '2D'} scores · fewest rotations through ${MAX_LEVEL} levels`
                 : 'All-time best scores'}
         </p>
       </div>

@@ -33,6 +33,9 @@ import {
   TRACE1_SWITCH_PREVIEW_MS, TRACE1_TURN_DEFS, TRACE1_TOTAL_TURNS,
   trace1KeyToTurn, trace1InitialPlaneStates, buildTrace1Round,
 } from '../utils/cbat/trace1Generator'
+import {
+  PACKAGES_PER_LEVEL as TOTAL_PACKAGES, MAX_LEVEL, practiseInterval,
+} from '../utils/cbat/tracePractise'
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 
@@ -54,10 +57,8 @@ const CbatTrace2       = lazy(() => import('./CbatTrace2'))
 // ── Constants ────────────────────────────────────────────────────────────────
 const GRID           = 10
 const LAYERS         = 10  // vertical layers in 3D mode (0 = floor, 9 = ceiling)
-const TOTAL_PACKAGES = 5
-const MAX_LEVEL      = 5
-const BASE_INTERVAL  = 500 // ms per move at level 1
-const SPEED_STEP     = 40  // ms faster each level
+// Run length and pacing live in utils/cbat/tracePractise so they can be tested
+// without mounting the scene.
 
 // Direction vectors: index matches rotation (0=up,1=right,2=down,3=left)
 const DIR = [
@@ -182,7 +183,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
             <>
               <div className="flex items-start gap-2">
                 <span className="text-brand-300 shrink-0">📦</span>
-                <span>Collect all care packages on each level to advance</span>
+                <span>Collect {TOTAL_PACKAGES} care packages on each level to advance</span>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-brand-300 shrink-0">🎮</span>
@@ -197,7 +198,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-brand-300 shrink-0">⚡</span>
-                <span>Speed increases each level — 5 levels total</span>
+                <span>Each level is faster than the last. {MAX_LEVEL} levels in a run.</span>
               </div>
             </>
           )}
@@ -236,7 +237,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
           <p className="text-xs text-slate-400 text-center mb-3">
             {gameModeTrace1
               ? 'Trace 1 uses the Hawk T2 — tap to start.'
-              : 'Select an aircraft, then navigate through 5 levels.'}
+              : `Select an aircraft, then navigate through ${MAX_LEVEL} levels.`}
           </p>
         </>
       )}
@@ -695,7 +696,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
   useEffect(() => {
     if (phase !== 'playing' || gameModeTrace1Ref.current) { clearInterval(moveRef.current); return }
 
-    const interval = Math.max(150, BASE_INTERVAL - (level - 1) * SPEED_STEP)
+    const interval = practiseInterval(level)
 
     moveRef.current = setInterval(() => {
       setPlane(prev => {
