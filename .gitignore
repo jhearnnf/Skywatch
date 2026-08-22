@@ -55,3 +55,7 @@ android/build/
 android/app/src/main/assets/public/
 android/app/src/main/assets/capacitor.config.json
 android/local.properties
+
+# Clipper b-roll clips - the manifest is committed, the video files are not
+public/video/broll/*
+!public/video/broll/library.json

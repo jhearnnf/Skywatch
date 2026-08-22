@@ -1,0 +1,10 @@
+{
+  "_readme": [
+    "The curated b-roll library. See backend/utils/clipperLibrary.js for why it exists.",
+    "Clips themselves are gitignored - drop the file in this folder, then describe it here.",
+    "Every clip needs a licence, and durationSec is what lets a beat be split into shots.",
+    "tags are what the stock search matches against, so write what is ON SCREEN,",
+    "not what the clip is about: 'typhoon runway afterburner takeoff', never 'power'."
+  ],
+  "clips": []
+}

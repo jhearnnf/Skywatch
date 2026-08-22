@@ -8,12 +8,14 @@
 // videos, so "where did this come from and may we use it?" has to be answerable
 // months later without re-running the search.
 
+const LIBRARY_MAX = 8;
 const DVIDS_MAX  = 8;
 const PEXELS_MAX = 8;
 const PIXABAY_MAX = 8;
 
 const UA = 'SkyWatch/1.0 (educational-platform)';
 
+const { searchLibrary, loadLibrary, libraryConfigured } = require('./clipperLibrary');
 
 // Why a provider last returned nothing, keyed by provider name.
 //
@@ -146,17 +148,40 @@ async function searchPixabay(term, max = PIXABAY_MAX) {
       };
     }).filter(c => c.downloadUrl);
   } catch {
+    noteError('pixabay', 'request failed');
     return [];
   }
 }
 
-const PROVIDERS = { dvids: searchDvids, pexels: searchPexels, pixabay: searchPixabay };
+// ── Curated library ─────────────────────────────────────────────────────────
+// Clips we chose ourselves, searched alongside the stock APIs so a beat sees
+// them next to each other and the better one wins. See utils/clipperLibrary.js.
+async function searchLocalLibrary(term, max = LIBRARY_MAX) {
+  try {
+    const results = searchLibrary(term, max);
+    // A malformed manifest entry is worth naming for the same reason a rejected
+    // API key is: the search still returns results, so nothing looks wrong.
+    const { problems } = loadLibrary();
+    noteError('library', problems.length ? problems[0] : null);
+    return results;
+  } catch {
+    noteError('library', 'library.json could not be read');
+    return [];
+  }
+}
+
+const PROVIDERS = {
+  dvids: searchDvids, pexels: searchPexels, pixabay: searchPixabay,
+  library: searchLocalLibrary,
+};
 
 function configuredProviders() {
   return {
     dvids:   Boolean(process.env.DVIDS_API_KEY),
     pexels:  Boolean(process.env.PEXELS_API_KEY),
     pixabay: Boolean(process.env.PIXABAY_API_KEY),
+    // Not a key but the same question: is there anything here to search?
+    library: libraryConfigured(),
   };
 }
 
@@ -197,6 +222,7 @@ async function searchFootage(term, { providers, limit = 18 } = {}) {
 
 module.exports = {
   searchFootage,
+  searchLocalLibrary,
   providerStatus,
   // Exported so tests can start from a known state - the map is module-level
   // and would otherwise leak between cases.

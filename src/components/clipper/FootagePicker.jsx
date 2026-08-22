@@ -19,6 +19,9 @@ const PROVIDER_STYLE = {
   dvids:   'bg-emerald-100 text-emerald-700 border-emerald-200',
   pexels:  'bg-sky-100 text-sky-700 border-sky-200',
   pixabay: 'bg-violet-100 text-violet-700 border-violet-200',
+  // Ours, so it gets the brand colour - when a curated clip and a stock one
+  // are side by side the curated one should be the obvious pick.
+  library: 'bg-brand-100 text-brand-600 border-brand-200',
 }
 
 function Candidate({ clip, chosen, onChoose }) {

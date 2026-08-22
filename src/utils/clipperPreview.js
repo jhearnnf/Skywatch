@@ -46,6 +46,11 @@ export function mediaUrl(pathOrFileUrl, mediaBaseUrl) {
 // and overlay intact rather than as an unexplained black rectangle.
 export function toPreviewUrl(url, mediaBaseUrl) {
   if (typeof url !== 'string' || !url) return null;
+  // A clip from the curated library is a path relative to public/, the same
+  // form the SFX and music use. Left alone it would resolve against whatever
+  // admin route the page is on; the app serves public/ at the root, so a
+  // leading slash is all it needs.
+  if (!/^[a-z]+:/i.test(url) && !url.startsWith('/')) return `/${url}`;
   if (!url.startsWith('file:')) return url;
   return mediaUrl(url, mediaBaseUrl);
 }
