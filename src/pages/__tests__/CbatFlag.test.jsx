@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatFlag from '../CbatFlag'
 
@@ -483,3 +483,74 @@ describe('CbatFlag — Numpad unit tests', () => {
     expect(screen.getByRole('button', { name: '7' }).disabled).toBe(true)
   })
 })
+
+// A run has to fit the screen it is played on. Stacked, the field plus the
+// numpad, strike buttons and YES/NO row came to more height than a 1080p
+// monitor has, so the controls sat below the fold on ordinary desktops. The
+// layout that fixes it is CSS (see .cbat-flag-playing in main.css), which jsdom
+// does not apply — what these guard is the contract the CSS hangs off: the
+// hooks are on the right elements, and only while a real run is on screen.
+describe('CbatFlag — gameplay fits the viewport', () => {
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(() => {
+    vi.useRealTimers()
+    document.body.className = ''
+  })
+
+  it('does not constrain the page height on the intro screen', async () => {
+    setupUser()
+    const { container } = render(<CbatFlag />)
+    await waitFor(() => expect(screen.getAllByText('FLAG').length).toBeGreaterThanOrEqual(1))
+    expect(container.querySelector('.cbat-flag-playing')).toBeNull()
+    expect(document.body.classList.contains('cbat-flag-wide')).toBe(false)
+  })
+
+  it('marks the page as playing and widens the shell during a run', async () => {
+    const { container } = await renderAndStartLayout()
+    expect(container.querySelector('.cbat-flag-playing')).not.toBeNull()
+    expect(document.body.classList.contains('cbat-flag-wide')).toBe(true)
+  })
+
+  it('gives the stage, columns, field and controls their layout hooks', async () => {
+    const { container } = await renderAndStartLayout()
+    const stage = container.querySelector('.cbat-flag-stage')
+    expect(stage).not.toBeNull()
+    // The field and the controls are siblings inside one flex container, so the
+    // CSS can turn the column into a row without moving anything in the DOM.
+    const columns = stage.querySelector('.cbat-flag-columns')
+    expect(columns).not.toBeNull()
+    const field = columns.querySelector('.cbat-flag-field')
+    const controls = columns.querySelector('.cbat-flag-controls')
+    expect(field).not.toBeNull()
+    expect(controls).not.toBeNull()
+    expect(field.parentElement).toBe(columns)
+    expect(controls.parentElement).toBe(columns)
+    // Every control the run needs lives inside that one column.
+    expect(controls.querySelector('.cbat-flag-panel')).not.toBeNull()
+    expect(controls.querySelector('.cbat-flag-keys')).not.toBeNull()
+    expect(controls.querySelector('.cbat-flag-strikes')).not.toBeNull()
+    expect(controls.querySelectorAll('.cbat-flag-key').length).toBe(10)
+    expect(controls.querySelectorAll('.cbat-flag-strike').length).toBe(3)
+    expect(within(controls).getByRole('button', { name: 'YES' })).toBeDefined()
+    expect(within(controls).getByRole('button', { name: 'NO' })).toBeDefined()
+  })
+
+  it('drops the page constraint and the body class again after the run', async () => {
+    const { container, unmount } = await renderAndStartLayout()
+    expect(document.body.classList.contains('cbat-flag-wide')).toBe(true)
+    unmount()
+    expect(document.body.classList.contains('cbat-flag-wide')).toBe(false)
+    expect(container.querySelector('.cbat-flag-playing')).toBeNull()
+  })
+})
+
+// Same as renderAndStart, but hands back the container so the layout hooks can
+// be queried by class rather than by role.
+async function renderAndStartLayout() {
+  vi.useFakeTimers({ shouldAdvanceTime: true })
+  setupUser()
+  const utils = render(<CbatFlag />)
+  await clickStart()
+  await act(async () => { vi.advanceTimersByTime(LAUNCH_MS + 100) })
+  return utils
+}

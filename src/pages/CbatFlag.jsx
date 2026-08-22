@@ -9,6 +9,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useCbatDemo } from '../utils/cbat/demoMode'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { generateMath } from './CbatFlag/mathBank'
 import {
@@ -634,6 +635,15 @@ export default function CbatFlag() {
   const { enterImmersive, exitImmersive } = useGameChrome()
 
   const [phase, setPhase] = useState('intro')   // intro | launching | tutorial | playing | results
+
+  // Desktop: let the run out of the shell's max-w-3xl so the controls can sit
+  // BESIDE the play field rather than under it (see body.cbat-flag-wide and the
+  // .cbat-flag-stage rules in main.css). Stacked, the field plus the numpad,
+  // strike buttons and YES/NO row need ~980px of viewport height — more than a
+  // 1080p monitor has once browser chrome is taken off, which is why players on
+  // ordinary screens could not see the whole game.
+  useGameBodyClass('cbat-flag-wide', phase === 'playing')
+
   // Defaults to 'easier'; a user who switches gets their most recent choice
   // back on the next visit. `?difficulty=` overrides both for one arrival — the
   // Aptitude Report's links use it to land on Hard, the only runs it counts.
@@ -1124,7 +1134,7 @@ export default function CbatFlag() {
   const remainingS = Math.max(0, GAME_DURATION - elapsed)
 
   return (
-    <div className="cbat-flag-page">
+    <div className={`cbat-flag-page${phase === 'playing' && !demo ? ' cbat-flag-playing' : ''}`}>
       <SEO title="FLAG — CBAT" description="Multi-task: track aircraft, solve maths, and strike target shapes." />
 
       {!user && (
@@ -1149,7 +1159,7 @@ export default function CbatFlag() {
             {phase === 'playing' && <DifficultyMarker tuning={runTuning} />}
           </div>
 
-          <div className="flex flex-col items-center max-[600px]:w-full">
+          <div className="cbat-flag-body flex flex-col items-center max-[600px]:w-full">
             {(phase === 'intro' || phase === 'launching') && (
               <IntroScreen
                 onStart={beginLaunch}
@@ -1173,9 +1183,9 @@ export default function CbatFlag() {
             )}
 
             {phase === 'playing' && (
-              <div className="w-full max-[600px]:h-[calc(100dvh-3rem-env(safe-area-inset-bottom))] max-[600px]:flex max-[600px]:flex-col max-[600px]:overflow-hidden">
+              <div className="cbat-flag-stage w-full max-[600px]:h-[calc(100dvh-3rem-env(safe-area-inset-bottom))] max-[600px]:flex max-[600px]:flex-col max-[600px]:overflow-hidden">
                 {/* HUD */}
-                <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-[600px]:mb-1 max-[600px]:shrink-0">
+                <div className="cbat-flag-hud flex items-center justify-between text-xs font-mono mb-2 px-1 max-[600px]:mb-1 max-[600px]:shrink-0">
                   <span className="text-slate-400">
                     ⏱ <span className="text-brand-300">{remainingS.toFixed(1)}s</span>
                   </span>
@@ -1184,11 +1194,13 @@ export default function CbatFlag() {
                   </span>
                 </div>
 
-                {/* Mobile: column with play field flex-1 + controls auto */}
-                <div className="flex flex-col gap-2 max-[600px]:flex-1 max-[600px]:min-h-0 max-[600px]:gap-1.5">
+                {/* Column with play field flex-1 + controls auto. Turns into a
+                    row beside the field once the shell is widened — see
+                    .cbat-flag-columns in main.css. */}
+                <div className="cbat-flag-columns flex flex-col gap-2 max-[600px]:flex-1 max-[600px]:min-h-0 max-[600px]:gap-1.5">
                   {/* Play field */}
                   <div
-                    className="w-full rounded-lg overflow-hidden h-[clamp(200px,45vw,380px)] max-[600px]:h-auto max-[600px]:flex-1 max-[600px]:min-h-0"
+                    className="cbat-flag-field w-full rounded-lg overflow-hidden h-[clamp(200px,45vw,380px)] max-[600px]:h-auto max-[600px]:flex-1 max-[600px]:min-h-0"
                   >
                     <PlayField
                       ref={playFieldRef}
@@ -1206,13 +1218,13 @@ export default function CbatFlag() {
                     />
                   </div>
 
-                  {/* Controls — numpad + aircraft question.
-                      In normal flow below the play field on every size; centered
-                      and width-capped so it sits just under the game on desktop. */}
+                  {/* Controls — numpad + aircraft question. Below the play field
+                      on phones and narrow windows, beside it on a desktop
+                      screen, where stacking is what pushed them off the bottom. */}
                   <div
-                    className="w-full max-w-[280px] mx-auto shrink-0 z-10"
+                    className="cbat-flag-controls w-full max-w-[280px] mx-auto shrink-0 z-10"
                   >
-                    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 max-[600px]:p-1.5 flex flex-col gap-3 max-[600px]:gap-1.5">
+                    <div className="cbat-flag-panel bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 max-[600px]:p-1.5 flex flex-col gap-3 max-[600px]:gap-1.5">
                       <Numpad
                         question={mathQuestion}
                         entered={mathEntered}
@@ -1220,12 +1232,12 @@ export default function CbatFlag() {
                         disabled={!mathQuestion}
                       />
                       {palette.length === 3 && (
-                        <div className="grid grid-cols-3 gap-1.5 max-[600px]:gap-1">
+                        <div className="cbat-flag-strikes grid grid-cols-3 gap-1.5 max-[600px]:gap-1">
                           {palette.map((p) => (
                             <button
                               key={p.color}
                               onClick={() => playFieldRef.current?.clickColor(p.color)}
-                              className="py-2 max-[600px]:py-1.5 rounded-lg flex items-center justify-center transition-transform active:scale-95 hover:opacity-90 cursor-pointer"
+                              className="cbat-flag-strike py-2 max-[600px]:py-1.5 rounded-lg flex items-center justify-center transition-transform active:scale-95 hover:opacity-90 cursor-pointer"
                               style={{ backgroundColor: p.color }}
                               aria-label={`Strike ${p.kind}`}
                             >
