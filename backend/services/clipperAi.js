@@ -174,6 +174,78 @@ Generate ${count} ideas${mode ? ` in "${mode}" mode` : ''}. Return ONLY the JSON
   return dedupeIdeas(cleaned, priorOneLiners);
 }
 
+// ── Stock queries ───────────────────────────────────────────────────────────
+//
+// A stock library cannot search for an idea, only for a thing that was pointed
+// a camera at. Ask it for "determination" and it returns a stranger looking
+// thoughtfully out of a window, which is the exact texture that makes a video
+// read as filler — and a measured render came back with seven shots, none of
+// them aviation and several of them precisely that.
+//
+// The prompt asks for concrete nouns. This is the backstop for when it does not
+// get them, because the failure is silent: an abstract query returns plenty of
+// results, so nothing downstream ever looks wrong.
+const ABSTRACT_QUERY_TOKENS = new Set([
+  'success', 'successful', 'failure', 'failing', 'determination', 'determined',
+  'motivation', 'motivated', 'inspiration', 'inspiring', 'mindset', 'attitude',
+  'concentration', 'concentrating', 'focus', 'focused', 'thinking', 'thought',
+  'thoughtful', 'stress', 'stressed', 'anxiety', 'anxious', 'pressure',
+  'confidence', 'confident', 'achievement', 'achieving', 'goal', 'goals',
+  'dream', 'dreams', 'journey', 'challenge', 'challenging', 'struggle',
+  'decision', 'decisions', 'choice', 'choices', 'teamwork', 'leadership',
+  'ambition', 'ambitious', 'potential', 'opportunity', 'future', 'concept',
+  'abstract', 'idea', 'ideas', 'mental', 'cognitive', 'intelligence', 'smart',
+  'clever', 'difficult', 'hard', 'easy', 'fast', 'quick', 'reaction', 'skill',
+  'skills', 'ability', 'performance', 'preparation', 'practice', 'practising',
+  // Generic people. A stock library reads these as "stock photo of a human",
+  // which is the same filler by another route.
+  'person', 'people', 'someone', 'man', 'men', 'woman', 'women', 'guy',
+  'young', 'candidate', 'candidates', 'student', 'students', 'businessman',
+]);
+
+// Words that carry nothing on their own once the abstractions are gone. Only
+// these are trimmed from the end of a query — dropping them from the middle
+// would turn "jet taking off runway" into something a library cannot match.
+const QUERY_FUNCTION_WORDS = new Set([
+  'a', 'an', 'the', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'and', 'or',
+  'his', 'her', 'their', 'its', 'this', 'that', 'up', 'out', 'under', 'over',
+]);
+
+// Anything that cannot be the SUBJECT of a shot. Used to answer "is there still
+// something to film here?" after the abstractions have gone, and nothing else:
+// "young candidate making a decision" strips down to "making", which passes a
+// naive is-it-empty check and is not a picture of anything.
+const WEAK_QUERY_TOKENS = new Set([
+  ...QUERY_FUNCTION_WORDS,
+  'making', 'taking', 'doing', 'being', 'getting', 'having', 'using', 'trying',
+  'looking', 'feeling', 'showing', 'working', 'thinking', 'is', 'are', 'be',
+]);
+
+// Concrete things this channel is actually about, used when a query has nothing
+// filmable left in it. Chosen by beat index so a script whose queries all
+// collapse does not end up with the same clip six times.
+const FALLBACK_QUERIES = [
+  'fighter jet taking off runway',
+  'cockpit instrument panel dials',
+  'air traffic control radar screen',
+  'military aircraft formation flying',
+  'pilot helmet visor cockpit',
+  'jet aircraft banking through clouds',
+];
+
+function constrainQuery(query, index = 0) {
+  const words = String(query || '').toLowerCase().match(/[a-z0-9-]+/g) || [];
+  const kept = words.filter(w => !ABSTRACT_QUERY_TOKENS.has(w));
+  const hasSubject = kept.some(w => !WEAK_QUERY_TOKENS.has(w));
+
+  if (!hasSubject) return FALLBACK_QUERIES[index % FALLBACK_QUERIES.length];
+  // Stripping leaves dangling function words at both ends - "cockpit view of",
+  // "at a desk" - and they only dilute the search.
+  while (kept.length && QUERY_FUNCTION_WORDS.has(kept[kept.length - 1])) kept.pop();
+  while (kept.length && QUERY_FUNCTION_WORDS.has(kept[0])) kept.shift();
+  return kept.join(' ');
+}
+
 // ── Script generation ───────────────────────────────────────────────────────
 
 const SCRIPT_SCHEMA = `Return ONLY a JSON object:
@@ -200,6 +272,8 @@ const SCRIPT_SCHEMA = `Return ONLY a JSON object:
 - 6 to 10 beats.
 - factKeys may be empty for a linking beat, but every fact you were given should appear in some beat.
 - visual.kind is "capture" ONLY for beats showing the platform itself. Available recipeIds: ${'`play-dpt`'}, ${'`browse-leaderboard`'}, ${'`cbat-home`'}. Otherwise use "stock" with a query.
+- visual.query must name PHYSICAL THINGS a camera has been pointed at, and should be aviation or military wherever the line allows it. Aircraft, cockpits, runways, radar screens, control towers, flight helmets, instrument panels, hangars, ground crew.
+  A stock library cannot film an idea. Queries like "determination", "mental focus", "person thinking", "under pressure" or "making a decision" all return a stranger looking out of a window, and that is what makes a video look like filler. If a beat is about something abstract, pick the concrete aviation image that sits nearest to it - a beat about split-second decisions is a cockpit, not a furrowed brow.
 - Do not put an overlay on every beat. Three or four across the video is right.`;
 
 async function generateScript({ idea, facts, mode = 'tips', outroEnabled = true }) {
@@ -263,7 +337,9 @@ Return ONLY the JSON object.`;
         factKeys: Array.isArray(b.factKeys) ? b.factKeys.filter(k => validKeys.has(k)) : [],
         visual: {
           kind,
-          query:    kind === 'stock'   ? String(b.visual?.query    ?? '').trim() : '',
+          // Constrained rather than trusted: an abstract query fails silently,
+          // returning plenty of results that are all wrong.
+          query:    kind === 'stock'   ? constrainQuery(b.visual?.query, i) : '',
           recipeId: kind === 'capture' ? String(b.visual?.recipeId ?? '').trim() : '',
         },
         sfxCue:  String(b.sfxCue  ?? '').trim(),
@@ -287,6 +363,9 @@ Return ONLY the JSON object.`;
 module.exports = {
   generateIdeas,
   generateScript,
+  constrainQuery,
+  ABSTRACT_QUERY_TOKENS,
+  FALLBACK_QUERIES,
   dedupeIdeas,
   ideaTokens,
   IDEA_STOPWORDS,
