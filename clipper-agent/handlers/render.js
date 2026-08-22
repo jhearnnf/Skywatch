@@ -39,9 +39,17 @@ const LOCAL_FIELDS = ['videoUrl', 'audioUrl'];
 
 const isLocal = (url) => typeof url === 'string' && url.startsWith('file:');
 
+// A beat's shots each carry their own copy of the clip URL, and the composition
+// draws those in preference to the beat's own. Rewriting only the beat's would
+// leave a file: URL on the field that is actually read, and the render would
+// fail on it - so shots have to go through the same rewrite.
+const needsRewrite = (beat) =>
+  LOCAL_FIELDS.some(f => isLocal(beat[f]))
+  || (beat?.shots ?? []).some(s => isLocal(s?.videoUrl));
+
 function resolveLocalAssets(timeline) {
   const beats = timeline.beats ?? [];
-  const local = beats.filter(b => LOCAL_FIELDS.some(f => isLocal(b[f])));
+  const local = beats.filter(needsRewrite);
   if (local.length === 0) return timeline;
 
   if (!mediaServer.getBaseUrl()) {
@@ -55,22 +63,30 @@ function resolveLocalAssets(timeline) {
   return {
     ...timeline,
     beats: beats.map(beat => {
-      if (!LOCAL_FIELDS.some(f => isLocal(beat[f]))) return beat;
+      if (!needsRewrite(beat)) return beat;
+
+      // Only paths inside the Clipper temp folder are servable. Anything else
+      // is from an older layout, or has been swept by the OS.
+      const serve = (url, what) => {
+        const served = mediaServer.toUrl(url);
+        if (!served) {
+          throw new Error(
+            `Beat "${beat.id}" points at a ${what} the media server will not serve ` +
+            `(${url}). Regenerate that beat.`,
+          );
+        }
+        return served;
+      };
 
       const next = { ...beat };
       for (const field of LOCAL_FIELDS) {
         if (!isLocal(next[field])) continue;
-
-        const served = mediaServer.toUrl(next[field]);
-        if (!served) {
-          // Only paths inside the Clipper temp folder are servable. Anything
-          // else is from an older layout, or has been swept by the OS.
-          throw new Error(
-            `Beat "${beat.id}" points at a ${field === 'audioUrl' ? 'narration file' : 'recording'} ` +
-            `the media server will not serve (${next[field]}). Regenerate that beat.`,
-          );
-        }
-        next[field] = served;
+        next[field] = serve(next[field], field === 'audioUrl' ? 'narration file' : 'recording');
+      }
+      if (Array.isArray(next.shots)) {
+        next.shots = next.shots.map(shot => (isLocal(shot?.videoUrl)
+          ? { ...shot, videoUrl: serve(shot.videoUrl, 'recording') }
+          : shot));
       }
       return next;
     }),

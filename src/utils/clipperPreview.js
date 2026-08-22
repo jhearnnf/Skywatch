@@ -62,24 +62,38 @@ const isLocal = (url) => typeof url === 'string' && url.startsWith('file:');
 // play it from there than it can play a screen recording.
 const LOCAL_FIELDS = ['videoUrl', 'audioUrl'];
 
+// A beat's shots each carry their own copy of the clip URL, and the composition
+// draws those in preference to the beat's. Rewriting only the beat's would put
+// a working URL on the field nothing reads and leave a file: URL on the one
+// that does — which previews as a black rectangle, the exact failure this
+// module exists to prevent.
+const needsRewrite = (beat) =>
+  LOCAL_FIELDS.some(f => isLocal(beat[f]))
+  || (beat?.shots ?? []).some(s => isLocal(s?.videoUrl));
+
 // The same timeline with every local media URL pointed at the media server.
 //
 // Returns the input untouched when nothing needs rewriting, so the Player is
 // not handed a new object identity on every render.
 export function previewTimeline(timeline, mediaBaseUrl) {
   const beats = timeline?.beats;
-  if (!Array.isArray(beats) || !beats.some(b => LOCAL_FIELDS.some(f => isLocal(b[f])))) {
+  if (!Array.isArray(beats) || !beats.some(needsRewrite)) {
     return timeline;
   }
 
   return {
     ...timeline,
     beats: beats.map(beat => {
-      if (!LOCAL_FIELDS.some(f => isLocal(beat[f]))) return beat;
+      if (!needsRewrite(beat)) return beat;
 
       const next = { ...beat };
       for (const field of LOCAL_FIELDS) {
         if (isLocal(next[field])) next[field] = toPreviewUrl(next[field], mediaBaseUrl);
+      }
+      if (Array.isArray(next.shots)) {
+        next.shots = next.shots.map(shot => (isLocal(shot?.videoUrl)
+          ? { ...shot, videoUrl: toPreviewUrl(shot.videoUrl, mediaBaseUrl) }
+          : shot));
       }
       return next;
     }),
@@ -91,7 +105,5 @@ export function previewTimeline(timeline, mediaBaseUrl) {
 // mystery.
 export function unplayableCaptureCount(timeline, mediaBaseUrl) {
   if (mediaBaseUrl) return 0;
-  return (timeline?.beats ?? [])
-    .filter(b => LOCAL_FIELDS.some(f => isLocal(b[f])))
-    .length;
+  return (timeline?.beats ?? []).filter(needsRewrite).length;
 }
