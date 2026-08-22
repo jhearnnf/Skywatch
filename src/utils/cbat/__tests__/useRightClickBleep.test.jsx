@@ -14,6 +14,22 @@ const press = (button, type = 'pointerdown') => {
   return e
 }
 
+// A chorded press: a button changing state while another is already held. The
+// spec fires these as pointermove, not pointerdown/pointerup — `button` names
+// the button that changed, `buttons` is the bitmask of what is down now.
+const LEFT_HELD = 1
+const RIGHT_BIT = 2
+const chord = (buttons) => {
+  window.dispatchEvent(new window.MouseEvent('pointermove', {
+    button: RIGHT, buttons, bubbles: true, cancelable: true,
+  }))
+}
+const move = () => {
+  window.dispatchEvent(new window.MouseEvent('pointermove', {
+    button: -1, buttons: LEFT_HELD, bubbles: true, cancelable: true,
+  }))
+}
+
 afterEach(() => vi.clearAllMocks())
 
 describe('useRightClickBleep', () => {
@@ -67,6 +83,41 @@ describe('useRightClickBleep', () => {
     expect(onRelease).toHaveBeenCalledTimes(1)
     press(LEFT, 'pointerup')
     expect(onRelease).toHaveBeenCalledTimes(1)
+  })
+
+  // The case this exists for: steering IS the left button held down, so every
+  // right-click made while flying is a chord and never fires a pointerdown.
+  it('fires while the left button is held for a steer drag', () => {
+    const onBleep = vi.fn()
+    renderHook(() => useRightClickBleep({ onBleep }))
+    chord(LEFT_HELD | RIGHT_BIT)
+    expect(onBleep).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats the chorded release as a release, not a second bleep', () => {
+    const onBleep = vi.fn()
+    const onRelease = vi.fn()
+    renderHook(() => useRightClickBleep({ onBleep, onRelease }))
+    chord(LEFT_HELD | RIGHT_BIT)
+    chord(LEFT_HELD)
+    expect(onBleep).toHaveBeenCalledTimes(1)
+    expect(onRelease).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores the ordinary moves of a steer drag', () => {
+    const onBleep = vi.fn()
+    const onRelease = vi.fn()
+    renderHook(() => useRightClickBleep({ onBleep, onRelease }))
+    move(); move(); move()
+    expect(onBleep).not.toHaveBeenCalled()
+    expect(onRelease).not.toHaveBeenCalled()
+  })
+
+  it('does not score a chorded press while disabled', () => {
+    const onBleep = vi.fn()
+    renderHook(() => useRightClickBleep({ onBleep, disabled: true }))
+    chord(LEFT_HELD | RIGHT_BIT)
+    expect(onBleep).not.toHaveBeenCalled()
   })
 
   it('lets the context menu back once the round unmounts', () => {

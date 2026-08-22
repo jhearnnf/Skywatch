@@ -586,6 +586,12 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   const tutorialActiveRef = useRef(false)
   const [tutorialActive, setTutorialActive] = useState(false)
 
+  // Called whenever a bleep arrives from an input with no pointer of its own
+  // to light the button with. The press highlight is driven by the button's
+  // pointer events, so a stick bleep scored correctly and lit nothing — the
+  // one input with no on-screen feedback at all. ActRound fills this in.
+  const bleepFlashRef = useRef(null)
+
   // Pending bleep — set when a bleep fires; cleared on hit/miss.
   const pendingBleepRef = useRef(null)
   // Cue cursor — index of the next audio cue to fire.
@@ -909,6 +915,9 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
         stickDy = d.dy
         const bleeps = stick.consumeBleeps()
         for (let b = 0; b < bleeps; b++) onBleepTapRef.current?.()
+        // One flash per frame's worth of presses. Two bleeps inside 16ms is a
+        // bounce, not two presses a player could see separately.
+        if (bleeps > 0) bleepFlashRef.current?.()
       }
 
       // ── 0. Tutorial pause — round-1 bleep teach moment. While active,
@@ -1200,6 +1209,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     isDragging,
     onBleepTap,
     onBleepPointerDown,
+    bleepFlashRef,
     tutorialActive,
     startBleepTutorial,
     paused,
@@ -1977,6 +1987,25 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
     if (bleepReleaseTimerRef.current) clearTimeout(bleepReleaseTimerRef.current)
   }, [])
 
+  // A stick BLEEP has no pointer to light the button with, so it gets the
+  // flash on a timer instead: pressed now, released after the same minimum
+  // window that makes a fast tap visible. Handed to the game loop as a ref
+  // rather than watched as state — the loop already owns the stick, and a
+  // counter would re-render the round on every press to say something the
+  // button could have been told directly.
+  const flashBleepOnce = useCallback(() => {
+    showBleepPress()
+    handleBleepPointerUp()
+  }, [showBleepPress, handleBleepPointerUp])
+  useEffect(() => {
+    const ref = state.bleepFlashRef
+    ref.current = flashBleepOnce
+    return () => { ref.current = null }
+    // `state` is a fresh object literal every render, so depending on it would
+    // reassign this on every HUD tick. The ref inside it never changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flashBleepOnce])
+
   // Right-click anywhere is a second way to hit BLEEP, for the mouse player
   // whose cursor is out on the tunnel steering when the bleep sounds. See
   // useRightClickBleep for why the right button specifically. Gated on the
@@ -2047,6 +2076,14 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
               <p className="text-2xl sm:text-3xl font-extrabold text-amber-300">
                 Press the button below when you hear a bleep
               </p>
+              {/* Only worth saying on a mouse, where the button is somewhere
+                  else on screen. On touch the button is right under a thumb
+                  that isn't steering, so there is nothing to solve. */}
+              {!isTouch && (
+                <p className="text-sm text-amber-200/80 mt-3">
+                  You can also right-click anywhere, so you do not have to stop steering.
+                </p>
+              )}
             </div>
           </motion.div>
         )}

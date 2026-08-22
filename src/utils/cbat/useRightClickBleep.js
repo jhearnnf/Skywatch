@@ -26,24 +26,48 @@ import { useEffect } from 'react'
  */
 export function useRightClickBleep({ onBleep, onRelease, disabled = false }) {
   useEffect(() => {
-    const onContextMenu = (e) => e.preventDefault()
-    const onPointerDown = (e) => {
-      if (e.button !== 2) return
+    const press = (e) => {
       e.preventDefault()
       if (disabled) return
       onBleep?.()
     }
+
+    const onContextMenu = (e) => e.preventDefault()
+
+    const onPointerDown = (e) => {
+      if (e.button !== 2) return
+      press(e)
+    }
+
     const onPointerUp = (e) => {
       if (e.button !== 2) return
       onRelease?.()
     }
+
+    // A chorded press — a second button going down while one is already held.
+    //
+    // This is the case that matters most and the one that silently did nothing
+    // at first: steering IS the left button held down, so every right-click
+    // made while flying is a chord. Pointer Events deliberately does not fire
+    // an overlapping pointerdown/pointerup pair for these; the press and the
+    // release both arrive as a `pointermove` whose `button` names the button
+    // that changed (it is -1 on an ordinary move) and whose `buttons` bitmask
+    // says whether that button is now down.
+    const onPointerMove = (e) => {
+      if (e.button !== 2) return
+      if (e.buttons & 2) press(e)
+      else onRelease?.()
+    }
+
     window.addEventListener('contextmenu', onContextMenu)
     window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointermove', onPointerMove)
     return () => {
       window.removeEventListener('contextmenu', onContextMenu)
       window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointermove', onPointerMove)
     }
   }, [onBleep, onRelease, disabled])
 }
