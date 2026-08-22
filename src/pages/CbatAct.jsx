@@ -36,6 +36,7 @@ import {
 import CodeRecall from './CbatAct/CodeRecall'
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
+import { useRightClickBleep } from '../utils/cbat/useRightClickBleep'
 import {
   createActStick,
   readStoredActStickRate, storeActStickRate,
@@ -669,6 +670,10 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   const [isDragging, setIsDragging] = useState(false)
 
   const onPointerDown = useCallback((e) => {
+    // Right/middle mouse button is the BLEEP shortcut (wired up in ActRound),
+    // not a steer drag. Touch and pen both report button 0, so they are
+    // unaffected by this guard.
+    if (e.button != null && e.button !== 0) return
     // Already dragging on a different pointer — ignore secondary inputs so
     // they can't reset lastPointer and cause a frame of huge dx/dy.
     if (capturedPointerIdRef.current != null) return
@@ -1952,15 +1957,18 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
   const bleepPressStartRef = useRef(0)
   const bleepReleaseTimerRef = useRef(null)
   const BLEEP_MIN_PRESS_MS = 140
-  const handleBleepPointerDown = useCallback((e) => {
-    state.onBleepPointerDown(e)
+  const showBleepPress = useCallback(() => {
     if (bleepReleaseTimerRef.current) {
       clearTimeout(bleepReleaseTimerRef.current)
       bleepReleaseTimerRef.current = null
     }
     bleepPressStartRef.current = performance.now()
     setBleepPressed(true)
-  }, [state])
+  }, [])
+  const handleBleepPointerDown = useCallback((e) => {
+    state.onBleepPointerDown(e)
+    showBleepPress()
+  }, [state, showBleepPress])
   const handleBleepPointerUp = useCallback(() => {
     const remaining = Math.max(0, BLEEP_MIN_PRESS_MS - (performance.now() - bleepPressStartRef.current))
     bleepReleaseTimerRef.current = setTimeout(() => setBleepPressed(false), remaining)
@@ -1968,6 +1976,26 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
   useEffect(() => () => {
     if (bleepReleaseTimerRef.current) clearTimeout(bleepReleaseTimerRef.current)
   }, [])
+
+  // Right-click anywhere is a second way to hit BLEEP, for the mouse player
+  // whose cursor is out on the tunnel steering when the bleep sounds. See
+  // useRightClickBleep for why the right button specifically. Gated on the
+  // same two conditions that disable the button — the callsign overlay and
+  // the pause screen — so a right-click can't score during warmup or while
+  // the round is on hold.
+  // Bound to the stable useCallback, not to `state` — `state` is a fresh
+  // object literal every render, which would re-subscribe the window
+  // listeners on every HUD tick.
+  const onBleepTap = state.onBleepTap
+  const onRightClickBleep = useCallback(() => {
+    onBleepTap()
+    showBleepPress()
+  }, [onBleepTap, showBleepPress])
+  useRightClickBleep({
+    onBleep: onRightClickBleep,
+    onRelease: handleBleepPointerUp,
+    disabled: showCallsignOverlay || state.paused,
+  })
 
   return (
     // On lg+ the round drops the 2xl cap and sizes itself off the viewport
@@ -2095,7 +2123,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
       <p className="text-[10px] text-slate-500 text-center mt-2">
         {isTouch
           ? 'Tap on bleep • Drag the pad to steer • You can also drag on the tunnel'
-          : 'Tap on bleep • Drag canvas to steer • Arrow keys also work'}
+          : 'Click BLEEP or right-click anywhere • Drag canvas to steer • Arrow keys also work'}
       </p>
     </div>
   )
