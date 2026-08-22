@@ -9,6 +9,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs/promises');
 const mediaServer = require('../mediaServer');
+const audio = require('../audio');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const ENTRY = path.join(REPO_ROOT, 'src', 'remotion', 'index.js');
@@ -103,20 +104,45 @@ module.exports = async function renderHandler({ job, progress }) {
 
   await fs.mkdir(OUT_DIR, { recursive: true });
   const outPath = path.join(OUT_DIR, `${job.scriptId}-${Date.now()}.mp4`);
+  // Remotion renders here and the loudness pass moves it to outPath. Only the
+  // final file is ever named after the script, so a failed normalise cannot
+  // leave two plausible-looking renders behind for the same job.
+  const rawPath = `${outPath}.raw.mp4`;
 
   await renderMedia({
     composition,
     serveUrl: cachedBundle,
     codec: 'h264',
-    outputLocation: outPath,
+    outputLocation: rawPath,
     inputProps: { timeline },
-    // Short-form platforms re-encode anyway; a high CRF here would only waste
-    // upload time for quality the viewer never sees.
-    crf: 20,
+    // Short-form platforms re-encode anyway, but they re-encode whatever we
+    // hand them: fine UI text in a screen capture is the first thing a low
+    // bitrate smears, and it is the one thing on screen the viewer has to read.
+    crf: 18,
     onProgress: ({ progress: p }) => {
-      progress(20 + Math.round(p * 78), `rendering ${Math.round(p * 100)}%`);
+      progress(20 + Math.round(p * 72), `rendering ${Math.round(p * 100)}%`);
     },
   });
+
+  // Bring the mix to the platform target.
+  //
+  // Nothing upstream sets an absolute level - the only gain constants in the
+  // pipeline are the music bed's - so the finished mix lands wherever Voicebox
+  // happened to record. The first measured render came out at -18.8 LUFS
+  // against a platform target of about -14, which is not a subtlety: it plays
+  // audibly quieter than whatever preceded it in the feed, and quiet reads as
+  // low energy before a word is understood.
+  await progress(94, 'matching loudness');
+  const loudness = await audio.normaliseLoudness(rawPath, outPath);
+
+  if (loudness.normalised) {
+    await fs.rm(rawPath, { force: true });
+  } else {
+    // Ship the render rather than failing the job over its level. The reason
+    // travels back in the result so the admin can see it was skipped instead of
+    // wondering why the video is still quiet.
+    await fs.rename(rawPath, outPath);
+  }
 
   const { size } = await fs.stat(outPath);
   await progress(100, 'done');
@@ -128,6 +154,7 @@ module.exports = async function renderHandler({ job, progress }) {
     width: composition.width,
     height: composition.height,
     fps: composition.fps,
+    loudness,
   };
 };
 
