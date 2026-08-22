@@ -122,6 +122,60 @@ describe('clampTrimIn', () => {
     expect(last.audioUrl).toBe('o.wav');
   });
 
+  // The end card used to cut to a flat panel and hold it for several seconds,
+  // which is both the least watchable frame in the video and a full stop where
+  // a loop should be. It now keeps the last beat's picture running underneath.
+  it('runs the last beat\'s footage under the end card', () => {
+    const t = buildTimeline(script({
+      footage: {
+        b1: { chosen: { downloadUrl: 'a.mp4' }, trim: { inMs: 500 } },
+        b2: { chosen: { downloadUrl: 'b.mp4', durationSec: 30 }, trim: { inMs: 1000 } },
+      },
+      outro: { enabled: true, copy: 'More tips' },
+      voice: { lines: [
+        { beatId: 'b2', durationMs: 4000, startMs: 0, audioUrl: 'b.wav' },
+        { beatId: 'outro', durationMs: 2600, startMs: 4000, audioUrl: 'o.wav' },
+      ] },
+    }));
+
+    const outro = t.beats.find(b => b.isEndCard);
+    expect(outro.videoUrl).toBe('b.mp4');
+    // Picks up where b2 left off: its in-point plus its length.
+    expect(outro.trimInMs).toBe(5000);
+  });
+
+  it('pulls the end card\'s in-point back when the clip has nothing left', () => {
+    const t = buildTimeline(script({
+      footage: {
+        b1: { chosen: { downloadUrl: 'a.mp4' }, trim: { inMs: 0 } },
+        // Only 6s long, and b2 already consumes 4s of it from 1s in.
+        b2: { chosen: { downloadUrl: 'b.mp4', durationSec: 6 }, trim: { inMs: 1000 } },
+      },
+      outro: { enabled: true, copy: 'More tips' },
+      voice: { lines: [
+        { beatId: 'b2', durationMs: 4000, startMs: 0, audioUrl: 'b.wav' },
+        { beatId: 'outro', durationMs: 2600, startMs: 4000, audioUrl: 'o.wav' },
+      ] },
+    }));
+
+    const outro = t.beats.find(b => b.isEndCard);
+    // 6000 - 2600 = the latest start that still plays, rather than seeking to
+    // 5000 and freezing on the last frame.
+    expect(outro.trimInMs).toBe(3400);
+  });
+
+  it('leaves the end card on the backdrop when the last beat had no clip', () => {
+    const t = buildTimeline(script({
+      outro: { enabled: true, copy: 'More tips' },
+      voice: { lines: [{ beatId: 'outro', durationMs: 2600, startMs: 0, audioUrl: 'o.wav' }] },
+    }));
+
+    // b2 in the fixture has no chosen clip, so there is nothing to carry.
+    const outro = t.beats.find(b => b.isEndCard);
+    expect(outro.videoUrl).toBeNull();
+    expect(outro.trimInMs).toBe(0);
+  });
+
   it('rebases caption timings to the start of their own beat', () => {
     // Remotion Sequences are locally timed, so a word 3.4s into the video that
     // belongs to a beat starting at 3.0s must render at 0.4s.
