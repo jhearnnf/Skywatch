@@ -10,7 +10,7 @@
 // actually have — the word-count estimate on the script is only ever used to
 // warn about length before any audio exists.
 
-const { resolveCue, sfxPath } = require('../constants/clipperSfx');
+const { resolveCue, sfxPath, SFX_BY_ID } = require('../constants/clipperSfx');
 const { MUSIC_DIR } = require('../constants/clipperMusic');
 const { focusFor } = require('../constants/clipperCapture');
 
@@ -107,6 +107,30 @@ function clampTrimIn(inMs, clipDurationSec, beatDurationMs) {
 
   const latestStart = Math.max(0, clipDurationSec * 1000 - beatDurationMs);
   return Math.min(wanted, Math.round(latestStart));
+}
+
+// ── Sound-effect placement ──────────────────────────────────────────────────
+//
+// Where a cue belongs, given that we know when every word was spoken.
+//
+// A 'land' sound punctuates something and goes on the beat's final word, which
+// is where the emphasis of a short spoken line almost always falls. A 'lead'
+// sound sets up what follows and stays at the beat's start. Both fall back to
+// the beat start when the captions stage has not run, so a video narrated but
+// not yet aligned sounds exactly as it did before.
+function defaultCueWord(sfxId, words) {
+  if (!Array.isArray(words) || words.length === 0) return null;
+  return SFX_BY_ID.get(sfxId)?.placement === 'land' ? words.length - 1 : null;
+}
+
+// A row's time within its beat. A word target wins over a millisecond offset:
+// the offset is what you set when you could not say "on that word", and a stale
+// one should not override the thing it was standing in for.
+function cueTimeMs(row, words) {
+  const idx = Number.isInteger(row?.atWord) ? row.atWord : null;
+  const word = idx != null && Array.isArray(words) ? words[idx] : null;
+  if (word) return Math.max(0, Math.round(word.startMs));
+  return Math.max(0, Number(row?.atMs) || 0);
 }
 
 // ── Shots ───────────────────────────────────────────────────────────────────
@@ -261,18 +285,31 @@ function buildTimeline(script) {
 
   // Approved SFX for a beat, falling back to the script writer's cue so a video
   // that skipped the SFX stage still gets its stingers.
-  const sfxFor = (beat) => {
+  //
+  // `words` is the beat's aligned narration, rebased to the beat's own start.
+  // Given it, a cue can be placed on a WORD rather than at a millisecond
+  // offset, which is the difference between a sound that punctuates the line
+  // and one that merely happens during it. Every path degrades to the old
+  // behaviour when there is no alignment yet.
+  const sfxFor = (beat, words) => {
     // The fallback keys off whether the admin has touched this beat AT ALL, not
     // on whether anything survived the enabled filter. Keying it off the
     // filtered list means switching every sound off resurrects the original
     // cue — the one thing the admin just said they did not want.
     const forBeat = sfxRows.filter(s => s.beatId === beat.id);
+    const cueId = beat.sfxCue ? resolveCue(beat.sfxCue) : null;
     const rows = forBeat.length
       ? forBeat.filter(s => s.enabled !== false)
-      : (beat.sfxCue ? [{ beatId: beat.id, sfxId: resolveCue(beat.sfxCue), atMs: 0, gain: 0.6 }] : []);
+      : (cueId
+        ? [{ beatId: beat.id, sfxId: cueId, atMs: 0, atWord: defaultCueWord(cueId, words), gain: 0.6 }]
+        : []);
 
     return rows
-      .map(s => ({ src: sfxPath(s.sfxId), atMs: Math.max(0, Number(s.atMs) || 0), gain: s.gain ?? 0.6 }))
+      .map(s => ({
+        src: sfxPath(s.sfxId),
+        atMs: cueTimeMs(s, words),
+        gain: s.gain ?? 0.6,
+      }))
       .filter(s => s.src);
   };
 
@@ -443,7 +480,7 @@ function buildMusic(script, beats, totalDurationMs) {
 
 module.exports = {
   buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, buildMusic,
-  buildShots, shotLengths, snapLengths,
+  buildShots, shotLengths, snapLengths, cueTimeMs, defaultCueWord,
   MIN_BEAT_MS, END_CARD_MS, HOOK_MAX_CHARS,
   MAX_SHOT_MS, FIRST_SHOT_MS, MIN_SHOT_MS, MAX_SHOTS, SHOT_JUMP_MS, MIN_JUMP_MS,
   SNAP_MS,

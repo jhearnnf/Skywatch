@@ -13,20 +13,29 @@
 
 const SFX_DIR = 'sounds/sound_effects';
 
+// `placement` is where a cue belongs relative to the line it punctuates, and it
+// exists because forced alignment already knows when every word was spoken
+// (utils/clipperCaptions.js) while SFX could only ever be placed at a beat
+// boundary. A stinger fired at the start of a sentence it was meant to land on
+// the end of is not punctuation, it is noise arriving early.
+//
+//   lead  the sound sets up what follows, so it belongs at the beat's start
+//   land  the sound punctuates something, so it belongs on the final word -
+//         which is usually where the emphasis of a spoken line falls
 const SFX = [
-  { id: 'whoosh',        file: 'whoosh_small.mp3',          label: 'Whoosh',          durationMs: 2425, use: 'Beat-to-beat transition' },
-  { id: 'whoosh-big',    file: 'whoosh_big.mp3',            label: 'Whoosh (big)',    durationMs: 5431, use: 'Major turn or reveal' },
-  { id: 'riser',         file: 'riser.mp3',                 label: 'Riser',           durationMs: 14545, use: 'Build into a payoff - start it early' },
-  { id: 'impact',        file: 'impact.mp3',                label: 'Impact',          durationMs: 329,  use: 'Land a fact hard' },
-  { id: 'sub-drop',      file: 'sub_drop.mp3',              label: 'Sub drop',        durationMs: 1985, use: 'Weight under a reveal' },
-  { id: 'pop',           file: 'pop.mp3',                   label: 'Pop',             durationMs: 99,   use: 'Callout appearing' },
-  { id: 'click',         file: 'click.mp3',                 label: 'Click',           durationMs: 322,  use: 'UI interaction in a demo' },
-  { id: 'notification',  file: 'notification.mp3',          label: 'Notification',    durationMs: 319,  use: 'Score or alert moment' },
-  { id: 'ding',          file: 'ding_bell.mp3',             label: 'Ding',            durationMs: 2519, use: 'Correct answer, positive beat' },
-  { id: 'record-scratch',file: 'record_scratch.mp3',        label: 'Record scratch',  durationMs: 1599, use: 'Contradiction - "actually, no"' },
-  { id: 'camera',        file: 'camera_shutter_double.mp3', label: 'Camera shutter',  durationMs: 950,  use: 'Freeze-frame or stat card' },
-  { id: 'swoosh-reverse',file: 'swoosh_reverse.mp3',        label: 'Swoosh (reverse)',durationMs: 2367, use: 'Lead INTO a cut - place it before the beat' },
-  { id: 'typewriter',    file: 'typewriter.mp3',            label: 'Typewriter',      durationMs: 980,  use: 'Text appearing on screen' },
+  { id: 'whoosh',        file: 'whoosh_small.mp3',          label: 'Whoosh',          durationMs: 2425, use: 'Beat-to-beat transition', placement: 'lead' },
+  { id: 'whoosh-big',    file: 'whoosh_big.mp3',            label: 'Whoosh (big)',    durationMs: 5431, use: 'Major turn or reveal', placement: 'lead' },
+  { id: 'riser',         file: 'riser.mp3',                 label: 'Riser',           durationMs: 14545, use: 'Build into a payoff - start it early', placement: 'lead' },
+  { id: 'impact',        file: 'impact.mp3',                label: 'Impact',          durationMs: 329,  use: 'Land a fact hard', placement: 'land' },
+  { id: 'sub-drop',      file: 'sub_drop.mp3',              label: 'Sub drop',        durationMs: 1985, use: 'Weight under a reveal', placement: 'land' },
+  { id: 'pop',           file: 'pop.mp3',                   label: 'Pop',             durationMs: 99,   use: 'Callout appearing', placement: 'lead' },
+  { id: 'click',         file: 'click.mp3',                 label: 'Click',           durationMs: 322,  use: 'UI interaction in a demo', placement: 'lead' },
+  { id: 'notification',  file: 'notification.mp3',          label: 'Notification',    durationMs: 319,  use: 'Score or alert moment', placement: 'land' },
+  { id: 'ding',          file: 'ding_bell.mp3',             label: 'Ding',            durationMs: 2519, use: 'Correct answer, positive beat', placement: 'land' },
+  { id: 'record-scratch',file: 'record_scratch.mp3',        label: 'Record scratch',  durationMs: 1599, use: 'Contradiction - "actually, no"', placement: 'land' },
+  { id: 'camera',        file: 'camera_shutter_double.mp3', label: 'Camera shutter',  durationMs: 950,  use: 'Freeze-frame or stat card', placement: 'land' },
+  { id: 'swoosh-reverse',file: 'swoosh_reverse.mp3',        label: 'Swoosh (reverse)',durationMs: 2367, use: 'Lead INTO a cut - place it before the beat', placement: 'lead' },
+  { id: 'typewriter',    file: 'typewriter.mp3',            label: 'Typewriter',      durationMs: 980,  use: 'Text appearing on screen', placement: 'lead' },
 ];
 
 const SFX_BY_ID = new Map(SFX.map(s => [s.id, s]));

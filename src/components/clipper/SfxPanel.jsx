@@ -8,9 +8,26 @@ import { useState, useEffect, useRef } from 'react'
 //
 // Audition happens in the browser against the same files the renderer uses, so
 // what you hear here is what lands in the MP4.
+//
+// A cue can be placed on a WORD once the captions stage has aligned the
+// narration. That is the difference between a stinger that punctuates the line
+// and one that merely happens during it - and the timings were already being
+// computed for the captions, so nothing new has to be measured. Before
+// alignment exists the control falls back to a millisecond offset.
 
 export default function SfxPanel({ script, library, sfxDir, onSave, onApprove, busy }) {
   const beats = script?.script?.beats ?? []
+  const allWords = script?.captions?.words ?? []
+
+  // One beat's narration, rebased to the beat's own start so the offsets match
+  // what the renderer uses.
+  const wordsFor = (beatId) => {
+    const line = (script?.voice?.lines ?? []).find(l => l.beatId === beatId)
+    const base = line?.startMs ?? 0
+    return allWords
+      .filter(w => w.beatId === beatId)
+      .map(w => ({ text: w.text, startMs: Math.max(0, w.startMs - base) }))
+  }
   const [rows, setRows] = useState([])
   const [dirty, setDirty] = useState(false)
   const audioRef = useRef(null)
@@ -21,9 +38,19 @@ export default function SfxPanel({ script, library, sfxDir, onSave, onApprove, b
       setRows(saved)
     } else {
       // Seed from the script's cues, resolved by the server into catalogue ids.
+      // Seeded on the same rule the renderer uses when no rows exist at all, so
+      // opening this stage does not silently move every sound.
       setRows(beats
         .filter(b => b.sfxCue && b.resolvedSfxId)
-        .map(b => ({ beatId: b.id, sfxId: b.resolvedSfxId, atMs: 0, gain: 0.6, enabled: true })))
+        .map(b => {
+          const words = wordsFor(b.id)
+          const lands = (library ?? []).find(s => s.id === b.resolvedSfxId)?.placement === 'land'
+          return {
+            beatId: b.id, sfxId: b.resolvedSfxId, gain: 0.6, enabled: true,
+            atMs: 0,
+            atWord: (lands && words.length) ? words.length - 1 : null,
+          }
+        }))
     }
     setDirty(false)
   }, [script?._id, script?.updatedAt])
@@ -94,12 +121,16 @@ export default function SfxPanel({ script, library, sfxDir, onSave, onApprove, b
       <p className="text-xs text-slate-500">
         Stingers sit under the voice by design. A reverse swoosh should lead <em>into</em> a cut,
         so give it a negative-feeling offset by placing it on the beat before.
+        {allWords.length === 0
+          ? ' Run the captions stage to place sounds on a word instead of a millisecond offset.'
+          : ' Sounds are placed on a word, so they stay in step if the narration is re-recorded.'}
       </p>
 
       <div className="space-y-2">
         {beats.map((b, i) => {
           const row = rowFor(b.id)
           const entry = row ? library.find(s => s.id === row.sfxId) : null
+          const words = wordsFor(b.id)
           return (
             <div key={b.id} className="border border-slate-200 rounded-xl bg-slate-50 p-3 space-y-2">
               <div className="flex items-start gap-3">
@@ -138,15 +169,35 @@ export default function SfxPanel({ script, library, sfxDir, onSave, onApprove, b
                       ▶ Play
                     </button>
 
-                    <label className="flex items-center gap-1 text-xs text-slate-600">
-                      at
-                      <input
-                        type="number" min={0} step={100} value={row.atMs}
-                        onChange={e => update(b.id, { atMs: Number(e.target.value) })}
-                        className="w-20 px-2 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800"
-                      />
-                      ms
-                    </label>
+                    {words.length > 0 ? (
+                      <label className="flex items-center gap-1 text-xs text-slate-600">
+                        on
+                        <select
+                          value={Number.isInteger(row.atWord) ? row.atWord : ''}
+                          onChange={e => update(b.id, {
+                            atWord: e.target.value === '' ? null : Number(e.target.value),
+                          })}
+                          className="px-2 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-sm text-slate-800"
+                        >
+                          <option value="">beat start</option>
+                          {words.map((w, wi) => (
+                            <option key={wi} value={wi}>
+                              {w.text} ({(w.startMs / 1000).toFixed(1)}s)
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : (
+                      <label className="flex items-center gap-1 text-xs text-slate-600">
+                        at
+                        <input
+                          type="number" min={0} step={100} value={row.atMs}
+                          onChange={e => update(b.id, { atMs: Number(e.target.value) })}
+                          className="w-20 px-2 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-800"
+                        />
+                        ms
+                      </label>
+                    )}
 
                     <label className="flex items-center gap-1 text-xs text-slate-600">
                       vol

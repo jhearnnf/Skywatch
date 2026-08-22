@@ -6,8 +6,9 @@
  */
 
 const {
-  buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, shotLengths, snapLengths,
-  MIN_BEAT_MS, MAX_SHOT_MS, FIRST_SHOT_MS, MIN_SHOT_MS, MAX_SHOTS, SNAP_MS,
+  buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, MIN_BEAT_MS,
+  shotLengths, snapLengths, cueTimeMs, defaultCueWord,
+  MAX_SHOT_MS, FIRST_SHOT_MS, MIN_SHOT_MS, MAX_SHOTS, SNAP_MS,
 } = require('../../utils/clipperTimeline');
 const { focusFor } = require('../../constants/clipperCapture');
 
@@ -556,6 +557,97 @@ describe('title card', () => {
  * Forced alignment already knows when every word was spoken, but SFX could only
  * ever be placed at a beat boundary - so a sound meant to punctuate the end of a
  * line fired at the start of it.
+ */
+describe('cueTimeMs', () => {
+  const words = [
+    { text: 'Most', startMs: 0,   endMs: 400 },
+    { text: 'people', startMs: 400, endMs: 900 },
+    { text: 'fail', startMs: 900, endMs: 1500 },
+  ];
+
+  it('places a cue on the word it names', () => {
+    expect(cueTimeMs({ atWord: 2, atMs: 0 }, words)).toBe(900);
+  });
+
+  // The offset is what you set when you could not say "on that word", so a
+  // stale one must not override the thing it was standing in for.
+  it('prefers the word over a millisecond offset', () => {
+    expect(cueTimeMs({ atWord: 1, atMs: 5000 }, words)).toBe(400);
+  });
+
+  it('falls back to the offset when no word is named', () => {
+    expect(cueTimeMs({ atWord: null, atMs: 250 }, words)).toBe(250);
+    expect(cueTimeMs({ atMs: 250 }, words)).toBe(250);
+  });
+
+  // A word index outliving the narration it pointed into is the ordinary
+  // consequence of re-recording a shorter line.
+  it('falls back when the word no longer exists', () => {
+    expect(cueTimeMs({ atWord: 9, atMs: 120 }, words)).toBe(120);
+    expect(cueTimeMs({ atWord: 1, atMs: 120 }, [])).toBe(120);
+  });
+});
+
+describe('defaultCueWord', () => {
+  const words = [{ startMs: 0 }, { startMs: 400 }, { startMs: 900 }];
+
+  // A sound that punctuates goes where the emphasis of a short spoken line
+  // almost always falls: the last word.
+  it('lands a punctuating sound on the final word', () => {
+    expect(defaultCueWord('impact', words)).toBe(2);
+    expect(defaultCueWord('record-scratch', words)).toBe(2);
+  });
+
+  it('leaves a setup sound at the beat start', () => {
+    expect(defaultCueWord('riser', words)).toBeNull();
+    expect(defaultCueWord('whoosh', words)).toBeNull();
+  });
+
+  it('has nothing to place against before alignment has run', () => {
+    expect(defaultCueWord('impact', [])).toBeNull();
+    expect(defaultCueWord('impact', null)).toBeNull();
+  });
+});
+
+describe('sfx in the timeline', () => {
+  const sfxScript = (over = {}) => ({
+    script: { beats: [
+      { id: 'b1', text: 'Most people fail.', visual: { kind: 'stock' }, sfxCue: 'impact' },
+    ] },
+    footage: {},
+    voice: { lines: [{ beatId: 'b1', durationMs: 2000, startMs: 0 }] },
+    captions: { words: [
+      { beatId: 'b1', text: 'Most',   startMs: 0,   endMs: 400 },
+      { beatId: 'b1', text: 'people', startMs: 400, endMs: 900 },
+      { beatId: 'b1', text: 'fail',   startMs: 900, endMs: 1500 },
+    ] },
+    outro: { enabled: false, copy: '' },
+    ...over,
+  });
+
+  it('lands the script writer’s cue on the last word rather than the beat start', () => {
+    const t = buildTimeline(sfxScript());
+    expect(t.beats[0].sfx[0].atMs).toBe(900);
+  });
+
+  it('keeps the cue at the beat start when nothing has been aligned yet', () => {
+    const t = buildTimeline(sfxScript({ captions: null }));
+    expect(t.beats[0].sfx[0].atMs).toBe(0);
+  });
+
+  it('honours a word the admin picked', () => {
+    const t = buildTimeline(sfxScript({
+      sfx: [{ beatId: 'b1', sfxId: 'ding', atWord: 1, atMs: 0, enabled: true }],
+    }));
+    expect(t.beats[0].sfx[0].atMs).toBe(400);
+  });
+});
+
+/**
+ * Cutting to the music.
+ *
+ * Beat boundaries are set by the narration and may not move. The boundaries
+ * *inside* a beat are free, which is the only reason this is safe to do at all.
  */
 describe('snapLengths', () => {
   const period = 500;   // 120bpm
