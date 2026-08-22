@@ -31,6 +31,7 @@ const { buildTimeline } = require('../utils/clipperTimeline');
 const { buildCaptions } = require('../utils/clipperCaptions');
 const { SFX, SFX_BY_ID, SFX_DIR, resolveCue } = require('../constants/clipperSfx');
 const { MUSIC_DIR, MUSIC_ABS_DIR, slugify, musicPath } = require('../constants/clipperMusic');
+const { detectBpm } = require('../utils/clipperTempo');
 const { searchMusic, isFreeLicence } = require('../utils/clipperMusicSearch');
 
 const SOURCE_SLUG = 'cbat-guide';
@@ -1263,6 +1264,10 @@ router.post('/music/import', async (req, res) => {
     const bytes = Buffer.from(await download.arrayBuffer());
     fs.writeFileSync(path.join(MUSIC_ABS_DIR, file), bytes);
 
+    // Measured here rather than at render time: it is a property of the file,
+    // it costs a decode, and the answer never changes.
+    const tempo = await detectBpm(path.join(MUSIC_ABS_DIR, file));
+
     const track = await ClipperMusic.create({
       slug,
       title: String(c.title).slice(0, 200),
@@ -1276,6 +1281,8 @@ router.post('/music/import', async (req, res) => {
       attribution: String(c.attribution || ''),
       provider: 'openverse',
       providerId: String(c.providerId || ''),
+      bpm: tempo.bpm,
+      bpmConfidence: tempo.confidence || 0,
     });
 
     res.status(201).json({
@@ -1329,6 +1336,9 @@ router.patch('/scripts/:id/music', async (req, res) => {
         licence: track.licence,
         sourceUrl: track.sourceUrl,
         durationMs: track.durationMs,
+        // Copied onto the script rather than looked up at render time, so a
+        // video renders identically after the library row is edited or gone.
+        bpm: track.bpm ?? null,
       };
     }
 

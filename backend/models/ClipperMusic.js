@@ -21,6 +21,13 @@ const clipperMusicSchema = new mongoose.Schema({
   durationMs: { type: Number, default: 0 },
   bytes:      { type: Number, default: 0 },
 
+  // Measured at import (utils/clipperTempo.js), used to land the cuts inside a
+  // beat on the music. Null when ffmpeg is missing or the track has no pulse
+  // worth trusting — an absent tempo simply means nothing snaps, which is
+  // exactly how videos behaved before this existed.
+  bpm:           { type: Number, default: null },
+  bpmConfidence: { type: Number, default: 0 },
+
   // ── Provenance ────────────────────────────────────────────────────────────
   // `licence` is free text because a hand-added track may carry a licence no
   // enum would anticipate ("Pixabay content licence", "purchased - invoice
