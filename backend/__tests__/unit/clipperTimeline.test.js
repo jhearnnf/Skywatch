@@ -172,6 +172,36 @@ describe('buildCaptionPages', () => {
   it('returns nothing for no words', () => {
     expect(buildCaptionPages([])).toEqual([]);
   });
+
+  // Captions are set at roughly 5% of the frame height now, where they used to
+  // be 4%. A fourth word at that size either overflows the safe width or wraps,
+  // and a two-line caption gets read rather than glanced at.
+  // Three short words and three long ones are the same page count but not the
+  // same line width, and the renderer pays for the difference by shrinking.
+  it('splits a page that would be too wide before it hits three words', () => {
+    const pages = buildCaptionPages(
+      [w('universally', 0, 100), w('rated', 100, 200), w('worst', 200, 300)],
+      { maxChars: 15 },
+    );
+    expect(pages).toHaveLength(2);
+    expect(pages[0].words.map(x => x.text)).toEqual(['universally']);
+    expect(pages[1].words.map(x => x.text)).toEqual(['rated', 'worst']);
+  });
+
+  it('never drops a single word that is wider than the budget on its own', () => {
+    const pages = buildCaptionPages([w('incomprehensibly', 0, 100)], { maxChars: 15 });
+    expect(pages).toHaveLength(1);
+    expect(pages[0].words[0].text).toBe('incomprehensibly');
+  });
+
+  it('defaults to three words a page', () => {
+    const pages = buildCaptionPages(
+      [w('a', 0, 100), w('b', 100, 200), w('c', 200, 300), w('d', 300, 400)],
+    );
+    expect(pages).toHaveLength(2);
+    expect(pages[0].words).toHaveLength(3);
+    expect(pages[1].words).toHaveLength(1);
+  });
 });
 
 // The voice stage records only `wavPath` — the agent's job is to put a file on

@@ -16,10 +16,20 @@ const { MUSIC_DIR } = require('../constants/clipperMusic');
 const MIN_BEAT_MS = 800;       // a beat with no audio still needs to be seen
 const END_CARD_MS = 2200;
 
-// Group word timings into caption pages. Short-form captions show 3-4 words at
-// a time: enough to read in one saccade, few enough that the highlighted word
-// is always findable.
-function buildCaptionPages(words, { maxWords = 4, maxGapMs = 700 } = {}) {
+// Group word timings into caption pages. Short-form captions show a few words
+// at a time: enough to read in one saccade, few enough that the highlighted
+// word is always findable.
+//
+// Three, not four. Four fitted when captions were set at 76px, which measured
+// out at 4% of the frame height against a native 5-6%. At the size they are now
+// a fourth word either overflows the safe width or forces a second line, and a
+// two-line caption is read as a paragraph rather than glanced at.
+// `maxChars` is a second bound on the same thing: three short words and three
+// long ones are the same page count but not the same line width. The renderer
+// shrinks an over-long page to keep it on one line, so a page that blows past
+// this budget is not broken, just smaller than it needed to be — splitting it
+// here is what keeps the type at full size.
+function buildCaptionPages(words, { maxWords = 3, maxChars = 15, maxGapMs = 700 } = {}) {
   const pages = [];
   let current = [];
 
@@ -33,11 +43,19 @@ function buildCaptionPages(words, { maxWords = 4, maxGapMs = 700 } = {}) {
     current = [];
   };
 
+  // Width of the page as it would be laid out: the words plus the space
+  // between them.
+  const widthWith = (word) =>
+    current.reduce((n, w) => n + w.text.length, 0) + current.length + word.text.length;
+
   for (const word of words) {
     const prev = current[current.length - 1];
     // A pause in the delivery is a natural page break — splitting there keeps
     // captions in step with phrasing rather than cutting mid-thought.
     if (prev && word.startMs - prev.endMs > maxGapMs) flush();
+    // A single word longer than the budget still has to go somewhere, so this
+    // only splits when there is already something on the page.
+    if (current.length > 0 && widthWith(word) > maxChars) flush();
     current.push(word);
     if (current.length >= maxWords) flush();
   }
@@ -157,9 +175,11 @@ function buildTimeline(script) {
     out.push({
       id: 'outro',
       text: script.outro.copy,
-      durationMs: Math.max(END_CARD_MS, line?.durationMs ?? 0),
-      videoUrl: null,
-      trimInMs: 0,
+      durationMs,
+      videoUrl: tail?.videoUrl ?? null,
+      trimInMs: tail?.videoUrl
+        ? clampTrimIn((tail.trimInMs ?? 0) + tail.durationMs, tailClip?.durationSec, durationMs)
+        : 0,
       audioUrl: line?.audioUrl || pathToFileUrl(line?.wavPath),
       overlay: null,
       sfx: [],

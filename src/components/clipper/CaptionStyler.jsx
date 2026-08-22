@@ -7,10 +7,18 @@ import { useState, useEffect } from 'react'
 // timing" control here by design. What IS editable is how captions look, which
 // is the part that actually varies between videos.
 
+// Sizes are in composition pixels against a 1920-tall frame, so 100px is 5.2%
+// of the height. That band is where short-form captions actually sit; the old
+// presets ran 58-76px, which measured out at 3-4% and read as small on a phone
+// even though it looked fine in the preview.
+//
+// bottomPct is kept at 34 and above for the same class of reason: below about
+// 30 the caption collides with the username, caption and CTA the platform draws
+// over the video, and none of that furniture exists in the preview.
 const PRESETS = {
-  bold: { label: 'Bold white', style: { fontSize: 76, uppercase: true, color: '#fff', activeColor: '#5baaff', strokeWidth: 10, strokeColor: '#000', bottomPct: 22 } },
-  brand: { label: 'Brand blue', style: { fontSize: 72, uppercase: true, color: '#ddeaf8', activeColor: '#5baaff', strokeWidth: 8, strokeColor: '#06101e', bottomPct: 24 } },
-  subtle: { label: 'Subtle', style: { fontSize: 58, uppercase: false, color: '#fff', activeColor: '#ffd84d', strokeWidth: 6, strokeColor: '#000', bottomPct: 18 } },
+  bold: { label: 'Bold white', style: { fontSize: 100, uppercase: true, color: '#fff', activeColor: '#ffd84d', strokeWidth: 13, strokeColor: '#000', bottomPct: 36 } },
+  brand: { label: 'Brand blue', style: { fontSize: 96, uppercase: true, color: '#ddeaf8', activeColor: '#5baaff', strokeWidth: 11, strokeColor: '#06101e', bottomPct: 36 } },
+  subtle: { label: 'Subtle', style: { fontSize: 84, uppercase: false, color: '#fff', activeColor: '#ffd84d', strokeWidth: 9, strokeColor: '#000', bottomPct: 34 } },
 }
 
 export default function CaptionStyler({ script, job, agentOnline, onGenerate, onSaveStyle, onApprove, busy }) {
