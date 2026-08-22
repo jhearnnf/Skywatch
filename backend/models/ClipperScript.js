@@ -32,6 +32,12 @@ const beatSchema = new mongoose.Schema({
   // Suggested at script time, approved/edited in their own stages later.
   sfxCue:  { type: String, default: '' },
   overlay: { type: String, default: '' },
+
+  // The one beat that opens a new question mid-video. Recorded because it is a
+  // structural claim about the script, not a property of the line: reading the
+  // beats back later, "where does this re-hook?" is not recoverable from the
+  // text alone.
+  rehook: { type: Boolean, default: false },
 }, { _id: false });
 
 const clipperScriptSchema = new mongoose.Schema({
@@ -56,6 +62,9 @@ const clipperScriptSchema = new mongoose.Schema({
     beats:          { type: [beatSchema], default: [] },
     wordCount:      { type: Number, default: 0 },
     estDurationSec: { type: Number, default: 0 },
+    // 'list' | 'myth-bust' | 'one-mistake' - the retention shape the writer
+    // committed to. Empty on scripts written before shapes were asked for.
+    format:         { type: String, default: '' },
   },
 
   // Marketing outro. Modelled as a flag plus copy rather than a stage: when

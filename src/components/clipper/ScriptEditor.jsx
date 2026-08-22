@@ -35,6 +35,13 @@ function BeatRow({ beat, index, onChange }) {
             Hook
           </span>
         )}
+        {/* The beat that opens a new question part-way through, which is what
+            keeps the second half from being the first half running down. */}
+        {beat.rehook && (
+          <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[11px] font-bold uppercase tracking-wider">
+            Re-hook
+          </span>
+        )}
         {beat.factKeys?.map(k => (
           <span key={k} className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[11px] font-mono">
             {k}
@@ -61,6 +68,15 @@ function BeatRow({ beat, index, onChange }) {
       </div>
     </div>
   )
+}
+
+// The retention shape the writer committed to. Shown because it is a claim the
+// script can be read against - a "counted list" with nothing counted out loud
+// is worth spotting before the voice stage turns it into audio.
+const FORMAT_LABELS = {
+  list: 'Counted list',
+  'myth-bust': 'Myth-bust',
+  'one-mistake': 'One mistake',
 }
 
 export default function ScriptEditor({ script, onGenerate, onSave, onApprove, busy }) {
@@ -125,6 +141,7 @@ export default function ScriptEditor({ script, onGenerate, onSave, onApprove, bu
 
         {hasBeats && (
           <span className="text-xs text-slate-500 ml-auto">
+            {script.script.format && <>{FORMAT_LABELS[script.script.format] || script.script.format} &middot; </>}
             {script.script.wordCount} words &middot; ~{script.script.estDurationSec}s
           </span>
         )}

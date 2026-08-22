@@ -72,7 +72,18 @@ const VOICE_GUIDE = `Voice and format:
 - The FIRST beat is the hook. It has about 2 seconds to stop a scroll. Make it concrete and specific - a surprising number, a counterintuitive claim, a mistake people make. Never open with "In this video" or "Here are some tips".
 - Short sentences. Spoken register, not written. Contractions are good.
 - Name the thing plainly. Puns and idioms read as filler.
-- Every beat must earn its place - if a beat does not add a new fact or turn, cut it.`;
+- Every beat must earn its place - if a beat does not add a new fact or turn, cut it.
+
+Structure. A good hook only buys the first two seconds; most videos are lost in the middle, and a middle with no shape is a list of facts in the order they were remembered. Pick ONE of these and hold it all the way through:
+
+- LIST: "three things", counted out loud ("first", "second", "and the last one"). The count tells the viewer how far in they are, which is itself a reason to stay.
+- MYTH-BUST: what nearly everyone believes, then what actually happens. The turn is the payoff, so do not give it away in the hook.
+- ONE-MISTAKE: the mistake, why it is the tempting thing to do, what to do instead.
+
+Two more rules that apply whichever shape you pick:
+
+- RE-HOOK around 40-50% of the way through. One beat that opens a NEW question rather than continuing to answer the old one - "but that is not the part that catches people out". Without it the second half is just the first half running down.
+- STRONGEST FACT LAST. Rank what you have been given and spend the best of it at the end, not in beat two. A video that fires its best material early has nothing left to hold the half where people leave.`;
 
 // ── Idea generation ─────────────────────────────────────────────────────────
 
@@ -252,6 +263,7 @@ const SCRIPT_SCHEMA = `Return ONLY a JSON object:
 
 {
   "title": "<short internal title, <= 60 chars>",
+  "format": "list" | "myth-bust" | "one-mistake",
   "beats": [
     {
       "id": "b1",
@@ -263,13 +275,16 @@ const SCRIPT_SCHEMA = `Return ONLY a JSON object:
         "recipeId": "<only when kind is capture>"
       },
       "sfxCue": "<optional: whoosh | riser | pop | scratch | notification | ''>",
-      "overlay": "<optional on-screen text, <= 40 chars, '' if none>"
+      "overlay": "<optional on-screen text, <= 40 chars, '' if none>",
+      "rehook": <true on the one beat that opens a new question mid-video, omit otherwise>
     }
   ],
-  "outro": "<closing call to action, <= 90 chars, '' if none>"
+  "outro": "<closing call to action, <= 60 chars, '' if none>"
 }
 
 - 6 to 10 beats.
+- Name the shape you chose in "format", and actually follow it. A "list" script with nothing counted out loud is a list in name only.
+- Mark the re-hook beat with "rehook": true. Exactly one beat, somewhere around the middle.
 - factKeys may be empty for a linking beat, but every fact you were given should appear in some beat.
 - visual.kind is "capture" ONLY for beats showing the platform itself. Available recipeIds: ${'`play-dpt`'}, ${'`browse-leaderboard`'}, ${'`cbat-home`'}. Otherwise use "stock" with a query.
 - visual.query must name PHYSICAL THINGS a camera has been pointed at, and should be aviation or military wherever the line allows it. Aircraft, cockpits, runways, radar screens, control towers, flight helmets, instrument panels, hangars, ground crew.
@@ -301,7 +316,7 @@ Facts you may use - the grade in brackets decides whether you state it flatly or
 ${formatFactsForPrompt(facts)}
 
 ${outroEnabled
-  ? 'End with a short call to action pointing at skywatch.academy. It must not mention RAF applications.'
+  ? 'End with a short call to action pointing at skywatch.academy. One sentence, spoken in under three seconds - the outro is the last thing on screen and every extra word there is time the viewer spends not looking at anything new. It must not mention RAF applications.'
   : 'Do not write an outro - return "" for outro.'}
 
 Return ONLY the JSON object.`;
@@ -344,13 +359,27 @@ Return ONLY the JSON object.`;
         },
         sfxCue:  String(b.sfxCue  ?? '').trim(),
         overlay: String(b.overlay ?? '').trim(),
+        rehook:  b.rehook === true,
       };
     });
 
+  // Exactly one re-hook, and never the opening beat - a "new question" on beat
+  // one is just the hook by another name. If the model marked several, keep the
+  // middle one, which is where the rule was aimed.
+  const marked = beats.map((b, i) => (b.rehook ? i : -1)).filter(i => i > 0);
+  for (const b of beats) b.rehook = false;
+  if (marked.length) beats[marked[Math.floor((marked.length - 1) / 2)]].rehook = true;
+
   const wordCount = beats.reduce((n, b) => n + b.text.split(/\s+/).filter(Boolean).length, 0);
+
+  const FORMATS = ['list', 'myth-bust', 'one-mistake'];
 
   return {
     title: String(parsed.title ?? '').trim() || idea.oneLiner.slice(0, 60),
+    // Recorded rather than merely asked for, so "which shape is this" is
+    // answerable when a script is read back weeks later - and so a shape the
+    // model invented does not quietly become a fourth format.
+    format: FORMATS.includes(parsed.format) ? parsed.format : '',
     beats,
     wordCount,
     // ~2.6 words/sec is a typical short-form voiceover pace. Reconciled against

@@ -848,6 +848,7 @@ router.post('/scripts/:id/script/generate', async (req, res) => {
       beats: generated.beats,
       wordCount: generated.wordCount,
       estDurationSec: generated.estDurationSec,
+      format: generated.format,
     };
     if (doc.outro?.enabled) doc.outro.copy = generated.outro;
 
