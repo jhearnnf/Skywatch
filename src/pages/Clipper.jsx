@@ -63,6 +63,9 @@ export default function Clipper() {
   const [active,    setActive]    = useState(null)
 
   const [providers,   setProviders]   = useState({})
+  // Keys that are set but rejected. Separate from `providers` because a
+  // provider can be configured and still be contributing nothing.
+  const [providerErrors, setProviderErrors] = useState({})
   const [voices,      setVoices]      = useState([])
   const [voiceProviders, setVoiceProviders] = useState({})
   const [sfxLibrary,  setSfxLibrary]  = useState([])
@@ -119,7 +122,7 @@ export default function Clipper() {
     Promise.all([
       loadFacts(),
       loadScripts(),
-      call('/footage/providers').then(d => setProviders(d.providers)),
+      call('/footage/providers').then(d => { setProviders(d.providers); setProviderErrors(d.providerErrors ?? {}) }),
       call('/sfx/library').then(d => { setSfxLibrary(d.sfx); setSfxDir(d.dir) }),
     ]).catch(e => setError(e.message))
   }, [user?.isAdmin, isLocal, loadFacts, loadScripts, call])
@@ -197,6 +200,7 @@ export default function Clipper() {
     })
     setActive(a => ({ ...a, footage: data.footage }))
     setProviders(data.providers)
+    setProviderErrors(data.providerErrors ?? {})
   })
 
   const handleSearchFootage = (beatId, term) => run(async () => {
@@ -550,6 +554,7 @@ export default function Clipper() {
             script={active}
             footage={active.footage}
             providers={providers}
+            providerErrors={providerErrors}
             job={activeJob}
             agentOnline={agentOnline}
             mediaBaseUrl={mediaBaseUrl}

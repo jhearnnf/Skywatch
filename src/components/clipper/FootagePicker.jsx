@@ -202,7 +202,7 @@ function BeatRow({ beat, index, entry, window: win, mediaBaseUrl, onSearch, onCh
   )
 }
 
-export default function FootagePicker({ script, footage, providers, job, agentOnline, mediaBaseUrl, onSearchAll, onSearch, onChoose, onCapture, onTrim, onApprove, busy }) {
+export default function FootagePicker({ script, footage, providers, providerErrors, job, agentOnline, mediaBaseUrl, onSearchAll, onSearch, onChoose, onCapture, onTrim, onApprove, busy }) {
   const beats = script?.script?.beats ?? []
 
   if (beats.length === 0) {
@@ -214,6 +214,9 @@ export default function FootagePicker({ script, footage, providers, job, agentOn
   const ready = stockBeats.length > 0 && chosenCount === stockBeats.length
 
   const off = Object.entries(providers || {}).filter(([, on]) => !on).map(([n]) => n)
+  // A key that is set but rejected reads as configured and returns nothing, so
+  // it needs saying separately from one that was never set up.
+  const failing = Object.entries(providerErrors || {})
   const hasCaptureBeats = beats.some(b => b.visual?.kind === 'capture')
 
   return (
@@ -253,6 +256,14 @@ export default function FootagePicker({ script, footage, providers, job, agentOn
       {off.length > 0 && (
         <p className="text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-2.5 py-1.5">
           Not configured, so skipped: {off.join(', ')}. Add the API keys to backend/.env for more choice.
+          {off.includes('library') && ' The library is empty - drop clips into public/video/broll/ and list them in library.json.'}
+        </p>
+      )}
+
+      {failing.length > 0 && (
+        <p className="text-xs text-rose-700 bg-rose-100 border border-rose-200 rounded-lg px-2.5 py-1.5">
+          Configured but returning nothing: {failing.map(([n, why]) => `${n} (${why})`).join(', ')}.
+          Results below are missing everything these sources would have found.
         </p>
       )}
 

@@ -26,7 +26,7 @@ const ClipperMusic  = require('../models/ClipperMusic');
 const { parseGuideSource, DEFAULT_GUIDE_PATH } = require('../utils/clipperFactParser');
 const { validateScript } = require('../utils/clipperGuardrails');
 const { generateIdeas, generateScript } = require('../services/clipperAi');
-const { searchFootage, configuredProviders } = require('../utils/clipperFootage');
+const { searchFootage, configuredProviders, providerStatus } = require('../utils/clipperFootage');
 const { buildTimeline } = require('../utils/clipperTimeline');
 const { buildCaptions } = require('../utils/clipperCaptions');
 const { SFX, SFX_BY_ID, SFX_DIR, resolveCue } = require('../constants/clipperSfx');
@@ -931,7 +931,7 @@ router.post('/scripts/:id/footage/search', async (req, res) => {
 
     res.json({
       status: 'success',
-      data: { footage: doc.footage, providers: configuredProviders() },
+      data: { footage: doc.footage, providers: configuredProviders(), providerErrors: providerStatus().failing },
     });
   } catch (err) { fail(res, err); }
 });
@@ -1006,7 +1006,8 @@ router.post('/scripts/:id/capture', async (req, res) => {
 
 // GET /api/clipper/footage/providers — which sources are actually usable.
 router.get('/footage/providers', (_req, res) => {
-  res.json({ status: 'success', data: { providers: configuredProviders() } });
+  const { configured, failing } = providerStatus();
+  res.json({ status: 'success', data: { providers: configured, providerErrors: failing } });
 });
 
 // ── Stage 3: voice ──────────────────────────────────────────────────────────
