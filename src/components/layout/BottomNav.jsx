@@ -5,6 +5,7 @@ import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
+import { badgeText, badgeLabel } from '../../utils/chatBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
@@ -39,7 +40,7 @@ export default function BottomNav() {
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
-  const { hasUnread: chatUnread } = useChatUnread() ?? {}
+  const { hasUnread: chatUnread, badgeCount: chatBadgeCount = 0 } = useChatUnread() ?? {}
   const { settings } = useAppSettings() ?? {}
   // Permanent entry off-native for every signed-in user, slim mode included.
   // See the matching note in Sidebar.jsx and NATIVE_APP in utils/appMode.js.
@@ -88,7 +89,10 @@ export default function BottomNav() {
           // Admin gets the same translucent dark-red treatment as the sidebar,
           // so the entry reads as "staff only" wherever it appears.
           const isAdminItem = to === '/admin'
-          const showChatBadge   = to === '/chat'  && chatUnread
+          // See Sidebar: a number for messages addressed to this agent, a dot
+          // for everything else Community has moved on to.
+          const showChatCount   = to === '/chat'  && chatBadgeCount > 0
+          const showChatBadge   = to === '/chat'  && chatUnread && !showChatCount
           const isProfileItem = to === '/profile'
           const handleLearnClick = isLearn && hasAnyNewCategory && user
             ? (e) => {
@@ -138,6 +142,11 @@ export default function BottomNav() {
                 )}
                 {showChatBadge && (
                   <span className="nav-new-badge" aria-label="New message" />
+                )}
+                {showChatCount && (
+                  <span className="nav-count-badge" aria-label={badgeLabel(chatBadgeCount)}>
+                    {badgeText(chatBadgeCount)}
+                  </span>
                 )}
               </span>
               <span className={`text-[10px] font-semibold tracking-wide ${active ? 'text-brand-600' : ''}`}>

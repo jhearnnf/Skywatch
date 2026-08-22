@@ -8,7 +8,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 //      slim mode. Slim mode keeps chat.
 const mockNative      = vi.hoisted(() => ({ value: false }))
 const mockSlim        = vi.hoisted(() => ({ value: false }))
-const mockChat        = vi.hoisted(() => ({ hasUnread: false }))
+const mockChat        = vi.hoisted(() => ({ hasUnread: false, badgeCount: 0 }))
 const mockChatEnabled = vi.hoisted(() => ({ value: true }))
 const mockUseAuth     = vi.hoisted(() => vi.fn())
 
@@ -71,6 +71,7 @@ describe('Sidebar — chat nav entry', () => {
     mockSlim.value = false
     mockChatEnabled.value = true
     mockChat.hasUnread = false
+    mockChat.badgeCount = 0
     mockUseAuth.mockReset()
     syncChatCacheOwner(null)
     clearChatCache()
@@ -181,5 +182,49 @@ describe('Sidebar — chat nav entry', () => {
     setupUser()
     render(<Sidebar />)
     expect(screen.getByLabelText('New message')).toBeTruthy()
+  })
+
+  // The dot says "Community moved on"; the number says "N of those are for
+  // you". Showing both at once would be two claims about the same thing, so
+  // the more specific one wins.
+  describe('the count badge', () => {
+    it('replaces the dot with a number when messages are addressed to you', () => {
+      mockChat.hasUnread = true
+      mockChat.badgeCount = 3
+      setupUser()
+      render(<Sidebar />)
+
+      expect(screen.getByLabelText('3 new messages for you').textContent).toBe('3')
+      expect(screen.queryByLabelText('New message')).toBeNull()
+    })
+
+    it('keeps the plain dot for channel traffic that is not about you', () => {
+      mockChat.hasUnread = true
+      mockChat.badgeCount = 0
+      setupUser()
+      render(<Sidebar />)
+
+      expect(screen.getByLabelText('New message')).toBeTruthy()
+    })
+
+    it('says the singular for one', () => {
+      mockChat.hasUnread = true
+      mockChat.badgeCount = 1
+      setupUser()
+      render(<Sidebar />)
+
+      expect(screen.getByLabelText('1 new message for you').textContent).toBe('1')
+    })
+
+    // Past nine the exact figure stops informing and the pill starts stretching
+    // — but a screen reader still gets the real number.
+    it('caps the drawn figure at 9+ while announcing the true count', () => {
+      mockChat.hasUnread = true
+      mockChat.badgeCount = 24
+      setupUser()
+      render(<Sidebar />)
+
+      expect(screen.getByLabelText('24 new messages for you').textContent).toBe('9+')
+    })
   })
 })

@@ -292,6 +292,54 @@ async function readMap(userId, conversationIds) {
   return new Map(rows.map(r => [String(r.conversationId), r]));
 }
 
+// How many unread messages in each conversation are addressed to THIS user.
+//
+// The dot and the number answer two different questions, deliberately:
+//
+//   dot    — "something happened in Community"
+//   number — "N messages are waiting for you specifically"
+//
+// So a busy channel you are not part of never inflates the number. Only three
+// things count: a message that @mentions you, a message that replies to one of
+// yours, and any message in a one-to-one thread (a DM or your support thread),
+// where every message is by definition addressed to you.
+//
+// Returns a Map of conversation id → count, with conversations at zero left
+// out. One aggregation for the whole set: the per-conversation read cutoffs go
+// into the $match as an $or of clauses rather than a query per row.
+async function personalUnreadCounts(user, convos, reads) {
+  const clauses = [];
+  for (const c of convos) {
+    if (!c.messageCount) continue;
+    // A channel the admin has silenced does not badge, dot or number.
+    if (c.type === 'channel' && c.channel?.notifyMembers === false) continue;
+    const readRow = reads.get(String(c._id));
+    clauses.push({
+      conversationId: c._id,
+      ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+      // In a channel, only what names you. In a DM or support thread the whole
+      // conversation is addressed to you, so every message counts.
+      ...(c.type === 'channel'
+        ? { $or: [{ mentions: user._id }, { 'replyTo.userId': user._id }] }
+        : {}),
+    });
+  }
+  if (!clauses.length) return new Map();
+
+  const rows = await ChatMessage.aggregate([
+    { $match: {
+      deletedAt: null,
+      // Your own messages, and the "Admin closed this chat" system lines, are
+      // not things waiting to be read.
+      senderRole:   { $ne: 'system' },
+      senderUserId: { $ne: user._id },
+      $or: clauses,
+    } },
+    { $group: { _id: '$conversationId', count: { $sum: 1 } } },
+  ]);
+  return new Map(rows.map(r => [String(r._id), r.count]));
+}
+
 // Last non-deleted message per conversation, in one aggregation rather than
 // one query per row.
 async function previewMap(conversationIds) {
@@ -432,8 +480,11 @@ router.get('/overview', async (req, res) => {
   try {
     const convos = await visibleConversations(req.user);
     const ids    = convos.map(c => c._id);
-    const [reads, previews, dmUsers, guides] = await Promise.all([
-      readMap(req.user._id, ids),
+    const reads = await readMap(req.user._id, ids);
+    const [personal, previews, dmUsers, guides] = await Promise.all([
+      // Same helper the navbar count uses, so the rail explains the number
+      // rather than merely agreeing with it.
+      personalUnreadCounts(req.user, convos, reads),
       previewMap(ids),
       (async () => {
         const otherIds = convos
@@ -458,6 +509,9 @@ router.get('/overview', async (req, res) => {
         lastMessageAt: c.lastMessageAt,
         messageCount:  c.messageCount ?? 0,
         unread:        isUnread(c, reads.get(String(c._id))),
+        // Unread messages in here that name this user. Zero in a channel you
+        // are simply behind on.
+        personalUnread: personal.get(String(c._id)) ?? 0,
         preview: preview
           ? {
             body: preview.body,
@@ -533,6 +587,7 @@ router.get('/overview', async (req, res) => {
           description:    b.botDescription || null,
           conversationId: thread?._id ?? null,
           unread:         thread ? isUnread(thread, reads.get(String(thread._id))) : false,
+          personalUnread: thread ? (personal.get(String(thread._id)) ?? 0) : 0,
           lastMessageAt:  thread?.lastMessageAt ?? null,
         };
       });
@@ -741,6 +796,8 @@ router.get('/unread/me', async (req, res) => {
 
     const unread = convos.filter(c => isUnread(c, reads.get(String(c._id))));
     const hasAnyOpenChat = convos.some(c => c.type === 'support' && c.status === 'open');
+    const personal = await personalUnreadCounts(req.user, convos, reads);
+    const personalUnread = [...personal.values()].reduce((a, b) => a + b, 0);
 
     // Opted out of the Community dot. Zeroed here rather than left to the
     // client so the badge cannot come back through any other caller, and so a
@@ -751,6 +808,10 @@ router.get('/unread/me', async (req, res) => {
       hasAnyOpenChat,
       hasUnread:   !muted && unread.length > 0,
       totalUnread: muted ? 0 : unread.length,
+      // What the navbar puts a NUMBER on: messages aimed at this user. Channel
+      // chatter is left to `hasUnread` and its quiet dot — see
+      // personalUnreadCounts for why the two are separated.
+      personalUnread: muted ? 0 : personalUnread,
       muted,
     } });
   } catch (err) {
@@ -971,7 +1032,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
     if (replyToId && isValidId(replyToId)) {
       const parent = await ChatMessage.findOne({
         _id: replyToId, conversationId: convo._id, deletedAt: null,
-      }).select('senderDisplayName senderRole body').lean();
+      }).select('senderDisplayName senderRole senderUserId body').lean();
       if (parent) {
         replyTo = {
           messageId:   parent._id,
@@ -979,6 +1040,9 @@ router.post('/conversations/:id/messages', async (req, res) => {
             ? SUPPORT_LABEL
             : parent.senderDisplayName,
           excerpt: (parent.body ?? '').slice(0, 160),
+          // Never shown — this is what makes the reply countable for the person
+          // being replied to. See the note on the field in ChatMessage.
+          userId:  parent.senderUserId ?? null,
         };
       }
     }
@@ -1282,6 +1346,7 @@ async function replyAsBotInChannel(convo, triggerMessage, bot, asker) {
         messageId:   triggerMessage._id,
         displayName: triggerMessage.senderDisplayName ?? null,
         excerpt:     (triggerMessage.body ?? '').slice(0, 160),
+        userId:      triggerMessage.senderUserId ?? null,
       },
     });
   } finally {

@@ -39,6 +39,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // replace the legacy open-chat unique index whose filter lacked `type`,
     // and seed a starting channel on a database that has none. Idempotent.
     await require('./migrations/chatChannelsUpgrade')();
+    // Fill in the parent author on replies written before the Community badge
+    // counted "replies aimed at me". Idempotent.
+    await require('./migrations/backfillReplyToUserId')();
     // One-shot repair of medal messages posted while agentLabel() escaped
     // markdown for Discord, which the plain-text chat feed showed literally.
     await require('./migrations/unescapeMedalMessages')();

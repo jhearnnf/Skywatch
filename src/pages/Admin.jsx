@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Overlay from '../components/ui/Overlay'
+import CountBadge from '../components/ui/CountBadge'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useUnsolvedReports } from '../context/UnsolvedReportsContext'
+import { useChatUnread } from '../context/ChatUnreadContext'
 import { useSlimMode } from '../hooks/useSlimMode'
 import {
   invalidateSoundSettings,
@@ -22,6 +24,7 @@ import {
   stopActPreview,
 } from '../utils/sound'
 import { applyTierCascade } from '../utils/tierCascade'
+import { supportQueueLabel } from '../utils/chatBadge'
 import { peekClientInfo, getClientInfo } from '../utils/appVersion'
 import RankBadge from '../components/RankBadge'
 import SocialsSection from '../components/admin/SocialsSection'
@@ -5073,6 +5076,9 @@ function ContentTab({ API }) {
   const [toast,       setToast]       = useState('')
   const [emailBusy,   setEmailBusy]   = useState(false)
   const { apiFetch } = useAuth()
+  // Support threads waiting on a staff reply — the same figure the navbar badge
+  // and the Community rail show, polled once for the whole app.
+  const { totalUnreadConversations: supportQueueUnread = 0 } = useChatUnread() ?? {}
 
   const load = useCallback(() => {
     apiFetch(`${API}/api/admin/settings`, { credentials: 'include' })
@@ -5207,9 +5213,16 @@ function ContentTab({ API }) {
         </p>
         <Link
           to="/chat/admin"
-          className="inline-flex px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors"
         >
           Open Community console →
+          {/* Agents waiting on a reply. The signpost is the whole point of this
+              section, so it should say whether there is anything to go for. */}
+          <CountBadge
+            count={supportQueueUnread}
+            label={supportQueueLabel(supportQueueUnread)}
+            tone="inverse"
+          />
         </Link>
       </Section>
 

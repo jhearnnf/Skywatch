@@ -79,7 +79,7 @@ describe('GET /api/chat/unread/me', () => {
     const res = await request(app).get('/api/chat/unread/me')
       .set('Cookie', authCookie(u._id));
     expect(res.body.data).toEqual({
-      hasAnyOpenChat: false, hasUnread: false, totalUnread: 0, muted: false,
+      hasAnyOpenChat: false, hasUnread: false, totalUnread: 0, personalUnread: 0, muted: false,
     });
   });
 

@@ -25,6 +25,11 @@ const chatMessageSchema = new mongoose.Schema({
     messageId:   { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage', default: null },
     displayName: { type: String, default: null },
     excerpt:     { type: String, default: null },
+    // Who wrote the parent. Snapshotted like the rest of replyTo, and for the
+    // same reason `mentions` is stored: "how many unread replies are aimed at
+    // me" is a query the navbar count runs on every poll, and answering it live
+    // would mean loading every parent message to find out.
+    userId:      { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
 
   // Users @mentioned in this message, resolved from the body at send time (see
@@ -75,5 +80,8 @@ chatMessageSchema.index({ senderUserId: 1, createdAt: -1 });
 // Backs "has anyone mentioned me in here since I last looked", which runs on
 // every channel open.
 chatMessageSchema.index({ mentions: 1, conversationId: 1, createdAt: 1 });
+// Backs the other half of the personal unread count: "how many unread messages
+// reply to something I said".
+chatMessageSchema.index({ 'replyTo.userId': 1, conversationId: 1, createdAt: 1 });
 
 module.exports = mongoose.model('ChatMessage', chatMessageSchema);

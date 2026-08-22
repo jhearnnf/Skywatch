@@ -6,6 +6,9 @@ import ChatGuidesEditor from '../admin/ChatGuidesEditor'
 import ChatBotEditor from '../admin/ChatBotEditor'
 import CommunitySoundEditor from '../admin/CommunitySoundEditor'
 import { useAuth } from '../../context/AuthContext'
+import { useChatUnread } from '../../context/ChatUnreadContext'
+import CountBadge from '../../components/ui/CountBadge'
+import { supportQueueLabel } from '../../utils/chatBadge'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 
 // Everything that administers Community, in one place.
@@ -27,6 +30,8 @@ const TABS = [
 
 export default function CommunityConsole() {
   const { API } = useAuth()
+  // The support queue, same figure as the navbar badge and the rail link.
+  const { totalUnreadConversations: supportQueueUnread = 0 } = useChatUnread() ?? {}
   const [searchParams] = useSearchParams()
   // A deep link from a chat report lands on a specific transcript, so it must
   // open the tab that shows one.
@@ -55,12 +60,22 @@ export default function CommunityConsole() {
             key={t.id}
             onClick={() => setTab(t.id)}
             title={t.hint}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors
               ${tab === t.id
                 ? 'bg-brand-600 text-white'
                 : 'bg-surface border border-slate-200 text-slate-600 hover:border-brand-400'}`}
           >
             {t.label}
+            {/* Arriving here from the badge, you still have to pick a tab — so
+                the tab holding the waiting threads says so. Only Conversations
+                has a queue behind it; the other four are settings. */}
+            {t.id === 'conversations' && (
+              <CountBadge
+                count={supportQueueUnread}
+                label={supportQueueLabel(supportQueueUnread)}
+                tone={tab === t.id ? 'inverse' : 'red'}
+              />
+            )}
           </button>
         ))}
       </div>

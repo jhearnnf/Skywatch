@@ -7,6 +7,7 @@ const ChatUnreadContext = createContext({
   hasUnread: false,
   totalUnread: 0,
   totalUnreadConversations: 0,
+  badgeCount: 0,
   muted: false,
   refresh: () => {},
 })
@@ -18,6 +19,7 @@ export function ChatUnreadProvider({ children }) {
   const [hasAnyOpenChat, setHasAnyOpenChat] = useState(false)
   const [hasUnread,      setHasUnread]      = useState(false)
   const [totalUnread,    setTotalUnread]    = useState(0)
+  const [personalUnread, setPersonalUnread] = useState(0)
   const [adminUnread,    setAdminUnread]    = useState(0)
 
   const fetchUnread = useCallback(() => {
@@ -42,6 +44,7 @@ export function ChatUnreadProvider({ children }) {
       setHasAnyOpenChat(Boolean(mine?.data?.hasAnyOpenChat) || Boolean(admin?.data?.hasAnyOpenChat))
       setHasUnread(mineUnread > 0 || queueUnread > 0)
       setTotalUnread(mineUnread)
+      setPersonalUnread(mine?.data?.personalUnread ?? 0)
       setAdminUnread(queueUnread)
     })
   }, [user, API])
@@ -53,7 +56,8 @@ export function ChatUnreadProvider({ children }) {
 
   useEffect(() => {
     if (!user || NATIVE_APP) {
-      setHasAnyOpenChat(false); setHasUnread(false); setTotalUnread(0); setAdminUnread(0)
+      setHasAnyOpenChat(false); setHasUnread(false); setTotalUnread(0)
+      setPersonalUnread(0); setAdminUnread(0)
       return
     }
     fetchUnread()
@@ -78,6 +82,12 @@ export function ChatUnreadProvider({ children }) {
       hasUnread:   muted ? adminUnread > 0 : hasUnread,
       totalUnread: muted ? 0 : totalUnread,
       totalUnreadConversations: adminUnread,
+      // What the navbar puts a NUMBER on: things waiting for you personally —
+      // mentions, replies to you, DM and support messages, plus the admin
+      // support queue, which is a job of work rather than channel chatter.
+      // Everything else stays a plain dot. A number that counted every message
+      // in every channel would be large, permanent and therefore ignored.
+      badgeCount: (muted ? 0 : personalUnread) + adminUnread,
       muted,
       refresh: fetchUnread,
     }}>

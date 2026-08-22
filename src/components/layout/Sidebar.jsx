@@ -4,6 +4,7 @@ import { useNewGameUnlock } from '../../context/NewGameUnlockContext'
 import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
+import { badgeText, badgeLabel } from '../../utils/chatBadge'
 import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
@@ -54,7 +55,7 @@ export default function Sidebar() {
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
   const { unsolvedCount } = useUnsolvedReports()
-  const { hasUnread: chatUnread } = useChatUnread() ?? {}
+  const { hasUnread: chatUnread, badgeCount: chatBadgeCount = 0 } = useChatUnread() ?? {}
   const { levels: liveLevels, settings } = useAppSettings() ?? {}
   // Chat is a permanent entry for every signed-in user off-native — it is now a
   // place you go (channels, DMs), not just a notification about a support
@@ -77,7 +78,11 @@ export default function Sidebar() {
           const isChat     = to === '/chat'
           const showPlayBadge     = isPlay  && hasAnyNew         && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
-          const showChatBadge     = isChat  && chatUnread
+          // A number when messages are addressed to this agent by name, a plain
+          // dot when Community has merely moved on without them. Both cannot
+          // show at once: the count is the more specific of the two.
+          const showChatCount     = isChat  && chatBadgeCount > 0
+          const showChatBadge     = isChat  && chatUnread && !showChatCount
           const handleLearnClick = isLearn && hasAnyNewCategory
             ? (e) => {
                 e.preventDefault()
@@ -119,6 +124,11 @@ export default function Sidebar() {
                 )}
                 {showChatBadge && (
                   <span className="nav-new-badge" aria-label="New message" />
+                )}
+                {showChatCount && (
+                  <span className="nav-count-badge" aria-label={badgeLabel(chatBadgeCount)}>
+                    {badgeText(chatBadgeCount)}
+                  </span>
                 )}
               </span>
               {label}

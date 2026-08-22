@@ -3,8 +3,13 @@ import BotBadge from '../../components/BotBadge'
 import AdminDmSearch from './components/AdminDmSearch'
 import PresenceStrip, { OnlineDot } from './components/PresenceStrip'
 import { formatRelative, SUPPORT_LABEL } from './format'
+import { badgeLabel, supportQueueLabel } from '../../utils/chatBadge'
+import CountBadge from '../../components/ui/CountBadge'
 
-function Row({ to, icon, title, subtitle, preview, unread, timestamp, active, online = false }) {
+function Row({
+  to, icon, title, subtitle, preview, unread, timestamp, active,
+  online = false, personalUnread = 0,
+}) {
   return (
     <Link
       to={to}
@@ -23,7 +28,12 @@ function Row({ to, icon, title, subtitle, preview, unread, timestamp, active, on
           <p className={`text-sm truncate ${unread ? 'font-extrabold text-slate-800' : 'font-bold text-slate-700'}`}>
             {title}
           </p>
-          {unread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
+          {/* The count is what the navbar badge was counting, broken down per
+              conversation — so a "3" up there resolves into the three rows that
+              actually want you. A row you are merely behind on keeps the dot. */}
+          {personalUnread > 0
+            ? <CountBadge count={personalUnread} label={badgeLabel(personalUnread)} />
+            : unread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
           <span className="ml-auto text-[10px] text-slate-400 shrink-0">
             {formatRelative(timestamp)}
           </span>
@@ -91,7 +101,7 @@ function SectionLabel({ children }) {
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
   support, guides = [], channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
-  loading = false, onStartSupport, onOpenBot, onOpenDm,
+  loading = false, onStartSupport, onOpenBot, onOpenDm, supportQueueUnread = 0,
   // Admin-only presence. Empty for everyone else — ChatShell does not even fetch
   // it — so the strip and the dots simply never appear rather than needing a
   // second permission check per call site.
@@ -132,6 +142,7 @@ export default function ChatSidebar({
             subtitle={support.status === 'closed' ? 'Closed' : 'Usually replies within a few hours'}
             preview={support.preview}
             unread={support.unread}
+            personalUnread={support.personalUnread}
             timestamp={support.lastMessageAt}
             active={String(activeId) === String(support._id)}
           />
@@ -182,6 +193,7 @@ export default function ChatSidebar({
               : c.description}
             preview={c.preview}
             unread={c.unread}
+            personalUnread={c.personalUnread}
             timestamp={c.lastMessageAt}
             active={String(activeId) === String(c._id)}
           />
@@ -204,6 +216,7 @@ export default function ChatSidebar({
                   title={b.title}
                   subtitle={b.description}
                   unread={b.unread}
+                  personalUnread={b.personalUnread}
                   timestamp={b.lastMessageAt}
                   active={String(activeId) === String(b.conversationId)}
                 />
@@ -245,6 +258,7 @@ export default function ChatSidebar({
             title={d.title}
             preview={d.preview}
             unread={d.unread}
+            personalUnread={d.personalUnread}
             timestamp={d.lastMessageAt}
             active={String(activeId) === String(d._id)}
             online={Boolean(d.otherUser && presence?.onlineIds?.has(String(d.otherUser._id)))}
@@ -256,9 +270,17 @@ export default function ChatSidebar({
         <div className="border-t border-slate-200 p-2">
           <Link
             to="/chat/admin"
-            className="block text-center px-3 py-1.5 text-[11px] font-bold text-brand-600 hover:text-brand-700 border border-brand-200 hover:bg-brand-100 rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 px-3 py-1.5 text-[11px] font-bold text-brand-600 hover:text-brand-700 border border-brand-200 hover:bg-brand-100 rounded-lg transition-colors"
           >
             Community console
+            {/* The support queue lives behind this link and nowhere else. An
+                admin whose navbar badge is counting waiting support threads
+                would otherwise arrive at a rail with nothing unread in it and
+                conclude the badge was lying. */}
+            <CountBadge
+              count={supportQueueUnread}
+              label={supportQueueLabel(supportQueueUnread)}
+            />
           </Link>
         </div>
       )}

@@ -28,7 +28,7 @@ const POLL_MS = 30_000
 export default function ChatShell() {
   const { conversationId } = useParams()
   const { API, apiFetch, user } = useAuth()
-  const { refresh: refreshUnread } = useChatUnread()
+  const { refresh: refreshUnread, totalUnreadConversations: supportQueueUnread = 0 } = useChatUnread()
   const navigate = useNavigate()
 
   // Seeded from the last copy of the rail — either the one this session already
@@ -148,6 +148,11 @@ export default function ChatShell() {
           loading={loading && !data}
           activeId={conversationId}
           isAdmin={Boolean(user?.isAdmin)}
+          // Support threads waiting on a staff reply. They are what an admin's
+          // navbar badge is often counting, and they live in the console rather
+          // than in this rail — so the rail has to say where to go, or the badge
+          // points at a page that looks empty.
+          supportQueueUnread={supportQueueUnread}
           presence={presence}
           onStartSupport={startSupport}
           onOpenBot={openBot}
