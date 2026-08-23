@@ -79,6 +79,43 @@ export function formatEstTime(game) {
   return `⏱ ${est} min`
 }
 
+// Tile titles that do not survive the dense mobile grid, where a tile is about
+// 83px wide and the label sits at 8.5px. Only the four that actually overflow
+// are listed — everything else, "Instruments" included, fits at full length and
+// is left alone rather than abbreviated for the sake of consistency.
+//
+// CUT is the odd one out in that it is not a truncation but the test's real
+// code, which is how DAD, SIT, SLT, VLT and MATF are already labelled on the
+// hub. The full names stay on the desktop tile, on the leaderboards and on each
+// game's own page, so nothing here is the only place a game is named.
+export const CBAT_SHORT_TITLES = {
+  'code-duplicates': 'Code Dupes',
+  'numerical-ops':   'Num Ops',
+  'cut':             'CUT',
+  'visualisation':   'Vis 2D/3D',
+}
+
+// The short label where one exists, the full title otherwise. Returns undefined
+// for a game that needs no shortening, so a caller can render a single node
+// instead of a mobile/desktop pair.
+export function shortTitle(game) {
+  return CBAT_SHORT_TITLES[game?.key]
+}
+
+// The run estimate at dense-grid size: "2m", "1.5m", "1–2m". The clock glyph and
+// the word "min" both go — at 7.5px the emoji renders as a smudge and the word
+// costs more width than the number it qualifies. Same en dash as the long form,
+// for the same reason.
+export function formatEstTimeCompact(game) {
+  const est = game?.estMinutes
+  if (est == null) return null
+  if (Array.isArray(est)) {
+    const [lo, hi] = est
+    return lo === hi ? `${lo}m` : `${lo}–${hi}m`
+  }
+  return `${est}m`
+}
+
 // Per-leaderboard display config, keyed by the backend leaderboard gameKey
 // (the URL segment, e.g. 'plane-turn-2d', 'trace-1', 'target'). Shared by the
 // leaderboard page (src/pages/CbatLeaderboard.jsx) and the post-game reveal

@@ -10,7 +10,7 @@ import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
 import CbatLoungeChat from '../components/CbatLoungeChat'
 import { useLoungeOpen } from '../hooks/useLoungeOpen'
 import { useFixedColumn } from '../hooks/useFixedColumn'
-import { CBAT_GAMES, formatEstTime } from '../data/cbatGames'
+import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
@@ -81,17 +81,99 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
 // and a fill dark enough to prevent that is exactly the visual weight we're
 // trying to remove. It's pulled back in step with the text so it never reads
 // as a smudge under it.
+// The estimate as the desktop card has always shown it: a faint pill pinned to
+// the tile's top-left corner, opposite the announcement badge. Standing
+// information rather than a badge, so it carries no fill and sits back at 35%.
+// The text-shadow is what makes that legible over the blurred card art.
 function EstTime({ game }) {
   const label = formatEstTime(game)
   if (!label) return null
   return (
     <span
       data-testid={`est-time-${game.key}`}
-      className="absolute top-2 left-2 px-2 py-1 text-slate-700/35 text-[10px] font-bold tracking-wide uppercase whitespace-nowrap"
+      className="hidden sm:block absolute top-2 left-2 px-2 py-1 text-slate-700/35 text-[10px] font-bold tracking-wide uppercase whitespace-nowrap"
       style={{ zIndex: 4, textShadow: '0 1px 2px rgba(5,13,26,0.75)' }}
     >
       {label}
     </span>
+  )
+}
+
+// The same estimate on the dense mobile grid, where there is no corner to pin it
+// to: it sits in the text flow directly under the title. Louder than the desktop
+// pill's 35% on purpose — at 7.5px, 35% over the blurred card art is unreadable,
+// and here it is one of only two lines the tile has.
+function EstTimeCompact({ game }) {
+  const label = formatEstTimeCompact(game)
+  if (!label) return null
+  return (
+    <span
+      data-testid={`est-time-compact-${game.key}`}
+      className="sm:hidden block font-mono text-[7.5px] font-medium tracking-wide text-slate-700/60 tabular-nums"
+      style={{ position: 'relative', zIndex: 3, textShadow: '0 1px 2px rgba(5,13,26,0.75)' }}
+    >
+      {label}
+    </span>
+  )
+}
+
+// A tile's title. Four games carry a short label — see CBAT_SHORT_TITLES — that
+// only the dense mobile tile uses; the desktop card has the room for the real
+// name and keeps it. A game needing no shortening renders a single node rather
+// than a hidden duplicate, so its title appears exactly once in the DOM.
+function TileTitle({ game }) {
+  const short = shortTitle(game)
+  return (
+    <p className="font-bold text-slate-800 text-[8.5px] leading-[1.15] sm:text-base sm:leading-normal sm:mb-0.5">
+      {short ? (
+        <>
+          <span className="sm:hidden">{short}</span>
+          <span className="hidden sm:inline">{game.title}</span>
+        </>
+      ) : game.title}
+    </p>
+  )
+}
+
+// Shared tile geometry. Mobile is a four-across icon grid — a centred column of
+// emoji, name and run time in a ~70px box, which is what gets all 22 games onto
+// one phone screen. From `sm` up it is the original card, unchanged: a 130px row
+// with the emoji beside the text and the full description.
+const TILE_BASE =
+  'relative bg-surface border border-slate-200 transition-all card-shadow h-full w-full overflow-hidden ' +
+  'flex flex-col items-center justify-center text-center gap-[3px] px-1 py-1.5 rounded-xl min-h-[70px] ' +
+  'sm:flex-row sm:items-center sm:justify-start sm:text-left sm:gap-4 sm:p-6 sm:rounded-2xl sm:min-h-[130px]'
+
+const TILE_HOVER =
+  'cursor-pointer no-underline hover:border-brand-300 hover:bg-brand-50 hover:-translate-y-0.5'
+
+const TILE_EMOJI = 'text-[21px] leading-none shrink-0 sm:text-4xl'
+
+// An announcement badge has nowhere to live on an 83px phone tile, so there it
+// becomes a dot in the corner: the same "something changed here", at the only
+// size that fits. The desktop card keeps the full wording.
+function TileBadge({ text, tone = 'brand' }) {
+  const pill = tone === 'brand'
+    ? 'bg-brand-500 text-white ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]'
+    : 'bg-slate-300 text-slate-700'
+  const dot = tone === 'brand'
+    ? 'bg-brand-600 shadow-[0_0_7px_rgba(91,170,255,0.9)]'
+    : 'bg-slate-500'
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        title={text}
+        className={`sm:hidden absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${dot}`}
+        style={{ zIndex: 5 }}
+      />
+      <span
+        className={`hidden sm:block absolute top-2 right-2 px-2.5 py-1 rounded-lg text-[10px] font-extrabold tracking-wider uppercase whitespace-nowrap ${pill}`}
+        style={{ zIndex: 4 }}
+      >
+        {text}
+      </span>
+    </>
   )
 }
 
@@ -177,30 +259,23 @@ function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, nav
       <Link
         to={game.path}
         {...baseHandlers}
-        className="relative flex items-center gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow cursor-pointer h-full min-h-[130px] w-full
-          hover:border-brand-300 hover:bg-brand-50 hover:-translate-y-0.5 no-underline overflow-hidden"
+        className={`${TILE_BASE} ${TILE_HOVER}`}
       >
         <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
         <EstTime game={game} />
-        {!enabled && isAdmin && (
-          <span
-            className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-slate-300 text-slate-700 text-[10px] font-extrabold tracking-wider uppercase"
-            style={{ zIndex: 4 }}
-          >
-            Disabled
-          </span>
-        )}
-        <span className="text-4xl shrink-0 group-hover:scale-110 transition-transform" style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
-        <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
-          <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
-          <p className="text-xs text-slate-700">{game.desc}</p>
+        {!enabled && isAdmin && <TileBadge text="Disabled" tone="slate" />}
+        <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
+        <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
+          <TileTitle game={game} />
+          <EstTimeCompact game={game} />
+          <p className="hidden sm:block text-xs text-slate-700">{game.desc}</p>
         </div>
       </Link>
 
       {/* Hover split — greys the base card and overlays the two mode buttons. */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 z-20 flex items-center justify-center gap-2 p-3 rounded-2xl bg-[#050d1a]/85
+        className="absolute inset-0 z-20 hidden sm:flex items-center justify-center gap-2 p-3 rounded-2xl bg-[#050d1a]/85
           opacity-0 pointer-events-none transition-opacity duration-150
           group-hover:opacity-100 group-hover:pointer-events-auto"
       >
@@ -290,7 +365,11 @@ export default function Cbat() {
   }, [])
 
   return (
-    <div className="cbat-page">
+    // A flex column at least as tall as the viewport below the app chrome — see
+    // the 10.75rem deduction in the AppShell notes — so the report link can sit on
+    // the bottom edge with mt-auto instead of floating directly under a grid that
+    // no longer reaches the fold.
+    <div className="cbat-page flex flex-col min-h-[calc(100dvh-10.75rem-env(safe-area-inset-bottom))]">
       <SEO
         title="CBAT Practice Tests"
         description="Practise every CBAT-style aptitude subtest in one place: FLAG, ANT, DPT, ACT, Trace, Visualisation and more. Free to play, with every score tracked."
@@ -298,7 +377,7 @@ export default function Cbat() {
       />
 
       <h1 className="text-2xl font-extrabold text-slate-900 mb-1">CBAT Games</h1>
-      <p className="text-sm text-slate-500 mb-4">Practise for CBAT with targeted training games.</p>
+      <p className="text-sm text-slate-500 mb-2 sm:mb-4">Practise for CBAT with targeted training games.</p>
 
       {/* Guide strip — signed-out only. For a visitor the grid below is blurred
           and this is the only thing on the page they can actually use, so it
@@ -342,7 +421,11 @@ export default function Cbat() {
       {user && <AptitudeReportCard />}
 
       {/* Game grid — blurred when not signed in */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`} style={{ rowGap: '2rem' }}>
+      {/* Four across on a phone so all 22 games sit on one screen; the two-column
+          130px card grid is untouched from `sm` up. The row gap was an inline
+          2rem style, which beat every class and applied at all widths — it is a
+          responsive class now, which is what lets the phone grid be dense. */}
+      <div className={`grid grid-cols-4 gap-2 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-8${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
         {CBAT_GAMES.filter(g => !g.hidden).map((game, i) => {
           const isImplemented = !!game.path
           const enabled       = isGameEnabled(game.key)
@@ -391,48 +474,36 @@ export default function Cbat() {
                 <Link
                   to={game.path}
                   {...baseHandlers}
-                  className="relative flex items-center gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow cursor-pointer h-full min-h-[130px] w-full
-                    hover:border-brand-300 hover:bg-brand-50 group hover:-translate-y-0.5 no-underline overflow-hidden"
+                  className={`${TILE_BASE} ${TILE_HOVER} group`}
                 >
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
                   <EstTime game={game} />
                   {/* Announcement badge for an existing game that's gained
                       something. */}
-                  {game.badge && enabled && (
-                    <span
-                      className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-brand-500 text-white text-[10px] font-extrabold tracking-wider uppercase whitespace-nowrap ring-2 ring-brand-300/60 shadow-[0_0_12px_rgba(91,170,255,0.7)]"
-                      style={{ zIndex: 4 }}
-                    >
-                      {game.badge}
-                    </span>
-                  )}
-                  {!enabled && user?.isAdmin && (
-                    <span
-                      className="absolute top-2 right-2 px-2.5 py-1 rounded-lg bg-slate-300 text-slate-700 text-[10px] font-extrabold tracking-wider uppercase"
-                      style={{ zIndex: 4 }}
-                    >
-                      Disabled
-                    </span>
-                  )}
-                  <span className="text-4xl shrink-0 group-hover:scale-110 transition-transform" style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
-                  <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
-                    <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
-                    <p className="text-xs text-slate-700">{game.desc}</p>
+                  {game.badge && enabled && <TileBadge text={game.badge} />}
+                  {!enabled && user?.isAdmin && <TileBadge text="Disabled" tone="slate" />}
+                  <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
+                  <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
+                    <TileTitle game={game} />
+                    <EstTimeCompact game={game} />
+                    <p className="hidden sm:block text-xs text-slate-700">{game.desc}</p>
                   </div>
                 </Link>
               ) : (
-                <div
-                  className="relative flex items-center gap-4 bg-surface rounded-2xl p-6 border border-slate-200 transition-all card-shadow h-full min-h-[130px] w-full opacity-60 overflow-hidden"
-                >
+                <div className={`${TILE_BASE} opacity-60`}>
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} dimmed />
                   <EstTime game={game} />
-                  <span className="text-4xl shrink-0" style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
-                  <div className="min-w-0" style={{ position: 'relative', zIndex: 3 }}>
-                    <p className="font-bold text-slate-800 mb-0.5">{game.title}</p>
-                    <p className="text-xs text-slate-700">{game.desc}</p>
-                    <EstTime game={game} />
-                    <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wide">
-                      {adminDisabled ? 'Temporarily disabled — check back soon' : 'Coming soon'}
+                  <span className={TILE_EMOJI} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
+                  <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
+                    <TileTitle game={game} />
+                    <EstTimeCompact game={game} />
+                    <p className="hidden sm:block text-xs text-slate-700">{game.desc}</p>
+                    {/* The phone tile has room for one word, so it states the
+                        condition and the desktop card keeps the explanation. */}
+                    <p className="text-[7px] leading-tight text-slate-500 uppercase tracking-wide sm:text-[10px] sm:mt-1">
+                      {adminDisabled
+                        ? <><span className="sm:hidden">Off</span><span className="hidden sm:inline">Temporarily disabled — check back soon</span></>
+                        : <><span className="sm:hidden">Soon</span><span className="hidden sm:inline">Coming soon</span></>}
                     </p>
                   </div>
                 </div>
@@ -485,8 +556,10 @@ export default function Cbat() {
         )}
       </div>
 
-      {/* Quiet report link — a game misbehaving? Send it to the team. */}
-      <div className="mt-10 pt-6 border-t border-slate-200 text-center">
+      {/* Quiet report link — a game misbehaving? Send it to the team. `mt-auto`
+          takes up whatever slack the grid leaves, so this sits on the bottom edge
+          of the page rather than trailing the last row of tiles. */}
+      <div className="mt-auto pt-3 sm:pt-6 border-t border-slate-200 text-center">
         <p className="text-xs text-slate-500">
           A game not working right?{' '}
           <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">

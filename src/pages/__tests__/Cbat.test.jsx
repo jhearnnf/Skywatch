@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Cbat, { CBAT_GAMES } from '../Cbat'
-import { formatEstTime } from '../../data/cbatGames'
+import { formatEstTime, formatEstTimeCompact, shortTitle, CBAT_SHORT_TITLES } from '../../data/cbatGames'
+
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -150,15 +151,16 @@ describe('Cbat page — background images', () => {
     }
   })
 
-  // The estimate is a corner pill on the card itself, not part of the text
-  // block — it must be a sibling of the title/desc wrapper, or absolute
+  // The desktop card's estimate is a corner pill on the card itself, not part of
+  // the text block — it must be a sibling of the title/desc wrapper, or absolute
   // positioning would resolve against the wrong box.
-  it('pins the estimate to the card corner, outside the text block', () => {
+  it('pins the desktop estimate to the card corner, outside the text block', () => {
     renderWithUser()
     const pill = screen.getByTestId('est-time-target')
     expect(pill.className).toContain('absolute')
     expect(pill.className).toContain('top-2')
     expect(pill.className).toContain('left-2')
+    expect(pill.className).toContain('hidden sm:block')
     expect(pill.parentElement).not.toBe(screen.getByText('Target').parentElement)
   })
 
@@ -178,6 +180,118 @@ describe('Cbat page — background images', () => {
     mockUseAuth.mockReturnValue({ user: null })
     render(<Cbat />)
     expect(screen.getByText(/Sign in to access CBAT Games/i)).toBeInTheDocument()
+  })
+})
+
+// The hub is four tiles across on a phone so all 22 games sit on one screen. The
+// desktop card grid is deliberately untouched — two columns of 130px cards with
+// descriptions, as it has always been. One DOM serves both, so these tests are
+// about the responsive classes rather than a measured layout; jsdom computes
+// none. What they protect is the set of decisions that let the phone grid fit,
+// and that none of them leaked into the desktop card.
+describe('Cbat page — dense mobile grid', () => {
+  beforeEach(() => {
+    mockUseAuth.mockReset()
+    localStorage.clear()
+  })
+
+  const grid = () => screen.getByText('Target').closest('.grid')
+
+  it('is four across on mobile and two across from sm up', () => {
+    renderWithUser()
+    expect(grid().className).toContain('grid-cols-4')
+    expect(grid().className).toContain('sm:grid-cols-2')
+  })
+
+  // The 2rem row gap used to be an inline style, which beats any class and
+  // applies at every width — it would have put 32px between rows of an 83px
+  // tile and undone the whole layout. It has to stay a responsive class.
+  it('sets the desktop row gap by class, never inline', () => {
+    renderWithUser()
+    expect(grid().getAttribute('style')).toBeNull()
+    expect(grid().className).toContain('sm:gap-y-8')
+  })
+
+  it('gives every tile the compact geometry on mobile and the card from sm up', () => {
+    renderWithUser()
+    for (const game of CBAT_GAMES) {
+      const tile = screen.getByText(shortTitle(game) ?? game.title).closest('a, div.relative')
+      expect(tile.className, game.key).toContain('min-h-[70px]')
+      expect(tile.className, game.key).toContain('sm:min-h-[130px]')
+      expect(tile.className, game.key).toContain('flex-col')
+      expect(tile.className, game.key).toContain('sm:flex-row')
+    }
+  })
+
+  // There is no room for a sentence on an 83px tile. The description stays in
+  // the DOM for the desktop card and is hidden below sm, rather than being
+  // dropped from the markup, so one render serves both widths.
+  it('hides the description below sm and keeps it from sm up', () => {
+    renderWithUser()
+    const desc = screen.getByText(CBAT_GAMES[0].desc)
+    expect(desc.className).toContain('hidden')
+    expect(desc.className).toContain('sm:block')
+  })
+
+  it('shows the compact run time on mobile alongside the desktop pill', () => {
+    renderWithUser()
+    for (const game of CBAT_GAMES) {
+      expect(screen.getByTestId(`est-time-compact-${game.key}`))
+        .toHaveTextContent(formatEstTimeCompact(game))
+      expect(screen.getByTestId(`est-time-compact-${game.key}`).className).toContain('sm:hidden')
+      // The corner pill is still there for the desktop card, hidden below sm.
+      expect(screen.getByTestId(`est-time-${game.key}`).className).toContain('hidden')
+      expect(screen.getByTestId(`est-time-${game.key}`).className).toContain('sm:block')
+    }
+  })
+
+  // The report link sits on the bottom edge of the page rather than trailing the
+  // last row of tiles, which on a phone leaves it stranded mid-screen.
+  it('pushes the report link to the bottom of the page', () => {
+    renderWithUser()
+    const footer = screen.getByText(/A game not working right/).closest('div')
+    expect(footer.className).toContain('mt-auto')
+  })
+})
+
+describe('CBAT short tile titles', () => {
+  beforeEach(() => mockUseAuth.mockReset())
+
+  it('names only games that exist, and only where the short form is shorter', () => {
+    for (const [key, short] of Object.entries(CBAT_SHORT_TITLES)) {
+      const game = CBAT_GAMES.find(g => g.key === key)
+      expect(game, `${key} is not a game`).toBeDefined()
+      expect(short.length, `${key} short title is no shorter`).toBeLessThan(game.title.length)
+    }
+  })
+
+  // A short title identical to the full one would render two nodes with the
+  // same text and quietly break every getByText(title) on this page.
+  it('never duplicates a title it does not actually shorten', () => {
+    for (const game of CBAT_GAMES) {
+      if (shortTitle(game)) expect(shortTitle(game)).not.toBe(game.title)
+    }
+    expect(shortTitle({ key: 'target' })).toBeUndefined()
+  })
+
+  // A shortened game renders both labels: the code on the phone tile, the real
+  // name on the desktop card, which has the room for it.
+  it('renders both labels for a shortened game and one node for the rest', () => {
+    renderWithUser()
+    expect(screen.getByText('CUT').className).toContain('sm:hidden')
+    expect(screen.getByText('Cognitive Updating Test').className).toContain('hidden sm:inline')
+    // Target needs no shortening, so its title is a single node — this would
+    // throw "found multiple elements" if it were rendered as a pair.
+    expect(screen.getByText('Target').tagName).toBe('P')
+  })
+
+  it('formats the compact estimate as a bare number of minutes', () => {
+    expect(formatEstTimeCompact({ estMinutes: 2 })).toBe('2m')
+    expect(formatEstTimeCompact({ estMinutes: 1.5 })).toBe('1.5m')
+    expect(formatEstTimeCompact({ estMinutes: [1, 2] })).toBe('1\u20132m')
+    expect(formatEstTimeCompact({ estMinutes: [2, 2] })).toBe('2m')
+    expect(formatEstTimeCompact({})).toBeNull()
+    expect(formatEstTimeCompact(null)).toBeNull()
   })
 })
 
