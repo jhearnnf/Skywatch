@@ -168,7 +168,10 @@ describe('Cbat page — background images', () => {
     expect(screen.getByTestId('est-time-sat')).toHaveTextContent('⏱ 2–3 min')
     // DPT is by far the longest game — worth stating plainly before a player
     // starts it, and worth a test so a future retune can't quietly drop it.
-    expect(screen.getByTestId('est-time-dpt')).toHaveTextContent('⏱ 15 min')
+    // It was a flat 15 minutes until the eight-round ladder was split in two:
+    // Easier now runs rounds 1-4 (105+105+105+120 seconds) and Hard runs
+    // rounds 5-8 (120+180+180+180), so the tile covers both lengths.
+    expect(screen.getByTestId('est-time-dpt')).toHaveTextContent('⏱ 7–11 min')
   })
 
   it('shows lock card and blurs grid when user is null', () => {

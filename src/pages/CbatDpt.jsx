@@ -15,8 +15,18 @@ import DptAircraftLayer from '../components/DptAircraftLayer'
 import { useGLTF } from '@react-three/drei'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
+import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import {
+  DPT_DIFFICULTIES, dptTuning, dptGameKey, firstRound, lastRound, displayRound,
+  readStoredDptDifficulty, storeDptDifficulty,
+} from '../utils/cbat/dptDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 
 // ── Constants ────────────────────────────────────────────────────────────────
+// The full ladder. A run no longer plays all eight: Easier serves rounds 1-4
+// and Hard serves rounds 5-8 (see utils/cbat/dptDifficulty.js). This is still
+// the ladder's length — what the admin round-jump cheats address, and what
+// startRound() indexes — not the length of a run.
 const TOTAL_ROUNDS = 8
 
 // Arena uses an internal SVG viewBox of 1000×1000. Aircraft, gates and danger
@@ -86,7 +96,6 @@ function roundDurationMs(roundNum) {
   if (roundNum >= 4) return 120_000
   return 105_000
 }
-const ROUND_DURATION_MS = 105_000  // base — used by round-1 inline spawn
 
 // Admin-only cheat codes typed into the numpad jump to the matching round
 // number. Using any of these flags the run as a debug session: score stops
@@ -888,10 +897,32 @@ const DptControls = memo(function DptControls({
 })
 
 // ── Aircraft Selection Screen ───────────────────────────────────────────────
-function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
+// Doubles as DPT's instructions card, so the difficulty pair sits under the
+// title here the way it does on every other split game. There is no launch flash:
+// picking an aircraft IS the Start button, and the logo intro that follows
+// already marks the moment the run begins.
+function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty, onDifficulty }) {
+  const tuning = dptTuning(difficulty)
   return (
     <div>
-      <h2 className="text-lg font-bold text-text text-center mb-1">Dynamic Projection Test</h2>
+      {/* DPT_DIFFICULTIES is ordered [easier, hard], so the easier option lands
+          left and hard lands right. The pair sits UNDER the title, matching
+          FLAG, CUT and every other split game. */}
+      <h2 className="text-lg font-bold text-text text-center mb-2">Dynamic Projection Test</h2>
+      <div className="flex items-center justify-center gap-3 mb-1">
+        <DifficultyButton
+          tuning={DPT_DIFFICULTIES[0]}
+          selected={difficulty === DPT_DIFFICULTIES[0].key}
+          onSelect={onDifficulty}
+        />
+        <DifficultyButton
+          tuning={DPT_DIFFICULTIES[1]}
+          selected={difficulty === DPT_DIFFICULTIES[1].key}
+          onSelect={onDifficulty}
+        />
+      </div>
+      <p className="text-[11px] text-brand-300 text-center mb-3">{tuning.blurb}</p>
+
       <p className="text-xs text-slate-400 text-center mb-3">
         Vector multiple aircraft through gates and intercept enemy contacts.
       </p>
@@ -906,14 +937,23 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
           <span className="shrink-0">🛩️</span>
           <span><span className="font-mono text-slate-700">CA-A</span> hits lettered gates in order (A→B→C)</span>
         </div>
-        <div className="flex items-start gap-2">
-          <span className="shrink-0">✈️</span>
-          <span><span className="font-mono text-slate-700">CA-N</span> joins round 4 — numbered gates (1→2→3)</span>
-        </div>
-        <div className="flex items-start gap-2">
-          <span className="shrink-0">🛫</span>
-          <span><span className="font-mono text-slate-700">Fighter</span> arrives round 6 — intercept enemy contacts</span>
-        </div>
+        {difficulty === 'easier' ? (
+          <div className="flex items-start gap-2">
+            <span className="shrink-0">✈️</span>
+            <span><span className="font-mono text-slate-700">CA-N</span> joins the final round — numbered gates (1→2→3)</span>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-start gap-2">
+              <span className="shrink-0">✈️</span>
+              <span><span className="font-mono text-slate-700">CA-N</span> is up from round 1 — numbered gates (1→2→3)</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="shrink-0">🛫</span>
+              <span><span className="font-mono text-slate-700">Fighter</span> arrives round 2 — intercept enemy contacts</span>
+            </div>
+          </>
+        )}
         <div className="flex items-start gap-2">
           <span className="text-brand-300 shrink-0">⌨️</span>
           <span><span className="font-mono text-slate-700">BRG</span>: type a 3-digit compass bearing (e.g. <span className="font-mono text-slate-700">010</span>, <span className="font-mono text-slate-700">250</span>)</span>
@@ -924,29 +964,41 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
         </div>
         <div className="flex items-start gap-2">
           <span className="text-brand-300 shrink-0">⏱</span>
-          <span>{TOTAL_ROUNDS} rounds &middot; 105s / 120s / 180s as difficulty ramps</span>
+          <span>{tuning.lengthBlurb}</span>
         </div>
       </div>
 
-      {/* Intercept rules — asymmetric scoring around the white/blue rings. */}
+      {/* Intercept rules — asymmetric scoring around the white/blue rings.
+          Easier plays rounds 1-4, which have no enemies (the Fighter and the
+          enemy squadron arrive at ladder round 6) and no danger zones (they
+          start at ladder round 5), so it lists only the rule it can actually
+          break: CA-A and CA-N closing on each other once both are up. */}
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
-        <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">Intercept rules</p>
-        <div className="flex items-start gap-2">
-          <span className="text-green-400 shrink-0">＋</span>
-          <span><span className="font-mono text-slate-700">Fighter</span> on enemy ring within <span className="font-mono text-slate-700">1,000ft</span> alt &rarr; <span className="text-green-400">+250</span>, kill</span>
-        </div>
-        <div className="flex items-start gap-2">
-          <span className="text-red-400 shrink-0">−</span>
-          <span><span className="font-mono text-slate-700">CA-A / CA-N</span> on enemy ring within <span className="font-mono text-slate-700">3,000ft</span> alt &rarr; <span className="text-red-400">−150</span></span>
-        </div>
+        <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+          {difficulty === 'easier' ? 'Separation rule' : 'Intercept rules'}
+        </p>
+        {difficulty !== 'easier' && (
+          <>
+            <div className="flex items-start gap-2">
+              <span className="text-green-400 shrink-0">＋</span>
+              <span><span className="font-mono text-slate-700">Fighter</span> on enemy ring within <span className="font-mono text-slate-700">1,000ft</span> alt &rarr; <span className="text-green-400">+250</span>, kill</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-red-400 shrink-0">−</span>
+              <span><span className="font-mono text-slate-700">CA-A / CA-N</span> on enemy ring within <span className="font-mono text-slate-700">3,000ft</span> alt &rarr; <span className="text-red-400">−150</span></span>
+            </div>
+          </>
+        )}
         <div className="flex items-start gap-2">
           <span className="text-red-400 shrink-0">−</span>
           <span>Two player aircraft inside each other's blue ring within <span className="font-mono text-slate-700">3,000ft</span> alt &rarr; <span className="text-red-400">−150</span></span>
         </div>
-        <div className="flex items-start gap-2">
-          <span className="text-amber-400 shrink-0">⚠</span>
-          <span>Danger zones at <span className="font-mono text-slate-700">020</span> (white ring) and <span className="font-mono text-slate-700">030</span> (black ring) — stay ≥<span className="font-mono text-slate-700">1,000ft</span> above or below</span>
-        </div>
+        {difficulty !== 'easier' && (
+          <div className="flex items-start gap-2">
+            <span className="text-amber-400 shrink-0">⚠</span>
+            <span>Danger zones at <span className="font-mono text-slate-700">020</span> (white ring) and <span className="font-mono text-slate-700">030</span> (black ring) — stay ≥<span className="font-mono text-slate-700">1,000ft</span> above or below</span>
+          </div>
+        )}
       </div>
 
       {personalBest && (
@@ -966,7 +1018,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest }) {
       )}
 
       <div className="text-center mb-4">
-        <Link to="/cbat/dpt/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
           View Leaderboard →
         </Link>
       </div>
@@ -1034,6 +1086,24 @@ export default function CbatDpt() {
   const [selected, setSelected]               = useState(null)
   // Fighter pool used for the player's Fighter and the enemy aircraft (rounds 6+)
   const [fighterPool, setFighterPool]         = useState([])
+
+  // ── Difficulty ─────────────────────────────────────────────────────────────
+  // `difficulty` is the card's current choice; `runDifficulty` is what the run
+  // in progress was started on and is what the render tree reads (changing the
+  // card mid-run must not repoint a live run's board). `runTuningRef` is the
+  // same thing for the game loop and the round scheduler, which run outside
+  // render and cannot read state.
+  //
+  // `?difficulty=hard` overrides the remembered choice for this arrival only —
+  // the Aptitude Report links here that way, since it scores the Hard board.
+  const [difficulty, setDifficulty]       = useState(() => initialDifficulty(readStoredDptDifficulty))
+  const [runDifficulty, setRunDifficulty] = useState(difficulty)
+  const runTuningRef                      = useRef(dptTuning(difficulty))
+  const runTuning                         = dptTuning(runDifficulty)
+  const handleDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeDptDifficulty(key)
+  }, [])
 
   // Phase state machine: select → playing → finished. (`over` reserved for
   // mid-round death/abandon overlays once the game loop lands in Chunk 5.)
@@ -1149,6 +1219,14 @@ export default function CbatDpt() {
   // integer requires bucketing those into whole-point deductions, so we hold
   // the running fraction here and only deduct integer amounts from state.
   const fractionalPenaltyRef = useRef(0)
+  // startRound() is called from effects that must NOT re-run when the aircraft
+  // roster or the fighter pool finish loading — a pool that arrives mid-game
+  // would otherwise respawn the round under the player. It therefore reads both
+  // through refs and carries no dependencies of its own.
+  const selectedRef    = useRef(null)
+  const fighterPoolRef = useRef([])
+  useEffect(() => { selectedRef.current    = selected },    [selected])
+  useEffect(() => { fighterPoolRef.current = fighterPool }, [fighterPool])
   useEffect(() => { aircraftRef.current     = aircraftList },     [aircraftList])
   useEffect(() => { gatesRef.current        = gateList },         [gateList])
   useEffect(() => { nextLetterRef.current   = nextLetterIndex },  [nextLetterIndex])
@@ -1181,14 +1259,17 @@ export default function CbatDpt() {
       .catch(() => {})
   }, [user])
 
-  // Fetch personal best
+  // Fetch personal best. Keyed off the card's difficulty rather than the run's:
+  // the two boards have different ceilings (1,700 and 5,200), so showing one
+  // difficulty's best beside the other's Start button would be meaningless.
   useEffect(() => {
     if (!user) return
-    apiFetch(`${API}/api/games/cbat/dpt/personal-best`)
+    setPersonalBest(null)
+    apiFetch(`${API}/api/games/cbat/${dptGameKey(difficulty)}/personal-best`)
       .then(r => r.json())
       .then(d => { if (d.data) setPersonalBest(d.data) })
       .catch(() => {})
-  }, [user])
+  }, [user, difficulty])
 
   // Pre-warm the GLB cache as soon as the selectable aircraft and fighter
   // pool are known. Without this the first aircraft's .glb isn't fetched
@@ -1210,14 +1291,31 @@ export default function CbatDpt() {
   //  - Round 5:    CA-A + CA-N, 3 numbered gates, danger zones begin
   //  - Round 6:    + Fighter joins, + enemies appear, more danger zones
   //  - Rounds 7–8: more enemies, harder spawns
-  const playerModel = () => selected ? getModelUrl(selected.briefId, selected.title) : null
+  const playerModel = () => {
+    const sel = selectedRef.current
+    return sel ? getModelUrl(sel.briefId, sel.title) : null
+  }
   const pickFighterModel = () => {
-    if (fighterPool.length === 0) return null
-    const fp = fighterPool[Math.floor(Math.random() * fighterPool.length)]
+    const pool = fighterPoolRef.current
+    if (pool.length === 0) return null
+    const fp = pool[Math.floor(Math.random() * pool.length)]
     return getModelUrl(fp.briefId, fp.title)
   }
 
-  const startRound = useCallback((roundNum) => {
+  // Builds and starts one rung of the ladder. `roundNum` is always the LADDER
+  // number (1-8), not the round's position in the run: a Hard run walks 5, 6,
+  // 7, 8 and shows them as 1/4 to 4/4. Everything a round is made of — how many
+  // aircraft, how many gates, how many enemies, how long it lasts, and the
+  // 50 × roundNum completion bonus — keys off this number and is unchanged by
+  // the split.
+  //
+  // `holdTimer` leaves the round clock at 0 for the logo intro, which spawns
+  // the round behind the curtain and only starts it once the curtain lifts.
+  const startRound = useCallback((roundNum, { holdTimer = false } = {}) => {
+    // Deliberately shadows the state variable of the same name: this callback
+    // has no dependencies, so the outer one would be the value from the render
+    // that created it. Shadowing means anything added here reads the live one.
+    const selected = selectedRef.current
     if (!selected) return
 
     // Player-controlled aircraft. Each subsequent spawn sees the already-
@@ -1268,7 +1366,7 @@ export default function CbatDpt() {
     setDangerZoneList(zones)
     setNextLetterIndex(0)
     setNextNumberIndex(0)
-    setRoundEndTime(Date.now() + roundDurationMs(roundNum))
+    setRoundEndTime(holdTimer ? 0 : Date.now() + roundDurationMs(roundNum))
     setRoundOverlay(null)
     setBearingInput('')
     setActiveId('CA-A')
@@ -1279,11 +1377,13 @@ export default function CbatDpt() {
     enemyContactRef.current = new Set()
     playerInterceptRef.current = new Set()
     fractionalPenaltyRef.current = 0
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, fighterPool])
+  }, [])
 
   // ?round=N — the same jump as the typed 555 codes, without needing a
   // keyboard or a game that will accept digits. See adminRoundParam.js.
+  // Addresses LADDER rounds 1-8, not the four in the current difficulty's run,
+  // so ?round=6 works from either card. The run then plays on to its own last
+  // round and stops. Debug runs are flagged and never submitted either way.
   useAdminRoundParam({
     totalRounds: TOTAL_ROUNDS,
     ready: phase === 'playing',
@@ -1294,11 +1394,10 @@ export default function CbatDpt() {
     },
   })
 
-  // Entering intro/playing phase → kick off round 1 INLINE (not via startRound),
-  // so this effect's closure doesn't depend on startRound's identity — that
-  // way fighterPool loading after the user is already in 'playing' won't
-  // respawn round 1 mid-game. Round 2+ still go through startRound, called
-  // from the round-overlay timeout below.
+  // Entering intro/playing phase → kick off the difficulty's FIRST round
+  // (1 on Easier, 5 on Hard). startRound carries no dependencies — it reads the
+  // selected aircraft and the fighter pool through refs — so a pool that loads
+  // after the user is already in 'playing' can't respawn the round mid-game.
   //
   // Intro choreography: aircraft spawn at intro entry (so GLBs and positions
   // are warm by the time the curtain lifts), but the round timer is HELD at 0
@@ -1327,36 +1426,19 @@ export default function CbatDpt() {
     if (!selected) return
 
     // Intro→playing: aircraft already spawned during intro; just start the
-    // round timer now that the curtain has lifted.
+    // round timer now that the curtain has lifted. The duration is the first
+    // round's own, which differs by difficulty (105s on Easier, 120s on Hard).
     if (prevPhase === 'intro' && phase === 'playing') {
-      setRoundEndTime(Date.now() + ROUND_DURATION_MS)
+      setRoundEndTime(Date.now() + roundDurationMs(roundRef.current))
       return
     }
 
-    // First entry (select→intro, or select→playing under reduced-motion /
-    // replay-skip): spawn round 1.
-    const ac    = [spawnPlayerAircraft('CA-A', 'CA-A', getModelUrl(selected.briefId, selected.title))]
-    const gates = generateGates(2, 'letter')
-
-    setRound(1)
-    setAircraftList(ac)
-    setGateList(gates)
-    setDangerZoneList([])
-    setNextLetterIndex(0)
-    setNextNumberIndex(0)
-    // Hold timer at 0 during intro — the prevPhase==='intro' branch above
-    // will set it once the curtain lifts.
-    setRoundEndTime(phase === 'playing' ? Date.now() + ROUND_DURATION_MS : 0)
-    setRoundOverlay(null)
-    setBearingInput('')
-    setActiveId('CA-A')
-    setTurnDir('R')
-    setInputMode('BRG')
-    dzActiveRef.current = new Set()
-    enemyContactRef.current = new Set()
-    playerInterceptRef.current = new Set()
-    fractionalPenaltyRef.current = 0
-  }, [phase, selected])
+    // First entry (select→intro, or select→playing on a replay that skips the
+    // intro): spawn the difficulty's opening round. Held at 0 on the clock
+    // during the intro — the prevPhase==='intro' branch above starts it once
+    // the curtain lifts.
+    startRound(firstRound(runTuningRef.current), { holdTimer: phase !== 'playing' })
+  }, [phase, selected, startRound])
 
   // Intro → playing transition is fired by SkywatchLogoIntro's onComplete
   // callback below. Cleanup if the user backs out mid-intro is handled by
@@ -1367,19 +1449,24 @@ export default function CbatDpt() {
     setPhase('playing')
   }, [])
 
-  // Round-complete overlay → advance to next round (or finish after round 8).
+  // Round-complete overlay → advance to the next rung (or finish after the
+  // difficulty's last one: round 4 on Easier, round 8 on Hard).
   // submitScore is defined later in the file but the timeout closure resolves
   // it after render commits, so it's in scope when this fires.
   useEffect(() => {
     if (!roundOverlay) return
     const timer = setTimeout(() => {
-      const next = roundOverlay.round + 1
-      if (next > TOTAL_ROUNDS) {
+      const tuning = runTuningRef.current
+      const next   = roundOverlay.round + 1
+      // Walking the ladder by +1 rather than by index into tuning.rounds keeps
+      // an admin round-jump sane: a debug run that lands outside the
+      // difficulty's own slice still plays on to that slice's end and stops.
+      if (roundOverlay.round >= lastRound(tuning)) {
         const totalTime = (Date.now() - startTimeRef.current) / 1000
         setElapsed(totalTime)
         // Cheat-flagged runs do not write to the leaderboard.
         if (selected && !cheatUsedRef.current) {
-          submitScore(totalScore, totalTime, selected.title, TOTAL_ROUNDS, {
+          submitScore(totalScore, totalTime, selected.title, roundOverlay.round, {
             gatesHit, interceptions, dangerZoneViolations, separationViolations,
           })
         }
@@ -1864,22 +1951,32 @@ export default function CbatDpt() {
     return () => window.removeEventListener('keydown', onKey)
   }, [phase, handleDigit])
 
-  // Submit score at end of run
+  // Submit score at end of run. `finalRound` is the ladder round the run
+  // finished on (4 on Easier, 8 on Hard), which is what the pre-split
+  // eight-round rows already hold.
   const submitScore = useCallback((finalScore, finalTime, aircraftTitle, finalRound, breakdown) => {
     setScoreSaved(false)
     setQueued(false)
+    const tuning  = runTuningRef.current
+    const gameKey = tuning.gameKey
     markGameCompleted({ score: finalScore, round: finalRound })
-    submitCbatResult(`dpt`, {
+    submitCbatResult(gameKey, {
         totalScore: finalScore,
         totalTime:  finalTime,
         finalRound,
+        // Which rung the run STARTED on — 1 on Easier, 5 on Hard. It is also
+        // how the backend recognises a submission from a client that predates
+        // the split: the old eight-round build finished on round 8 exactly as
+        // Hard does, so finalRound cannot tell them apart, but only a post-split
+        // build sends this. See backend/routes/games.js submitDptResult.
+        firstRound: firstRound(tuning),
         aircraftUsed: aircraftTitle,
         ...breakdown,
       }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/dpt/personal-best`)
+        apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
           .then(r => r.json())
           .then(d => { if (d.data) setPersonalBest(d.data) })
           .catch(() => {})
@@ -1889,9 +1986,16 @@ export default function CbatDpt() {
 
   // Handlers
   const handleSelect = useCallback((a) => {
+    // Picking an aircraft is DPT's Start button, so this is where the run's
+    // difficulty is pinned. Changing the card afterwards can't repoint a run
+    // that's already flying.
+    const tuning = dptTuning(difficulty)
+    runTuningRef.current = tuning
+    setRunDifficulty(difficulty)
     setSelected(a)
-    startTracking('dpt')
-    setRound(1)
+    selectedRef.current = a
+    startTracking(tuning.gameKey)
+    setRound(firstRound(tuning))
     setTotalScore(0)
     setGatesHit(0)
     setInterceptions(0)
@@ -1907,7 +2011,7 @@ export default function CbatDpt() {
     // Skip the intro on replay within the same aircraft selection
     // (introPlayedRef set after first run).
     setPhase(introPlayedRef.current ? 'playing' : 'intro')
-  }, [apiFetch, API])
+  }, [apiFetch, API, difficulty, startTracking])
 
   const handleMenu = useCallback(() => {
     setSelected(null)
@@ -1950,6 +2054,7 @@ export default function CbatDpt() {
             : <CbatQuitButton onConfirm={handleMenu} confirmNeeded={['intro', 'playing', 'over'].includes(phase)} label={<>&larr; Quit</>} />
           }
           <h1 className="text-sm font-extrabold text-text">DPT</h1>
+          {phase !== 'select' && <DifficultyMarker tuning={runTuning} />}
         </div>
       </div>
 
@@ -1977,6 +2082,8 @@ export default function CbatDpt() {
                 onSelect={handleSelect}
                 loading={loadingAircraft}
                 personalBest={personalBest}
+                difficulty={difficulty}
+                onDifficulty={handleDifficulty}
               />
             </div>
           )}
@@ -2000,7 +2107,7 @@ export default function CbatDpt() {
                 const lowTime   = roundLeft < 10
                 return (
                   <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
-                    <span className="text-slate-400">RND <span className="text-brand-300">{round}</span>/{TOTAL_ROUNDS}</span>
+                    <span className="text-slate-400">RND <span className="text-brand-300">{displayRound(round, runTuning)}</span>/{runTuning.rounds.length}</span>
                     <span className="text-slate-400">
                       SCORE <span className="text-brand-300">{totalScore}</span>
                       {cheatUsed && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
@@ -2070,10 +2177,12 @@ export default function CbatDpt() {
                       >
                         <p className="text-3xl mb-1">{roundOverlay.success ? '✅' : '⏱'}</p>
                         <p className="text-lg font-extrabold text-white mb-0.5">
-                          Round {roundOverlay.round} {roundOverlay.success ? 'Complete' : 'Time Up'}
+                          Round {displayRound(roundOverlay.round, runTuning)} {roundOverlay.success ? 'Complete' : 'Time Up'}
                         </p>
                         <p className="text-xs text-slate-400">
-                          {roundOverlay.round < TOTAL_ROUNDS ? `Next: Round ${roundOverlay.round + 1}` : 'Final score…'}
+                          {roundOverlay.round < lastRound(runTuning)
+                            ? `Next: Round ${displayRound(roundOverlay.round + 1, runTuning)}`
+                            : 'Final score…'}
                         </p>
                       </motion.div>
                     </motion.div>
@@ -2110,7 +2219,7 @@ export default function CbatDpt() {
           <AnimatePresence>
             {phase === 'finished' && selected && (
               <CbatGameOver
-                gameKey="dpt"
+                gameKey={runTuning.gameKey}
                 score={totalScore}
                 time={elapsed}
                 scoreSaved={scoreSaved}
@@ -2121,7 +2230,7 @@ export default function CbatDpt() {
                 <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
                   <p className="text-5xl mb-3">🎖️</p>
                   <p className="text-2xl font-extrabold text-white mb-1">Run Complete</p>
-                  <p className="text-sm text-slate-400 mb-6">Reached round {round} of {TOTAL_ROUNDS}.</p>
+                  <p className="text-sm text-slate-400 mb-6">Reached round {displayRound(round, runTuning)} of {runTuning.rounds.length}.</p>
 
                   <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
                     <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>

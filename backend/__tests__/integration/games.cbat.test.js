@@ -13,6 +13,8 @@ const GameSessionCbatTargetResult         = require('../../models/GameSessionCba
 const GameSessionCbatInstrumentsResult    = require('../../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatAntResult            = require('../../models/GameSessionCbatAntResult');
 const GameSessionCbatDptResult            = require('../../models/GameSessionCbatDptResult');
+const GameSessionCbatDptEasierResult      = require('../../models/GameSessionCbatDptEasierResult');
+const GameSessionCbatDptHardResult        = require('../../models/GameSessionCbatDptHardResult');
 const GameSessionCbatActResult            = require('../../models/GameSessionCbatActResult');
 
 let user, cookie, user2, cookie2;
@@ -729,6 +731,11 @@ describe('CBAT Airborne Numerical Test', () => {
 });
 
 // ── DPT (Dynamic Projection Test) ────────────────────────────────────────────
+// `dpt` is the ORIGINAL eight-round board. It was deliberately not turned into
+// the Hard board when the ladder was split: clients predating the split still
+// play the eight-round game and POST here with hardcoded URLs, so this keeps
+// ranking eight-round runs and goes quiet as they update. The two post-split
+// boards live on new keys those clients have never heard of — covered below.
 describe('CBAT DPT', () => {
   const RESULT_URL = '/api/games/cbat/dpt/result';
   const PB_URL     = '/api/games/cbat/dpt/personal-best';
@@ -794,6 +801,71 @@ describe('CBAT DPT', () => {
       expect(res.body.data.attempts).toBe(3);
     });
   });
+
+  // The whole point of keeping three boards: a client predating the split can
+  // only reach `dpt`, and a post-split client only ever posts to the other two.
+  // Nothing needs detecting at the door because the URLs cannot collide.
+  describe('the three boards stay separate', () => {
+    const HARD_RESULT_URL   = '/api/games/cbat/dpt-hard/result';
+    const HARD_PB_URL       = '/api/games/cbat/dpt-hard/personal-best';
+    const EASIER_RESULT_URL = '/api/games/cbat/dpt-easier/result';
+    const EASIER_PB_URL     = '/api/games/cbat/dpt-easier/personal-best';
+
+    it('writes each to its own collection', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 6900, totalTime: 1100, finalRound: 8, gatesHit: 36, interceptions: 6 });
+      await request(app).post(HARD_RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 4200, totalTime: 640, finalRound: 8, firstRound: 5, gatesHit: 22, interceptions: 5 });
+      await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 1500, totalTime: 402, finalRound: 4, firstRound: 1, gatesHit: 11 });
+
+      expect(await GameSessionCbatDptResult.countDocuments()).toBe(1);
+      expect(await GameSessionCbatDptHardResult.countDocuments()).toBe(1);
+      expect(await GameSessionCbatDptEasierResult.countDocuments()).toBe(1);
+    });
+
+    it('keeps all three personal bests apart', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 6900, totalTime: 1100, finalRound: 8, gatesHit: 36 });
+      await request(app).post(HARD_RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 4200, totalTime: 640, finalRound: 8, firstRound: 5 });
+      await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 1500, totalTime: 402, finalRound: 4, firstRound: 1 });
+
+      const legacy = await request(app).get(PB_URL).set('Cookie', cookie);
+      const hard   = await request(app).get(HARD_PB_URL).set('Cookie', cookie);
+      const easier = await request(app).get(EASIER_PB_URL).set('Cookie', cookie);
+      expect(legacy.body.data.bestScore).toBe(6900);
+      expect(hard.body.data.bestScore).toBe(4200);
+      expect(easier.body.data.bestScore).toBe(1500);
+      for (const r of [legacy, hard, easier]) expect(r.body.data.attempts).toBe(1);
+    });
+
+    // An eight-round total is up to 1,700 higher than a four-round Hard run can
+    // reach. That it cannot land on the Hard board is the guarantee this whole
+    // three-key arrangement exists to provide.
+    it('never lets an eight-round total reach the Hard board', async () => {
+      await request(app).post(RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 6900, totalTime: 1100, finalRound: 8, gatesHit: 36, interceptions: 6 });
+      expect(await GameSessionCbatDptHardResult.countDocuments()).toBe(0);
+      const hard = await request(app).get(HARD_PB_URL).set('Cookie', cookie);
+      expect(hard.body.data).toBeNull();
+    });
+
+    it('records which rung a post-split run opened on', async () => {
+      const res = await request(app).post(HARD_RESULT_URL).set('Cookie', cookie)
+        .send({ totalScore: 4200, totalTime: 640, finalRound: 8, firstRound: 5 });
+      expect(res.body.data.firstRound).toBe(5);
+    });
+
+    it('returns 401 without auth on both new boards', async () => {
+      for (const url of [HARD_RESULT_URL, EASIER_RESULT_URL]) {
+        const res = await request(app).post(url).send({ totalScore: 100, totalTime: 30 });
+        expect(res.status).toBe(401);
+      }
+    });
+  });
+
 });
 
 // ── ACT (Auditory Capacity Test) ─────────────────────────────────────────────

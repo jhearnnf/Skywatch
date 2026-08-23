@@ -52,6 +52,8 @@ const GAME_OFFSET = {
   'vigilance':       33,
   'sma':             34,
   'sma-easier':      35,
+  'dpt-easier':      36,
+  'dpt-hard':        37,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -174,14 +176,28 @@ const FAKE_TUNING = {
     scoreSequence: [460, 420, 380, 350, 320, 295, 270, 245, 220, 195, 175, 155, 135, 120, 105, 95, 85, 75, 68, 60],
   },
   'dpt': {
+    // The ORIGINAL eight-round board, still played and read by clients that
+    // predate the Easier/Hard split, so it keeps the tuning it always had.
     // totalScore accumulates across 8 rounds: +100/gate, +250/intercept,
     // +50×round completion bonus, minus danger-zone (-10/s) and bad-hit (-150)
-    // penalties — a perfect no-penalty run tops out near ~5,750. Top demo of
-    // 4,820 is a strong-but-beatable run; the rest trail toward ~1,100. Scores
-    // land on multiples of 10 (the danger-zone penalty is per-second), so the
-    // sequence keeps that granularity. Runs are long (~900–1,200s / 15–20 min).
+    // penalties — a perfect no-penalty run is exactly 6,900 (36 gates, 6
+    // intercepts, 50 × (1+…+8) of bonus). Top demo of 4,820 is a
+    // strong-but-beatable run; the rest trail toward ~1,100. Scores land on
+    // multiples of 10 (the danger-zone penalty is per-second), so the sequence
+    // keeps that granularity. Runs are long (~900–1,200s / 15–20 min).
     floor: 1100, ceiling: 5750, seedTime: 915.4, timeStep: 11.3,
     scoreSequence: [4820, 4560, 4300, 4050, 3800, 3540, 3290, 3030, 2780, 2530, 2280, 2030, 1860, 1700, 1560, 1440, 1340, 1250, 1170, 1100],
+  },
+  'dpt-hard': {
+    // The post-split Hard board — rounds 5-8 only: +100/gate over 24 gates,
+    // +250 for each of the 6 intercepts, +50×round of completion bonus over
+    // rounds 5-8 (1,300), minus the same penalties. A perfect no-penalty run is
+    // exactly 5,200. Every value here is the eight-round board's less 1,700,
+    // which is what rounds 1-4 were worth and what `dpt-easier` now ranks — the
+    // same subtraction the carried-over scores were seeded with (see
+    // utils/dptLegacyNormalise.js). A run is ~11 minutes (120s + 3 × 180s).
+    floor: 450, ceiling: 5200, seedTime: 612.5, timeStep: 7.4,
+    scoreSequence: [3120, 2960, 2800, 2640, 2480, 2320, 2170, 2020, 1870, 1720, 1580, 1440, 1310, 1180, 1060, 950, 850, 760, 610, 450],
   },
   'trace-1': {
     // correctTurns out of 40 (5 rounds × 8 turns), higher is better. Top demo
@@ -546,7 +562,12 @@ const WEEKLY_PER_PLAY = {
   // ringed contacts in the same 60s, so a decent run scores below a decent
   // hard one.
   'flag-easier':     170,
-  'dpt':            3400,  // real med 3850
+  // The eight-round board keeps the value it always had — it is still ranking
+  // eight-round runs. The two post-split boards are each a half of that ladder,
+  // so Hard's is the old figure less the 1,700 that rounds 1-4 were worth.
+  'dpt':            3400,  // real med 3850, over all eight rounds
+  'dpt-hard':       1900,  // real med 2150 once the rounds 1-4 share comes off
+  'dpt-easier':     1050,  // out of a 1,700 ceiling
   'act':            1300,  // real med 1482
   'trace-1':          26,  // real med 29 (correctTurns /40)
   'trace-2':           5,  // correctCount /8 — a little below a decent single run

@@ -28,8 +28,11 @@
 // 180s) all measured within a couple of seconds of their caps, which is what
 // confirms the units and that the medians are trustworthy elsewhere.
 //
-// DPT really is ~15 minutes — 8 rounds at ROUND_DURATION_MS = 105s. It is by
-// far the longest game here and the measurement agrees with the arithmetic.
+// DPT was a flat ~15 minutes when it was one eight-round ladder. The
+// Easier/Hard split cut that ladder in half, so the tile now carries a range:
+// Easier is rounds 1-4 (105 + 105 + 105 + 120 seconds ≈ 7 min) and Hard is
+// rounds 5-8 (120 + 3 × 180 ≈ 11 min). It is still by far the longest game
+// here, and a run can finish a round early by clearing every gate.
 export const CBAT_GAMES = [
   { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Multi-task across eight panels — hunt shapes, match lights, ID aircraft, find codes.', path: '/cbat/target',          image: '/images/Target.png', estMinutes: 2 },
   { key: 'ant',             emoji: '📡', title: 'ANT',              desc: 'Airborne Numerical Test — speed, distance and time. Compute arrival, distance, fuel or speed against the clock.', path: '/cbat/ant',             image: '/images/ANT.png', estMinutes: 5 },
@@ -40,7 +43,7 @@ export const CBAT_GAMES = [
   { key: 'plane-turn',      emoji: '🗺️', title: 'Trace 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png', estMinutes: [1, 2] },
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png', estMinutes: 1 },
   { key: 'visualisation',    emoji: '🧊', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png', estMinutes: [1, 2] },
-  { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png', estMinutes: 15 },
+  { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png', estMinutes: [7, 11] },
   { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png', estMinutes: 5 },
   { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', estMinutes: [1, 2] },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — track a journey of relative turns from text alone, then name the direction back to the start.', path: '/cbat/dad',             image: '/images/DAD.png', estMinutes: 5 },
@@ -108,7 +111,12 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'flag-easier':     { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true, difficultyGroup: 'flag' },
   'visualisation-2d':{ title: 'Visualisation 2D',  emoji: '🧮',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
   'visualisation-3d':{ title: 'Visualisation 3D',  emoji: '🧊',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
-  'dpt':             { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/dpt' },
+  // The original eight-round board. No `difficultyGroup`: it is neither half
+  // of the split, so it gets no Easier/Hard pills and names itself instead.
+  // Clients predating the split still read it; it goes quiet as they update.
+  'dpt':             { title: 'DPT (8-round)',    emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/dpt' },
+  'dpt-hard':        { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/dpt', difficultyGroup: 'dpt' },
+  'dpt-easier':      { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/dpt', difficultyGroup: 'dpt' },
   'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true },
   'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'numerical-ops-easier': { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
@@ -193,6 +201,13 @@ export const CBAT_DIFFICULTY_GROUPS = {
   sma: [
     { gameKey: 'sma-easier', label: 'Easier' },
     { gameKey: 'sma',        label: 'Hard' },
+  ],
+  // DPT's halves are literally halves: Easier plays rounds 1-4 of the ladder
+  // and Hard plays rounds 5-8, so the two boards have different ceilings
+  // (1,700 and 5,200) and nothing converts between them.
+  dpt: [
+    { gameKey: 'dpt-easier', label: 'Easier' },
+    { gameKey: 'dpt-hard',   label: 'Hard' },
   ],
   // Vigilance is absent on purpose — it ships one difficulty. See
   // backend/models/GameSessionCbatVigilanceResult.js for the reasoning.

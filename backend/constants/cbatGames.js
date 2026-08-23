@@ -10,6 +10,8 @@ const GameSessionCbatFlagEasierResult     = require('../models/GameSessionCbatFl
 const GameSessionCbatVisualisation2DResult = require('../models/GameSessionCbatVisualisation2DResult');
 const GameSessionCbatVisualisation3DResult = require('../models/GameSessionCbatVisualisation3DResult');
 const GameSessionCbatDptResult           = require('../models/GameSessionCbatDptResult');
+const GameSessionCbatDptEasierResult     = require('../models/GameSessionCbatDptEasierResult');
+const GameSessionCbatDptHardResult       = require('../models/GameSessionCbatDptHardResult');
 const GameSessionCbatActResult           = require('../models/GameSessionCbatActResult');
 const GameSessionCbatTrace1Result        = require('../models/GameSessionCbatTrace1Result');
 const GameSessionCbatTrace2Result        = require('../models/GameSessionCbatTrace2Result');
@@ -176,12 +178,55 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Visualisation 3D',
   },
+  // ── DPT: three boards, not two ───────────────────────────────────────────
+  //
+  // DPT was one eight-round game. The Easier/Hard split cut that ladder in half
+  // (Easier plays rounds 1-4, Hard plays rounds 5-8), which would normally mean
+  // the original key becomes Hard and a `-easier` key joins it — the pattern
+  // every other split follows.
+  //
+  // It cannot here. Builds that predate the split are still in the wild for a
+  // long time: the native app ships a bundled build that only changes with a
+  // store release, and an offline score can sit in the outbox for days. Those
+  // builds POST and read `dpt` with hardcoded URLs, and they are still playing
+  // a genuine eight-round game. Pointing `dpt` at the four-round Hard board
+  // would rank their 8-round totals — up to 1,700 higher — against 4-round runs
+  // and put them permanently on top of it.
+  //
+  // So `dpt` stays exactly what it always was: the eight-round board, ranking
+  // eight-round runs against each other. It goes quiet on its own as clients
+  // update. The split lives on two NEW keys that no old build can address.
   'dpt': {
     Model: GameSessionCbatDptResult,
     primaryField: 'totalScore',
     sortDir: -1,
     bestOp: '$max',
-    label: 'DPT',
+    label: 'DPT (8-round)',
+    // Suppresses the "(Hard)" that cbatLabelWithDifficulty would otherwise
+    // append once a `dpt-easier` key exists. This board is neither difficulty.
+    legacyBoard: true,
+  },
+  // The post-split Hard board — rounds 5-8 only. A perfect run is 5,200 where a
+  // perfect eight-round run was 6,900; the difference is exactly what rounds
+  // 1-4 were worth, which is what `dpt-easier` now ranks. See
+  // utils/dptLegacyNormalise.js.
+  'dpt-hard': {
+    Model: GameSessionCbatDptHardResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'DPT',           // cbatLabelWithDifficulty appends "(Hard)"
+  },
+  'dpt-easier': {
+    Model: GameSessionCbatDptEasierResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'DPT (Easier)',
+    // Every other split puts Hard on this key minus the suffix. DPT's is on
+    // 'dpt-hard' because plain 'dpt' had to stay the pre-split eight-round
+    // board, so the pairing is stated rather than inferred from the string.
+    hardKey: 'dpt-hard',
   },
   'act': {
     Model: GameSessionCbatActResult,
@@ -396,11 +441,24 @@ const CBAT_GAMES = {
 // split keep their plain label.
 const EASIER_SUFFIX = '-easier';
 
+// Where an Easier board's Hard counterpart lives. Normally the same key without
+// the suffix; a split whose entry names a `hardKey` overrides that (see
+// 'dpt-easier' — plain 'dpt' is the retired eight-round board, not Hard).
+function cbatHardKeyFor(easierKey) {
+  return CBAT_GAMES[easierKey]?.hardKey || easierKey.slice(0, -EASIER_SUFFIX.length);
+}
+
+const HARD_KEYS = new Set(
+  Object.keys(CBAT_GAMES).filter(k => k.endsWith(EASIER_SUFFIX)).map(cbatHardKeyFor),
+);
+
 function cbatLabelWithDifficulty(gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return null;
   if (gameKey.endsWith(EASIER_SUFFIX)) return cfg.label;   // already carries "(Easier)"
-  return CBAT_GAMES[`${gameKey}${EASIER_SUFFIX}`] ? `${cfg.label} (Hard)` : cfg.label;
+  // A retired pre-split board is neither difficulty and names itself (see 'dpt').
+  if (cfg.legacyBoard) return cfg.label;
+  return HARD_KEYS.has(gameKey) ? `${cfg.label} (Hard)` : cfg.label;
 }
 
-module.exports = { CBAT_GAMES, cbatLabelWithDifficulty };
+module.exports = { CBAT_GAMES, cbatLabelWithDifficulty, cbatHardKeyFor };

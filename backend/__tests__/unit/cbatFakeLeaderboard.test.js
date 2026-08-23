@@ -15,7 +15,13 @@ const GAME_MAX = {
   'flag-easier':     null,   // accumulating score, no fixed ceiling
   'visualisation-2d': null,  // small count, no ceiling assertion needed
   'visualisation-3d': 8,     // 8 rounds, one point each
-  'dpt':             null,   // accumulating score, no fixed ceiling
+  // All three DPT boards have a fixed ceiling: each plays a fixed set of rounds
+  // with a fixed number of gates, intercepts and completion bonuses. `dpt` is
+  // the original eight-round board that pre-split clients still use; the other
+  // two are the halves it was cut into, and 5200 + 1700 = 6900.
+  'dpt':             6900,   // 36 gates + 6 intercepts + 50×(1+…+8)
+  'dpt-hard':        5200,   // 24 gates + 6 intercepts + 50×(5+6+7+8)
+  'dpt-easier':      1700,   // 12 gates + 50×(1+2+3+4)
   'trace-1':         40,     // 5 rounds × 8 turns
   'trace-2':         8,      // 8 rounds, one question each
   'numerical-ops':   100,    // percentage 0–100

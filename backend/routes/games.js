@@ -44,6 +44,8 @@ const GameSessionCbatFlagEasierResult     = CBAT_GAMES['flag-easier'].Model;
 const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
 const GameSessionCbatVisualisation3DResult = CBAT_GAMES['visualisation-3d'].Model;
 const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
+const GameSessionCbatDptEasierResult       = CBAT_GAMES['dpt-easier'].Model;
+const GameSessionCbatDptHardResult         = CBAT_GAMES['dpt-hard'].Model;
 const GameSessionCbatActResult             = CBAT_GAMES['act'].Model;
 const GameSessionCbatNumericalOpsResult    = CBAT_GAMES['numerical-ops'].Model;
 const GameSessionCbatNumericalOpsEasierResult = CBAT_GAMES['numerical-ops-easier'].Model;
@@ -2760,18 +2762,30 @@ router.post('/cbat/visualisation-3d/result', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/cbat/dpt/result — Dynamic Projection Test
-router.post('/cbat/dpt/result', protect, async (req, res) => {
+// POST /api/games/cbat/dpt/result, /dpt-hard/result and /dpt-easier/result
+//
+// Three boards, one handler. `dpt` is the ORIGINAL eight-round board and is the
+// only one a client predating the Easier/Hard split can address — its URLs are
+// hardcoded in bundles that only update with a page reload or a store release.
+// Those runs are still real eight-round runs, so they land on the eight-round
+// board unaltered and rank against each other. Nothing needs detecting: an old
+// build cannot post to `dpt-hard` or `dpt-easier` because it has never heard of
+// them, and a post-split build never posts to `dpt`.
+//
+// `finalRound` is the LADDER round (1-8) throughout, and `firstRound` is the rung
+// the run opened on — 1 on Easier, 5 on Hard, absent on the eight-round board.
+async function submitDptResult(req, res, Model) {
   try {
     const {
-      totalScore, totalTime, finalRound,
+      totalScore, totalTime, finalRound, firstRound,
       gatesHit, dangerZoneViolations, separationViolations, interceptions,
       aircraftUsed,
     } = req.body;
-    const result = await saveCbatResult(GameSessionCbatDptResult, req, {
+    const result = await saveCbatResult(Model, req, {
       totalScore:           Math.max(0, Math.round(totalScore ?? 0)),
       totalTime:            totalTime ?? 0,
       finalRound:           finalRound ?? 1,
+      firstRound:           Number.isFinite(firstRound) ? firstRound : undefined,
       gatesHit:             gatesHit ?? 0,
       dangerZoneViolations: dangerZoneViolations ?? 0,
       separationViolations: separationViolations ?? 0,
@@ -2782,7 +2796,10 @@ router.post('/cbat/dpt/result', protect, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-});
+}
+router.post('/cbat/dpt/result',        protect, (req, res) => submitDptResult(req, res, GameSessionCbatDptResult));
+router.post('/cbat/dpt-hard/result',   protect, (req, res) => submitDptResult(req, res, GameSessionCbatDptHardResult));
+router.post('/cbat/dpt-easier/result', protect, (req, res) => submitDptResult(req, res, GameSessionCbatDptEasierResult));
 
 // POST /api/games/cbat/act/result — Auditory Capacity Test
 router.post('/cbat/act/result', protect, async (req, res) => {
@@ -3224,6 +3241,8 @@ router.get('/cbat/flag-easier/leaderboard', protect, (req, res) => cbatLeaderboa
 router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
 router.get('/cbat/visualisation-3d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
+router.get('/cbat/dpt-hard/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt-hard'));
+router.get('/cbat/dpt-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt-easier'));
 router.get('/cbat/act/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'act'));
 router.get('/cbat/trace-1/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-1'));
 router.get('/cbat/trace-2/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'trace-2'));
@@ -3436,6 +3455,8 @@ router.get('/cbat/flag-easier/personal-best', protect, (req, res) => cbatPersona
 router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
 router.get('/cbat/visualisation-3d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));
+router.get('/cbat/dpt-hard/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt-hard'));
+router.get('/cbat/dpt-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt-easier'));
 router.get('/cbat/act/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'act'));
 router.get('/cbat/trace-1/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-1'));
 router.get('/cbat/trace-2/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'trace-2'));

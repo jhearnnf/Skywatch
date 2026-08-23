@@ -5,7 +5,7 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
 const GameSessionCbatStart = require('../../models/GameSessionCbatStart');
-const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty, cbatHardKeyFor } = require('../../constants/cbatGames');
 
 let admin, cookie, u1, u2;
 
@@ -102,14 +102,20 @@ describe('GET /api/admin/reports/cbat — every split game names both difficulti
     const easierKeys = Object.keys(CBAT_GAMES).filter(k => k.endsWith('-easier'));
     expect(easierKeys.length).toBeGreaterThan(0);
 
+    // Hard normally lives on the Easier key minus its suffix, but not always:
+    // DPT's plain `dpt` had to stay the pre-split eight-round board, so its Hard
+    // half is on `dpt-hard`. cbatHardKeyFor is the one place that knows.
+    const hardKeys = new Set(easierKeys.map(cbatHardKeyFor));
     for (const easierKey of easierKeys) {
-      const hardKey = easierKey.replace(/-easier$/, '');
+      const hardKey = cbatHardKeyFor(easierKey);
+      expect(CBAT_GAMES[hardKey]).toBeTruthy();
       expect(gameLabels[easierKey]).toContain('(Easier)');
       expect(gameLabels[hardKey]).toBe(`${CBAT_GAMES[hardKey].label} (Hard)`);
     }
 
     for (const [key, cfg] of Object.entries(CBAT_GAMES)) {
-      if (key.endsWith('-easier') || CBAT_GAMES[`${key}-easier`]) continue;
+      if (key.endsWith('-easier') || hardKeys.has(key)) continue;
+      // A retired pre-split board is neither difficulty and names itself.
       expect(gameLabels[key]).toBe(cfg.label);
     }
 

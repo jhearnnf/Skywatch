@@ -28,6 +28,8 @@ const OWNED_BY_USER = [
   'GameSessionCbatCutEasierResult',
   'GameSessionCbatDADResult',
   'GameSessionCbatDptResult',
+  'GameSessionCbatDptEasierResult',
+  'GameSessionCbatDptHardResult',
   'GameSessionCbatFlagResult',
   'GameSessionCbatFlagEasierResult',
   'GameSessionCbatInstrumentsResult',

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CBAT_ADMIN_GAMES, CBAT_GAMES, CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_BY_KEY } from '../cbatGames'
-import { CBAT_GAMES as BACKEND_CBAT_GAMES } from '../../../backend/constants/cbatGames'
+import { CBAT_GAMES as BACKEND_CBAT_GAMES, cbatHardKeyFor } from '../../../backend/constants/cbatGames'
 import batteryData from '../../../backend/constants/cbatBatteries.json'
 
 // CBAT_ADMIN_GAMES drives the per-game enable/disable rows on the admin Settings
@@ -17,13 +17,33 @@ import batteryData from '../../../backend/constants/cbatBatteries.json'
 
 const EASIER_SUFFIX = '-easier'
 const backendKeys = Object.keys(BACKEND_CBAT_GAMES)
-const hardKeys = backendKeys.filter(k => !k.endsWith(EASIER_SUFFIX))
+const easierKeys = backendKeys.filter(k => k.endsWith(EASIER_SUFFIX))
+
+// The Hard half of each split. Normally the Easier key minus its suffix — but
+// not for DPT, whose plain `dpt` had to stay the pre-split eight-round board
+// (clients predating the split still address it), putting Hard on `dpt-hard`.
+const splitHardKeys = new Set(easierKeys.map(cbatHardKeyFor))
+
+// Keys that are a difficulty half and nothing else, so they get no hub tile and
+// no admin toggle — the parent tile's toggle gates the page for both halves, the
+// same way a `-easier` key is gated. `dpt-hard`'s parent tile is `dpt`.
+const DIFFICULTY_ONLY = new Set([...easierKeys, ...[...splitHardKeys].filter(k => !CBAT_GAMES.some(g => g.key === k))])
+
+const toggleableKeys = backendKeys.filter(k => !DIFFICULTY_ONLY.has(k))
 
 describe('CBAT_ADMIN_GAMES', () => {
-  it('offers a toggle for every non-Easier backend game', () => {
+  it('offers a toggle for every backend game that is not purely a difficulty half', () => {
     const adminKeys = new Set(CBAT_ADMIN_GAMES.map(g => g.key))
-    for (const key of hardKeys) {
+    for (const key of toggleableKeys) {
       expect([key, adminKeys.has(key)]).toEqual([key, true])
+    }
+  })
+
+  it('offers no toggle for a key that is only a difficulty of another tile', () => {
+    const adminKeys = new Set(CBAT_ADMIN_GAMES.map(g => g.key))
+    expect(DIFFICULTY_ONLY.size).toBeGreaterThan(0)
+    for (const key of DIFFICULTY_ONLY) {
+      expect([key, adminKeys.has(key)]).toEqual([key, false])
     }
   })
 
@@ -110,11 +130,22 @@ describe('frontend ↔ backend registry coverage', () => {
 
   it('labels both halves of every split, and neither half of a single-difficulty game', () => {
     for (const key of backendKeys) {
-      const hasEasierSibling = !!BACKEND_CBAT_GAMES[`${key}${EASIER_SUFFIX}`]
-      const isEasier = key.endsWith(EASIER_SUFFIX)
-      const expectLabel = hasEasierSibling || isEasier
+      // Both halves of a split carry a label; everything else carries none —
+      // including `dpt`, the retired eight-round board, which is neither half
+      // of DPT's split and names itself instead.
+      const expectLabel = key.endsWith(EASIER_SUFFIX) || splitHardKeys.has(key)
       expect([key, !!CBAT_DIFFICULTY_BY_KEY[key]]).toEqual([key, expectLabel])
     }
+  })
+
+  it('leaves the retired eight-round DPT board out of the split entirely', () => {
+    // It is not Easier and not Hard: it ranks eight-round runs, which neither
+    // difficulty produces. Its own title says so.
+    expect(CBAT_DIFFICULTY_BY_KEY.dpt).toBeUndefined()
+    expect(splitHardKeys.has('dpt')).toBe(false)
+    expect(splitHardKeys.has('dpt-hard')).toBe(true)
+    expect(CBAT_LEADERBOARD_CONFIG.dpt.title).toBe('DPT (8-round)')
+    expect(CBAT_LEADERBOARD_CONFIG.dpt.difficultyGroup).toBeUndefined()
   })
 
   it('leaves Vigilance unlabelled — it ships one difficulty on purpose', () => {
