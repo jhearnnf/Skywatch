@@ -347,7 +347,7 @@ describe('CbatLeaderboard — "You" progress tab', () => {
   describe('current-form percentile', () => {
     const withForm = (over = {}) => progressData([10, 12, 14, 15], {
       form: {
-        form: 12.8, formTime: 24.3, percentile: 72, cohort: 34, window: 5,
+        form: 12.8, formTime: 24.3, percentile: 72, cohort: 34, window: 3,
         aheadOf: 24, tiedWith: 0, betterThanMe: 9, ...over,
       },
     })
@@ -361,7 +361,7 @@ describe('CbatLeaderboard — "You" progress tab', () => {
       // Ahead of 72% => in the best 28% of the field.
       await waitFor(() => expect(screen.getByText('28%')).toBeDefined())
       expect(screen.getByText(/you're in the top/i)).toBeDefined()
-      expect(screen.getByText(/last 5 runs avg/i)).toBeDefined()
+      expect(screen.getByText(/last 3 runs avg/i)).toBeDefined()
     })
 
     // Most CBAT games have a scoring ceiling, so a chunk of the field shares a perfect recent-form
@@ -418,7 +418,7 @@ describe('CbatLeaderboard — "You" progress tab', () => {
         render(<CbatLeaderboard />)
         await selectYou()
 
-        await waitFor(() => expect(screen.getByText(/last 5 runs avg 15\/15 · 18\.6s/i)).toBeDefined())
+        await waitFor(() => expect(screen.getByText(/last 3 runs avg 15\/15 · 18\.6s/i)).toBeDefined())
       })
 
       // Target runs a fixed 60 seconds — its time is a constant, not an achievement, so it would be
@@ -429,7 +429,7 @@ describe('CbatLeaderboard — "You" progress tab', () => {
         render(<CbatLeaderboard />)
         await selectYou()
 
-        await waitFor(() => expect(screen.getByText(/last 5 runs avg 240/i)).toBeDefined())
+        await waitFor(() => expect(screen.getByText(/last 3 runs avg 240/i)).toBeDefined())
         expect(screen.queryByText(/60s/i)).toBeNull()
       })
 
@@ -439,7 +439,7 @@ describe('CbatLeaderboard — "You" progress tab', () => {
         render(<CbatLeaderboard />)
         await selectYou()
 
-        await waitFor(() => expect(screen.getByText(/last 5 runs avg 13\/15$/i)).toBeDefined())
+        await waitFor(() => expect(screen.getByText(/last 3 runs avg 13\/15$/i)).toBeDefined())
       })
     })
 

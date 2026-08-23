@@ -222,7 +222,7 @@ describe('GET /api/games/cbat/:gameKey/progress', () => {
     });
   });
 
-  // Recent-form percentile: the user's last-5 mean against every other user's last-5 mean.
+  // Recent-form percentile: the user's last-3 mean against every other user's last-3 mean.
   describe('recent-form percentile (?percentile=1)', () => {
     // Gives `user` a form of `myForm` and creates `others.length` rivals with the given forms.
     // Every entrant gets 3 runs so they clear FORM_MIN_RUNS.
@@ -253,7 +253,7 @@ describe('GET /api/games/cbat/:gameKey/progress', () => {
 
       // Best of 6 → ahead of 5 of them.
       expect(res.body.data.form).toMatchObject({
-        percentile: 83, cohort: 6, form: 10, window: 5,
+        percentile: 83, cohort: 6, form: 10, window: 3,
         aheadOf: 5, tiedWith: 0, betterThanMe: 0,
       });
     });

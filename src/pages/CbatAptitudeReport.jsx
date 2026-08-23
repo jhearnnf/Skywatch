@@ -136,8 +136,13 @@ function TestRow({ test }) {
       <span className="text-slate-700 w-[92px] shrink-0 truncate" title={test.label}>{test.code}{mult}</span>
       <div className="flex-1 min-w-0"><StanineBar stanine={test.stanine} compact /></div>
       <span className={`w-6 text-right font-mono font-bold ${tone.text}`}>{Math.round(test.stanine)}</span>
-      <span className="hidden sm:block w-[150px] shrink-0 text-slate-600 truncate text-right">
-        {test.played.map(p => `${p.label} ${p.form}`).join(' · ')}
+      {/* Labelled inline, because an unlabelled number here reads as "the score you got" rather
+          than the mean of your last three goes that it actually is. */}
+      <span
+        className="hidden sm:block w-[150px] shrink-0 text-slate-600 truncate text-right"
+        title="Your average score over your last 3 goes on Hard, not your best ever."
+      >
+        <span className="text-slate-500">Last 3:</span> {test.played.map(p => `${p.label} ${p.form}`).join(' · ')}
       </span>
       {test.match === 'proxy' && (
         <span className="hidden md:inline text-[9px] text-slate-600 uppercase tracking-wide" title="A SkyWatch game that trains the same skill, not a simulation of this exact test">
@@ -779,7 +784,7 @@ export default function CbatAptitudeReport() {
                                 ? `Play it on Hard and it starts counting. Helps your ${f.domainLabel}.`
                                 : `Play it${onHard(game)} ${f.needsRuns?.[0]?.runsNeeded ?? 3} more time${(f.needsRuns?.[0]?.runsNeeded ?? 3) === 1 ? '' : 's'} and it starts counting. Helps your ${f.domainLabel}.`)
                             : f.nextTarget
-                              ? `Average ${f.nextTarget.score}+${onHard(game)} to go from level ${Math.round(f.stanine)} to ${Math.round(f.stanine) + 1}. Helps your ${f.domainLabel}.`
+                              ? `Average ${f.nextTarget.score}+ across 3 goes${onHard(game)} to go from level ${Math.round(f.stanine)} to ${Math.round(f.stanine) + 1}. Helps your ${f.domainLabel}.`
                               : `You're on level ${Math.round(f.stanine)}. Helps your ${f.domainLabel}.`}
                         </span>
                       </span>
@@ -820,7 +825,7 @@ export default function CbatAptitudeReport() {
             The red line is level {targetStanine ? Math.round(targetStanine * 10) / 10 : '-'}. Reach it in every skill area and
             you land exactly on this role&apos;s pass mark. The chips under each row are the games that feed it, so tap one to
             go and play it. Games with two difficulties open on Hard, the only runs this report counts. Tap the row
-            itself to see how you scored on each. Anything greyed out isn&apos;t counting yet, almost always because you
+            itself to see your average score on each, taken from your last 3 goes. Anything greyed out isn&apos;t counting yet, almost always because you
             haven&apos;t played its game enough times.
           </p>
 
@@ -882,7 +887,7 @@ export default function CbatAptitudeReport() {
               </li>
               <li>
                 <span className="block text-slate-700 font-bold mb-0.5">We use your recent scores, not your best</span>
-                Each game counts the average of your last 5 goes, and you need at least 3 before it counts at all. On the
+                Each game counts the average of your last 3 goes, so you need 3 goes before it counts at all. On the
                 day you get one attempt, so your best ever score from fifty tries is not what you would walk in and repeat.
                 Only Hard difficulty counts, because the real test has one setting.
               </li>

@@ -157,7 +157,7 @@ describe('CbatAptitudeReport', () => {
     // Both instructions name the difficulty: CUT and SAT are split games and only their Hard runs
     // feed this score, so "average 409+" on its own would be advice a user could follow on Easier
     // and get nothing for.
-    expect(screen.getByText(/Average 409\+ on Hard to go from level 5 to 6/)).toBeInTheDocument()
+    expect(screen.getByText(/Average 409\+ across 3 goes on Hard to go from level 5 to 6/)).toBeInTheDocument()
     expect(screen.getByText(/Play it on Hard 2 more times and it starts counting/)).toBeInTheDocument()
     expect(screen.getAllByText('Play')[0]).toHaveAttribute('href', '/cbat/cut?difficulty=hard')
   })

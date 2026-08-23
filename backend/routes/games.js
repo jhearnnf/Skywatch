@@ -3570,7 +3570,7 @@ router.get('/cbat/report/:batteryKey', protect, async (req, res) => {
 // Opt-in via ?percentile=1 because it aggregates the whole collection: the post-game sparkline
 // fires /progress on every single game completion and doesn't need this, so it stays off that
 // hot path. The { userId: 1, createdAt: -1 } index on every result model serves the $sort.
-const FORM_WINDOW = 5;         // runs averaged into "current form"
+const FORM_WINDOW = 3;         // runs averaged into "current form" — same window as the Aptitude Report
 const FORM_MIN_RUNS = 3;       // fewer runs than this and a user isn't ranked (their own or others')
 const FORM_MIN_COHORT = 5;     // below this the percentile is meaningless (and near-deanonymising)
 

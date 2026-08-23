@@ -32,9 +32,10 @@ const { scoreToStanine, scoreForStanine } = require('./cbatStanine');
 // Matches the recent-form window used by the leaderboard percentile, for the reasons given there:
 // one bad run shouldn't tank the estimate, and a lifetime average would permanently drag in a
 // user's worst early runs — punishing the very improvement the report exists to show.
-const FORM_WINDOW = 5;
+const FORM_WINDOW = 3;
 // Below this, a game's average is noise and the test is reported as "needs more runs" rather than
-// scored. It doubles as the report's core call to action.
+// scored. It doubles as the report's core call to action. It is equal to FORM_WINDOW, so a scored
+// test is always averaging a full window — never one or two runs standing in for three.
 const FORM_MIN_RUNS = 3;
 
 // Only Hard counts. The real CBAT has one difficulty, so folding an Easier run into the estimate
