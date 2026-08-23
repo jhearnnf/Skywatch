@@ -530,3 +530,114 @@ describe('Admin — Reports tab', () => {
     expect(document.body.classList.contains('admin-wide')).toBe(false)
   })
 })
+
+// ── Per-game breakdown sorting ────────────────────────────────────────────
+
+describe('Admin — Reports per-game breakdown sorting', () => {
+  beforeEach(() => { global.fetch = setupFetch() })
+  afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
+
+  // The breakdown is the only table on the tab carrying an Abandon % column, so
+  // its sort button is a stable handle on it.
+  const perGameTable = () => screen.getByRole('button', { name: /Sort by Abandon %/i }).closest('table')
+  const gameOrder = () =>
+    Array.from(perGameTable().querySelectorAll('tbody tr')).map(tr => tr.querySelector('td').textContent)
+  const sortBy = name => fireEvent.click(screen.getByRole('button', { name: new RegExp(`Sort by ${name}`, 'i') }))
+
+  const SERVER_ORDER = ['Trace Practise 2D', 'Trace Practise 3D', 'Target', 'Angles', 'Target (tutorial)']
+
+  it('leaves the backend ordering in place until a column is clicked', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Per-game Breakdown')).toBeInTheDocument())
+    expect(gameOrder()).toEqual(SERVER_ORDER)
+  })
+
+  it('cycles a numeric column through desc, asc, then back to server order', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Per-game Breakdown')).toBeInTheDocument())
+
+    // First click on a number column opens on the biggest values.
+    sortBy('Sessions')
+    expect(gameOrder()).toEqual(['Target', 'Angles', 'Trace Practise 2D', 'Target (tutorial)', 'Trace Practise 3D'])
+
+    sortBy('Sessions')
+    expect(gameOrder()).toEqual(['Trace Practise 3D', 'Target (tutorial)', 'Trace Practise 2D', 'Angles', 'Target'])
+
+    // Third click releases the sort rather than flipping again.
+    sortBy('Sessions')
+    expect(gameOrder()).toEqual(SERVER_ORDER)
+  })
+
+  it('sorts the Game column alphabetically first', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Per-game Breakdown')).toBeInTheDocument())
+
+    sortBy('Game')
+    expect(gameOrder()).toEqual(['Angles', 'Target', 'Target (tutorial)', 'Trace Practise 2D', 'Trace Practise 3D'])
+
+    sortBy('Game')
+    expect(gameOrder()).toEqual(['Trace Practise 3D', 'Trace Practise 2D', 'Target (tutorial)', 'Target', 'Angles'])
+  })
+
+  it('sorts the other measures too, including Abandon %', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Per-game Breakdown')).toBeInTheDocument())
+
+    sortBy('Abandon %')
+    expect(gameOrder()[0]).toBe('Target (tutorial)')   // 37.5%, the worst
+
+    sortBy('Players')
+    expect(gameOrder()[0]).toBe('Angles')              // 6 players, the most
+
+    sortBy('Avg/Player')
+    expect(gameOrder()[0]).toBe('Target')              // 3.75, the highest
+
+    sortBy('Starts')
+    expect(gameOrder()[0]).toBe('Target')              // 17 starts, the most
+  })
+
+  it('marks the sorted column with aria-sort and clears it from the others', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Per-game Breakdown')).toBeInTheDocument())
+
+    const header = name => screen.getByRole('button', { name: new RegExp(`Sort by ${name}`, 'i') }).closest('th')
+    expect(header('Sessions').getAttribute('aria-sort')).toBe('none')
+
+    sortBy('Sessions')
+    expect(header('Sessions').getAttribute('aria-sort')).toBe('descending')
+    sortBy('Sessions')
+    expect(header('Sessions').getAttribute('aria-sort')).toBe('ascending')
+
+    sortBy('Players')
+    expect(header('Players').getAttribute('aria-sort')).toBe('descending')
+    expect(header('Sessions').getAttribute('aria-sort')).toBe('none')
+  })
+
+  it('drops a Δ sort when compare is switched back off', async () => {
+    // The shared compare mock gives every game the same delta, which sorts to a
+    // no-op. Vary them so a Δ sort is actually visible in the row order.
+    const DELTAS = { 'plane-turn-2d': 0.1, 'plane-turn-3d': 0.5, target: -0.2, angles: 0.9, 'target-tutorial': 0.3 }
+    global.fetch = setupFetch({
+      cbat: { ...MOCK_CBAT_CMP, data: {
+        ...MOCK_CBAT_CMP.data,
+        perGame: MOCK_CBAT_CMP.data.perGame.map(g => ({ ...g, sessionsDelta: DELTAS[g.key] })),
+      } },
+    })
+
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Per-game Breakdown')).toBeInTheDocument())
+
+    const toggle = () => screen.getByRole('switch', { name: /Compare to previous/i })
+    fireEvent.click(toggle())
+    await waitFor(() => expect(screen.getByText(/Δ vs prev/i)).toBeInTheDocument())
+
+    sortBy('Δ vs prev')
+    expect(gameOrder()).toEqual(['Angles', 'Trace Practise 3D', 'Target (tutorial)', 'Trace Practise 2D', 'Target'])
+
+    // The column disappears with compare mode, so the sort must not linger and
+    // silently reorder the table by a measure that is no longer on screen.
+    fireEvent.click(toggle())
+    await waitFor(() => expect(screen.queryByText(/Δ vs prev/i)).toBeNull())
+    expect(gameOrder()).toEqual(SERVER_ORDER)
+  })
+})

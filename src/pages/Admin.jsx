@@ -840,6 +840,46 @@ function PerGameTableSkeleton() {
   )
 }
 
+// Per-game breakdown table header. Every column is sortable so an admin can ask
+// "which test is abandoned most?" without exporting the numbers. Numeric columns
+// open descending (the big values are the ones being hunted for), the Game name
+// opens A-Z. Clicking the active column flips direction; a third click drops back
+// to the backend's own ordering, which is the only view where the rows line up
+// with the Sessions by Game chart beside it.
+function SortHeader({ label, sortKey, sort, onSort, align = 'right' }) {
+  const active = sort.key === sortKey
+  const dir = active ? sort.dir : null
+  return (
+    <th
+      className={`${align === 'left' ? 'text-left' : 'text-right'} px-3 py-2 font-bold`}
+      aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        title={`Sort by ${label}`}
+        aria-label={`Sort by ${label}`}
+        className={`inline-flex items-center gap-1 uppercase tracking-wider font-bold transition-colors hover:text-slate-700 ${
+          align === 'left' ? '' : 'flex-row-reverse'
+        } ${active ? 'text-brand-600' : ''}`}
+      >
+        <span>{label}</span>
+        <span aria-hidden="true" className={`text-[9px] leading-none ${active ? '' : 'text-slate-300'}`}>
+          {active && dir === 'asc' ? '▲' : '▼'}
+        </span>
+      </button>
+    </th>
+  )
+}
+
+// Cycles one column through desc → asc → off (back to server order). Sorting a
+// new column always starts at the direction that column reads best in.
+function nextSort(prev, key, firstDir) {
+  if (prev.key !== key) return { key, dir: firstDir }
+  if (prev.dir === firstDir) return { key, dir: firstDir === 'desc' ? 'asc' : 'desc' }
+  return { key: null, dir: null }
+}
+
 // Tester emphasis — the red watermarked row, the pulsing idle border and the
 // tester-first sort order in the users list, plus the Test Usage chart in
 // Reports — is only useful while a beta round is running. Admins doing anything
@@ -871,6 +911,10 @@ function ReportsTab({ API }) {
   // no tester-specific reporting anywhere. Read once on mount — only one tab is
   // mounted at a time, so the toggle can't change underneath this component.
   const [testerFx] = useState(readTesterFx)
+
+  // Per-game breakdown sort. null key = the order the backend sent, which is the
+  // one that matches the Sessions by Game chart rendered next to the table.
+  const [perGameSort, setPerGameSort] = useState({ key: null, dir: null })
 
   // Snapshot is fetched ONCE on mount — it doesn't depend on the window picker.
   useEffect(() => {
@@ -917,6 +961,31 @@ function ReportsTab({ API }) {
     return () => { cancelled = true }
   }, [API, window, cmpQuery])
 
+  // Δ only exists in compare mode. Sorting by a column that isn't on screen would
+  // silently reorder the table, so that key is ignored while compare is off — and
+  // picked back up if it's switched on again.
+  const sortKey = !compareActive && perGameSort.key === 'sessionsDelta' ? null : perGameSort.key
+  const sortDir = sortKey ? perGameSort.dir : null
+
+  // Sorted rows for the per-game breakdown. The label sorts as text; every other
+  // column is numeric. Missing numbers (a game with no comparison delta) always
+  // sink to the bottom rather than counting as zero, so an absent measurement is
+  // never mistaken for a flat one.
+  const perGameRows = useMemo(() => {
+    const rows = cbat?.perGame ?? []
+    if (!sortKey) return rows
+    const sign = sortDir === 'asc' ? 1 : -1
+    return [...rows].sort((a, b) => {
+      if (sortKey === 'label') return sign * String(a.label).localeCompare(String(b.label))
+      const av = a[sortKey], bv = b[sortKey]
+      const aMissing = av == null || Number.isNaN(av)
+      const bMissing = bv == null || Number.isNaN(bv)
+      if (aMissing || bMissing) return aMissing && bMissing ? 0 : aMissing ? 1 : -1
+      // Ties keep the backend's order so the table doesn't reshuffle on refetch.
+      return sign * (av - bv) || 0
+    })
+  }, [cbat?.perGame, sortKey, sortDir])
+
   if (error) return <p className="text-sm text-red-500 py-8 text-center">{error}</p>
 
   const windowedDimmed = windowedLoading && windowed ? 'opacity-60 transition-opacity' : ''
@@ -927,6 +996,9 @@ function ReportsTab({ API }) {
   // set of keys; map them to labels for the chart legend/axis greying.
   const practiceKeySet  = new Set(cbat?.practiceKeys ?? [])
   const practiceLabels  = (cbat?.practiceKeys ?? []).map(k => cbat?.gameLabels?.[k]).filter(Boolean)
+
+  const perGameSortState = { key: sortKey, dir: sortDir }
+  const sortPerGame = key => setPerGameSort(prev => nextSort(prev, key, key === 'label' ? 'asc' : 'desc'))
 
   // Comparison data is only present when the backend honoured the compare flag
   // (i.e. compareActive AND the response carries it). Guard on both.
@@ -1242,23 +1314,23 @@ function ReportsTab({ API }) {
                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Per-game Breakdown</h4>
                   <WindowChip window={window} sm />
                 </div>
-                <p className="text-[10px] text-slate-400 mt-0.5">window: {window}{compareActive ? ' · Δ = sessions vs previous period' : ''}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">window: {window}{compareActive ? ' · Δ = sessions vs previous period' : ''} · click a column heading to sort</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider">
                     <tr>
-                      <th className="text-left  px-3 py-2 font-bold">Game</th>
-                      <th className="text-right px-3 py-2 font-bold">Sessions</th>
-                      {compareActive && <th className="text-right px-3 py-2 font-bold">Δ vs prev</th>}
-                      <th className="text-right px-3 py-2 font-bold">Players</th>
-                      <th className="text-right px-3 py-2 font-bold">Avg/Player</th>
-                      <th className="text-right px-3 py-2 font-bold">Starts</th>
-                      <th className="text-right px-3 py-2 font-bold">Abandon %</th>
+                      <SortHeader label="Game"       sortKey="label"        align="left" sort={perGameSortState} onSort={sortPerGame} />
+                      <SortHeader label="Sessions"   sortKey="sessions"     sort={perGameSortState} onSort={sortPerGame} />
+                      {compareActive && <SortHeader label="Δ vs prev" sortKey="sessionsDelta" sort={perGameSortState} onSort={sortPerGame} />}
+                      <SortHeader label="Players"    sortKey="players"      sort={perGameSortState} onSort={sortPerGame} />
+                      <SortHeader label="Avg/Player" sortKey="avgPerPlayer" sort={perGameSortState} onSort={sortPerGame} />
+                      <SortHeader label="Starts"     sortKey="starts"       sort={perGameSortState} onSort={sortPerGame} />
+                      <SortHeader label="Abandon %"  sortKey="abandonPct"   sort={perGameSortState} onSort={sortPerGame} />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {cbat.perGame.map(g => (
+                    {perGameRows.map(g => (
                       <tr key={g.key}>
                         <td className={`px-3 py-2 font-semibold ${practiceKeySet.has(g.key) ? 'text-slate-400' : ''}`}>{g.label}</td>
                         <td className="px-3 py-2 text-right">{fmtNum(g.sessions)}</td>
