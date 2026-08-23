@@ -759,6 +759,18 @@ export default function Profile() {
       {tab === 'tutorials' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
           <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden divide-y divide-slate-100">
+            {/* Community lives on the website, not in the app — see NATIVE_APP
+                in utils/appMode.js. The row points at /chat, which renders the
+                "Community is on the website" explainer natively, so the app
+                still says where the channels are instead of never mentioning
+                them. Gated on NATIVE_APP rather than slim mode: web slim mode
+                has the real Community nav button already. */}
+            {NATIVE_APP && (
+              <Link to="/chat" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+                <span>💬 Community</span>
+                <span className="text-slate-400">→</span>
+              </Link>
+            )}
             <Link to="/share" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
               <span>📤 Share SkyWatch</span>
               <span className="text-slate-400">→</span>
