@@ -143,6 +143,52 @@ header.fixed {
   animation: report-loading-bar 1.1s ease-in-out infinite;
 }
 
+/* ── Aptitude Report, while it is being worked out ────────────────────────
+   The card holds its exact height during the fetch (see AptitudeReportCard),
+   and these are what make that held space read as calculation rather than as a
+   stalled page. Three parts, deliberately on different periods so they never
+   pulse in lockstep and turn into one throb. */
+
+/* The progress rail fills and empties, like a gauge being swept. */
+@keyframes aptitude-rail-fill {
+  0%   { transform: scaleX(0);    opacity: 0.35; }
+  55%  { transform: scaleX(1);    opacity: 0.9;  }
+  100% { transform: scaleX(0);    opacity: 0.35; }
+}
+.aptitude-rail-fill {
+  transform-origin: left center;
+  animation: aptitude-rail-fill 2.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* A brighter head riding the rail, a beat out of phase with the fill. */
+@keyframes aptitude-rail-scan {
+  0%   { left: -30%; }
+  100% { left: 100%; }
+}
+.aptitude-rail-scan {
+  animation: aptitude-rail-scan 1.45s ease-in-out infinite;
+}
+
+/* The status stripe breathes between the neutral blue and the brand, so the
+   one coloured element on the card is clearly "not settled yet". */
+@keyframes aptitude-stripe-breathe {
+  0%, 100% { background-color: #1a3a5c; }
+  50%      { background-color: #2d72d4; }
+}
+.aptitude-stripe-breathe {
+  animation: aptitude-stripe-breathe 2.4s ease-in-out infinite;
+}
+
+/* Three dots after "Analysing aptitude results", each a step behind the last.
+   Opacity only — spacing must not move, or the line reflows on every frame. */
+@keyframes aptitude-dot {
+  0%, 60%, 100% { opacity: 0.2; }
+  30%           { opacity: 1; }
+}
+.aptitude-dot { animation: aptitude-dot 1.35s ease-in-out infinite; }
+.aptitude-dot-2 { animation-delay: 0.18s; }
+.aptitude-dot-3 { animation-delay: 0.36s; }
+
 /* ── Base ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
