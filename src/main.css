@@ -340,6 +340,24 @@ body.community-selectable .app-shell-content * {
   -webkit-touch-callout: default;
 }
 
+/* Opt one element back into selection.
+ *
+ * Same `body { user-select: none }` problem as the block above, but for a
+ * single element rather than a whole route, and for everyone rather than
+ * admins. Tailwind's `select-text` covers the `user-select` half; the half it
+ * has no utility for is `-webkit-touch-callout`, and on a touch device that is
+ * the half that matters — long-press is how selection is reached at all, and
+ * the app-wide `none` suppresses the menu that starts it.
+ *
+ * Used for text that a user may need to copy by hand when a copy button is not
+ * available or does not work: see NativeCommunity in src/pages/chat/Chat.jsx,
+ * where the address is the only route back to Community from the native app. */
+.user-selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 /* RTT gameplay: widen the shell so the sensor picture gets the screen. Field of
    view is fixed, so a wider arena is literally more warning of a crossing
    target. Toggled from src/pages/CbatRtt.jsx while playing. */

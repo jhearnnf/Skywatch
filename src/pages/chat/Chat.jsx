@@ -43,13 +43,27 @@ function Unavailable({ heading, detail }) {
 // gate exists to prevent. Same shape as the native subscribe prompt in
 // UpgradePrompt for that same reason.
 function NativeCommunity() {
-  const [copied, setCopied] = useState(false)
+  // 'idle' | 'copied' | 'failed'. The failure branch is not defensive padding:
+  // the Clipboard API is unavailable or blocked often enough in a WebView that
+  // a bare .then() leaves a dead button and no explanation. When it fails the
+  // address is still on screen and selectable (.user-selectable in main.css),
+  // so the message points at that instead.
+  const [copyState, setCopyState] = useState('idle')
 
   const copyLink = () => {
-    navigator.clipboard.writeText(COMMUNITY_URL).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2500)
-    })
+    // The write is issued synchronously on click; the try/catch is for a
+    // navigator.clipboard that is absent altogether, which throws before any
+    // promise exists, and the .catch() is for one that exists and refuses.
+    try {
+      navigator.clipboard.writeText(COMMUNITY_URL)
+        .then(() => {
+          setCopyState('copied')
+          setTimeout(() => setCopyState('idle'), 2500)
+        })
+        .catch(() => setCopyState('failed'))
+    } catch {
+      setCopyState('failed')
+    }
   }
 
   return (
@@ -63,14 +77,20 @@ function NativeCommunity() {
       </p>
       <div className="flex flex-col items-center gap-3">
         <p className="text-xs text-slate-400">Visit</p>
-        <p className="text-sm font-bold text-brand-600">skywatch.academy/chat</p>
+        <p className="text-sm font-bold text-brand-600 user-selectable">skywatch.academy/chat</p>
         <button
           onClick={copyLink}
           className="inline-block bg-brand-600 hover:bg-brand-700 text-white font-bold px-6 py-3 rounded-2xl text-sm transition-colors"
           style={{ boxShadow: '0 0 20px rgba(91,170,255,0.25)' }}
         >
-          {copied ? '✓ Copied!' : 'Copy Link'}
+          {copyState === 'copied' ? '✓ Copied!' : 'Copy Link'}
         </button>
+        {copyState === 'failed' && (
+          <p className="text-xs text-slate-400 max-w-[16rem]">
+            Copying did not work on this device. Press and hold the address above to select it, then
+            copy it by hand.
+          </p>
+        )}
       </div>
     </div>
   )

@@ -89,4 +89,39 @@ describe('Community in the native app', () => {
     expect(screen.getByText('Chat is unavailable')).toBeInTheDocument()
     mockSettings.value = { chatEnabled: true }
   })
+
+  it('marks the address selectable, so it can be copied by hand', () => {
+    // body sets `user-select: none` app-wide (main.css), which would otherwise
+    // make the address impossible to highlight — and the button the only way
+    // out of this screen.
+    mockNativeApp.value = true
+    render(<Chat />)
+
+    expect(screen.getByText('skywatch.academy/chat').className).toContain('user-selectable')
+  })
+
+  it('says what to do instead when copying fails', async () => {
+    // A rejected write used to leave the button dead and silent.
+    mockNativeApp.value = true
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'))
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+
+    render(<Chat />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Link' }))
+
+    await waitFor(() => expect(screen.getByText(/Press and hold the address above/)).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: '✓ Copied!' })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it('does not throw when the Clipboard API is missing entirely', async () => {
+    mockNativeApp.value = true
+    vi.stubGlobal('navigator', { ...navigator, clipboard: undefined })
+
+    render(<Chat />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Link' }))
+
+    await waitFor(() => expect(screen.getByText(/Press and hold the address above/)).toBeInTheDocument())
+    vi.unstubAllGlobals()
+  })
 })
