@@ -64,23 +64,12 @@ export function DifficultyMarker({ tuning }) {
   )
 }
 
-// The pair, flanking a title. `difficulties` is ordered [easier, hard] so the
-// easier option lands left of the title and hard lands right of it.
-export function DifficultyTitleRow({ difficulties, difficulty, onSelect, launching, children }) {
-  const btn = (t) => (
-    <DifficultyButton
-      tuning={t}
-      selected={difficulty === t.key}
-      onSelect={onSelect}
-      flashing={launching && difficulty === t.key}
-      dimmed={launching && difficulty !== t.key}
-    />
-  )
-  return (
-    <div className="flex items-center justify-center gap-3 mb-1">
-      {btn(difficulties[0])}
-      {children}
-      {btn(difficulties[1])}
-    </div>
-  )
-}
+// There is deliberately NO helper here that lays the pair out for you. A
+// `DifficultyTitleRow` used to live at this spot and flanked the title with one
+// button either side; no page ever used it, and it caught two separate attempts
+// at adding a split game — it looks plausible in review and is wrong on screen.
+//
+// Every split game renders the same three lines itself: title, then the pair in
+// a `flex items-center justify-center gap-3 mb-1` row UNDER it, then the
+// selected tuning's blurb. Copy that from CbatFlag.jsx. DOM order is pinned by
+// tests in CbatRosterCompletion.test.jsx and CbatDpt.difficulty.test.jsx.

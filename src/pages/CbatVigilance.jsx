@@ -7,7 +7,7 @@
 // ONE difficulty, deliberately. Every other CBAT game with a split lowers the
 // load and keeps the clock; here the clock is the load, and a shorter Vigilance
 // test would not be measuring vigilance. That is why this page has no
-// DifficultyTitleRow while its four siblings do.
+// difficulty pair under its title while its four siblings do.
 //
 // The grid carries its labels on ALL FOUR edges. That is not decoration: the
 // corpus's technique — "edge squares can be entered without checking the grid

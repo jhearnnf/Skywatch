@@ -96,11 +96,12 @@ describe.each(SPLIT_PAGES)('%s — difficulty wiring', (name, Component, key) =>
   })
 
   it('puts the difficulty pair BELOW the title, where every other split game has it', () => {
-    // FLAG, CUT, Numerical Operations, SAT and RTT all render title → pair →
-    // blurb on the intro card. Pinned by DOM order rather than by eye because
-    // the shared CbatDifficultySelect module also exports a `DifficultyTitleRow`
-    // that flanks the title instead — using it here would look plausible in
-    // review and be inconsistent on screen.
+    // FLAG, CUT, Numerical Operations, SAT, RTT and DPT all render title →
+    // pair → blurb on the intro card. Pinned by DOM order rather than by eye:
+    // the shared CbatDifficultySelect module used to also export a
+    // `DifficultyTitleRow` that flanked the title instead, which read as
+    // plausible in review and was wrong on screen every time someone reached
+    // for it. That export is gone; this assertion is what keeps it gone.
     const { container } = renderPage(Component)
     // The intro card's own title, not the page <h1> — both carry the game name.
     const title = container.querySelector('.text-xl.font-extrabold')
