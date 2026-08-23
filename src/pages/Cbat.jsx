@@ -376,7 +376,7 @@ export default function Cbat() {
         jsonLd={cbatHubJsonLd(isGameEnabled)}
       />
 
-      <h1 className="text-2xl font-extrabold text-slate-900 mb-1">CBAT Games</h1>
+      <h1 className="text-2xl font-extrabold text-slate-900 mb-1">CBAT Aptitude Practise</h1>
       <p className="text-sm text-slate-500 mb-2 sm:mb-4">Practise for CBAT with targeted training games.</p>
 
       {/* Guide strip — signed-out only. For a visitor the grid below is blurred
@@ -408,7 +408,7 @@ export default function Cbat() {
       {!user && (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 mb-5 text-center card-shadow">
           <div className="text-4xl mb-3">🔒</div>
-          <p className="font-bold text-slate-800 mb-1">Sign in to access CBAT Games</p>
+          <p className="font-bold text-slate-800 mb-1">Sign in to access CBAT Aptitude Practise</p>
           <p className="text-sm text-slate-500 mb-4">Create a free account to start practising.</p>
           <Link to="/login" className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
             Sign In

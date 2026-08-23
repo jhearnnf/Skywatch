@@ -179,7 +179,7 @@ describe('Cbat page — background images', () => {
   it('shows lock card and blurs grid when user is null', () => {
     mockUseAuth.mockReturnValue({ user: null })
     render(<Cbat />)
-    expect(screen.getByText(/Sign in to access CBAT Games/i)).toBeInTheDocument()
+    expect(screen.getByText(/Sign in to access CBAT Aptitude Practise/i)).toBeInTheDocument()
   })
 })
 

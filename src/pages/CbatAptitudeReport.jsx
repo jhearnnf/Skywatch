@@ -343,7 +343,7 @@ function RolePicker({ batteries, selected, targetBattery, onSelect, onSetTarget,
               : `I'm aiming for ${BATTERY_BY_KEY[selected]?.label}`}
           </button>
           <p className="text-[10px] text-slate-600 text-center mt-1.5">
-            We&apos;ll track this role for you on the CBAT Games page.
+            We&apos;ll track this role for you on the CBAT Aptitude Practise page.
           </p>
         </>
       ) : (
@@ -611,7 +611,7 @@ export default function CbatAptitudeReport() {
 
       <div className="flex items-center justify-between gap-3 mb-1">
         <h1 className="text-2xl font-extrabold text-slate-900">Aptitude Report</h1>
-        <Link to="/cbat" className="text-sm text-slate-500 hover:text-brand-600 transition-colors shrink-0">CBAT Games &rarr;</Link>
+        <Link to="/cbat" className="text-sm text-slate-500 hover:text-brand-600 transition-colors shrink-0">CBAT Aptitude Practise &rarr;</Link>
       </div>
       <p className="text-sm text-slate-500 mb-5">
         An estimate of how you&apos;d score on the real CBAT, and what to practise next. Pick the RAF role you want and
