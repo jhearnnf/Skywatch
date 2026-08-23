@@ -152,7 +152,11 @@ a:hover{text-decoration-color:currentColor}
 .masthead .wrap{max-width:1240px;margin:0 auto;padding:64px 32px 54px;
   display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:0 60px;align-items:start}
 .masthead .kicker,.masthead h1{grid-column:1/-1}
-.kicker{font:700 11.5px/1 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--brand)}
+/* Leading of 1.7, not 1. On a phone the kicker wraps onto a second line, and at
+   a line-height of 1 the two lines sit right on top of one another: the link's
+   underline lands in "updated for 2026". The extra leading has to clear the
+   underline as well as the text, hence 1.7 rather than a nominal 1.2. */
+.kicker{font:700 11.5px/1.7 var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--brand)}
 /* The way back to the site. A reader who arrived from Google has no history to
    go back to, so the masthead has to carry the link itself. Underlined because
    the whole kicker is already brand-coloured, so colour alone wouldn't read as a
