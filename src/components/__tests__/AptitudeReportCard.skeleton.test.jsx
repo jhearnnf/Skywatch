@@ -87,6 +87,27 @@ describe('AptitudeReportCard — loading skeleton', () => {
     expect(apiFetch).not.toHaveBeenCalled()
   })
 
+  // The skeleton must never show a figure. It used to roll a random number
+  // through the score slot to look like it was calculating, which read as a
+  // broken readout: the one number the card exists to report was visibly
+  // jumping between values nothing had computed. Dashes only, in both slots.
+  it('shows no digits at all while it is loading', () => {
+    const d = deferred()
+    const { container } = renderWith(vi.fn().mockReturnValue(d.promise))
+    expect(container.textContent).not.toMatch(/\d/)
+    expect(container.textContent).toContain('pass mark')
+  })
+
+  // Nothing in the held space may rest at, or animate towards, a width that
+  // could be read as a share of the score.
+  it('leaves the progress rail empty apart from one indeterminate pass', () => {
+    const d = deferred()
+    const { container } = renderWith(vi.fn().mockReturnValue(d.promise))
+    const rail = container.querySelector('.mt-3.h-2')
+    expect(rail.querySelectorAll('.aptitude-rail-scan')).toHaveLength(1)
+    expect(rail.querySelector('.aptitude-rail-fill')).toBeNull()
+  })
+
   // Height parity with the real card is the entire point, and it is achieved by
   // reusing the scored card's own boxes. A skeleton that stopped mirroring those
   // classes would silently reintroduce the shift, so the structure is pinned.

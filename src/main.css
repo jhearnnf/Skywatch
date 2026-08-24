@@ -143,40 +143,24 @@ header.fixed {
   animation: report-loading-bar 1.1s ease-in-out infinite;
 }
 
-/* ── Aptitude Report, while it is being worked out ────────────────────────
+/* ── Aptitude Report, while it is being worked out ──────────────────────
    The card holds its exact height during the fetch (see AptitudeReportCard),
    and these are what make that held space read as calculation rather than as a
-   stalled page. Three parts, deliberately on different periods so they never
-   pulse in lockstep and turn into one throb. */
+   stalled page. Everything here is deliberately non-committal: nothing pulses
+   in the score's colour, nothing rests at a width, nothing counts. A skeleton
+   that hints at a value is worse than one that plainly says "not yet". */
 
-/* The progress rail fills and empties, like a gauge being swept. */
-@keyframes aptitude-rail-fill {
-  0%   { transform: scaleX(0);    opacity: 0.35; }
-  55%  { transform: scaleX(1);    opacity: 0.9;  }
-  100% { transform: scaleX(0);    opacity: 0.35; }
-}
-.aptitude-rail-fill {
-  transform-origin: left center;
-  animation: aptitude-rail-fill 2.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-/* A brighter head riding the rail, a beat out of phase with the fill. */
+/* One head crossing an empty rail, on a long easing so it glides rather than
+   strobes. It used to be two layers — a gauge filling and emptying underneath a
+   faster scan — which beat against each other and made the card look busy. */
 @keyframes aptitude-rail-scan {
-  0%   { left: -30%; }
-  100% { left: 100%; }
+  0%   { left: -35%; opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
 }
 .aptitude-rail-scan {
-  animation: aptitude-rail-scan 1.45s ease-in-out infinite;
-}
-
-/* The status stripe breathes between the neutral blue and the brand, so the
-   one coloured element on the card is clearly "not settled yet". */
-@keyframes aptitude-stripe-breathe {
-  0%, 100% { background-color: #1a3a5c; }
-  50%      { background-color: #2d72d4; }
-}
-.aptitude-stripe-breathe {
-  animation: aptitude-stripe-breathe 2.4s ease-in-out infinite;
+  animation: aptitude-rail-scan 1.9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 
 /* Three dots after "Analysing aptitude results", each a step behind the last.
