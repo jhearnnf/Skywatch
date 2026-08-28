@@ -14,7 +14,8 @@
 jest.mock('../../utils/openRouter', () => ({ callOpenRouter: jest.fn() }));
 
 const { callOpenRouter } = require('../../utils/openRouter');
-const { generateScript, generateIdeas, subjectBrief } = require('../../services/clipperAi');
+const { generateScript, generateIdeas, subjectBrief, topicShot, constrainQuery } =
+  require('../../services/clipperAi');
 const { subjectFor, allowedRecipeIds } = require('../../constants/clipperSubjects');
 
 const FACTS = [
@@ -150,5 +151,30 @@ describe('ideas', () => {
       ideas: [{ oneLiner: 'A tip about pacing', hook: 'h', angle: 'a', mode: 'tips', subject: 'flag', factKeys: ['test:flag:0'] }],
     });
     expect((await generateIdeas({ facts: IDEA_FACTS }))[0].subject).toBe('flag');
+  });
+});
+
+describe('a stock query with nothing filmable left in it', () => {
+  // The old fallback picked a generic jet by beat index - by where the beat sat
+  // rather than by what it said.
+  it('reads the beat rather than counting beats', () => {
+    expect(constrainQuery('mental focus', 0, 'You have to listen for the callsign.'))
+      .toBe('pilot radio headset microphone');
+    expect(constrainQuery('mental focus', 0, 'Every answer is a compass bearing.'))
+      .toBe('aircraft compass heading indicator');
+  });
+
+  it('falls back to the generic list when the beat suggests nothing either', () => {
+    expect(constrainQuery('determination', 0, 'It is harder than it looks.'))
+      .toBe('fighter jet taking off runway');
+  });
+
+  it('leaves a query that already names something filmable alone', () => {
+    expect(constrainQuery('cockpit instrument panel', 0, 'Listen for the callsign.'))
+      .toBe('cockpit instrument panel');
+  });
+
+  it('has nothing to offer an empty beat', () => {
+    expect(topicShot('')).toBeNull();
   });
 });

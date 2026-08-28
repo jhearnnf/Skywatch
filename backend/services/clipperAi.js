@@ -269,12 +269,56 @@ const FALLBACK_QUERIES = [
   'jet aircraft banking through clouds',
 ];
 
-function constrainQuery(query, index = 0) {
+// The nearest concrete shot to a line about something abstract.
+//
+// FALLBACK_QUERIES alone made every collapsed query a different generic jet,
+// picked by beat index - which is to say, picked by where the beat sat rather
+// than by what it said. These read the beat instead: a line about listening for
+// a callsign gets a headset, a line about bearings gets a compass. Still not
+// literal, but a viewer can see why the picture is there, and that is the whole
+// difference between b-roll and filler.
+//
+// Ordered: the first match wins, so the more specific patterns come first.
+const TOPIC_SHOTS = [
+  { re: /\b(?:hear|heard|hearing|listen\w*|audio|auditory|voice|radio|callsign\w*|bleep\w*|sound)\b/,
+    query: 'pilot radio headset microphone' },
+  { re: /\b(?:bearing\w*|heading\w*|compass|navigat\w*|vector\w*|degrees)\b/,
+    query: 'aircraft compass heading indicator' },
+  { re: /\b(?:radar|contact\w*|track\w*|blip\w*|intercept\w*|scope)\b/,
+    query: 'air traffic control radar screen' },
+  { re: /\b(?:instrument\w*|dial\w*|gauge\w*|altimeter|attitude|horizon)\b/,
+    query: 'cockpit instrument panel dials' },
+  { re: /\b(?:memor\w*|recall\w*|remember\w*|brief\w*|forget\w*)\b/,
+    query: 'military briefing room map table' },
+  { re: /\b(?:second\w*|minute\w*|clock|timer|countdown|deadline)\b/,
+    query: 'aircraft cockpit clock instrument' },
+  { re: /\b(?:shape\w*|rotat\w*|angle\w*|spatial|3d|three-dimensional)\b/,
+    query: 'fighter jet banking turn sky' },
+  { re: /\b(?:screen\w*|display\w*|monitor\w*|panel\w*|console)\b/,
+    query: 'military operations room screens' },
+  { re: /\b(?:score\w*|rank\w*|result\w*|leaderboard\w*|marks?)\b/,
+    query: 'squadron pilots debrief hangar' },
+  { re: /\b(?:practis\w*|practic\w*|train\w*|simulat\w*|repeat\w*)\b/,
+    query: 'flight simulator cockpit training' },
+];
+
+function topicShot(beatText) {
+  const hay = String(beatText || '').toLowerCase();
+  if (!hay) return null;
+  return TOPIC_SHOTS.find(t => t.re.test(hay))?.query ?? null;
+}
+
+// `beatText` is what the line actually says. It is used only when the model's
+// own query has nothing filmable left in it, which is precisely the case where
+// picking blind hurts most.
+function constrainQuery(query, index = 0, beatText = '') {
   const words = String(query || '').toLowerCase().match(/[a-z0-9-]+/g) || [];
   const kept = words.filter(w => !ABSTRACT_QUERY_TOKENS.has(w));
   const hasSubject = kept.some(w => !WEAK_QUERY_TOKENS.has(w));
 
-  if (!hasSubject) return FALLBACK_QUERIES[index % FALLBACK_QUERIES.length];
+  if (!hasSubject) {
+    return topicShot(beatText) ?? FALLBACK_QUERIES[index % FALLBACK_QUERIES.length];
+  }
   // Stripping leaves dangling function words at both ends - "cockpit view of",
   // "at a desk" - and they only dilute the search.
   while (kept.length && QUERY_FUNCTION_WORDS.has(kept[kept.length - 1])) kept.pop();
@@ -425,8 +469,10 @@ Return ONLY the JSON object.`;
         visual: {
           kind,
           // Constrained rather than trusted: an abstract query fails silently,
-          // returning plenty of results that are all wrong.
-          query:    kind === 'stock' ? constrainQuery(b.visual?.query, i) : '',
+          // returning plenty of results that are all wrong. The beat's own words
+          // are passed in so a query with nothing filmable left falls back to a
+          // shot that at least belongs beside the line.
+          query:    kind === 'stock' ? constrainQuery(b.visual?.query, i, text) : '',
           recipeId,
         },
         sfxCue:  String(b.sfxCue  ?? '').trim(),
@@ -469,6 +515,8 @@ module.exports = {
   generateScript,
   subjectBrief,
   constrainQuery,
+  topicShot,
+  TOPIC_SHOTS,
   ABSTRACT_QUERY_TOKENS,
   FALLBACK_QUERIES,
   dedupeIdeas,

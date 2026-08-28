@@ -209,7 +209,80 @@ function interleave(lists) {
   return out;
 }
 
-async function searchFootage(term, { providers, limit = 18 } = {}) {
+// ── Relevance ───────────────────────────────────────────────────────────────
+//
+// Nothing used to rank these. Three providers were queried, their results were
+// interleaved, and the first eighteen were kept — so a clip's position in the
+// strip recorded which API answered fastest and nothing about whether it suited
+// the line it would sit under. That is most of why a finished video's pictures
+// did not match its words: the admin chose from an order that carried no signal
+// and, choosing left to right, mostly took whatever landed first.
+//
+// The signal available is thin (a Pexels clip's "title" is the photographer's
+// name) but it is not nothing: Pixabay ships its tags, DVIDS and the curated
+// library ship real titles. Score what we can, leave the rest at zero, and let
+// a clip that actually says "cockpit" beat one that says nothing.
+
+// Words that would match everything and so separate nothing.
+const RELEVANCE_STOPWORDS = new Set([
+  'a', 'an', 'the', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'and', 'or',
+  'is', 'are', 'be', 'it', 'its', 'this', 'that', 'you', 'your', 'they',
+  'video', 'clip', 'footage', 'stock', 'free', 'pexels', 'pixabay', 'by',
+]);
+
+function relevanceTokens(text) {
+  return (String(text || '').toLowerCase().match(/[a-z0-9]{3,}/g) || [])
+    .filter(w => !RELEVANCE_STOPWORDS.has(w));
+}
+
+// How well one candidate answers this beat.
+//
+// The query is weighted far above the beat text on purpose. The query names the
+// thing to film; the beat text is the line it plays under, and matching it is a
+// bonus rather than the job — a beat about "sixty seconds" should not pull up
+// clips of clocks ahead of the aircraft the query asked for.
+function scoreCandidate(candidate, queryTokens, beatTokens) {
+  const haystack = new Set(relevanceTokens(
+    `${candidate.title || ''} ${candidate.sourceUrl || ''}`,
+  ));
+
+  let score = 0;
+  for (const t of queryTokens) if (haystack.has(t)) score += 4;
+  for (const t of beatTokens)  if (haystack.has(t)) score += 1;
+
+  // Source priors. The curated library is clips somebody watched and kept, and
+  // DVIDS is public-domain military and aviation: both are likelier to belong
+  // on this channel than a generic stock hit, and neither describes itself as
+  // richly as Pixabay does, so a small prior stops good sources sinking purely
+  // for having terser metadata.
+  if (candidate.provider === 'library') score += 5;
+  if (candidate.provider === 'dvids')   score += 3;
+
+  // Portrait clips need no cropping into a 9:16 frame.
+  if (candidate.width && candidate.height && candidate.height > candidate.width) score += 2;
+
+  return score;
+}
+
+// Rank by relevance, but never let one provider take the whole strip: an admin
+// scanning left to right should still see the range available. Best clip first,
+// then the best from a different provider, and so on until the tie is spent.
+function rankCandidates(candidates, { queryTokens, beatTokens }) {
+  const scored = candidates
+    .map((c, i) => ({ c, i, score: scoreCandidate(c, queryTokens, beatTokens) }))
+    .sort((a, b) => (b.score - a.score) || (a.i - b.i));
+
+  const byProvider = new Map();
+  for (const row of scored) {
+    if (!byProvider.has(row.c.provider)) byProvider.set(row.c.provider, []);
+    byProvider.get(row.c.provider).push(row.c);
+  }
+  return interleave([...byProvider.values()]);
+}
+
+// `beatText` is the spoken line this clip will play under. Optional: a search
+// run by hand from the footage stage has a term and nothing else.
+async function searchFootage(term, { providers, limit = 18, beatText = '' } = {}) {
   const query = String(term || '').trim();
   if (!query) return [];
 
@@ -217,7 +290,11 @@ async function searchFootage(term, { providers, limit = 18 } = {}) {
     .filter(n => PROVIDERS[n]);
 
   const settled = await Promise.all(names.map(n => PROVIDERS[n](query)));
-  return interleave(settled).slice(0, limit);
+
+  const queryTokens = relevanceTokens(query);
+  const beatTokens  = relevanceTokens(beatText).filter(t => !queryTokens.includes(t));
+
+  return rankCandidates(settled.flat(), { queryTokens, beatTokens }).slice(0, limit);
 }
 
 module.exports = {
@@ -232,5 +309,8 @@ module.exports = {
   searchPixabay,
   configuredProviders,
   interleave,
+  rankCandidates,
+  scoreCandidate,
+  relevanceTokens,
   PROVIDERS,
 };

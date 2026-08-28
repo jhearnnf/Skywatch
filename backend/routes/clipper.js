@@ -924,7 +924,10 @@ router.post('/scripts/:id/footage/search', async (req, res) => {
     for (const beat of targets) {
       const term = String(req.body?.term || beat.visual?.query || '').trim();
       if (!term) continue;
-      const candidates = await searchFootage(term);
+      // The beat's own words go with the term: the query names a thing to
+      // film, the line says what the shot has to sit under, and a candidate
+      // that matches both is the one that belongs there.
+      const candidates = await searchFootage(term, { beatText: beat.text });
       footage[beat.id] = {
         ...(footage[beat.id] || {}),
         term,
