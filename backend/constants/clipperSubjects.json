@@ -1,0 +1,364 @@
+{
+  "_comment": [
+    "What a Clipper video can be ABOUT. Mirrors src/data/cbatGames.js — path and",
+    "spokenName must match a real route and the name the hub uses, and a frontend",
+    "test asserts that. JSON rather than JS for the same reason categories.json is:",
+    "the frontend imports it directly, so there is one list, not two.",
+    "",
+    "Every CBAT game is here, and a frontend test fails if one is missing. That",
+    "took adding the site-wide [data-demo-start] / [data-demo-answer] markers to",
+    "the ten pages that lacked them: those two attributes are the whole interface",
+    "the capture bot has, and without them a game cannot be filmed being played.",
+    "Adding a game to the site therefore means marking its start and answer",
+    "controls and adding a row here, or the channel can never show it.",
+    "",
+    "answerIntervalMs mirrors the landing wall's demo pool: how often the capture",
+    "bot presses an answer control to keep the game looking played. 0 means the",
+    "game runs on its own clock and pressing at it would only get in the way."
+  ],
+  "subjects": [
+    {
+      "key": "platform",
+      "kind": "platform",
+      "spokenName": "SkyWatch",
+      "what": "the site itself: a hub of CBAT-style aptitude games, each with its own leaderboard and score history.",
+      "aliases": [
+        "skywatch",
+        "skywatch.academy"
+      ],
+      "path": "/cbat",
+      "recipeId": "cbat-home",
+      "answerIntervalMs": 0,
+      "playMs": 0
+    },
+    {
+      "key": "leaderboard",
+      "kind": "platform",
+      "spokenName": "the SkyWatch leaderboards",
+      "what": "a ranked table per game, weekly and all-time, with your own scores tracked over time.",
+      "aliases": [
+        "leaderboard",
+        "leaderboards"
+      ],
+      "path": "/cbat/leaderboard",
+      "recipeId": "browse-leaderboard",
+      "answerIntervalMs": 0,
+      "playMs": 0
+    },
+    {
+      "key": "dpt",
+      "kind": "game",
+      "spokenName": "DPT",
+      "what": "vector several aircraft through gates and intercept enemy contacts, all by typing compass bearings.",
+      "aliases": [
+        "dpt",
+        "dynamic projection test",
+        "dynamic projection"
+      ],
+      "path": "/cbat/dpt",
+      "recipeId": "play-dpt",
+      "answerIntervalMs": 0,
+      "playMs": 20000
+    },
+    {
+      "key": "flag",
+      "kind": "game",
+      "spokenName": "FLAG",
+      "what": "sixty seconds of tracking aircraft, answering maths and identification questions and hitting target shapes at the same time.",
+      "aliases": [
+        "flag"
+      ],
+      "path": "/cbat/flag",
+      "recipeId": "play-flag",
+      "answerIntervalMs": 900,
+      "playMs": 20000
+    },
+    {
+      "key": "act",
+      "kind": "game",
+      "spokenName": "ACT",
+      "what": "the Auditory Capacity Test: track callsigns by ear, steer through the right gates and react to bleeps.",
+      "aliases": [
+        "act",
+        "auditory capacity test",
+        "auditory capacity"
+      ],
+      "path": "/cbat/act",
+      "recipeId": "play-act",
+      "answerIntervalMs": 2600,
+      "playMs": 22000
+    },
+    {
+      "key": "target",
+      "kind": "game",
+      "spokenName": "Target",
+      "what": "eight panels at once: hunt shapes, match lights, identify aircraft and find codes without dropping any of them.",
+      "aliases": [
+        "target"
+      ],
+      "path": "/cbat/target",
+      "recipeId": "play-target",
+      "answerIntervalMs": 1500,
+      "playMs": 20000
+    },
+    {
+      "key": "cut",
+      "kind": "game",
+      "spokenName": "the Cognitive Updating Test",
+      "what": "juggle six aircraft displays at once, holding fuel, speed, sensors, pressure and load drops in tolerance while warnings pile up.",
+      "aliases": [
+        "cut",
+        "cognitive updating test",
+        "cognitive updating"
+      ],
+      "path": "/cbat/cut",
+      "recipeId": "play-cut",
+      "answerIntervalMs": 1100,
+      "playMs": 22000
+    },
+    {
+      "key": "sat",
+      "kind": "game",
+      "spokenName": "the Situational Awareness Test",
+      "what": "watch a tactical picture of units, aircraft and radio calls build up, then recall the details from memory.",
+      "aliases": [
+        "sat",
+        "situational awareness test",
+        "situational awareness"
+      ],
+      "path": "/cbat/sat",
+      "recipeId": "play-sat",
+      "answerIntervalMs": 0,
+      "playMs": 20000
+    },
+    {
+      "key": "rtt",
+      "kind": "game",
+      "spokenName": "the Rapid Tracking Test",
+      "what": "slew a sensor camera onto moving targets and hold three centred frames of each before the pass ends.",
+      "aliases": [
+        "rtt",
+        "rapid tracking test",
+        "rapid tracking"
+      ],
+      "path": "/cbat/rtt",
+      "recipeId": "play-rtt",
+      "answerIntervalMs": 0,
+      "playMs": 18000
+    },
+    {
+      "key": "sma",
+      "kind": "game",
+      "spokenName": "the Sensory Motor Apparatus Test",
+      "what": "a red dot drifting across the display and a crosshair fixed at the centre, held together on a stick, a mouse or a touch pad.",
+      "aliases": [
+        "sma",
+        "sensory motor apparatus test",
+        "sensory motor"
+      ],
+      "path": "/cbat/sma",
+      "recipeId": "play-sma",
+      "answerIntervalMs": 0,
+      "playMs": 16000
+    },
+    {
+      "key": "plane-turn",
+      "kind": "game",
+      "spokenName": "Trace",
+      "what": "read an aircraft's turn and heading off the board, in two dimensions or three.",
+      "aliases": [
+        "trace",
+        "trace practise",
+        "plane turn"
+      ],
+      "path": "/cbat/trace",
+      "recipeId": "play-trace",
+      "answerIntervalMs": 1600,
+      "playMs": 20000
+    },
+    {
+      "key": "visualisation",
+      "kind": "game",
+      "spokenName": "Visualisation",
+      "what": "mentally weld flat shapes together, or rotate a 3D composite, to pick the figure that matches.",
+      "aliases": [
+        "visualisation",
+        "visualization"
+      ],
+      "path": "/cbat/visualisation",
+      "recipeId": "play-visualisation",
+      "answerIntervalMs": 2800,
+      "playMs": 20000
+    },
+    {
+      "key": "symbols",
+      "kind": "game",
+      "spokenName": "Symbols",
+      "what": "find the target symbol in a grid that grows every round.",
+      "aliases": [
+        "symbols"
+      ],
+      "path": "/cbat/symbols",
+      "recipeId": "play-symbols",
+      "answerIntervalMs": 1400,
+      "playMs": 18000
+    },
+    {
+      "key": "instruments",
+      "kind": "game",
+      "spokenName": "Instruments",
+      "what": "read cockpit instruments and call the aircraft's attitude under time pressure.",
+      "aliases": [
+        "instruments"
+      ],
+      "path": "/cbat/instruments",
+      "recipeId": "play-instruments",
+      "answerIntervalMs": 2400,
+      "playMs": 18000
+    },
+    {
+      "key": "ant",
+      "kind": "game",
+      "spokenName": "ANT",
+      "what": "the Airborne Numerical Test: work out arrival time, distance, fuel or speed against the clock.",
+      "aliases": [
+        "ant",
+        "airborne numerical test",
+        "airborne numerical"
+      ],
+      "path": "/cbat/ant",
+      "recipeId": "play-ant",
+      "answerIntervalMs": 2600,
+      "playMs": 22000
+    },
+    {
+      "key": "numerical-ops",
+      "kind": "game",
+      "spokenName": "Numerical Operations",
+      "what": "two-number arithmetic against the clock, plus, minus, times and divide, across four escalating rounds.",
+      "aliases": [
+        "numerical operations",
+        "numerical ops"
+      ],
+      "path": "/cbat/numerical-ops",
+      "recipeId": "play-numerical-ops",
+      "answerIntervalMs": 700,
+      "playMs": 20000
+    },
+    {
+      "key": "code-duplicates",
+      "kind": "game",
+      "spokenName": "Code Duplicates",
+      "what": "memorise a sequence of digits, then count how many times one of them appeared.",
+      "aliases": [
+        "code duplicates",
+        "duplicates"
+      ],
+      "path": "/cbat/code-duplicates",
+      "recipeId": "play-code-duplicates",
+      "answerIntervalMs": 2200,
+      "playMs": 20000
+    },
+    {
+      "key": "angles",
+      "kind": "game",
+      "spokenName": "Angles",
+      "what": "judge the angle on screen quickly and accurately, round after round.",
+      "aliases": [
+        "angles"
+      ],
+      "path": "/cbat/angles",
+      "recipeId": "play-angles",
+      "answerIntervalMs": 1600,
+      "playMs": 18000
+    },
+    {
+      "key": "dad",
+      "kind": "game",
+      "spokenName": "DAD",
+      "what": "Directions and Distances: follow a journey of relative turns from text alone, then name the direction back to the start.",
+      "aliases": [
+        "dad",
+        "directions and distances"
+      ],
+      "path": "/cbat/dad",
+      "recipeId": "play-dad",
+      "answerIntervalMs": 2400,
+      "playMs": 20000
+    },
+    {
+      "key": "sit",
+      "kind": "game",
+      "spokenName": "the Spatial Integration Test",
+      "what": "study the ground one isolated layer at a time, then judge a rotated two-second clip of the whole scene on a single detail.",
+      "aliases": [
+        "sit",
+        "spatial integration test",
+        "spatial integration"
+      ],
+      "path": "/cbat/sit",
+      "recipeId": "play-sit",
+      "answerIntervalMs": 2000,
+      "playMs": 22000
+    },
+    {
+      "key": "slt",
+      "kind": "game",
+      "spokenName": "the System Logic Test",
+      "what": "fifteen tabs of system figures with only two readable at once, and no single tab answering a question.",
+      "aliases": [
+        "slt",
+        "system logic test",
+        "system logic"
+      ],
+      "path": "/cbat/slt",
+      "recipeId": "play-slt",
+      "answerIntervalMs": 2600,
+      "playMs": 22000
+    },
+    {
+      "key": "vlt",
+      "kind": "game",
+      "spokenName": "the Verbal Logic Test",
+      "what": "eight tabs of briefing prose, two readable at once, where every answer needs two of them joined and the plainly-stated one is the trap.",
+      "aliases": [
+        "vlt",
+        "verbal logic test",
+        "verbal logic"
+      ],
+      "path": "/cbat/vlt",
+      "recipeId": "play-vlt",
+      "answerIntervalMs": 2600,
+      "playMs": 22000
+    },
+    {
+      "key": "matf",
+      "kind": "game",
+      "spokenName": "the Table Reading Test",
+      "what": "a coordinate grid running minus 17 to plus 17, then a wind sheet read in three steps, both against the clock.",
+      "aliases": [
+        "matf",
+        "table reading test",
+        "table reading"
+      ],
+      "path": "/cbat/matf",
+      "recipeId": "play-matf",
+      "answerIntervalMs": 1400,
+      "playMs": 20000
+    },
+    {
+      "key": "vigilance",
+      "kind": "game",
+      "spokenName": "Vigilance",
+      "what": "three minutes of clearing coordinates off a 9 by 9 star grid, row first then column, with priority tasks that appear when the job has gone quiet.",
+      "aliases": [
+        "vigilance",
+        "vigilance test"
+      ],
+      "path": "/cbat/vigilance",
+      "recipeId": "play-vigilance",
+      "answerIntervalMs": 800,
+      "playMs": 20000
+    }
+  ]
+}

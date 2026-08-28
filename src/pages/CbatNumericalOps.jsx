@@ -90,12 +90,13 @@ function formatOp(op) {
 // defined inline would get a new type identity on every render, forcing React
 // to unmount/remount every button each tick — which makes them visibly flash
 // and swallows clicks (the node is replaced between mousedown and mouseup).
-function KeyButton({ children, onClick, accent, disabled, canSubmit }) {
+function KeyButton({ children, onClick, accent, disabled, canSubmit, demoAnswer }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      data-demo-answer={demoAnswer ? '' : undefined}
       className={`py-4 rounded-lg border-2 font-mono font-bold text-xl transition-all ${
         accent === 'submit'
           ? (canSubmit && !disabled
@@ -119,11 +120,11 @@ function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
   return (
     <div className="grid grid-cols-3 gap-2 mt-3">
       {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-        <KeyButton key={d} onClick={() => onDigit(String(d))} disabled={disabled}>{d}</KeyButton>
+        <KeyButton key={d} onClick={() => onDigit(String(d))} disabled={disabled} demoAnswer>{d}</KeyButton>
       ))}
       <KeyButton accent="back" onClick={onBackspace} disabled={disabled}>⌫</KeyButton>
-      <KeyButton onClick={() => onDigit('0')} disabled={disabled}>0</KeyButton>
-      <KeyButton accent="submit" onClick={onSubmit} disabled={disabled || !canSubmit} canSubmit={canSubmit}>⏎</KeyButton>
+      <KeyButton onClick={() => onDigit('0')} disabled={disabled} demoAnswer>0</KeyButton>
+      <KeyButton accent="submit" onClick={onSubmit} disabled={disabled || !canSubmit} canSubmit={canSubmit} demoAnswer>⏎</KeyButton>
     </div>
   )
 }
@@ -566,6 +567,7 @@ export default function CbatNumericalOps() {
               <button
                 onClick={beginLaunch}
                 disabled={launching}
+                data-demo-start
                 className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}
               >
                 Start

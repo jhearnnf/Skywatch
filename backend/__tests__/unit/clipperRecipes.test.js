@@ -43,7 +43,7 @@ describe('every recipe', () => {
   it.each(ids)('%s uses only step kinds the handler implements', (id) => {
     const known = [
       'goto', 'wait', 'waitFor', 'waitForGone', 'assertVisible',
-      'click', 'clickIfPresent', 'scroll', 'idle', 'keys', 'play',
+      'click', 'clickIfPresent', 'scroll', 'idle', 'keys', 'play', 'demoPlay',
     ];
     for (const kind of kinds(id)) expect(known).toContain(kind);
   });
@@ -63,6 +63,59 @@ describe('every recipe', () => {
       // Playwright presses one key per entry, so a multi-character entry other
       // than a named key silently does nothing.
       for (const key of seq) expect(key).toMatch(/^([\w]|Arrow(Left|Right|Up|Down)|Enter|Escape|Space|Tab)$/);
+    }
+  });
+});
+
+// Every promotable game needs a recipe, because a feature video whose subject
+// cannot appear on camera is the problem the subject table was written to fix.
+// For a long time DPT was the only game with one, and that alone decided what
+// the channel could show.
+describe('generated game recipes', () => {
+  const { GAME_SUBJECTS } = require('../../constants/clipperSubjects');
+
+  it.each(GAME_SUBJECTS.map(s => [s.key, s]))('%s has a recipe that films it', (_key, subject) => {
+    const recipe = getRecipe(subject.recipeId);
+    expect(recipe.steps[0]).toMatchObject({ do: 'goto', path: subject.path });
+  });
+
+  // The whole point of the generic shape: no per-game browser code. If one of
+  // these starts hunting for a game-specific selector, the next game added will
+  // silently get a recipe that films a menu.
+  const generic = GAME_SUBJECTS.filter(s => s.recipeId !== 'play-dpt');
+
+  it.each(generic.map(s => [s.key, s]))('%s starts play through the site-wide marker', (_key, subject) => {
+    const click = stepsOf(subject.recipeId).find(s => s.do === 'click');
+    expect(click.selector).toContain('[data-demo-start]');
+  });
+
+  it.each(generic.map(s => [s.key, s]))('%s waits for the intro curtain before playing', (_key, subject) => {
+    const steps = stepsOf(subject.recipeId);
+    const curtain = steps.findIndex(s => s.do === 'waitForGone');
+    const play    = steps.findIndex(s => s.do === 'demoPlay');
+    expect(curtain).toBeGreaterThan(-1);
+    expect(curtain).toBeLessThan(play);
+  });
+
+  // A beat is a couple of seconds and takes them from wherever the trim points,
+  // so a clip that is mostly briefing has mostly nothing to offer.
+  it.each(generic.map(s => [s.key, s]))('%s spends most of the clip on the game', (_key, subject) => {
+    const steps = stepsOf(subject.recipeId);
+    const play = steps.find(s => s.do === 'demoPlay');
+    const briefing = steps
+      .slice(0, steps.findIndex(s => s.do === 'click'))
+      .reduce((n, s) => n + (s.ms || 0), 0);
+
+    expect(play.ms).toBeGreaterThanOrEqual(15000);
+    expect(briefing).toBeLessThan(2500);
+  });
+
+  // Pressing at a game that runs on its own clock gets in the way of it.
+  it('leaves the self-running games alone rather than pressing at them', () => {
+    for (const subject of GAME_SUBJECTS) {
+      if (subject.answerIntervalMs) continue;
+      const play = stepsOf(subject.recipeId).find(s => s.do === 'demoPlay');
+      if (play) expect(play.intervalMs).toBe(0);
     }
   });
 });

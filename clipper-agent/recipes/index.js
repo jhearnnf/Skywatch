@@ -8,6 +8,21 @@
 // Selectors use data-testid where possible. When a recipe breaks because the UI
 // moved, the job fails loudly with the step that could not run — much better
 // than silently recording a blank page.
+//
+// ── One recipe per promotable game ──────────────────────────────────────────
+// Hand-writing a recipe per game does not scale and, worse, it decided what the
+// channel could talk about: for a long time DPT was the only game with a
+// recipe, so every "feature" video either showed DPT or showed no product at
+// all. `play-<key>` recipes are therefore generated from the subject table, and
+// only games that were never given one by hand fall back to the generic shape.
+//
+// The generic shape leans on the two attributes the landing page's demo driver
+// already relies on — [data-demo-start] to begin play and [data-demo-answer] to
+// keep it moving — so it needs no per-game knowledge and cannot wander into a
+// Back or Quit button. See src/components/landingGames/demoDriver.js; the
+// `demoPlay` step is that driver, run from the capture handler.
+
+const { SUBJECTS } = require('../../backend/constants/clipperSubjects');
 
 const RECIPES = {
   'cbat-home': {
@@ -110,6 +125,58 @@ const RECIPES = {
   },
 };
 
+// Film one game being played, using only the site-wide demo markers.
+//
+// Deliberately short on assertions. `assertVisible` at the end catches the
+// worst failure — the run quit and the clip is of a menu — but "the game was
+// visibly being played" is not something a selector can settle, and a recipe
+// that fails loudly on a healthy game costs a twenty-second recording. Pull
+// frames before trusting a new game's first capture.
+function genericGameRecipe(subject) {
+  const playMs = subject.playMs || 18000;
+  return {
+    label: `Play ${subject.spokenName}`,
+    requiresAuth: true,
+    // Navigation, briefing, intro curtain and play, plus headroom.
+    estDurationSec: Math.round(playMs / 1000) + 10,
+    steps: [
+      { do: 'goto', path: subject.path },
+
+      // The start control is the game having finished mounting. Waiting for it
+      // rather than sleeping is what keeps this working on a slow first load of
+      // an R3F game, where a fixed wait would film a spinner.
+      { do: 'waitFor', selector: '[data-demo-start]' },
+      // A moment on the briefing: it names the task, which is what a viewer
+      // needs before watching an attempt. Kept under a second - this is b-roll
+      // beneath a two-second line, not an explainer.
+      { do: 'wait', ms: 900 },
+
+      { do: 'click', selector: '[data-demo-start] >> nth=0' },
+
+      // Games mount their arena BEHIND a 1.8s logo intro and only bind input
+      // once it clears, so anything sent before this is dropped in silence.
+      // Harmless on the games that show no intro: a selector that was never
+      // present is already hidden.
+      { do: 'waitForGone', selector: '[data-testid="skywatch-logo-intro"]' },
+
+      { do: 'demoPlay', ms: playMs, intervalMs: subject.answerIntervalMs || 0 },
+
+      // Something of the game still on screen. A comma list rather than a
+      // precise selector because the alternative is a per-game stage selector
+      // that rots quietly the first time a layout moves.
+      { do: 'assertVisible', selector: '[data-demo-answer], [data-demo-start], canvas' },
+    ],
+  };
+}
+
+// Hand-tuned recipes win. play-dpt knows the game's round-skip cheat and issues
+// real bearing commands, which no generic driver can infer.
+for (const subject of SUBJECTS) {
+  if (subject.kind !== 'game') continue;
+  if (RECIPES[subject.recipeId]) continue;
+  RECIPES[subject.recipeId] = genericGameRecipe(subject);
+}
+
 function getRecipe(id) {
   const recipe = RECIPES[id];
   if (!recipe) {
@@ -118,4 +185,4 @@ function getRecipe(id) {
   return recipe;
 }
 
-module.exports = { RECIPES, getRecipe };
+module.exports = { RECIPES, getRecipe, genericGameRecipe };

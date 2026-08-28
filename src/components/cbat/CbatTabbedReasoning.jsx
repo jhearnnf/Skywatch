@@ -455,6 +455,7 @@ export default function CbatTabbedReasoning({
               <button
                 onClick={beginLaunch}
                 disabled={phase === 'launching'}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -515,6 +516,7 @@ export default function CbatTabbedReasoning({
                           type="button"
                           onClick={() => handlePick(opt)}
                           disabled={!!feedback}
+                          data-demo-answer
                           className={`px-3 py-2.5 rounded-lg border-2 text-sm font-bold text-left transition-all ${cls}`}
                         >
                           {formatAnswer(opt, currentQuestion)}
@@ -535,6 +537,7 @@ export default function CbatTabbedReasoning({
                         </p>
                         <button
                           onClick={goNext}
+                          data-demo-answer
                           className="w-full px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                         >
                           {currentIdx + 1 >= totalQuestions ? 'See Results' : 'Next'}
@@ -568,6 +571,7 @@ export default function CbatTabbedReasoning({
               {phase === 'reading' && (
                 <button
                   onClick={() => { clearInterval(tickRef.current); beginQuestions() }}
+                  data-demo-answer
                   className="w-full max-w-2xl mx-auto block mt-3 px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                 >
                   Start the questions

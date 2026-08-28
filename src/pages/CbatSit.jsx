@@ -647,6 +647,7 @@ export default function CbatSit() {
               <button
                 onClick={beginLaunch}
                 disabled={phase === 'launching'}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -742,6 +743,7 @@ export default function CbatSit() {
                         the clip, which runs on its own fixed window. */}
                     <button
                       onClick={endStudyEarly}
+                      data-demo-answer
                       className="w-full mt-2.5 px-6 py-2.5 rounded-lg border border-[#1a3a5c] bg-[#060e1a] text-brand-300 font-bold text-sm hover:bg-[#0f2240] hover:border-brand-400 transition-colors cursor-pointer"
                     >
                       Skip study time · Go to the clip
@@ -803,6 +805,7 @@ export default function CbatSit() {
                             type="button"
                             onClick={() => handlePick(value)}
                             disabled={phase === 'feedback'}
+                            data-demo-answer
                             className={`py-4 rounded-lg border-2 font-bold text-lg transition-all ${cls}`}
                           >
                             {value ? 'Yes' : 'No'}
@@ -840,6 +843,7 @@ export default function CbatSit() {
                           )}
                           <button
                             onClick={goNext}
+                            data-demo-answer
                             className="w-full px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                           >
                             {answers.length >= SIT_ROUNDS

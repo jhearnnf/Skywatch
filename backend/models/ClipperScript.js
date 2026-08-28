@@ -51,6 +51,19 @@ const clipperScriptSchema = new mongoose.Schema({
     default: () => new Map(),
   },
 
+  // What the video is ABOUT - a CBAT game, the platform, or nothing in
+  // particular. Stored as a key alone: constants/clipperSubjects.js owns the
+  // spoken name, the description and the capture recipe, so renaming a game
+  // does not need a migration.
+  //
+  // `mode: 'feature'` used to be the whole of this, and it was a label nothing
+  // acted on. The subject is what the script prompt, the capture recipes and
+  // the guardrail validator all read.
+  subject: {
+    kind: { type: String, enum: ['game', 'platform', 'none'], default: 'none' },
+    key:  { type: String, default: '' },
+  },
+
   idea: {
     oneLiner: { type: String, default: '' },
     hook:     { type: String, default: '' },

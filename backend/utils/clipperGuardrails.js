@@ -11,6 +11,10 @@
 // span highlighted and decides — silently rewriting a script would hide the
 // fact that the model keeps reaching for a claim we don't allow.
 
+const {
+  subjectFor, allowedRecipeIds, mentionsSubject,
+} = require('../constants/clipperSubjects');
+
 // Handles from the guide that are also ordinary English words. Matching these
 // strictly would fire on innocent copy ("God knows", "the mighty Typhoon",
 // "overwatch"), so they are reported as warnings for a human to glance at
@@ -174,16 +178,81 @@ function checkStyle(text) {
   return findings;
 }
 
+// ── Is the product actually in the video? ───────────────────────────────────
+//
+// The complaint that produced this check was that a finished render was hard to
+// read as an advert for anything: a subject was chosen, and the script then
+// mentioned it once in the outro over stock jets. Nothing anywhere objected,
+// because nothing anywhere was looking.
+//
+// Thresholds match the wording in services/clipperAi.js subjectBrief - the
+// prompt asks, this decides. Findings are warnings rather than errors: a thin
+// mention is a weak video, not an unpublishable one, and the admin can look at
+// the beats and disagree. The content rules above stay errors because those are
+// claims we must not make at all.
+const MIN_SUBJECT_MENTIONS = 3;
+const MIN_SUBJECT_CAPTURES = 3;
+// "Early" means inside the first two beats. A product first shown in beat six
+// is a product most of the audience never saw.
+const EARLY_BEATS = 2;
+
+function checkSubject(beats, subject) {
+  if (!subject) return [];
+
+  const findings = [];
+  const named = beats.filter(b => mentionsSubject(b.text, subject));
+  const shots = beats.filter(b => b.visual?.kind === 'capture'
+    && b.visual?.recipeId === subject.recipeId);
+
+  if (named.length < MIN_SUBJECT_MENTIONS) {
+    findings.push({
+      rule: 'subject-unnamed', severity: 'warning', beatId: null,
+      message: `This video is promoting ${subject.spokenName} but names it in only ${named.length} of ${beats.length} beats - it needs ${MIN_SUBJECT_MENTIONS}`,
+    });
+  }
+  if (shots.length < MIN_SUBJECT_CAPTURES) {
+    findings.push({
+      rule: 'subject-unseen', severity: 'warning', beatId: null,
+      message: `Only ${shots.length} beat(s) show ${subject.spokenName} on screen - it needs ${MIN_SUBJECT_CAPTURES} capture beats using "${subject.recipeId}"`,
+    });
+  }
+
+  const early = beats.slice(0, EARLY_BEATS);
+  if (shots.length > 0 && !early.some(b => shots.includes(b))) {
+    findings.push({
+      rule: 'subject-shown-late', severity: 'warning', beatId: beats[0]?.id ?? null,
+      message: `${subject.spokenName} is not on screen until beat ${beats.indexOf(shots[0]) + 1} - show it in the first ${EARLY_BEATS}`,
+    });
+  }
+
+  // Filming a different game while the voice talks about this one reads as
+  // deliberate misdirection, which is worse than stock footage.
+  const allowed = new Set(allowedRecipeIds(subject));
+  for (const beat of beats) {
+    const id = beat.visual?.kind === 'capture' ? beat.visual?.recipeId : '';
+    if (id && !allowed.has(id)) {
+      findings.push({
+        rule: 'subject-wrong-capture', severity: 'error', beatId: beat.id,
+        message: `Beat films "${id}" in a video about ${subject.spokenName}`,
+      });
+    }
+  }
+
+  return findings;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 // Validate a whole generated script.
 //   script    — { beats: [{ id, text, factKeys }], outro?: { copy } }
 //   facts     — array of ClipperFact-shaped rows (needs factKey + grade)
 //   blocklist — array of real names harvested at ingest
+//   subject   — { key } the video is promoting, or null for a tips video that
+//               shows nothing. Decides the subject-presence checks below.
 //
 // Returns { ok, errors, warnings, findings }. `ok` is false when any finding
 // has severity 'error'; warnings never block.
-function validateScript(script, facts, blocklist) {
+function validateScript(script, facts, blocklist, subject = null) {
   const beats = Array.isArray(script?.beats) ? script.beats : [];
   const factsByKey = new Map((facts || []).map(f => [f.factKey, f]));
 
@@ -215,6 +284,7 @@ function validateScript(script, facts, blocklist) {
   }
 
   findings.push(...checkGrades(beats, factsByKey));
+  findings.push(...checkSubject(beats, subjectFor(subject?.key ?? subject)));
 
   const errors   = findings.filter(f => f.severity === 'error');
   const warnings = findings.filter(f => f.severity === 'warning');
@@ -228,6 +298,10 @@ module.exports = {
   checkNames,
   checkGrades,
   checkStyle,
+  checkSubject,
+  MIN_SUBJECT_MENTIONS,
+  MIN_SUBJECT_CAPTURES,
+  EARLY_BEATS,
   COMMON_WORD_HANDLES,
   REAL_CBAT_PATTERNS,
   RAF_APPLICATION_PATTERNS,

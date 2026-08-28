@@ -14,6 +14,9 @@
 // enforces — see the note at the top of that file for why.
 
 const { callOpenRouter } = require('../utils/openRouter');
+const {
+  GAME_SUBJECTS, subjectFor, allowedRecipeIds,
+} = require('../constants/clipperSubjects');
 const { parseTimelineJson: parseAiJson, containment } = require('./briefReelAi');
 
 const MODEL = 'anthropic/claude-sonnet-4-5';
@@ -96,14 +99,27 @@ const IDEA_SCHEMA = `Return ONLY a JSON object:
       "hook":     "<the opening line as it would be spoken, <= 90 chars>",
       "angle":    "<what makes THIS take different, <= 90 chars>",
       "mode":     "tips" | "feature",
+      "subject":  "<subject key from the list below, or "" for a tips video that shows nothing>",
       "factKeys": ["test:flag:0", ...]
     }
   ]
 }
 
 - "tips" = advice about sitting the test. "feature" = showcases something on the platform.
+- EVERY "feature" idea must name a subject, and it must be one of the keys listed below. A feature video with no subject is a video about nothing, and will be rejected.
+- A "tips" idea may name a subject too, when the advice has an obvious place to be demonstrated. Leave it "" when it does not.
 - factKeys must be chosen from the facts supplied below. 1-3 per idea.
 - Every idea must be about a DIFFERENT main point. Do not produce two ideas that a viewer would experience as the same video.`;
+
+// The closed list of things a video may be about, written out for the prompt.
+// Both calls get it: ideas so a feature idea has something real to point at,
+// scripts so the writer knows what the thing actually does and does not have to
+// invent mechanics for a game it has never seen.
+function formatSubjectsForPrompt() {
+  return GAME_SUBJECTS
+    .map(s => `- [${s.key}] ${s.spokenName} - ${s.what}`)
+    .join('\n');
+}
 
 function formatFactsForPrompt(facts) {
   return facts.map(f => {
@@ -140,7 +156,10 @@ ${VOICE_GUIDE}
 
 ${IDEA_SCHEMA}`;
 
-  const user = `Available facts:
+  const user = `Subjects you may promote - a "feature" idea MUST name one of these keys:
+${formatSubjectsForPrompt()}
+
+Available facts:
 ${formatFactsForPrompt(facts)}
 
 Previously used angles - any reuse of these facts needs a genuinely different hook AND a different main point:
@@ -176,11 +195,17 @@ Generate ${count} ideas${mode ? ` in "${mode}" mode` : ''}. Return ONLY the JSON
       hook:     String(i.hook  ?? '').trim(),
       angle:    String(i.angle ?? '').trim(),
       mode:     i.mode === 'feature' ? 'feature' : 'tips',
+      // A hallucinated subject key is dropped rather than trusted. A feature
+      // idea that loses its subject that way is discarded below: it is an
+      // advert with nothing to advertise, which is the exact failure this
+      // whole mechanism exists to stop.
+      subject:  subjectFor(i.subject)?.key ?? '',
       // Drop hallucinated keys rather than failing the batch — the admin still
       // gets usable ideas, and an idea with no valid fact is discarded below.
       factKeys: Array.isArray(i.factKeys) ? i.factKeys.filter(k => validKeys.has(k)) : [],
     }))
-    .filter(i => i.factKeys.length > 0);
+    .filter(i => i.factKeys.length > 0)
+    .filter(i => i.mode !== 'feature' || i.subject);
 
   return dedupeIdeas(cleaned, priorOneLiners);
 }
@@ -259,7 +284,7 @@ function constrainQuery(query, index = 0) {
 
 // ── Script generation ───────────────────────────────────────────────────────
 
-const SCRIPT_SCHEMA = `Return ONLY a JSON object:
+const scriptSchema = (recipeIds) => `Return ONLY a JSON object:
 
 {
   "title": "<short internal title, <= 60 chars>",
@@ -286,24 +311,58 @@ const SCRIPT_SCHEMA = `Return ONLY a JSON object:
 - Name the shape you chose in "format", and actually follow it. A "list" script with nothing counted out loud is a list in name only.
 - Mark the re-hook beat with "rehook": true. Exactly one beat, somewhere around the middle.
 - factKeys may be empty for a linking beat, but every fact you were given should appear in some beat.
-- visual.kind is "capture" ONLY for beats showing the platform itself. Available recipeIds: ${'`play-dpt`'}, ${'`browse-leaderboard`'}, ${'`cbat-home`'}. Otherwise use "stock" with a query.
+- visual.kind is "capture" for any beat showing the platform itself - a real screen recording of the site. Available recipeIds, and NOTHING else: ${recipeIds.map(r => `\`${r}\``).join(', ')}. Otherwise use "stock" with a query.
 - visual.query must name PHYSICAL THINGS a camera has been pointed at, and should be aviation or military wherever the line allows it. Aircraft, cockpits, runways, radar screens, control towers, flight helmets, instrument panels, hangars, ground crew.
   A stock library cannot film an idea. Queries like "determination", "mental focus", "person thinking", "under pressure" or "making a decision" all return a stranger looking out of a window, and that is what makes a video look like filler. If a beat is about something abstract, pick the concrete aviation image that sits nearest to it - a beat about split-second decisions is a cockpit, not a furrowed brow.
 - Do not put an overlay on every beat. Three or four across the video is right.`;
 
-async function generateScript({ idea, facts, mode = 'tips', outroEnabled = true }) {
+// What the script has to do differently when the video is promoting something.
+//
+// Every number here is also checked by utils/clipperGuardrails.js. Asking is
+// not enough on its own - the previous version of this prompt said nothing at
+// all about showing the product, and a finished render was accordingly hard to
+// read as an advert for anything.
+// The descriptions in the subject table are written to follow a colon, so they
+// start lower case. This one follows a full stop.
+const sentenceCase = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+
+function subjectBrief(subject, recipeIds) {
+  if (!subject) return '';
+
+  const isGame = subject.kind === 'game';
+
+  return `This video is promoting one specific thing, and a viewer who watches it to the end must be able to say what that thing is and what it does.
+
+Promoting: ${subject.spokenName}
+What it is: ${isGame ? `a CBAT-style practice game on SkyWatch. ${sentenceCase(subject.what)}` : subject.what}
+
+Rules for this video. These are checked by a validator, and a script that breaks them is rejected:
+
+- Say "${subject.spokenName}" out loud in at least THREE beats, and one of those must be in the first two. Named once in the outro is a product nobody remembers; named in the hook is a product the video is about.
+- At least THREE beats must be visual.kind "capture" with recipeId "${subject.recipeId}", and one of those must be in the first two beats. The viewer has to SEE it, and see it early - the words alone do not tell anyone what the screen looks like.
+- The only recipeIds you may use are: ${recipeIds.join(', ')}. Never film a different game while the voice is talking about this one.
+- Describe what it actually asks you to do, using the description above. Do not invent mechanics, scoring or features.${isGame ? `
+- It is a CBAT-style simulation of that subtest, not the real CBAT.` : ''}`;
+}
+
+async function generateScript({ idea, facts, mode = 'tips', outroEnabled = true, subject = null }) {
   if (!idea || !idea.oneLiner) throw new Error('An idea is required');
   if (!Array.isArray(facts) || facts.length === 0) {
     throw new Error('No facts supplied for the script');
   }
+
+  const resolved  = subjectFor(subject?.key ?? subject ?? idea.subject);
+  const recipeIds = allowedRecipeIds(resolved);
 
   const system = `You are the script writer for SkyWatch's short-form video channel. SkyWatch is an independent platform with CBAT-style practice games.
 
 ${HOUSE_RULES}
 
 ${VOICE_GUIDE}
-
-${SCRIPT_SCHEMA}`;
+${resolved ? `
+${subjectBrief(resolved, recipeIds)}
+` : ''}
+${scriptSchema(recipeIds)}`;
 
   const user = `Write the script for this idea.
 
@@ -311,6 +370,7 @@ Premise: ${idea.oneLiner}
 Hook:    ${idea.hook || '(write one)'}
 Angle:   ${idea.angle || '(your choice)'}
 Mode:    ${mode}
+Promoting: ${resolved ? `${resolved.spokenName} (capture recipeId "${resolved.recipeId}")` : 'nothing in particular'}
 
 Facts you may use - the grade in brackets decides whether you state it flatly or hedge it:
 ${formatFactsForPrompt(facts)}
@@ -341,21 +401,33 @@ Return ONLY the JSON object.`;
     throw new Error('AI returned no script beats');
   }
 
-  const validKeys = new Set(facts.map(f => f.factKey));
+  const validKeys   = new Set(facts.map(f => f.factKey));
+  const validRecipes = new Set(recipeIds);
+
   const beats = parsed.beats
     .filter(b => b && typeof b.text === 'string' && b.text.trim())
     .map((b, i) => {
       const kind = b.visual?.kind === 'capture' ? 'capture' : 'stock';
+      const text = b.text.trim();
+
+      // A capture beat naming a recipe we do not have is the one case worth
+      // repairing rather than reporting. Left alone it fails the whole capture
+      // job at record time; demoted to stock it silently costs the video the
+      // shot of the product it was asking for. Pointing it at the subject is
+      // what the beat was reaching for anyway.
+      let recipeId = kind === 'capture' ? String(b.visual?.recipeId ?? '').trim() : '';
+      if (recipeId && !validRecipes.has(recipeId)) recipeId = recipeIds[0];
+
       return {
         id:       String(b.id || `b${i + 1}`),
-        text:     b.text.trim(),
+        text,
         factKeys: Array.isArray(b.factKeys) ? b.factKeys.filter(k => validKeys.has(k)) : [],
         visual: {
           kind,
           // Constrained rather than trusted: an abstract query fails silently,
           // returning plenty of results that are all wrong.
-          query:    kind === 'stock'   ? constrainQuery(b.visual?.query, i) : '',
-          recipeId: kind === 'capture' ? String(b.visual?.recipeId ?? '').trim() : '',
+          query:    kind === 'stock' ? constrainQuery(b.visual?.query, i) : '',
+          recipeId,
         },
         sfxCue:  String(b.sfxCue  ?? '').trim(),
         overlay: String(b.overlay ?? '').trim(),
@@ -376,6 +448,9 @@ Return ONLY the JSON object.`;
 
   return {
     title: String(parsed.title ?? '').trim() || idea.oneLiner.slice(0, 60),
+    // Echoed back so the caller stores WHICH subject this script was written
+    // for. Validation needs it on every later edit, not just at generation.
+    subject: resolved ? { kind: resolved.kind, key: resolved.key } : { kind: 'none', key: '' },
     // Recorded rather than merely asked for, so "which shape is this" is
     // answerable when a script is read back weeks later - and so a shape the
     // model invented does not quietly become a fourth format.
@@ -392,6 +467,7 @@ Return ONLY the JSON object.`;
 module.exports = {
   generateIdeas,
   generateScript,
+  subjectBrief,
   constrainQuery,
   ABSTRACT_QUERY_TOKENS,
   FALLBACK_QUERIES,

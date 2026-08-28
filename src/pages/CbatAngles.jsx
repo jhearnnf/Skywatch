@@ -444,6 +444,7 @@ export default function CbatAngles() {
 
               <button
                 onClick={startGame}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -544,6 +545,7 @@ export default function CbatAngles() {
                       key={opt}
                       onClick={() => handleAnswer(opt)}
                       disabled={phase === 'feedback'}
+                      data-demo-answer
                       className={`py-3 rounded-lg border-2 font-mono font-bold text-sm transition-all ${btnClass} ${
                         phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                       }`}

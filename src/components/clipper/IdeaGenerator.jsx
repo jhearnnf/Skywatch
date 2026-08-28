@@ -80,6 +80,11 @@ export default function IdeaGenerator({ ideas, onGenerate, onPick, busy, picking
                     <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold uppercase tracking-wider">
                       {idea.mode}
                     </span>
+                    {idea.subject && (
+                      <span className="px-2 py-0.5 rounded-md bg-brand-100 text-brand-600 text-[11px] font-semibold uppercase tracking-wider">
+                        {idea.subject}
+                      </span>
+                    )}
                     {idea.factKeys.map(k => (
                       <span key={k} className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[11px] font-mono">
                         {k}

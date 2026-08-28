@@ -1140,6 +1140,7 @@ export default function CbatAnt() {
                 </button>
                 <button
                   onClick={startGame}
+                  data-demo-start
                   className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
                 >
                   Start
@@ -1258,6 +1259,7 @@ export default function CbatAnt() {
                         <button
                           ref={nextRef}
                           onClick={advanceRound}
+                          data-demo-answer
                           className="mt-3 w-full sm:w-auto px-8 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
                         >
                           {roundIndex + 1 >= ROUND_COUNT ? 'See Results →' : 'Next Round →'}
@@ -1275,6 +1277,7 @@ export default function CbatAnt() {
                               autoFocus={!IS_TOUCH}
                               value={answerInput}
                               onChange={(e) => setAnswerInput(e.target.value)}
+                              data-demo-input="420"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') handleSubmit(false)
                               }}
@@ -1283,6 +1286,7 @@ export default function CbatAnt() {
                             />
                             <button
                               onClick={() => handleSubmit(false)}
+                              data-demo-answer
                               className="shrink-0 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
                             >
                               Submit

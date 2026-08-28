@@ -26,6 +26,7 @@ const ClipperMusic  = require('../models/ClipperMusic');
 const { parseGuideSource, DEFAULT_GUIDE_PATH } = require('../utils/clipperFactParser');
 const { validateScript } = require('../utils/clipperGuardrails');
 const { generateIdeas, generateScript } = require('../services/clipperAi');
+const { normaliseSubject, SUBJECTS } = require('../constants/clipperSubjects');
 const { searchFootage, configuredProviders, providerStatus } = require('../utils/clipperFootage');
 const { buildTimeline } = require('../utils/clipperTimeline');
 const { buildCaptions } = require('../utils/clipperCaptions');
@@ -749,6 +750,7 @@ router.post('/scripts', async (req, res) => {
     const doc = await ClipperScript.create({
       title: String(idea.oneLiner).slice(0, 60),
       mode:  idea.mode === 'feature' ? 'feature' : 'tips',
+      subject: normaliseSubject(req.body?.subject ?? idea.subject),
       idea: {
         oneLiner: String(idea.oneLiner),
         hook:     String(idea.hook  ?? ''),
@@ -767,7 +769,7 @@ router.get('/scripts', async (_req, res) => {
   try {
     const scripts = await ClipperScript.find({})
       .sort({ updatedAt: -1 })
-      .select('title mode stage idea.oneLiner script.wordCount script.estDurationSec validation.ok updatedAt')
+      .select('title mode subject stage idea.oneLiner script.wordCount script.estDurationSec validation.ok updatedAt')
       .lean();
     res.json({ status: 'success', data: { scripts } });
   } catch (err) { fail(res, err); }
@@ -808,6 +810,7 @@ async function revalidate(scriptDoc) {
     { beats: scriptDoc.script?.beats ?? [], outro: scriptDoc.outro },
     facts,
     source?.nameBlocklist ?? [],
+    scriptDoc.subject,
   );
 
   scriptDoc.validation = {
@@ -841,6 +844,7 @@ router.post('/scripts/:id/script/generate', async (req, res) => {
       facts,
       mode: doc.mode,
       outroEnabled: doc.outro?.enabled !== false,
+      subject: doc.subject,
     });
 
     doc.title  = generated.title;
@@ -874,6 +878,9 @@ router.patch('/scripts/:id', async (req, res) => {
     if (!doc) { const e = new Error('Script not found'); e.status = 404; throw e; }
 
     if (typeof req.body?.title === 'string') doc.title = req.body.title;
+    // Changing what the video is about changes what the validator asks of it,
+    // so it is edited here rather than being fixed at creation.
+    if ('subject' in (req.body || {})) doc.subject = normaliseSubject(req.body.subject);
     if (Array.isArray(req.body?.beats)) {
       doc.script.beats = req.body.beats;
       doc.script.wordCount = req.body.beats
@@ -1004,6 +1011,13 @@ router.post('/scripts/:id/capture', async (req, res) => {
 
     res.status(202).json({ status: 'success', data: { job: job.toObject() } });
   } catch (err) { fail(res, err); }
+});
+
+// GET /api/clipper/subjects — what a video can be about.
+// Served rather than duplicated in the frontend so the picker and the validator
+// can never disagree about which games are filmable.
+router.get('/subjects', (_req, res) => {
+  res.json({ status: 'success', data: { subjects: SUBJECTS } });
 });
 
 // GET /api/clipper/footage/providers — which sources are actually usable.

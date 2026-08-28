@@ -290,6 +290,81 @@ async function runStep(page, step, progress) {
       break;
     }
 
+    // Play a game the way the landing wall's demo cards do — press the start
+    // control, then keep pressing answer controls at a steady cadence.
+    //
+    // This is the generic counterpart to `play`. `play` sends real DPT bearing
+    // commands and knows the game; this knows only [data-demo-answer] and
+    // [data-demo-start], which is precisely why it works on every game that
+    // carries them and needed no new per-game browser code to film twelve of
+    // them. See src/components/landingGames/demoDriver.js for the original.
+    //
+    // intervalMs 0 means the game runs on its own clock (SAT, RTT, SMA): there
+    // is nothing to press, so this degrades to an idle rather than poking at a
+    // game that is already moving.
+    case 'demoPlay': {
+      const interval = step.intervalMs ?? 0;
+      const totalMs = step.ms ?? 15000;
+
+      if (!interval) { await page.waitForTimeout(totalMs); break; }
+
+      const until = Date.now() + totalMs;
+      while (Date.now() < until) {
+        await page.waitForTimeout(interval);
+        // Failures are swallowed: a press that lands mid-navigation or on a
+        // control that has just unmounted must not end the recording.
+        await page.evaluate(({ answerSel, startSel, inputSel }) => {
+          const enabled = (el) => !el.disabled && el.getAttribute('aria-disabled') !== 'true';
+          const pick = (sel) => {
+            const all = Array.from(document.querySelectorAll(sel)).filter(enabled);
+            return all.length ? all[Math.floor(Math.random() * all.length)] : null;
+          };
+
+          // Games where the answer is typed rather than picked (ANT, Code
+          // Duplicates) leave their Submit button disabled until the box has
+          // something in it, so a driver that only clicks would film a dead
+          // form. The attribute carries a plausible value for that game.
+          //
+          // React tracks the input's value on the DOM node, so assigning to
+          // .value directly is ignored on the next render. Going through the
+          // prototype's setter and dispatching 'input' is what makes React see
+          // the change - the same trick testing libraries use.
+          const box = pick(inputSel);
+          if (box && !box.value) {
+            const proto = box instanceof window.HTMLTextAreaElement
+              ? window.HTMLTextAreaElement.prototype
+              : window.HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            if (setter) {
+              setter.call(box, box.getAttribute('data-demo-input') || '1');
+              box.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }
+          // Games bind variously to onClick and onPointerDown, so fire the
+          // whole sequence rather than guessing which one is listening.
+          const press = (el) => {
+            const opts = { bubbles: true, cancelable: true };
+            if (typeof window.PointerEvent === 'function') {
+              el.dispatchEvent(new window.PointerEvent('pointerdown', opts));
+              el.dispatchEvent(new window.PointerEvent('pointerup', opts));
+            }
+            el.dispatchEvent(new MouseEvent('mousedown', opts));
+            el.dispatchEvent(new MouseEvent('mouseup', opts));
+            el.click();
+          };
+          // An answer if play is running; otherwise whatever restarts it, which
+          // is what stops a clip freezing on the first end-of-round screen.
+          const el = pick(answerSel) || pick(startSel);
+          if (el) press(el);
+        }, {
+          answerSel: '[data-demo-answer]',
+          startSel:  '[data-demo-start]',
+          inputSel:  '[data-demo-input]',
+        }).catch(() => {});
+      }
+      break;
+    }
+
     default:
       throw new Error(`Unknown capture step "${step.do}"`);
   }

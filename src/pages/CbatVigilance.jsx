@@ -199,6 +199,7 @@ function Keypad({ onDigit, onClear, pendingRow }) {
             key={d}
             type="button"
             onClick={() => onDigit(d)}
+            data-demo-answer
             className="py-3 rounded-lg border border-[#1a3a5c] bg-[#0a1628] text-[#ddeaf8] font-mono text-base font-bold hover:bg-[#0f2240] hover:border-brand-400 active:bg-brand-600 transition-all cursor-pointer"
           >
             {d}
@@ -551,6 +552,7 @@ export default function CbatVigilance() {
 
               <button
                 onClick={startGame}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start

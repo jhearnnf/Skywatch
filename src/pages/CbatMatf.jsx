@@ -469,6 +469,7 @@ export default function CbatMatf() {
               <button
                 onClick={beginLaunch}
                 disabled={phase === 'launching'}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -490,6 +491,7 @@ export default function CbatMatf() {
               </p>
               <button
                 onClick={beginPart2}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start Part 2
@@ -557,6 +559,7 @@ export default function CbatMatf() {
                       key={`${opt}-${i}`}
                       type="button"
                       onClick={() => handlePick(opt)}
+                      data-demo-answer
                       className="py-3 rounded-lg border-2 border-[#1a3a5c] bg-[#060e1a] text-[#ddeaf8] font-mono font-bold text-base hover:border-brand-400 hover:bg-[#0f2240] transition-all cursor-pointer"
                     >
                       <span className="text-[10px] text-slate-600 mr-1.5">{i + 1}</span>{opt}

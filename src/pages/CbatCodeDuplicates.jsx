@@ -402,6 +402,7 @@ export default function CbatCodeDuplicates() {
 
               <button
                 onClick={startGame}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -503,6 +504,7 @@ export default function CbatCodeDuplicates() {
                         max="20"
                         value={userAnswer}
                         onChange={(e) => setUserAnswer(e.target.value)}
+                        data-demo-input="3"
                         onKeyDown={handleKeyDown}
                         className="w-20 h-12 text-center text-2xl font-mono font-bold rounded-lg bg-[#060e1a] border-2 border-[#1a3a5c] text-[#ddeaf8] focus:border-brand-400 focus:outline-none transition-colors"
                         placeholder="?"
@@ -510,6 +512,7 @@ export default function CbatCodeDuplicates() {
                       <button
                         onClick={handleSubmit}
                         disabled={userAnswer === ''}
+                        data-demo-answer
                         className="px-5 h-12 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors"
                       >
                         Submit
@@ -568,6 +571,7 @@ export default function CbatCodeDuplicates() {
                   >
                     <button
                       onClick={handleNext}
+                      data-demo-answer
                       className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
                     >
                       {round >= TOTAL_ROUNDS ? 'View Results' : 'Next Round'}

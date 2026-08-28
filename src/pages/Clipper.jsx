@@ -62,6 +62,9 @@ export default function Clipper() {
   const [scripts,   setScripts]   = useState([])
   const [active,    setActive]    = useState(null)
 
+  // What a video can be about. Served rather than hardcoded so the picker and
+  // the guardrail validator can never disagree about which games are filmable.
+  const [subjects,    setSubjects]    = useState([])
   const [providers,   setProviders]   = useState({})
   // Keys that are set but rejected. Separate from `providers` because a
   // provider can be configured and still be contributing nothing.
@@ -122,6 +125,7 @@ export default function Clipper() {
     Promise.all([
       loadFacts(),
       loadScripts(),
+      call('/subjects').then(d => setSubjects(d.subjects)),
       call('/footage/providers').then(d => { setProviders(d.providers); setProviderErrors(d.providerErrors ?? {}) }),
       call('/sfx/library').then(d => { setSfxLibrary(d.sfx); setSfxDir(d.dir) }),
     ]).catch(e => setError(e.message))
@@ -178,10 +182,10 @@ export default function Clipper() {
     await loadScripts()
   })
 
-  const handleSaveScript = ({ beats, outro }) => run(async () => {
+  const handleSaveScript = ({ beats, outro, subject }) => run(async () => {
     const data = await call(`/scripts/${active._id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ beats, outro: { copy: outro } }),
+      body: JSON.stringify({ beats, outro: { copy: outro }, subject }),
     })
     setActive(data.script)
   })
@@ -541,6 +545,7 @@ export default function Clipper() {
 
             <ScriptEditor
               script={active}
+              subjects={subjects}
               onGenerate={handleGenerateScript}
               onSave={handleSaveScript}
               onApprove={handleApproveScript}

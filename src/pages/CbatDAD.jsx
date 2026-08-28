@@ -463,6 +463,7 @@ export default function CbatDAD() {
 
               <button
                 onClick={startGame}
+                data-demo-start
                 className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
               >
                 Start
@@ -524,6 +525,7 @@ export default function CbatDAD() {
                       key={opt}
                       type="button"
                       onClick={() => handlePick(opt)}
+                      data-demo-answer
                       disabled={phase === 'feedback'}
                       className={`py-2.5 sm:py-4 rounded-lg border-2 font-mono font-bold text-base sm:text-lg transition-all ${cls}`}
                     >
@@ -554,6 +556,7 @@ export default function CbatDAD() {
                     </div>
                     <button
                       onClick={goNext}
+                      data-demo-answer
                       className="w-full mt-2 sm:mt-3 px-6 py-2.5 sm:py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                     >
                       {currentIdx + 1 >= TOTAL_QUESTIONS ? 'See Results' : 'Next'}
