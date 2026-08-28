@@ -524,3 +524,98 @@ describe('MessageList — typing indicator', () => {
     expect(screen.queryByText(/is typing/)).toBeNull()
   })
 })
+
+// Tailwind compiles every `hover:` rule inside `@media (hover: hover)`, so a
+// hover-revealed control does not merely become awkward on a phone — it is
+// never rendered. jsdom cannot evaluate that media query, so what is asserted
+// here is the behaviour the tap trigger adds; the CSS pairing is what makes it
+// visible on the devices that need it.
+describe('MessageList — reaching the actions without a hover', () => {
+  const opts = () => ({ onReply: vi.fn(), onReact: vi.fn(), onReport: vi.fn() })
+
+  it('offers a tap trigger for the row actions', () => {
+    renderList([msg('u1', 'hello')], opts())
+    expect(screen.getByLabelText('Message actions')).toBeTruthy()
+  })
+
+  it('offers none on a row with no actions to reach', () => {
+    // Reactions live under the message, not in the bar, so a viewer who can
+    // only react has nothing for the trigger to open.
+    renderList([msg('u1', 'hello')], { onReact: vi.fn() })
+    expect(screen.queryByLabelText('Message actions')).toBeNull()
+  })
+
+  it('swaps the trigger for the bar when tapped', () => {
+    renderList([msg('u1', 'hello')], opts())
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    expect(screen.getByTestId('message-actions').dataset.open).toBe('true')
+    // Gone, rather than sitting underneath what it opened.
+    expect(screen.queryByLabelText('Message actions')).toBeNull()
+  })
+
+  it('keeps one row open at a time', () => {
+    renderList([msg('u1', 'one'), msg('u2', 'two')], opts())
+    const triggers = screen.getAllByLabelText('Message actions')
+    expect(triggers).toHaveLength(2)
+
+    fireEvent.click(triggers[0])
+    expect(screen.getAllByLabelText('Message actions')).toHaveLength(1)
+
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    // The first row closed as the second opened, so still exactly one is up.
+    expect(screen.getAllByLabelText('Message actions')).toHaveLength(1)
+    const open = screen.getAllByTestId('message-actions').filter(b => b.dataset.open === 'true')
+    expect(open).toHaveLength(1)
+  })
+
+  it('closes the bar behind an action it opened', () => {
+    const props = opts()
+    renderList([msg('u1', 'hello')], props)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    fireEvent.click(screen.getByTitle('Reply'))
+
+    expect(props.onReply).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('message-actions').dataset.open).toBe('false')
+    expect(screen.getByLabelText('Message actions')).toBeTruthy()
+  })
+
+  it('lets you back out without doing anything', () => {
+    const props = opts()
+    renderList([msg('u1', 'hello')], props)
+    fireEvent.click(screen.getByLabelText('Message actions'))
+    fireEvent.click(screen.getByLabelText('Close message actions'))
+
+    expect(props.onReply).not.toHaveBeenCalled()
+    expect(screen.getByTestId('message-actions').dataset.open).toBe('false')
+    expect(screen.getByLabelText('Message actions')).toBeTruthy()
+  })
+
+  // The reaction button is the one control that is NOT in the bar, so it needs
+  // the touch pairing on itself. Where a message already carries reactions it
+  // was never hidden in the first place.
+  it('keeps the reaction picker out of the hover-only class list', () => {
+    renderList([msg('u1', 'hello')], { onReact: vi.fn() })
+    const picker = screen.getByLabelText('Add a reaction')
+    expect(picker.className).toContain('touch:opacity-100')
+    expect(picker.className).toContain('group-hover:opacity-100')
+  })
+
+  it('offers the picker on every channel message, not just a bot feed', () => {
+    renderList([msg('u1', 'one'), msg('u2', 'two')], { onReact: vi.fn() })
+    expect(screen.getAllByLabelText('Add a reaction')).toHaveLength(2)
+  })
+
+  it('offers no picker at all when reacting is not on offer', () => {
+    renderList([msg('u1', 'hello')], {})
+    expect(screen.queryByLabelText('Add a reaction')).toBeNull()
+  })
+
+  it('reacts with a picked emoji', () => {
+    const onReact = vi.fn()
+    const m = msg('u1', 'hello')
+    renderList([m], { onReact })
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    fireEvent.click(screen.getByText('🔥'))
+    expect(onReact).toHaveBeenCalledWith(expect.objectContaining({ _id: m._id }), '🔥')
+  })
+})

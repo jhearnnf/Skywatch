@@ -16,6 +16,12 @@ const AVATAR_PX = 30
 // Existing reactions, plus a picker. In a bot feed this is the only way to
 // interact at all, so it is always visible rather than hover-only once a
 // message has any.
+//
+// On a touch device the picker button is always visible too. It is faint, and
+// one faint glyph per message is a fair price: Tailwind compiles `hover:` into
+// `@media (hover: hover)`, so a hover-only control on a phone is not awkward,
+// it is absent — there would be no way to react at all on a message nobody had
+// reacted to yet.
 function Reactions({ message, onReact }) {
   const [picking, setPicking] = useState(false)
   const list = message.reactions ?? []
@@ -48,7 +54,7 @@ function Reactions({ message, onReact }) {
             onClick={() => setPicking(p => !p)}
             className={`px-1.5 py-0.5 rounded-md text-[11px] border border-slate-200 text-slate-400
               hover:text-slate-600 hover:border-slate-300 transition-colors
-              ${list.length ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+              ${list.length ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100 touch:opacity-100'}`}
             aria-label="Add a reaction"
           >
             ☺+
@@ -260,6 +266,9 @@ function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine, online,
   viewerIsAdmin, onOpenUser, onReport, onDelete, onEdit, onReply, onReact, onSeenBy,
   onJump, highlighted, senders, currentUserId,
+  // Whether this row's actions are pinned open, and how to ask for that. Held
+  // by the list rather than the row so only one row can be open at a time.
+  actionsOpen, onToggleActions,
 }) {
   const m = message
   const name = isSupportIdentity
@@ -277,6 +286,12 @@ function MessageRow({
   // serves them the deleted ones. Everyone else gets it on their own live
   // messages only.
   const canSeenBy   = Boolean(onSeenBy)   && (viewerIsAdmin || (mine && !m.deleted))
+  const hasActions  = canSeenBy || canReply || canEdit || canReport || canDelete
+
+  // On a pointer device the bar disappears the moment you move off the row, so
+  // nothing has to dismiss it. Where it was opened by tap it does, or it would
+  // sit over the conversation until another row was touched.
+  const act = (fn) => () => { onToggleActions?.(null); fn() }
 
   // Inline edit, admin only. Kept local to the row rather than lifted, so
   // typing a correction does not re-render the whole thread on every keystroke.
@@ -384,28 +399,56 @@ function MessageRow({
         {!m.deleted && <Reactions message={m} onReact={onReact} />}
       </div>
 
-      {/* Hover actions, floated so they never take layout space per row. */}
-      <div className="absolute right-1 -top-2 hidden group-hover:flex items-center gap-1 bg-surface border border-slate-200 rounded-lg px-1 py-0.5 card-shadow">
+      {/* The tap target that stands in for hovering. Only rendered where hover
+          does not exist, and only until the bar it opens is up. */}
+      {hasActions && !actionsOpen && (
+        <button
+          type="button"
+          onClick={() => onToggleActions?.(m._id)}
+          aria-label="Message actions"
+          aria-expanded="false"
+          className="absolute right-1 top-0 hidden touch:block px-1.5 py-0.5 text-[13px] leading-none text-slate-400"
+        >
+          ⋯
+        </button>
+      )}
+
+      {/* Hover actions, floated so they never take layout space per row. Shown
+          on hover where there is a pointer, and on tap where there is not. */}
+      <div
+        data-testid="message-actions"
+        data-open={actionsOpen ? 'true' : 'false'}
+        className={`absolute right-1 -top-2 ${actionsOpen ? 'flex' : 'hidden'} group-hover:flex items-center gap-1 bg-surface border border-slate-200 rounded-lg px-1 py-0.5 card-shadow`}
+      >
         {canSeenBy && (
-          <button type="button" onClick={() => onSeenBy(m)} title="Seen by"
+          <button type="button" onClick={act(() => onSeenBy(m))} title="Seen by"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">👁</button>
         )}
         {canReply && (
-          <button type="button" onClick={() => onReply(m)} title="Reply"
+          <button type="button" onClick={act(() => onReply(m))} title="Reply"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">↰</button>
         )}
         {canEdit && (
-          <button type="button" onClick={() => setDraft(m.body ?? '')} title="Edit"
+          <button type="button" onClick={act(() => setDraft(m.body ?? ''))} title="Edit"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">✎</button>
         )}
         {canReport && (
-          <button type="button" onClick={() => onReport(m)} title="Report"
+          <button type="button" onClick={act(() => onReport(m))} title="Report"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">⚑</button>
         )}
         {canDelete && (
-          <button type="button" onClick={() => onDelete(m)} title="Delete"
+          <button type="button" onClick={act(() => onDelete(m))} title="Delete"
             className="text-[11px] px-1.5 py-0.5 text-red-600 hover:text-red-700">✕</button>
         )}
+        {/* Only where the bar had to be opened deliberately. */}
+        <button
+          type="button"
+          onClick={() => onToggleActions?.(null)}
+          aria-label="Close message actions"
+          className="hidden touch:block text-[11px] px-1.5 py-0.5 text-slate-400"
+        >
+          ⌄
+        </button>
       </div>
     </div>
   )
@@ -451,6 +494,11 @@ export default function MessageList({
   emptyLabel = 'No messages yet — say hi to get started.',
 }) {
   const scrollRef = useRef(null)
+  // Which row has its actions pinned open, on a device with no hover. Held
+  // here rather than per row so opening one closes the last.
+  const [openActionsId, setOpenActionsId] = useState(null)
+  const toggleActions = (id) =>
+    setOpenActionsId(cur => (id === null || cur === id ? null : String(id)))
 
   // Also scrolls when the indicator appears, so it is not left below the fold.
   useEffect(() => {
@@ -547,6 +595,8 @@ export default function MessageList({
             onSeenBy={conversationType === 'support' && !viewerIsAdmin ? undefined : onSeenBy}
             onJump={jumpTo}
             highlighted={String(highlightId) === String(m._id)}
+            actionsOpen={openActionsId === String(m._id)}
+            onToggleActions={toggleActions}
           />
           </Fragment>
         )

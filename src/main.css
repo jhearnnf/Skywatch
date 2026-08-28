@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind v4 compiles every `hover:` rule inside `@media (hover: hover)`, so
+   on a touch device a hover-revealed control is not merely hard to reach — it
+   never renders at all. `touch:` is the exact complement, for giving those
+   controls a tap-reachable equivalent. Pair them; do not replace `hover:`
+   with it. */
+@custom-variant touch (@media (hover: none));
+
 @theme {
   /* ── Brand palette — dark electric blue RAF theme ─────────────────── */
   --color-brand-50:  #04101f;
