@@ -249,8 +249,58 @@ describe('Cbat page — dense mobile grid', () => {
   // last row of tiles, which on a phone leaves it stranded mid-screen.
   it('pushes the report link to the bottom of the page', () => {
     renderWithUser()
-    const footer = screen.getByText(/A game not working right/).closest('div')
-    expect(footer.className).toContain('mt-auto')
+    expect(screen.getByTestId('cbat-footer-report').className).toContain('mt-auto')
+  })
+
+  // On a phone the grid is four across, so a roster that is not a multiple of
+  // four ends on a part-empty row. The report link goes in that dead space
+  // instead of costing the page a footer strip of its own — the whole point
+  // being that it is free height, so it must only happen when the cells are
+  // genuinely spare.
+  describe('report link in the grid', () => {
+    const visible = CBAT_GAMES.filter(g => !g.hidden)
+    const trailing = (4 - (visible.length % 4)) % 4
+
+    it('fills the last row dead cells at the current roster size', () => {
+      // 22 games, so two cells free beside Vigilance and SMA. If this fails the
+      // roster changed size and the expectations below are what matter.
+      expect(trailing).toBe(2)
+      renderWithUser()
+      const cell = screen.getByTestId('cbat-grid-report')
+      expect(cell).toBeInTheDocument()
+      expect(cell.closest('div').className).toContain('col-span-2')
+      // Phone only: the desktop grid is two across and always full.
+      expect(cell.closest('div').className).toContain('sm:hidden')
+    })
+
+    it('is not a tile', () => {
+      renderWithUser()
+      // Everything that makes a card in this grid read as a game is absent, or
+      // the grid grows a 23rd thing that looks playable.
+      const cell = screen.getByTestId('cbat-grid-report')
+      for (const tileClass of ['bg-surface', 'card-shadow', 'border-slate-200', 'rounded-xl']) {
+        expect(cell.className).not.toContain(tileClass)
+      }
+    })
+
+    it('hides the footer strip on a phone while the grid carries the link', () => {
+      renderWithUser()
+      // Both exist in the DOM; the footer is the one that goes away under `sm`.
+      expect(screen.getByTestId('cbat-footer-report').className).toContain('hidden sm:block')
+    })
+
+    // The link must still be reachable from this page on a phone at any roster
+    // size, because /report is not in BottomNav. One free cell is too narrow to
+    // read at 73px, and zero would open a whole seventh row for one link.
+    it('leaves the footer as the fallback when the last row is full', () => {
+      expect(trailing >= 2 || trailing === 0 || trailing === 1).toBe(true)
+      // The two states are mutually exclusive and one is always present.
+      renderWithUser()
+      const inGrid = screen.queryByTestId('cbat-grid-report')
+      const footer = screen.getByTestId('cbat-footer-report')
+      expect(Boolean(inGrid)).toBe(trailing >= 2)
+      expect(footer.className.includes('hidden sm:block')).toBe(trailing >= 2)
+    })
   })
 })
 

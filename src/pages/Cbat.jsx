@@ -10,6 +10,7 @@ import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
 import CbatLoungeChat from '../components/CbatLoungeChat'
 import { useLoungeOpen } from '../hooks/useLoungeOpen'
 import { useFixedColumn } from '../hooks/useFixedColumn'
+import { usePhoneTight } from '../hooks/usePhoneTight'
 import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 
@@ -336,6 +337,22 @@ export default function Cbat() {
   const sideColumnRef = useRef(null)
   const sideColumn    = useFixedColumn(sideColumnRef)
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
+  const visibleGames = CBAT_GAMES.filter(g => !g.hidden)
+
+  // The phone grid is four across, so a game count that is not a multiple of
+  // four leaves dead cells on the last row — at 22 games, the two beside
+  // Vigilance and SMA. The report link goes in them: it is the only thing on
+  // this page that is not a game, it costs nothing to put it in space the grid
+  // was wasting anyway, and it stops the page needing a footer strip under the
+  // grid at all.
+  //
+  // Computed rather than hard-coded to two, because the roster grows. At 23
+  // games there is one cell left and a link squeezed into a single 73px column
+  // would be unreadable, so it falls back to the footer; at 24 there are none
+  // and it must, or it would open a seventh row to hold one link and cost more
+  // height than it ever saved.
+  const trailingCells = (4 - (visibleGames.length % 4)) % 4
+  const reportInGrid  = trailingCells >= 2
   const isGameEnabled = (key) => isCbatGameEnabled(cbatGameEnabled, key)
 
   // Signed-in users get a Recent Scores side column on lg+ — widen the page
@@ -346,6 +363,13 @@ export default function Cbat() {
     document.body.classList.add('cbat-recent-wide')
     return () => document.body.classList.remove('cbat-recent-wide')
   }, [user])
+
+  // Phone-height relief for the hub. /cbat/* game routes already get their top
+  // padding cut by `.cbat-route`, but the hub deliberately does not carry that
+  // class, so it still pays .app-shell-content's full py-6 — 48px spent above a
+  // heading and below a footer line that both have whitespace to spare. Phone
+  // width only; desktop is untouched.
+  usePhoneTight()
 
   useEffect(() => {
     let tid
@@ -376,8 +400,16 @@ export default function Cbat() {
         jsonLd={cbatHubJsonLd(isGameEnabled)}
       />
 
-      <h1 className="text-2xl font-extrabold text-slate-900 mb-1">CBAT Aptitude Practise</h1>
-      <p className="text-sm text-slate-500 mb-2 sm:mb-4">Practise for CBAT with targeted training games.</p>
+      <h1 className="text-2xl font-extrabold text-slate-900 mb-3 sm:mb-1">CBAT Aptitude Practise</h1>
+      {/* The strapline is for someone who has just landed here — a signed-out visitor, and the
+          crawler that reads this page as one of the few indexable CBAT URLs we have. A signed-in
+          player on a phone already knows what the page is, and the line costs them 28px of the
+          viewport the 22-tile grid is fighting for, so it comes off at phone width only once
+          there is a session. Never hidden while signed out, or we would be hiding the page's one
+          keyword-bearing sentence from mobile-first indexing. */}
+      <p className={`text-sm text-slate-500 mb-2 sm:mb-4${user ? ' hidden sm:block' : ''}`}>
+        Practise for CBAT with targeted training games.
+      </p>
 
       {/* Guide strip — signed-out only. For a visitor the grid below is blurred
           and this is the only thing on the page they can actually use, so it
@@ -426,7 +458,7 @@ export default function Cbat() {
           2rem style, which beat every class and applied at all widths — it is a
           responsive class now, which is what lets the phone grid be dense. */}
       <div className={`grid grid-cols-4 gap-2 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-8${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
-        {CBAT_GAMES.filter(g => !g.hidden).map((game, i) => {
+        {visibleGames.map((game, i) => {
           const isImplemented = !!game.path
           const enabled       = isGameEnabled(game.key)
           // Admins always click through to test, regardless of toggle state.
@@ -511,6 +543,41 @@ export default function Cbat() {
             </motion.div>
           )
         })}
+
+        {/* Report link, sitting in the last row's dead cells beside Vigilance and
+            SMA. Phone only — the desktop grid is two across, always full, and has
+            the room for a proper footer anyway.
+
+            It is deliberately NOT a tile. No surface, no border, no shadow, no
+            emoji: everything that makes a card here read as "a thing you play"
+            is absent, so it reads as the whitespace it is sitting in with a link
+            written across it. A dashed or ghosted card was the obvious idea and
+            is the wrong one, because this grid already contains greyed-out cards
+            that mean "coming soon" and a 23rd ghost card would be read as one.
+
+            The question comes back that the compact footer had to drop. The cell
+            already exists at the row's height whatever goes in it, so two lines
+            of 8px text are free here in a way they were not under the grid. */}
+        {reportInGrid && (
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: visibleGames.length * 0.06, duration: 0.35 }}
+            className={`sm:hidden ${trailingCells === 3 ? 'col-span-3' : 'col-span-2'}`}
+          >
+            <Link
+              to="/report"
+              data-testid="cbat-grid-report"
+              className="h-full w-full flex flex-col items-center justify-center gap-0.5 px-2 text-center no-underline
+                text-slate-500 active:text-brand-600 transition-colors"
+            >
+              <span className="text-[8px] leading-[1.2]">A game not working right?</span>
+              <span className="text-[9px] font-semibold leading-[1.2] text-slate-600 underline underline-offset-2">
+                Report a problem
+              </span>
+            </Link>
+          </motion.div>
+        )}
       </div>
 
         </div>
@@ -558,10 +625,21 @@ export default function Cbat() {
 
       {/* Quiet report link — a game misbehaving? Send it to the team. `mt-auto`
           takes up whatever slack the grid leaves, so this sits on the bottom edge
-          of the page rather than trailing the last row of tiles. */}
-      <div className="mt-auto pt-3 sm:pt-6 border-t border-slate-200 text-center">
-        <p className="text-xs text-slate-500">
-          A game not working right?{' '}
+          of the page rather than trailing the last row of tiles.
+
+          On a phone this strip disappears entirely when the grid has dead cells
+          to put the link in — see `reportInGrid` above. It is kept as the
+          fallback rather than deleted because /report is not in BottomNav, so
+          this is the only route to it from the games hub: at a game count that
+          fills the last row, the link has to come back down here or there would
+          be no way to reach it at all. In that case it drops the framing
+          question and the rule, leaving the link alone at 10px. */}
+      <div
+        data-testid="cbat-footer-report"
+        className={`mt-auto pt-1 sm:pt-6 sm:border-t sm:border-slate-200 text-center${reportInGrid ? ' hidden sm:block' : ''}`}
+      >
+        <p className="text-[10px] sm:text-xs text-slate-500">
+          <span className="hidden sm:inline">A game not working right? </span>
           <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
             Report a problem
           </Link>

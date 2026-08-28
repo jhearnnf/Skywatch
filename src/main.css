@@ -293,6 +293,26 @@ body[data-rsvp-active] > *:not(.rsvp-overlay) {
    (but not flush with) the navbar, matching the bottom gap on the header div. */
 .cbat-route .app-shell-content { padding-top: 0.75rem; }
 
+/* Pages that have to fit a phone viewport rather than scroll: the CBAT hub,
+   whose six rows of tiles need about 460px of a screen that is only 540-570px
+   tall once the topbar and BottomNav have taken their 136px, and /report, whose
+   form has to end above the fold. Neither carries .cbat-route — AppShell keeps
+   the hub and every non-game route out of it — so both still pay
+   .app-shell-content's full py-6. Half of that is 24px: a third of a tile row,
+   or a line of the report textarea.
+
+   The query is the exact complement of Tailwind's `sm:` (min-width 40rem), NOT
+   the 600px hand-written breakpoint used elsewhere in this file. It has to
+   switch on the same edge as the `sm:` and `max-sm:` classes on those pages, or
+   there is a 40px band where the page is in its phone layout but still paying
+   desktop padding. Toggled by the usePhoneTight hook. */
+@media (width < 40rem) {
+  body.phone-tight .app-shell-content {
+    padding-top:    0.75rem;
+    padding-bottom: 0.75rem;
+  }
+}
+
 /* DPT during gameplay needs the full main-content width (sidebar already
    handled by md:ml-56 on .app-shell-main). The default max-w-3xl/mx-auto
    on .app-shell-content would otherwise cap the layout at 768px and prevent
