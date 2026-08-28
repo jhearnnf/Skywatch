@@ -14,13 +14,35 @@ import { MAX_SCORE, BATTERY_BY_KEY, reportVerdict, statusColour, TONE_TEXT } fro
 // It reserves its space with a skeleton while the summary loads. This used to render nothing at
 // all, on the reasoning that a placeholder shifting the games down was worse than a card fading
 // in — but that had it backwards: rendering nothing IS the shift, because the card drops in above
-// the grid and pushes ~135px of games down after the fetch lands. The /cbat grid is now tuned to
-// put all 22 games on one phone screen, so that late shove is the difference between fitting and
-// not. A skeleton built from the scored card's own classes holds the exact height instead.
+// the grid and pushes the games down after the fetch lands. The /cbat grid is tuned to put all 22
+// games on one phone screen, so that late shove is the difference between fitting and not. A
+// skeleton built from the scored card's own classes holds the exact height instead.
 //
 // The skeleton mirrors the SCORED shape, which is what a returning player gets. Someone who has
-// not picked a target role yet sees the shorter prompt card, so their page still settles by about
-// 19px — worth it to keep the common case at zero.
+// not picked a target role yet sees the shorter prompt card, so their page still settles slightly.
+
+// ── Shared geometry ──────────────────────────────────────────────────────────
+// The boxes that set the card's height, defined once and used by BOTH the scored card and its
+// skeleton. Height parity is the skeleton's entire job, so the two cannot be allowed to drift: a
+// change made here now applies to both by construction, rather than by someone remembering to
+// copy it across.
+//
+// The `sm:` half of each pair is the card as it has always been on a desktop. The bare half is
+// the phone form, which is a different shape rather than a scaled one: the verdict moves up
+// beside the eyebrow, so the card becomes two text lines and a rail instead of three and a rail,
+// and every box loses padding. That takes it from roughly 135px to roughly 72px. The grid below
+// needs about 460px for its six rows of tiles, and a small phone only has 540-570px of viewport
+// under the app chrome, so the 60-odd pixels are most of a grid row bought back.
+const CARD_WRAP    = 'mb-3 sm:mb-5'
+const CARD_STRIPE  = 'w-1.5 sm:w-2 shrink-0'
+const CARD_BODY    = 'flex-1 min-w-0 p-2 sm:p-4'
+const CARD_EYEBROW = 'flex-1 min-w-0 truncate text-[9px] leading-[1.2] sm:text-[10px] sm:leading-normal uppercase tracking-wide'
+const CARD_SCORE   = 'font-mono font-extrabold text-lg sm:text-2xl leading-tight'
+const CARD_UNIT    = 'text-[11px] sm:text-sm font-bold'
+const CARD_NOTE    = 'text-[9px] leading-[1.2] font-bold'
+const CARD_OPEN    = 'shrink-0 text-[10px] sm:text-xs font-bold'
+const CARD_RAIL    = 'relative mt-1 h-1.5 sm:mt-3 sm:h-2 bg-[#060e1a] border border-[#1a3a5c] rounded-sm overflow-hidden'
+const CARD_SHELL   = 'block bg-surface border border-slate-200 rounded-xl sm:rounded-2xl overflow-hidden card-shadow'
 
 export default function AptitudeReportCard() {
   const { API, apiFetch, user } = useAuth()
@@ -48,77 +70,7 @@ export default function AptitudeReportCard() {
 
   if (loading) return <AptitudeReportSkeleton />
 
-// Holds the card's exact height while the summary is in flight, so the game grid below never
-// moves. Every box here is the scored card's own markup — same padding, same line heights, same
-// stripe — so the two are the same height by construction rather than by a hard-coded pixel value
-// that would drift the first time the card changes.
-//
-// It shows no number at all. An earlier version rolled a random figure through the score slot to
-// look like arithmetic; it read as a fault, because the one number this card exists to report was
-// visibly jumping between values it could not possibly have computed. A placeholder that is
-// obviously a placeholder is more trustworthy than a plausible one that is wrong. So the score
-// slot holds em dashes, the stripe stays the neutral "no status yet" blue, and the only motion is
-// the shared shimmer, the dots, and one indeterminate pass across the rail — none of which claims
-// to know anything.
-function AptitudeReportSkeleton() {
-  return (
-    <div
-      className="mb-5"
-      role="status"
-      aria-busy="true"
-      aria-label="Analysing aptitude results"
-      data-testid="aptitude-report-skeleton"
-    >
-      <div className="relative block bg-surface border border-slate-200 rounded-2xl overflow-hidden card-shadow">
-        {/* The app's one shimmer idiom, shared with Profile's StatCard. */}
-        <span aria-hidden="true" className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
-          <span className="absolute -inset-y-2 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-brand-600/12 to-transparent stat-skeleton-sweep" />
-        </span>
-
-        <div className="flex">
-          {/* The scored card's own neutral stripe — the colour it uses when a status is unknown. */}
-          <div className="w-2 shrink-0 bg-[#1a3a5c]" />
-
-          <div className="flex-1 min-w-0 p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide">Aptitude Report</p>
-
-                {/* Same classes as the settled score, so the line box is the same
-                    height to the pixel. Dashes, never digits. */}
-                <p className="font-mono font-extrabold text-2xl text-slate-500 leading-tight tabular-nums" aria-hidden="true">
-                  &ndash;&ndash;
-                  <span className="text-sm text-slate-500 font-bold"> / pass mark &ndash;&ndash;</span>
-                </p>
-
-                <p className="text-[11px] font-bold text-brand-700">
-                  Analysing aptitude results
-                  <span aria-hidden="true">
-                    <span className="aptitude-dot">.</span>
-                    <span className="aptitude-dot aptitude-dot-2">.</span>
-                    <span className="aptitude-dot aptitude-dot-3">.</span>
-                  </span>
-                </p>
-              </div>
-              <span className="shrink-0 text-xs font-bold text-slate-500" aria-hidden="true">Open &rarr;</span>
-            </div>
-
-            {/* An indeterminate pass across an empty rail. It never rests at a width,
-                because any resting width would read as a share of the score. */}
-            <div className="relative mt-3 h-2 bg-[#060e1a] border border-[#1a3a5c] rounded-sm overflow-hidden" aria-hidden="true">
-              <div
-                className="absolute inset-y-0 w-1/3 aptitude-rail-scan rounded-sm"
-                style={{ background: 'linear-gradient(90deg, transparent 0%, #2d72d4 50%, transparent 100%)' }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Guards the SHAPE, not just the absence. `data` is whatever the endpoint
+  // Guards the SHAPE, not just the absence. `data` is whatever the endpoint
   // returned, and every branch below walks `batteries` — so a response that came
   // back without it (an error body, an empty payload, an older cached one) threw
   // and took the whole page down with it, because a render error is not caught
@@ -139,13 +91,13 @@ function AptitudeReportSkeleton() {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="bg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-shadow"
+        className="bg-surface border border-slate-200 rounded-xl sm:rounded-2xl p-2 sm:p-4 mb-3 sm:mb-5 card-shadow"
       >
-        <div className="flex items-center gap-4">
-          <span className="text-3xl shrink-0">📋</span>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <span className="text-xl sm:text-3xl shrink-0">📋</span>
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-slate-800 mb-0.5">Aptitude Report</p>
-            <p className="text-xs text-slate-600">
+            <p className="font-bold text-slate-800 text-sm leading-tight sm:text-base sm:mb-0.5">Aptitude Report</p>
+            <p className="text-[10px] leading-[1.3] sm:text-xs text-slate-600">
               {scored
                 ? <>You already have a score for {scored} RAF role{scored === 1 ? '' : 's'}{passing > 0 && <>, and you&apos;d pass <span className="font-bold text-emerald-300">{passing}</span> of them</>}. Pick the one you&apos;re aiming for.</>
                 : <>See how your practice would score on the real CBAT, and what to work on next.</>}
@@ -153,7 +105,7 @@ function AptitudeReportSkeleton() {
           </div>
           <Link
             to="/cbat/report"
-            className="shrink-0 px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition-colors no-underline"
+            className="shrink-0 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-xs font-bold transition-colors no-underline"
           >
             Open
           </Link>
@@ -171,35 +123,46 @@ function AptitudeReportSkeleton() {
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className="mb-5"
+      className={CARD_WRAP}
     >
       <Link
         to="/cbat/report"
-        className="block bg-surface border border-slate-200 rounded-2xl overflow-hidden card-shadow no-underline
-          hover:border-brand-300 transition-colors"
+        className={`${CARD_SHELL} no-underline hover:border-brand-300 transition-colors`}
       >
         <div className="flex">
           <div
-            className={`w-2 shrink-0 ${
+            data-testid="aptitude-card-stripe"
+            className={`${CARD_STRIPE} ${
               target.status === 'pass' ? 'bg-[#2f7d5b]' : target.status === 'fail' ? 'bg-[#a34a45]' : 'bg-[#1a3a5c]'
             }`}
           />
-          <div className="flex-1 min-w-0 p-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide">Aptitude Report · {label}</p>
-                <p className="font-mono font-extrabold text-2xl text-slate-900 leading-tight">
-                  {target.score ?? '-'}
-                  <span className="text-sm text-slate-600 font-bold"> / pass mark {target.cutoff}</span>
-                </p>
-                <p className={`text-[11px] font-bold ${TONE_TEXT[verdict.tone]}`}>{verdict.label}</p>
-              </div>
-              <span className="shrink-0 text-xs font-bold text-brand-700">Open &rarr;</span>
+          <div data-testid="aptitude-card-body" className={CARD_BODY}>
+            {/* Eyebrow row. On a phone the verdict rides up here beside the role name, which is
+                what removes a whole line from the card; from `sm` it drops back under the score,
+                where the desktop card has always had room for it. The eyebrow truncates because
+                the longest role — "WSOP (Air Signaller, Linguist)" — is 30 characters and would
+                otherwise push the verdict off the right edge of a 360px screen. */}
+            <div className="flex items-baseline gap-2">
+              <p data-testid="aptitude-card-eyebrow" className={`${CARD_EYEBROW} text-slate-500`}>
+                Aptitude Report · {label}
+              </p>
+              <span className={`sm:hidden shrink-0 ${CARD_NOTE} ${TONE_TEXT[verdict.tone]}`}>{verdict.label}</span>
             </div>
 
-            <div className="relative mt-3 h-2 bg-[#060e1a] border border-[#1a3a5c] rounded-sm overflow-hidden">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <p data-testid="aptitude-card-score" className={`${CARD_SCORE} text-slate-900`}>
+                  {target.score ?? '-'}
+                  <span className={`${CARD_UNIT} text-slate-600`}> / pass mark {target.cutoff}</span>
+                </p>
+                <p className={`hidden sm:block text-[11px] font-bold ${TONE_TEXT[verdict.tone]}`}>{verdict.label}</p>
+              </div>
+              <span className={`${CARD_OPEN} text-brand-700`}>Open &rarr;</span>
+            </div>
+
+            <div data-testid="aptitude-card-rail" className={CARD_RAIL}>
               <motion.div
-                className="absolute inset-y-0 left-0"
+                className="absolute inset-y-0 left-0 aptitude-rail-fill"
                 style={{ background: statusColour(target.status), opacity: 0.9 }}
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
@@ -214,5 +177,81 @@ function AptitudeReportSkeleton() {
         </div>
       </Link>
     </motion.div>
+  )
+}
+
+// Holds the card's exact height while the summary is in flight, so the game grid below never
+// moves. Every box here is one of the shared constants above — same padding, same line heights,
+// same stripe, same breakpoint behaviour — so the two are the same height by construction rather
+// than by a hard-coded pixel value that would drift the first time the card changes.
+//
+// It shows no number at all. An earlier version rolled a random figure through the score slot to
+// look like arithmetic; it read as a fault, because the one number this card exists to report was
+// visibly jumping between values it could not possibly have computed. A placeholder that is
+// obviously a placeholder is more trustworthy than a plausible one that is wrong. So the score
+// slot holds dashes, the stripe stays the neutral "no status yet" blue, and the only motion is
+// the shared shimmer, the dots, and one indeterminate pass across the rail — none of which claims
+// to know anything.
+function AptitudeReportSkeleton() {
+  // The working message occupies the verdict's slot, so on a phone it sits up in the eyebrow row
+  // where the verdict sits, and has to be as short as the verdict is.
+  const dots = (
+    <span aria-hidden="true">
+      <span className="aptitude-dot">.</span>
+      <span className="aptitude-dot aptitude-dot-2">.</span>
+      <span className="aptitude-dot aptitude-dot-3">.</span>
+    </span>
+  )
+  return (
+    <div
+      className={CARD_WRAP}
+      role="status"
+      aria-busy="true"
+      aria-label="Analysing aptitude results"
+      data-testid="aptitude-report-skeleton"
+    >
+      <div className={`relative ${CARD_SHELL}`}>
+        {/* The app's one shimmer idiom, shared with Profile's StatCard. */}
+        <span aria-hidden="true" className="absolute inset-0 overflow-hidden rounded-xl sm:rounded-2xl pointer-events-none">
+          <span className="absolute -inset-y-2 -left-1/2 w-1/2 bg-gradient-to-r from-transparent via-brand-600/12 to-transparent stat-skeleton-sweep" />
+        </span>
+
+        <div className="flex">
+          {/* The scored card's own neutral stripe — the colour it uses when a status is unknown. */}
+          <div data-testid="aptitude-card-stripe" className={`${CARD_STRIPE} bg-[#1a3a5c]`} />
+
+          <div data-testid="aptitude-card-body" className={CARD_BODY}>
+            <div className="flex items-baseline gap-2">
+              <p data-testid="aptitude-card-eyebrow" className={`${CARD_EYEBROW} text-slate-500`}>Aptitude Report</p>
+              <span className={`sm:hidden shrink-0 ${CARD_NOTE} text-brand-700`}>Analysing{dots}</span>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                {/* Same classes as the settled score, so the line box is the same
+                    height to the pixel. Dashes, never digits. */}
+                <p data-testid="aptitude-card-score" className={`${CARD_SCORE} text-slate-500 tabular-nums`} aria-hidden="true">
+                  &ndash;&ndash;
+                  <span className={`${CARD_UNIT} text-slate-500`}> / pass mark &ndash;&ndash;</span>
+                </p>
+                <p className="hidden sm:block text-[11px] font-bold text-brand-700">
+                  Analysing aptitude results{dots}
+                </p>
+              </div>
+              <span className={`${CARD_OPEN} text-slate-500`} aria-hidden="true">Open &rarr;</span>
+            </div>
+
+            {/* An indeterminate pass across an empty rail. It never rests at a width,
+                because any resting width would read as a share of the score. */}
+            <div data-testid="aptitude-card-rail" className={CARD_RAIL} aria-hidden="true">
+              <div
+                className="absolute inset-y-0 w-1/3 aptitude-rail-scan rounded-sm"
+                style={{ background: 'linear-gradient(90deg, transparent 0%, #2d72d4 50%, transparent 100%)' }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }

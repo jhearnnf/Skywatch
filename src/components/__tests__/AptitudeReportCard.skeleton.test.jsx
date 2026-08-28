@@ -61,7 +61,7 @@ describe('AptitudeReportCard — loading skeleton', () => {
   })
 
   // The failure modes all have to end with the skeleton gone. A skeleton that
-  // never resolves is worse than no skeleton: it holds 116px open for ever and
+  // never resolves is worse than no skeleton: it holds the card open for ever and
   // permanently costs the grid the screen space this whole change bought.
   it('comes down when the request throws', async () => {
     renderWith(vi.fn().mockRejectedValue(new Error('offline')))
@@ -103,29 +103,93 @@ describe('AptitudeReportCard — loading skeleton', () => {
   it('leaves the progress rail empty apart from one indeterminate pass', () => {
     const d = deferred()
     const { container } = renderWith(vi.fn().mockReturnValue(d.promise))
-    const rail = container.querySelector('.mt-3.h-2')
+    const rail = container.querySelector('[data-testid="aptitude-card-rail"]')
     expect(rail.querySelectorAll('.aptitude-rail-scan')).toHaveLength(1)
     expect(rail.querySelector('.aptitude-rail-fill')).toBeNull()
   })
 
-  // Height parity with the real card is the entire point, and it is achieved by
-  // reusing the scored card's own boxes. A skeleton that stopped mirroring those
-  // classes would silently reintroduce the shift, so the structure is pinned.
-  it('mirrors the scored card boxes that set its height', () => {
+  // Height parity with the real card is the entire point, and both shapes now
+  // vary by breakpoint — the phone card is two text lines and a rail where the
+  // desktop card is three and a rail — so pinning literal class strings would
+  // pin the wrong thing and would go stale on the next tuning pass. What has to
+  // hold is that the boxes setting the height are IDENTICAL between the two, at
+  // every width. Rendering both and comparing them asserts exactly that, and
+  // keeps holding whatever the classes become.
+  const HEIGHT_BOXES = ['stripe', 'body', 'eyebrow', 'score', 'rail']
+
+  function classesOf(container) {
+    return Object.fromEntries(HEIGHT_BOXES.map(box => [
+      box,
+      container.querySelector(`[data-testid="aptitude-card-${box}"]`)?.className,
+    ]))
+  }
+
+  it('mirrors the scored card boxes that set its height, at every breakpoint', async () => {
+    const d = deferred()
+    const loadingRender = renderWith(vi.fn().mockReturnValue(d.promise))
+    const skeletonWrap = skeleton().className
+    const skeletonBoxes = classesOf(loadingRender.container)
+    loadingRender.unmount()
+
+    const scored = renderWith(vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {
+        targetBattery: 'pilot',
+        batteries: [{ key: 'pilot', score: 72, cutoff: 85, status: 'fail' }],
+      } }),
+    }))
+    await waitFor(() => expect(skeleton()).toBeNull())
+
+    // Every height-setting box carries the same geometry in both shapes. Colour
+    // is allowed to differ and does — the stripe carries the pass/fail fill, the
+    // real score is slate-900 against the placeholder's slate-500 — and so is
+    // `tabular-nums`, which only stops the dashes shifting. None of those change
+    // a line box, so they are normalised out and everything else must match.
+    // Named explicitly rather than by a catch-all pattern: `text-lg` is a colour
+    // class by shape and a geometry class by effect, so a loose /text-\S+/ would
+    // quietly stop this test checking the thing it exists to check.
+    const NON_GEOMETRY = /\s*(?:text-(?:slate|brand|emerald|amber|sky)-\d+|bg-\[#[0-9a-f]{6}\]|tabular-nums)(?![\w-])/gi
+    const geometry = s => s.replace(NON_GEOMETRY, '').trim()
+    const scoredBoxes = classesOf(scored.container)
+    for (const box of HEIGHT_BOXES) {
+      expect(geometry(scoredBoxes[box])).toBe(geometry(skeletonBoxes[box]))
+    }
+
+    // And the same outer spacing as the real card's wrapper.
+    expect(scored.container.querySelector('[data-testid="aptitude-card-stripe"]')
+      .closest('.mb-3')).toBeInTheDocument()
+    expect(skeletonWrap).toContain('mb-3')
+    expect(skeletonWrap).toContain('sm:mb-5')
+  })
+
+  // The app's one shimmer idiom, shared with Profile's StatCard.
+  it('uses the shared skeleton shimmer', () => {
     const d = deferred()
     const { container } = renderWith(vi.fn().mockReturnValue(d.promise))
-
-    // Same outer spacing as the real card's wrapper.
-    expect(skeleton().className).toContain('mb-5')
-    // Status stripe, 16px padding body, and the progress rail.
-    expect(container.querySelector('.w-2.shrink-0')).toBeInTheDocument()
-    expect(container.querySelector('.p-4')).toBeInTheDocument()
-    expect(container.querySelector('.mt-3.h-2')).toBeInTheDocument()
-    // The three stacked lines whose line boxes carry the height.
-    expect(container.querySelector('p.text-\\[10px\\]')).toBeInTheDocument()
-    expect(container.querySelector('p.text-2xl.leading-tight')).toBeInTheDocument()
-    expect(container.querySelector('p.text-\\[11px\\]')).toBeInTheDocument()
-    // The app's one shimmer idiom, shared with Profile's StatCard.
     expect(container.querySelector('.stat-skeleton-sweep')).toBeInTheDocument()
+  })
+
+  // The phone card only fits because the verdict moves out of its own line and
+  // up beside the role name. The skeleton has to make the same move, or it holds
+  // a three-line height open for a two-line card and the grid jumps on arrival.
+  it('keeps the phone shape to two text lines in both states', async () => {
+    const d = deferred()
+    const loading = renderWith(vi.fn().mockReturnValue(d.promise))
+    // The working message: shown in the eyebrow row on a phone, on its own line
+    // from `sm` up. Both exist; each is hidden at the other's width.
+    expect(loading.container.querySelector('.sm\\:hidden')).toBeInTheDocument()
+    expect(loading.container.querySelector('.hidden.sm\\:block')).toBeInTheDocument()
+    loading.unmount()
+
+    const scored = renderWith(vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: {
+        targetBattery: 'pilot',
+        batteries: [{ key: 'pilot', score: 72, cutoff: 85, status: 'fail' }],
+      } }),
+    }))
+    await waitFor(() => expect(skeleton()).toBeNull())
+    expect(scored.container.querySelector('.sm\\:hidden')).toBeInTheDocument()
+    expect(scored.container.querySelector('.hidden.sm\\:block')).toBeInTheDocument()
   })
 })
