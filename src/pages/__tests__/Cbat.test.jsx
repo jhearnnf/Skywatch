@@ -519,3 +519,44 @@ describe('Cbat page — admin view toggle', () => {
     expect(apiFetch).toHaveBeenCalledWith('/api/games/cbat/recent?limit=25&adminView=0')
   })
 })
+
+// The hub is the one page in the app that is meant to end exactly at the fold:
+// 22 tiles tuned to a phone screen, with the report link pinned to the bottom
+// edge by mt-auto. That only works while its own height deduction matches what
+// the shell takes off the viewport. Deduct too little and the page is a handful
+// of pixels taller than the box it sits in, so it scrolls with nothing below the
+// fold to scroll to — which is exactly what the Android app showed when the
+// status-bar inset was left out of the sum.
+describe('CBAT hub — fitting the viewport', () => {
+  it('deducts both safe-area insets as well as the chrome', () => {
+    renderWithUser()
+    const page = document.querySelector('.cbat-page')
+    expect(page).toBeTruthy()
+
+    // `.app-shell-body` pads down by 3.5rem + the top inset, `.app-shell-main`
+    // up by 5rem + the bottom inset. The top one is 0 on desktop and 24-48px in
+    // the Android app (index.html sets viewport-fit=cover), so leaving it out
+    // only breaks on the phone.
+    expect(page.className).toContain('env(safe-area-inset-top)')
+    expect(page.className).toContain('env(safe-area-inset-bottom)')
+  })
+
+  it('pays the tightened padding at phone width and the full py-6 above it', () => {
+    renderWithUser()
+    const page = document.querySelector('.cbat-page')
+    // Phone: 3.5 topbar + 0.75 + 0.75 (usePhoneTight halves .app-shell-content's
+    // py-6 below 40rem) + 5 BottomNav.
+    expect(page.className).toContain('min-h-[calc(100dvh-10rem-')
+    // sm and up: the full 1.5rem top and bottom is paid again. The 5rem stays —
+    // .app-shell-main sets it unlayered in main.css, so main's own md:pb-6 never
+    // wins and the BottomNav's reservation is held at desktop width too.
+    expect(page.className).toContain('sm:min-h-[calc(100dvh-11.5rem-')
+  })
+
+  it('adds body.phone-tight so the deduction it assumes is real', () => {
+    renderWithUser()
+    // The 10rem above is only correct while usePhoneTight is mounted; without
+    // the class the shell still pays py-6 and the page overflows by 24px.
+    expect(document.body.classList.contains('phone-tight')).toBe(true)
+  })
+})

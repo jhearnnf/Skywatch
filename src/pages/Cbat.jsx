@@ -389,11 +389,23 @@ export default function Cbat() {
   }, [])
 
   return (
-    // A flex column at least as tall as the viewport below the app chrome — see
-    // the 10.75rem deduction in the AppShell notes — so the report link can sit on
-    // the bottom edge with mt-auto instead of floating directly under a grid that
-    // no longer reaches the fold.
-    <div className="cbat-page flex flex-col min-h-[calc(100dvh-10.75rem-env(safe-area-inset-bottom))]">
+    // A flex column exactly as tall as the viewport below the app chrome, so the
+    // report link can sit on the bottom edge with mt-auto instead of floating
+    // directly under a grid that no longer reaches the fold.
+    //
+    // The deduction has to match what the shell actually takes, or the page is a
+    // few pixels taller than the space it sits in and scrolls with nothing below
+    // the fold to scroll to. Both insets count: `.app-shell-body` pads down by
+    // `3.5rem + env(safe-area-inset-top)` and `.app-shell-main` up by
+    // `5rem + env(safe-area-inset-bottom)`. The status-bar inset is 0 on desktop
+    // but 24-48px in the Android app (viewport-fit=cover), which is where a too-
+    // small deduction shows up as a phantom scroll.
+    //
+    // Phone: 3.5 topbar + 0.75 + 0.75 (usePhoneTight halves .app-shell-content's
+    // py-6) + 5 BottomNav = 10rem. sm and up: the full py-6 is paid, so 11.5rem —
+    // .app-shell-main's 5rem is unlayered and beats its own md:pb-6, so the
+    // BottomNav's reservation is held at desktop width too.
+    <div className="cbat-page flex flex-col min-h-[calc(100dvh-10rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:min-h-[calc(100dvh-11.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
       <SEO
         title="CBAT Practice Tests"
         description="Practise every CBAT-style aptitude subtest in one place: FLAG, ANT, DPT, ACT, Trace, Visualisation and more. Free to play, with every score tracked."
