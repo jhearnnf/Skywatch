@@ -5,7 +5,11 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { NATIVE_APP } from '../utils/appMode'
 import { nameColour } from '../pages/chat/nameColour'
 import { formatTime } from '../pages/chat/format'
+import { splitMentions, activeMention } from '../pages/chat/mentions'
+import { REACTION_EMOJI } from '../pages/chat/reactionEmoji'
 import DisplayNameGate from '../pages/chat/components/DisplayNameGate'
+import SeenByDialog from '../pages/chat/components/SeenByDialog'
+import MentionPicker from '../pages/chat/components/MentionPicker'
 
 // The mini chat docked under Recent Scores on the CBAT hub.
 //
@@ -51,6 +55,87 @@ function ActivityStrip({ activity }) {
   )
 }
 
+// What you are answering, above the message. The quote is the snapshot the
+// server took at send time, so it still reads correctly when the parent has
+// scrolled out of the 40-message window this panel holds.
+function ReplyQuote({ replyTo }) {
+  return (
+    <span className="flex items-center gap-1 text-[10px] text-slate-500 min-w-0">
+      <span className="shrink-0" aria-hidden="true">↰</span>
+      <span className="font-semibold shrink-0">{replyTo.displayName || 'Unknown agent'}</span>
+      <span className="truncate">{replyTo.excerpt || 'message unavailable'}</span>
+    </span>
+  )
+}
+
+// Message text with any @mentions picked out, exactly as the full room renders
+// them: a mention of YOU is loud, a mention of someone else is only tinted.
+function MessageBody({ message, senders, currentUserId }) {
+  const mentioned = (message.mentions ?? []).map(id => senders[String(id)]).filter(Boolean)
+  if (!mentioned.length) return <>{message.body}</>
+
+  return splitMentions(message.body, mentioned).map((run, i) => {
+    if (!run.user) return <span key={i}>{run.text}</span>
+    const isMe = String(run.user._id) === String(currentUserId)
+    return (
+      <span
+        key={i}
+        className={`rounded px-0.5 font-semibold ${isMe ? 'bg-brand-200/70 text-brand-800' : 'text-brand-600'}`}
+      >
+        {run.text}
+      </span>
+    )
+  })
+}
+
+// Reaction chips, plus the picker.
+//
+// The picker opens INLINE, replacing the hover bar, rather than as a popup: the
+// message list is an `overflow-y-auto` box a few hundred pixels tall, so a
+// floating palette would be clipped at whichever end of it you reached for —
+// and the messages you actually react to sit at the bottom edge.
+function Reactions({ message, onReact, picking, onPick }) {
+  const list = message.reactions ?? []
+  // `picking` is gated on being able to post, but the right to post can be
+  // taken away mid-session — so the palette is tied to onReact, not to the
+  // picker state that opened it.
+  const offering = picking && Boolean(onReact)
+  if (!list.length && !offering) return null
+
+  return (
+    <span className="flex flex-wrap items-center gap-1 mt-0.5">
+      {list.map(r => (
+        <button
+          key={r.emoji}
+          type="button"
+          onClick={() => onReact?.(message, r.emoji)}
+          disabled={!onReact}
+          aria-label={`${r.emoji} ${r.count}`}
+          aria-pressed={r.mine}
+          className={`flex items-center gap-0.5 px-1 py-px rounded text-[10px] border transition-colors
+            ${r.mine
+              ? 'bg-brand-600/20 border-brand-400 text-brand-700'
+              : 'bg-[#0c1829] border-[#1a3a5c] text-slate-600 hover:border-brand-400'}`}
+        >
+          <span>{r.emoji}</span>
+          <span className="font-bold">{r.count}</span>
+        </button>
+      ))}
+
+      {offering && REACTION_EMOJI.map(e => (
+        <button
+          key={e}
+          type="button"
+          onClick={() => { onPick(null); onReact(message, e) }}
+          className="px-1 py-px rounded text-xs bg-[#0c1829] border border-[#1a3a5c] hover:border-brand-400 transition-colors"
+        >
+          {e}
+        </button>
+      ))}
+    </span>
+  )
+}
+
 export default function CbatLoungeChat({ open, onToggle }) {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
@@ -67,6 +152,21 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const [typingName, setTypingName] = useState(null)
   const [streaming, setStreaming] = useState(false)
   const [activity, setActivity] = useState(null)
+  // Display names, badges and so on for everyone who has spoken here OR been
+  // mentioned. Needed to render an @mention, which is a text match against the
+  // mentioned person's name — see pages/chat/mentions.js.
+  const [senders,   setSenders]   = useState({})
+  const [replyTo,   setReplyTo]   = useState(null)
+  // The message whose readership is being inspected, or null.
+  const [seenByMsg, setSeenByMsg] = useState(null)
+  // The message whose emoji picker is open, if any. One at a time.
+  const [picking,   setPicking]   = useState(null)
+  // Caret offset, for spotting the "@" being typed. Tracked rather than read
+  // off the input on demand because the picker re-renders from it.
+  const [caret,     setCaret]     = useState(0)
+  // The offset of an "@" the user dismissed with Escape, so it stays dismissed
+  // until they start a different mention.
+  const [mentionDismissed, setMentionDismissed] = useState(null)
 
   const scrollRef = useRef(null)
   const inputRef  = useRef(null)
@@ -74,6 +174,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
   // over the open state as it was when the connection opened.
   const openRef   = useRef(open)
   openRef.current = open
+  // Same reason as openRef: the stream handler is installed once and would
+  // otherwise close over the sender map as it was when the connection opened.
+  const sendersRef = useRef(senders)
+  sendersRef.current = senders
 
   const conversationId = lounge?.conversationId ?? null
   const enabled = Boolean(user) && !NATIVE_APP && settings?.chatEnabled !== false
@@ -123,6 +227,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
     const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}`)
     if (!ok || !data) return
     setMessages(data.messages ?? [])
+    setSenders(data.senders ?? {})
     setTypingName(data.botTyping ?? null)
     setLoading(false)
   }, [conversationId, get])
@@ -153,6 +258,12 @@ export default function CbatLoungeChat({ open, onToggle }) {
     const onMessage = (e) => {
       let incoming
       try { incoming = JSON.parse(e.data) } catch { return }
+      // The stream carries the message but not the profile of anyone it
+      // mentions, and a mention renders by matching that person's display name
+      // against the body. When we cannot name them, refetch — which is also
+      // what fills in a first-time speaker's avatar and colour.
+      const unnamed = (incoming.mentions ?? []).some(id => !sendersRef.current[String(id)])
+      if (unnamed) loadMessages().catch(() => {})
       setMessages(prev => (
         // The sender already appended this one from the POST response, and a
         // reconnect can replay nothing but is cheap to guard anyway.
@@ -210,6 +321,8 @@ export default function CbatLoungeChat({ open, onToggle }) {
 
   // ── Sending ────────────────────────────────────────────────────────────────
 
+  const syncCaret = (e) => setCaret(e.target.selectionStart ?? 0)
+
   const send = async () => {
     const text = draft.trim()
     if (!text || busy || !conversationId) return
@@ -219,7 +332,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text }),
+        body: JSON.stringify({ body: text, replyToId: replyTo?._id ?? null }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) {
@@ -228,6 +341,8 @@ export default function CbatLoungeChat({ open, onToggle }) {
         throw new Error(d?.message || 'Could not send that')
       }
       setDraft('')
+      setReplyTo(null)
+      setMentionDismissed(null)
       if (d?.data?.botReplyingName) setTypingName(d.data.botReplyingName)
       if (d?.data?.message) {
         setMessages(prev => (
@@ -241,11 +356,55 @@ export default function CbatLoungeChat({ open, onToggle }) {
     }
   }
 
+  // Toggle one of the whitelisted reactions. The response carries the updated
+  // counts for this viewer, so the message is swapped in place rather than
+  // refetching the room; everyone else finds out through the 'refresh' the
+  // server publishes.
+  const react = async (message, emoji) => {
+    setErr('')
+    const r = await apiFetch(`${API}/api/chat/messages/${message._id}/reactions`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji }),
+    }).catch(() => null)
+    const d = await r?.json().catch(() => null)
+    if (!r?.ok) { setErr(d?.message || 'Could not add that reaction'); return }
+    setMessages(prev => prev.map(m => (
+      String(m._id) === String(d.data.message._id) ? d.data.message : m
+    )))
+  }
+
+  const startReply = (message) => {
+    setReplyTo(message)
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  // Drop the half-typed "@fal" and put "@Falcon " in its place, caret after it
+  // so typing carries straight on.
+  const pickMention = (picked) => {
+    const mention = activeMention(draft, caret)
+    if (!mention) return
+    const insert = `@${picked.displayName} `
+    const next = draft.slice(0, mention.start) + insert + draft.slice(caret)
+    const nextCaret = mention.start + insert.length
+    setDraft(next)
+    setCaret(nextCaret)
+    setMentionDismissed(null)
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(nextCaret, nextCaret)
+    })
+  }
+
   // Prefill the composer with the mention rather than sending anything: the
   // question is still theirs to write, and the bot only answers when addressed.
   const askBot = () => {
     if (!lounge?.botName) return
     setDraft(d => (d.includes(`@${lounge.botName}`) ? d : `@${lounge.botName} ${d}`.trim() + ' '))
+    setMentionDismissed(null)
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
@@ -281,6 +440,13 @@ export default function CbatLoungeChat({ open, onToggle }) {
   // ── Open ───────────────────────────────────────────────────────────────────
 
   const canPost = lounge?.canPost && !needsName
+  const viewerIsAdmin = Boolean(user?.isAdmin)
+
+  // The "@" the caret is sitting in, if any, and whether to offer the picker
+  // for it. Suppressed while a display name is still being asked for, since
+  // there is no composer to complete into.
+  const mention = canPost ? activeMention(draft, caret) : null
+  const showMentionPicker = Boolean(mention) && mention.start !== mentionDismissed
 
   return (
     <div className="flex-[2] min-h-0 mt-3 flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
@@ -319,28 +485,88 @@ export default function CbatLoungeChat({ open, onToggle }) {
           messages.map(m => {
             const isBot   = Boolean(lounge?.botName) && m.senderDisplayName === lounge.botName
             const mineTag = (m.mentions ?? []).some(id => String(id) === String(user?._id))
+            const acting  = canPost && !m.deleted
+            const mine    = String(m.senderUserId ?? '') === String(user?._id)
+            // Exactly the rule the full room uses, enforced again by the
+            // endpoint: your own messages, and admins on anyone's. Not gated on
+            // canPost — being unable to speak is no reason to lose sight of who
+            // read what you already said.
+            const canSeen = viewerIsAdmin || (mine && !m.deleted)
             return (
-              <p
+              <div
                 key={m._id}
-                className={`text-xs leading-snug break-words ${
+                className={`group relative text-xs leading-snug break-words ${
                   mineTag ? 'bg-brand-600/10 border-l-2 border-l-brand-400 -mx-1 px-1 rounded' : ''
                 }`}
-                title={formatTime(m.createdAt)}
               >
-                <span
-                  className="font-bold"
-                  style={{ color: isBot ? '#5baaff' : nameColour(m.senderUserId) }}
-                >
-                  {m.senderDisplayName || 'Unknown agent'}
-                </span>
-                {isBot && (
-                  <span className="ml-1 px-1 py-px rounded bg-brand-600/15 text-brand-600 text-[8px] font-extrabold uppercase tracking-wide align-middle">
-                    Bot
+                {m.replyTo && <ReplyQuote replyTo={m.replyTo} />}
+                <p title={formatTime(m.createdAt)}>
+                  <span
+                    className="font-bold"
+                    style={{ color: isBot ? '#5baaff' : nameColour(m.senderUserId) }}
+                  >
+                    {m.senderDisplayName || 'Unknown agent'}
+                  </span>
+                  {isBot && (
+                    <span className="ml-1 px-1 py-px rounded bg-brand-600/15 text-brand-600 text-[8px] font-extrabold uppercase tracking-wide align-middle">
+                      Bot
+                    </span>
+                  )}
+                  <span className="text-slate-500">: </span>
+                  <span className="text-[#ddeaf8] whitespace-pre-wrap">
+                    <MessageBody message={m} senders={senders} currentUserId={user?._id} />
+                  </span>
+                </p>
+
+                <Reactions
+                  message={m}
+                  onReact={acting ? react : undefined}
+                  picking={picking === String(m._id)}
+                  onPick={setPicking}
+                />
+
+                {/* Hover-reveal, so forty rows of buttons do not compete with
+                    the conversation. `hover:` compiles to @media (hover: hover),
+                    so on a touch screen it would never appear at all — the
+                    panel is desktop-width only, but a touch laptop still lands
+                    here, hence the touch: pair. focus-within covers the
+                    keyboard. */}
+                {(acting || canSeen) && (
+                  <span className="absolute top-0 right-0 flex gap-0.5 rounded-md bg-[#0a1628] border border-[#1a3a5c] px-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch:opacity-100 transition-opacity">
+                    {canSeen && (
+                      <button
+                        type="button"
+                        onClick={() => setSeenByMsg(m)}
+                        aria-label="Seen by"
+                        title="Seen by"
+                        className="px-1 text-[11px] text-slate-500 hover:text-brand-600 transition-colors"
+                      >
+                        👁
+                      </button>
+                    )}
+                    {acting && (
+                      <button
+                        type="button"
+                        onClick={() => setPicking(p => (p === String(m._id) ? null : String(m._id)))}
+                        aria-label="Add a reaction"
+                        className="px-1 text-[11px] text-slate-500 hover:text-brand-600 transition-colors"
+                      >
+                        ☺+
+                      </button>
+                    )}
+                    {acting && (
+                      <button
+                        type="button"
+                        onClick={() => startReply(m)}
+                        aria-label="Reply"
+                        className="px-1 text-[11px] text-slate-500 hover:text-brand-600 transition-colors"
+                      >
+                        ↰
+                      </button>
+                    )}
                   </span>
                 )}
-                <span className="text-slate-500">: </span>
-                <span className="text-[#ddeaf8] whitespace-pre-wrap">{m.body}</span>
-              </p>
+              </div>
             )
           })
         )}
@@ -362,36 +588,80 @@ export default function CbatLoungeChat({ open, onToggle }) {
             : lounge?.postBlockedMessage || 'You cannot post here right now.'}
         </p>
       ) : (
-        <div className="shrink-0 border-t border-[#1a3a5c] p-2 flex items-center gap-1.5">
-          {lounge?.botName && (
+        <div className="shrink-0 border-t border-[#1a3a5c]">
+          {replyTo && (
+            <div className="flex items-center gap-1.5 px-2 pt-1.5 text-[10px] min-w-0">
+              <span className="text-slate-500 shrink-0">Replying to</span>
+              <span className="font-semibold text-slate-600 shrink-0">
+                {replyTo.senderDisplayName || 'Unknown agent'}
+              </span>
+              <span className="text-slate-500 truncate">{replyTo.body}</span>
+              <button
+                type="button"
+                onClick={() => setReplyTo(null)}
+                aria-label="Cancel reply"
+                className="ml-auto shrink-0 px-1 text-slate-500 hover:text-slate-400"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          <div className="relative p-2 flex items-center gap-1.5">
+            {showMentionPicker && (
+              <MentionPicker
+                conversationId={conversationId}
+                query={mention.query}
+                onPick={pickMention}
+                onDismiss={() => setMentionDismissed(mention.start)}
+              />
+            )}
+            {lounge?.botName && (
+              <button
+                type="button"
+                onClick={askBot}
+                title={`Ask ${lounge.botName} a question`}
+                className="shrink-0 px-2 py-1.5 rounded-lg border border-[#1a3a5c] text-[11px] font-bold text-slate-500 hover:text-brand-600 hover:border-brand-400 transition-colors"
+              >
+                🤖
+              </button>
+            )}
+            <input
+              ref={inputRef}
+              type="text"
+              value={draft}
+              maxLength={4000}
+              onChange={e => { setDraft(e.target.value); syncCaret(e) }}
+              onSelect={syncCaret}
+              onKeyUp={syncCaret}
+              onClick={syncCaret}
+              onKeyDown={e => {
+                // While the picker is open it owns these keys — Enter completes
+                // the mention rather than sending a half-typed name. Its own
+                // capture-phase listener runs before this.
+                if (showMentionPicker && ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) return
+                if (e.key === 'Enter') { e.preventDefault(); send() }
+              }}
+              placeholder="Message the lounge…"
+              className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-[#0c1829] border border-[#1a3a5c] focus:border-brand-400 outline-none text-xs text-[#ddeaf8] placeholder:text-slate-500"
+            />
             <button
               type="button"
-              onClick={askBot}
-              title={`Ask ${lounge.botName} a question`}
-              className="shrink-0 px-2 py-1.5 rounded-lg border border-[#1a3a5c] text-[11px] font-bold text-slate-500 hover:text-brand-600 hover:border-brand-400 transition-colors"
+              onClick={send}
+              disabled={busy || !draft.trim()}
+              className="shrink-0 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition-colors"
             >
-              🤖
+              Send
             </button>
-          )}
-          <input
-            ref={inputRef}
-            type="text"
-            value={draft}
-            maxLength={4000}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); send() } }}
-            placeholder="Message the lounge…"
-            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-[#0c1829] border border-[#1a3a5c] focus:border-brand-400 outline-none text-xs text-[#ddeaf8] placeholder:text-slate-500"
-          />
-          <button
-            type="button"
-            onClick={send}
-            disabled={busy || !draft.trim()}
-            className="shrink-0 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition-colors"
-          >
-            Send
-          </button>
+          </div>
         </div>
+      )}
+
+      {seenByMsg && (
+        <SeenByDialog
+          key={seenByMsg._id}
+          message={seenByMsg}
+          onClose={() => setSeenByMsg(null)}
+        />
       )}
     </div>
   )

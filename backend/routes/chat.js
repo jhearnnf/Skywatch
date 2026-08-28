@@ -237,6 +237,19 @@ async function appendMessage({
     body,
     createdAt:         message.createdAt,
     mentions:          mentions.map(String),
+    // The reply snapshot rides along, or a reply arriving live would render
+    // without the quote it is answering until the next full refetch. Safe for
+    // every listener for the same reason the snapshot exists: it is a copy
+    // taken at send time, not a live read of the parent.
+    replyTo:           replyTo ? {
+      messageId:   String(replyTo.messageId),
+      displayName: replyTo.displayName ?? null,
+      excerpt:     replyTo.excerpt ?? null,
+    } : null,
+    // A brand new message has none, but the field has to exist: clients render
+    // reactions straight off the message and would otherwise special-case the
+    // streamed copy.
+    reactions:         [],
   });
 
   return message;
@@ -1661,6 +1674,14 @@ router.post('/messages/:id/reactions', async (req, res) => {
     }
 
     const fresh = await ChatMessage.findById(message._id).lean();
+
+    // Tell live listeners to refetch rather than pushing the new counts.
+    // `mine` is computed per viewer, so a single serialized payload would tell
+    // everyone else that the reaction was theirs — and a refresh lets each
+    // client resolve its own view. Reactions are rare enough that the extra
+    // read costs nothing next to getting that wrong.
+    chatStream.publish(message.conversationId, 'refresh', { reason: 'reaction' });
+
     res.json({ status: 'success', data: {
       message: serializeMessage(fresh, {
         viewerIsAdmin:    Boolean(req.user.isAdmin),

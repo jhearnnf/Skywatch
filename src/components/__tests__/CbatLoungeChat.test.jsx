@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatLoungeChat from '../CbatLoungeChat'
+import { REACTION_EMOJI } from '../../pages/chat/reactionEmoji'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,30 @@ vi.mock('../../context/AppSettingsContext', () => ({
 vi.mock('../../utils/appMode', () => ({ get NATIVE_APP() { return mockNative.value } }))
 vi.mock('../../pages/chat/components/DisplayNameGate', () => ({
   default: () => <div>Choose a display name</div>,
+}))
+// Stubbed for the same reason as the picker: what belongs here is that the
+// lounge opens the dialog for the right message and closes it again. The
+// dialog's own fetching is not the lounge's business.
+vi.mock('../../pages/chat/components/SeenByDialog', () => ({
+  default: ({ message, onClose }) => (
+    <div data-testid="seen-by">
+      {message._id}
+      <button type="button" onClick={onClose}>close seen-by</button>
+    </div>
+  ),
+}))
+// Stubbed so these tests exercise the lounge's wiring of the picker — when it
+// is offered and what happens to the draft on a pick — rather than the
+// picker's own debounced search.
+vi.mock('../../pages/chat/components/MentionPicker', () => ({
+  default: ({ query, onPick }) => (
+    <div data-testid="mention-picker">
+      <span>query:{query}</span>
+      <button type="button" onClick={() => onPick({ _id: 'u2', displayName: 'Viper' })}>
+        pick Viper
+      </button>
+    </div>
+  ),
 }))
 
 // A stand-in for the browser's EventSource, so a test can push a message down
@@ -54,7 +79,7 @@ const MESSAGES = [
 
 // Routes the component's fetches. `overrides` swaps one response without having
 // to restate the rest.
-function stubFetch({ lounge = LOUNGE, loungeStatus = 200, messages = MESSAGES, onPost } = {}) {
+function stubFetch({ lounge = LOUNGE, loungeStatus = 200, messages = MESSAGES, senders = {}, onPost } = {}) {
   const json = (status, data) => Promise.resolve({
     ok: status < 400,
     status,
@@ -63,7 +88,7 @@ function stubFetch({ lounge = LOUNGE, loungeStatus = 200, messages = MESSAGES, o
   const fetchMock = vi.fn((url, opts) => {
     if (String(url).includes('/api/chat/lounge')) return json(loungeStatus, lounge)
     if (String(url).includes('/messages') && opts?.method === 'POST') return onPost(url, opts)
-    if (String(url).includes('/messages')) return json(200, { messages, botTyping: null })
+    if (String(url).includes('/messages')) return json(200, { messages, senders, botTyping: null })
     return json(200, {})
   })
   global.fetch = fetchMock
@@ -264,7 +289,7 @@ describe('posting', () => {
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalled())
     const [, opts] = apiFetch.mock.calls[0]
-    expect(JSON.parse(opts.body)).toEqual({ body: 'hello all' })
+    expect(JSON.parse(opts.body)).toEqual({ body: 'hello all', replyToId: null })
     await waitFor(() => expect(box.value).toBe(''))
   })
 
@@ -354,5 +379,262 @@ describe('activity strip', () => {
     stubWithActivity({ plays7d: 1, agentsToday: 1, quiet: false })
     renderOpen()
     expect(await screen.findByText('1 game played this week · 1 agent today')).toBeDefined()
+  })
+})
+
+// The lounge is a second view of a real channel, so replying, reacting and
+// mentioning are the same server features the full room uses. What is tested
+// here is that the small panel actually offers them and sends the right thing.
+
+describe('replying', () => {
+  const REPLY = {
+    _id: 'm2', senderUserId: 'u3', senderDisplayName: 'Hawk',
+    body: 'yep, standing by', createdAt: new Date().toISOString(), mentions: [],
+    replyTo: { messageId: 'm1', displayName: 'Viper', excerpt: 'anyone about?' },
+  }
+
+  it('shows what a message is answering', async () => {
+    stubFetch({ messages: [...MESSAGES, REPLY] })
+    renderOpen()
+    await screen.findByText('yep, standing by')
+    expect(screen.getAllByText('Viper').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('anyone about?').length).toBe(2)
+  })
+
+  // The parent may well have scrolled out of the forty messages this panel
+  // holds, which is exactly why the server snapshots the quote.
+  it('still shows the quote when the parent is not loaded', async () => {
+    stubFetch({ messages: [REPLY] })
+    renderOpen()
+    await screen.findByText('yep, standing by')
+    expect(screen.getByText('anyone about?')).toBeTruthy()
+  })
+
+  it('names the target in the composer and sends it with the message', async () => {
+    stubFetch({ onPost: vi.fn() })
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'success', data: { message: null } }),
+    })
+    renderOpen()
+    await screen.findByText('anyone about?')
+
+    fireEvent.click(screen.getByLabelText('Reply'))
+    expect(screen.getByText('Replying to')).toBeTruthy()
+
+    const box = screen.getByPlaceholderText('Message the lounge…')
+    fireEvent.change(box, { target: { value: 'on my way' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalled())
+    const [, opts] = apiFetch.mock.calls[0]
+    expect(JSON.parse(opts.body)).toEqual({ body: 'on my way', replyToId: 'm1' })
+    // Cleared once sent, or the next message would answer the same person.
+    await waitFor(() => expect(screen.queryByText('Replying to')).toBeNull())
+  })
+
+  it('lets you back out of a reply', async () => {
+    stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+    fireEvent.click(screen.getByLabelText('Reply'))
+    fireEvent.click(screen.getByLabelText('Cancel reply'))
+    expect(screen.queryByText('Replying to')).toBeNull()
+  })
+
+  it('offers no reply control when you cannot post', async () => {
+    stubFetch({ lounge: { ...LOUNGE, canPost: false } })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.queryByLabelText('Reply')).toBeNull()
+  })
+})
+
+describe('reactions', () => {
+  const REACTED = [{
+    ...MESSAGES[0],
+    reactions: [{ emoji: '🔥', count: 2, mine: false }],
+  }]
+
+  it('shows what has already been reacted, with counts', async () => {
+    stubFetch({ messages: REACTED })
+    renderOpen()
+    expect(await screen.findByLabelText('🔥 2')).toBeTruthy()
+  })
+
+  // The response carries this viewer's own counts, so the message is swapped in
+  // place rather than refetching the room.
+  it('swaps in the counts the server returns when you react', async () => {
+    stubFetch({ messages: REACTED })
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'success', data: { message: {
+        ...REACTED[0], reactions: [{ emoji: '🔥', count: 3, mine: true }],
+      } } }),
+    })
+    renderOpen()
+    fireEvent.click(await screen.findByLabelText('🔥 2'))
+
+    const chip = await screen.findByLabelText('🔥 3')
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    const [url, opts] = apiFetch.mock.calls[0]
+    expect(url).toContain('/api/chat/messages/m1/reactions')
+    expect(JSON.parse(opts.body)).toEqual({ emoji: '🔥' })
+  })
+
+  it('opens the emoji whitelist inline rather than as a popup', async () => {
+    stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+    // Nothing on offer until asked for, so forty rows stay readable.
+    expect(screen.queryByText('👍')).toBeNull()
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    for (const emoji of REACTION_EMOJI) expect(screen.getByText(emoji)).toBeTruthy()
+  })
+
+  it('reacts with a picked emoji and closes the picker', async () => {
+    stubFetch()
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'success', data: { message: {
+        ...MESSAGES[0], reactions: [{ emoji: '👍', count: 1, mine: true }],
+      } } }),
+    })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    fireEvent.click(screen.getByText('👍'))
+
+    expect(await screen.findByLabelText('👍 1')).toBeTruthy()
+    expect(JSON.parse(apiFetch.mock.calls[0][1].body)).toEqual({ emoji: '👍' })
+  })
+
+  it('says so rather than silently doing nothing when a reaction is refused', async () => {
+    stubFetch({ messages: REACTED })
+    apiFetch.mockResolvedValue({
+      ok: false,
+      json: async () => ({ message: 'You cannot react in chat.' }),
+    })
+    renderOpen()
+    fireEvent.click(await screen.findByLabelText('🔥 2'))
+    expect(await screen.findByText('You cannot react in chat.')).toBeTruthy()
+  })
+
+  it('offers no reaction control when you cannot post', async () => {
+    stubFetch({ lounge: { ...LOUNGE, canPost: false } })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.queryByLabelText('Add a reaction')).toBeNull()
+  })
+})
+
+describe('mentions', () => {
+  const MENTIONING = [{
+    _id: 'm3', senderUserId: 'u2', senderDisplayName: 'Viper',
+    body: 'nice one @Falcon', createdAt: new Date().toISOString(), mentions: ['u1'],
+  }]
+  const SENDERS = { u1: { _id: 'u1', displayName: 'Falcon' } }
+
+  it('picks the mention out of the body', async () => {
+    stubFetch({ messages: MENTIONING, senders: SENDERS })
+    renderOpen()
+    // Split into its own run rather than left inside the surrounding text.
+    expect(await screen.findByText('@Falcon')).toBeTruthy()
+  })
+
+  it('offers the picker once you type an @ and completes the name', async () => {
+    stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+    const box = screen.getByPlaceholderText('Message the lounge…')
+    expect(screen.queryByTestId('mention-picker')).toBeNull()
+
+    fireEvent.change(box, { target: { value: 'ta @vi', selectionStart: 6 } })
+    expect(screen.getByTestId('mention-picker')).toBeTruthy()
+    expect(screen.getByText('query:vi')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('pick Viper'))
+    await waitFor(() => expect(box.value).toBe('ta @Viper '))
+  })
+
+  // Enter belongs to the picker while it is open, or a half-typed name would be
+  // sent instead of completed.
+  it('does not send on Enter while the picker is open', async () => {
+    stubFetch({ onPost: vi.fn() })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    const box = screen.getByPlaceholderText('Message the lounge…')
+    fireEvent.change(box, { target: { value: 'hi @vi', selectionStart: 6 } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('offers nothing to complete when you cannot post', async () => {
+    stubFetch({ lounge: { ...LOUNGE, canPost: false } })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.queryByTestId('mention-picker')).toBeNull()
+  })
+})
+
+// Same rule as the full room, and enforced again by the endpoint: your own
+// messages, and admins on anyone's. Not admin-only.
+describe('seen by', () => {
+  const MINE   = { _id: 'm9', senderUserId: 'u1', senderDisplayName: 'Falcon', body: 'on station', createdAt: new Date().toISOString(), mentions: [] }
+  const THEIRS = MESSAGES[0]
+
+  it('offers it on your own message', async () => {
+    stubFetch({ messages: [MINE] })
+    renderOpen()
+    await screen.findByText('on station')
+    expect(screen.getByLabelText('Seen by')).toBeTruthy()
+  })
+
+  it('does not offer an agent the readership of someone else\'s message', async () => {
+    stubFetch({ messages: [THEIRS] })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.queryByLabelText('Seen by')).toBeNull()
+  })
+
+  it('offers an admin any message, since they already read every transcript', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch,
+    })
+    stubFetch({ messages: [THEIRS] })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.getByLabelText('Seen by')).toBeTruthy()
+  })
+
+  // Losing the ability to speak is no reason to lose sight of who read what you
+  // already said, so this one is not gated on being able to post.
+  it('still offers it on your own message when you cannot post', async () => {
+    stubFetch({ messages: [MINE], lounge: { ...LOUNGE, canPost: false } })
+    renderOpen()
+    await screen.findByText('on station')
+    expect(screen.getByLabelText('Seen by')).toBeTruthy()
+    // The reply and reaction controls do go, though.
+    expect(screen.queryByLabelText('Reply')).toBeNull()
+    expect(screen.queryByLabelText('Add a reaction')).toBeNull()
+  })
+
+  it('opens the readership of the message you asked about', async () => {
+    stubFetch({ messages: [MINE] })
+    renderOpen()
+    await screen.findByText('on station')
+    expect(screen.queryByTestId('seen-by')).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Seen by'))
+    expect(screen.getByTestId('seen-by').textContent).toContain('m9')
+  })
+
+  it('closes again', async () => {
+    stubFetch({ messages: [MINE] })
+    renderOpen()
+    await screen.findByText('on station')
+    fireEvent.click(screen.getByLabelText('Seen by'))
+    fireEvent.click(screen.getByText('close seen-by'))
+    expect(screen.queryByTestId('seen-by')).toBeNull()
   })
 })

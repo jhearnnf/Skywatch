@@ -222,6 +222,92 @@ describe('pushing to a live stream', () => {
     expect(watcher.events.some(e => e.event === 'refresh')).toBe(true);
   });
 
+  // The lounge renders straight off the streamed copy, so a reply arriving
+  // live would show without the quote it answers if the snapshot did not ride
+  // along. Safe to push to everyone: it is a copy taken at send time, not a
+  // live read of the parent.
+  it('carries the reply snapshot on a pushed message', async () => {
+    await seedCbatLounge();
+    const falcon = await createUser({ displayName: 'Falcon' });
+    const viper  = await createUser({ displayName: 'Viper' });
+    const convo  = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
+
+    const parent = await send(falcon._id, convo._id, 'anyone about?');
+
+    const watcher = listener();
+    chatStream.subscribe(convo._id, watcher);
+
+    await request(app).post(`/api/chat/conversations/${convo._id}/messages`)
+      .set('Cookie', authCookie(viper._id))
+      .send({ body: 'standing by', replyToId: String(parent.body.data.message._id) });
+
+    const pushed = watcher.events.find(e => e.event === 'message');
+    expect(pushed.data.replyTo.displayName).toBe('Falcon');
+    expect(pushed.data.replyTo.excerpt).toBe('anyone about?');
+    expect(String(pushed.data.replyTo.messageId))
+      .toBe(String(parent.body.data.message._id));
+  });
+
+  it('pushes a null reply snapshot, and no reactions, on an ordinary message', async () => {
+    await seedCbatLounge();
+    const falcon = await createUser({ displayName: 'Falcon' });
+    const convo  = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
+
+    const watcher = listener();
+    chatStream.subscribe(convo._id, watcher);
+    await send(falcon._id, convo._id, 'anyone about?');
+
+    const pushed = watcher.events.find(e => e.event === 'message');
+    expect(pushed.data.replyTo).toBeNull();
+    expect(pushed.data.reactions).toEqual([]);
+  });
+
+  // A reaction changes what everyone sees, but `mine` is per viewer — so the
+  // push is a nudge to refetch rather than a rendering that would tell every
+  // other listener the reaction was theirs.
+  it('tells listeners to refetch when someone reacts, without naming them', async () => {
+    await seedCbatLounge();
+    const falcon = await createUser({ displayName: 'Falcon' });
+    const viper  = await createUser({ displayName: 'Viper' });
+    const convo  = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
+
+    const posted = await send(falcon._id, convo._id, 'anyone about?');
+
+    const watcher = listener();
+    chatStream.subscribe(convo._id, watcher);
+
+    const res = await request(app)
+      .post(`/api/chat/messages/${posted.body.data.message._id}/reactions`)
+      .set('Cookie', authCookie(viper._id)).send({ emoji: '🔥' });
+    expect(res.status).toBe(200);
+
+    const refresh = watcher.events.filter(e => e.event === 'refresh');
+    expect(refresh).toHaveLength(1);
+    expect(refresh[0].data).toEqual({ reason: 'reaction' });
+    // The reacting viewer's own view is answered by the response, not the push.
+    expect(res.body.data.message.reactions).toEqual([
+      { emoji: '🔥', count: 1, mine: true },
+    ]);
+  });
+
+  it('pushes nothing when a reaction is refused', async () => {
+    await seedCbatLounge();
+    const falcon = await createUser({ displayName: 'Falcon' });
+    const viper  = await createUser({ displayName: 'Viper' });
+    const convo  = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
+
+    const posted = await send(falcon._id, convo._id, 'anyone about?');
+
+    const watcher = listener();
+    chatStream.subscribe(convo._id, watcher);
+
+    await request(app)
+      .post(`/api/chat/messages/${posted.body.data.message._id}/reactions`)
+      .set('Cookie', authCookie(viper._id)).send({ emoji: '🦆' });
+
+    expect(watcher.events).toHaveLength(0);
+  });
+
   it('rejects a stream on a conversation you cannot read', async () => {
     const falcon = await createUser({ displayName: 'Falcon' });
     const viper  = await createUser({ displayName: 'Viper' });
