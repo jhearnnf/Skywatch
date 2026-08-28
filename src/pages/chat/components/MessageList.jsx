@@ -5,6 +5,7 @@ import { nameColour } from '../nameColour'
 import { REACTION_EMOJI } from '../reactionEmoji'
 import { splitMentions, mentionsMe } from '../mentions'
 import { OnlineDot } from './PresenceStrip'
+import CbatPassedBadge from '../../../components/CbatPassedBadge'
 
 // Discord-style rows rather than chat bubbles. Bubbles alternate sides and
 // carry a lot of padding, which is fine for two people and unreadable once a
@@ -345,6 +346,7 @@ function MessageRow({
                 Bot
               </span>
             )}
+            {profile?.cbatPassed && <CbatPassedBadge />}
             <span className="text-[10px] text-slate-400">{formatTime(m.createdAt)}</span>
           </div>
         )}

@@ -619,3 +619,39 @@ describe('MessageList — reaching the actions without a hover', () => {
     expect(onReact).toHaveBeenCalledWith(expect.objectContaining({ _id: m._id }), '🔥')
   })
 })
+
+describe('MessageList — the CBAT passed mark', () => {
+  const LABEL = 'Passed the CBAT'
+  const passed = { ...SENDERS, u1: { ...SENDERS.u1, cbatPassed: true } }
+
+  it('marks the name of someone who has passed', () => {
+    renderList([msg('u1', 'hello')], { senders: passed })
+    expect(screen.getByLabelText(LABEL)).toBeTruthy()
+  })
+
+  it('leaves everyone else unmarked', () => {
+    renderList([msg('u2', 'hello')], { senders: passed })
+    expect(screen.queryByLabelText(LABEL)).toBeNull()
+  })
+
+  // It rides with the name, which is drawn once per run — not once per line.
+  it('marks it once for a run of consecutive messages', () => {
+    renderList([msg('u1', 'one'), msg('u1', 'two'), msg('u1', 'three')], { senders: passed })
+    expect(screen.getAllByLabelText(LABEL)).toHaveLength(1)
+  })
+
+  // Beside the name rather than on the avatar: a green tick in the corner of a
+  // profile picture is the verified-account convention and would be read as
+  // one. The name row is also where the Bot pill already lives.
+  it('sits in the name row, not on the avatar', () => {
+    renderList([msg('u1', 'hello')], { senders: passed })
+    const mark = screen.getByLabelText(LABEL)
+    expect(mark.textContent.trim()).toBe('Passed')
+    expect(mark.closest('div').textContent).toContain('Falcon')
+  })
+
+  it('marks nothing when the field was never sent', () => {
+    renderList([msg('u1', 'hello')])
+    expect(screen.queryByLabelText(LABEL)).toBeNull()
+  })
+})

@@ -110,6 +110,13 @@ export default function Privacy() {
               the weekly boards and the recent-scores feed. These require a signed-in account to view.
             </li>
             <li>
+              <span className="text-slate-700 font-medium">CBAT pass mark</span> — if you have told us
+              you passed the CBAT and an administrator has recorded it on your account, a green
+              "Passed" mark is shown beside your name across the site, including on leaderboards and
+              in chat. Only signed-in SkyWatch users see it. If you would rather it was not shown,
+              ask us and we will remove the mark from your account.
+            </li>
+            <li>
               <span className="text-slate-700 font-medium">Homepage progress examples</span> — your
               agent number only, never your display name. See section 4, including how to opt out.
             </li>

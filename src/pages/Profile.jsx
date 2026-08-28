@@ -12,6 +12,7 @@ import { displayTier, isFreeUser } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
 import ProfileBadge from '../components/ProfileBadge'
+import CbatPassedBadge from '../components/CbatPassedBadge'
 import SocialLinks from '../components/SocialLinks'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import SEO from '../components/SEO'
@@ -308,14 +309,17 @@ export default function Profile() {
               <ProfileBadge user={user} size={user?.selectedBadge?.cutoutUrl ? 48 : 38} />
             </button>
             <div className="flex-1 min-w-0">
-              <button
-                type="button"
-                onClick={goToNameSettings}
-                title="Change your display name"
-                className="block max-w-full font-extrabold text-lg text-slate-800 leading-tight truncate text-left hover:text-brand-700 transition-colors"
-              >
-                {user.displayName || `Agent #${user.agentNumber ?? '———'}`}
-              </button>
+              <div className="flex items-center gap-2 max-w-full">
+                <button
+                  type="button"
+                  onClick={goToNameSettings}
+                  title="Change your display name"
+                  className="block min-w-0 font-extrabold text-lg text-slate-800 leading-tight truncate text-left hover:text-brand-700 transition-colors"
+                >
+                  {user.displayName || `Agent #${user.agentNumber ?? '———'}`}
+                </button>
+                {user?.cbatPassed && <CbatPassedBadge />}
+              </div>
               {!slim && <p className="text-slate-600 text-sm">{rankDisplay}</p>}
               {user.displayName && (
                 <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{user.agentNumber ?? '———'}</p>

@@ -73,6 +73,12 @@ export default function UserCard({ userId, onClose, onOpenDm }) {
             {profile.isAdmin && (
               <p className="text-[11px] font-semibold text-brand-600 mt-1">SkyWatch staff</p>
             )}
+            {/* Spelled out in full here rather than abbreviated to the pill:
+                this is the card you opened to find out who someone is, and it
+                has the room. Matches the staff line above it. */}
+            {profile.cbatPassed && (
+              <p className="text-[11px] font-semibold text-emerald-600 mt-1">Passed the CBAT</p>
+            )}
 
             {err && <p className="text-xs text-red-600 mt-3">{err}</p>}
 

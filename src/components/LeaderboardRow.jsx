@@ -11,6 +11,7 @@
 // neighbours) wins, else displayName → admin email → agent number.
 
 import { motion } from 'framer-motion'
+import CbatPassedBadge from './CbatPassedBadge'
 
 // `compact` narrows the fixed columns for constrained containers (the post-game
 // weekly-chase window, which is nested inside several layers of padding on a
@@ -110,11 +111,17 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           </motion.span>
         )}
       </span>
-      <span
-        className={`truncate ${achievedAtTitle ? 'cursor-help' : ''} ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}
-        {...(achievedAtTitle ? { title: achievedAtTitle } : {})}
-      >
-        {agentName(entry)}{isMe ? ' (you)' : ''}
+      <span className={`min-w-0 flex items-center gap-1 ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}>
+        {/* The name keeps the truncation, and the admin timestamp tooltip: both
+            belong to the name itself. The mark is pulled out of it so a long
+            name shortens rather than pushing the mark off the row. */}
+        <span
+          className={`truncate ${achievedAtTitle ? 'cursor-help' : ''}`}
+          {...(achievedAtTitle ? { title: achievedAtTitle } : {})}
+        >
+          {agentName(entry)}{isMe ? ' (you)' : ''}
+        </span>
+        {entry.cbatPassed && <CbatPassedBadge />}
       </span>
       {variant === 'weekly' ? (
         <>

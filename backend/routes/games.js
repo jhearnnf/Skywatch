@@ -2904,6 +2904,13 @@ async function cbatLeaderboard(req, res, gameKey) {
           userId: 1,
           agentNumber: '$user.agentNumber',
           displayName: '$user.displayName',
+          // Signed-in viewers only: it is a real, personally identifying fact
+          // the user told an admin in confidence. Every leaderboard route is
+          // `protect`ed today, so this guard is always true — it is here so
+          // that opening one of them to logged-out visitors cannot silently
+          // start publishing the flag as well. Padded demo rows carry no
+          // `user` at all, so they never show the tick.
+          ...(req.user ? { cbatPassed: '$user.cbatPassed' } : {}),
           ...(isAdmin ? { email: '$user.email', achievedAt: '$createdAt' } : {}),
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
@@ -3042,6 +3049,8 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
           userId: 1,
           agentNumber: '$user.agentNumber',
           displayName: '$user.displayName',
+          // Signed-in viewers only — see the all-time board for the reasoning.
+          ...(req.user ? { cbatPassed: '$user.cbatPassed' } : {}),
           ...(isAdmin ? { email: '$user.email' } : {}),
           weekTotal: 1,
           plays: 1,
