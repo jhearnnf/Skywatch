@@ -358,6 +358,16 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
+  it('points at SAT, whose difficulty was rebuilt around the real test', () => {
+    // SAT now feeds the picture one fact at a time instead of all at once. A
+    // returning player would otherwise find a game that scores nothing like the
+    // one they left and have no way to know why, so the tile says so. Drop this
+    // once it has been true long enough to stop being news.
+    renderWithUser()
+    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['sat'])
+    expect(screen.getByText('Realistic Difficulty Update')).toBeTruthy()
+  })
+
   it('no longer flags any game as new — the badge is gone entirely', () => {
     // The roster is complete, so "New Game" had stopped meaning "look here"
     // and was just decorating a third of the grid. The mechanism went with it:

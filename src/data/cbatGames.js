@@ -51,7 +51,7 @@ export const CBAT_GAMES = [
   // `badge: '…'` surfaces announcement text in the tile's top-right slot
   // (for a game that has gained something worth pointing at).
   { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', estMinutes: 3 },
-  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [4, 6] },
+  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [4, 6], badge: 'Realistic Difficulty Update' },
   { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', estMinutes: [1, 2] },
   // The five tests that completed the roster.
   { key: 'sit',              emoji: '🛰️', title: 'SIT',              desc: 'Spatial Integration Test. Study the ground one isolated layer at a time, then judge a rotated two-second clip of the whole scene on one detail alone.', path: '/cbat/sit',             image: '/images/SIT.png', estMinutes: [4, 6] },
