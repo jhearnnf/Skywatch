@@ -102,6 +102,70 @@ describe('SAT — difficulty selection', () => {
   })
 })
 
+describe('SAT — observe layouts', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  const startAt = (container, key) => {
+    if (key) act(() => { press(difficultyButton(container, key)) })
+    act(() => { press(container.querySelector(START_SELECTOR)) })
+    act(() => { vi.advanceTimersByTime(1100) })
+  }
+
+  const AIRCRAFT_FIELD_LABELS = ['Next Waypoint', 'Next Waypoint At', 'Altitude', 'Comms Channel']
+
+  it('gives the fact a screen to itself on Easier', () => {
+    const { container } = renderPage()
+    startAt(container)
+    // No console around it — the aircraft panel and the radio ticker only exist
+    // on the card that is currently up.
+    expect(screen.queryByText('Controller Aircraft')).toBeNull()
+  })
+
+  it('keeps the whole console on screen on Hard', () => {
+    const { container } = renderPage()
+    startAt(container, 'hard')
+
+    expect(screen.getByText('Controller Aircraft')).toBeTruthy()
+    expect(screen.getByText('Radio')).toBeTruthy()
+    // Every field box is present from the first card, whether or not it holds a
+    // value — an idle panel that collapsed would reflow the console every 2.5s.
+    for (const label of AIRCRAFT_FIELD_LABELS) expect(screen.getByText(label)).toBeTruthy()
+  })
+
+  // The point of the rebuild: the console is all there, but only ever one thing
+  // in it is live. If two facts were ever readable at once we would be back to
+  // the divided-attention test this replaced.
+  it('lights exactly one fact at a time on Hard', () => {
+    const { container } = renderPage()
+    startAt(container, 'hard')
+
+    const liveCount = () => {
+      const plotted = container.querySelectorAll('svg circle').length
+      const fields = [...container.querySelectorAll('dd')].filter(d => d.textContent !== '—').length
+      const radio = container.querySelector('[data-radio-line]').textContent === '—' ? 0 : 1
+      return plotted + fields + radio
+    }
+
+    // Hard's shortest queue is 13 facts, so 12 steps stay inside the window.
+    for (let i = 0; i < 12; i++) {
+      expect(liveCount(), `card ${i + 1}`).toBe(1)
+      act(() => { vi.advanceTimersByTime(3500) })
+    }
+  })
+
+  it('counts the facts down on both layouts', () => {
+    const { container } = renderPage()
+    startAt(container)
+    expect(screen.getByText(/^Fact 1 \/ \d+$/)).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(4000) })
+    expect(screen.getByText(/^Fact 2 \/ \d+$/)).toBeTruthy()
+  })
+})
+
 describe('SAT — a run reaches only its own board', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -114,7 +178,10 @@ describe('SAT — a run reaches only its own board', () => {
   // where the score is sent, not what it is.
   function playOut(container, situations, questionsPer) {
     for (let s = 0; s < situations; s++) {
-      act(() => { vi.advanceTimersByTime(28_500) })       // observe window
+      // The observe window is now the card queue's length x the difficulty's
+      // dwell, so it varies per situation. 90s clears the longest possible one
+      // (Hard's 21 cards at 2.5s).
+      act(() => { vi.advanceTimersByTime(90_000) })       // observe window
       for (let q = 0; q < questionsPer; q++) {
         act(() => { vi.advanceTimersByTime(22_500) })     // question timer expires
         // The reveal waits for a click; advancing the clock further would just

@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { generateSatSituation, SAT_GRID, ALL_AIRCRAFT_FIELDS } from '../utils/cbat/satGenerator'
+import { buildSatCards, satObserveMs } from '../utils/cbat/satCards'
 import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
@@ -19,26 +20,26 @@ import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 
 // ── Constants ────────────────────────────────────────────────────────────────
-// Situation count, question count, how many units and aircraft appear and how
-// often a support call comes in are all per-difficulty — see satDifficulty.js.
-// The clocks below are shared: Easier lightens the load, never the timer.
-const OBSERVE_MS = 28000      // study window per situation
+// Situation count, question count, how many units and aircraft appear, how often
+// a support call comes in and how long each card holds are all per-difficulty —
+// see satDifficulty.js. The recall clock below is shared.
 const PER_QUESTION_MS = 22000 // recall timer per question
-const AIRCRAFT_SLOT_MS = 5000 // panel 4 shows one callsign at a time, switching on this cadence
-// The grid shows each contact exactly once — the observe window is split evenly
-// between them (Hard's 3–5 units → ~6–9s each, Easier's 2–3 → ~9–14s) and the
-// last one stays up until the end.
 
+// The observe phase plays a queue of single-fact cards: one contact, or one
+// aircraft field, or one radio call, and nothing else on screen. How long the
+// whole window runs is therefore derived from the queue, not fixed — see
+// satCards.js.
 function buildSituations(tuning) {
   const out = []
   for (let i = 0; i < tuning.situations; i++) {
-    out.push(generateSatSituation({
+    const sit = generateSatSituation({
       questionCount: tuning.questionsPerSituation,
       unitRange: tuning.unitRange,
       aircraftRange: tuning.aircraftRange,
       aircraftFields: tuning.aircraftFields,
       supportChance: tuning.supportChance,
-    }))
+    })
+    out.push({ ...sit, cards: buildSatCards(sit, tuning.aircraftFields) })
   }
   return out
 }
@@ -195,6 +196,189 @@ function AircraftPanel({ aircraft, activeIdx, fields = ALL_AIRCRAFT_FIELDS }) {
   )
 }
 
+// ── Observe presentation ─────────────────────────────────────────────────────
+// Both difficulties deliver the situation one fact at a time (see satCards.js).
+// They differ in how much of the console is around that fact — the difficulty's
+// `layout`:
+//
+//   • 'card' (Easier) — the fact fills the screen on its own. Nothing to search,
+//     nothing to ignore; the only job is to remember it.
+//   • 'panels' (Hard) — the whole console is on screen the whole time, grid,
+//     aircraft panel and radio ticker together, but only the panel holding the
+//     current fact is live. The other two sit there dimmed, showing dashes.
+//     That is the real test's console: every panel visible, one datum at a time
+//     inside it, so you also have to notice WHERE the new information landed.
+//
+// Three kinds of fact either way: a single contact on the grid, a single field
+// of one controller aircraft, or a single radio call.
+
+const FIELD_LABEL = {
+  waypoint: 'Next Waypoint',
+  waypointAt: 'Next Waypoint At',
+  altitude: 'Altitude',
+  channel: 'Comms Channel',
+}
+
+// `arrowClass` sizes the waypoint chevron. The panel layout keeps every field
+// box on screen whether or not it holds a value, so its arrow has to fit the
+// same height as a dash — a 6xl one there would make the panel jump every time
+// the waypoint came up.
+function FieldValue({ ac, field, arrowClass = 'text-6xl' }) {
+  if (field === 'waypoint') return (
+    <>
+      <span className={`text-green-400 ${arrowClass} font-bold leading-none align-middle mr-2`}>{WAYPOINT_ARROW[ac.waypointDir]}</span>
+      <span className="align-middle">{ac.waypointRef}</span>
+    </>
+  )
+  if (field === 'waypointAt') return <>{ac.waypointAt}s</>
+  if (field === 'altitude') return <>FL{ac.altitude}</>
+  return <>{ac.channel}</>
+}
+
+function ObserveCard({ card }) {
+  if (!card) return null
+
+  if (card.kind === 'unit') {
+    return (
+      <div className="w-full max-w-sm">
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 text-center">Contact — grid {card.unit.ref}</p>
+        <SatGrid units={[card.unit]} />
+        <GridLegend />
+      </div>
+    )
+  }
+
+  if (card.kind === 'field') {
+    const theme = CALLSIGN_THEME[card.callsign] || DEFAULT_THEME
+    return (
+      <div
+        className="w-full max-w-sm border rounded-xl p-5 text-center"
+        style={{ backgroundColor: theme.panel, borderColor: theme.border }}
+      >
+        <p className={`text-3xl font-extrabold tracking-wide mb-4 ${theme.text}`}>{card.callsign}</p>
+        <div className="border rounded-lg px-4 py-5" style={{ backgroundColor: theme.field, borderColor: theme.border }}>
+          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{FIELD_LABEL[card.field]}</p>
+          <p className="text-3xl text-[#ddeaf8] font-mono font-bold">
+            <FieldValue ac={card.aircraft} field={card.field} />
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full max-w-sm bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 text-center">
+      <p className="text-4xl mb-3">🔊</p>
+      <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Radio</p>
+      <p className="text-base sm:text-lg leading-snug text-green-300 font-mono break-words">{card.comm.text}</p>
+    </div>
+  )
+}
+
+// ── Panel layout (Hard) ──────────────────────────────────────────────────────
+// The full console, always on screen. Exactly one panel is live at a time — the
+// one holding the current fact — and the other two are dimmed with their values
+// replaced by dashes, so a glance tells you both what the fact is and which
+// instrument it arrived on.
+
+// Dimming rather than hiding is deliberate: an idle panel has to keep its size
+// and its labels, or the console reflows every 2.5s and finding the live one
+// becomes a layout puzzle instead of a scanning one.
+function panelChrome(live) {
+  return live
+    ? { className: 'border-brand-400', style: { boxShadow: '0 0 0 1px rgba(91,170,255,0.35)' } }
+    : { className: 'border-[#1a3a5c] opacity-40', style: undefined }
+}
+
+function AircraftPanelSerial({ aircraft, fields, card }) {
+  const live = card?.kind === 'field' ? card : null
+  const theme = (live && CALLSIGN_THEME[live.callsign]) || DEFAULT_THEME
+  return (
+    <div
+      className="border rounded-lg p-3 h-full flex flex-col"
+      style={{ backgroundColor: theme.panel, borderColor: theme.border }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <p className={`text-2xl font-extrabold tracking-wide ${live ? theme.text : 'text-slate-600'}`}>
+          {live ? live.callsign : '—'}
+        </p>
+        {/* One dot per aircraft in the situation. How many there are is itself a
+            fact worth holding, so the dots stay lit even when the panel is idle. */}
+        <div className="flex gap-1.5">
+          {aircraft.map(a => (
+            <span
+              key={a.callsign}
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: live?.callsign === a.callsign ? theme.dot : theme.border }}
+            />
+          ))}
+        </div>
+      </div>
+      <dl className="grid grid-cols-1 gap-2 flex-1">
+        {fields.map(f => {
+          const on = live?.field === f
+          return (
+            <div
+              key={f}
+              className="border rounded-lg px-3 py-2.5"
+              style={{ backgroundColor: theme.field, borderColor: on ? theme.dot : theme.border, opacity: on ? 1 : 0.35 }}
+            >
+              <dt className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">{FIELD_LABEL[f]}</dt>
+              <dd className="text-lg text-[#ddeaf8] font-mono min-h-[1.75rem] flex items-center">
+                {on ? <FieldValue ac={live.aircraft} field={f} arrowClass="text-2xl" /> : '—'}
+              </dd>
+            </div>
+          )
+        })}
+      </dl>
+    </div>
+  )
+}
+
+function ObservePanels({ situation, card, fields }) {
+  const gridLive = card?.kind === 'unit'
+  const acLive = card?.kind === 'field'
+  const radioLive = card?.kind === 'radio'
+  const grid = panelChrome(gridLive)
+  const radio = panelChrome(radioLive)
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row gap-2 mb-2">
+        <div className={`sm:flex-[3] bg-[#0a1628] border rounded-lg p-3 ${grid.className}`} style={grid.style}>
+          {/* No grid ref in the header: reading "D4" off a label is much easier
+              to hold than locating a dot, and locating it is what's being
+              tested. Easier's card layout does print it — it's the intro. */}
+          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 px-0.5">Contacts</p>
+          {/* SatGrid drops falsy entries, so an empty list draws the bare grid —
+              the console never loses its map, it just has nothing plotted on it. */}
+          <SatGrid units={gridLive ? [card.unit] : []} />
+          <GridLegend />
+        </div>
+        <div className={`sm:flex-[2] flex flex-col ${acLive ? '' : 'opacity-40'}`}>
+          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 px-1">Controller Aircraft</p>
+          <div className={`flex-1 rounded-lg ${acLive ? 'ring-1 ring-brand-400' : ''}`}>
+            <AircraftPanelSerial aircraft={situation.aircraft} fields={fields} card={card} />
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`bg-[#0a1628] border rounded-lg px-3 py-2 mb-2 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1 ${radio.className}`}
+        style={radio.style}
+      >
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-base">{radioLive ? '🔊' : '📻'}</span>
+          <span className="text-xs text-slate-500 uppercase tracking-wide">Radio</span>
+        </div>
+        <p data-radio-line className="text-[11px] sm:text-sm leading-snug text-green-300 font-mono break-words flex-1 min-w-0">
+          {radioLive ? card.comm.text : '—'}
+        </p>
+      </div>
+    </>
+  )
+}
+
 // ── Results screen (embedded inside CbatGameOver) ────────────────────────────
 const GRADE_STYLE = {
   Outstanding: { emoji: '🎖️', color: 'text-green-400' },
@@ -274,7 +458,8 @@ const SAT_TUTORIAL_STEPS = [
         Units sit on a <b className="text-brand-300">10×10 grid</b> (columns 0–9 on top, rows A–J on the left).
         Each marker's <b className="text-brand-300">colour</b> is its allegiance — <span style={{ color: ALLEGIANCE_COLOR.friendly }}>yellow friendly</span>,{' '}
         <span style={{ color: ALLEGIANCE_COLOR.hostile }}>red hostile</span>, <span style={{ color: ALLEGIANCE_COLOR.unknown }}>white unknown</span>.
-        The <b className="text-brand-300">letter</b> is the type (T/H/J), the <b className="text-brand-300">number</b> is how many, and the <b className="text-brand-300">arrow</b> is its heading. In the real test they appear one at a time.
+        The <b className="text-brand-300">letter</b> is the type (T/H/J), the <b className="text-brand-300">number</b> is how many, and the <b className="text-brand-300">arrow</b> is its heading.
+        All three are shown together here so you can learn them. In the game you get <b className="text-brand-300">one contact at a time</b>.
       </>
     ),
   },
@@ -283,9 +468,9 @@ const SAT_TUTORIAL_STEPS = [
     title: 'The controller aircraft',
     body: (
       <>
-        Two or three controller aircraft (callsigns <b className="text-brand-300">York</b>, <b className="text-brand-300">Leeds</b>, <b className="text-brand-300">Hull</b>) each show a
+        Two or three controller aircraft (callsigns <b className="text-brand-300">York</b>, <b className="text-brand-300">Leeds</b>, <b className="text-brand-300">Hull</b>) each have a
         <b className="text-brand-300"> Next Waypoint</b>, time to it, <b className="text-brand-300">Altitude</b> and <b className="text-brand-300">Comms Channel</b>.
-        The panel shows one callsign at a time and switches between them — note each one's details.
+        The whole panel is filled in together here. In the game you only ever get <b className="text-brand-300">one field of one aircraft</b> at a time, so York's altitude and York's channel arrive separately. On Hard the panel stays on screen with its other boxes dashed out; on Easier the field gets the screen to itself.
       </>
     ),
   },
@@ -306,7 +491,7 @@ const SAT_TUTORIAL_STEPS = [
     title: 'Now recall it',
     body: (
       <>
-        The picture disappears and you answer multiple-choice questions <b className="text-brand-300">from memory</b>. Try one below.
+        Nothing comes back. Once the last card has gone you answer multiple-choice questions <b className="text-brand-300">from memory</b>. Try one below.
       </>
     ),
   },
@@ -512,12 +697,10 @@ export default function CbatSat() {
   const [questionIdx, setQuestionIdx] = useState(0)
   const [answers, setAnswers] = useState([])
   const [feedback, setFeedback] = useState(null) // { correct, picked, answer }
-  const [observeRemainingMs, setObserveRemainingMs] = useState(OBSERVE_MS)
+  const [observeRemainingMs, setObserveRemainingMs] = useState(0)
   const [qRemainingMs, setQRemainingMs] = useState(PER_QUESTION_MS)
   const [totalElapsedMs, setTotalElapsedMs] = useState(0)
-  const [activeComm, setActiveComm] = useState(0)
-  const [activeAircraft, setActiveAircraft] = useState(0)
-  const [activeUnit, setActiveUnit] = useState(0)
+  const [cardIdx, setCardIdx] = useState(0)
   const [audioOn, setAudioOn] = useState(true)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
@@ -576,41 +759,36 @@ export default function CbatSat() {
       .catch(() => {})
   }, [apiFetch, API, markGameCompleted, fetchPB])
 
-  // Observe phase — countdown + sequential radio comms. When it ends (or the
-  // user clicks Ready), units/aircraft disappear and the recall questions begin.
+  // Observe phase — walk the card queue, one fact at a time. Each card holds for
+  // the run difficulty's cardMs and is then replaced; when the queue runs out the
+  // picture is gone and the recall questions begin. There is no skip-ahead: with
+  // everything on screen at once "I'm Ready" was fair, but skipping a serial
+  // queue would mean being asked about facts that were never shown.
   useEffect(() => {
     if (phase !== 'observe' || !currentSituation) return
     stopSpeech()
-    setActiveComm(0)
-    setActiveAircraft(0)
-    setActiveUnit(0)
-    setObserveRemainingMs(OBSERVE_MS)
+    setCardIdx(0)
+    const cards = currentSituation.cards
+    const cardMs = runTuningRef.current.cardMs
+    const totalMs = satObserveMs(cards, cardMs)
+    setObserveRemainingMs(totalMs)
     const start = Date.now()
-    const comms = currentSituation.comms
-    const aircraftCount = currentSituation.aircraft.length
-    const unitCount = currentSituation.units.length
-    if (comms.length) speak(comms[0].speech, audioOnRef.current)
-    const slot = OBSERVE_MS / Math.max(1, comms.length)
-    const unitSlot = OBSERVE_MS / Math.max(1, unitCount)
+    if (cards[0]?.kind === 'radio') speak(cards[0].comm.speech, audioOnRef.current)
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - start
-      setObserveRemainingMs(Math.max(0, OBSERVE_MS - elapsed))
-      const idx = Math.min(comms.length - 1, Math.floor(elapsed / slot))
-      setActiveComm(prev => {
-        if (idx !== prev && comms[idx]) speak(comms[idx].speech, audioOnRef.current)
+      setObserveRemainingMs(Math.max(0, totalMs - elapsed))
+      const idx = Math.min(cards.length - 1, Math.floor(elapsed / cardMs))
+      setCardIdx(prev => {
+        // Speak on arrival only — re-speaking every tick would stack utterances.
+        if (idx !== prev && cards[idx]?.kind === 'radio') speak(cards[idx].comm.speech, audioOnRef.current)
         return idx
       })
-      // Panel 4 cycles through the callsigns, and the grid reveals one unit at a
-      // time — both shown one at a time, matching the real SAT. Units never
-      // repeat: the index walks forward and stops on the last contact.
-      if (aircraftCount) setActiveAircraft(Math.floor(elapsed / AIRCRAFT_SLOT_MS) % aircraftCount)
-      if (unitCount) setActiveUnit(Math.min(unitCount - 1, Math.floor(elapsed / unitSlot)))
-      if (elapsed >= OBSERVE_MS) {
+      if (elapsed >= totalMs) {
         clearInterval(interval)
         beginQuestions()
       }
-    }, 150)
+    }, 100)
     return () => { clearInterval(interval); stopSpeech() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, situationIdx])
@@ -742,6 +920,7 @@ export default function CbatSat() {
   const correctSoFar = answers.filter(a => a.correct).length
   const globalQ = situationIdx * runTuning.questionsPerSituation + questionIdx + 1
   const observeSec = (observeRemainingMs / 1000).toFixed(0)
+  const cardCount = currentSituation?.cards?.length || 0
   const remainingSec = (qRemainingMs / 1000).toFixed(0)
   const launching = phase === 'launching'
   // During the launch flash everything on the card except the chosen difficulty
@@ -806,17 +985,17 @@ export default function CbatSat() {
               <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
 
               <p className={`text-base text-slate-400 mb-5${dim}`}>
-                Build and hold a mental picture of a changing battlefield. Each situation shows units on a grid and controller aircraft, with some details called in over the <span className="text-brand-300">radio</span>. It all disappears — then you answer from memory.
+                Build and hold a mental picture of a changing battlefield. Each situation feeds you one piece of information at a time — a contact on the grid, one field of a controller aircraft, or a call over the <span className="text-brand-300">radio</span>. Each one vanishes before the next arrives, then you answer from memory.
               </p>
 
               <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-base text-[#ddeaf8]${dim}`}>
                 <div className="flex items-start gap-2">
                   <span className="text-brand-300 font-bold shrink-0">1.</span>
-                  <span>Observe — units (type, count, allegiance, heading), aircraft data, and radio calls.</span>
+                  <span>Observe — contacts (type, count, allegiance, heading), aircraft data, and radio calls, one at a time.</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-brand-300 font-bold shrink-0">2.</span>
-                  <span>It vanishes after {OBSERVE_MS / 1000}s. Answer multiple-choice recall questions.</span>
+                  <span>Each one holds for {tuning.cardMs / 1000}s, then it's gone for good. Answer multiple-choice recall questions.</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-brand-300 font-bold shrink-0">3.</span>
@@ -871,7 +1050,7 @@ export default function CbatSat() {
             <SatTutorial onExit={() => setPhase('intro')} onProgress={reportTutorialProgress} />
           )}
 
-          {/* Observe phase — the five-panel tactical picture */}
+          {/* Observe phase — one fact at a time, then it's gone */}
           {phase === 'observe' && currentSituation && (
             <motion.div
               key={`obs-${situationIdx}`}
@@ -879,11 +1058,21 @@ export default function CbatSat() {
               animate={{ opacity: 1 }}
               className="w-full max-w-2xl"
             >
-              {/* Panel 1 (instruction) + Panel 2 (timer) */}
+              {/* Instruction + progress + timer */}
               <div className="flex items-stretch gap-2 mb-2">
                 <div className="flex-1 bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations} — Memorise the picture</p>
-                  <p className="text-sm text-[#ddeaf8]">Units, aircraft data and radio calls. It disappears when the timer ends.</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations} — Memorise the picture</p>
+                    <button
+                      onClick={() => { setAudioOn(v => { if (v) stopSpeech(); return !v }) }}
+                      className="shrink-0 text-base bg-transparent border-0 cursor-pointer p-0"
+                      title={audioOn ? 'Mute radio' : 'Unmute radio'}
+                      aria-label={audioOn ? 'Mute radio' : 'Unmute radio'}
+                    >
+                      {audioOn ? '🔊' : '🔇'}
+                    </button>
+                  </div>
+                  <p className="text-sm text-[#ddeaf8]">Each fact shows once, then vanishes. Nothing comes back.</p>
                 </div>
                 <div className="w-20 bg-[#0a1628] border border-[#1a3a5c] rounded-lg flex flex-col items-center justify-center">
                   <p className="text-[11px] text-slate-500 uppercase">Time</p>
@@ -891,56 +1080,46 @@ export default function CbatSat() {
                 </div>
               </div>
 
-              {/* Panel 3 (grid) + Panel 4 (aircraft) */}
-              <div className="flex flex-col sm:flex-row gap-2 mb-2">
-                <div className="sm:flex-[3] bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-1 px-0.5">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">
-                      Contact {(activeUnit % currentSituation.units.length) + 1} / {currentSituation.units.length}
-                    </p>
-                    <div className="flex gap-1.5">
-                      {currentSituation.units.map((u, i) => (
-                        <span key={u.id} className={`w-2 h-2 rounded-full ${i === activeUnit % currentSituation.units.length ? 'bg-brand-400' : 'bg-[#1a3a5c]'}`} />
-                      ))}
-                    </div>
+              {/* The picture. Easier gives the fact a screen to itself; Hard puts
+                  the whole console up and lights only the panel it landed in. */}
+              {runTuning.layout === 'panels' ? (
+                <ObservePanels
+                  situation={currentSituation}
+                  card={currentSituation.cards[cardIdx]}
+                  fields={runTuning.aircraftFields}
+                />
+              ) : (
+                <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-3 mb-2">
+                  <div className="min-h-[26rem] flex items-center justify-center">
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.div
+                        key={cardIdx}
+                        initial={{ opacity: 0, scale: 0.97 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.97 }}
+                        transition={{ duration: 0.15 }}
+                        className="w-full flex justify-center"
+                      >
+                        <ObserveCard card={currentSituation.cards[cardIdx]} />
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
-                  <SatGrid units={[currentSituation.units[activeUnit % currentSituation.units.length]]} />
-                  <GridLegend />
                 </div>
-                <div className="sm:flex-[2] flex flex-col">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 px-1">Controller Aircraft</p>
-                  <div className="flex-1">
-                    <AircraftPanel aircraft={currentSituation.aircraft} activeIdx={activeAircraft} fields={runTuning.aircraftFields} />
-                  </div>
-                </div>
-              </div>
+              )}
 
-              {/* Panel 5 (comms ticker) */}
-              <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2 mb-3 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1">
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => { setAudioOn(v => { if (v) stopSpeech(); return !v }) }}
-                    className="shrink-0 text-base bg-transparent border-0 cursor-pointer p-0"
-                    title={audioOn ? 'Mute radio' : 'Unmute radio'}
-                    aria-label={audioOn ? 'Mute radio' : 'Unmute radio'}
-                  >
-                    {audioOn ? '🔊' : '🔇'}
-                  </button>
-                  <span className="text-xs text-slate-500 uppercase tracking-wide">Radio</span>
-                </div>
-                <p className="text-[11px] sm:text-sm leading-snug text-green-300 font-mono break-words flex-1 min-w-0">
-                  {currentSituation.comms[activeComm]?.text || '—'}
+              {/* Progress through the queue, under the picture on both layouts. */}
+              <div className="flex items-center gap-3 px-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide shrink-0">
+                  Fact {Math.min(cardIdx + 1, cardCount)} / {cardCount}
                 </p>
+                <div className="h-1 flex-1 rounded-full bg-[#1a3a5c] overflow-hidden">
+                  <div
+                    className="h-full bg-brand-400"
+                    style={{ width: `${Math.round(((cardIdx + 1) / Math.max(1, cardCount)) * 100)}%` }}
+                  />
+                </div>
               </div>
 
-              <div className="text-center">
-                <button
-                  onClick={beginQuestions}
-                  className="px-6 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm"
-                >
-                  I'm Ready →
-                </button>
-              </div>
             </motion.div>
           )}
 

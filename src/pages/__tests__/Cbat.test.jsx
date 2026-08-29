@@ -167,7 +167,7 @@ describe('Cbat page — background images', () => {
   it('shows a range on the tiles that cover two run lengths', () => {
     renderWithUser()
     expect(screen.getByTestId('est-time-plane-turn')).toHaveTextContent('⏱ 1–2 min')
-    expect(screen.getByTestId('est-time-sat')).toHaveTextContent('⏱ 2–3 min')
+    expect(screen.getByTestId('est-time-sat')).toHaveTextContent('⏱ 4–6 min')
     // DPT is by far the longest game — worth stating plainly before a player
     // starts it, and worth a test so a future retune can't quietly drop it.
     // It was a flat 15 minutes until the eight-round ladder was split in two:

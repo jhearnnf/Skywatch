@@ -129,11 +129,17 @@
     "band FAKE_TUNING was tuned to before there was real play to look at.",
     "",
     "These are SkyWatch's own norms, not the RAF's — see the disclaimer the report page carries.",
-    "Retune freely: nothing else depends on these numbers."
+    "Retune freely: nothing else depends on these numbers.",
+    "",
+    "PROVISIONAL (2026-08-29): `sat` is an estimate, not a queried median. SAT changed from an",
+    "all-at-once picture to one fact at a time, which is what the real test does and is easier to",
+    "score on, so the queried median of 12 is stale and would under-read every run made since.",
+    "14 is a judged shift, not a measurement — re-query the production median once a few weeks of",
+    "serial-format runs exist and replace it."
   ],
   "stanineAnchors": {
     "cut":              { "median": 380,  "strong": 550  },
-    "sat":              { "median": 12,   "strong": 17   },
+    "sat":              { "median": 14,   "strong": 17   },
     "act":              { "median": 1482, "strong": 2100 },
     "dad":              { "median": 9,    "strong": 13   },
     "ant":              { "median": 50,   "strong": 70   },

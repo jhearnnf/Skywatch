@@ -242,7 +242,8 @@ const FAKE_TUNING = {
   'sat': {
     // correctCount out of 18 (Situational Awareness Test), higher is better. Top
     // demo of 17 stays under a perfect 18; the roster trails to 5. Three
-    // observe+recall situations (~18s observe + 6 questions each) → ~180–260s.
+    // observe+recall situations of 6 questions each → ~180–260s. The observe
+    // windows aren't in that figure: SAT reports per-question time only.
     floor: 5, ceiling: 18, seedTime: 204.6, timeStep: 5.4,
     scoreSequence: [17, 16, 16, 15, 15, 14, 14, 13, 12, 12, 11, 11, 10, 9, 9, 8, 8, 7, 6, 5],
   },

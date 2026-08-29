@@ -1,29 +1,36 @@
 // Situational Awareness Test difficulty tuning.
 //
-// Hard is the original test — every value here is what the game shipped with.
-// Easier keeps every clock identical (28s to observe each situation, 22s per
-// recall question, the 5s aircraft-panel cadence); what changes is how much
-// there is to hold in that time:
+// Both difficulties present the picture SERIALLY — one fact on screen at a time,
+// it vanishes, the next appears (see satCards.js for why). What separates them
+// is how many facts there are and how long each one holds:
 //
-//   • 2–3 units on the grid instead of 3–5. The grid reveals one contact at a
-//     time and splits the observe window evenly between them, so fewer contacts
-//     means longer on each — ~9–14s rather than ~5.6–9s — without moving a timer.
-//   • always 2 controller aircraft instead of 2–3. Two is the floor, not one:
-//     with a single aircraft on screen "which aircraft was told to X?" answers
-//     itself and the radio stops testing anything.
-//   • each aircraft shows 2 fields instead of 4 — altitude and comms channel
-//     only. Those two can't be confused with each other (a flight level and a
-//     phonetic word), and dropping the waypoint takes its grid reference off the
-//     panel so nothing there competes with the unit refs on the map. Together
-//     with the aircraft count that's 4 facts from the panel instead of 8–12.
-//   • the cross-modal support call — the only fact that needs the audio AND the
-//     map together — comes up in about a third of situations instead of half.
-//   • 2 situations of 5 questions instead of 3 of 6, so a run is ~2 minutes
-//     rather than ~4.
+//   • Easier is the intro. 2–3 contacts, 2 controller aircraft showing two
+//     fields each (altitude and comms channel — a flight level and a phonetic
+//     word can't be confused with each other), the cross-modal support call in
+//     about a third of situations, and 4s on every card. Roughly 9 facts to
+//     hold over a ~36s window, at a pace you can rehearse at. Each one fills the screen on
+//     its own (`layout: 'card'`) — there is nothing to search, only to remember.
 //
-// Everything else is deliberately shared — the panels, the generator, the
-// scoring, the tutorial — so the two difficulties stay the same test at
-// different loads (the same rule FLAG, CUT and Numerical Operations follow).
+//   • Hard is the real test's shape, a notch tighter. 3–4 contacts, 2–3 aircraft
+//     showing all four fields, a support call every other situation, and 3.5s a
+//     fact. 13–20 facts, ~60s an observe window, with enough time on each fact
+//     to actually find and read it before it goes. The
+//     whole console stays on screen (`layout: 'panels'`) with only the panel
+//     holding the current fact live, so finding where the information landed is
+//     part of the job — which is what the real console does.
+//
+//     The dwell is deliberately not tight. On the panel layout a fact has to be
+//     found before it can be memorised, and 2.5s spent both scanning and
+//     encoding was measuring reaction speed more than recall.
+//
+// Hard is deliberately NOT an overload drill. Being far harder than the thing
+// you are practising for tells a candidate nothing useful and reads as a broken
+// game — the previous all-at-once presentation had someone who passed the real
+// SAT scoring a stanine 2 here.
+//
+// Everything else is shared — the generator, the panels, the 22s question
+// clock, the scoring, the tutorial — so the two stay the same test at different
+// loads (the same rule FLAG, CUT and Numerical Operations follow).
 
 export const DEFAULT_SAT_DIFFICULTY = 'easier'
 
@@ -39,7 +46,7 @@ export const SAT_TUNING = {
     // Backend leaderboard key — its own collection, its own board.
     gameKey: 'sat-easier',
     bars: 1,
-    blurb: 'Fewer contacts, shorter run',
+    blurb: 'One fact at a time, slower',
 
     situations: 2,
     questionsPerSituation: 5,
@@ -47,6 +54,10 @@ export const SAT_TUNING = {
     aircraftRange: [2, 2],
     aircraftFields: ['altitude', 'channel'],
     supportChance: 0.35,
+    // Seconds each fact holds before it vanishes. The only clock a difficulty
+    // owns: the 22s question timer and everything else stay shared.
+    cardMs: 4000,
+    layout: 'card',
 
     // Score is a count out of the run's own question total, so both difficulties
     // top out at 100% of what they ask. The bands therefore move the other way
@@ -59,14 +70,16 @@ export const SAT_TUNING = {
     label: 'Hard',
     gameKey: 'sat',
     bars: 3,
-    blurb: 'The full tactical picture',
+    blurb: 'Full console, faster facts',
 
     situations: 3,
     questionsPerSituation: 6,
-    unitRange: [3, 5],
+    unitRange: [3, 4],
     aircraftRange: [2, 3],
     aircraftFields: ['waypoint', 'waypointAt', 'altitude', 'channel'],
     supportChance: 0.5,
+    cardMs: 3500,
+    layout: 'panels',
 
     grades: { outstanding: 90, good: 70, needsWork: 50 },
   },

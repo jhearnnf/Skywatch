@@ -19,8 +19,9 @@
 //     curveLen = 100 per round, which is not the real tunnel length). Measured
 //     properly off buildTunnelCurve().getLength() / speed, a run is ~5:08, not
 //     the ~1:41 every row in the collection claims.
-//   • SAT sums per-question time only, so it omits the OBSERVE_MS study window
-//     before each situation — 3×28s on Hard, 2×28s on Easier. Added back.
+//   • SAT sums per-question time only, so it omits the observe window before
+//     each situation. That window is now the situation's fact queue x the
+//     difficulty's dwell — roughly 2×36s on Easier and 3×60s on Hard. Added back.
 //   • Numerical Operations likewise omits FEEDBACK_MS between questions.
 //   • ANT pauses its clock during round review, so its median understates the
 //     wall-clock; the p75 is the fairer figure and is what's used.
@@ -50,7 +51,7 @@ export const CBAT_GAMES = [
   // `badge: '…'` surfaces announcement text in the tile's top-right slot
   // (for a game that has gained something worth pointing at).
   { key: 'cut',              emoji: '🖥️', title: 'Cognitive Updating Test', desc: 'Juggle six aircraft displays at once — keep fuel, speed, sensors, pressure and load drops in tolerance while the warnings pile up.', path: '/cbat/cut',             image: '/images/CUT.png', estMinutes: 3 },
-  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [2, 3] },
+  { key: 'sat',              emoji: '🗺️', title: 'SAT',              desc: 'Situational Awareness Test — observe a tactical picture of units, aircraft and radio calls, then recall the details from memory.', path: '/cbat/sat',             image: '/images/SAT.png', estMinutes: [4, 6] },
   { key: 'rtt',              emoji: '📷', title: 'RTT',              desc: 'Rapid Tracking Test — slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends.', path: '/cbat/rtt',             image: '/images/RTT.png', estMinutes: [1, 2] },
   // The five tests that completed the roster.
   { key: 'sit',              emoji: '🛰️', title: 'SIT',              desc: 'Spatial Integration Test. Study the ground one isolated layer at a time, then judge a rotated two-second clip of the whole scene on one detail alone.', path: '/cbat/sit',             image: '/images/SIT.png', estMinutes: [4, 6] },

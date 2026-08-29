@@ -5,13 +5,13 @@ import {
 } from '../satDifficulty'
 import { generateSatSituation, ALL_AIRCRAFT_FIELDS } from '../satGenerator'
 
-// Easier lightens the LOAD, never the clock. Pinning the allowed key set is what
-// stops a difficulty quietly growing a new lever (a shorter observe window, a
-// slower question timer) that nobody agreed to.
+// A difficulty tunes the LOAD and the card dwell, and nothing else. Pinning the
+// allowed key set is what stops one quietly growing a new lever (a slower
+// question timer, fewer options per question) that nobody agreed to.
 const ALLOWED_KEYS = [
   'key', 'label', 'gameKey', 'bars', 'blurb',
   'situations', 'questionsPerSituation',
-  'unitRange', 'aircraftRange', 'aircraftFields', 'supportChance',
+  'unitRange', 'aircraftRange', 'aircraftFields', 'supportChance', 'cardMs', 'layout',
   'grades',
 ].sort()
 
@@ -43,14 +43,32 @@ describe('SAT difficulty tuning', () => {
     expect(satGameKey('easier')).toBe('sat-easier')
   })
 
-  it('leaves Hard at the values the game shipped with', () => {
+  it('gives Easier a bare card and Hard the whole console', () => {
+    // Both feed one fact at a time. Hard keeps every panel on screen around it,
+    // which is what the real console does — the player has to spot which
+    // instrument the fact landed on, not just remember it.
+    expect(SAT_TUNING.easier.layout).toBe('card')
+    expect(SAT_TUNING.hard.layout).toBe('panels')
+  })
+
+  it('holds every card longer on Easier than on Hard', () => {
+    // The whole difference between the two is how many facts there are and how
+    // long each is on screen — if the dwells ever match, Easier is only "fewer
+    // questions" and stops being an intro to the same test.
+    expect(SAT_TUNING.easier.cardMs).toBeGreaterThan(SAT_TUNING.hard.cardMs)
+  })
+
+  it('holds Hard to the run shape its leaderboard was built on', () => {
+    // The load levers are retunable; 3 situations of 6 is not. Scores on the
+    // 'sat' board are a raw count out of 18, so changing the total silently
+    // rescales every run already sitting on it.
     const h = SAT_TUNING.hard
     expect(h.situations).toBe(3)
     expect(h.questionsPerSituation).toBe(6)
-    expect(h.unitRange).toEqual([3, 5])
+    expect(satTotalQuestions(h)).toBe(18)
+    expect(h.unitRange).toEqual([3, 4])
     expect(h.aircraftRange).toEqual([2, 3])
     expect(h.supportChance).toBe(0.5)
-    expect(satTotalQuestions(h)).toBe(18)
   })
 
   it('asks 10 questions on Easier and 18 on Hard', () => {
