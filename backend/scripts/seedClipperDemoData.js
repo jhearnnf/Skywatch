@@ -118,7 +118,7 @@ async function main() {
           cycleAirstars: Math.round(airstars / 4),
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true, rawResult: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true, includeResultMetadata: true },
     );
     if (res?.lastErrorObject?.upserted) created++;
   }
@@ -149,6 +149,7 @@ async function main() {
   const PLACEHOLDER = '/icon-512.png';
 
   let briefsMade = 0;
+  const aircraftBriefIds = [];
   for (const title of AIRCRAFT) {
     const media = await Media.findOneAndUpdate(
       { mediaUrl: PLACEHOLDER, name: title },
@@ -174,14 +175,32 @@ async function main() {
           media: [media._id],
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true, rawResult: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true, includeResultMetadata: true },
     );
     if (res?.lastErrorObject?.upserted) briefsMade++;
+    aircraftBriefIds.push(String(res.value._id));
   }
+
+  // ── Aircraft allowlists ──────────────────────────────────────────────────
+  // A published Aircrafts brief with a cutout is necessary but NOT sufficient:
+  // FLAG and Target each filter the roster through a strict allowlist in
+  // AppSettings, empty by default so a new 3D model is never silently live.
+  //
+  // Without this the games render a Start button that is disabled and reads
+  // "No aircraft enabled - ask an admin to enable at least one in CBAT
+  // settings", which the capture bot can only report as a click timeout on
+  // [data-demo-start]. The seed's job is a database the recipes can actually
+  // play, so it enables what it just created.
+  const AppSettings = require('../models/AppSettings');
+  const settings = await AppSettings.getSettings();
+  settings.cbatFlagAircraftBriefIds   = aircraftBriefIds;
+  settings.cbatTargetAircraftBriefIds = aircraftBriefIds;
+  await settings.save();
 
   console.log(`  primary demo agent : ${primary} (clipper-demo@skywatch.local)`);
   console.log(`  leaderboard agents : ${DEMO_AGENTS.length - 1} (${created} newly created)`);
   console.log(`  aircraft briefs    : ${AIRCRAFT.length} (${briefsMade} newly created)`);
+  console.log(`  FLAG/Target roster : ${aircraftBriefIds.length} aircraft enabled`);
   console.log('\nDone. Point CLIPPER_CAPTURE_MONGO_URI at this database and run the site against it.');
 
   await mongoose.disconnect();
