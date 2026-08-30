@@ -496,7 +496,7 @@ describe('beat shots', () => {
       footage: { b1: { chosen: null }, b2: { chosen: null } },
     }));
     expect(t.beats[1].shots).toEqual([
-      { videoUrl: null, trimInMs: 0, durationMs: 6000, move: 'in', focus: null },
+      { videoUrl: null, trimInMs: 0, durationMs: 6000, move: 'in', focus: null, framed: false },
     ]);
   });
 
@@ -551,6 +551,144 @@ describe('capture framing', () => {
 
   it('leaves stock footage uncropped', () => {
     expect(buildTimeline(captureScript('play-dpt')).beats[0].shots[0].focus).toBeNull();
+  });
+});
+
+/**
+ * The phone frame.
+ *
+ * Screen recordings play inside a slowly turning device from the third beat on.
+ * The rule is about the hook, not about taste: short-form platforms render
+ * full-bleed natively, so a device mockup on frame 0 reads as an advert and
+ * gets scrolled - a cost that has almost entirely decayed by beat three, where
+ * the frame buys back sharpness and the whole playthrough instead.
+ */
+describe('phone framing', () => {
+  const beat = (id, kind, recipeId = '') => ({ id, text: `${id}.`, visual: { kind, recipeId } });
+
+  const framedScript = (kinds) => ({
+    script: { beats: kinds.map((k, i) => beat(`b${i + 1}`, k, k === 'capture' ? 'play-flag' : '')) },
+    footage: Object.fromEntries(kinds.map((k, i) => [
+      `b${i + 1}`,
+      { chosen: k === 'capture'
+        ? { provider: 'capture', playbackUrl: 'cap.mp4', durationSec: 28 }
+        : { downloadUrl: 'stock.mp4', durationSec: 12 },
+        trim: { inMs: 0 } },
+    ])),
+    voice: { lines: kinds.map((_, i) => ({
+      beatId: `b${i + 1}`, durationMs: 3000, startMs: i * 3000,
+    })) },
+    outro: { enabled: false, copy: '' },
+  });
+
+  const framedFlags = (t) => t.beats.map(b => Boolean(b.shots?.[0]?.framed));
+
+  it('leaves the hook full-bleed even when it is a screen recording', () => {
+    const t = buildTimeline(framedScript(['capture', 'capture', 'capture']));
+    expect(framedFlags(t)).toEqual([false, false, true]);
+  });
+
+  it('never frames stock footage', () => {
+    const t = buildTimeline(framedScript(['stock', 'stock', 'stock', 'stock']));
+    expect(framedFlags(t)).toEqual([false, false, false, false]);
+  });
+
+  it('frames only the captures among later beats', () => {
+    const t = buildTimeline(framedScript(['stock', 'stock', 'capture', 'stock', 'capture']));
+    expect(framedFlags(t)).toEqual([false, false, true, false, true]);
+  });
+
+  // This asserted the opposite at first, on the reasoning that "inside a phone
+  // there is no frame to waste, the whole screen is the subject". That only
+  // holds for a page that fills its own viewport. DPT does not - it renders at
+  // a fixed width and leaves the right fifth of every frame empty, which is why
+  // the rect was measured at all. Shown whole on a phone, the dead strip became
+  // part of the device's screen and the gameplay sat visibly off to one side.
+  it('keeps the recipe rect on a framed shot, so the screen is filled', () => {
+    const t = buildTimeline({
+      script: { beats: [
+        beat('b1', 'stock'), beat('b2', 'stock'),
+        { id: 'b3', text: 'Three.', visual: { kind: 'capture', recipeId: 'play-dpt' } },
+      ] },
+      footage: {
+        b1: { chosen: null }, b2: { chosen: null },
+        b3: { chosen: { provider: 'capture', playbackUrl: 'cap.mp4', durationSec: 28 }, trim: { inMs: 0 } },
+      },
+      voice: { lines: [
+        { beatId: 'b1', durationMs: 1000, startMs: 0 },
+        { beatId: 'b2', durationMs: 1000, startMs: 1000 },
+        { beatId: 'b3', durationMs: 8000, startMs: 2000 },
+      ] },
+      outro: { enabled: false, copy: '' },
+    });
+
+    expect(t.beats[2].shots[0].framed).toBe(true);
+    expect(t.beats[2].shots[0].focus).toEqual(focusFor('play-dpt'));
+  });
+
+  // The input rect is a punch-in for emphasis. A framed shot has already
+  // committed to showing the whole screen, and cropping to a corner of a phone
+  // is a different - worse - shot than the one that was asked for.
+  it('does not punch in on input inside the phone', () => {
+    const inputLog = [
+      { atMs: 100, x: 0.5, y: 0.5, kind: 'press' },
+      { atMs: 200, x: 0.51, y: 0.51, kind: 'press' },
+      { atMs: 300, x: 0.49, y: 0.49, kind: 'press' },
+    ];
+    const t = buildTimeline({
+      script: { beats: [
+        beat('b1', 'stock'), beat('b2', 'stock'),
+        { id: 'b3', text: 'Three.', visual: { kind: 'capture', recipeId: 'play-flag' } },
+      ] },
+      footage: {
+        b1: { chosen: null }, b2: { chosen: null },
+        b3: {
+          chosen: { provider: 'capture', playbackUrl: 'cap.mp4', durationSec: 28 },
+          trim: { inMs: 0 }, inputLog,
+        },
+      },
+      voice: { lines: [
+        { beatId: 'b1', durationMs: 1000, startMs: 0 },
+        { beatId: 'b2', durationMs: 1000, startMs: 1000 },
+        { beatId: 'b3', durationMs: 8000, startMs: 2000 },
+      ] },
+      outro: { enabled: false, copy: '' },
+    });
+
+    // play-flag has no measured rect, and the input rect must not stand in for
+    // one here - so a framed FLAG shot is uncropped.
+    expect(t.beats[2].shots[0].framed).toBe(true);
+    expect(t.beats[2].shots[0].focus).toBeNull();
+  });
+
+  it('still crops an early capture, which is playing full-bleed', () => {
+    const t = buildTimeline({
+      script: { beats: [
+        beat('b1', 'stock'),
+        { id: 'b2', text: 'Two.', visual: { kind: 'capture', recipeId: 'play-dpt' } },
+      ] },
+      footage: {
+        b1: { chosen: null },
+        b2: { chosen: { provider: 'capture', playbackUrl: 'cap.mp4', durationSec: 28 }, trim: { inMs: 0 } },
+      },
+      voice: { lines: [
+        { beatId: 'b1', durationMs: 1000, startMs: 0 },
+        { beatId: 'b2', durationMs: 8000, startMs: 1000 },
+      ] },
+      outro: { enabled: false, copy: '' },
+    });
+
+    expect(t.beats[1].shots[0].framed).toBe(false);
+    expect(t.beats[1].shots[0].focus).toEqual(focusFor('play-dpt'));
+  });
+
+  // Stock beats split into several shots, and a treatment that applied to the
+  // first but not the rest would flicker mid-beat.
+  it('marks every shot of a beat the same way', () => {
+    const t = buildTimeline(framedScript(['stock', 'stock', 'stock', 'stock']));
+    for (const b of t.beats) {
+      expect(new Set(b.shots.map(sh => sh.framed)).size).toBe(1);
+    }
   });
 });
 

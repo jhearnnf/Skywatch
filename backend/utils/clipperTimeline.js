@@ -12,7 +12,7 @@
 
 const { resolveCue, sfxPath, SFX_BY_ID } = require('../constants/clipperSfx');
 const { MUSIC_DIR } = require('../constants/clipperMusic');
-const { focusFor } = require('../constants/clipperCapture');
+const { focusFor, focusFromInput } = require('../constants/clipperCapture');
 
 const MIN_BEAT_MS = 800;       // a beat with no audio still needs to be seen
 const END_CARD_MS = 2200;
@@ -25,6 +25,17 @@ const END_CARD_MS = 2200;
 // frame 0. Long lines are left as ordinary captions: a title card is something
 // you take in at a glance, and past this length it is a paragraph.
 const HOOK_MAX_CHARS = 78;
+
+// From which beat a screen recording is shown inside a phone rather than
+// full-bleed (0-based, so the first two beats are always full-bleed).
+//
+// Short-form platforms render full-bleed natively, so an opening frame with a
+// device mockup in it reads as an advert and is scrolled past. That cost is
+// concentrated almost entirely in the hook: by the third beat the viewer has
+// already decided to stay, and a framed product shot there reads as polish
+// instead. The change of treatment also gives the video a gear change at
+// exactly the point a single-treatment edit starts to feel flat.
+const FRAMED_FROM_BEAT = 2;
 
 // Group word timings into caption pages. Short-form captions show a few words
 // at a time: enough to read in one saccade, few enough that the highlighted
@@ -228,10 +239,10 @@ function snapLengths(lens, startMs, periodMs) {
 // Cover one beat with shots taken from its clip.
 function buildShots({
   videoUrl, trimInMs, durationMs, clipDurationSec,
-  focus = null, splittable = true, first = false,
+  focus = null, framed = false, splittable = true, first = false,
   startMs = 0, beatPeriodMs = 0,
 }) {
-  const single = [{ videoUrl, trimInMs, durationMs, move: 'in', focus }];
+  const single = [{ videoUrl, trimInMs, durationMs, move: 'in', focus, framed }];
   if (!videoUrl || !splittable) return single;
 
   // Without a clip length there is no telling whether a later in-point has
@@ -263,6 +274,7 @@ function buildShots({
       // and gives the cut a change of direction to land on.
       move: i % 2 === 0 ? 'in' : 'out',
       focus,
+      framed,
     });
 
     wanted = inMs + lens[i] + SHOT_JUMP_MS;
@@ -354,12 +366,54 @@ function buildTimeline(script) {
     // page background (see constants/clipperCapture.js).
     const isCapture = chosen?.provider === 'capture' || beat.visual?.kind === 'capture';
 
+    // A framed shot needs no focus rect. The rect exists to crop away page
+    // background that is wasting the frame; inside a phone there is no frame to
+    // waste, the whole screen is the subject, and cropping would cost the one
+    // thing the treatment is for - seeing the entire playthrough.
+    //
+    // It is also the only composition where the footage is not upscaled. A
+    // capture is 596x1060 encoded up to 1080x1920, and full-bleed shows it at
+    // roughly twice its true resolution; the screen inside the phone is smaller
+    // than 596x1060, so the same source is downscaled and reads sharper.
+    const framed = isCapture && index >= FRAMED_FROM_BEAT;
+
+    // Where the bot's hand actually went beats a rect measured once by hand.
+    // The recipe rect answers "which part of this page is worth showing"; the
+    // input log answers "which part of it was being used while this shot is on
+    // screen", which is the shot a viewer wants. Falls back to the measured
+    // rect whenever the presses were too few or too scattered to mean anything
+    // - see focusFromInput.
+    //
+    // Captures are never split, so one window covers the whole beat.
+    const inputFocus = (isCapture && !framed)
+      ? focusFromInput(footage[beat.id]?.inputLog, { startMs: trimInMs, endMs: trimInMs + durationMs })
+      : null;
+
+    // A framed shot keeps the recipe's rect, and this was wrong at first.
+    //
+    // The reasoning for dropping it - "inside a phone there is no frame to
+    // waste, the whole screen is the subject" - only holds for a page that
+    // fills its own viewport. DPT does not: it renders at a fixed width and
+    // leaves the right fifth of every frame empty (see constants/clipperCapture
+    // .js), which is the entire reason the rect was measured. Shown whole on a
+    // phone, that dead strip becomes part of the device's screen and the
+    // gameplay sits visibly off to one side.
+    //
+    // The input-derived rect is deliberately NOT used here. It is a punch-in
+    // for emphasis, and a framed shot has already committed to showing the
+    // whole screen - cropping to a corner of a phone is a different, worse
+    // shot. The recipe rect only corrects the framing; it does not narrow it.
+
     const shots = buildShots({
       videoUrl,
       trimInMs,
       durationMs,
       clipDurationSec: chosen?.durationSec,
-      focus: isCapture ? focusFor(beat.visual?.recipeId) : null,
+      focus: isCapture
+        ? (framed ? focusFor(beat.visual?.recipeId)
+          : (inputFocus ?? focusFor(beat.visual?.recipeId)))
+        : null,
+      framed,
       splittable: !isCapture,
       first: index === 0,
       startMs: cursor,
