@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import ProfileBadge from '../../../components/ProfileBadge'
-import { formatTime, SUPPORT_LABEL } from '../format'
+import { formatTime, formatStamp, SUPPORT_LABEL } from '../format'
 import { nameColour } from '../nameColour'
 import { REACTION_EMOJI } from '../reactionEmoji'
 import { splitMentions, mentionsMe } from '../mentions'
@@ -266,7 +266,7 @@ function NewMessagesDivider() {
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine, online,
   viewerIsAdmin, onOpenUser, onReport, onDelete, onEdit, onReply, onReact, onSeenBy,
-  onJump, highlighted, senders, currentUserId,
+  onJump, highlighted, senders, currentUserId, datedStamps,
   // Whether this row's actions are pinned open, and how to ask for that. Held
   // by the list rather than the row so only one row can be open at a time.
   actionsOpen, onToggleActions,
@@ -347,7 +347,9 @@ function MessageRow({
               </span>
             )}
             {profile?.cbatPassed && <CbatPassedBadge />}
-            <span className="text-[10px] text-slate-400">{formatTime(m.createdAt)}</span>
+            <span className="text-[10px] text-slate-400">
+              {datedStamps ? formatStamp(m.createdAt) : formatTime(m.createdAt)}
+            </span>
           </div>
         )}
 
@@ -486,6 +488,11 @@ export default function MessageList({
   // would hide the time each one was posted behind whichever came first. Feeds
   // pass false and get one self-contained entry per message.
   groupRuns = true,
+  // Stamp every message with its full date, year and time rather than the
+  // conversational short form. A noticeboard entry is a dated record — it gets
+  // read weeks after it was posted, and "when was this said" is the whole
+  // point of reading it.
+  datedStamps = false,
   highlightId = null,
   // Where this viewer got up to last time, frozen at entry by ChatThread. Null
   // means "never been here", which draws no line — a first visit is not a pile
@@ -583,6 +590,7 @@ export default function MessageList({
             profile={senders[String(m.senderUserId)]}
             senders={senders}
             currentUserId={currentUserId}
+            datedStamps={datedStamps}
             isSupportIdentity={collapseAdmins && m.senderRole === 'admin'}
             viewerIsAdmin={viewerIsAdmin}
             onOpenUser={conversationType === 'channel' ? onOpenUser : undefined}

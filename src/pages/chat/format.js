@@ -7,6 +7,20 @@ export function formatTime(ts) {
   } catch { return '' }
 }
 
+// A full, unambiguous stamp: date, year and clock time. Used where a message
+// is a dated record rather than a line of conversation — an announcement is
+// read weeks later, and "Aug 30" alone leaves the reader guessing the year.
+export function formatStamp(ts) {
+  try {
+    const d = new Date(ts)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toLocaleString([], {
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    })
+  } catch { return '' }
+}
+
 // Relative time for list rows, where an exact timestamp is noise.
 export function formatRelative(ts) {
   if (!ts) return ''

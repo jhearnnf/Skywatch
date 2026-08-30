@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 import MessageList from '../components/MessageList'
+import { formatStamp, formatTime } from '../format'
 
 const CUTOUT = 'https://cdn.test/typhoon.png'
 
@@ -316,6 +317,37 @@ describe('MessageList — feeds', () => {
   it('still groups by default', () => {
     renderList([msg('u1', 'one'), msg('u1', 'two')])
     expect(screen.getAllByText('Falcon')).toHaveLength(1)
+  })
+})
+
+describe('MessageList — dated stamps', () => {
+  const POSTED = '2026-08-30T16:04:00.000Z'
+
+  it('stamps announcements with the full date, year and time', () => {
+    renderList([msg('u1', 'Maintenance tonight', { createdAt: POSTED })], {
+      datedStamps: true, groupRuns: false,
+    })
+    const stamp = formatStamp(POSTED)
+    expect(stamp).toMatch(/2026/)
+    expect(screen.getByText(stamp)).toBeTruthy()
+  })
+
+  it('dates every entry, not just the first of a run', () => {
+    renderList(
+      [
+        msg('u1', 'first',  { createdAt: '2026-08-01T09:00:00.000Z' }),
+        msg('u1', 'second', { createdAt: POSTED }),
+      ],
+      { datedStamps: true, groupRuns: false },
+    )
+    expect(screen.getByText(formatStamp('2026-08-01T09:00:00.000Z'))).toBeTruthy()
+    expect(screen.getByText(formatStamp(POSTED))).toBeTruthy()
+  })
+
+  it('keeps the short conversational stamp everywhere else', () => {
+    renderList([msg('u1', 'hey', { createdAt: POSTED })])
+    expect(screen.getByText(formatTime(POSTED))).toBeTruthy()
+    expect(screen.queryByText(formatStamp(POSTED))).toBeNull()
   })
 })
 

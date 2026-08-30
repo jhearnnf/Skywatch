@@ -387,9 +387,14 @@ export default function ChatThread({
           dividerAfter={entryState?.lastReadAt ?? null}
           highlightId={highlightId}
           typingName={botTyping || askedBot}
-          // A bot feed is a log, not a conversation: every entry is from the
-          // same poster, so each one keeps its own name and timestamp.
-          groupRuns={postPolicy !== 'bot'}
+          // A feed is a log, not a conversation: every entry is from the same
+          // poster, so each one keeps its own name and timestamp. That covers
+          // the bot feeds and the announcements board alike — grouping two
+          // announcements posted a fortnight apart under one heading would hide
+          // when the second one went up.
+          groupRuns={postPolicy === 'everyone'}
+          // Announcements are dated records, so they carry the full stamp.
+          datedStamps={postPolicy === 'admin'}
           emptyLabel={type === 'channel'
             ? 'Nothing here yet — be the first to post.'
             : 'No messages yet — say hi to get started.'}
