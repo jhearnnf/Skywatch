@@ -277,6 +277,25 @@ export default function Clipper() {
     setActiveJob(data.job)
   })
 
+  // Recordings we already have of a given game. Fetched on demand rather than
+  // with the script: it is only ever wanted when somebody opens the list, and
+  // it changes whenever any script records anything.
+  const listCaptures = useCallback(
+    (recipeId) => call(`/captures?recipeId=${encodeURIComponent(recipeId)}`).then(d => d.captures),
+    [call],
+  )
+
+  const handleReuseCapture = (beatId, captureId) => run(async () => {
+    const data = await call(`/scripts/${active._id}/footage/reuse`, {
+      method: 'POST', body: JSON.stringify({ beatId, captureId }),
+    })
+    setActive(a => ({ ...a, footage: data.footage }))
+  })
+
+  const handleForgetCapture = (captureId) => run(async () => {
+    await call(`/captures/${captureId}`, { method: 'DELETE' })
+  })
+
   const handleApproveFootage = () => run(async () => {
     const data = await call(`/scripts/${active._id}/stages/footage/approve`, { method: 'POST' })
     setActive(data.script)
@@ -570,6 +589,9 @@ export default function Clipper() {
             onSearch={handleSearchFootage}
             onChoose={handleChooseFootage}
             onCapture={handleCapture}
+            onListCaptures={listCaptures}
+            onReuseCapture={handleReuseCapture}
+            onForgetCapture={handleForgetCapture}
             onTrim={handleTrimFootage}
             onApprove={handleApproveFootage}
             busy={busy}

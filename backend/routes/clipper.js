@@ -20,6 +20,7 @@ const { featureMiddleware }  = require('../utils/openRouter');
 const ClipperSource = require('../models/ClipperSource');
 const ClipperFact   = require('../models/ClipperFact');
 const ClipperScript = require('../models/ClipperScript');
+const ClipperCapture = require('../models/ClipperCapture');
 const ClipperJob    = require('../models/ClipperJob');
 const ClipperMusic  = require('../models/ClipperMusic');
 
@@ -193,6 +194,29 @@ async function applyJobResult(job) {
       };
       script.footage = footage;
       script.markModified('footage');
+
+      // Into the library as well, so the next script that needs this game can
+      // take the recording instead of spending another twenty-five seconds of
+      // browser automation reproducing it.
+      //
+      // Failure here must not fail the job: the recording exists and is already
+      // on the beat, and a catalogue that could not be written is a smaller
+      // problem than a capture reported as failed.
+      const recipeId = job.result.recipeId || job.payload?.recipeId || '';
+      if (recipeId) {
+        await ClipperCapture.create({
+          recipeId,
+          label: job.result.label || 'Screen recording',
+          localPath: job.result.localPath,
+          playbackUrl: footage[beatId].chosen.playbackUrl,
+          durationSec: footage[beatId].chosen.durationSec,
+          bytes:  job.result.bytes  ?? null,
+          width:  job.result.width  ?? null,
+          height: job.result.height ?? null,
+          inputLog: Array.isArray(job.result.inputLog) ? job.result.inputLog : [],
+          jobId: job._id,
+        }).catch(() => {});
+      }
     }
   } else if (job.type === 'captions') {
     // The agent reports raw whisper timings. Alignment against the known script
@@ -1093,6 +1117,129 @@ router.post('/scripts/:id/capture', async (req, res) => {
 // can never disagree about which games are filmable.
 router.get('/subjects', (_req, res) => {
   res.json({ status: 'success', data: { subjects: SUBJECTS } });
+});
+
+// ── The capture library ─────────────────────────────────────────────────────
+
+// GET /api/clipper/captures?recipeId=play-flag
+// Recordings of this game that already exist, newest first.
+//
+// `missing` is the point of doing any work here: the files live in the agent's
+// %TEMP% folder and Windows clears that, so an entry is a claim about a file
+// that may be gone. Offering a dead clip would set it as the beat's footage and
+// fail much later, in the render, as an asset that will not download.
+router.get('/captures', async (req, res) => {
+  try {
+    const recipeId = String(req.query?.recipeId || '').trim();
+    const query = recipeId ? { recipeId } : {};
+
+    const rows = await ClipperCapture.find(query)
+      .sort({ createdAt: -1 })
+      .limit(40)
+      .lean();
+
+    const captures = rows.map(row => ({
+      _id: String(row._id),
+      recipeId: row.recipeId,
+      label: row.label,
+      playbackUrl: row.playbackUrl,
+      durationSec: row.durationSec,
+      width: row.width,
+      height: row.height,
+      recordedAt: row.createdAt,
+      useCount: row.useCount || 0,
+      // A recording made before the human-input work has no log and will fall
+      // back to the recipe's measured crop. Surfaced so the difference between
+      // an old take and a new one is visible in the picker rather than a
+      // surprise in the edit.
+      hasInputLog: Array.isArray(row.inputLog) && row.inputLog.length > 0,
+      missing: row.localPath ? !fs.existsSync(row.localPath) : true,
+    }));
+
+    res.json({ status: 'success', data: { captures } });
+  } catch (err) { fail(res, err); }
+});
+
+// POST /api/clipper/scripts/:id/footage/reuse   { beatId, captureId }
+// Point a capture beat at a recording we already have.
+router.post('/scripts/:id/footage/reuse', async (req, res) => {
+  try {
+    const doc = await ClipperScript.findById(req.params.id);
+    if (!doc) { const e = new Error('Script not found'); e.status = 404; throw e; }
+
+    const beat = (doc.script?.beats ?? []).find(b => b.id === req.body?.beatId);
+    if (!beat) { const e = new Error('No such beat'); e.status = 400; throw e; }
+    if (beat.visual?.kind !== 'capture') {
+      const e = new Error('That beat is not a capture beat'); e.status = 400; throw e;
+    }
+
+    const capture = await ClipperCapture.findById(req.body?.captureId);
+    if (!capture) { const e = new Error('That recording is no longer in the library'); e.status = 404; throw e; }
+
+    // Filming a different game while the voice talks about this one is worse
+    // than stock footage, because it looks deliberate. Enforced here and not
+    // only in the picker: the beat's recipe is the whole basis for reuse.
+    if (beat.visual.recipeId && capture.recipeId !== beat.visual.recipeId) {
+      const e = new Error(
+        `That recording is of "${capture.recipeId}", but this beat asks for "${beat.visual.recipeId}"`,
+      );
+      e.status = 400; throw e;
+    }
+
+    if (capture.localPath && !fs.existsSync(capture.localPath)) {
+      const e = new Error(
+        "That recording's file is gone - the agent keeps them in a temp folder that gets cleared. Record it again.",
+      );
+      e.status = 409; throw e;
+    }
+
+    const footage = { ...(doc.footage || {}) };
+    footage[beat.id] = {
+      ...(footage[beat.id] || {}),
+      chosen: {
+        provider: 'capture',
+        providerId: String(capture._id),
+        title: capture.label || 'Screen recording',
+        playbackUrl: capture.playbackUrl,
+        localPath: capture.localPath,
+        durationSec: capture.durationSec,
+        licence: 'Own content (SkyWatch screen recording)',
+        sourceUrl: null,
+        recipeId: capture.recipeId,
+      },
+      // Travels with the recording, so a reused clip keeps the punch-in derived
+      // from where the hand actually went.
+      inputLog: Array.isArray(capture.inputLog) ? capture.inputLog : [],
+      // A different clip is a different length, so a trim measured against the
+      // old one would seek into the wrong part of this one - or past its end.
+      trim: { inMs: 0 },
+    };
+
+    doc.footage = footage;
+    doc.markModified('footage');
+    if (doc.stageState.get('footage') === 'approved') doc.stageState.set('footage', 'stale');
+    await doc.save();
+
+    await ClipperCapture.updateOne(
+      { _id: capture._id },
+      { $inc: { useCount: 1 }, $set: { lastUsedAt: new Date() } },
+    ).catch(() => {});
+
+    res.json({ status: 'success', data: { footage: doc.footage } });
+  } catch (err) { fail(res, err); }
+});
+
+// DELETE /api/clipper/captures/:id — forget a recording.
+//
+// The catalogue entry only; the file is the agent's and its temp folder is
+// cleared by the OS anyway. Deleting the row is how a bad take stops being
+// offered.
+router.delete('/captures/:id', async (req, res) => {
+  try {
+    const gone = await ClipperCapture.findByIdAndDelete(req.params.id);
+    if (!gone) { const e = new Error('No such recording'); e.status = 404; throw e; }
+    res.json({ status: 'success', data: { removed: String(gone._id) } });
+  } catch (err) { fail(res, err); }
 });
 
 // GET /api/clipper/footage/providers — which sources are actually usable.

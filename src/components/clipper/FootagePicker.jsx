@@ -80,7 +80,108 @@ function BeatTrim({ beat, chosen, trim, window: win, mediaBaseUrl, onTrim }) {
   )
 }
 
-function BeatRow({ beat, index, entry, window: win, mediaBaseUrl, onSearch, onChoose, onCapture, onTrim, job, agentOnline, busy }) {
+// Recordings of this game that already exist.
+//
+// A recording of a game is not specific to the beat that asked for it: twenty
+// seconds of FLAG being played is twenty seconds of FLAG being played, whatever
+// line is spoken over it. Re-recording for every script costs a minute of
+// browser automation to reproduce a file we already had - and the agent has to
+// be running to do it.
+//
+// Only takes of THIS beat's recipe are offered. Filming a different game while
+// the voice talks about this one is worse than stock footage, because it looks
+// deliberate.
+function CaptureLibrary({ recipeId, onList, onReuse, onForget, busy }) {
+  const [open, setOpen] = useState(false)
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    setError('')
+    try {
+      setRows(await onList(recipeId))
+    } catch (err) {
+      setError(err.message || 'Could not read the recording library')
+      setRows([])
+    }
+  }
+
+  const toggle = async () => {
+    const next = !open
+    setOpen(next)
+    if (next) await load()
+  }
+
+  const forget = async (id) => {
+    await onForget(id)
+    await load()
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={toggle}
+        disabled={!recipeId}
+        className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-100 transition-colors disabled:opacity-40"
+      >
+        {open ? 'Hide existing recordings' : 'Use an existing recording'}
+      </button>
+
+      {open && (
+        <div className="rounded-lg border border-slate-200 bg-white p-2 space-y-1.5">
+          {error && <p className="text-xs text-rose-700">{error}</p>}
+
+          {rows === null && <p className="text-xs text-slate-500">Reading the library…</p>}
+
+          {rows?.length === 0 && !error && (
+            <p className="text-xs text-slate-500">
+              Nothing recorded for <code className="text-slate-600">{recipeId}</code> yet. Record once and
+              every later script can reuse it.
+            </p>
+          )}
+
+          {rows?.map(row => (
+            <div key={row._id} className="flex items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => onReuse(row._id)}
+                disabled={busy || row.missing}
+                title={row.missing
+                  ? 'The file is gone - the agent keeps recordings in a temp folder that gets cleared'
+                  : undefined}
+                className="flex-1 text-left px-2 py-1.5 rounded-lg border border-brand-200 text-brand-600 font-semibold hover:bg-brand-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {row.durationSec ? `${row.durationSec.toFixed(1)}s` : 'unknown length'}
+                {' · '}
+                {new Date(row.recordedAt).toLocaleString()}
+                {row.useCount > 0 && ` · used ${row.useCount}×`}
+                {/* A take filmed before the human-input work has no log, so it
+                    falls back to the recipe's measured crop rather than punching
+                    in on where the hand went. Better said here than discovered
+                    in the edit. */}
+                {!row.hasInputLog && ' · no input log'}
+                {row.missing && ' · file gone'}
+              </button>
+              <button
+                type="button"
+                onClick={() => forget(row._id)}
+                disabled={busy}
+                title="Forget this recording"
+                className="px-2 py-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors disabled:opacity-40"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BeatRow({ beat, index, entry, window: win, mediaBaseUrl, onSearch, onChoose, onCapture,
+  onListCaptures, onReuseCapture, onForgetCapture, onTrim, job, agentOnline, busy }) {
   // A job only belongs to this row if it is a capture for this beat.
   const mine = job?.type === 'capture' && job.payload?.beatId === beat.id ? job : null
   const captureJob = mine && (mine.status === 'queued' || mine.status === 'claimed') ? mine : null
@@ -127,6 +228,19 @@ function BeatRow({ beat, index, entry, window: win, mediaBaseUrl, onSearch, onCh
               </span>
             )}
           </div>
+
+          {/* Deliberately not gated on the agent being online: taking a clip we
+              already have is exactly what you want when the agent is down, and
+              a disabled button there would send you off to start it for nothing. */}
+          {!captureJob && (
+            <CaptureLibrary
+              recipeId={beat.visual.recipeId}
+              onList={onListCaptures}
+              onReuse={(captureId) => onReuseCapture(beat.id, captureId)}
+              onForget={onForgetCapture}
+              busy={busy}
+            />
+          )}
 
           {/* Without this the button queued a job and appeared to do nothing —
               the work happens on another machine and takes tens of seconds. */}
@@ -205,7 +319,7 @@ function BeatRow({ beat, index, entry, window: win, mediaBaseUrl, onSearch, onCh
   )
 }
 
-export default function FootagePicker({ script, footage, providers, providerErrors, job, agentOnline, mediaBaseUrl, onSearchAll, onSearch, onChoose, onCapture, onTrim, onApprove, busy }) {
+export default function FootagePicker({ script, footage, providers, providerErrors, job, agentOnline, mediaBaseUrl, onSearchAll, onSearch, onChoose, onCapture, onListCaptures, onReuseCapture, onForgetCapture, onTrim, onApprove, busy }) {
   const beats = script?.script?.beats ?? []
 
   if (beats.length === 0) {
@@ -282,6 +396,9 @@ export default function FootagePicker({ script, footage, providers, providerErro
             onSearch={onSearch}
             onChoose={onChoose}
             onCapture={onCapture}
+            onListCaptures={onListCaptures}
+            onReuseCapture={onReuseCapture}
+            onForgetCapture={onForgetCapture}
             onTrim={onTrim}
             job={job}
             agentOnline={agentOnline}
