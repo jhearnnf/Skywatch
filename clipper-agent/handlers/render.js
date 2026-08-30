@@ -22,7 +22,36 @@ const OUT_DIR = path.join(os.tmpdir(), 'skywatch-clipper', 'renders');
 
 // Cached across jobs: bundling is the slow part and the composition only
 // changes when the code does, not between renders.
+//
+// But "when the code does" was never checked, and the cache lives as long as
+// the agent process - which outlives many edits. Iterating on the composition
+// therefore hit a wall where every render came back byte-identical to the last
+// one, with nothing to say the source had moved on. The preview updated (Vite
+// serves it fresh) and the render did not, which is the exact disagreement
+// bundling from the same source is meant to prevent.
+//
+// So the cache is keyed on the newest mtime under src/remotion. Cheap - a
+// handful of stats against a render measured in minutes - and it means a change
+// to the composition needs no agent restart to take effect.
 let cachedBundle = null;
+let bundledMtime = 0;
+
+const REMOTION_SRC = path.join(REPO_ROOT, 'src', 'remotion');
+
+async function newestSourceMtime(dir) {
+  let newest = 0;
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, await newestSourceMtime(full));
+    } else if (/\.(jsx?|css)$/.test(entry.name)) {
+      const { mtimeMs } = await fs.stat(full).catch(() => ({ mtimeMs: 0 }));
+      newest = Math.max(newest, mtimeMs);
+    }
+  }
+  return newest;
+}
 
 // Point screen recordings at the agent's media server.
 //
@@ -103,12 +132,14 @@ module.exports = async function renderHandler({ job, progress }) {
   const timeline = resolveLocalAssets(payloadTimeline);
 
   await progress(5, 'bundling composition');
-  if (!cachedBundle) {
+  const sourceMtime = await newestSourceMtime(REMOTION_SRC);
+  if (!cachedBundle || sourceMtime > bundledMtime) {
     cachedBundle = await bundle({
       entryPoint: ENTRY,
       publicDir: PUBLIC_DIR,
       onProgress: () => {},
     });
+    bundledMtime = sourceMtime;
   }
 
   await progress(20, 'resolving composition');
