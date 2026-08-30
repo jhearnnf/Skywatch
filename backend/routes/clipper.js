@@ -21,6 +21,7 @@ const ClipperSource = require('../models/ClipperSource');
 const ClipperFact   = require('../models/ClipperFact');
 const ClipperScript = require('../models/ClipperScript');
 const ClipperCapture = require('../models/ClipperCapture');
+const ClipperVoice = require('../models/ClipperVoice');
 const ClipperJob    = require('../models/ClipperJob');
 const ClipperMusic  = require('../models/ClipperMusic');
 
@@ -61,6 +62,58 @@ const agentPresence = {
   // Set by POST /agent/stop, handed to the agent on its next heartbeat.
   stopRequested: false,
 };
+
+// Adopt a reported set of voice profiles.
+//
+// `agentPresence.voices` stays as the hot cache - a heartbeat arrives every ten
+// seconds and re-writing Mongo each time would be a write per heartbeat for a
+// list that changes when the admin makes a new profile, which is to say almost
+// never. So the database is touched only when the set actually differs.
+//
+// The caller is responsible for never passing an empty list: an empty report
+// means "I could not ask" (Voicebox was not running), not "there are none".
+function rememberVoices(list) {
+  const voices = list.slice(0, 100).map(v => ({
+    id:   String(v.id ?? ''),
+    name: String(v.name ?? '').slice(0, 80),
+  })).filter(v => v.id);
+
+  if (voices.length === 0) return;
+
+  const same = JSON.stringify(voices) === JSON.stringify(agentPresence.voices);
+  agentPresence.voices = voices;
+  if (same) return;
+
+  // Replace the stored set rather than merging, so a profile deleted in the
+  // Voicebox app stops being offered. Fire-and-forget: the picker already has
+  // the list from the cache, and a failed write costs the next restart's
+  // memory, not this session's.
+  (async () => {
+    const ids = voices.map(v => v.id);
+    await ClipperVoice.deleteMany({ voiceId: { $nin: ids } });
+    await ClipperVoice.bulkWrite(voices.map(v => ({
+      updateOne: {
+        filter: { voiceId: v.id },
+        update: { $set: { name: v.name, lastSeenAt: new Date() } },
+        upsert: true,
+      },
+    })));
+  })().catch(() => {});
+}
+
+// The profiles to show, preferring the hot cache and falling back to what was
+// last persisted. The fallback is the whole point: a freshly restarted backend
+// has an empty cache and cannot refill it on its own, because enumerating
+// profiles requires Voicebox to be running and only the admin pressing Reload
+// voices starts it.
+async function knownVoices() {
+  if (agentPresence.voices.length) return agentPresence.voices;
+
+  const rows = await ClipperVoice.find({}).sort({ name: 1 }).lean().catch(() => []);
+  const voices = rows.map(r => ({ id: r.voiceId, name: r.name }));
+  agentPresence.voices = voices;
+  return voices;
+}
 
 // Where the agent is serving its own temp files, if it managed to bind a port.
 //
@@ -142,7 +195,7 @@ async function applyJobResult(job) {
   // dropped whenever that borrowed script had since been deleted — and the
   // symptom would be the profile picker staying empty for no visible reason.
   if (job.type === 'voices') {
-    if (Array.isArray(job.result?.voices)) agentPresence.voices = job.result.voices;
+    if (Array.isArray(job.result?.voices)) rememberVoices(job.result.voices);
     return;
   }
 
@@ -268,10 +321,7 @@ router.post('/agent/heartbeat', clipperAgentAuth, (req, res) => {
   // press Reload voices over and over. Absence of knowledge is not knowledge of
   // absence, so a heartbeat can only ever add to what is known here.
   if (Array.isArray(req.body?.voices) && req.body.voices.length > 0) {
-    agentPresence.voices = req.body.voices.slice(0, 100).map(v => ({
-      id:   String(v.id ?? ''),
-      name: String(v.name ?? '').slice(0, 80),
-    })).filter(v => v.id);
+    rememberVoices(req.body.voices);
   }
   // The heartbeat is how a stop reaches the agent. Nothing can push to it — it
   // has no inbound port by design — so the reply carries the instruction, and
@@ -1256,11 +1306,11 @@ router.get('/footage/providers', (_req, res) => {
 // Reporting availability rather than letting the UI guess means an unconfigured
 // provider is greyed out up front, instead of failing several clicks later when
 // the job reaches the agent.
-router.get('/voices', (_req, res) => {
+router.get('/voices', async (_req, res) => {
   res.json({
     status: 'success',
     data: {
-      voices: agentPresence.voices || [],
+      voices: await knownVoices(),
       online: agentIsOnline(),
       // Only meaningful while the agent is up — the port dies with it, so
       // reporting a stale one would have the preview retry a dead socket.

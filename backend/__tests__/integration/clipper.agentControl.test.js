@@ -334,6 +334,44 @@ describe('voice profiles surviving heartbeats', () => {
     expect(list.map(v => v.name)).toEqual(['News Lady', 'Mr House']);
   });
 
+  // The complaint this fixed: the picker emptied "on refresh". It was not the
+  // refresh - the browser re-polls GET /voices on mount and would have shown
+  // whatever the server knew. The list lived on agentPresence, which is
+  // in-memory by design because it is a liveness signal, so every backend
+  // restart forgot it. Under nodemon that is every save of a backend file.
+  //
+  // And it could not always recover: the agent only enumerates profiles while
+  // Voicebox is running, and the one thing that STARTS Voicebox is the admin
+  // pressing Reload voices.
+  it('remembers profiles across a backend restart', async () => {
+    await reportProfiles([{ id: 'v1', name: 'Bethan' }, { id: 'v2', name: 'News Lady' }]);
+
+    // What a restart actually does to this process: the module-level cache is
+    // gone, and no agent has checked in yet.
+    clipperRouter._resetAgentPresenceForTests();
+
+    const list = (await voices()).body.data.voices;
+    expect(list.map(v => v.name).sort()).toEqual(['Bethan', 'News Lady']);
+  });
+
+  it('forgets a profile deleted in the Voicebox app', async () => {
+    await reportProfiles([{ id: 'v1', name: 'Bethan' }, { id: 'v2', name: 'News Lady' }]);
+    await beat({ voices: [{ id: 'v2', name: 'News Lady' }] });
+    clipperRouter._resetAgentPresenceForTests();
+
+    const list = (await voices()).body.data.voices;
+    expect(list.map(v => v.id)).toEqual(['v2']);
+  });
+
+  // The rule the whole design turns on, now across restarts too.
+  it('does not let an empty report erase what was stored', async () => {
+    await reportProfiles([{ id: 'v1', name: 'Bethan' }]);
+    await beat({ voices: [] });
+    clipperRouter._resetAgentPresenceForTests();
+
+    expect((await voices()).body.data.voices).toHaveLength(1);
+  });
+
   it('survives a run of empty heartbeats', async () => {
     await reportProfiles([{ id: 'v1', name: 'Bethan' }]);
     for (let i = 0; i < 5; i++) await beat({ voices: [] });
