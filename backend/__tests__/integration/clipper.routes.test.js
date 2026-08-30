@@ -300,6 +300,141 @@ describe('script generation and approval', () => {
     expect(doc.stageState.footage).toBe('stale');
   });
 
+  // Picking a game and pressing Regenerate is one gesture in the UI, and the
+  // subject is what tells the writer to name FLAG and to film /cbat/flag. It
+  // only used to be persisted by Save, so the button on its own wrote a script
+  // for no subject at all - a video that shows no product.
+  it('writes to the subject chosen at the moment of regenerating', async () => {
+    const id = await makeScript();
+    mockScript([beat('FLAG asks you to hold three tasks at once.')]);
+
+    await request(app)
+      .post(`/api/clipper/scripts/${id}/script/generate`)
+      .set('Cookie', adminCookie)
+      .send({ subject: 'flag' })
+      .expect(200);
+
+    expect(clipperAi.generateScript).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: expect.objectContaining({ key: 'flag', kind: 'game' }) }),
+    );
+
+    const doc = await ClipperScript.findById(id).lean();
+    expect(doc.subject).toEqual({ kind: 'game', key: 'flag' });
+  });
+
+  it('leaves the stored subject alone when the request does not name one', async () => {
+    const id = await makeScript();
+    await ClipperScript.updateOne({ _id: id }, { $set: { subject: { kind: 'game', key: 'flag' } } });
+    mockScript([beat('Only circled aircraft matter.')]);
+
+    await request(app)
+      .post(`/api/clipper/scripts/${id}/script/generate`)
+      .set('Cookie', adminCookie).expect(200);
+
+    const doc = await ClipperScript.findById(id).lean();
+    expect(doc.subject.key).toBe('flag');
+  });
+
+  // Beat ids are positional, so a regenerate hands b1 to a completely different
+  // line. Footage is keyed by beat id, and the previous script's clips used to
+  // ride along - which is how a FLAG video's capture beats came back showing
+  // stock jets and no gameplay.
+  it('drops footage the rewritten beats no longer earned', async () => {
+    const id = await makeScript();
+    mockScript([beat('Only circled aircraft matter.')]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    await ClipperScript.updateOne({ _id: id }, { $set: { footage: {
+      b1: { term: 'jets', candidates: [{ provider: 'pexels' }], chosen: { provider: 'pexels' } },
+    } } });
+
+    mockScript([{ ...beat('A different line entirely.'), id: 'b1' }]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    // An emptied map is dropped from the document altogether (mongoose minimize),
+    // which every reader already handles as `doc.footage || {}`.
+    const doc = await ClipperScript.findById(id).lean();
+    expect(doc.footage?.b1).toBeUndefined();
+  });
+
+  it('never leaves a capture beat holding the stock clip it inherited', async () => {
+    const id = await makeScript();
+    mockScript([beat('Only circled aircraft matter.')]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    await ClipperScript.updateOne({ _id: id }, { $set: { footage: {
+      b1: { term: 'jets', candidates: [], chosen: { provider: 'pexels', playbackUrl: 'jet.mp4' } },
+    } } });
+
+    mockScript([{
+      ...beat('Watch a round of FLAG.'), id: 'b1',
+      visual: { kind: 'capture', query: '', recipeId: 'play-flag' },
+    }]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    const doc = await ClipperScript.findById(id).lean();
+    expect(doc.footage?.b1?.chosen ?? null).toBeNull();
+  });
+
+  it('keeps a screen recording when only the line over it was rewritten', async () => {
+    const id = await makeScript();
+    const capture = (text) => ({
+      ...beat(text), id: 'b1', visual: { kind: 'capture', query: '', recipeId: 'play-flag' },
+    });
+
+    mockScript([capture('Watch a round of FLAG.')]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    const chosen = { provider: 'capture', playbackUrl: 'file:///tmp/flag.mp4' };
+    await ClipperScript.updateOne({ _id: id }, { $set: { footage: { b1: { chosen } } } });
+
+    mockScript([capture('This is what FLAG asks of you.')]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    const doc = await ClipperScript.findById(id).lean();
+    expect(doc.footage.b1.chosen).toEqual(chosen);
+  });
+
+  it('strands no narration on a line that was rewritten by hand', async () => {
+    const id = await makeScript();
+    mockScript([beat('Only circled aircraft matter.')]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    await ClipperScript.updateOne({ _id: id }, { $set: { voice: {
+      profileId: 'v1',
+      lines: [{ beatId: 'b1', durationMs: 1200, wavPath: 'b1.wav', startMs: 0 }],
+    } } });
+
+    await request(app)
+      .patch(`/api/clipper/scripts/${id}`)
+      .set('Cookie', adminCookie)
+      .send({ beats: [beat('Only the circled ones count.')] })
+      .expect(200);
+
+    const doc = await ClipperScript.findById(id).lean();
+    expect(doc.voice.lines).toEqual([]);
+    expect(doc.voice.profileId).toBe('v1');
+  });
+
+  it('keeps a built timeline when a save changed none of the lines', async () => {
+    const id = await makeScript();
+    const line = beat('Only circled aircraft matter.');
+    mockScript([line]);
+    await request(app).post(`/api/clipper/scripts/${id}/script/generate`).set('Cookie', adminCookie);
+
+    const timeline = { totalFrames: 900 };
+    await ClipperScript.updateOne({ _id: id }, { $set: { timeline } });
+
+    await request(app)
+      .patch(`/api/clipper/scripts/${id}`)
+      .set('Cookie', adminCookie)
+      .send({ title: 'Renamed', beats: [line], outro: { copy: 'More tips at skywatch.academy' } })
+      .expect(200);
+
+    const doc = await ClipperScript.findById(id).lean();
+    expect(doc.timeline).toEqual(timeline);
+  });
+
   it('revalidates a hand-edited script', async () => {
     const id = await makeScript();
     mockScript([beat('Only circled aircraft matter.')]);

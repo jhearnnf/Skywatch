@@ -128,7 +128,7 @@ export default function ScriptEditor({ script, subjects = [], onGenerate, onSave
 
         <button
           type="button"
-          onClick={onGenerate}
+          onClick={() => onGenerate({ subject })}
           disabled={busy}
           className="px-3 py-2 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-500 transition-colors disabled:opacity-50"
         >

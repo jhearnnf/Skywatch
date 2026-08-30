@@ -28,6 +28,9 @@ const { validateScript } = require('../utils/clipperGuardrails');
 const { generateIdeas, generateScript } = require('../services/clipperAi');
 const { normaliseSubject, SUBJECTS } = require('../constants/clipperSubjects');
 const { searchFootage, configuredProviders, providerStatus } = require('../utils/clipperFootage');
+const {
+  planBeatCarry, pruneFootage, pruneVoice, pruneBeatRows, placeVoiceLines,
+} = require('../utils/clipperBeatCarry');
 const { buildTimeline } = require('../utils/clipperTimeline');
 const { buildCaptions } = require('../utils/clipperCaptions');
 const { SFX, SFX_BY_ID, SFX_DIR, resolveCue } = require('../constants/clipperSfx');
@@ -116,23 +119,16 @@ function mergeVoiceLines(script, result) {
   const byId = new Map(existing.map(l => [l.beatId, l]));
   for (const line of incoming) byId.set(line.beatId, line);
 
-  const order = [...(script.script?.beats ?? []).map(b => b.id), 'outro'];
-  const ordered = order.map(id => byId.get(id)).filter(Boolean);
-
   // Anything whose beat has since been deleted from the script would otherwise
   // linger for ever, contributing its duration to a beat that no longer exists.
-  let offsetMs = 0;
-  const lines = ordered.map(line => {
-    const placed = { ...line, startMs: offsetMs };
-    offsetMs += Number(line.durationMs) || 0;
-    return placed;
-  });
+  const order = [...(script.script?.beats ?? []).map(b => b.id), 'outro'];
+  const { lines, totalDurationMs } = placeVoiceLines([...byId.values()], order);
 
   return {
     ...(script.voice || {}),
     ...result,
     lines,
-    totalDurationMs: offsetMs,
+    totalDurationMs,
   };
 }
 
@@ -821,6 +817,54 @@ async function revalidate(scriptDoc) {
   return result;
 }
 
+// Cut loose the per-beat work that no longer belongs to the beat holding it.
+//
+// Call this after replacing doc.script.beats, with the beats (and outro copy)
+// as they were beforehand. Beat ids are positional, so without it a rewritten
+// script inherits the previous one's footage, takes, sfx, overlays and captions
+// by id alone - see utils/clipperBeatCarry.js for what survives and why.
+function carryBeatWork(doc, previousBeats, previousOutro) {
+  const beats = doc.script?.beats ?? [];
+  const plan  = planBeatCarry(previousBeats, beats);
+
+  const outroCopy = doc.outro?.copy ?? '';
+  const outroSurvives = Boolean(previousOutro) && previousOutro === outroCopy;
+  const extra = outroSurvives ? ['outro'] : [];
+
+  // Saving a script whose lines nobody touched must cost nothing, so what was
+  // actually let go decides whether the timeline stands - a rendered edit is
+  // expensive to rebuild and it is still true of work that all survived.
+  const snapshot = () => JSON.stringify([doc.footage, doc.voice, doc.sfx, doc.overlays, doc.captions]);
+  const before = snapshot();
+
+  doc.footage  = pruneFootage(doc.footage, plan, beats);
+  doc.voice    = pruneVoice(doc.voice, plan, beats, outroSurvives);
+  doc.sfx      = pruneBeatRows(doc.sfx, plan, extra);
+  doc.overlays = pruneBeatRows(doc.overlays, plan, extra);
+
+  if (doc.captions) {
+    // The style is a look the admin chose for the video, not work done on a
+    // line, so it outlives the words it was set on.
+    doc.captions = { ...doc.captions, words: pruneBeatRows(doc.captions.words, plan, extra) };
+  }
+
+  const fields = ['footage', 'voice', 'sfx', 'overlays', 'captions'];
+
+  if (snapshot() !== before) {
+    // Built from every one of the above, so it cannot outlive them.
+    doc.timeline = null;
+    fields.push('timeline');
+  }
+
+  for (const field of fields) doc.markModified(field);
+}
+
+// Beats as plain objects, captured before they are overwritten - a Mongoose
+// subdocument array is replaced in place, so reading it afterwards would give
+// the new beats and every carry decision would trivially agree with itself.
+const beatsSnapshot = (doc) =>
+  (doc.script?.beats ?? []).map(b => (typeof b?.toObject === 'function' ? b.toObject() : b));
+
 // POST /api/clipper/scripts/:id/script/generate
 router.post('/scripts/:id/script/generate', async (req, res) => {
   try {
@@ -830,6 +874,12 @@ router.post('/scripts/:id/script/generate', async (req, res) => {
     const doc = await ClipperScript.findById(req.params.id);
     if (!doc) { const e = new Error('Script not found'); e.status = 404; throw e; }
 
+    // The subject decides what the writer is told to say and to film, so it is
+    // taken here as well as on PATCH. Picking a game and pressing Regenerate is
+    // the whole gesture, and it used to write a script for whatever subject was
+    // last saved - usually none, which is a video that shows no product.
+    if ('subject' in (req.body || {})) doc.subject = normaliseSubject(req.body.subject);
+
     const facts = await ClipperFact.find({
       factKey: { $in: doc.idea.factKeys },
       grade: { $in: ['green', 'amber'] },
@@ -838,6 +888,9 @@ router.post('/scripts/:id/script/generate', async (req, res) => {
     if (facts.length === 0) {
       const e = new Error('This idea has no usable facts attached'); e.status = 400; throw e;
     }
+
+    const previousBeats = beatsSnapshot(doc);
+    const previousOutro = doc.outro?.copy ?? '';
 
     const generated = await generateScript({
       idea: doc.idea,
@@ -860,6 +913,7 @@ router.post('/scripts/:id/script/generate', async (req, res) => {
     for (const stage of ['footage', 'voice', 'captions', 'sfx', 'overlays', 'export']) {
       if (doc.stageState.get(stage) === 'approved') doc.stageState.set(stage, 'stale');
     }
+    carryBeatWork(doc, previousBeats, previousOutro);
 
     const validation = await revalidate(doc);
     await doc.save();
@@ -877,6 +931,9 @@ router.patch('/scripts/:id', async (req, res) => {
     const doc = await ClipperScript.findById(req.params.id);
     if (!doc) { const e = new Error('Script not found'); e.status = 404; throw e; }
 
+    const previousBeats = beatsSnapshot(doc);
+    const previousOutro = doc.outro?.copy ?? '';
+
     if (typeof req.body?.title === 'string') doc.title = req.body.title;
     // Changing what the video is about changes what the validator asks of it,
     // so it is edited here rather than being fixed at creation.
@@ -891,6 +948,12 @@ router.patch('/scripts/:id', async (req, res) => {
       if (typeof req.body.outro.enabled === 'boolean') doc.outro.enabled = req.body.outro.enabled;
       if (typeof req.body.outro.copy === 'string')     doc.outro.copy    = req.body.outro.copy;
     }
+
+    // Rewriting a line by hand strands its clip and its take exactly as
+    // regenerating does. Skipped when neither was touched, so renaming a script
+    // does not throw away a built timeline.
+    const rewroteCopy = Array.isArray(req.body?.beats) || typeof req.body?.outro?.copy === 'string';
+    if (rewroteCopy) carryBeatWork(doc, previousBeats, previousOutro);
 
     const validation = await revalidate(doc);
     await doc.save();

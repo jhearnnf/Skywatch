@@ -176,8 +176,11 @@ export default function Clipper() {
     setActive(data.script)
   })
 
-  const handleGenerateScript = () => run(async () => {
-    const data = await call(`/scripts/${active._id}/script/generate`, { method: 'POST' })
+  const handleGenerateScript = ({ subject } = {}) => run(async () => {
+    const data = await call(`/scripts/${active._id}/script/generate`, {
+      method: 'POST',
+      body: JSON.stringify({ subject }),
+    })
     setActive(data.script)
     await loadScripts()
   })
