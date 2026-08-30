@@ -30,6 +30,9 @@ const path = require('path');
 const os = require('os');
 const { CURSOR_SCRIPT } = require('../capture/cursor');
 const { record } = require('../capture/recorder');
+const {
+  makeRng, createHand, digitTargets, between, HESITATE_RATE, MISS_RATE,
+} = require('../capture/humanInput');
 const { getRecipe } = require('../recipes');
 
 // 596 x 1060 is 9:16 and sits just under the 600px mobile breakpoint.
@@ -153,7 +156,41 @@ const markDocument = (page) => page.evaluate((k) => { window[k] = true; }, MARK)
 const documentSurvived = (page) =>
   page.evaluate((k) => Boolean(window[k]), MARK).catch(() => false);
 
-async function runStep(page, step, progress) {
+// The pressable controls currently on screen, with the geometry needed to aim
+// at them.
+//
+// Read from Playwright rather than from inside the page because the whole point
+// is to click at real coordinates: a bounding box is the only thing that turns
+// "this element" into "this point on screen", and a point is what produces a
+// visible cursor, a correctly-placed ripple and a real hit test.
+//
+// `label` carries the control's text so a keypad can be recognised without
+// knowing which game is on screen (see digitTargets).
+async function collectTargets(page) {
+  const handles = await page.$$('[data-demo-answer], [data-demo-start]');
+  const targets = [];
+
+  for (const handle of handles) {
+    // A box of null means not rendered; zero area means present but collapsed.
+    // Either way there is nothing to aim at, and clicking its centre would land
+    // on whatever is behind it.
+    const box = await handle.boundingBox().catch(() => null);
+    if (!box || box.width < 2 || box.height < 2) continue;
+
+    const info = await handle.evaluate((el) => ({
+      disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true',
+      answer: el.hasAttribute('data-demo-answer'),
+      label: (el.textContent || '').trim().slice(0, 8),
+    })).catch(() => null);
+    if (!info || info.disabled) continue;
+
+    targets.push({ box, label: info.label, role: info.answer ? 'answer' : 'start' });
+  }
+
+  return targets;
+}
+
+async function runStep(page, step, progress, ctx = {}) {
   switch (step.do) {
     case 'goto':
       await page.goto(`${baseUrl()}${step.path}`, { waitUntil: 'domcontentloaded' });
@@ -308,59 +345,80 @@ async function runStep(page, step, progress) {
 
       if (!interval) { await page.waitForTimeout(totalMs); break; }
 
+      const hand = ctx.hand;
+      const rng = ctx.rng ?? Math.random;
       const until = Date.now() + totalMs;
-      while (Date.now() < until) {
-        await page.waitForTimeout(interval);
-        // Failures are swallowed: a press that lands mid-navigation or on a
-        // control that has just unmounted must not end the recording.
-        await page.evaluate(({ answerSel, startSel, inputSel }) => {
-          const enabled = (el) => !el.disabled && el.getAttribute('aria-disabled') !== 'true';
-          const pick = (sel) => {
-            const all = Array.from(document.querySelectorAll(sel)).filter(enabled);
-            return all.length ? all[Math.floor(Math.random() * all.length)] : null;
-          };
 
-          // Games where the answer is typed rather than picked (ANT, Code
-          // Duplicates) leave their Submit button disabled until the box has
-          // something in it, so a driver that only clicks would film a dead
-          // form. The attribute carries a plausible value for that game.
-          //
-          // React tracks the input's value on the DOM node, so assigning to
-          // .value directly is ignored on the next render. Going through the
-          // prototype's setter and dispatching 'input' is what makes React see
-          // the change - the same trick testing libraries use.
-          const box = pick(inputSel);
-          if (box && !box.value) {
-            const proto = box instanceof window.HTMLTextAreaElement
-              ? window.HTMLTextAreaElement.prototype
-              : window.HTMLInputElement.prototype;
-            const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-            if (setter) {
-              setter.call(box, box.getAttribute('data-demo-input') || '1');
-              box.dispatchEvent(new Event('input', { bubbles: true }));
-            }
+      while (Date.now() < until) {
+        const tickStart = Date.now();
+
+        // Typed-answer games (ANT, Code Duplicates) keep Submit disabled until
+        // the box has something in it, so a driver that only clicks films a
+        // dead form. Still done in-page: this is filling a field, not pressing
+        // a control, and there is nothing for a cursor to show.
+        //
+        // React tracks the value on the DOM node, so assigning to .value is
+        // ignored on the next render. Going through the prototype setter and
+        // dispatching 'input' is what makes React see it.
+        await page.evaluate((sel) => {
+          const box = Array.from(document.querySelectorAll(sel))
+            .find(el => !el.disabled && !el.value);
+          if (!box) return;
+          const proto = box instanceof window.HTMLTextAreaElement
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+          if (!setter) return;
+          setter.call(box, box.getAttribute('data-demo-input') || '1');
+          box.dispatchEvent(new Event('input', { bubbles: true }));
+        }, '[data-demo-input]').catch(() => {});
+
+        // Measured on THIS tick, not once up front: controls mount and unmount
+        // between questions, and a box captured a second ago may belong to an
+        // element that has since gone.
+        const targets = await collectTargets(page);
+        if (targets.length === 0) { await page.waitForTimeout(interval); continue; }
+
+        const digits = digitTargets(targets);
+
+        // Ten enabled single-digit controls is a keypad with a live question -
+        // FLAG disables its numpad until one is up (`disabled={!mathsActive}`),
+        // and every other game with a keypad does the same. Answering it as a
+        // run of digits is what reads as "somebody just answered that"; the
+        // same presses spread across the cadence read as noise.
+        if (digits.length >= 10) {
+          const count = rng() < 0.55 ? 2 : 1;
+          const picks = [];
+          for (let d = 0; d < count; d++) {
+            picks.push(digits[Math.floor(rng() * digits.length)].box);
           }
-          // Games bind variously to onClick and onPointerDown, so fire the
-          // whole sequence rather than guessing which one is listening.
-          const press = (el) => {
-            const opts = { bubbles: true, cancelable: true };
-            if (typeof window.PointerEvent === 'function') {
-              el.dispatchEvent(new window.PointerEvent('pointerdown', opts));
-              el.dispatchEvent(new window.PointerEvent('pointerup', opts));
-            }
-            el.dispatchEvent(new MouseEvent('mousedown', opts));
-            el.dispatchEvent(new MouseEvent('mouseup', opts));
-            el.click();
-          };
-          // An answer if play is running; otherwise whatever restarts it, which
-          // is what stops a clip freezing on the first end-of-round screen.
-          const el = pick(answerSel) || pick(startSel);
-          if (el) press(el);
-        }, {
-          answerSel: '[data-demo-answer]',
-          startSel:  '[data-demo-start]',
-          inputSel:  '[data-demo-input]',
-        }).catch(() => {});
+          await hand.typeDigits(picks).catch(() => {});
+        } else {
+          // An answer while play is running, otherwise whatever restarts it -
+          // which is what stops a clip freezing on the first end-of-round
+          // screen it reaches.
+          const answers = targets.filter(t => t.role === 'answer');
+          const pool = answers.length ? answers : targets;
+          const pick = pool[Math.floor(rng() * pool.length)];
+
+          const miss = pick.role === 'answer' && rng() < MISS_RATE;
+
+          if (pool.length > 1 && rng() < HESITATE_RATE) {
+            let decoy = pool[Math.floor(rng() * pool.length)];
+            if (decoy === pick) decoy = pool[(pool.indexOf(pick) + 1) % pool.length];
+            await hand.hesitateThenTap(decoy.box, pick.box, { miss }).catch(() => {});
+          } else {
+            await hand.tap(pick.box, { miss }).catch(() => {});
+          }
+        }
+
+        // The cadence is what is left of the interval once the hand has done
+        // its work, jittered so presses do not land on a metronome. Travel and
+        // dwell already took time, so sleeping the full interval on top would
+        // halve the number of moves a recording gets.
+        const spent = Date.now() - tickStart;
+        const wait = Math.max(0, between([interval * 0.6, interval * 1.25], rng) - spent);
+        if (wait > 0) await page.waitForTimeout(wait);
       }
       break;
     }
@@ -419,6 +477,24 @@ module.exports = async function captureHandler({ job, progress }) {
 
     await markDocument(page);
 
+    // One hand for the whole recipe, so the pointer carries its position from
+    // step to step. A fresh hand per step would snap back to the middle of the
+    // screen before every press, which is the one movement a person never makes.
+    //
+    // Seeded from the job id: two recordings of the same recipe should not come
+    // out frame-identical, but one that misbehaved should be reproducible.
+    const inputLog = [];
+    const seed = Number(String(job._id).replace(/[^0-9]/g, '').slice(-9)) || 1;
+    const ctx = {
+      inputLog,
+      rng: makeRng(seed),
+      viewport: VIEWPORT,
+      startedAt: Date.now(),
+    };
+    ctx.hand = createHand(page, {
+      rng: ctx.rng, startedAt: ctx.startedAt, viewport: VIEWPORT, log: inputLog,
+    });
+
     // A reload mid-capture is not a small blemish: the app takes seconds to
     // boot and lands back on its first screen, so most of what follows is the
     // splash and the menu. One verified clip lost twenty-two of its thirty-six
@@ -434,7 +510,7 @@ module.exports = async function captureHandler({ job, progress }) {
           Math.round(15 + (i / recipe.steps.length) * 70),
           `${recipe.label}: step ${i + 1}/${recipe.steps.length}`,
         );
-        await runStep(page, recipe.steps[i], progress);
+        await runStep(page, recipe.steps[i], progress, ctx);
       }
       if (!(await documentSurvived(page))) throw new Error(RELOADED);
     } catch (err) {
@@ -459,6 +535,15 @@ module.exports = async function captureHandler({ job, progress }) {
       width: result.width,
       height: result.height,
       durationSec: result.durationSec,
+      // Where the hand actually went, as { atMs, x, y, kind } with x and y
+      // normalised to the viewport. Kept so the EDIT can punch in on real input
+      // rather than on a rect measured once by hand: buildTimeline turns these
+      // into a focus rect for the shot they fall inside.
+      //
+      // Deliberately not baked into the recording. A zoom in the MP4 cannot be
+      // undone, cannot be retuned, and would fight the Ken Burns move and the
+      // phone frame that are applied at render time.
+      inputLog,
     };
   } finally {
     await browser.close().catch(() => {});

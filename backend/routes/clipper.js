@@ -180,7 +180,16 @@ async function applyJobResult(job) {
             ? job.result.frames / job.result.fps : null,
           licence: 'Own content (SkyWatch screen recording)',
           sourceUrl: null,
+          // Which game this is footage of. Stored on the clip so a beat can say
+          // what it is holding without a lookup, and so a reused recording can
+          // be told apart from one filmed for this beat.
+          recipeId: job.result.recipeId || job.payload?.recipeId || '',
         },
+        // Where the bot's hand went during this recording, in clip time. Kept
+        // beside the clip rather than inside `chosen` because it describes the
+        // recording session, not the file - a re-record replaces both, and a
+        // clip picked from stock has no such thing.
+        inputLog: Array.isArray(job.result.inputLog) ? job.result.inputLog : [],
       };
       script.footage = footage;
       script.markModified('footage');
