@@ -17,6 +17,7 @@ const db      = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 const ChatConversation = require('../../models/ChatConversation');
 const ChatMessage      = require('../../models/ChatMessage');
+const User             = require('../../models/User');
 
 // Mongoose builds indexes in the background, so a fresh in-memory database can
 // race the first write. server.js awaits the same syncIndexes() via
@@ -253,6 +254,79 @@ describe('sender profiles (chat avatars)', () => {
     // The close system message carries the user's id, but a system row must not
     // put anyone in the sender map on its own.
     expect(res.body.data.senders).toEqual({});
+  });
+});
+
+describe('a sender who changes their display name', () => {
+  // The message keeps the send-time snapshot as the moderation record; every
+  // surface a member reads is named from the live account instead, so a rename
+  // reaches everything that person has already posted.
+  const post = (id, cookie, body, extra = {}) =>
+    request(app).post(`/api/chat/conversations/${id}/messages`)
+      .set('Cookie', cookie).send({ body, ...extra });
+
+  it('names their old messages, quotes and rail preview by the new name', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control' });
+    const user  = await createUser({ displayName: 'Falcon' });
+    const other = await createUser({ displayName: 'Viper' });
+
+    const made = await createChannel(authCookie(admin._id), { name: 'General' });
+    const id = made.body.data.channel._id;
+
+    const first = await post(id, authCookie(user._id), 'hello all');
+    await post(id, authCookie(other._id), 'welcome', { replyToId: first.body.data.message._id });
+    await post(id, authCookie(user._id), 'thanks');
+
+    await User.findByIdAndUpdate(user._id, {
+      displayName: 'Nighthawk', displayNameLower: 'nighthawk',
+    });
+
+    const res = await request(app).get(`/api/chat/conversations/${id}/messages`)
+      .set('Cookie', authCookie(other._id));
+
+    // Live, in the sender map the client names every message from.
+    expect(res.body.data.senders[String(user._id)].displayName).toBe('Nighthawk');
+    // The quote carries the author's id, so the reply header can be named live
+    // too rather than from its snapshot.
+    const reply = res.body.data.messages.find(m => m.replyTo);
+    expect(reply.replyTo.userId).toBe(String(user._id));
+    expect(reply.replyTo.displayName).toBe('Falcon');
+
+    // The rail line reads "Name: message", and that name is resolved live.
+    const overview = await request(app).get('/api/chat/overview')
+      .set('Cookie', authCookie(other._id));
+    const channel = overview.body.data.channels.find(c => c._id === String(id));
+    expect(channel.preview.senderDisplayName).toBe('Nighthawk');
+  });
+
+  it('keeps the send-time name on the message itself, as the moderation record', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control' });
+    const user  = await createUser({ displayName: 'Falcon' });
+
+    const made = await createChannel(authCookie(admin._id), { name: 'General' });
+    const id = made.body.data.channel._id;
+    await post(id, authCookie(user._id), 'hello all');
+
+    await User.findByIdAndUpdate(user._id, {
+      displayName: 'Nighthawk', displayNameLower: 'nighthawk',
+    });
+
+    const stored = await ChatMessage.findOne({ senderUserId: user._id }).lean();
+    expect(stored.senderDisplayName).toBe('Falcon');
+  });
+
+  it('still shows one support identity in a preview, whoever replied', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control' });
+    const user  = await createUser({ displayName: 'Falcon' });
+    const cu = authCookie(user._id);
+
+    const start = await request(app).post('/api/chat/conversations').set('Cookie', cu);
+    const id = start.body.data.conversation._id;
+    await post(id, cu, 'help please');
+    await post(id, authCookie(admin._id), 'on it');
+
+    const overview = await request(app).get('/api/chat/overview').set('Cookie', cu);
+    expect(overview.body.data.support.preview.senderDisplayName).toBe('SkyWatch Support');
   });
 });
 

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useAuth } from '../../../context/AuthContext'
 import Overlay from '../../../components/ui/Overlay'
+import { senderName } from '../senderName'
 
 // Reports go to the admins only — they land in Admin › Intel › Reports tagged
 // as chat moderation. Nothing is shown to the reported user, and the report is
 // not visible to anyone else.
-export default function ReportMessageDialog({ message, onClose, onReported }) {
+export default function ReportMessageDialog({ message, senders, onClose, onReported }) {
   const { API, apiFetch } = useAuth()
   const [reason, setReason] = useState('')
   const [busy,   setBusy]   = useState(false)
@@ -40,7 +41,7 @@ export default function ReportMessageDialog({ message, onClose, onReported }) {
 
         <div className="rounded-xl bg-slate-100 border border-slate-200 px-3 py-2 mb-3">
           <p className="text-[10px] font-semibold text-slate-500 mb-0.5">
-            {message.senderDisplayName || 'Unknown agent'}
+            {senderName(message.senderUserId, senders, message.senderDisplayName) || 'Unknown agent'}
           </p>
           <p className="text-xs text-slate-700 whitespace-pre-wrap break-words line-clamp-4">
             {message.body}

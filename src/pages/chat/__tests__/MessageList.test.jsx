@@ -203,6 +203,45 @@ describe('MessageList — replies', () => {
   })
 })
 
+describe('MessageList — a sender who has been renamed', () => {
+  // The name on the message is the send-time snapshot; the name in `senders` is
+  // live. Renaming has to reach old messages, the same way changing a badge
+  // already does.
+  const RENAMED = { ...SENDERS, u1: { ...SENDERS.u1, displayName: 'Nighthawk' } }
+
+  it('names the author by their current display name, not the stored one', () => {
+    renderList([msg('u1', 'hello')], { senders: RENAMED })
+    expect(screen.getByText('Nighthawk')).toBeTruthy()
+    expect(screen.queryByText('Falcon')).toBeNull()
+  })
+
+  it('renames them in a quoted reply too', () => {
+    renderList([
+      msg('u2', 'answering', {
+        replyTo: { messageId: 'm-orig', userId: 'u1', displayName: 'Falcon', excerpt: 'original' },
+      }),
+    ], { senders: RENAMED })
+    expect(screen.getByText('Nighthawk')).toBeTruthy()
+    expect(screen.queryByText('Falcon')).toBeNull()
+  })
+
+  it('falls back to the snapshot when the author no longer has an account', () => {
+    // The delete cascade nulls senderUserId and keeps the name, so the snapshot
+    // is the only thing left to render.
+    renderList([msg('u1', 'hello', { senderUserId: null, senderDisplayName: 'Falcon' })])
+    expect(screen.getByText('Falcon')).toBeTruthy()
+  })
+
+  it('still shows one support identity rather than the admin behind it', () => {
+    renderList(
+      [msg('u1', 'Hi, how can I help?', { senderRole: 'admin', senderDisplayName: 'SkyWatch Support' })],
+      { conversationType: 'support', senders: RENAMED },
+    )
+    expect(screen.getAllByTitle('SkyWatch Support')).toHaveLength(1)
+    expect(screen.queryByText('Nighthawk')).toBeNull()
+  })
+})
+
 describe('MessageList — seen by', () => {
   // `mine` is decided by currentUserId, so 'me' is the sender under test.
   const mine = (body, extra = {}) => msg('u1', body, { senderUserId: 'me', ...extra })

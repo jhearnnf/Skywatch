@@ -4,6 +4,7 @@ import { formatTime, formatStamp, SUPPORT_LABEL } from '../format'
 import { nameColour } from '../nameColour'
 import { REACTION_EMOJI } from '../reactionEmoji'
 import { splitMentions, mentionsMe } from '../mentions'
+import { senderName } from '../senderName'
 import { OnlineDot } from './PresenceStrip'
 import CbatPassedBadge from '../../../components/CbatPassedBadge'
 
@@ -186,8 +187,9 @@ function Avatar({ profile, show, support, online = false }) {
 
 // The quoted parent above a reply. Renders from the snapshot stored on the
 // message, so it still shows when the parent has been removed or is simply not
-// in the loaded page.
-function ReplyQuote({ replyTo, onJump }) {
+// in the loaded page — with the author's CURRENT name over the top of it where
+// they still have an account (see ../senderName).
+function ReplyQuote({ replyTo, senders, onJump }) {
   return (
     <button
       type="button"
@@ -196,7 +198,7 @@ function ReplyQuote({ replyTo, onJump }) {
     >
       <span className="text-slate-400 text-[10px] shrink-0">↰</span>
       <span className="text-[11px] font-semibold text-slate-500 shrink-0">
-        {replyTo.displayName || 'Unknown agent'}
+        {senderName(replyTo.userId, senders, replyTo.displayName) || 'Unknown agent'}
       </span>
       <span className="text-[11px] text-slate-400 truncate group-hover/quote:text-slate-500">
         {replyTo.excerpt || 'message unavailable'}
@@ -274,7 +276,7 @@ function MessageRow({
   const m = message
   const name = isSupportIdentity
     ? SUPPORT_LABEL
-    : (m.senderDisplayName || 'Unknown agent')
+    : (senderName(m.senderUserId, senders, m.senderDisplayName) || 'Unknown agent')
   const colour = isSupportIdentity ? '#94a3b8' : nameColour(m.senderUserId)
 
   const canOpenUser = Boolean(onOpenUser) && !mine && m.senderUserId && !isSupportIdentity
@@ -325,7 +327,7 @@ function MessageRow({
       <Avatar profile={profile} show={startsRun} support={isSupportIdentity} online={online} />
 
       <div className="min-w-0 flex-1 py-0.5">
-        {m.replyTo && <ReplyQuote replyTo={m.replyTo} onJump={onJump} />}
+        {m.replyTo && <ReplyQuote replyTo={m.replyTo} senders={senders} onJump={onJump} />}
 
         {startsRun && (
           <div className="flex items-baseline gap-2">

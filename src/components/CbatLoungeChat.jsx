@@ -6,6 +6,7 @@ import { NATIVE_APP } from '../utils/appMode'
 import { nameColour } from '../pages/chat/nameColour'
 import { formatTime } from '../pages/chat/format'
 import { splitMentions, activeMention } from '../pages/chat/mentions'
+import { senderName } from '../pages/chat/senderName'
 import { REACTION_EMOJI } from '../pages/chat/reactionEmoji'
 import DisplayNameGate from '../pages/chat/components/DisplayNameGate'
 import SeenByDialog from '../pages/chat/components/SeenByDialog'
@@ -57,12 +58,15 @@ function ActivityStrip({ activity }) {
 
 // What you are answering, above the message. The quote is the snapshot the
 // server took at send time, so it still reads correctly when the parent has
-// scrolled out of the 40-message window this panel holds.
-function ReplyQuote({ replyTo }) {
+// scrolled out of the 40-message window this panel holds — named live where
+// the author still has an account (see ../pages/chat/senderName).
+function ReplyQuote({ replyTo, senders }) {
   return (
     <span className="flex items-center gap-1 text-[10px] text-slate-500 min-w-0">
       <span className="shrink-0" aria-hidden="true">↰</span>
-      <span className="font-semibold shrink-0">{replyTo.displayName || 'Unknown agent'}</span>
+      <span className="font-semibold shrink-0">
+        {senderName(replyTo.userId, senders, replyTo.displayName) || 'Unknown agent'}
+      </span>
       <span className="truncate">{replyTo.excerpt || 'message unavailable'}</span>
     </span>
   )
@@ -483,7 +487,11 @@ export default function CbatLoungeChat({ open, onToggle }) {
           </p>
         ) : (
           messages.map(m => {
-            const isBot   = Boolean(lounge?.botName) && m.senderDisplayName === lounge.botName
+            const prof    = senders[String(m.senderUserId ?? '')]
+            const name     = senderName(m.senderUserId, senders, m.senderDisplayName) || 'Unknown agent'
+            const isBot   = prof
+              ? Boolean(prof.isBot)
+              : Boolean(lounge?.botName) && m.senderDisplayName === lounge.botName
             const mineTag = (m.mentions ?? []).some(id => String(id) === String(user?._id))
             const acting  = canPost && !m.deleted
             const mine    = String(m.senderUserId ?? '') === String(user?._id)
@@ -499,13 +507,13 @@ export default function CbatLoungeChat({ open, onToggle }) {
                   mineTag ? 'bg-brand-600/10 border-l-2 border-l-brand-400 -mx-1 px-1 rounded' : ''
                 }`}
               >
-                {m.replyTo && <ReplyQuote replyTo={m.replyTo} />}
+                {m.replyTo && <ReplyQuote replyTo={m.replyTo} senders={senders} />}
                 <p title={formatTime(m.createdAt)}>
                   <span
                     className="font-bold"
                     style={{ color: isBot ? '#5baaff' : nameColour(m.senderUserId) }}
                   >
-                    {m.senderDisplayName || 'Unknown agent'}
+                    {name}
                   </span>
                   {isBot && (
                     <span className="ml-1 px-1 py-px rounded bg-brand-600/15 text-brand-600 text-[8px] font-extrabold uppercase tracking-wide align-middle">
@@ -593,7 +601,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
             <div className="flex items-center gap-1.5 px-2 pt-1.5 text-[10px] min-w-0">
               <span className="text-slate-500 shrink-0">Replying to</span>
               <span className="font-semibold text-slate-600 shrink-0">
-                {replyTo.senderDisplayName || 'Unknown agent'}
+                {senderName(replyTo.senderUserId, senders, replyTo.senderDisplayName) || 'Unknown agent'}
               </span>
               <span className="text-slate-500 truncate">{replyTo.body}</span>
               <button

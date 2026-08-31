@@ -449,6 +449,7 @@ export default function ChatThread({
           busy={busy}
           onSend={handleSend}
           replyTo={replyTo}
+          senders={senders}
           onCancelReply={() => setReplyTo(null)}
           // No @ picker in support: it is a private thread with staff, so there
           // is nobody to mention and no bot to summon.
@@ -469,6 +470,7 @@ export default function ChatThread({
       {reporting && (
         <ReportMessageDialog
           message={reporting}
+          senders={senders}
           onClose={() => setReporting(null)}
           onReported={() => { setReporting(null); setReportDone(true) }}
         />

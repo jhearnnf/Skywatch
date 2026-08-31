@@ -365,6 +365,7 @@ async function previewMap(conversationIds) {
       body:              { $first: '$body' },
       createdAt:         { $first: '$createdAt' },
       senderRole:        { $first: '$senderRole' },
+      senderUserId:      { $first: '$senderUserId' },
       senderDisplayName: { $first: '$senderDisplayName' },
     } },
   ]);
@@ -413,6 +414,10 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
       })),
     replyTo:           m.replyTo?.messageId ? {
       messageId:   m.replyTo.messageId,
+      // Who wrote the quoted message, so the client can name them by whatever
+      // they are called NOW. displayName is the send-time snapshot behind it —
+      // still what renders when the author's account is gone.
+      userId:      m.replyTo.userId ?? null,
       displayName: m.replyTo.displayName ?? null,
       excerpt:     m.replyTo.excerpt ?? null,
     } : null,
@@ -447,6 +452,14 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
     // against the body, so without their name in this map the highlight would
     // silently not happen for anyone who has not spoken in the thread.
     ...messages.flatMap(m => (m.mentions ?? []).map(String)),
+    // And the authors of quoted messages, so a reply header names them as they
+    // are called now. Skipped entirely while admins are collapsed: the quoted
+    // author's role is not on the snapshot, so adding them could put a staff
+    // member's own profile into a support thread that is meant to show one
+    // "SkyWatch Support" identity.
+    ...(collapseAdmins
+      ? []
+      : messages.map(m => m.replyTo?.userId).filter(Boolean).map(String)),
   ])];
   if (!ids.length) return {};
 
@@ -517,6 +530,19 @@ router.get('/overview', async (req, res) => {
       ChatGuide.find({ isHidden: false }).sort({ order: 1, title: 1 }).lean(),
     ]);
 
+    // Current names for whoever wrote each preview. The rail line is "Name:
+    // message", and reading it off the send-time snapshot left the list calling
+    // someone by a name they had already changed. One small query for the
+    // handful of distinct senders across the whole rail.
+    const previewNames = await (async () => {
+      const senderIds = [...new Set(
+        [...previews.values()].map(p => p.senderUserId).filter(Boolean).map(String),
+      )];
+      if (!senderIds.length) return new Map();
+      const users = await User.find({ _id: { $in: senderIds } }).select('displayName').lean();
+      return new Map(users.map(u => [String(u._id), u.displayName ?? null]));
+    })();
+
     const decorate = (c) => {
       const preview = previews.get(String(c._id));
       return {
@@ -534,7 +560,7 @@ router.get('/overview', async (req, res) => {
             senderDisplayName:
                 c.type === 'support' && preview.senderRole === 'admin'
                   ? SUPPORT_LABEL
-                  : preview.senderDisplayName,
+                  : (previewNames.get(String(preview.senderUserId)) || preview.senderDisplayName),
             createdAt: preview.createdAt,
           }
           : null,

@@ -1,12 +1,16 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import MentionPicker from './MentionPicker'
 import { activeMention } from '../mentions'
+import { senderName } from '../senderName'
 
 // Roughly eight lines of the composer's text size, after which it scrolls.
 const MAX_HEIGHT = 160
 
 export default function ComposeBox({
   disabled, busy, onSend, placeholder, replyTo, onCancelReply,
+  // Live sender profiles for the thread, so "Replying to X" uses the name the
+  // author goes by now rather than the one stored on the message.
+  senders,
   // Enables the @ autocomplete. Absent in support threads, where there is
   // nobody to mention.
   mentionConversationId,
@@ -66,7 +70,7 @@ export default function ComposeBox({
         <div className="flex items-center gap-2 px-3 pt-2 text-[11px]">
           <span className="text-slate-400 shrink-0">Replying to</span>
           <span className="font-semibold text-slate-600 shrink-0">
-            {replyTo.senderDisplayName || 'Unknown agent'}
+            {senderName(replyTo.senderUserId, senders, replyTo.senderDisplayName) || 'Unknown agent'}
           </span>
           <span className="text-slate-400 truncate">{replyTo.body}</span>
           <button

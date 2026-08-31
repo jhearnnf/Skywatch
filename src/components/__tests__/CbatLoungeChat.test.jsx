@@ -579,6 +579,43 @@ describe('mentions', () => {
 
 // Same rule as the full room, and enforced again by the endpoint: your own
 // messages, and admins on anyone's. Not admin-only.
+describe('a sender who has been renamed', () => {
+  // Same rule as the full room: the name comes from the live account, with the
+  // message's send-time snapshot only as the fallback.
+  const RENAMED = { u2: { _id: 'u2', displayName: 'Nighthawk' } }
+
+  it('names an old message by the current name on the account', async () => {
+    stubFetch({ messages: MESSAGES, senders: RENAMED })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.getByText('Nighthawk')).toBeTruthy()
+    expect(screen.queryByText('Viper')).toBeNull()
+  })
+
+  it('renames the author of a quoted message too', async () => {
+    const reply = {
+      _id: 'm2', senderUserId: 'u3', senderDisplayName: 'Hawk',
+      body: 'yep, standing by', createdAt: new Date().toISOString(), mentions: [],
+      replyTo: { messageId: 'm1', userId: 'u2', displayName: 'Viper', excerpt: 'anyone about?' },
+    }
+    stubFetch({ messages: [reply], senders: RENAMED })
+    renderOpen()
+    await screen.findByText('yep, standing by')
+    expect(screen.getByText('Nighthawk')).toBeTruthy()
+  })
+
+  it('still marks the bot as a bot', async () => {
+    const botMsg = {
+      _id: 'm4', senderUserId: 'bot1', senderDisplayName: 'Guide Bot',
+      body: 'ask me anything', createdAt: new Date().toISOString(), mentions: [],
+    }
+    stubFetch({ messages: [botMsg], senders: { bot1: { _id: 'bot1', displayName: 'Guide Bot', isBot: true } } })
+    renderOpen()
+    await screen.findByText('ask me anything')
+    expect(screen.getByText('Bot')).toBeTruthy()
+  })
+})
+
 describe('seen by', () => {
   const MINE   = { _id: 'm9', senderUserId: 'u1', senderDisplayName: 'Falcon', body: 'on station', createdAt: new Date().toISOString(), mentions: [] }
   const THEIRS = MESSAGES[0]
