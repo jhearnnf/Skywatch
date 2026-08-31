@@ -39,6 +39,23 @@ export default function RenderPanel({ script, timeline, job, agentOnline, mediaB
   const playable = useMemo(() => previewTimeline(timeline, mediaBaseUrl), [timeline, mediaBaseUrl])
   const unreachableCaptures = unplayableCaptureCount(timeline, mediaBaseUrl)
 
+  // Stages that shipped and then quietly went unused.
+  //
+  // A measured render went out with no music bed and not one stinger in 41
+  // seconds - both stages exist, both were simply never opened for that script,
+  // and nothing on the way to the render button said so. Counted off the built
+  // timeline rather than off the script, because a beat can still get a sound
+  // from the writer's own cue when the SFX stage was never touched.
+  const missing = useMemo(() => {
+    const beats = timeline?.beats ?? []
+    if (!beats.length) return []
+
+    const out = []
+    if (!timeline?.music?.src) out.push('a music bed')
+    if (!beats.some(b => (b.sfx?.length ?? 0) > 0)) out.push('any sound effects')
+    return out
+  }, [timeline])
+
   // Taken from the newest render rather than hard-coded: the agent decides
   // where its output goes, and a path duplicated here would drift from it.
   const renderFolder = renders[0]?.localPath?.replace(/[\\/][^\\/]*$/, '') || null
@@ -77,6 +94,14 @@ export default function RenderPanel({ script, timeline, job, agentOnline, mediaB
           />
           SkyWatch mark - top left, names the domain once when the app appears
         </label>
+
+        {missing.length > 0 && (
+          <p className="mt-2 text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-2.5 py-1.5">
+            This video has no {missing.join(' and no ')}. Silence under the narration is the
+            single biggest thing separating a short from a finished one, so it is worth a pass
+            through the {missing.length > 1 ? 'Music and Sound FX tabs' : missing[0] === 'a music bed' ? 'Music tab' : 'Sound FX tab'} before rendering.
+          </p>
+        )}
 
         {unreachableCaptures > 0 && (
           <p className="mt-2 text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-2.5 py-1.5">

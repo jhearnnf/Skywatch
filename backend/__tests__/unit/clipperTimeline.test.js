@@ -463,7 +463,11 @@ describe('beat shots', () => {
 
   it('alternates the move so two shots do not read as one long push', () => {
     const moves = buildTimeline(shotScript()).beats[1].shots.map(s => s.move);
-    expect(moves).toEqual(['in', 'out', 'in'].slice(0, moves.length));
+    // Counted from the beat's own direction, so beat 1 starts on 'out'. The
+    // alternation has to survive the beat boundary as well as the cuts inside
+    // it - two beats that both push in read as one move however they are cut.
+    expect(moves).toEqual(['out', 'in', 'out'].slice(0, moves.length));
+    expect(new Set(moves).size).toBe(Math.min(2, moves.length));
   });
 
   // The whole point of the conservative rule: a six-second beat over a
@@ -497,7 +501,7 @@ describe('beat shots', () => {
       footage: { b1: { chosen: null }, b2: { chosen: null } },
     }));
     expect(t.beats[1].shots).toEqual([
-      { videoUrl: null, trimInMs: 0, durationMs: 6000, move: 'in', focus: null, framed: false },
+      { videoUrl: null, trimInMs: 0, durationMs: 6000, move: 'out', focus: null, framed: false },
     ]);
   });
 
@@ -1014,5 +1018,45 @@ describe('branding', () => {
   it('has nothing to brand when there are no beats', () => {
     expect(buildTimeline({ script: { beats: [] }, outro: { enabled: false, copy: '' } }).branding)
       .toBeNull();
+  });
+});
+
+/**
+ * Three consecutive capture beats opened a measured render - different
+ * recordings, different in-points - and played as one static 17-second shot.
+ * Every DPT recording is structurally the same picture, and all three pushed
+ * the same way, so scene detection found no cut in them at all. A capture is
+ * never split, so the direction of the move is the only cut-like event a beat
+ * boundary can carry.
+ */
+describe('move direction across beats', () => {
+  const captureBeats = (n) => ({
+    script: {
+      beats: Array.from({ length: n }, (_, i) => ({
+        id: `b${i + 1}`, text: `${i + 1}.`,
+        visual: { kind: 'capture', recipeId: 'play-dpt' },
+      })),
+    },
+    footage: Object.fromEntries(Array.from({ length: n }, (_, i) => [
+      `b${i + 1}`,
+      { chosen: { provider: 'capture', playbackUrl: `cap${i}.mp4`, durationSec: 84 },
+        trim: { inMs: i * 5000 } },
+    ])),
+    voice: { lines: Array.from({ length: n }, (_, i) => ({
+      beatId: `b${i + 1}`, durationMs: 3000, startMs: i * 3000,
+    })) },
+    outro: { enabled: false, copy: '' },
+  });
+
+  it('turns the move around at every beat boundary', () => {
+    const t = buildTimeline(captureBeats(4));
+    expect(t.beats.map(b => b.shots[0].move)).toEqual(['in', 'out', 'in', 'out']);
+  });
+
+  // The reason the boundary needs it: these beats cannot be cut into shots at
+  // all, so without the change of direction nothing at all happens at the join.
+  it('still refuses to split a capture', () => {
+    const t = buildTimeline(captureBeats(3));
+    expect(t.beats.every(b => b.shots.length === 1)).toBe(true);
   });
 });

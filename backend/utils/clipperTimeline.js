@@ -240,9 +240,9 @@ function snapLengths(lens, startMs, periodMs) {
 function buildShots({
   videoUrl, trimInMs, durationMs, clipDurationSec,
   focus = null, framed = false, splittable = true, first = false,
-  startMs = 0, beatPeriodMs = 0,
+  startMs = 0, beatPeriodMs = 0, move = 'in',
 }) {
-  const single = [{ videoUrl, trimInMs, durationMs, move: 'in', focus, framed }];
+  const single = [{ videoUrl, trimInMs, durationMs, move, focus, framed }];
   if (!videoUrl || !splittable) return single;
 
   // Without a clip length there is no telling whether a later in-point has
@@ -271,8 +271,10 @@ function buildShots({
       trimInMs: inMs,
       durationMs: lens[i],
       // Alternating the move stops consecutive shots reading as one long push,
-      // and gives the cut a change of direction to land on.
-      move: i % 2 === 0 ? 'in' : 'out',
+      // and gives the cut a change of direction to land on. Counted from the
+      // beat's own direction rather than always from 'in', so the alternation
+      // carries across the beat boundary instead of restarting at it.
+      move: (i + (move === 'out' ? 1 : 0)) % 2 === 0 ? 'in' : 'out',
       focus,
       framed,
     });
@@ -418,6 +420,18 @@ function buildTimeline(script) {
       first: index === 0,
       startMs: cursor,
       beatPeriodMs,
+      // Alternate the direction of the move from one beat to the next, for the
+      // reason it is already alternated between shots inside a beat: two
+      // push-ins back to back read as one long move rather than as a cut.
+      //
+      // A measured render made this the difference between a cut and no cut at
+      // all. Three consecutive capture beats opened that video, all of them
+      // different recordings at different in-points - but every DPT recording
+      // is structurally the same picture, and all three pushed the same way, so
+      // 17 seconds played as one static shot. Scene detection found no cut in
+      // them either. A capture cannot be split (see `splittable` above), so the
+      // direction change is the only cut-like event a beat boundary can carry.
+      move: index % 2 === 0 ? 'in' : 'out',
     });
 
     const isTitleCard = index === 0 && String(beat.text || '').trim().length <= HOOK_MAX_CHARS;

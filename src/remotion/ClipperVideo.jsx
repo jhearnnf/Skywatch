@@ -152,18 +152,27 @@ function Overlay({ overlay, durationInFrames }) {
         transform: `translateY(${y}px) scale(${scale})`,
       }}
     >
+      {/* Type on the picture, not a card on the picture.
+          The first version was a translucent slab with a 22px radius and a 3px
+          brand border - the app's own callout component, moved to video. On a
+          measured render it read as a browser notification sitting on top of
+          the footage, which is the one thing a short-form overlay must not do.
+          Nothing native to the format draws a bordered box; it draws heavy type
+          with a stroke, which is also what makes it legible over anything.
+          Same stroke and weight as the captions and the title card, so all the
+          text in the video reads as one channel. Position, not decoration, is
+          what separates a callout from a caption: this one owns the top. */}
       <span
         style={{
           display: 'inline-block',
-          padding: '18px 34px',
-          borderRadius: 22,
-          background: overlay.background ?? 'rgba(6,16,30,0.82)',
-          border: `3px solid ${overlay.borderColor ?? BRAND}`,
-          color: overlay.color ?? INK,
+          color: overlay.color ?? '#fff',
           fontFamily: overlay.fontFamily ?? 'Inter, Arial, sans-serif',
-          fontWeight: 800,
-          fontSize: overlay.fontSize ?? 58,
-          lineHeight: 1.2,
+          fontWeight: 900,
+          fontSize: overlay.fontSize ?? 62,
+          lineHeight: 1.15,
+          WebkitTextStroke: `${overlay.strokeWidth ?? 11}px ${overlay.strokeColor ?? '#000'}`,
+          paintOrder: 'stroke fill',
+          textShadow: '0 6px 24px rgba(0,0,0,0.65)',
         }}
       >
         {overlay.text}
@@ -554,6 +563,19 @@ function EndCard({ text, videoUrl, trimInMs, durationInFrames }) {
         }}
       >
         <div style={{ textAlign: 'center' }}>
+          {/* The mark, always — the domain line below it is suppressed when the
+              outro says the domain out loud, and without this the last four
+              seconds of the video carried no branding at all. A measured render
+              ended on text over a dark rectangle: the one card that exists to
+              be remembered, with nothing on it to remember. */}
+          <div style={{
+            display: 'flex', justifyContent: 'center', marginBottom: 44,
+            transform: `scale(${interpolate(enter, [0, 1], [0.8, 1])})`,
+            filter: 'drop-shadow(0 3px 14px rgba(0,0,0,0.7))',
+          }}>
+            <BrandMark size={112} />
+          </div>
+
           <p style={{
             color: INK, fontFamily: 'Inter, Arial, sans-serif', fontWeight: 900,
             fontSize: 68, lineHeight: 1.25, margin: 0,
@@ -614,7 +636,7 @@ const BUG_SIZE = 60
 // Not full strength once it has settled. The mark is meant to be noticed once
 // and then ignored; at full opacity it competes with the footage for the whole
 // video, which is the thing a watermark usually gets wrong.
-const BUG_OPACITY = 0.68
+const BUG_OPACITY = 0.8
 
 const REVEAL_IN = 12      // frames to arrive
 const REVEAL_HOLD = 36    // frames the domain stays up — 1.2s, one glance

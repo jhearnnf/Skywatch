@@ -26,7 +26,7 @@ export default function OverlayEditor({ script, onSave, onApprove, busy }) {
       .map(b => {
         const existing = saved.find(o => o.beatId === b.id)
         if (existing) return existing
-        if (b.overlay) return { beatId: b.id, text: b.overlay, animation: 'pop', topPct: 16, fontSize: 58, color: '#ddeaf8', borderColor: '#5baaff' }
+        if (b.overlay) return { beatId: b.id, text: b.overlay, animation: 'pop', topPct: 16, fontSize: 62, color: '#ffffff' }
         return null
       })
       .filter(Boolean)
@@ -40,7 +40,7 @@ export default function OverlayEditor({ script, onSave, onApprove, busy }) {
   }
 
   const add = (beatId) => {
-    setRows(rs => [...rs, { beatId, text: '', animation: 'pop', topPct: 16, fontSize: 58, color: '#ddeaf8', borderColor: '#5baaff' }])
+    setRows(rs => [...rs, { beatId, text: '', animation: 'pop', topPct: 16, fontSize: 62, color: '#ffffff' }])
     setDirty(true)
   }
 
@@ -126,9 +126,9 @@ export default function OverlayEditor({ script, onSave, onApprove, busy }) {
                     className="w-20 px-2 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-800"
                   />
                   <input
-                    type="color" value={row.borderColor}
-                    onChange={e => update(b.id, { borderColor: e.target.value })}
-                    title="border colour"
+                    type="color" value={row.color ?? '#ffffff'}
+                    onChange={e => update(b.id, { color: e.target.value })}
+                    title="text colour"
                     className="w-12 h-8 rounded-lg bg-slate-100 border border-slate-200"
                   />
                 </div>
