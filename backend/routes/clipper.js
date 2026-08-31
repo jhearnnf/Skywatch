@@ -1797,7 +1797,23 @@ router.post('/renders/reveal', async (req, res) => {
     // insists on the single `/select,<path>` token — but that is still one
     // argv entry, not shell syntax.
     if (process.platform === 'win32') {
-      childProcess.spawn('explorer.exe', [`/select,${wanted}`], { detached: true, stdio: 'ignore' }).unref();
+      // explorer.exe parses its own command line rather than taking an argv,
+      // and it will not accept `/select,<path>` quoted as one token - which is
+      // exactly what Node's automatic quoting produces the moment the path
+      // contains a space. It did not while renders lived in the temp folder;
+      // it does now they live under "Cursor Projects", and the button silently
+      // stopped opening anything.
+      //
+      // The quotes have to go around the PATH alone, so build the string and
+      // tell Node not to re-quote it. Still no shell: verbatim arguments go
+      // straight to CreateProcess, so there is nothing to interpret a
+      // metacharacter. The one thing that could break out of the quoting is a
+      // double quote in the path, and Windows does not permit one in a
+      // filename - on top of which this path has already been checked to sit
+      // inside RENDER_DIR and to exist.
+      childProcess.spawn('explorer.exe', [`/select,"${wanted}"`], {
+        detached: true, stdio: 'ignore', windowsVerbatimArguments: true,
+      }).unref();
     } else if (process.platform === 'darwin') {
       childProcess.spawn('open', ['-R', wanted], { detached: true, stdio: 'ignore' }).unref();
     } else {
