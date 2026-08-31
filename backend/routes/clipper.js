@@ -1756,10 +1756,16 @@ router.post('/scripts/:id/render', async (req, res) => {
 });
 
 // Where the agent writes finished MP4s. Mirrors OUT_DIR in
-// clipper-agent/handlers/render.js — both derive it from the OS temp dir, so
-// they agree without the backend importing agent code it cannot rely on being
-// present (Railway ships backend/ alone).
-const RENDER_DIR = path.join(os.tmpdir(), 'skywatch-clipper', 'renders');
+// clipper-agent/handlers/render.js — both read the same variable and fall back
+// to the same temp path, so they agree without the backend importing agent code
+// it cannot rely on being present (Railway ships backend/ alone).
+//
+// This is the allowlist for the reveal endpoint below, which is why it has to
+// agree with the agent exactly: set CLIPPER_RENDER_DIR on one side only and
+// every "Show in folder" is refused as being outside the renders folder.
+const RENDER_DIR = process.env.CLIPPER_RENDER_DIR
+  ? path.resolve(process.env.CLIPPER_RENDER_DIR)
+  : path.join(os.tmpdir(), 'skywatch-clipper', 'renders');
 
 // POST /api/clipper/renders/reveal   { path }
 //
