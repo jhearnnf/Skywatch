@@ -437,11 +437,6 @@ router.get('/snapshot', async (_req, res) => {
       });
     }
 
-    const dailyDau = emptyDailyBuckets(sparkStart, now).map(b => ({
-      date: b.date,
-      count: dailyMap.get(b.date)?.size ?? 0,
-    }));
-
     // DAU/WAU/MAU from event streams.
     const todayKey = ymd(startOfUtcDay(now));
     const dau = dailyMap.get(todayKey)?.size ?? 0;
@@ -474,7 +469,6 @@ router.get('/snapshot', async (_req, res) => {
       status: 'success',
       data: {
         headlines: { dau, wau, mau, totalUsers },
-        dailyDau,
         signupSource,
         subscription,
         testUsage,
@@ -483,6 +477,39 @@ router.get('/snapshot', async (_req, res) => {
     });
   } catch (err) {
     console.error('[reports/snapshot] error:', err);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// ── GET /api/admin/reports/dau?days=7|30|90|365 ───────────────────────────────────
+// The Daily Active Users series on its own timeframe. Split out of /snapshot so
+// changing the DAU range doesn't re-run the (much heavier) whole-snapshot query
+// — and so it stays independent of the Time window picker, which drives the
+// engagement sections rather than this chart.
+
+const DAU_RANGES = [7, 30, 90, 365];
+const DAU_DEFAULT_DAYS = 30;
+
+function dauDays(raw) {
+  const n = Number(raw);
+  return DAU_RANGES.includes(n) ? n : DAU_DEFAULT_DAYS;
+}
+
+router.get('/dau', async (req, res) => {
+  try {
+    const days = dauDays(req.query.days);
+    const now = new Date();
+    const start = new Date(now.getTime() - (days - 1) * DAY_MS); // inclusive of today
+
+    const dailyMap = mergeDailyDistinctUsers(await activityStreams(start));
+    const dailyDau = emptyDailyBuckets(start, now).map(b => ({
+      date: b.date,
+      count: dailyMap.get(b.date)?.size ?? 0,
+    }));
+
+    res.json({ status: 'success', data: { days, dailyDau } });
+  } catch (err) {
+    console.error('[reports/dau] error:', err);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
