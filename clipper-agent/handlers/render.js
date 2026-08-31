@@ -9,6 +9,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs/promises');
 const mediaServer = require('../mediaServer');
+const { RENDER_DIR } = require('../paths');
 const audio = require('../audio');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -18,17 +19,9 @@ const ENTRY = path.join(REPO_ROOT, 'src', 'remotion', 'index.js');
 // bundle looks for a public/ folder next to the entry point and finds nothing,
 // and every stinger silently goes missing.
 const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
-// Where finished MP4s land.
-//
-// The temp directory is only the fallback. A render is a deliverable - it gets
-// uploaded to TikTok, kept, compared against the next one - and the OS sweeps
-// temp folders out from under exactly that kind of file. Set
-// CLIPPER_RENDER_DIR to somewhere the work is meant to survive; it must match
-// the same variable in backend/.env, or "Show in folder" will refuse to open a
-// render it thinks is outside the renders directory.
-const OUT_DIR = process.env.CLIPPER_RENDER_DIR
-  ? path.resolve(process.env.CLIPPER_RENDER_DIR)
-  : path.join(os.tmpdir(), 'skywatch-clipper', 'renders');
+// Where finished MP4s land. Under the same root the media server serves, so
+// the render list's Play button can stream one back — see paths.js.
+const OUT_DIR = RENDER_DIR;
 
 // Cached across jobs: bundling is the slow part and the composition only
 // changes when the code does, not between renders.

@@ -25,9 +25,15 @@ const path = require('node:path');
 const os = require('node:os');
 const url = require('node:url');
 
-// The only directory this server will ever read from. Both the capture handler
-// and the render handler write beneath it.
-const ROOT = path.join(os.tmpdir(), 'skywatch-clipper');
+// The directories this server will read from, and nothing else. Both the
+// capture handler and the render handler write beneath the first of them.
+//
+// More than one because the root is configurable and recordings outlive a
+// change to it: a capture made before CLIPPER_MEDIA_ROOT was set is still
+// referenced by absolute path on the script that chose it, and refusing to
+// serve it would black out beats in videos that used to render. See paths.js.
+const { SERVE_ROOTS, MEDIA_ROOT } = require('./paths');
+const ROOT = MEDIA_ROOT;
 
 const CONTENT_TYPES = {
   '.mp4': 'video/mp4',
@@ -37,15 +43,20 @@ const CONTENT_TYPES = {
   '.mp3': 'audio/mpeg',
 };
 
-// A request may only name a file inside ROOT. Resolving first and comparing the
-// resolved path is what makes `..` segments harmless — checking the raw string
-// would accept `<root>/../../.ssh/id_rsa`.
+// A request may only name a file inside one of the served roots. Resolving
+// first and comparing the resolved path is what makes `..` segments harmless —
+// checking the raw string would accept `<root>/../../.ssh/id_rsa`.
+//
+// An empty relative path means the request named a root directory itself, which
+// is not a file and is refused along with everything above it.
 function resolveWithinRoot(requested) {
   if (!requested) return null;
   const resolved = path.resolve(requested);
-  const rel = path.relative(ROOT, resolved);
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-  return resolved;
+
+  return SERVE_ROOTS.some((root) => {
+    const rel = path.relative(root, resolved);
+    return rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+  }) ? resolved : null;
 }
 
 // Parse a single-range `Range: bytes=start-end` header. Multi-range requests
@@ -83,7 +94,7 @@ async function handle(req, res) {
   const url = new URL(req.url, 'http://127.0.0.1');
   if (url.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, root: ROOT }));
+    res.end(JSON.stringify({ ok: true, root: ROOT, roots: SERVE_ROOTS }));
     return;
   }
   if (url.pathname !== '/file') { res.writeHead(404).end(); return; }
@@ -174,4 +185,4 @@ function toUrl(fileOrUrl) {
   return `${baseUrl}/file?path=${encodeURIComponent(file)}`;
 }
 
-module.exports = { start, getBaseUrl, toUrl, ROOT, resolveWithinRoot, parseRange };
+module.exports = { start, getBaseUrl, toUrl, ROOT, SERVE_ROOTS, resolveWithinRoot, parseRange };

@@ -27,6 +27,7 @@
 // out in a single column — the right look for short-form, with no cropping.
 
 const path = require('path');
+const { CAPTURE_DIR } = require('../paths');
 const os = require('os');
 const { CURSOR_SCRIPT } = require('../capture/cursor');
 const { record } = require('../capture/recorder');
@@ -445,8 +446,10 @@ module.exports = async function captureHandler({ job, progress }) {
     args: ['--hide-scrollbars', '--mute-audio', '--disable-background-networking'],
   });
 
-  const workDir = path.join(os.tmpdir(), 'skywatch-clipper', 'capture', String(job._id));
-  const outPath = path.join(os.tmpdir(), 'skywatch-clipper', 'capture', `${job._id}.mp4`);
+  // Under the configured media root, so a recording is kept with the videos it
+  // ends up in rather than in a temp folder the OS will sweep.
+  const workDir = path.join(CAPTURE_DIR, String(job._id));
+  const outPath = path.join(CAPTURE_DIR, `${job._id}.mp4`);
 
   try {
     const context = await browser.newContext({

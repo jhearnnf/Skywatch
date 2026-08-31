@@ -118,3 +118,37 @@ describe('serving', () => {
     expect((await res.json()).ok).toBe(true);
   });
 });
+
+/**
+ * The root is configurable (CLIPPER_MEDIA_ROOT), and recordings outlive a
+ * change to it: a capture made before the setting existed is still referenced
+ * by absolute path on the script that chose it. So the server reads from the
+ * current root AND the legacy temp one, and from nowhere else - the widening is
+ * exactly two known directories, not a relaxation of the check.
+ */
+describe('serving more than one root', () => {
+  const { SERVE_ROOTS, LEGACY_ROOT, MEDIA_ROOT } = require('../../../clipper-agent/paths');
+
+  it('always keeps the legacy temp folder readable', () => {
+    expect(SERVE_ROOTS).toContain(LEGACY_ROOT);
+    expect(mediaServer.resolveWithinRoot(path.join(LEGACY_ROOT, 'capture', 'old.mp4')))
+      .toBe(path.join(LEGACY_ROOT, 'capture', 'old.mp4'));
+  });
+
+  it('lists the temp folder once when no root is configured', () => {
+    // Unset is the default in the test environment, so the two roots collapse.
+    if (MEDIA_ROOT === LEGACY_ROOT) expect(SERVE_ROOTS).toHaveLength(1);
+    else expect(SERVE_ROOTS).toHaveLength(2);
+  });
+
+  it('still refuses a path outside every root', () => {
+    expect(mediaServer.resolveWithinRoot(path.join(os.homedir(), '.ssh', 'id_rsa'))).toBeNull();
+    expect(mediaServer.resolveWithinRoot(path.join(LEGACY_ROOT, '..', 'elsewhere.mp4'))).toBeNull();
+  });
+
+  // A root is a directory, not a file, and naming one is not a request for
+  // anything servable.
+  it('refuses a root directory itself', () => {
+    for (const root of SERVE_ROOTS) expect(mediaServer.resolveWithinRoot(root)).toBeNull();
+  });
+});
