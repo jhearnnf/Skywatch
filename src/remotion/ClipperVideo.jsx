@@ -575,6 +575,128 @@ function EndCard({ text, videoUrl, trimInMs, durationInFrames }) {
   )
 }
 
+// ── Brand mark ──────────────────────────────────────────────────────────────
+
+// The crosshair, at a size given in composition pixels.
+//
+// Inlined rather than imported from components/briefReel/SkywatchLogoMark: this
+// file is bundled on its own by the agent's renderer, and the composition needs
+// the mark at an explicit pixel size, which that component deliberately leaves
+// to CSS. Keep the shapes in step with public/favicon.svg if the logo changes.
+//
+// Both rings take the light blue, not the favicon's #1d4ed8 outer ring. That
+// dark blue is drawn on a known light ground; over footage it disappears.
+function BrandMark({ size }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx={20} cy={20} r={17} stroke={BRAND} strokeWidth={2.2} />
+      <line x1={20} y1={1}  x2={20} y2={12} stroke={BRAND} strokeWidth={2.2} strokeLinecap="round" />
+      <line x1={20} y1={28} x2={20} y2={39} stroke={BRAND} strokeWidth={2.2} strokeLinecap="round" />
+      <line x1={1}  y1={20} x2={12} y2={20} stroke={BRAND} strokeWidth={2.2} strokeLinecap="round" />
+      <line x1={28} y1={20} x2={39} y2={20} stroke={BRAND} strokeWidth={2.2} strokeLinecap="round" />
+      <circle cx={20} cy={20} r={7}   stroke={BRAND} strokeWidth={1.8} />
+      <circle cx={20} cy={20} r={2.5} fill={BRAND} />
+    </svg>
+  )
+}
+
+// Top left, and only top left. The platform's own furniture takes the top
+// centre (TikTok's Following/For You tabs) and the top right (search, and the
+// Shorts overflow); the left corner is the one part of the upper band nobody
+// else draws in. It also sits inside the composition's own top gradient, so the
+// mark is over a known dark ground rather than over whatever the clip contains.
+const BUG_TOP_PCT = 4.2
+const BUG_LEFT = 56
+// Overlays start at topPct 16 (307px on a 1920 frame). The lockup's bottom edge
+// lands near 176px, so the two never meet.
+const LOCKUP_SIZE = 96
+const BUG_SIZE = 60
+// Not full strength once it has settled. The mark is meant to be noticed once
+// and then ignored; at full opacity it competes with the footage for the whole
+// video, which is the thing a watermark usually gets wrong.
+const BUG_OPACITY = 0.68
+
+const REVEAL_IN = 12      // frames to arrive
+const REVEAL_HOLD = 36    // frames the domain stays up — 1.2s, one glance
+const REVEAL_SETTLE = 14  // frames to shrink to the corner bug
+
+// The mark, revealed once with the domain beside it and then left in the corner.
+//
+// The shrink is anchored at the left edge (transformOrigin) so the mark stays
+// exactly where it is while it gets smaller. A logo that travels across the
+// frame is read as an animation to watch; this one has to be read once and then
+// stop asking for attention.
+//
+// One drop-shadow on the wrapper covers both the mark and the wordmark, because
+// the filter applies to the alpha of everything inside it. The top gradient is
+// only about 0.4 alpha this far down the frame, which is enough for the type
+// but not for 3px SVG strokes over a bright sky.
+function BrandBug({ domain }) {
+  const frame = useCurrentFrame()
+  const { fps } = useVideoConfig()
+
+  const enter = spring({ frame, fps, config: { damping: 200 }, durationInFrames: REVEAL_IN })
+
+  const settleFrom = REVEAL_IN + REVEAL_HOLD
+  const settle = interpolate(
+    frame,
+    [settleFrom, settleFrom + REVEAL_SETTLE],
+    [0, 1],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+  )
+
+  // The domain goes before the mark finishes shrinking, so the two changes read
+  // as one move rather than as a wordmark hanging next to a smaller logo.
+  const wordOpacity = interpolate(
+    frame,
+    [settleFrom, settleFrom + REVEAL_SETTLE * 0.6],
+    [1, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+  )
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: `${BUG_TOP_PCT}%`,
+        left: BUG_LEFT,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 18,
+        opacity: enter * interpolate(settle, [0, 1], [1, BUG_OPACITY]),
+        filter: 'drop-shadow(0 3px 12px rgba(0,0,0,0.85))',
+      }}
+    >
+      <div
+        style={{
+          transform: `scale(${interpolate(settle, [0, 1], [1, BUG_SIZE / LOCKUP_SIZE])})`,
+          transformOrigin: 'left center',
+          display: 'flex',
+        }}
+      >
+        <BrandMark size={LOCKUP_SIZE} />
+      </div>
+
+      <span
+        style={{
+          opacity: wordOpacity,
+          color: INK,
+          fontFamily: 'Inter, Arial, sans-serif',
+          fontWeight: 800,
+          fontSize: 40,
+          letterSpacing: 1,
+          whiteSpace: 'nowrap',
+          // The lowercase domain, exactly as the end card prints it. The brand
+          // is SkyWatch with a capital W everywhere on screen; a domain is not.
+          transform: `translateX(${interpolate(enter, [0, 1], [-18, 0])}px)`,
+        }}
+      >
+        {domain}
+      </span>
+    </div>
+  )
+}
+
 // ── Background music ────────────────────────────────────────────────────────
 
 // How long the level takes to move in or out of a duck. Long enough not to
@@ -690,6 +812,7 @@ export function ClipperVideo({ timeline }) {
   const beats = timeline?.beats ?? []
   const captionStyle = timeline?.captionStyle ?? {}
   const music = timeline?.music ?? null
+  const branding = timeline?.branding ?? null
 
   let cursor = 0
 
@@ -749,6 +872,19 @@ export function ClipperVideo({ timeline }) {
           </Sequence>
         )
       })}
+
+      {/* After the beats, not before: every shot lays a legibility gradient
+          over the whole frame, and a mark rendered earlier would sit under it.
+          Ends where the end card starts — that card carries the brand itself,
+          and two lockups on one frame is one too many. */}
+      {branding && (
+        <Sequence
+          from={msToOffset(branding.revealAtMs)}
+          durationInFrames={msToFrames(branding.untilMs - branding.revealAtMs)}
+        >
+          <BrandBug domain={branding.domain} />
+        </Sequence>
+      )}
     </AbsoluteFill>
   )
 }

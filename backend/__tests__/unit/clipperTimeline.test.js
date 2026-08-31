@@ -9,6 +9,7 @@ const {
   buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, MIN_BEAT_MS,
   shotLengths, snapLengths, cueTimeMs, defaultCueWord,
   MAX_SHOT_MS, FIRST_SHOT_MS, MIN_SHOT_MS, MAX_SHOTS, SNAP_MS,
+  BRAND_DOMAIN, MIN_BRAND_MS, END_CARD_MS,
 } = require('../../utils/clipperTimeline');
 const { focusFor } = require('../../constants/clipperCapture');
 
@@ -938,5 +939,80 @@ describe('cutting to the music end to end', () => {
       const wasFrom = Math.abs(loose[i] - Math.round(loose[i] / 500) * 500);
       expect(c % 500 === 0 || wasFrom > SNAP_MS).toBe(true);
     });
+  });
+});
+
+/**
+ * The brand used to appear once, on the end card, and only when the outro line
+ * had not already said the domain - so most viewers, who leave well before it,
+ * saw no mark at all. These tests pin the two decisions the builder owns: when
+ * the mark arrives, and when it gets out of the way.
+ */
+describe('branding', () => {
+  const brandScript = (kinds, over = {}) => ({
+    script: {
+      beats: kinds.map((k, i) => ({
+        id: `b${i + 1}`, text: `${i + 1}.`,
+        visual: { kind: k, recipeId: k === 'capture' ? 'play-flag' : '' },
+      })),
+    },
+    footage: Object.fromEntries(kinds.map((k, i) => [
+      `b${i + 1}`,
+      { chosen: k === 'capture'
+        ? { provider: 'capture', playbackUrl: 'cap.mp4', durationSec: 28 }
+        : { downloadUrl: 'stock.mp4', durationSec: 12 },
+        trim: { inMs: 0 } },
+    ])),
+    voice: { lines: kinds.map((_, i) => ({
+      beatId: `b${i + 1}`, durationMs: 3000, startMs: i * 3000,
+    })) },
+    outro: { enabled: false, copy: '' },
+    ...over,
+  });
+
+  // The one moment where "this is our app" is literally true on screen.
+  it('anchors the reveal on the first framed shot', () => {
+    const t = buildTimeline(brandScript(['stock', 'stock', 'capture']));
+    expect(t.beats[2].shots[0].framed).toBe(true);
+    expect(t.branding.revealAtMs).toBe(6000);
+    expect(t.branding.domain).toBe(BRAND_DOMAIN);
+  });
+
+  // Past the hook, still early. Nothing competes with the opening line.
+  it('falls back to the second beat when no phone ever appears', () => {
+    const t = buildTimeline(brandScript(['stock', 'stock', 'stock']));
+    expect(t.branding.revealAtMs).toBe(3000);
+  });
+
+  // The end card carries the brand itself; two lockups on one frame is one too
+  // many, and on an outro that says the domain it would be the second printing.
+  it('stops where the end card starts', () => {
+    const t = buildTimeline(brandScript(['stock', 'stock', 'capture'], {
+      outro: { enabled: true, copy: 'More at skywatch.academy' },
+    }));
+    expect(t.beats[t.beats.length - 1].isEndCard).toBe(true);
+    expect(t.totalDurationMs).toBe(9000 + END_CARD_MS);
+    expect(t.branding.untilMs).toBe(9000);
+  });
+
+  it('is off for a video whose branding was switched off', () => {
+    const t = buildTimeline(brandScript(['stock', 'stock', 'capture'], {
+      branding: { enabled: false },
+    }));
+    expect(t.branding).toBeNull();
+  });
+
+  // A mark on screen for less time than its own reveal takes reads as a
+  // flicker. Drop it rather than flash it.
+  it('drops the mark when it would have no time to be read', () => {
+    const short = brandScript(['stock', 'stock']);
+    short.voice.lines[1].durationMs = MIN_BRAND_MS - 500;
+    const t = buildTimeline(short);
+    expect(t.branding).toBeNull();
+  });
+
+  it('has nothing to brand when there are no beats', () => {
+    expect(buildTimeline({ script: { beats: [] }, outro: { enabled: false, copy: '' } }).branding)
+      .toBeNull();
   });
 });

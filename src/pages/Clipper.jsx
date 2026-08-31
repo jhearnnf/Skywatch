@@ -266,6 +266,15 @@ export default function Clipper() {
     setActive(a => ({ ...a, music: data.music }))
   })
 
+  // The timeline is rebuilt server-side, so updating the script is enough —
+  // RenderPanel refreshes it off script.updatedAt.
+  const handleBranding = (enabled) => run(async () => {
+    const data = await call(`/scripts/${active._id}/branding`, {
+      method: 'PATCH', body: JSON.stringify({ enabled }),
+    })
+    setActive(a => ({ ...a, branding: data.branding, updatedAt: new Date().toISOString() }))
+  })
+
   const handleRevealRender = (localPath) => run(async () => {
     await call('/renders/reveal', { method: 'POST', body: JSON.stringify({ path: localPath }) })
   })
@@ -657,6 +666,7 @@ export default function Clipper() {
               onRender={handleRender}
               onRefresh={loadTimeline}
               onReveal={handleRevealRender}
+              onBranding={handleBranding}
               busy={busy}
             />
           </Suspense>

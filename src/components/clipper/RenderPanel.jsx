@@ -15,7 +15,7 @@ import { previewTimeline, unplayableCaptureCount, mediaUrl } from '../../utils/c
 // here; the agent's render handler does the same on its side, so the stored
 // timeline stays free of a port number that dies with the agent.
 
-export default function RenderPanel({ script, timeline, job, agentOnline, mediaBaseUrl, onRender, onRefresh, onReveal, busy }) {
+export default function RenderPanel({ script, timeline, job, agentOnline, mediaBaseUrl, onRender, onRefresh, onReveal, onBranding, busy }) {
   const [showJson, setShowJson] = useState(false)
   const [copied, setCopied] = useState(null)
 
@@ -65,6 +65,18 @@ export default function RenderPanel({ script, timeline, job, agentOnline, mediaB
             Nothing to preview yet.
           </p>
         )}
+
+        {/* Beside the player rather than in a settings tab, because the only
+            way to judge a logo is to watch it against the footage it lands on. */}
+        <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={script?.branding?.enabled !== false}
+            disabled={busy}
+            onChange={e => onBranding?.(e.target.checked)}
+          />
+          SkyWatch mark - top left, names the domain once when the app appears
+        </label>
 
         {unreachableCaptures > 0 && (
           <p className="mt-2 text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-2.5 py-1.5">

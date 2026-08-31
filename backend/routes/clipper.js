@@ -1703,6 +1703,24 @@ router.patch('/scripts/:id/overlays', async (req, res) => {
 
 // ── Stage 7: render ─────────────────────────────────────────────────────────
 
+// PATCH /api/clipper/scripts/:id/branding — { enabled }
+//
+// Where the mark goes and when it names the domain is decided by the timeline
+// builder, not here; the only per-video choice is whether it appears at all.
+// Footage we do not own the rights to brand as ours is the case this exists for.
+router.patch('/scripts/:id/branding', async (req, res) => {
+  try {
+    const doc = await ClipperScript.findById(req.params.id);
+    if (!doc) { const e = new Error('Script not found'); e.status = 404; throw e; }
+
+    doc.branding = { ...(doc.branding || {}), enabled: req.body?.enabled !== false };
+    doc.markModified('branding');
+    await doc.save();
+
+    res.json({ status: 'success', data: { branding: doc.branding } });
+  } catch (err) { fail(res, err); }
+});
+
 // GET /api/clipper/scripts/:id/timeline — what the preview player mounts.
 router.get('/scripts/:id/timeline', async (req, res) => {
   try {

@@ -483,7 +483,85 @@ function buildTimeline(script) {
     beats: out,
     captionStyle: script?.captions?.style ?? {},
     music: buildMusic(script, out, totalDurationMs),
+    branding: buildBranding(script, out),
     totalDurationMs,
+  };
+}
+
+// ── Branding ────────────────────────────────────────────────────────────────
+
+// When the SkyWatch mark comes on screen, and when it says the domain.
+//
+// The brand used to appear exactly once, on the end card, and even there only
+// when the outro line had not already said the domain. A viewer who scrolls at
+// 60% — which is most of them — saw no mark at all. Gameplay is the worst of
+// it: captures run the app in its immersive state, so the app's own header is
+// not in the recording either, and the most on-brand footage we have carries
+// no branding whatsoever.
+//
+// Two things this deliberately does NOT do:
+//
+//   Sit under the phone. The device's bottom edge lands about 28% up from the
+//   bottom of the frame, which is inside the band the platform draws its own
+//   username, caption and call to action over — the same band captions were
+//   raised out of after the 2026-08-21 audit. A lockup there is half covered on
+//   every video, and on a video whose outro says the domain it would also be
+//   the second time we printed it.
+//
+//   Run the whole video with the wordmark attached. A domain on screen for 35
+//   seconds is what makes a short read as an advert. The name is shown once, at
+//   the moment the app itself is on screen; after that only the mark stays, and
+//   its job is attribution if the clip is re-uploaded.
+//
+// The reveal is anchored to the first framed (phone) shot, because that is the
+// one moment where "this is our app" is literally true on screen. A video with
+// no capture in it falls back to the second beat: past the hook, still early.
+// Only the anchor is decided here — how the reveal animates belongs to the
+// composition, the same split ducking uses.
+const BRAND_DOMAIN = 'skywatch.academy';
+
+// Below this the mark would be on screen for less time than its own reveal
+// takes, which reads as a flicker. Drop it rather than flash it.
+const MIN_BRAND_MS = 2000;
+
+// Where the phone first appears, in whole-video milliseconds.
+function brandRevealMs(beats) {
+  let cursor = 0;
+
+  for (const beat of beats) {
+    if (beat.isEndCard) break;
+
+    let at = cursor;
+    for (const shot of beat.shots ?? []) {
+      if (shot.framed) return at;
+      at += shot.durationMs;
+    }
+    cursor += beat.durationMs;
+  }
+
+  // No phone anywhere in this one. The hook still gets the frame to itself —
+  // nothing should compete with it — so the mark waits for the second beat.
+  const second = beats[1];
+  return second && !second.isEndCard ? beats[0].durationMs : 0;
+}
+
+function buildBranding(script, beats) {
+  if (script?.branding?.enabled === false) return null;
+  if (!beats.length) return null;
+
+  // The end card carries its own lockup, so the bug stops where that starts.
+  const last = beats[beats.length - 1];
+  const untilMs = beats.reduce((n, b) => n + b.durationMs, 0)
+    - (last.isEndCard ? last.durationMs : 0);
+  if (untilMs <= 0) return null;
+
+  const revealAtMs = brandRevealMs(beats);
+  if (untilMs - revealAtMs < MIN_BRAND_MS) return null;
+
+  return {
+    domain: script?.branding?.domain || BRAND_DOMAIN,
+    revealAtMs,
+    untilMs,
   };
 }
 
@@ -535,6 +613,7 @@ function buildMusic(script, beats, totalDurationMs) {
 module.exports = {
   buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, buildMusic,
   buildShots, shotLengths, snapLengths, cueTimeMs, defaultCueWord,
+  buildBranding, BRAND_DOMAIN, MIN_BRAND_MS,
   MIN_BEAT_MS, END_CARD_MS, HOOK_MAX_CHARS,
   MAX_SHOT_MS, FIRST_SHOT_MS, MIN_SHOT_MS, MAX_SHOTS, SHOT_JUMP_MS, MIN_JUMP_MS,
   SNAP_MS,

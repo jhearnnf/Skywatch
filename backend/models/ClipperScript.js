@@ -107,6 +107,10 @@ const clipperScriptSchema = new mongoose.Schema({
   // the track because the same bed sits differently under a busy read.
   music:    { type: mongoose.Schema.Types.Mixed, default: null },
   overlays: { type: mongoose.Schema.Types.Mixed, default: [] },
+  // Whether the SkyWatch mark rides this video, and what its one-time lockup
+  // says: { enabled, domain }. Null means the default, which is on — a video
+  // with no branding in it is the choice that has to be made deliberately.
+  branding: { type: mongoose.Schema.Types.Mixed, default: null },
   timeline: { type: mongoose.Schema.Types.Mixed, default: null },
   renders:  { type: mongoose.Schema.Types.Mixed, default: [] },
 
