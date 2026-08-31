@@ -72,13 +72,25 @@ const MOCK_SNAPSHOT = {
     headlines: {
       dau: 4, wau: 12, mau: 25, totalUsers: 30,
     },
-    dailyDau: Array.from({ length: 30 }, (_, i) => ({ date: `2026-04-${String(i + 1).padStart(2, '0')}`, count: i % 5 })),
     signupSource: { google: 18, email: 12 },
     subscription: { free: 25, trial: 3, silver: 1, gold: 1 },
     testUsage: Array.from({ length: 7 }, (_, i) => ({ date: `2026-04-${String(24 + i).padStart(2, '0')}`, count: i % 3 })),
     osDistribution: { windows: 12, mac: 5, linux: 1, ios: 4, android: 6, unreported: 8 },
   },
 }
+
+// DAU is its own endpoint with its own timeframe — the series length follows
+// whatever `days` was asked for, so the mock builds it from the request.
+const mockDau = (days) => ({
+  status: 'success',
+  data: {
+    days,
+    dailyDau: Array.from({ length: days }, (_, i) => ({
+      date: new Date(Date.UTC(2026, 3, 1) + i * 86400000).toISOString().slice(0, 10),
+      count: i % 5,
+    })),
+  },
+})
 
 const MOCK_WINDOW = {
   status: 'success',
@@ -176,6 +188,10 @@ function setupFetch(overrides = {}) {
     if (url.includes('/api/admin/reports/snapshot')) {
       return Promise.resolve({ ok: true, json: async () => overrides.snapshot ?? MOCK_SNAPSHOT })
     }
+    if (url.includes('/api/admin/reports/dau')) {
+      const days = Number(new URL(url, 'http://x').searchParams.get('days'))
+      return Promise.resolve({ ok: true, json: async () => overrides.dau ?? mockDau(days) })
+    }
     if (url.includes('/api/admin/reports/window')) {
       const cmp = url.includes('compare=1')
       return Promise.resolve({ ok: true, json: async () => overrides.windowed ?? (cmp ? MOCK_WINDOW_CMP : MOCK_WINDOW) })
@@ -216,6 +232,35 @@ describe('Admin — Reports tab', () => {
     expect(screen.getByText('WAU')).toBeInTheDocument()
     expect(screen.getByText('MAU')).toBeInTheDocument()
     expect(screen.getByText('Total Users')).toBeInTheDocument()
+  })
+
+  it('loads Daily Active Users over its own default 30-day range', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Daily Active Users')).toBeInTheDocument())
+    expect(screen.getByText('last 30 days (rolling)')).toBeInTheDocument()
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/reports/dau?days=30'),
+      expect.anything(),
+    )
+  })
+
+  it('refetches Daily Active Users when its timeframe changes', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Daily Active Users')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: '90D' }))
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/admin/reports/dau?days=90'),
+      expect.anything(),
+    ))
+    await waitFor(() => expect(screen.getByText('last 90 days (rolling)')).toBeInTheDocument())
+    // The Time window picker is a separate control — changing the DAU range must
+    // not refetch the window-driven sections.
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining('window=90'),
+      expect.anything(),
+    )
   })
 
   it('renders the Test Usage snapshot card', async () => {
@@ -460,6 +505,9 @@ describe('Admin — Reports tab', () => {
     global.fetch = vi.fn().mockImplementation((url) => {
       if (url.includes('/api/admin/reports/snapshot')) {
         return Promise.resolve({ ok: true, json: async () => MOCK_SNAPSHOT })
+      }
+      if (url.includes('/api/admin/reports/dau')) {
+        return Promise.resolve({ ok: true, json: async () => mockDau(30) })
       }
       if (url.includes('/api/admin/reports/window')) {
         // First (7d) load resolves immediately; the 30d refetch stays pending.

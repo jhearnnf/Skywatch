@@ -640,6 +640,42 @@ const REPORT_WINDOWS = [
   { id: 'all',   label: 'All'   },
 ]
 
+// Daily Active Users has its own timeframe. It sits above the Time window picker
+// in the Snapshot section, which is otherwise fixed-period, so the ranges are
+// deliberately its own list — a DAU line only reads as a trend over days, and
+// "today" (a single point) isn't one.
+const DAU_RANGES = [
+  { days: 7,   label: '7D',  sub: 'last 7 days (rolling)'   },
+  { days: 30,  label: '30D', sub: 'last 30 days (rolling)'  },
+  { days: 90,  label: '90D', sub: 'last 90 days (rolling)'  },
+  { days: 365, label: '1Y',  sub: 'last 365 days (rolling)' },
+]
+const DAU_DEFAULT_DAYS = 30
+
+// Compact segmented control rendered in the DAU card header, where the
+// window-driven charts carry their WindowChip.
+function DauRangePicker({ value, onChange }) {
+  return (
+    <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="group" aria-label="Daily active users timeframe">
+      {DAU_RANGES.map(r => (
+        <button
+          key={r.days}
+          type="button"
+          onClick={() => onChange(r.days)}
+          aria-pressed={value === r.days}
+          className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold tracking-widest transition-all
+            ${value === r.days
+              ? 'bg-brand-600 text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+            }`}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function WindowPicker({ value, onChange }) {
   return (
     <div className="inline-flex rounded-xl border border-slate-200 bg-surface p-1 mb-4">
@@ -900,6 +936,11 @@ function ReportsTab({ API }) {
   const [window, setWindow] = useState('7d')
   const [compare, setCompare] = useState(false)
   const [snapshot, setSnapshot] = useState(null)
+  // Daily Active Users has its own timeframe, independent of the Time window
+  // picker below (that one drives Activity & Growth / CBAT Engagement only).
+  const [dauDays, setDauDays] = useState(DAU_DEFAULT_DAYS)
+  const [dau, setDau] = useState(null)
+  const [dauLoading, setDauLoading] = useState(true)
   const [windowed, setWindowed] = useState(null)
   const [cbat, setCbat] = useState(null)
   const [windowedLoading, setWindowedLoading] = useState(true)
@@ -929,6 +970,23 @@ function ReportsTab({ API }) {
       .catch(() => { if (!cancelled) setError(e => e || 'Failed to load snapshot') })
     return () => { cancelled = true }
   }, [API])
+
+  // DAU series — refetched when its own range changes. Stale-while-revalidate:
+  // the previous series stays on screen (dimmed) rather than flashing a skeleton.
+  useEffect(() => {
+    let cancelled = false
+    setDauLoading(true)
+    apiFetch(`${API}/api/admin/reports/dau?days=${dauDays}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (d.status === 'success') setDau(d.data)
+        else setError(e => e || 'Failed to load daily active users')
+      })
+      .catch(() => { if (!cancelled) setError(e => e || 'Failed to load daily active users') })
+      .finally(() => { if (!cancelled) setDauLoading(false) })
+    return () => { cancelled = true }
+  }, [API, dauDays])
 
   // All-time has no prior period — comparison is forced off there.
   const compareActive = compare && window !== 'all'
@@ -997,6 +1055,25 @@ function ReportsTab({ API }) {
   const practiceKeySet  = new Set(cbat?.practiceKeys ?? [])
   const practiceLabels  = (cbat?.practiceKeys ?? []).map(k => cbat?.gameLabels?.[k]).filter(Boolean)
 
+  // One DAU card for both the loading and loaded snapshot branches — it loads on
+  // its own clock, so it must not flash a skeleton just because the rest of the
+  // snapshot is still in flight, nor lose its range picker while it is.
+  const dauSub = DAU_RANGES.find(r => r.days === dauDays)?.sub ?? ''
+  const dauCard = (
+    <ChartCard
+      title="Daily Active Users"
+      sub={dauSub}
+      tag={<DauRangePicker value={dauDays} onChange={setDauDays} />}
+      loading={dauLoading}
+      dim={dauLoading && !!dau}
+      className={testerFx ? 'xl:col-span-2' : 'xl:col-span-3'}
+    >
+      {dau
+        ? <ReportChart type="line" data={dau.dailyDau} xKey="date" keys={['count']} height={200} />
+        : <ChartSkeleton height={200} />}
+    </ChartCard>
+  )
+
   const perGameSortState = { key: sortKey, dir: sortDir }
   const sortPerGame = key => setPerGameSort(prev => nextSort(prev, key, key === 'label' ? 'asc' : 'desc'))
 
@@ -1019,7 +1096,7 @@ function ReportsTab({ API }) {
                 so the rows always fill exactly, with or without Test Usage.
                 Mirrors the loaded layout. */}
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className={testerFx ? 'xl:col-span-2' : 'xl:col-span-3'}><ChartSkeleton height={200} /></ChartCard>
+              {dauCard}
               {testerFx && <ChartCard title="Test Usage" sub="last 7 days"><ChartSkeleton height={200} /></ChartCard>}
               <ChartCard title="Signup Source" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Subscription Tiers" sub="current snapshot"><ChartSkeleton height={200} /></ChartCard>
@@ -1036,18 +1113,11 @@ function ReportsTab({ API }) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-              {/* DAU spans the rest of its row — it's a 30-point time series, so
-                  it's the one chart here that actually reads better wide. Without
-                  Test Usage beside it that's the full three columns. */}
-              <ChartCard title="Daily Active Users" sub="last 30 days (rolling)" className={testerFx ? 'xl:col-span-2' : 'xl:col-span-3'}>
-                <ReportChart
-                  type="line"
-                  data={snapshot.dailyDau}
-                  xKey="date"
-                  keys={['count']}
-                  height={200}
-                />
-              </ChartCard>
+              {/* DAU spans the rest of its row — it's the one chart here that's a
+                  time series (up to 365 points), so it's the one that actually
+                  reads better wide. Without Test Usage beside it that's the full
+                  three columns. */}
+              {dauCard}
 
               {testerFx && (
                 <ChartCard title="Test Usage" sub="testers who played CBAT or opened the app · last 7 days">
