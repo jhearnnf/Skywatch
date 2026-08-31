@@ -257,6 +257,10 @@ export default function ReportChart({
   }
 
   // Default: line
+  // Per-point dots stop helping once a series is long — at 90 or 365 daily points
+  // they merge into a thick band and bury the line itself, so they're dropped and
+  // the hover dot does the work instead.
+  const showDots = data.length <= 60
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
@@ -272,7 +276,7 @@ export default function ReportChart({
             dataKey={k}
             stroke={seriesColors[i]}
             strokeWidth={2}
-            dot={{ r: 2.5, fill: seriesColors[i] }}
+            dot={showDots ? { r: 2.5, fill: seriesColors[i] } : false}
             activeDot={{ r: 4 }}
             name={labels?.[k] ?? k}
           />
