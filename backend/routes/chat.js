@@ -2100,7 +2100,11 @@ router.get('/presence', adminOnly, async (req, res) => {
 // users are *kept*: talking to someone is often the point of the ban.
 router.get('/admin/users/search', adminOnly, async (req, res) => {
   try {
-    const q = (req.query.q ?? '').toString().trim();
+    // A leading "@" is dropped. Everywhere else in chat a person is written
+    // "@Name", so admins type it here too, and an unstripped "@" turned a name
+    // that is definitely present into "No agents found". Only the leading one
+    // goes: "viper@" still has to match the email it is the start of.
+    const q = (req.query.q ?? '').toString().trim().replace(/^@+/, '').trim();
     if (!q) return res.json({ status: 'success', data: { users: [] } });
 
     const rx = new RegExp(escapeRegex(q), 'i');

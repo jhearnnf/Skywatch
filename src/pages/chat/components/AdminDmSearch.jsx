@@ -23,7 +23,10 @@ export default function AdminDmSearch({ onOpenDm }) {
   const [err,     setErr]     = useState('')
   const seq = useRef(0)
 
-  const trimmed = query.trim()
+  // A leading "@" is dropped before searching. Every other mention of a
+  // person in chat is written "@Name", so that is what gets typed here too,
+  // and searching for the "@" as if it were part of the name found nobody.
+  const trimmed = query.trim().replace(/^@+/, '').trim()
 
   useEffect(() => {
     if (!trimmed) { setUsers([]); setBusy(false); return }

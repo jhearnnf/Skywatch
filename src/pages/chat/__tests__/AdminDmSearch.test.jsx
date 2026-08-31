@@ -104,6 +104,18 @@ describe('admin DM search', () => {
     expect(await screen.findByText('Agent #900900900')).toBeTruthy()
   })
 
+  it('searches without the leading "@" an admin naturally types', async () => {
+    route({ users: [VIPER] })
+    render(<ChatShell />)
+
+    await userEvent.type(await findBox(), '@Viper')
+
+    expect(await screen.findByText('Viper')).toBeTruthy()
+    const searchCall = mockApiFetch.mock.calls.find(c => c[0].includes('/admin/users/search'))
+    expect(searchCall[0]).toContain('q=Viper')
+    expect(searchCall[0]).not.toContain('%40')
+  })
+
   it('says so when nothing matches', async () => {
     route({ users: [] })
     render(<ChatShell />)

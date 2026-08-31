@@ -56,6 +56,14 @@ describe('GET /api/chat/admin/users/search', () => {
     expect(names(await search(authCookie(admin._id), 'viper@'))).toEqual(['Viper']);
   });
 
+  it('ignores a leading "@", which is how a person is written everywhere else', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control' });
+    await createUser({ displayName: 'Lukeyboi' });
+
+    expect(names(await search(authCookie(admin._id), '@Lukeyboi'))).toEqual(['Lukeyboi']);
+    expect((await search(authCookie(admin._id), '@')).body.data.users).toEqual([]);
+  });
+
   it('finds an agent who has never chosen a display name', async () => {
     const admin = await createUser({ isAdmin: true, displayName: 'Control' });
     await createUser({ agentNumber: '900900900' });
