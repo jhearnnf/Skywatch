@@ -58,6 +58,53 @@
   ]
 }
 </script>
+<!--
+  PostHog. This page is a standalone document served straight out of public/, not
+  a route in the SPA, so src/main.jsx never runs here and initPostHog() never
+  fires. Without this block the guide — the page most search traffic lands on —
+  is completely invisible in analytics while every in-app route is tracked.
+
+  The project key is the same public one the app bundle already ships. It is an
+  ingest-only key and belongs in client source. It is written out literally
+  rather than read from VITE_POSTHOG_KEY because Vite copies public/ through
+  verbatim and never substitutes env vars in it.
+
+  Loaded with a plain deferred <script src> instead of PostHog's inline
+  bootstrap snippet, for the pre-render. scripts/prerender-cbat-guide.mjs runs
+  this page's scripts in jsdom at build time and serialises the result over
+  dist/cbat-guide.html. jsdom fetches no external resources, so array.js never
+  loads there and the guard below simply returns — whereas the bootstrap snippet
+  would inject its own loader tag into the DOM being serialised, shipping a
+  duplicate <script> to every reader. The protocol check is the second half of
+  the same guard: jsdom parses the page at about:blank.
+-->
+<script src="https://eu-assets.i.posthog.com/static/array.js" defer></script>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  var http = location.protocol === 'https:' || location.protocol === 'http:';
+  if (!http || !window.posthog) return;   // pre-render, or the CDN was blocked
+
+  posthog.init('phc_zqRyDJ6T6z2QUjJ6KcF7NmJAfALfEMy8iJ6VFLHAddtX', {
+    api_host: 'https://eu.i.posthog.com',
+    // Deliberately NOT 'history_change' like the SPA's config. The section nav
+    // down the page replaceState()s the hash on every click, which under that
+    // setting would log each jump as a fresh pageview and wreck the counts.
+    capture_pageview: true,
+    // Gives both of the things this page is measured on: time on page, and
+    // $prev_pageview_max_scroll_percentage — how far down people actually got.
+    capture_pageleave: true,
+    autocapture: true,
+    session_recording: {
+      maskAllInputs: false,
+      maskInputOptions: { password: true },
+    },
+    // Same as src/lib/posthog.js. The distinct_id cookie is per-domain, so a
+    // reader who has signed in to the app arrives here already identified and
+    // logged-in vs anonymous readers separate on $is_identified.
+    person_profiles: 'always',
+  });
+});
+</script>
 <style>
 /* ═══ CBAT field guide, editorial print-manual styling ═════════════════════
    Design brief: this is a document people read for twenty minutes at a stretch
