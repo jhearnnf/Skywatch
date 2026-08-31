@@ -41,5 +41,6 @@ module.exports = {
   LEGACY_ROOT,
   SERVE_ROOTS,
   CAPTURE_DIR: path.join(MEDIA_ROOT, 'capture'),
+  VOICE_DIR: path.join(MEDIA_ROOT, 'voice'),
   RENDER_DIR: path.join(MEDIA_ROOT, 'renders'),
 };

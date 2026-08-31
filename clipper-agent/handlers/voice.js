@@ -13,9 +13,14 @@
 const path = require('path');
 const os = require('os');
 const voicebox = require('../voicebox');
+const { VOICE_DIR } = require('../paths');
 const audio = require('../audio');
 
-const WORK_DIR = path.join(os.tmpdir(), 'skywatch-clipper');
+// Narration wavs, one folder per script. Under the media root with the
+// recordings and the renders: a take is content - it is what the video is
+// timed against, and re-recording one costs a Voicebox run - so it has no
+// business in a directory the OS sweeps. See ../paths.js.
+const WORK_DIR = VOICE_DIR;
 
 module.exports = async function voiceHandler({ job, progress }) {
   const { scriptId, payload } = job;
