@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Cbat, { CBAT_GAMES } from '../Cbat'
 import { formatEstTime, formatEstTimeCompact, shortTitle, CBAT_SHORT_TITLES } from '../../data/cbatGames'
@@ -252,6 +252,66 @@ describe('Cbat page — dense mobile grid', () => {
     expect(screen.getByTestId('cbat-footer-report').className).toContain('mt-auto')
   })
 
+  // The strip is a sibling of the two-column row, not a child of its left
+  // column — `mt-auto` against the page's flex column is what pins it to the
+  // bottom edge. So it spans the full width while the Recent Scores column is
+  // painted over the right 340px as `position: fixed`, and without a margin the
+  // centred text sits underneath it: "Report a problem" was buried behind the
+  // chat panel at lg and up.
+  it('keeps the footer strip clear of the fixed side column', () => {
+    renderWithUser()
+    expect(screen.getByTestId('cbat-footer-report').className).toContain('lg:mr-[364px]')
+  })
+
+  it('does not reserve that space when there is no side column to miss', () => {
+    // The column renders for signed-in users only, so a signed-out visitor has
+    // the full width and reserving 364px of it would just shift the text left.
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: vi.fn() })
+    render(<Cbat />)
+    expect(screen.getByTestId('cbat-footer-report').className).not.toContain('lg:mr-')
+  })
+
+  // The donation ask lives beside the report link rather than anywhere louder.
+  // A filled CTA on this page would compete with 22 game tiles for the same
+  // glance and read as the primary action, which it emphatically is not.
+  describe('the donation link', () => {
+    it('sits with the report link in the footer strip, pointing at /donate', () => {
+      renderWithUser()
+      const link = screen.getByTestId('cbat-footer-donate')
+      expect(link.getAttribute('href')).toBe('/donate')
+      expect(link).toHaveTextContent('Support SkyWatch')
+    })
+
+    // The framing sentence is desktop only, the same way the report link's
+    // question is: at 10px in a phone footer there is room for the action and
+    // not the reason.
+    it('carries its framing sentence on desktop only', () => {
+      renderWithUser()
+      const framing = screen.getByText(/SkyWatch is free and has no ads\. Donations cover/)
+      expect(framing.className).toContain('hidden')
+      expect(framing.className).toContain('sm:inline')
+    })
+
+    // One row, wrapping to two only when the container cannot hold both. Two
+    // permanently stacked centred sentences was more footer for no gain on a
+    // page whose footer is already 1800px below the fold.
+    it('sits on one wrapping row with the report link', () => {
+      renderWithUser()
+      const row = screen.getByTestId('cbat-footer-donate').closest('div')
+      expect(row.className).toContain('flex-wrap')
+      // "Report a problem" also exists in the grid cell, so scope the query.
+      expect(within(row).getByText('Report a problem')).toBeInTheDocument()
+    })
+
+    // Manufactured jeopardy converts worse than gratitude, and this line is
+    // read by people who owe us nothing.
+    it('does not threaten the site to get the money', () => {
+      renderWithUser()
+      expect(screen.getByTestId('cbat-footer-report').textContent)
+        .not.toMatch(/shut down|shutting|will close|at risk/i)
+    })
+  })
+
   // On a phone the grid is four across, so a roster that is not a multiple of
   // four ends on a part-empty row. The report link goes in that dead space
   // instead of costing the page a footer strip of its own — the whole point
@@ -271,6 +331,29 @@ describe('Cbat page — dense mobile grid', () => {
       expect(cell.closest('div').className).toContain('col-span-2')
       // Phone only: the desktop grid is two across and always full.
       expect(cell.closest('div').className).toContain('sm:hidden')
+    })
+
+    // Both links share the cell, side by side and half each. Stacking them fits
+    // but halves the tap target to about 30px; half a cell is roughly 80x70px,
+    // which is a real target. The ask goes first, as it does in the footer.
+    it('carries the donation link in the same dead cells, half each', () => {
+      renderWithUser()
+      const donate = screen.getByTestId('cbat-grid-donate')
+      const report = screen.getByTestId('cbat-grid-report')
+
+      expect(donate.getAttribute('href')).toBe('/donate')
+      expect(donate.closest('div')).toBe(report.closest('div'))
+      expect(donate.compareDocumentPosition(report) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      for (const link of [donate, report]) expect(link.className).toContain('flex-1')
+    })
+
+    // Labels only down here. The framing sentences that used to sit above the
+    // report link are what paid for the second destination, and they survive at
+    // `sm` in the footer strip where there is width for them.
+    it('drops the framing sentences a phone cannot read anyway', () => {
+      renderWithUser()
+      const cell = screen.getByTestId('cbat-grid-report').closest('div')
+      expect(cell.textContent).toBe('Support SkyWatchReport a problem')
     })
 
     it('is not a tile', () => {

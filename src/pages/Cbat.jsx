@@ -13,6 +13,7 @@ import { useFixedColumn } from '../hooks/useFixedColumn'
 import { usePhoneTight } from '../hooks/usePhoneTight'
 import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
+import { SLIM_APP } from '../utils/appMode'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -575,18 +576,49 @@ export default function Cbat() {
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: visibleGames.length * 0.06, duration: 0.35 }}
-            className={`sm:hidden ${trailingCells === 3 ? 'col-span-3' : 'col-span-2'}`}
+            className={`sm:hidden flex items-stretch ${trailingCells === 3 ? 'col-span-3' : 'col-span-2'}`}
           >
+            {/* Two links now, side by side, each taking half the cell and all of
+                its height. They are still deliberately NOT tiles: no surface, no
+                border, no shadow, no emoji, so they read as the whitespace they
+                are sitting in with links written across it, and the grid does
+                not grow a 23rd thing that looks playable.
+
+                Side by side rather than stacked, and labels only. Stacking them
+                fits — four lines of 8px text clear 70px — but it halves each tap
+                target to about 30px and asks someone to read two micro-sentences
+                at arm's length. Half a cell each is roughly 80x70px, which is a
+                real target, and at this size a legible label beats an
+                illegible explanation.
+
+                What goes is the framing question that used to sit above "Report
+                a problem". It was there because one link left the cell with room
+                to spare; the room now buys a second destination, which is worth
+                more than a sentence explaining a link that already explains
+                itself. The full framing for both survives at `sm` in the footer
+                strip below, where there is width for it.
+
+                The ask goes first for the same reason it does down there, and is
+                never in the native app: see the footer note. */}
+            {!SLIM_APP && (
+              <Link
+                to="/donate"
+                data-testid="cbat-grid-donate"
+                className="flex-1 flex items-center justify-center px-1 text-center no-underline
+                  text-[9px] font-semibold leading-[1.25] text-brand-600 active:text-brand-700
+                  underline underline-offset-2 transition-colors"
+              >
+                Support SkyWatch
+              </Link>
+            )}
             <Link
               to="/report"
               data-testid="cbat-grid-report"
-              className="h-full w-full flex flex-col items-center justify-center gap-0.5 px-2 text-center no-underline
-                text-slate-500 active:text-brand-600 transition-colors"
+              className="flex-1 flex items-center justify-center px-1 text-center no-underline
+                text-[9px] font-semibold leading-[1.25] text-slate-600 active:text-brand-600
+                underline underline-offset-2 transition-colors"
             >
-              <span className="text-[8px] leading-[1.2]">A game not working right?</span>
-              <span className="text-[9px] font-semibold leading-[1.2] text-slate-600 underline underline-offset-2">
-                Report a problem
-              </span>
+              Report a problem
             </Link>
           </motion.div>
         )}
@@ -635,27 +667,67 @@ export default function Cbat() {
         )}
       </div>
 
-      {/* Quiet report link — a game misbehaving? Send it to the team. `mt-auto`
-          takes up whatever slack the grid leaves, so this sits on the bottom edge
-          of the page rather than trailing the last row of tiles.
+      {/* The two standing links this page carries that are not games: the
+          donation ask and the report link. `mt-auto` takes up whatever slack
+          the grid leaves, so they sit on the bottom edge of the page rather
+          than trailing the last row of tiles.
 
-          On a phone this strip disappears entirely when the grid has dead cells
-          to put the link in — see `reportInGrid` above. It is kept as the
-          fallback rather than deleted because /report is not in BottomNav, so
-          this is the only route to it from the games hub: at a game count that
-          fills the last row, the link has to come back down here or there would
-          be no way to reach it at all. In that case it drops the framing
-          question and the rule, leaving the link alone at 10px. */}
+          One row, not two stacked lines. On a phone this whole strip
+          disappears when the grid has dead cells to put the links in (see
+          `reportInGrid` above) and the framing sentences are hidden anyway, so
+          the row is two short labels; from `sm` up each label gets its framing
+          sentence back and the row wraps to two lines only if the container is
+          too narrow to hold both — which is the stacked layout, arrived at when
+          it is actually needed rather than always.
+
+          Below the fold on a desktop, unavoidably: the two-across grid is
+          eleven rows of 130px tiles. That is the right place for a standing
+          link even so. The high-intent ask is the post-game note, which fires
+          on a results screen after a measured improvement; this is the findable
+          home for someone who has gone looking, and a footer is where people
+          look. Anyone who reaches it has scrolled 22 games.
+
+          Neither link is a button. A filled CTA here would compete with the
+          tiles for the same glance and read as the page's primary action,
+          which it emphatically is not.
+
+          The donation link is never shown in the native app, whatever the admin
+          flags say — the store-policy reason is set out in CbatGameOver. It
+          reads SLIM_APP rather than useSlimMode() for the same reason given
+          there: slim mode applied to the WEBSITE is just a trimmed site and
+          carries no store exposure. */}
+      {/* `lg:mr-[364px]` keeps this clear of the Recent Scores column, and it is
+          not cosmetic. This strip is a sibling of the lg:flex row above rather
+          than a child of its left column — it has to be, because `mt-auto`
+          against .cbat-page's flex column is what pins it to the bottom edge of
+          the page. So it spans the full width while the side column is
+          `position: fixed` and painted over the right 340px of the viewport,
+          and centred footer text slid underneath it: "Report a problem" was
+          buried behind the chat panel at lg and up.
+
+          340px column + gap-6 (24px) = 364px, and only when there is a column
+          to miss — it renders for signed-in users at lg only, which is exactly
+          when the margin applies. */}
       <div
         data-testid="cbat-footer-report"
-        className={`mt-auto pt-1 sm:pt-6 sm:border-t sm:border-slate-200 text-center${reportInGrid ? ' hidden sm:block' : ''}`}
+        className={`mt-auto pt-1 sm:pt-6 sm:border-t sm:border-slate-200${reportInGrid ? ' hidden sm:block' : ''}${user ? ' lg:mr-[364px]' : ''}`}
       >
-        <p className="text-[10px] sm:text-xs text-slate-500">
-          <span className="hidden sm:inline">A game not working right? </span>
-          <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
-            Report a problem
-          </Link>
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-center text-[10px] sm:text-xs text-slate-500">
+          {!SLIM_APP && (
+            <p className="m-0">
+              <span className="hidden sm:inline">SkyWatch is free and has no ads. Donations cover the running costs. </span>
+              <Link to="/donate" data-testid="cbat-footer-donate" className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors">
+                Support SkyWatch
+              </Link>
+            </p>
+          )}
+          <p className="m-0">
+            <span className="hidden sm:inline">A game not working right? </span>
+            <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
+              Report a problem
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )
