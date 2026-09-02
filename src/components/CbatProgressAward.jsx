@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import Overlay from './ui/Overlay'
 import useCountUp from '../hooks/useCountUp'
 import { awardTitle, awardSummary } from '../utils/cbatProgressAward'
@@ -121,9 +122,18 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
 // The donation footnote. Rendered inline on the results screen after the celebration above has
 // been dismissed — never inside it, and never before it.
 //
-// Copy notes, both deliberate:
+// Copy notes, all deliberate:
 //   - It names a concrete amount. An open-ended "support us" converts far worse than a small
 //     specific one, and the destination page is where a range of amounts belongs.
+//   - "from £3" rather than the flat "£3" it used to say. The ask used to be a Stripe payment
+//     link that could physically only take £3, so naming one figure was the truth; /donate offers
+//     a range, and a page that opens on four amounts after a note promising one reads as a bait
+//     and switch. £3 stays the number in the sentence because it is the one the page opens on.
+//
+// The destination is a constant, not a prop. It was configurable while donations went to
+// somebody else's site and only an admin could know the address; /donate is part of this app, so
+// there is one address and it is this file's business to know it. The server no longer sends a
+// URL either — see the `donate` boolean in routes/games.js.
 //   - It states what SkyWatch costs the user (nothing, no ads) and asks. It does NOT suggest the
 //     site or their progress is at risk without them. Manufactured jeopardy converts worse than
 //     gratitude and is a bad thing to do to someone who has just been congratulated.
@@ -140,7 +150,7 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
 //
 // A dismiss icon rather than a text button is the other half of it: this then reads as a
 // dismissible notice, which is what it is, instead of a third cluster of buttons.
-export function CbatDonationNote({ url, onRecord }) {
+export function CbatDonationNote({ onRecord }) {
   const [gone, setGone] = useState(false)
   const reported = useRef(false)
 
@@ -151,14 +161,14 @@ export function CbatDonationNote({ url, onRecord }) {
   //
   // The ref guard keeps StrictMode's double-invoke (and any remount) from double-counting.
   useEffect(() => {
-    if (reported.current || !url) return
+    if (reported.current) return
     reported.current = true
     onRecord?.('shown')
-  }, [url])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = (action) => { setGone(true); onRecord?.(action) }
 
-  if (gone || !url) return null
+  if (gone) return null
 
   return (
     <motion.div
@@ -176,17 +186,20 @@ export function CbatDonationNote({ url, onRecord }) {
         ✕
       </button>
       <p className="text-xs text-[#ddeaf8] leading-relaxed">
-        SkyWatch is free and has no ads. If it's helping, a one-off £3 helps keep it running.
+        SkyWatch is free and has no ads. If it's helping, a one-off donation from £3 helps keep it
+        running.
       </p>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
+      {/* A router <Link>, not an anchor. /donate is in this app, and a full page
+          load would drop the player out of the SPA from a results screen,
+          mid-session, having just been congratulated. */}
+      <Link
+        to="/donate"
         onClick={() => close('clicked')}
+        data-testid="cbat-donate-cta"
         className="inline-block mt-2.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors no-underline"
       >
         Support SkyWatch
-      </a>
+      </Link>
     </motion.div>
   )
 }

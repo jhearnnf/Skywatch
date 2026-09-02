@@ -2910,7 +2910,6 @@ function SettingsTab({ API }) {
           'cbatGameEnabled',
           'progressAwardEnabled',
           'progressAwardDonateEnabled',
-          'progressAwardDonateUrl',
           'caseFilesEnabled',
           'caseFilesDailyLimitFree',
           'caseFilesDailyLimitSilver',
@@ -3203,34 +3202,12 @@ function SettingsTab({ API }) {
                   />
                   <Toggle
                     label="Donation note on progress awards"
-                    hint="Adds a small donation ask below the results once the player dismisses the award. Capped globally: at most once every 30 days, and never again after two dismissals or an 'Already supported' click."
+                    hint="Adds a small donation ask below the results once the player dismisses the award. Capped globally: at most once every 30 days, never again after two dismissals, and never again at all once they have donated while signed in."
                     checked={draft.progressAwardDonateEnabled !== false}
                     onChange={v => set('progressAwardDonateEnabled', v)}
                     disabled={draft.progressAwardEnabled === false}
                     disabledHint="Unavailable while the progress award screen is off — the note only ever appears attached to an award."
                   />
-                  <div className="py-2.5 border-b border-slate-100">
-                    <p className="text-sm font-semibold text-slate-700 mb-1">Donation link</p>
-                    <p className="text-xs text-slate-400 mb-2">
-                      Where “Support SkyWatch” points (Ko-fi, Buy Me a Coffee, Stripe payment link…).
-                      Leave empty and the note never renders, whatever the switch above says — a live
-                      ask pointing nowhere is worse than no ask.
-                    </p>
-                    <input
-                      type="text"
-                      value={draft.progressAwardDonateUrl ?? ''}
-                      onChange={e => set('progressAwardDonateUrl', e.target.value)}
-                      placeholder="https://ko-fi.com/…"
-                      className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
-                    />
-                    {draft.progressAwardEnabled !== false
-                      && draft.progressAwardDonateEnabled !== false
-                      && !String(draft.progressAwardDonateUrl ?? '').trim() && (
-                      <p className="text-xs text-amber-700 mt-1.5">
-                        No URL set, so players see the award but no donation note.
-                      </p>
-                    )}
-                  </div>
                   <div className="py-2.5 border-b border-slate-100 last:border-0">
                     <p className="text-sm font-semibold text-slate-700 mb-1">Testing</p>
                     <p className="text-xs text-slate-400 mb-2">

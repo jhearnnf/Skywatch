@@ -160,40 +160,35 @@ describe('POST /api/games/cbat/:gameKey/progress-award/claim', () => {
 });
 
 describe('the donation note attached to an award', () => {
-  const enableDonate = (url = 'https://ko-fi.com/skywatch') =>
-    AppSettings.updateOne({}, { $set: { progressAwardDonateEnabled: true, progressAwardDonateUrl: url } });
+  const enableDonate = () =>
+    AppSettings.updateOne({}, { $set: { progressAwardDonateEnabled: true } });
 
-  it('rides along with an award once configured', async () => {
+  // A boolean, not a URL. There is one destination and it is a page in this app, so the client
+  // already knows it — all the server decides is whether the ask is due. The endpoint used to
+  // hand back the configured address, from the days when donations went to somebody else's site.
+  it('rides along with an award as a plain yes', async () => {
     await enableDonate();
     await seedAngles(10, 10, 16);
 
     const res = await claim();
-    expect(res.body.data.donate).toEqual({ url: 'https://ko-fi.com/skywatch' });
+    expect(res.body.data.donate).toBe(true);
   });
 
-  // Ships pointing at the live Stripe link, so the ask works on deploy rather than waiting for
-  // an admin to paste it in.
-  it('defaults to the configured Stripe payment link', async () => {
+  // On by default, so the ask works on deploy rather than waiting to be switched on.
+  it('is on by default', async () => {
     const settings = await AppSettings.getSettings();
-    expect(settings.progressAwardDonateUrl).toMatch(/^https:\/\/donate\.stripe\.com\//);
+    expect(settings.progressAwardDonateEnabled).toBe(true);
   });
 
-  // Blanking the URL is the kill switch an admin reaches for, and it has to beat the flag.
-  it('is withheld when the URL is blanked', async () => {
-    await AppSettings.updateOne({}, { $set: { progressAwardDonateUrl: '' } });
-    await seedAngles(10, 10, 16);
-
-    const res = await claim();
-    expect(res.body.data.donate).toBeNull();
-  });
-
+  // The one switch. It used to share the job with a URL field an admin could blank, which was
+  // two kill switches for one decision.
   it('is withheld when the donate flag is off', async () => {
     await enableDonate();
     await AppSettings.updateOne({}, { $set: { progressAwardDonateEnabled: false } });
     await seedAngles(10, 10, 16);
 
     const res = await claim();
-    expect(res.body.data.donate).toBeNull();
+    expect(res.body.data.donate).toBe(false);
   });
 
   // The cap is global, not per game — the whole reason it is separate state from the milestones.
@@ -201,13 +196,13 @@ describe('the donation note attached to an award', () => {
     await enableDonate();
     await seedAngles(10, 10, 12);          // tier 15, ask shown
     const first = await claim();
-    expect(first.body.data.donate).not.toBeNull();
+    expect(first.body.data.donate).toBe(true);
 
     await GameSessionCbatAnglesResult.deleteMany({ userId: user._id });
     await seedAngles(12, 10, 16);          // tier 50 on the same game, a second award
     const second = await claim();
     expect(second.body.data.award).toMatchObject({ tier: 50 });
-    expect(second.body.data.donate).toBeNull();
+    expect(second.body.data.donate).toBe(false);
   });
 
   // The award still fires when the ask has been exhausted — the celebration was never
@@ -219,7 +214,7 @@ describe('the donation note attached to an award', () => {
 
     await seedAngles(10, 10, 16);
     const res = await claim();
-    expect(res.body.data.donate).toBeNull();
+    expect(res.body.data.donate).toBe(false);
     expect(res.body.data.award).toMatchObject({ tier: 50 });
   });
 
@@ -259,12 +254,12 @@ describe('the donation funnel behind the admin stat', () => {
   // card ever appeared.
   it('does not count an impression merely because the ask was offered', async () => {
     await AppSettings.updateOne({}, {
-      $set: { progressAwardDonateEnabled: true, progressAwardDonateUrl: 'https://ko-fi.com/x' },
+      $set: { progressAwardDonateEnabled: true },
     });
     await seedAngles(10, 10, 16);
 
     const res = await claim();
-    expect(res.body.data.donate).not.toBeNull();   // offered…
+    expect(res.body.data.donate).toBe(true);   // offered…
 
     const saved = await User.findById(user._id).lean();
     expect(saved.donationPrompt.lastShownAt).not.toBeNull();

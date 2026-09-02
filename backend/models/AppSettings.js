@@ -273,18 +273,16 @@ const appSettingsSchema = new mongoose.Schema({
   progressAwardEnabled:       { type: Boolean,  default: true },
   progressAwardDonateEnabled: { type: Boolean,  default: true },
 
-  // Where the donation CTA points. Empty means the footnote does not render at
-  // all, however progressAwardDonateEnabled is set — a live ask with nowhere to
-  // go is worse than no ask.
+  // There used to be a progressAwardDonateUrl here: free text for wherever the
+  // ask should point, because donations went to somebody else's site (a Stripe
+  // payment link, Ko-fi) and only an admin could know the address. Donations
+  // now land on /donate, which is part of this app, so there is exactly one
+  // destination and no address for anyone to configure. Blanking it used to be
+  // the kill switch; progressAwardDonateEnabled is now the only one, which is
+  // what it was always named for.
   //
-  // The default is the live Stripe payment link, so the ask works on deploy
-  // without an admin having to paste it in. Admins can still override it in
-  // Game Options; once they save that section the stored value wins and this
-  // default stops applying to that environment.
-  progressAwardDonateUrl: {
-    type: String,
-    default: 'https://donate.stripe.com/9B6cMXaxWeWi6ne6QR18c00',
-  },
+  // No migration: the field is simply absent from the schema, so Mongoose
+  // ignores whatever an existing settings document still has stored under it.
 
   // Chat (user↔admin help) feature
   chatEnabled:                { type: Boolean,  default: true },

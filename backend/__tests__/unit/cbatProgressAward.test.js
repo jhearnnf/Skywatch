@@ -96,7 +96,7 @@ describe('tierToAward', () => {
 });
 
 describe('donationPromptDue', () => {
-  const on = { progressAwardDonateEnabled: true, progressAwardDonateUrl: 'https://ko-fi.com/x' };
+  const on = { progressAwardDonateEnabled: true };
   const fresh = { lastShownAt: null, dismissCount: 0 };
   const daysAgo = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 
@@ -108,15 +108,17 @@ describe('donationPromptDue', () => {
     expect(donationPromptDue(fresh, { ...on, progressAwardDonateEnabled: false })).toBe(false);
   });
 
-  // A live CTA pointing nowhere is worse than no CTA, so the URL is a hard gate
-  // rather than something the UI is trusted to check.
-  it('is not due when no donation URL is configured', () => {
-    expect(donationPromptDue(fresh, { ...on, progressAwardDonateUrl: '' })).toBe(false);
-    expect(donationPromptDue(fresh, { ...on, progressAwardDonateUrl: '   ' })).toBe(false);
+  // The one gate with no cooldown behind it. Asking someone who has already
+  // given is the outcome that turns a supporter into someone who regrets
+  // supporting, and a donor who wants to give again knows where /donate is.
+  it('is never due again once the user has donated', () => {
+    const donor = { lastShownAt: null, dismissCount: 0, donatedAt: daysAgo(400) };
+    expect(donationPromptDue(donor, on)).toBe(false);
   });
 
-  // The only permanent stop. There is deliberately no "already donated" flag — the note has one
-  // dismiss control, and two uses of it answer the question for good.
+  // The permanent stop for everyone we cannot observe paying: an anonymous donor, or one who
+  // never signed in. The note has one dismiss control and two uses of it answer the question
+  // for good.
   it('stops asking after the dismissal cap', () => {
     expect(donationPromptDue({ ...fresh, dismissCount: DONATION_MAX_DISMISSALS - 1 }, on)).toBe(true);
     expect(donationPromptDue({ ...fresh, dismissCount: DONATION_MAX_DISMISSALS }, on)).toBe(false);

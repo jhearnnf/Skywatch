@@ -83,14 +83,21 @@ function tierToAward({ attempts, firstAvg, lastAvg }, { lowerIsBetter, seenTiers
 // Every one of these is a hard gate rather than a weighting — an ask that slips
 // through any of them is worse than no ask at all:
 //   - the feature flags are off, or
-//   - there is no destination URL (a live CTA pointing nowhere), or
+//   - they have already donated, or
 //   - they have dismissed it enough times to have answered the question, or
 //   - it was shown too recently.
+//
+// The "already donated" gate is permanent and has no cooldown, deliberately.
+// Asking again is the one outcome that turns a supporter into someone who
+// regrets supporting, and a donor who wants to give a second time knows where
+// /donate is. It can only ever be set for a donor who was signed in when they
+// paid — an anonymous donation is unobservable, and those fall back to the
+// dismissal cap like everyone else.
 function donationPromptDue(donationPrompt, settings, now = new Date()) {
   if (!settings?.progressAwardDonateEnabled) return false;
-  if (!String(settings?.progressAwardDonateUrl || '').trim()) return false;
 
   const state = donationPrompt || {};
+  if (state.donatedAt) return false;
   if ((state.dismissCount ?? 0) >= DONATION_MAX_DISMISSALS) return false;
 
   if (state.lastShownAt) {

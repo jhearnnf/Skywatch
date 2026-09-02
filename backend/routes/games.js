@@ -3770,7 +3770,10 @@ router.post('/cbat/:gameKey/progress-award/claim', protect, async (req, res) => 
       status: 'success',
       data: {
         award: { gameKey, tier: award.tier, pct: award.pct, attempts: progress.attempts },
-        donate: due ? { url: settings.progressAwardDonateUrl } : null,
+        // A boolean, not a URL. There is one destination (/donate, a page in
+        // this app) and the client already knows where it is, so the only
+        // thing the server has to answer is whether the ask is due.
+        donate: due,
       },
     });
   } catch (err) {

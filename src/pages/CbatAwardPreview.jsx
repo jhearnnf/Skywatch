@@ -74,8 +74,7 @@ export default function CbatAwardPreview() {
   }
 
   const cfg = CBAT_LEADERBOARD_CONFIG[run.gameKey]
-  const donateUrl = String(settings?.progressAwardDonateUrl || '').trim()
-  const donateOn = settings?.progressAwardDonateEnabled !== false && !!donateUrl
+  const donateOn = settings?.progressAwardDonateEnabled !== false
 
   return (
     <div className="max-w-md mx-auto px-5 py-6 flex flex-col items-center gap-4">
@@ -138,7 +137,7 @@ export default function CbatAwardPreview() {
         onPlayAgain={reroll}
         previewAward={{
           award: run.award,
-          donate: donateOn ? { url: donateUrl } : null,
+          donate: donateOn,
         }}
       />
     </div>

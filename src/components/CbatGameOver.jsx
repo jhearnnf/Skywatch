@@ -468,7 +468,7 @@ export default function CbatGameOver({
   // Skipped when queued, for the same reason the progress fetch is: an offline run isn't in the
   // series yet, so the server would judge the improvement without the run just played.
   const [award, setAward] = useState(previewAward?.award ?? null)
-  const [donate, setDonate] = useState(previewAward?.donate ?? null)
+  const [donate, setDonate] = useState(Boolean(previewAward?.donate))
   const [awardDismissed, setAwardDismissed] = useState(false)
 
   useEffect(() => {
@@ -480,7 +480,7 @@ export default function CbatGameOver({
         .then(d => {
           if (cancelled || !d?.data?.award) return
           setAward(d.data.award)
-          setDonate(d.data.donate ?? null)
+          setDonate(Boolean(d.data.donate))
         })
         .catch(() => { /* the milestone is additive — a failure just means no celebration */ })
     }
@@ -635,8 +635,8 @@ export default function CbatGameOver({
           web-only ask avoids entirely. Deliberately SLIM_APP and not useSlimMode(): slim mode
           applied to the WEBSITE is just a trimmed site and carries no store exposure. The award
           itself still fires natively — it's a retention feature and no policy touches it. */}
-      {award && awardDismissed && donate?.url && !SLIM_APP && (
-        <CbatDonationNote url={donate.url} onRecord={recordDonation} />
+      {award && awardDismissed && donate && !SLIM_APP && (
+        <CbatDonationNote onRecord={recordDonation} />
       )}
 
       {/* Panel 2 — game-specific breakdown (rendered embedded, no own actions) */}

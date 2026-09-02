@@ -19,7 +19,11 @@ vi.mock('../../lib/posthog', () => ({ captureEvent: mockCapture }))
 vi.mock('../../lib/net', () => ({ isOnline: () => true, onNetworkChange: () => () => {} }))
 vi.mock('../../lib/apiHealth', () => ({ getApiHealth: () => ({ status: 'ok' }), onApiHealthChange: () => () => {} }))
 vi.mock('../../lib/cbatOutbox', () => ({ pendingCount: async () => 0, onOutboxChange: () => () => {} }))
-vi.mock('react-router-dom', () => ({ Link: ({ children, to }) => <a href={to}>{children}</a> }))
+// Spread the rest: the donation CTA is a <Link> with an onClick that records the click-through,
+// and a mock that dropped unknown props would silently swallow it.
+vi.mock('react-router-dom', () => ({
+  Link: ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
+}))
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../context/GameChromeContext', () => ({ useGameChrome: () => mockChrome }))
 // Forwards everything except the motion-only props, so `data-testid` survives onto the DOM node.
@@ -86,7 +90,7 @@ describe('CbatProgressAward — the celebration', () => {
 
 describe('CbatDonationNote — the ask', () => {
   it('names a concrete amount and says the site is free and ad-free', () => {
-    render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={vi.fn()} />)
+    render(<CbatDonationNote onRecord={vi.fn()} />)
     expect(screen.getByText(/free and has no ads/i)).toBeDefined()
     expect(screen.getByText(/£3/)).toBeDefined()
   })
@@ -94,23 +98,20 @@ describe('CbatDonationNote — the ask', () => {
   // Manufactured jeopardy converts worse than gratitude, and is a bad thing to do to someone who
   // has just been congratulated.
   it('does not threaten the service or the player\'s progress', () => {
-    render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={vi.fn()} />)
+    render(<CbatDonationNote onRecord={vi.fn()} />)
     expect(document.body.textContent).not.toMatch(/shut down|close|lose your|will end|at risk/i)
   })
 
-  it('renders nothing without a URL, so the ask can never point nowhere', () => {
-    const { container } = render(<CbatDonationNote url="" onRecord={vi.fn()} />)
-    expect(container.firstChild).toBeNull()
-  })
-
-  it('opens the link in a new tab and records the click', () => {
+  // In-app, and a router <Link> rather than an anchor: a full page load would drop the player out
+  // of the SPA from a results screen, mid-session, having just been congratulated. It used to be
+  // a new-tab anchor because the destination was somebody else's site.
+  it('sends the player to /donate and records the click', () => {
     const onRecord = vi.fn()
-    render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={onRecord} />)
+    render(<CbatDonationNote onRecord={onRecord} />)
 
     const link = screen.getByRole('link', { name: /support skywatch/i })
-    expect(link.getAttribute('href')).toBe('https://ko-fi.com/x')
-    expect(link.getAttribute('target')).toBe('_blank')
-    expect(link.getAttribute('rel')).toContain('noopener')
+    expect(link.getAttribute('href')).toBe('/donate')
+    expect(link.getAttribute('target')).toBeNull()
 
     fireEvent.click(link)
     expect(onRecord).toHaveBeenCalledWith('clicked')
@@ -120,7 +121,7 @@ describe('CbatDonationNote — the ask', () => {
   // links, so a second way to say no would be a fourth thing competing for the same glance.
   // Regression guard: an earlier version shipped "Not now" AND "Already supported".
   it('offers exactly one call to action and one dismiss', () => {
-    render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={vi.fn()} />)
+    render(<CbatDonationNote onRecord={vi.fn()} />)
 
     expect(screen.getAllByRole('link')).toHaveLength(1)
     const buttons = screen.getAllByRole('button')
@@ -134,23 +135,17 @@ describe('CbatDonationNote — the ask', () => {
   // covering the screen — a player who leaves there never saw the card.
   it('reports an impression once, on render', () => {
     const onRecord = vi.fn()
-    const { rerender } = render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={onRecord} />)
+    const { rerender } = render(<CbatDonationNote onRecord={onRecord} />)
     expect(onRecord).toHaveBeenCalledWith('shown')
 
     // A re-render must not inflate the count.
-    rerender(<CbatDonationNote url="https://ko-fi.com/x" onRecord={onRecord} />)
+    rerender(<CbatDonationNote onRecord={onRecord} />)
     expect(onRecord.mock.calls.filter(([a]) => a === 'shown')).toHaveLength(1)
-  })
-
-  it('reports no impression when there is no URL to show', () => {
-    const onRecord = vi.fn()
-    render(<CbatDonationNote url="" onRecord={onRecord} />)
-    expect(onRecord).not.toHaveBeenCalled()
   })
 
   it('records a dismissal and disappears when waved away', () => {
     const onRecord = vi.fn()
-    render(<CbatDonationNote url="https://ko-fi.com/x" onRecord={onRecord} />)
+    render(<CbatDonationNote onRecord={onRecord} />)
 
     fireEvent.click(screen.getByRole('button', { name: /dismiss/i }))
     expect(onRecord).toHaveBeenCalledWith('dismissed')
@@ -162,7 +157,7 @@ describe('CbatDonationNote — the ask', () => {
 describe('CbatGameOver — award then, separately, the ask', () => {
   const claimUrl = '/progress-award/claim'
 
-  function setup({ award = null, donate = null } = {}) {
+  function setup({ award = null, donate = false } = {}) {
     const apiFetch = vi.fn().mockImplementation((url) => {
       const u = String(url)
       if (u.includes(claimUrl)) return Promise.resolve({ ok: true, json: async () => ({ data: { award, donate } }) })
@@ -185,7 +180,7 @@ describe('CbatGameOver — award then, separately, the ask', () => {
   })
 
   it('holds the ask back until the celebration has been dismissed', async () => {
-    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: true })
     render(<CbatGameOver {...props}><div /></CbatGameOver>)
 
     // Celebration first, and alone — this ordering is the whole point of the two components.
@@ -199,7 +194,7 @@ describe('CbatGameOver — award then, separately, the ask', () => {
   })
 
   it('shows the award with no ask when the donation note is withheld', async () => {
-    setup({ award: { tier: 15, pct: 18, attempts: 9 }, donate: null })
+    setup({ award: { tier: 15, pct: 18, attempts: 9 }, donate: false })
     render(<CbatGameOver {...props}><div /></CbatGameOver>)
 
     await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
@@ -223,7 +218,7 @@ describe('CbatGameOver — award then, separately, the ask', () => {
   it('withholds the ask inside the native app but still celebrates the milestone', async () => {
     mockSlimApp.value = true
     try {
-      setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+      setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: true })
       render(<CbatGameOver {...props}><div /></CbatGameOver>)
 
       await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
@@ -240,7 +235,7 @@ describe('CbatGameOver — award then, separately, the ask', () => {
     render(
       <CbatGameOver
         {...props}
-        previewAward={{ award: { tier: 50, pct: 61, attempts: 22 }, donate: { url: 'https://ko-fi.com/x' } }}
+        previewAward={{ award: { tier: 50, pct: 61, attempts: 22 }, donate: true }}
       >
         <div />
       </CbatGameOver>
@@ -263,7 +258,7 @@ describe('CbatGameOver — award then, separately, the ask', () => {
 describe('CbatGameOver — donation ask analytics', () => {
   const claimUrl = '/progress-award/claim'
 
-  function setup({ award = null, donate = null } = {}) {
+  function setup({ award = null, donate = false } = {}) {
     const apiFetch = vi.fn().mockImplementation((url) => {
       const u = String(url)
       if (u.includes(claimUrl)) return Promise.resolve({ ok: true, json: async () => ({ data: { award, donate } }) })
@@ -281,7 +276,7 @@ describe('CbatGameOver — donation ask analytics', () => {
   const donationEvents = () => mockCapture.mock.calls.filter(([n]) => n.startsWith('donation_note_'))
 
   it('fires donation_note_shown with the game and the milestone behind it', async () => {
-    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: true })
     render(<CbatGameOver {...props}><div /></CbatGameOver>)
 
     await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
@@ -296,7 +291,7 @@ describe('CbatGameOver — donation ask analytics', () => {
   })
 
   it('fires donation_note_clicked on the click-through and _dismissed on the ✕', async () => {
-    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: true })
     const { unmount } = render(<CbatGameOver {...props}><div /></CbatGameOver>)
 
     await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
@@ -307,7 +302,7 @@ describe('CbatGameOver — donation ask analytics', () => {
     unmount()
 
     mockCapture.mockClear()
-    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: { url: 'https://ko-fi.com/x' } })
+    setup({ award: { tier: 30, pct: 34, attempts: 12 }, donate: true })
     render(<CbatGameOver {...props}><div /></CbatGameOver>)
     await waitFor(() => expect(screen.getByTestId('cbat-progress-award')).toBeDefined())
     fireEvent.click(screen.getByRole('button', { name: /continue/i }))
@@ -322,7 +317,7 @@ describe('CbatGameOver — donation ask analytics', () => {
     render(
       <CbatGameOver
         {...props}
-        previewAward={{ award: { tier: 50, pct: 61, attempts: 22 }, donate: { url: 'https://ko-fi.com/x' } }}
+        previewAward={{ award: { tier: 50, pct: 61, attempts: 22 }, donate: true }}
       >
         <div />
       </CbatGameOver>
