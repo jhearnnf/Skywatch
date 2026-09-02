@@ -152,6 +152,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const [draft,     setDraft]     = useState('')
   const [hasNew,    setHasNew]    = useState(false)
   const [needsName, setNeedsName] = useState(false)
+  // Bumped to refetch /api/chat/lounge. Needed after the display-name gate:
+  // the endpoint reports canPost:false while a name is missing, so clearing
+  // `needsName` alone would leave the widget refusing to show a composer.
+  const [loungeReload, setLoungeReload] = useState(0)
   const [typingName, setTypingName] = useState(null)
   const [streaming, setStreaming] = useState(false)
   const [activity, setActivity] = useState(null)
@@ -208,7 +212,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
       setNeedsName(Boolean(data.displayNameRequired))
     }).catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [enabled, get])
+  }, [enabled, get, loungeReload])
 
   // How busy the site has been lately, shown under the lounge header. Refreshed
   // on a slow timer rather than with the messages: the numbers move over days,
@@ -586,7 +590,14 @@ export default function CbatLoungeChat({ open, onToggle }) {
 
       {needsName ? (
         <div className="shrink-0 border-t border-[#1a3a5c]">
-          <DisplayNameGate onDone={() => setNeedsName(false)} />
+          <DisplayNameGate onDone={() => {
+            // Optimistic so the composer appears the instant the name saves,
+            // then confirmed by the refetch — which is also what catches any
+            // other reason this user still cannot post.
+            setNeedsName(false)
+            setLounge(l => (l ? { ...l, canPost: true, displayNameRequired: false } : l))
+            setLoungeReload(n => n + 1)
+          }} />
         </div>
       ) : !canPost ? (
         <p className="shrink-0 text-[11px] text-slate-500 px-3 py-2.5 border-t border-[#1a3a5c] text-center">

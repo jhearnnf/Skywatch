@@ -16,7 +16,12 @@ vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: mockSettings.value }),
 }))
 vi.mock('../../pages/chat/components/DisplayNameGate', () => ({
-  default: () => <div>Choose a display name</div>,
+  default: ({ onDone }) => (
+    <div>
+      Choose a display name
+      <button type="button" onClick={() => onDone?.('Falcon')}>save name</button>
+    </div>
+  ),
 }))
 // Stubbed for the same reason as the picker: what belongs here is that the
 // lounge opens the dialog for the right message and closes it again. The
@@ -84,7 +89,11 @@ function stubFetch({ lounge = LOUNGE, loungeStatus = 200, messages = MESSAGES, s
     json: async () => ({ status: status < 400 ? 'success' : 'error', data }),
   })
   const fetchMock = vi.fn((url, opts) => {
-    if (String(url).includes('/api/chat/lounge')) return json(loungeStatus, lounge)
+    // A function lets a test change the answer between calls, which is how the
+    // display-name gate behaves: refused before the name is set, allowed after.
+    if (String(url).includes('/api/chat/lounge')) {
+      return json(loungeStatus, typeof lounge === 'function' ? lounge() : lounge)
+    }
     if (String(url).includes('/messages') && opts?.method === 'POST') return onPost(url, opts)
     if (String(url).includes('/messages')) return json(200, { messages, senders, botTyping: null })
     return json(200, {})
@@ -308,6 +317,23 @@ describe('posting', () => {
     renderOpen()
     expect(await screen.findByText('Choose a display name')).toBeTruthy()
     expect(screen.queryByPlaceholderText(/Message the lounge/i)).toBeNull()
+  })
+
+  it('shows the composer once the display name is saved', async () => {
+    // The lounge endpoint reports canPost:false while the name is missing, so a
+    // widget that only cleared its own gate flag would fall through to "You
+    // cannot post here right now" — which is what used to happen.
+    let named = false
+    stubFetch({ lounge: () => (named
+      ? LOUNGE
+      : { ...LOUNGE, canPost: false, displayNameRequired: true }) })
+    renderOpen()
+
+    fireEvent.click(await screen.findByText('save name'))
+    named = true
+
+    expect(await screen.findByPlaceholderText(/Message the lounge/i)).toBeTruthy()
+    expect(screen.queryByText(/cannot post here right now/i)).toBeNull()
   })
 
   it('says so plainly when the reader is chat-banned', async () => {
