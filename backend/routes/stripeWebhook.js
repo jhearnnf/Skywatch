@@ -8,6 +8,38 @@ const tierByPrice = () => ({
   [process.env.STRIPE_GOLD_PRICE_ID]:   'gold',
 });
 
+// Record a completed donation against the donor, when we know who they are.
+//
+// Anonymous donations are the normal case (/donate does not require an
+// account) and there is nothing to write for those — the payment itself lives
+// in Stripe, which is the system of record for money. What this is for is the
+// one thing the app needs to know: that this person has already given, so the
+// post-game ask stops appearing for them. Before donations went through our own
+// Checkout session we could not observe a payment at all, and the ask had to
+// rely on the dismissal cap alone.
+//
+// `amount_total` off the session rather than the metadata: Stripe is the
+// authority on what was actually charged.
+async function recordDonation(session, userId) {
+  const pence = Number.isFinite(session.amount_total)
+    ? session.amount_total
+    : Number(session.metadata?.amountPence) || 0;
+
+  if (!userId) {
+    console.log(`Stripe donation complete: anonymous, ${pence}p`);
+    return;
+  }
+
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: { 'donationPrompt.donatedAt': new Date() },
+      $inc: { 'donationPrompt.donatedTotalPence': pence },
+    },
+  );
+  console.log(`Stripe donation complete: user ${userId}, ${pence}p`);
+}
+
 module.exports = async function stripeWebhook(req, res) {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -26,7 +58,18 @@ module.exports = async function stripeWebhook(req, res) {
 
       case 'checkout.session.completed': {
         const session = event.data.object;
-        const { userId, tier, isTrial } = session.metadata ?? {};
+        const { userId, tier, isTrial, kind } = session.metadata ?? {};
+
+        // One-off donations arrive on this same event. They must be handled
+        // and returned BEFORE the subscription branch below, which would
+        // otherwise read an undefined `tier` off the metadata and write it
+        // straight onto subscriptionTier — repaying a donor by breaking their
+        // account. The `kind` marker is set in routes/stripe.js.
+        if (kind === 'donation') {
+          await recordDonation(session, userId);
+          break;
+        }
+
         if (!userId) break;
 
         const user = await User.findById(userId);

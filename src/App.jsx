@@ -87,6 +87,7 @@ import GameHistory        from './pages/GameHistory'
 import CbatGameHistory   from './pages/CbatGameHistory'
 import IntelBriefHistory from './pages/IntelBriefHistory'
 import ReportProblem  from './pages/ReportProblem'
+import Donate         from './pages/Donate'
 import Chat, { ChatAdminRoute } from './pages/chat/Chat'
 import Contact        from './pages/Contact'
 import Privacy        from './pages/Privacy'
@@ -329,6 +330,8 @@ function AppRoutes() {
           {/* v2 protected pages */}
           <Route path="/subscribe"        element={<PageWrapper><Subscription /></PageWrapper>} />
           <Route path="/report"           element={<PageWrapper><ReportProblem /></PageWrapper>} />
+          {/* Public on purpose — see the note at the top of Donate.jsx. */}
+          <Route path="/donate"           element={<PageWrapper><Donate /></PageWrapper>} />
           <Route path="/chat"             element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           {/* Static segment before the dynamic one — react-router ranks it
               higher regardless, but the order documents the intent. */}
