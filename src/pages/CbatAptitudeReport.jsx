@@ -119,24 +119,33 @@ function TestRow({ test }) {
   }
 
   const tone = stanineTone(test.stanine)
+  // Labelled inline wherever it appears, because an unlabelled number here reads as "the score you
+  // got" rather than the mean of your last three goes that it actually is.
+  const last3 = test.played.map(p => `${p.label} ${p.form}`).join(' · ')
+  const last3Title = 'Your average score over your last 3 goes on Hard, not your best ever.'
+
   return (
-    <div className="flex items-center gap-2 py-1 pl-3 text-[11px] min-w-0">
-      <span className="text-slate-700 w-[92px] shrink-0 truncate" title={test.label}>{test.code}{mult}</span>
-      <div className="flex-1 min-w-0"><StanineBar stanine={test.stanine} compact /></div>
-      <span className={`w-6 text-right font-mono font-bold ${tone.text}`}>{Math.round(test.stanine)}</span>
-      {/* Labelled inline, because an unlabelled number here reads as "the score you got" rather
-          than the mean of your last three goes that it actually is. */}
-      <span
-        className="hidden sm:block w-[150px] shrink-0 text-slate-600 truncate text-right"
-        title="Your average score over your last 3 goes on Hard, not your best ever."
-      >
-        <span className="text-slate-500">Last 3:</span> {test.played.map(p => `${p.label} ${p.form}`).join(' · ')}
-      </span>
-      {test.match === 'proxy' && (
-        <span className="hidden md:inline text-[9px] text-slate-600 uppercase tracking-wide" title="A SkyWatch game that trains the same skill, not a simulation of this exact test">
-          proxy
+    <div className="py-1 pl-3 text-[11px] min-w-0">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-slate-700 w-[92px] shrink-0 truncate" title={test.label}>{test.code}{mult}</span>
+        <div className="flex-1 min-w-0"><StanineBar stanine={test.stanine} compact /></div>
+        <span className={`w-6 text-right font-mono font-bold ${tone.text}`}>{Math.round(test.stanine)}</span>
+        <span className="hidden sm:block w-[150px] shrink-0 text-slate-600 truncate text-right" title={last3Title}>
+          <span className="text-slate-500">Last 3:</span> {last3}
         </span>
-      )}
+        {test.match === 'proxy' && (
+          <span className="hidden md:inline text-[9px] text-slate-600 uppercase tracking-wide" title="A SkyWatch game that trains the same skill, not a simulation of this exact test">
+            proxy
+          </span>
+        )}
+      </div>
+      {/* On a phone there is no room for the scores beside the bar, and they used to be dropped
+          entirely — which left opening a row on the device most people read this on showing a
+          code, a bar and a level, none of which is the thing you opened it to see. They get their
+          own line instead. */}
+      <p className="sm:hidden mt-0.5 text-[10px] text-slate-600 truncate" title={last3Title}>
+        <span className="text-slate-500">Last 3:</span> {last3}
+      </p>
     </div>
   )
 }
@@ -229,18 +238,18 @@ function DomainRow({ domain, targetStanine }) {
         <span className="text-slate-500 text-[10px] w-3 shrink-0">{open ? '▾' : '▸'}</span>
         <span className="w-[104px] sm:w-[150px] shrink-0 min-w-0">
           <span className="block text-xs font-bold text-slate-800 truncate">{domain.label}</span>
-          <span className="block text-[10px] text-slate-600 font-mono">counts {domain.weight}%</span>
+          <span className={`block text-[10px] truncate ${TONE_TEXT[band.tone]}`}>
+            {unmeasured ? (noGameAtAll ? 'No game yet' : 'Not enough games') : band.label}
+          </span>
         </span>
         <span className="flex-1 min-w-0"><StanineBar stanine={domain.stanine} target={targetStanine} /></span>
         <span className={`w-7 text-right font-mono text-base font-extrabold ${tone.text}`}>
           {domain.stanine == null ? '-' : Math.round(domain.stanine)}
         </span>
-        <span className="hidden lg:block w-[132px] shrink-0 text-right">
-          <span className={`block text-[10px] ${TONE_TEXT[band.tone]}`}>
-            {unmeasured ? (noGameAtAll ? 'No game yet' : 'Not enough games') : band.label}
-          </span>
+        <span className="hidden sm:block w-[104px] lg:w-[132px] shrink-0 text-right">
+          <span className="block text-[10px] text-slate-600 font-mono">counts {domain.weight}%</span>
           {!unmeasured && domain.coverage < 100 && (
-            <span className="block text-[9px] text-slate-600">We can measure {domain.coverage}% of this</span>
+            <span className="block text-[9px] text-slate-600">We measure {domain.coverage}% of it</span>
           )}
         </span>
       </button>
@@ -474,6 +483,10 @@ export default function CbatAptitudeReport() {
   const [error, setError] = useState(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [userPickerOpen, setUserPickerOpen] = useState(false)
+  // The explainer answers the questions a first-timer has and nobody else's. Null means "decide
+  // from the report": open for a reader with no score, shut for one who has one and has almost
+  // certainly read it. An explicit tap wins over both, for the life of the page.
+  const [helpOpen, setHelpOpen] = useState(null)
 
   // Admin only: whose report we're reading. In the URL so a refresh — or a link pasted into a
   // support thread — lands back on the same player.
@@ -592,6 +605,7 @@ export default function CbatAptitudeReport() {
   }
 
   const verdict = reportVerdict(report ?? {})
+  const showHelp = helpOpen ?? (report?.score == null)
 
   return (
     <div>
@@ -602,8 +616,7 @@ export default function CbatAptitudeReport() {
         <Link to="/cbat" className="text-sm text-slate-500 hover:text-brand-600 transition-colors shrink-0">CBAT Aptitude Practise &rarr;</Link>
       </div>
       <p className="text-sm text-slate-500 mb-5">
-        An estimate of how you&apos;d score on the real CBAT, and what to practise next. Pick the RAF role you want and
-        we&apos;ll show you how close you are to its pass mark.
+        An estimate of how you&apos;d score on the real CBAT, and what to practise next.
       </p>
 
       {/* Admin: whose report this is. Amber, and stated in full — an admin who forgets they're
@@ -635,26 +648,23 @@ export default function CbatAptitudeReport() {
         <AdminUserPicker current={viewingId} onPick={pickUser} onClose={() => setUserPickerOpen(false)} />
       )}
 
-      {/* Role bar. Reworded when an admin is reading someone else's report: the role on show is
-          that player's choice, and calling it the one "you're" aiming for would read as the
-          admin's own. */}
-      <div className="flex items-center gap-3 mb-5">
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide">
-            {viewingAs ? 'Role this player is aiming for' : "Role you're aiming for"}
-          </p>
-          <p className="text-base font-extrabold text-slate-900 truncate">
-            {report?.label ?? BATTERY_BY_KEY[selected]?.label ?? '-'}
-          </p>
-          {/* Said plainly rather than left to look like a choice they made: the role on screen is
-              our default, and an admin reading it as the player's goal would draw the wrong
-              conclusion from every number under it. */}
+      {/* Role bar. One line: which role the numbers below are being judged against, and the way to
+          change it. It was three lines and a label, which is a lot of chrome to cross before
+          reaching the score it introduces.
+          
+          Reworded when an admin is reading someone else's report: the role on show is that
+          player's choice, and calling it the one "you're" aiming for would read as the admin's
+          own. An unchosen role is said plainly rather than left to look like a decision, because
+          an admin reading our default as the player's goal would draw the wrong conclusion from
+          every number under it. */}
+      <div className="flex items-center gap-3 mb-4">
+        <p className="flex-1 min-w-0 text-sm text-slate-600 truncate">
+          {viewingAs ? 'This player is aiming for ' : 'Aiming for '}
+          <span className="font-extrabold text-slate-900">{report?.label ?? BATTERY_BY_KEY[selected]?.label ?? '-'}</span>
           {viewingAs && !targetBattery && (
-            <p className="text-[10px] text-amber-700 truncate">
-              This player has not chosen a role yet, so we are showing the first one on the sheet.
-            </p>
+            <span className="text-amber-700"> (not chosen yet, so this is the first role on the sheet)</span>
           )}
-        </div>
+        </p>
         <button
           type="button"
           onClick={() => setPickerOpen(o => !o)}
@@ -751,9 +761,8 @@ export default function CbatAptitudeReport() {
             <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-shadow">
               <h2 className="text-sm font-extrabold text-slate-900 mb-0.5">Play these next</h2>
               <p className="text-[11px] text-slate-600 mb-3">
-                The games that would add the most to your score for this role. The green number is roughly how many points
-                each one is worth. Only runs on Hard count, so a game with two difficulties opens with Hard already
-                selected.
+                Ranked by what each adds to this role&apos;s score. The green figure is roughly what it is worth. Only
+                Hard runs count, so these open on Hard.
               </p>
               <div className="space-y-1.5">
                 {report.focus.map((f) => {
@@ -806,7 +815,7 @@ export default function CbatAptitudeReport() {
               <span className="w-[104px] sm:w-[150px] shrink-0">Skill area</span>
               <span className="flex-1 min-w-0"><StanineScale /></span>
               <span className="w-7 text-right">Lvl</span>
-              <span className="hidden lg:block w-[132px] shrink-0 text-right">How you compare</span>
+              <span className="hidden sm:block w-[104px] lg:w-[132px] shrink-0 text-right">Weighting</span>
             </div>
             {report.domains.map(d => (
               <DomainRow key={d.key} domain={d} targetStanine={targetStanine} />
@@ -816,10 +825,8 @@ export default function CbatAptitudeReport() {
           <p className="text-[11px] text-slate-600 mb-5">
             <span className="inline-block w-[2px] h-3 bg-[#ff4d4d] align-middle mr-1.5" />
             The red line is level {targetStanine ? Math.round(targetStanine * 10) / 10 : '-'}. Reach it in every skill area and
-            you land exactly on this role&apos;s pass mark. The chips under each row are the games that feed it, so tap one to
-            go and play it. Games with two difficulties open on Hard, the only runs this report counts. Tap the row
-            itself to see your average score on each, taken from your last 3 goes. Anything greyed out isn&apos;t counting yet, almost always because you
-            haven&apos;t played its game enough times.
+            you land exactly on this role&apos;s pass mark. The chips under each row are the games that feed it: tap one to
+            play it, or tap the row itself for your average on each.
           </p>
 
           {/* Gaps. */}
@@ -827,8 +834,8 @@ export default function CbatAptitudeReport() {
             <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-shadow">
               <h2 className="text-sm font-extrabold text-slate-900 mb-0.5">Tests we don&apos;t have a game for</h2>
               <p className="text-[11px] text-slate-600 mb-3">
-                You&apos;ll sit these on the day, but we can&apos;t practise them yet. We leave them out of your score rather
-                than guess at them, which is why the number above is based on part of the role and not all of it.
+                You&apos;ll sit these on the day, but we have no game for them yet, so we leave them out rather than guess
+                at them. It is why your score covers part of this role and not all of it.
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {report.gaps.map(g => (
@@ -848,8 +855,16 @@ export default function CbatAptitudeReport() {
           {/* Not small print: the page is worthless, and misleading, if it is mistaken for a result.
               Written for someone who has never sat the CBAT and may not know what a stanine is. */}
           <div className="border border-[#1a3a5c] rounded-2xl p-4 bg-[#060e1a]">
-            <h2 className="text-xs font-extrabold text-slate-700 uppercase tracking-wide mb-3">New to this? Start here</h2>
-            <ul className="text-[11px] text-slate-600 space-y-2.5 list-none pl-0">
+            <button
+              type="button"
+              onClick={() => setHelpOpen(!showHelp)}
+              className="w-full flex items-center justify-between gap-3 text-left"
+            >
+              <h2 className="text-xs font-extrabold text-slate-700 uppercase tracking-wide">New to this? Start here</h2>
+              <span className="text-[10px] font-bold text-brand-700 shrink-0">{showHelp ? 'Hide' : 'Show'}</span>
+            </button>
+            {showHelp && (
+            <ul className="text-[11px] text-slate-600 space-y-2.5 list-none pl-0 mt-3">
               <li>
                 <span className="block text-slate-700 font-bold mb-0.5">How the real CBAT works</span>
                 You sit the tests once and get one score out of 180. That score is checked against the pass mark for every
@@ -884,13 +899,18 @@ export default function CbatAptitudeReport() {
                 day you get one attempt, so your best ever score from fifty tries is not what you would walk in and repeat.
                 Only Hard difficulty counts, because the real test has one setting.
               </li>
-              <li>
-                <span className="block text-slate-700 font-bold mb-0.5">This is a practice estimate, not a real result</span>
-                Our games are our own versions of the CBAT tests, not the RAF&apos;s. The role weightings and pass marks come
-                from real score sheets, but your levels are worked out by comparing you to other SkyWatch players, not to
-                real RAF candidates. Treat it as a guide to what to practise, not a prediction.
-              </li>
             </ul>
+            )}
+
+            {/* Never behind the toggle. The page is worthless, and actively misleading, if it is
+                mistaken for a real result, so the one paragraph that says so is not something a
+                reader can collapse away. */}
+            <p className={`text-[11px] text-slate-600 ${showHelp ? 'mt-3 pt-3 border-t border-[#12293f]' : 'mt-3'}`}>
+              <span className="block text-slate-700 font-bold mb-0.5">This is a practice estimate, not a real result</span>
+              Our games are our own versions of the CBAT tests, not the RAF&apos;s. The role weightings and pass marks come
+              from real score sheets, but your levels are worked out by comparing you to other SkyWatch players, not to
+              real RAF candidates. Treat it as a guide to what to practise, not a prediction.
+            </p>
           </div>
         </>
       )}

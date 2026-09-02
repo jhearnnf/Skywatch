@@ -456,8 +456,8 @@ describe('CbatAptitudeReport', () => {
       render(<CbatAptitudeReport />)
       await screen.findByText('100')
 
-      expect(screen.getByText('Role this player is aiming for')).toBeInTheDocument()
-      expect(screen.getByText(/has not chosen a role yet, so we are showing/)).toBeInTheDocument()
+      expect(screen.getByText(/This player is aiming for/)).toBeInTheDocument()
+      expect(screen.getByText(/not chosen yet, so this is the first role on the sheet/)).toBeInTheDocument()
     })
   })
 
@@ -466,5 +466,107 @@ describe('CbatAptitudeReport', () => {
     render(<CbatAptitudeReport />)
     expect(screen.getByText('Sign in to see your Aptitude Report')).toBeInTheDocument()
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+})
+
+// The explainer is five long bullets written for someone who has never sat the CBAT, and dead
+// weight for someone who has read them once. It decides for itself which reader it has.
+describe('CbatAptitudeReport — the explainer', () => {
+  const HOW_IT_WORKS = /You sit the tests once and get one score out of 180/
+  const DISCLAIMER   = /practice estimate, not a real result/i
+
+  const unscored = () => {
+    global.fetch = vi.fn((url) => {
+      let body = { ...summary, batteries: summary.batteries.map(b => ({ ...b, score: null, status: 'unscored', coverage: 0 })) }
+      if (url.includes('/report-users')) body = { users: reportUsers }
+      else if (url.includes('/report/')) body = { ...report, score: null, margin: null, status: 'unscored', coverage: 0 }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+  }
+
+  it('stays shut for a player who already has a score', async () => {
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.queryByText(HOW_IT_WORKS)).not.toBeInTheDocument()
+    expect(screen.getByText('Show')).toBeInTheDocument()
+  })
+
+  it('opens itself for a player who has no score to read yet', async () => {
+    unscored()
+    render(<CbatAptitudeReport />)
+    await screen.findByText('Pass mark')
+    expect(screen.getByText(HOW_IT_WORKS)).toBeInTheDocument()
+  })
+
+  // The awaits below are the test harness, not the page: a parent state change re-renders it, and
+  // this file's useAuth mock hands back a fresh apiFetch each time, so both fetch effects re-run
+  // and the report block drops out for a tick. The real context memoises apiFetch and never does
+  // this.
+  it('opens on a tap', async () => {
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    fireEvent.click(screen.getByText('Show'))
+    expect(await screen.findByText(HOW_IT_WORKS)).toBeInTheDocument()
+  })
+
+  // The page is worthless, and actively misleading, if it is mistaken for a real result. The one
+  // paragraph that says so is not something a reader can collapse away.
+  it('never hides the disclaimer, open or shut', async () => {
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.getByText(DISCLAIMER)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Show'))
+    expect(await screen.findByText(DISCLAIMER)).toBeInTheDocument()
+  })
+})
+
+// A bar and a bare number say where you are without saying what it means. The words for it used to
+// live in a column that only appeared from `lg`, so on the device most people read this on, no row
+// said anything at all.
+describe('CbatAptitudeReport — what a level means', () => {
+  it('names the band on the row itself, at every width', async () => {
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.getByText('Average').className).not.toMatch(/hidden/)
+  })
+
+  it('says so on a skill area it cannot measure at all', async () => {
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.getByText('No game yet').className).not.toMatch(/hidden/)
+  })
+
+  // The weighting is detail rather than meaning, so it is the half that gives way when the row
+  // runs out of room.
+  it('keeps the weighting in a column of its own', async () => {
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.getByText('counts 17%').closest('.hidden')).toBeInTheDocument()
+  })
+})
+
+// Opening a skill area is how you find out what you actually scored on each game. On a phone that
+// column had nowhere to go and was simply dropped, which left the tap showing a code, a bar and a
+// level: everything except the reason for tapping.
+describe('CbatAptitudeReport — your scores on a phone', () => {
+  it('gives the last-3 scores their own line below the sm breakpoint', async () => {
+    const { container } = render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    fireEvent.click(screen.getByText('Strategic Task Management'))
+
+    const phone = [...container.querySelectorAll('.sm\\:hidden')]
+      .find(el => el.textContent.includes('Last 3:'))
+    expect(phone).toBeDefined()
+    expect(phone.textContent).toContain('Cognitive Updating Test 380')
+  })
+
+  it('keeps the desktop column in the row itself', async () => {
+    const { container } = render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    fireEvent.click(screen.getByText('Strategic Task Management'))
+
+    const desktop = [...container.querySelectorAll('.hidden.sm\\:block')]
+      .find(el => el.textContent.includes('Last 3:'))
+    expect(desktop).toBeDefined()
   })
 })
