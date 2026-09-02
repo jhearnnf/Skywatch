@@ -93,6 +93,38 @@ const slugify = (name) => String(name).toLowerCase().trim()
 
 const isChatBanned = (user) => Boolean(user?.chatBannedAt);
 
+// ── Blocking ─────────────────────────────────────────────────────────────────
+// The user-level block Community needs to be a place people can leave a
+// conversation without asking a moderator first. Semantics live on
+// User.blockedUserIds; these are the three ways the rest of this file asks
+// about them.
+
+const blockedIds = (user) => (user?.blockedUserIds ?? []).map(String);
+
+// Whose messages to hide from THIS viewer. Admins are exempt: a moderator
+// reading a reported thread has to see the message that was reported, and a
+// block of their own must not quietly remove evidence from the transcript.
+const hiddenSenderIds = (user) => (user.isAdmin ? [] : blockedIds(user));
+
+// Whether a DM between `user` and `otherId` is barred, and by whom. Two-way on
+// purpose: a block that only muted the person doing the blocking would leave
+// them still receiving messages from someone they had just walked away from.
+//
+// Returns 'you', 'them', or null.
+async function dmBlockedBy(user, otherId) {
+  if (blockedIds(user).includes(String(otherId))) return 'you';
+  const blockedByThem = await User.exists({ _id: otherId, blockedUserIds: user._id });
+  return blockedByThem ? 'them' : null;
+}
+
+// The 'them' wording is deliberately vague. Telling someone they have been
+// blocked turns blocking into an accusation, which is exactly what makes people
+// hesitate to use it.
+const DM_BLOCK_MESSAGE = {
+  you:  'You have blocked this agent. Unblock them from your profile to message them again.',
+  them: 'You cannot send messages to this agent.',
+};
+
 // Who a message is from, as far as other users are concerned. Support threads
 // collapse every admin to one "SkyWatch Support" identity; in channels and DMs
 // admins speak under their own display name like anyone else.
@@ -287,10 +319,19 @@ function isUnread(convo, readRow) {
 
 // Every conversation a user can see, projected to just what unread needs.
 async function visibleConversations(user, { lean = true } = {}) {
+  // A DM with someone this user has blocked leaves the rail and the unread
+  // counts altogether. A blocked thread that still badged the navbar would be
+  // the block failing in the one place the user actually looks.
+  const blocked = blockedIds(user);
   const query = ChatConversation.find({
     $or: [
       { type: 'channel', isArchived: false },
-      { type: 'dm', participantIds: user._id },
+      {
+        type: 'dm',
+        participantIds: blocked.length
+          ? { $all: [user._id], $nin: blocked }
+          : user._id,
+      },
       { type: 'support', userId: user._id },
     ],
   }).sort({ lastMessageAt: -1 });
@@ -543,8 +584,17 @@ router.get('/overview', async (req, res) => {
       return new Map(users.map(u => [String(u._id), u.displayName ?? null]));
     })();
 
+    // A channel's most recent line can be from someone this viewer has blocked.
+    // The rail would then quote them by name on a channel the block was
+    // supposed to have cleaned up, so the preview is dropped and the row falls
+    // back to showing no preview at all.
+    const hidden = new Set(hiddenSenderIds(req.user));
+
     const decorate = (c) => {
-      const preview = previews.get(String(c._id));
+      const raw     = previews.get(String(c._id));
+      const preview = raw && raw.senderUserId && hidden.has(String(raw.senderUserId))
+        ? null
+        : raw;
       return {
         _id:           c._id,
         type:          c.type,
@@ -728,7 +778,83 @@ router.get('/users/:id/card', async (req, res) => {
       cbatPassed:  Boolean(target.cbatPassed),
       botKey:      target.botKey ?? null,
       isSelf:      String(target._id) === String(req.user._id),
+      // Drives the Block/Unblock button. Bots are excluded because blocking one
+      // would hide the guide answers people came for, and would read as a
+      // broken feature rather than a moderation choice.
+      isBlocked:   blockedIds(req.user).includes(String(target._id)),
+      canBlock:    String(target._id) !== String(req.user._id) && !target.isBot,
     } } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Blocking ─────────────────────────────────────────────────────────────────
+
+// GET /api/chat/blocks — the agents this user has blocked, for the list in
+// Profile that is the only place a block can be undone. A block made from a
+// message you can no longer see would otherwise be permanent by accident.
+router.get('/blocks', async (req, res) => {
+  try {
+    const ids = req.user.blockedUserIds ?? [];
+    if (!ids.length) return res.json({ status: 'success', data: { blocked: [] } });
+
+    const users = await User.find({ _id: { $in: ids } })
+      .select('displayName agentNumber')
+      .sort({ displayNameLower: 1 })
+      .lean();
+
+    res.json({ status: 'success', data: {
+      blocked: users.map(u => ({
+        _id:         u._id,
+        displayName: u.displayName ?? null,
+        agentNumber: u.agentNumber ?? null,
+      })),
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/chat/users/:id/block — block an agent.
+//
+// $addToSet, so blocking twice is the same as blocking once: the client can
+// fire this without first knowing the current state, and a double tap on a
+// slow connection cannot produce a duplicate entry.
+router.post('/users/:id/block', async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'User not found' });
+    if (String(req.params.id) === String(req.user._id)) {
+      return res.status(400).json({ message: 'You cannot block yourself.' });
+    }
+
+    const target = await User.findById(req.params.id).select('_id isBot').lean();
+    if (!target) return res.status(404).json({ message: 'User not found' });
+    // Blocking the guide bot would hide the answers people opened Community
+    // for, and would read as the app breaking rather than as a choice.
+    if (target.isBot) {
+      return res.status(400).json({ message: 'That agent cannot be blocked.' });
+    }
+
+    await User.updateOne({ _id: req.user._id }, { $addToSet: { blockedUserIds: target._id } });
+
+    res.json({ status: 'success', data: { blocked: true } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/chat/users/:id/block — unblock.
+router.delete('/users/:id/block', async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'User not found' });
+
+    // No existence check on the target: unblocking someone whose account has
+    // since been deleted must still clear the entry, or the row would be stuck
+    // in the list forever with nothing able to remove it.
+    await User.updateOne({ _id: req.user._id }, { $pull: { blockedUserIds: req.params.id } });
+
+    res.json({ status: 'success', data: { blocked: false } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -759,6 +885,14 @@ router.post('/dm', async (req, res) => {
     // there unanswered.
     if (target.isBot && !target.botAnswersDms) {
       return res.status(400).json({ message: 'That bot posts to a channel and does not take messages.' });
+    }
+
+    // Checked before the thread is created, not after: an empty DM conversation
+    // left behind by a refused open would still surface in the other party's
+    // rail the moment anything touched it.
+    const blockedBy = await dmBlockedBy(req.user, target._id);
+    if (blockedBy) {
+      return res.status(403).json({ code: 'BLOCKED', message: DM_BLOCK_MESSAGE[blockedBy] });
     }
 
     const participantKey = ChatConversation.dmKey(req.user._id, userId);
@@ -895,7 +1029,15 @@ router.get('/conversations/:id/stream', async (req, res) => {
     });
     res.write(': open\n\n');
 
+    // Captured at connect. Blocking someone mid-stream is followed by a thread
+    // re-fetch on the client, which is what actually clears them from the
+    // screen — this only has to stop new arrivals on an existing connection.
+    const hiddenStreamSenders = new Set(hiddenSenderIds(req.user));
+
     const send = (event, data) => {
+      if (event === 'message'
+        && data?.senderUserId
+        && hiddenStreamSenders.has(String(data.senderUserId))) return;
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
@@ -956,6 +1098,12 @@ router.get('/conversations/:id/messages', async (req, res) => {
     // `hasMore` still describe the page the user actually receives. Admins are
     // exempt: the moderation record is the whole reason the row is kept.
     if (!req.user.isAdmin) filter.deletedAt = null;
+
+    // Blocked agents drop out of the page for the same reason and in the same
+    // way as removed messages: filtered in the QUERY, so `limit` and `hasMore`
+    // still describe the page the viewer actually receives.
+    const hiddenSenders = hiddenSenderIds(req.user);
+    if (hiddenSenders.length) filter.senderUserId = { $nin: hiddenSenders };
 
     const messages = await ChatMessage
       .find(filter)
@@ -1055,6 +1203,17 @@ router.post('/conversations/:id/messages', async (req, res) => {
 
     const refusal = postRefusal(convo, req.user);
     if (refusal) return res.status(refusal.status).json(refusal.body);
+
+    // Blocking is checked here rather than inside postRefusal because it needs
+    // a query and that helper is synchronous — it is also read by GET /lounge,
+    // which has no other party to look up.
+    if (convo.type === 'dm') {
+      const otherId = (convo.participantIds ?? []).find(id => String(id) !== String(req.user._id));
+      const blockedBy = otherId ? await dmBlockedBy(req.user, otherId) : null;
+      if (blockedBy) {
+        return res.status(403).json({ code: 'BLOCKED', message: DM_BLOCK_MESSAGE[blockedBy] });
+      }
+    }
 
     if (hitRateLimit(req.user._id)) {
       return res.status(429).json({ message: 'You are sending messages too quickly. Wait a moment.' });
@@ -1620,7 +1779,9 @@ router.get('/conversations/:id/mention-suggestions', async (req, res) => {
         isBanned: { $ne: true },
         chatBannedAt: null,
         displayNameLower: { $regex: `^${escapeRegex(q.toLowerCase())}` },
-        _id: { $ne: req.user._id },
+        // Yourself, plus anyone you have blocked — offering a blocked agent
+        // for autocomplete would be the block failing at the point of contact.
+        _id: { $nin: [req.user._id, ...blockedIds(req.user)] },
       })
         .select('displayName agentNumber isAdmin')
         .sort({ displayNameLower: 1 })

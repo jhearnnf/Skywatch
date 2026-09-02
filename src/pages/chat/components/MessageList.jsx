@@ -267,7 +267,7 @@ function NewMessagesDivider() {
 // remounts its whole subtree on every parent render.
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine, online,
-  viewerIsAdmin, onOpenUser, onReport, onDelete, onEdit, onReply, onReact, onSeenBy,
+  viewerIsAdmin, onOpenUser, onReport, onBlock, onDelete, onEdit, onReply, onReact, onSeenBy,
   onJump, highlighted, senders, currentUserId, datedStamps,
   // Whether this row's actions are pinned open, and how to ask for that. Held
   // by the list rather than the row so only one row can be open at a time.
@@ -281,6 +281,10 @@ function MessageRow({
 
   const canOpenUser = Boolean(onOpenUser) && !mine && m.senderUserId && !isSupportIdentity
   const canReport   = Boolean(onReport)   && !mine && !m.deleted
+  // Blocking sits beside reporting on purpose. They are the two things you can
+  // do about a message from someone else, and a block that could only be found
+  // by first tapping the person's name would be a block most people never find.
+  const canBlock    = Boolean(onBlock)    && !mine && !m.deleted && Boolean(m.senderUserId)
   const canDelete   = Boolean(onDelete)   && viewerIsAdmin && !m.deleted
   const canEdit     = Boolean(onEdit)     && viewerIsAdmin && !m.deleted
   const canReply    = Boolean(onReply)    && !m.deleted
@@ -289,7 +293,7 @@ function MessageRow({
   // serves them the deleted ones. Everyone else gets it on their own live
   // messages only.
   const canSeenBy   = Boolean(onSeenBy)   && (viewerIsAdmin || (mine && !m.deleted))
-  const hasActions  = canSeenBy || canReply || canEdit || canReport || canDelete
+  const hasActions  = canSeenBy || canReply || canEdit || canReport || canBlock || canDelete
 
   // On a pointer device the bar disappears the moment you move off the row, so
   // nothing has to dismiss it. Where it was opened by tap it does, or it would
@@ -442,6 +446,10 @@ function MessageRow({
           <button type="button" onClick={act(() => onReport(m))} title="Report"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">⚑</button>
         )}
+        {canBlock && (
+          <button type="button" onClick={act(() => onBlock(m))} title="Block this agent"
+            className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">🚫</button>
+        )}
         {canDelete && (
           <button type="button" onClick={act(() => onDelete(m))} title="Delete"
             className="text-[11px] px-1.5 py-0.5 text-red-600 hover:text-red-700">✕</button>
@@ -479,6 +487,7 @@ export default function MessageList({
   onlineIds = null,
   onOpenUser,
   onReport,
+  onBlock,
   onDelete,
   onEdit,
   onReply,
@@ -597,6 +606,10 @@ export default function MessageList({
             viewerIsAdmin={viewerIsAdmin}
             onOpenUser={conversationType === 'channel' ? onOpenUser : undefined}
             onReport={conversationType === 'support' ? undefined : onReport}
+            // Support is a thread with staff. There is nobody to block in
+            // one, and offering it would suggest you could cut yourself off
+            // from the only people who can help you.
+            onBlock={conversationType === 'support' ? undefined : onBlock}
             onDelete={onDelete}
             onEdit={onEdit}
             onReply={onReply}

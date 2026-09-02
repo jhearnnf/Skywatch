@@ -21,6 +21,7 @@ import { NATIVE_APP } from '../utils/appMode'
 import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
 import { PLAY_STORE_URL, forceUpdateWebApp, isNativeUpdateAvailable } from '../utils/appUpdate'
+import BlockedAgents from './chat/components/BlockedAgents'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
@@ -621,6 +622,12 @@ export default function Profile() {
               )}
             </div>
           )}
+
+          {/* The undo for a block. Sits next to the other Community setting
+              rather than inside Community itself, because blocking someone
+              removes their messages from the very place you would look for
+              them. See BlockedAgents. */}
+          {appSettings?.chatEnabled !== false && <BlockedAgents />}
 
           {/* Homepage feature — the opt-out for the landing page's progress wall.
               Worded so the choice can be made without reading a policy: it says

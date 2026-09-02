@@ -47,6 +47,10 @@ export default function ChatThread({
   const [cardUserId,   setCardUserId]   = useState(null)
   const [reporting,    setReporting]    = useState(null)
   const [reportDone,   setReportDone]   = useState(false)
+  // Set when the block action is used from a message rather than from a name:
+  // the card is the confirm step, so the message action simply opens it on the
+  // sender instead of duplicating the explanation.
+  const [blockDone,    setBlockDone]    = useState(false)
   const [replyTo,      setReplyTo]      = useState(null)
   const [seenByMsg,    setSeenByMsg]    = useState(null)
   // Both frozen at entry. The server's answers change the moment we mark the
@@ -381,6 +385,7 @@ export default function ChatThread({
           onReply={canPost ? setReplyTo : undefined}
           onReact={handleReact}
           onReport={m => { setReportDone(false); setReporting(m) }}
+          onBlock={m => { setBlockDone(false); setCardUserId(m.senderUserId) }}
           onDelete={user?.isAdmin ? handleDelete : undefined}
           onEdit={user?.isAdmin ? handleEdit : undefined}
           onSeenBy={setSeenByMsg}
@@ -407,6 +412,11 @@ export default function ChatThread({
       {reportDone && (
         <p className="text-xs text-emerald-700 bg-emerald-50 border-t border-emerald-200 px-3 py-2">
           Thanks — the SkyWatch team will review that message.
+        </p>
+      )}
+      {blockDone && (
+        <p className="text-xs text-slate-600 bg-slate-100 border-t border-slate-200 px-3 py-2">
+          Blocked. You can undo this under Blocked Agents in your profile.
         </p>
       )}
 
@@ -462,6 +472,15 @@ export default function ChatThread({
           userId={cardUserId}
           onClose={() => setCardUserId(null)}
           onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`); onChanged?.() }}
+          // Their messages have just left (or rejoined) this thread server-side,
+          // so refetch rather than waiting up to 5s for the poll to notice.
+          onBlockChanged={(blocked) => {
+            setBlockDone(blocked)
+            fetchMessages()
+              .then(d => { setMessages(d.messages); setSenders(d.senders ?? {}) })
+              .catch(() => {})
+            onChanged?.()
+          }}
         />
       )}
       {seenByMsg && (

@@ -68,6 +68,19 @@ const userSchema = new mongoose.Schema(
     chatBannedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     chatBanReason:      { type: String, trim: true, maxlength: 300, default: null },
 
+    // Agents this user has blocked in Community.
+    //
+    // Deliberately one-way and viewer-scoped, which is what makes it safe to
+    // act on without a moderator: blocking hides THEIR messages from YOU and
+    // stops either of you opening or posting into a DM with the other. It does
+    // not hide your messages from them, and it tells them nothing — a block
+    // that announced itself would make blocking an escalation rather than a
+    // way out of one.
+    //
+    // Admins are exempt when reading: the moderation transcript has to show
+    // every message, or a reported conversation could not be assessed.
+    blockedUserIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
     // Automated chat account. A real User row so DMs, avatars, the sender map,
     // name colours and the admin transcript all work with no special-casing —
     // but it never plays anything, so it is excluded from the leaderboard and
@@ -272,9 +285,18 @@ const userSchema = new mongoose.Schema(
     // (or per game) would not be a cap.
     //
     // `lastShownAt` and `dismissCount` drive the caps: when we last offered the
-    // note, and how many times it has been waved away. There is no "already
-    // donated" flag — we cannot observe an external payment, and the dismissal
-    // cap already stops asking someone who has answered twice.
+    // note, and how many times it has been waved away.
+    //
+    // `donatedAt` is the hard stop, and it only became possible once donations
+    // started going through our own Stripe Checkout session rather than an
+    // external payment link — with a link we could not observe the payment at
+    // all, so the dismissal cap was the only thing standing between a donor and
+    // being asked again. It is set by the webhook, and only for a donor who was
+    // signed in; an anonymous donation is invisible to us by construction, and
+    // the dismissal cap still covers that case.
+    //
+    // `donatedTotalPence` accumulates rather than overwrites, so someone who
+    // gives twice reads as having given twice.
     //
     // `impressionCount` and `clickCount` are the funnel behind the admin stat,
     // and are deliberately NOT derived from the two above. `lastShownAt` is set
@@ -283,10 +305,12 @@ const userSchema = new mongoose.Schema(
     // never saw it. The impression is reported by the note itself on render, so
     // the denominator counts people who actually laid eyes on the card.
     donationPrompt: {
-      lastShownAt:     { type: Date,   default: null },
-      dismissCount:    { type: Number, default: 0 },
-      impressionCount: { type: Number, default: 0 },
-      clickCount:      { type: Number, default: 0 },
+      lastShownAt:       { type: Date,   default: null },
+      dismissCount:      { type: Number, default: 0 },
+      impressionCount:   { type: Number, default: 0 },
+      clickCount:        { type: Number, default: 0 },
+      donatedAt:         { type: Date,   default: null },
+      donatedTotalPence: { type: Number, default: 0 },
     },
   },
   { timestamps: true }
@@ -298,6 +322,11 @@ userSchema.index(
   { displayNameLower: 1 },
   { unique: true, partialFilterExpression: { displayNameLower: { $type: 'string' } } }
 );
+
+// "Has anyone blocked me?" runs on every DM open and every DM send, so the
+// reverse lookup needs an index of its own — the forward direction is already
+// answered by the blocker's own document.
+userSchema.index({ blockedUserIds: 1 });
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 
