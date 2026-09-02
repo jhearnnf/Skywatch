@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import {
   MAX_SCORE, MAX_STANINE, BATTERY_GROUPS, BATTERY_BY_KEY,
-  gamePath, gameTitle, gameEmoji, gameHasDifficulties,
+  gamePath, gameTitle, gameEmoji, gameHasDifficulties, onHard,
   stanineBand, stanineBeatsPct, stanineTone, reportVerdict, statusColour, TONE_TEXT,
 } from '../data/cbatBatteries'
 
@@ -19,18 +19,6 @@ import {
 // one cold.
 
 // ── Small pieces ─────────────────────────────────────────────────────────────────────────────
-
-// Every "go and play this" on the page has to name the difficulty, because only Hard runs feed the
-// report. Saying just "play it more" is advice that quietly fails: the game card opens on the
-// difficulty that user last chose, which is Easier until they change it, so the runs they go away
-// and do would leave this score exactly where it was.
-//
-// Empty for a game with no split, where naming a difficulty would send someone hunting for a button
-// that isn't on the card. Both helpers key off the same registry field the links do, so the wording
-// and the ?difficulty=hard on the link can't disagree.
-function onHard(gameKey) {
-  return gameHasDifficulties(gameKey) ? ' on Hard' : ''
-}
 
 // The sentence that closes a tooltip on a game that is already counting: what to do to move it up.
 function levelUpHint(gameKey) {
@@ -773,7 +761,12 @@ export default function CbatAptitudeReport() {
                   const game = test?.games?.[0]
                   return (
                     <div key={`${f.domainKey}-${f.code}`} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#060e1a] border border-[#1a3a5c]">
-                      <span className="font-mono font-extrabold text-emerald-300 text-sm w-12 shrink-0">+{f.gain}</span>
+                      {/* Points where the score has a base to express them against; the share of
+                          the role the play would let us measure where it hasn't (nothing scored
+                          yet, so there is no score for a point to be a point of). */}
+                      <span className="font-mono font-extrabold text-emerald-300 text-sm w-12 shrink-0">
+                        {f.gain === null ? `+${f.coverageGain}%` : `+${f.gain}`}
+                      </span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-xs font-bold text-slate-800 truncate">
                           {game ? `${gameEmoji(game)} ${gameTitle(game)}` : f.label}

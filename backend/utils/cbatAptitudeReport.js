@@ -276,15 +276,25 @@ function buildBatteryReport(battery, form) {
 //               for a run we haven't seen.
 // Tests with no SkyWatch game at all are gaps, not focus items — they're reported separately and
 // never appear here, because "work on TRT" is advice a user cannot act on.
+//
+// A BATTERY WITH NOTHING MEASURED STILL GETS A LIST. `gain` is a share of the renormalised base,
+// so with no scored test there is no base and the points figure is undefined — but that is exactly
+// the user who most needs telling what to play, and returning [] left the newest player with no
+// advice at all. Those rows come back with `gain: null` and are ranked on `coverageGain` instead:
+// the share of the battery's weight the test would ADD to what we can measure. That is the honest
+// currency at zero coverage, and it is the one the /cbat card leads with anyway, because a score
+// built on 8% of a role is not a thing to show anyone.
 const FOCUS_LIMIT = 5;
 
 function buildFocus(domains, measuredWeight) {
-  if (!measuredWeight) return [];
   const out = [];
 
   for (const d of domains) {
     const scored = d.tests.filter(t => t.state === 'scored');
     const scoredMult = scored.reduce((a, t) => a + t.mult, 0);
+    // The domain's whole multiplier pool, no-game tests included — the same denominator the
+    // domain's reported `coverage` uses, so a row's coverageGain and the headline agree.
+    const totalMult = d.tests.reduce((a, t) => a + t.mult, 0);
 
     for (const t of scored) {
       if (t.stanine >= MAX_STANINE) continue;   // already topped out
@@ -294,7 +304,8 @@ function buildFocus(domains, measuredWeight) {
         domainKey: d.key, domainLabel: d.label, domainWeight: d.weight,
         stanine: t.stanine,
         nextTarget: t.nextTarget,
-        gain: (d.weight / measuredWeight) * (t.mult / scoredMult) * (MAX_SCORE / MAX_STANINE),
+        gain: measuredWeight ? (d.weight / measuredWeight) * (t.mult / scoredMult) * (MAX_SCORE / MAX_STANINE) : null,
+        coverageGain: 0,   // already counted; improving it measures nothing new
       });
     }
 
@@ -309,15 +320,23 @@ function buildFocus(domains, measuredWeight) {
         stanine: null,
         needsRuns: t.needsRuns ?? [],
         easierOnly: t.state === 'easier-only',
-        gain: (d.weight / measuredWeight) * (t.mult / (scoredMult + t.mult)) * (MAX_SCORE / MAX_STANINE),
+        gain: measuredWeight ? (d.weight / measuredWeight) * (t.mult / (scoredMult + t.mult)) * (MAX_SCORE / MAX_STANINE) : null,
+        coverageGain: totalMult ? (d.weight * t.mult) / totalMult : 0,
       });
     }
   }
 
+  // Points where there is a base to express them against, coverage where there is not. Never a
+  // mix: at zero measured weight every row is an unlock with a null gain.
+  const rank = measuredWeight ? (f => f.gain) : (f => f.coverageGain);
   return out
-    .sort((a, b) => b.gain - a.gain)
+    .sort((a, b) => rank(b) - rank(a))
     .slice(0, FOCUS_LIMIT)
-    .map(f => ({ ...f, gain: Number(f.gain.toFixed(1)) }));
+    .map(f => ({
+      ...f,
+      gain: f.gain === null ? null : Number(f.gain.toFixed(1)),
+      coverageGain: Number(f.coverageGain.toFixed(1)),
+    }));
 }
 
 // Tests in a battery that SkyWatch has no game for — the honest footnote under every score, and
@@ -338,13 +357,95 @@ function buildGaps(battery) {
 // Every battery scored against one load of the user's form — the role picker's list, and the
 // "roles you'd currently pass" summary. Trimmed to the headline fields; the full domain breakdown
 // is only built for the battery actually being viewed.
-async function buildAllBatteryScores(userId) {
+//
+// `targetKey` buys one extra thing for the /cbat card: the single highest-value next play for the
+// role the user is aiming at. Every battery's focus list is computed here already, so this is a
+// pick rather than more work, and it saves the card either fetching the full report (thirteen
+// domains of detail to render one sentence) or inventing its own advice.
+async function buildAllBatteryScores(userId, targetKey = null) {
   const form = await loadForm(userId);
+  let targetFocus = null;
   const batteries = Object.values(BATTERY_BY_KEY).map((b) => {
-    const { key, label, group, cutoff, score, margin, status, coverage } = buildBatteryReport(b, form);
+    const report = buildBatteryReport(b, form);
+    const { key, label, group, cutoff, score, margin, status, coverage } = report;
+    if (targetKey && key === targetKey) targetFocus = topFocus(report);
     return { key, label, group, cutoff, maxScore: MAX_SCORE, score, margin, status, coverage };
   });
-  return { batteries, form };
+  const target = targetKey ? BATTERY_BY_KEY[targetKey] : null;
+  // runsToCount travels with the data rather than being mirrored in the frontend. The card counts
+  // runs toward it in its own copy ("2 / 3", "play it once more"), and a client guessing at three
+  // while the report moved to four would be wrong in the one place a new user is watching.
+  return {
+    batteries,
+    targetFocus,
+    nearestUnlock: nearestUnlock(form, target),
+    runsToCount: FORM_MIN_RUNS,
+    form,
+  };
+}
+
+// The top focus row, with the game key resolved onto it. The full report page finds the game by
+// walking its own domain tree; a caller holding only the summary has no tree to walk, so the key
+// travels with the row.
+function topFocus(report) {
+  const top = report.focus[0];
+  if (!top) return null;
+  const test = report.domains.flatMap(d => d.tests).find(t => t.code === top.code);
+  return { ...top, gameKey: test?.games?.[0] ?? null };
+}
+
+// The run this user is CLOSEST TO BANKING: of the games they have started but not yet played
+// FORM_MIN_RUNS times, the one with the most runs on it.
+//
+// It exists for the state the score cannot describe. A player two runs into the roster has a score
+// of null and 0% coverage, so every figure the report owns reads as nothing at all — and "nothing
+// at all" is wrong, because they may be one run away from their first score. This is that run, and
+// on the /cbat card it is the whole message: one game, one number, one more go.
+//
+// Ranked on runs banked first and most recently played second, deliberately: the question is "what
+// am I nearly done with", not "what is worth most", which is what `focus` is for. The recency
+// tie-break means it names the game they were just playing, which is the one they are most likely
+// to go back into.
+//
+// Games with no runs at all are excluded. A game never touched is not something a user is partway
+// through, and offering it as a near-miss would misreport their own history back at them.
+//
+// `battery` narrows it to the games a chosen role is actually tested on; without one it ranges
+// over the whole roster, because a user who has picked no role still has a first score to earn and
+// any game will start it.
+function nearestUnlock(form, battery = null) {
+  const allowed = battery ? batteryGameKeys(battery) : null;
+  let best = null;
+
+  for (const [gameKey, f] of Object.entries(form)) {
+    if (!f || !f.runs || f.runs >= FORM_MIN_RUNS) continue;
+    if (allowed && !allowed.has(gameKey)) continue;
+
+    const row = {
+      gameKey,
+      label: CBAT_GAMES[gameKey]?.label ?? gameKey,
+      runs: f.runs,
+      runsNeeded: FORM_MIN_RUNS - f.runs,
+      lastPlayedAt: f.lastPlayedAt ?? null,
+    };
+    const better = !best
+      || row.runs > best.runs
+      || (row.runs === best.runs && (row.lastPlayedAt ?? 0) > (best.lastPlayedAt ?? 0));
+    if (better) best = row;
+  }
+
+  return best;
+}
+
+// Every SkyWatch game a battery is tested on, deduplicated.
+function batteryGameKeys(battery) {
+  const keys = new Set();
+  for (const d of battery.domains) {
+    for (const t of d.tests) {
+      for (const game of TESTS[t.code].games) keys.add(game);
+    }
+  }
+  return keys;
 }
 
 // ── Admin: who is worth looking at? ──────────────────────────────────────────────────────────

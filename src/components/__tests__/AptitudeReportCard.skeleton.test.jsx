@@ -95,7 +95,10 @@ describe('AptitudeReportCard — loading skeleton', () => {
     const d = deferred()
     const { container } = renderWith(vi.fn().mockReturnValue(d.promise))
     expect(container.textContent).not.toMatch(/\d/)
-    expect(container.textContent).toContain('pass mark')
+    // And no unit either. The card that lands is far more often counting runs toward a first
+    // score than reporting a pass mark, so a placeholder naming a pass mark would lie twice.
+    expect(container.textContent).not.toContain('pass mark')
+    expect(container.textContent).toContain('Working out what to play next')
   })
 
   // Nothing in the held space may rest at, or animate towards, a width that
@@ -108,14 +111,22 @@ describe('AptitudeReportCard — loading skeleton', () => {
     expect(rail.querySelector('.aptitude-rail-fill')).toBeNull()
   })
 
-  // Height parity with the real card is the entire point, and both shapes now
-  // vary by breakpoint — the phone card is two text lines and a rail where the
-  // desktop card is three and a rail — so pinning literal class strings would
-  // pin the wrong thing and would go stale on the next tuning pass. What has to
-  // hold is that the boxes setting the height are IDENTICAL between the two, at
-  // every width. Rendering both and comparing them asserts exactly that, and
-  // keeps holding whatever the classes become.
-  const HEIGHT_BOXES = ['stripe', 'body', 'eyebrow', 'score', 'rail']
+  // Height parity with the real card is the entire point, and the shapes vary by
+  // breakpoint — a phone card is two or three text lines and a rail where the
+  // desktop card is three — so pinning literal class strings would pin the wrong
+  // thing and would go stale on the next tuning pass. What has to hold is that
+  // the boxes setting the height are IDENTICAL between the two, at every width.
+  // Rendering both and comparing them asserts exactly that, and keeps holding
+  // whatever the classes become.
+  //
+  // The comparison is against the PROGRESS card, not the scored one. That is the
+  // taller shape (it keeps its action line on a phone, where the scored card
+  // drops its verdict) and the one almost everyone who sees a skeleton at all is
+  // about to get: a user whose card is worth waiting for is by definition not yet
+  // a returning player with a settled score. A scored card landing instead
+  // settles the grid UPWARD by a line, which hides nothing.
+  const HEIGHT_BOXES = ['stripe', 'body', 'eyebrow', 'score', 'action', 'rail']
+  const SCORED_BOXES = HEIGHT_BOXES.filter(box => box !== 'action')
 
   function classesOf(container) {
     return Object.fromEntries(HEIGHT_BOXES.map(box => [
@@ -124,42 +135,75 @@ describe('AptitudeReportCard — loading skeleton', () => {
     ]))
   }
 
-  it('mirrors the scored card boxes that set its height, at every breakpoint', async () => {
+  const summary = (over) => ({
+    ok: true,
+    json: async () => ({ data: {
+      targetBattery: 'pilot',
+      batteries: [{ key: 'pilot', score: 72, cutoff: 85, status: 'fail' }],
+      ...over,
+    } }),
+  })
+
+  // Colour is allowed to differ and does — the stripe carries the pass/fail fill,
+  // a real figure is slate-900 against the placeholder's slate-500 — and so is
+  // `tabular-nums`, which only stops the dashes shifting. None of those change a
+  // line box, so they are normalised out and everything else must match. Named
+  // explicitly rather than by a catch-all pattern: `text-lg` is a colour class by
+  // shape and a geometry class by effect, so a loose /text-\S+/ would quietly stop
+  // this test checking the thing it exists to check.
+  const NON_GEOMETRY = /\s*(?:text-(?:slate|brand|emerald|amber|sky)-\d+|bg-\[#[0-9a-f]{6}\]|tabular-nums)(?![\w-])/gi
+  const geometry = s => s.replace(NON_GEOMETRY, '').trim()
+
+  it('mirrors the progress card boxes that set its height, at every breakpoint', async () => {
     const d = deferred()
     const loadingRender = renderWith(vi.fn().mockReturnValue(d.promise))
-    const skeletonWrap = skeleton().className
     const skeletonBoxes = classesOf(loadingRender.container)
     loadingRender.unmount()
 
-    const scored = renderWith(vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: {
-        targetBattery: 'pilot',
-        batteries: [{ key: 'pilot', score: 72, cutoff: 85, status: 'fail' }],
-      } }),
-    }))
+    const progress = renderWith(vi.fn().mockResolvedValue(summary({
+      batteries: [{ key: 'pilot', score: null, cutoff: 85, status: 'unscored', coverage: 0 }],
+      nearestUnlock: { gameKey: 'cut', runs: 2, runsNeeded: 1 },
+      runsToCount: 3,
+    })))
     await waitFor(() => expect(skeleton()).toBeNull())
 
-    // Every height-setting box carries the same geometry in both shapes. Colour
-    // is allowed to differ and does — the stripe carries the pass/fail fill, the
-    // real score is slate-900 against the placeholder's slate-500 — and so is
-    // `tabular-nums`, which only stops the dashes shifting. None of those change
-    // a line box, so they are normalised out and everything else must match.
-    // Named explicitly rather than by a catch-all pattern: `text-lg` is a colour
-    // class by shape and a geometry class by effect, so a loose /text-\S+/ would
-    // quietly stop this test checking the thing it exists to check.
-    const NON_GEOMETRY = /\s*(?:text-(?:slate|brand|emerald|amber|sky)-\d+|bg-\[#[0-9a-f]{6}\]|tabular-nums)(?![\w-])/gi
-    const geometry = s => s.replace(NON_GEOMETRY, '').trim()
-    const scoredBoxes = classesOf(scored.container)
+    const progressBoxes = classesOf(progress.container)
     for (const box of HEIGHT_BOXES) {
+      expect(geometry(progressBoxes[box])).toBe(geometry(skeletonBoxes[box]))
+    }
+  })
+
+  // The scored card has no action line, so it is a line shorter on a phone. Every
+  // box it does share with the skeleton still has to match, or the shrink would be
+  // a jump rather than the one line the layout animation is there to cover.
+  it('shares every box it has with the scored card too', async () => {
+    const d = deferred()
+    const loadingRender = renderWith(vi.fn().mockReturnValue(d.promise))
+    const skeletonBoxes = classesOf(loadingRender.container)
+    loadingRender.unmount()
+
+    const scored = renderWith(vi.fn().mockResolvedValue(summary()))
+    await waitFor(() => expect(skeleton()).toBeNull())
+
+    const scoredBoxes = classesOf(scored.container)
+    for (const box of SCORED_BOXES) {
       expect(geometry(scoredBoxes[box])).toBe(geometry(skeletonBoxes[box]))
     }
+  })
 
-    // And the same outer spacing as the real card's wrapper.
+  // One wrapper owns the outer spacing for every state, which is what lets the
+  // size change between them animate instead of snapping. Both shapes therefore
+  // sit inside the same box rather than each carrying their own margin.
+  it('holds every state in one persistent wrapper', async () => {
+    const d = deferred()
+    const loading = renderWith(vi.fn().mockReturnValue(d.promise))
+    expect(skeleton().closest('.mb-3.sm\\:mb-5')).toBeInTheDocument()
+    loading.unmount()
+
+    const scored = renderWith(vi.fn().mockResolvedValue(summary()))
+    await waitFor(() => expect(skeleton()).toBeNull())
     expect(scored.container.querySelector('[data-testid="aptitude-card-stripe"]')
-      .closest('.mb-3')).toBeInTheDocument()
-    expect(skeletonWrap).toContain('mb-3')
-    expect(skeletonWrap).toContain('sm:mb-5')
+      .closest('.mb-3.sm\\:mb-5')).toBeInTheDocument()
   })
 
   // The app's one shimmer idiom, shared with Profile's StatCard.
@@ -169,18 +213,11 @@ describe('AptitudeReportCard — loading skeleton', () => {
     expect(container.querySelector('.stat-skeleton-sweep')).toBeInTheDocument()
   })
 
-  // The phone card only fits because the verdict moves out of its own line and
-  // up beside the role name. The skeleton has to make the same move, or it holds
-  // a three-line height open for a two-line card and the grid jumps on arrival.
-  it('keeps the phone shape to two text lines in both states', async () => {
-    const d = deferred()
-    const loading = renderWith(vi.fn().mockReturnValue(d.promise))
-    // The working message: shown in the eyebrow row on a phone, on its own line
-    // from `sm` up. Both exist; each is hidden at the other's width.
-    expect(loading.container.querySelector('.sm\\:hidden')).toBeInTheDocument()
-    expect(loading.container.querySelector('.hidden.sm\\:block')).toBeInTheDocument()
-    loading.unmount()
-
+  // The scored card only fits on a phone because the verdict moves out of its own
+  // line and up beside the role name: one copy shown below `sm`, one from `sm` up,
+  // each hidden at the other's width. That is what makes it a line shorter there,
+  // and it is the only state that plays the trick.
+  it('keeps the scored phone shape to two text lines', async () => {
     const scored = renderWith(vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: {
@@ -191,5 +228,15 @@ describe('AptitudeReportCard — loading skeleton', () => {
     await waitFor(() => expect(skeleton()).toBeNull())
     expect(scored.container.querySelector('.sm\\:hidden')).toBeInTheDocument()
     expect(scored.container.querySelector('.hidden.sm\\:block')).toBeInTheDocument()
+  })
+
+  // The skeleton does not, because it is holding space for a progress card, whose
+  // action line is shown at every width. A hidden-on-mobile line in the skeleton
+  // would hold a shorter box than the card that replaces it.
+  it('shows the skeleton action line at every width', () => {
+    const d = deferred()
+    const { container } = renderWith(vi.fn().mockReturnValue(d.promise))
+    const action = container.querySelector('[data-testid="aptitude-card-action"]')
+    expect(action.className).not.toMatch(/hidden|sm:block/)
   })
 })

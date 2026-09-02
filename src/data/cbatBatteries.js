@@ -54,6 +54,18 @@ export function gameEmoji(gameKey) {
   return CBAT_LEADERBOARD_CONFIG[gameKey]?.emoji ?? '🎮'
 }
 
+// Every "go and play this" in the report has to name the difficulty, because only Hard runs feed
+// it. Saying just "play it more" is advice that quietly fails: the game card opens on the
+// difficulty that user last chose, which is Easier until they change it, so the runs they go away
+// and do would leave the score exactly where it was.
+//
+// Empty for a game with no split, where naming a difficulty would send someone hunting for a
+// button that isn't on the card. Keyed off the same registry field the links are, so the wording
+// and the ?difficulty=hard on the link can't disagree.
+export function onHard(gameKey) {
+  return gameHasDifficulties(gameKey) ? ' on Hard' : ''
+}
+
 // Plain words for a stanine. The bands are the real ones: a stanine has a fixed meaning against the
 // normal curve (1-3 below average, 4-6 average, 7-9 above), so this is description, not grading on
 // a curve of our own invention.

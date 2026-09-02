@@ -7,7 +7,7 @@ const { createUser, createSettings, authCookie } = require('../helpers/factories
 
 const User = require('../../models/User');
 const { CBAT_GAMES } = require('../../constants/cbatGames');
-const { BATTERIES, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MIN_COVERAGE_FOR_VERDICT } = require('../../constants/cbatBatteries');
+const { BATTERIES, BATTERY_BY_KEY, TESTS, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MIN_COVERAGE_FOR_VERDICT } = require('../../constants/cbatBatteries');
 const { FORM_MIN_RUNS } = require('../../utils/cbatAptitudeReport');
 
 let user, cookie;
@@ -42,6 +42,32 @@ async function play(gameKey, pick, runs = FORM_MIN_RUNS) {
 
 const playAll = (pick, runs) => Promise.all(SCORED_GAME_KEYS.map(k => play(k, pick, runs)));
 
+// Distinct playable games from a battery, read out of the data rather than named, so a
+// re-transcribed role can't strand these tests on a test code that moved.
+function playableGames(batteryKey, count) {
+  const out = [];
+  for (const d of BATTERY_BY_KEY[batteryKey].domains) {
+    for (const t of d.tests) {
+      const game = TESTS[t.code].games[0];
+      if (game && !out.includes(game)) out.push(game);
+      if (out.length === count) return out;
+    }
+  }
+  throw new Error(`${batteryKey} has fewer than ${count} playable games`);
+}
+
+const target = (key) => User.findByIdAndUpdate(user._id, { cbatTargetBattery: key });
+
+// Every game a battery is tested on.
+function batteryGames(batteryKey) {
+  const keys = new Set();
+  for (const d of BATTERY_BY_KEY[batteryKey].domains) {
+    for (const t of d.tests) for (const game of TESTS[t.code].games) keys.add(game);
+  }
+  return keys;
+}
+
+
 describe('GET /api/games/cbat/report', () => {
   it('requires a signed-in user', async () => {
     const res = await request(app).get('/api/games/cbat/report');
@@ -64,6 +90,113 @@ describe('GET /api/games/cbat/report', () => {
     await User.findByIdAndUpdate(user._id, { cbatTargetBattery: 'pilot' });
     const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
     expect(res.body.data.targetBattery).toBe('pilot');
+  });
+
+  // The /cbat card leads with progress, not a score, for anyone below the coverage floor — so the
+  // summary has to carry what to play next as well as the numbers. Without these two fields the
+  // only honest thing that card could say to a new player is "0%".
+  describe('what to play next for the target role', () => {
+    it('ranks the focus list on coverage when there is no score to gain points against', async () => {
+      await target('pilot');
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+
+      // A points figure is a share of the renormalised base, and with nothing measured there is no
+      // base — so the row says so rather than inventing one, and carries what it would let us
+      // measure instead.
+      expect(res.body.data.targetFocus).toMatchObject({ kind: 'unlock', gain: null });
+      expect(res.body.data.targetFocus.coverageGain).toBeGreaterThan(0);
+      expect(res.body.data.targetFocus.gameKey).toBeTruthy();
+    });
+
+    it('names the run the user is closest to banking', async () => {
+      const [game] = playableGames('pilot', 1);
+      await target('pilot');
+      await play(game, a => a.median, FORM_MIN_RUNS - 1);
+
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.nearestUnlock).toMatchObject({
+        gameKey: game, runs: FORM_MIN_RUNS - 1, runsNeeded: 1,
+      });
+    });
+
+    // Deliberately a different question from the focus list. "What am I nearly done with" and
+    // "what is worth the most" are usually different games, and the card counts runs, so it needs
+    // the first.
+    it('prefers the game with the most runs banked over the one worth the most', async () => {
+      const [first, second] = playableGames('pilot', 2);
+      await target('pilot');
+      await play(first, a => a.median, 1);
+      await play(second, a => a.median, FORM_MIN_RUNS - 1);
+
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.nearestUnlock.gameKey).toBe(second);
+    });
+
+    // A game never touched is not something a user is partway through, and offering it as a
+    // near-miss would misreport their own history back at them.
+    it('has no nearest run when nothing has been played', async () => {
+      await target('pilot');
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.nearestUnlock).toBeNull();
+    });
+
+    it('stops naming a game once it counts', async () => {
+      const [game] = playableGames('pilot', 1);
+      await target('pilot');
+      await play(game, a => a.median, FORM_MIN_RUNS);
+
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.nearestUnlock?.gameKey).not.toBe(game);
+    });
+
+    it('has no focus list when no role has been chosen', async () => {
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.targetFocus).toBeNull();
+      expect(res.body.data.nearestUnlock).toBeNull();
+    });
+
+    // The nearest run is served WITHOUT a role, which the focus list is not. A user who has never
+    // opened the report still has a first score to earn, and any game will start it — and that
+    // user, one or two games in, is exactly who the /cbat card has the least else to say to.
+    it('names the nearest run even when no role has been chosen', async () => {
+      const [game] = playableGames('pilot', 1);
+      await play(game, a => a.median, FORM_MIN_RUNS - 1);
+
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.targetBattery).toBeNull();
+      expect(res.body.data.nearestUnlock).toMatchObject({ gameKey: game, runsNeeded: 1 });
+    });
+
+    // A chosen role narrows it: a run on a game that role is not tested on would not move that
+    // role's score, so offering it as the next step would be advice pointing the wrong way.
+    it('ignores a started game the chosen role is not tested on', async () => {
+      const outside = SCORED_GAME_KEYS.find(k => !batteryGames('nco-control-atc').has(k));
+      await target('nco-control-atc');
+      await play(outside, a => a.median, FORM_MIN_RUNS - 1);
+
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.nearestUnlock).toBeNull();
+    });
+
+    // The card counts runs toward this number in its own copy ("2 / 3", "play it once more"), so
+    // it is served rather than mirrored: a client guessing at three while the report moved to four
+    // would be wrong in the one place a new user is watching.
+    it('says how many runs a game needs before it counts', async () => {
+      const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+      expect(res.body.data.runsToCount).toBe(FORM_MIN_RUNS);
+    });
+
+    it('follows the target of the player being read, not the admin reading it', async () => {
+      const admin = await createUser({ agentNumber: '1000009', isAdmin: true });
+      const [game] = playableGames('pilot', 1);
+      await target('pilot');
+      await play(game, a => a.median, FORM_MIN_RUNS - 1);
+
+      const res = await request(app)
+        .get(`/api/games/cbat/report?userId=${user._id}`)
+        .set('Cookie', authCookie(admin._id));
+      expect(res.body.data.nearestUnlock).toMatchObject({ gameKey: game, runsNeeded: 1 });
+    });
   });
 });
 

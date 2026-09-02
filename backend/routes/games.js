@@ -3547,11 +3547,19 @@ router.get('/cbat/report', protect, async (req, res) => {
     const subject = await resolveReportSubject(req);
     if (!subject) return res.status(404).json({ message: 'Unknown user' });
 
-    const { batteries } = await buildAllBatteryScores(subject.userId);
+    // The subject's saved target, not the admin's — the page is showing their report.
+    const targetBattery = subject.viewingAs ? subject.targetBattery : (req.user.cbatTargetBattery ?? null);
+    const { batteries, targetFocus, nearestUnlock, runsToCount } = await buildAllBatteryScores(subject.userId, targetBattery);
     res.json({ status: 'success', data: {
       batteries,
-      // The subject's saved target, not the admin's — the page is showing their report.
-      targetBattery: subject.viewingAs ? subject.targetBattery : (req.user.cbatTargetBattery ?? null),
+      targetBattery,
+      // The next play for that target, and the run they are closest to banking, so the /cbat card
+      // can tell a user who has no score yet what would give them one. nearestUnlock is served
+      // whether or not a role has been chosen: a first score is worth earning either way, and it
+      // is what the card shows someone who has played once and picked nothing.
+      targetFocus,
+      nearestUnlock,
+      runsToCount,
       viewingAs: subject.viewingAs,
     } });
   } catch (err) {
