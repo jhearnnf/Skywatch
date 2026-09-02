@@ -268,6 +268,7 @@ function NewMessagesDivider() {
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine, online,
   viewerIsAdmin, onOpenUser, onReport, onBlock, onDelete, onEdit, onReply, onReact, onSeenBy,
+  onShowReactors,
   onJump, highlighted, senders, currentUserId, datedStamps,
   // Whether this row's actions are pinned open, and how to ask for that. Held
   // by the list rather than the row so only one row can be open at a time.
@@ -293,7 +294,12 @@ function MessageRow({
   // serves them the deleted ones. Everyone else gets it on their own live
   // messages only.
   const canSeenBy   = Boolean(onSeenBy)   && (viewerIsAdmin || (mine && !m.deleted))
-  const hasActions  = canSeenBy || canReply || canEdit || canReport || canBlock || canDelete
+  // Who reacted is admin-only, and only worth offering on a message that has
+  // reactions. Members see the counts and never the names: an anonymous pill
+  // is a cheap thing to tap, and reacting is the only interaction a read-only
+  // channel has. The names are kept for moderation, not for the room.
+  const canReactors = Boolean(onShowReactors) && viewerIsAdmin && Boolean(m.reactions?.length)
+  const hasActions  = canSeenBy || canReactors || canReply || canEdit || canReport || canBlock || canDelete
 
   // On a pointer device the bar disappears the moment you move off the row, so
   // nothing has to dismiss it. Where it was opened by tap it does, or it would
@@ -434,6 +440,10 @@ function MessageRow({
           <button type="button" onClick={act(() => onSeenBy(m))} title="Seen by"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">👁</button>
         )}
+        {canReactors && (
+          <button type="button" onClick={act(() => onShowReactors(m))} title="Who reacted"
+            className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">☺</button>
+        )}
         {canReply && (
           <button type="button" onClick={act(() => onReply(m))} title="Reply"
             className="text-[11px] px-1.5 py-0.5 text-slate-500 hover:text-slate-700">↰</button>
@@ -493,6 +503,7 @@ export default function MessageList({
   onReply,
   onReact,
   onSeenBy,
+  onShowReactors,
   // Runs collapse consecutive messages from one sender under a single avatar,
   // name and timestamp. That is right for a conversation and wrong for a feed:
   // in the medals channel every message is from the same bot, so grouping them
@@ -618,6 +629,7 @@ export default function MessageList({
             // "who has read this" there would hand them a list of staff. An
             // admin already sees who replied, so the concern does not apply.
             onSeenBy={conversationType === 'support' && !viewerIsAdmin ? undefined : onSeenBy}
+            onShowReactors={onShowReactors}
             onJump={jumpTo}
             highlighted={String(highlightId) === String(m._id)}
             actionsOpen={openActionsId === String(m._id)}

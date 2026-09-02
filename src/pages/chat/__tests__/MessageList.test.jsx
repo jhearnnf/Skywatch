@@ -691,6 +691,38 @@ describe('MessageList — reaching the actions without a hover', () => {
   })
 })
 
+// Reactions are anonymous to the room and named only to staff. Members see a
+// count on the pill and nothing more, which is what keeps a reaction cheap
+// enough to tap; the names are a moderation record.
+describe('MessageList — who reacted', () => {
+  const reacted = (extra = {}) =>
+    msg('u1', 'hello', { reactions: [{ emoji: '👍', count: 2, mine: false }], ...extra })
+
+  it('offers an admin the reactor list on a message that has reactions', () => {
+    renderList([reacted()], { viewerIsAdmin: true, onShowReactors: vi.fn() })
+    expect(screen.getByTitle('Who reacted')).toBeTruthy()
+  })
+
+  it('opens it on the message it belongs to', () => {
+    const onShowReactors = vi.fn()
+    const m = reacted()
+    renderList([m], { viewerIsAdmin: true, onShowReactors })
+    fireEvent.click(screen.getByTitle('Who reacted'))
+    expect(onShowReactors).toHaveBeenCalledWith(expect.objectContaining({ _id: m._id }))
+  })
+
+  it('offers nothing to an ordinary member, who still sees the count', () => {
+    renderList([reacted()], { viewerIsAdmin: false, onShowReactors: vi.fn() })
+    expect(screen.queryByTitle('Who reacted')).toBeNull()
+    expect(screen.getByLabelText('👍 2')).toBeTruthy()
+  })
+
+  it('offers nothing on a message nobody has reacted to', () => {
+    renderList([msg('u1', 'hello')], { viewerIsAdmin: true, onShowReactors: vi.fn() })
+    expect(screen.queryByTitle('Who reacted')).toBeNull()
+  })
+})
+
 describe('MessageList — the CBAT passed mark', () => {
   const LABEL = 'Passed the CBAT'
   const passed = { ...SENDERS, u1: { ...SENDERS.u1, cbatPassed: true } }

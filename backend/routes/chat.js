@@ -1885,6 +1885,75 @@ router.post('/messages/:id/reactions', async (req, res) => {
   }
 });
 
+// How many reactors one emoji will name before it stops listing them
+// individually. Far above any plausible count on a single message; it is here
+// so a runaway pile-on cannot turn one dialog into an unbounded response.
+const REACTORS_LIMIT = 200;
+
+// GET /api/chat/messages/:id/reactions — who reacted, and with what.
+//
+// Admin-only, deliberately, and the asymmetry is the design rather than an
+// oversight. Reactions are public in aggregate: everyone sees the emoji and
+// the count, and `mine` answers "was one of them me". Whose the others were is
+// never serialised to an ordinary member.
+//
+// Named reactions get fewer reactions. Tapping ❤️ stops being a shrug and
+// becomes a signed statement, and on a read-only channel — where reacting is
+// the ONLY interaction available — damping that damps the channel altogether.
+// Engagement is what the feature is for, so anonymity wins the default.
+//
+// Moderation still needs the names, which is why the ids are kept rather than
+// counted and discarded: an 😮 pile-on aimed at one person is exactly the sort
+// of thing that needs somebody behind it, and an admin can already read every
+// transcript anyway.
+router.get('/messages/:id/reactions', adminOnly, async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Message not found' });
+
+    const message = await ChatMessage.findById(req.params.id)
+      .select('conversationId reactions deletedAt').lean();
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+
+    const convo = await ChatConversation.findById(message.conversationId);
+    if (!convo || !canRead(convo, req.user)) return res.status(403).json({ message: 'Forbidden' });
+
+    const live = (message.reactions ?? []).filter(r => (r.userIds ?? []).length);
+
+    // One lookup covering every reactor across every emoji rather than one per
+    // pill — the same person usually appears under several of them.
+    const ids = [...new Set(live.flatMap(r => (r.userIds ?? []).map(String)))];
+    const users = await User.find({ _id: { $in: ids } })
+      .select('displayName agentNumber isAdmin').lean();
+    const byId = new Map(users.map(u => [String(u._id), u]));
+
+    res.json({ status: 'success', data: {
+      // Stored order, which is the order the pills render in — the dialog
+      // should read down the same row the admin is looking at.
+      reactions: live.map(r => {
+        const reactorIds = (r.userIds ?? []).map(String);
+        return {
+          emoji: r.emoji,
+          // The count the pill shows, before names are resolved. `users` can
+          // come back shorter: a deleted account leaves its id in the array
+          // with nobody left to name, and the limit truncates a pile-on.
+          count: reactorIds.length,
+          users: reactorIds.slice(0, REACTORS_LIMIT)
+            .map(id => byId.get(id))
+            .filter(Boolean)
+            .map(u => ({
+              _id:         u._id,
+              displayName: u.displayName ?? null,
+              agentNumber: u.agentNumber ?? null,
+              isAdmin:     Boolean(u.isAdmin),
+            })),
+        };
+      }),
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // How many readers the seen-by list will name before it stops counting them
 // individually. A busy channel could have hundreds of rows; the list is a
 // "who has seen this" reassurance, not a register.
