@@ -16,17 +16,13 @@ export const SLIM_APP = (() => {
   }
 })()
 
-// Whether we are running inside a packaged native app (as opposed to the web).
-//
-// Identical in value to SLIM_APP today, and deliberately a SEPARATE export
-// rather than an alias. They answer different questions — "how much of the app
-// do we show?" versus "are we in a store-distributed binary?" — and only one of
-// them is a store-policy matter. Chat is gated on this one: user-to-user
-// messaging is hidden in the app because connecting under-18s with strangers is
-// a problem for the Play Store and the App Store alike. If slim mode is ever
-// decoupled from native (e.g. a slim web build, or a fuller native app), chat
-// visibility must not move with it.
-export const NATIVE_APP = SLIM_APP
+// There used to be a NATIVE_APP export here — the same value as SLIM_APP, kept
+// separate because it answered a different question ("are we in a
+// store-distributed binary?") and gated Community off the app, where
+// user-to-user messaging was a store-policy problem. Community now ships on
+// native too: the Play declarations cover it and users can block each other
+// (User.blockedUserIds). Nothing gates on the platform any more, so the export
+// went with the gates rather than sitting here unused.
 
 // Path prefixes reachable in slim mode. Anything else redirects to /cbat.
 // A prefix matches the pathname exactly OR when the pathname starts with
@@ -42,6 +38,7 @@ const SLIM_ALLOWED_PREFIXES = [
   '/cbat-game-history',  // CBAT score history
   '/airstar-history',    // airstars earned in CBAT
   '/report',             // "report a problem" (linked from CBAT + profile)
+  '/donate',             // support page — see note below
   '/share',              // "share SkyWatch" QR-code page (linked from profile Help)
   '/privacy',            // store-compliance page
   '/delete-account',     // store-compliance page — the URL declared to Google Play
@@ -51,13 +48,17 @@ const SLIM_ALLOWED_PREFIXES = [
   '/chat',               // channels + DMs — see note below
 ]
 
-// Note on '/chat': slim mode keeps chat, but the native app does not show it.
-// Those are two different gates and both are load-bearing. This list is a pure
-// function of the pathname, so the route is allow-listed unconditionally; the
-// native check lives on the nav entry (NATIVE_APP in Sidebar/BottomNav) and on
-// the /chat route itself. That way web slim mode — an admin flipping
-// slimModeEnabled on the site — still gets chat, while the Play Store build
-// never surfaces it.
+// Note on '/donate': the path is allow-listed so the WEBSITE keeps its donation
+// page when an admin turns slim mode on site-wide, which is just a trimmed site
+// and carries no store exposure. The native app is a different question — Play
+// treats donations outside Play Billing as a carve-out for registered charities
+// — so nothing in the app links here and the page itself refuses to render
+// under SLIM_APP. Gating the route instead would have taken the page away from
+// web slim too, which is not what the risk is about.
+
+// Note on '/chat': slim mode keeps chat, on every platform. The only thing that
+// takes Community away now is the chatEnabled feature flag, which the nav
+// entries and the route read for themselves.
 
 // Note on '/immerse': the Hangar is the one non-CBAT game slim mode keeps, by
 // design — enabling it in Admin → Game Options is meant to surface it even on

@@ -7,7 +7,6 @@ import { REACTION_EMOJI } from '../../pages/chat/reactionEmoji'
 
 const mockUseAuth     = vi.hoisted(() => vi.fn())
 const mockSettings    = vi.hoisted(() => ({ value: { chatEnabled: true } }))
-const mockNative      = vi.hoisted(() => ({ value: false }))
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
@@ -16,7 +15,6 @@ vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: mockSettings.value }),
 }))
-vi.mock('../../utils/appMode', () => ({ get NATIVE_APP() { return mockNative.value } }))
 vi.mock('../../pages/chat/components/DisplayNameGate', () => ({
   default: () => <div>Choose a display name</div>,
 }))
@@ -100,7 +98,6 @@ const apiFetch = vi.fn()
 beforeEach(() => {
   vi.clearAllMocks()
   mockSettings.value = { chatEnabled: true }
-  mockNative.value = false
   FakeEventSource.last = null
   global.EventSource = FakeEventSource
   mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Falcon' }, API: '', apiFetch })
@@ -128,11 +125,12 @@ describe('when it should not be there at all', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('renders nothing in the native app, which has no chat', () => {
+  it('renders in the native app, which now has Community', () => {
+    // The lounge used to be hidden in the store build along with the rest of
+    // Community. Only the feature flag and being signed in gate it now.
     stubFetch()
-    mockNative.value = true
     const { container } = renderOpen()
-    expect(container.firstChild).toBeNull()
+    expect(container.firstChild).not.toBeNull()
   })
 
   it('disappears when an admin has archived the room', async () => {

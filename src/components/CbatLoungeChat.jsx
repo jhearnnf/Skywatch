@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
-import { NATIVE_APP } from '../utils/appMode'
 import { nameColour } from '../pages/chat/nameColour'
 import { formatTime } from '../pages/chat/format'
 import { splitMentions, activeMention } from '../pages/chat/mentions'
@@ -184,7 +183,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
   sendersRef.current = senders
 
   const conversationId = lounge?.conversationId ?? null
-  const enabled = Boolean(user) && !NATIVE_APP && settings?.chatEnabled !== false
+  const enabled = Boolean(user) && settings?.chatEnabled !== false
 
   // ── Loading ────────────────────────────────────────────────────────────────
 

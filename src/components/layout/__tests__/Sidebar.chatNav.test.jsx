@@ -4,9 +4,8 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 // The two rules this file exists to pin down:
 //   1. Chat is a permanent nav entry for signed-in users — it no longer waits
 //      for an open support conversation to exist.
-//   2. It is hidden inside the native app, and that gate is NATIVE_APP, not
-//      slim mode. Slim mode keeps chat.
-const mockNative      = vi.hoisted(() => ({ value: false }))
+//   2. It shows on every platform — slim mode and the native app included.
+//      Only the chatEnabled feature flag takes it away.
 const mockSlim        = vi.hoisted(() => ({ value: false }))
 const mockChat        = vi.hoisted(() => ({ hasUnread: false, badgeCount: 0 }))
 const mockChatEnabled = vi.hoisted(() => ({ value: true }))
@@ -19,14 +18,6 @@ vi.mock('react-router-dom', () => ({
     <a href={to} className={className} onClick={onClick} {...rest}>{children}</a>
   ),
 }))
-
-vi.mock('../../../utils/appMode', async (importOriginal) => {
-  const actual = await importOriginal()
-  return {
-    ...actual,
-    get NATIVE_APP() { return mockNative.value },
-  }
-})
 
 vi.mock('../../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../../context/NewGameUnlockContext', () => ({ useNewGameUnlock: () => ({ hasAnyNew: false }) }))
@@ -67,7 +58,6 @@ function setupUser(overrides = {}, apiFetch = vi.fn()) {
 
 describe('Sidebar — chat nav entry', () => {
   beforeEach(() => {
-    mockNative.value = false
     mockSlim.value = false
     mockChatEnabled.value = true
     mockChat.hasUnread = false
@@ -107,13 +97,14 @@ describe('Sidebar — chat nav entry', () => {
     expect(chatLink()).not.toBeNull()
   })
 
-  it('hides chat inside the native app', () => {
-    // The store-policy gate. Slim mode is deliberately left off here to prove
-    // the two are independent.
-    mockNative.value = true
+  it('shows chat in the native app, which now has Community', () => {
+    // There used to be a store-policy gate here hiding Community from the
+    // Android build. The Play declarations cover it and users can block each
+    // other, so nothing about the platform is read any more — only the feature
+    // flag below can take the entry away.
     setupUser()
     render(<Sidebar />)
-    expect(chatLink()).toBeNull()
+    expect(chatLink()).not.toBeNull()
   })
 
   it('hides chat when the feature flag is off', () => {

@@ -11,7 +11,7 @@ import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
 import { isLocalEnvironment } from '../../utils/localEnvironment'
 import { prefetchOverview } from '../../utils/chatCache'
-import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, NATIVE_APP, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
+import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 
@@ -57,12 +57,12 @@ export default function Sidebar() {
   const { unsolvedCount } = useUnsolvedReports()
   const { hasUnread: chatUnread, badgeCount: chatBadgeCount = 0 } = useChatUnread() ?? {}
   const { levels: liveLevels, settings } = useAppSettings() ?? {}
-  // Chat is a permanent entry for every signed-in user off-native — it is now a
-  // place you go (channels, DMs), not just a notification about a support
-  // thread, so it no longer waits for an open conversation to exist. Hidden
-  // inside the native app: see NATIVE_APP in utils/appMode.js. It DOES show in
-  // slim mode, which is why `slim` is not part of this condition.
-  const showChatNav = !NATIVE_APP && user && settings?.chatEnabled !== false
+  // Chat is a permanent entry for every signed-in user — it is a place you go
+  // (channels, DMs), not just a notification about a support thread, so it does
+  // not wait for an open conversation to exist. It shows on every platform,
+  // slim mode and the native app included, which is why neither is part of this
+  // condition. The feature flag is the only thing that takes it away.
+  const showChatNav = user && settings?.chatEnabled !== false
   // Rendered inside the main loop rather than appended after it, so it can sit
   // above Profile.
   const navItems = showChatNav ? insertBeforeProfile(withHangar, CHAT_ITEM) : withHangar

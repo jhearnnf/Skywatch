@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import { useAuth } from './AuthContext'
-import { NATIVE_APP } from '../utils/appMode'
 
 const ChatUnreadContext = createContext({
   hasAnyOpenChat: false,
@@ -23,8 +22,7 @@ export function ChatUnreadProvider({ children }) {
   const [adminUnread,    setAdminUnread]    = useState(0)
 
   const fetchUnread = useCallback(() => {
-    // No chat in the native app, so no reason to poll for its badge.
-    if (!user || NATIVE_APP) return
+    if (!user) return
 
     const get = (path) =>
       fetch(`${API}${path}`, { credentials: 'include' })
@@ -55,7 +53,7 @@ export function ChatUnreadProvider({ children }) {
   const muted = user?.communityNotificationsEnabled === false
 
   useEffect(() => {
-    if (!user || NATIVE_APP) {
+    if (!user) {
       setHasAnyOpenChat(false); setHasUnread(false); setTotalUnread(0)
       setPersonalUnread(0); setAdminUnread(0)
       return

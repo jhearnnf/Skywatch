@@ -11,7 +11,7 @@ import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
 import { getActiveNavTo } from '../../utils/navSections'
 import { prefetchOverview } from '../../utils/chatCache'
-import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, NATIVE_APP, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
+import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
 import { useSlimMode } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 
@@ -42,9 +42,9 @@ export default function BottomNav() {
   const { unsolvedCount } = useUnsolvedReports()
   const { hasUnread: chatUnread, badgeCount: chatBadgeCount = 0 } = useChatUnread() ?? {}
   const { settings } = useAppSettings() ?? {}
-  // Permanent entry off-native for every signed-in user, slim mode included.
-  // See the matching note in Sidebar.jsx and NATIVE_APP in utils/appMode.js.
-  const showChatNav = !NATIVE_APP && user && settings?.chatEnabled !== false
+  // Permanent entry for every signed-in user, slim mode and native included.
+  // See the matching note in Sidebar.jsx.
+  const showChatNav = user && settings?.chatEnabled !== false
   // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
   const showHangarNav = useWorld3dNavVisible()
 

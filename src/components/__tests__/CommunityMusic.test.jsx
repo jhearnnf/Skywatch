@@ -3,17 +3,11 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 const mockUpdate   = vi.hoisted(() => vi.fn())
 const mockPathname = vi.hoisted(() => ({ value: '/' }))
-const mockNative   = vi.hoisted(() => ({ value: false }))
 
 vi.mock('react-router-dom', () => ({
   useLocation: () => ({ pathname: mockPathname.value }),
 }))
 vi.mock('../../utils/communityMusic', () => ({ updateCommunityMusic: mockUpdate }))
-vi.mock('../../utils/appMode', async (importOriginal) => {
-  const actual = await importOriginal()
-  return { ...actual, get NATIVE_APP() { return mockNative.value } }
-})
-
 import CommunityMusic from '../CommunityMusic'
 
 const zoneFor = (pathname) => {
@@ -24,7 +18,7 @@ const zoneFor = (pathname) => {
 }
 
 describe('CommunityMusic', () => {
-  beforeEach(() => { mockUpdate.mockClear(); mockNative.value = false })
+  beforeEach(() => { mockUpdate.mockClear() })
 
   it('plays across every Community surface', () => {
     // One zone for all of them, so moving list -> thread -> console keeps the
@@ -44,9 +38,11 @@ describe('CommunityMusic', () => {
     expect(zoneFor('/chatter')).toBeNull()
   })
 
-  it('is silent inside the native app, where Community does not exist', () => {
-    mockNative.value = true
-    expect(zoneFor('/chat')).toBeNull()
+  it('plays in the native app too, which now has Community', () => {
+    // The soundtrack used to be gated off native alongside Community itself.
+    // Community ships in the app now, so nothing about the platform is read
+    // here any more.
+    expect(zoneFor('/chat')).toBe('community')
   })
 
   it('stops the track when it unmounts', () => {
