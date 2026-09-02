@@ -116,6 +116,24 @@ describe('CBAT guide analytics', () => {
     dom.window.close()
   })
 
+  it('keeps the self-playing game frames out of the session recording', () => {
+    // Left capturable, the recorder walks into each same-origin frame and
+    // records nine live games mutation by mutation. That flooded replays with
+    // "Too many mutations on node" and made the player cut to a full-bleed
+    // game close-up mid-read. Nothing is lost by blocking them: the games play
+    // themselves, so the frames hold no reader behaviour. Readers are
+    // unaffected — the class is only ever read by rrweb.
+    const { html } = prerenderGuide(source)
+    const dom = new JSDOM(html)
+    const frames = [...dom.window.document.querySelectorAll('.simbox iframe')]
+
+    expect(frames.length).toBeGreaterThan(0)
+    for (const frame of frames) {
+      expect(frame.classList.contains('ph-no-capture')).toBe(true)
+    }
+    dom.window.close()
+  })
+
   it('ships exactly one loader tag through the pre-render', () => {
     // The reason this uses a plain <script src> rather than PostHog's inline
     // bootstrap snippet: the snippet injects its own loader tag into the DOM,

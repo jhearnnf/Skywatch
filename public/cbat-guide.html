@@ -1048,8 +1048,15 @@ const SIMS = {
    Each one starts a whole React app, several with a WebGL context, and a
    browser gives you well under twenty of those, and ten frames loading eagerly
    would exhaust them and stall a document people read for twenty minutes. */
+/* ph-no-capture blocks the frame from the PostHog session recording, and does
+   nothing else — readers see the game exactly as before. Without it the
+   recorder descends into every same-origin frame and tries to capture nine
+   live games mutation by mutation, which floods the console with "Too many
+   mutations on node", bloats the payload, and buys nothing: these games play
+   themselves, so there is no reader behaviour in them to watch back. Blocked,
+   each box replays as a placeholder and the reading is legible again. */
 const simHTML = s => `<figure class="sim">
-  <div class="simbox"><iframe data-src="/embed/cbat/${s.id}" title="SkyWatch ${esc(s.name)}, a practice game playing itself"
+  <div class="simbox"><iframe class="ph-no-capture" data-src="/embed/cbat/${s.id}" title="SkyWatch ${esc(s.name)}, a practice game playing itself"
     loading="lazy" scrolling="no" tabindex="-1"></iframe></div>
   <figcaption>SkyWatch <strong>${esc(s.name)}</strong> playing itself, our practice
   version, not the real test. <a href="/cbat" target="_top">Play it</a></figcaption>
