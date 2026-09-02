@@ -70,9 +70,18 @@ describe('useLandingPageEnabled', () => {
     expect(render()).toBe(false)
   })
 
-  it('is off on the native app whatever the flag says', () => {
+  // The native app used to be excluded outright. It now follows the same flag
+  // as web slim: the page is reachable from the header logo, and the proof wall
+  // it carries has no equivalent on /cbat. Opening on it every launch is a
+  // separate question — see useNativeLaunchRoute.
+  it('defaults to on in the native app', () => {
     slimAppRef.value = true
-    settingsRef.value = { slimLandingEnabled: true }
+    expect(render()).toBe(true)
+  })
+
+  it('is off in the native app when an admin turns the landing page off', () => {
+    slimAppRef.value = true
+    settingsRef.value = { slimLandingEnabled: false }
     expect(render()).toBe(false)
   })
 })

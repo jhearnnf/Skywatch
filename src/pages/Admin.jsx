@@ -3519,18 +3519,16 @@ function SettingsTab({ API }) {
           checked={draft.slimModeEnabled ?? false}
           onChange={v => set('slimModeEnabled', v)}
         />
-        {/* Only meaningful while slim mode is on — the full site always has a
-            landing page — so it stays hidden until then. */}
-        {draft.slimModeEnabled && (
-          <div className="pl-4 border-l-2 border-slate-200">
-            <Toggle
-              label="Landing Page in Slim Mode"
-              hint="When on, the site URL shows the landing/welcome page (the live game wall) and the header logo links back to it. When off, arriving at the site goes straight to the CBAT game selection page and the logo stops being a link, so there's no way to reach the landing page. The native app never shows it either way."
-              checked={draft.slimLandingEnabled !== false}
-              onChange={v => set('slimLandingEnabled', v)}
-            />
-          </div>
-        )}
+        {/* Always shown, not nested under the slim toggle: it governs the
+            native app too, and the app is slim whatever the website is set to.
+            The full site is the only thing it never touches — that always has
+            a landing page. */}
+        <Toggle
+          label="Landing Page in Slim Mode"
+          hint="When on, the header logo links to the landing/welcome page (the live game wall and the player progress charts) in the Android app and on a slimmed website. When off, the logo stops being a link and the site URL goes straight to the CBAT game selection page, so there is no way to reach it. The app opens on the games either way, apart from the very first launch before signing up."
+          checked={draft.slimLandingEnabled !== false}
+          onChange={v => set('slimLandingEnabled', v)}
+        />
         {/* Landing-page preview windows. Slim mode has no preview windows at all
             — Landing.jsx gates both on !slim — so these are dead controls while
             it is on, and say so rather than pretending to work. Read off the

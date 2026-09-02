@@ -53,3 +53,19 @@ export function isCroFirstBriefActive() {
 export function clearCroFirstBrief() {
   try { sessionStorage.removeItem(CRO_FIRST_BRIEF_KEY) } catch { /* storage unavailable */ }
 }
+
+// Whether the native app has already shown its one-time intro (the landing
+// page) on launch. Set the first time a signed-out launch lands there; from
+// then on the app opens straight on the CBAT games page. See
+// src/hooks/useNativeLaunch.js.
+export const NATIVE_INTRO_SEEN_KEY = 'sw_native_intro_seen'
+
+// Defaults to "seen" when storage is unavailable. A user whose storage is
+// blocked should get the app, not the sales pitch on every single launch.
+export function nativeIntroSeen() {
+  try { return localStorage.getItem(NATIVE_INTRO_SEEN_KEY) === '1' } catch { return true }
+}
+
+export function markNativeIntroSeen() {
+  try { localStorage.setItem(NATIVE_INTRO_SEEN_KEY, '1') } catch { /* storage unavailable */ }
+}

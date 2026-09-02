@@ -35,6 +35,7 @@ import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
 import { isSlimAllowed } from './utils/appMode'
 import { transitionKeyFor } from './utils/navSections'
 import { useSlimMode, useLandingPageEnabled } from './hooks/useSlimMode'
+import { useNativeLaunchRoute } from './hooks/useNativeLaunch'
 
 // v2 pages
 import Landing        from './pages/Landing'
@@ -197,11 +198,14 @@ function LoginRoute() {
 
 // ── App routes ─────────────────────────────────────────────────────────────
 function AppRoutes() {
-  const { loading } = useAuth()
+  const { user, loading } = useAuth()
   const location    = useLocation()
   const navigate    = useNavigate()
   const slim        = useSlimMode()
   const landingEnabled = useLandingPageEnabled()
+  // Native only: whether a launch at `/` should skip the landing page. Called
+  // here with every other hook, ahead of the early returns below.
+  const skipLaunchLanding = useNativeLaunchRoute(location.pathname, user, !loading)
   useHeartbeat()
 
   // When the user transitions TO /login from another route, remember where
@@ -249,18 +253,27 @@ function AppRoutes() {
     )
   }
 
-  // No landing page to show — go straight to the CBAT games page. That's the
-  // native app always, and web slim mode when an admin has turned the landing
-  // page off. See useLandingPageEnabled.
+  // No landing page to show — go straight to the CBAT games page. That's web
+  // slim mode when an admin has turned the landing page off. See
+  // useLandingPageEnabled.
   if (!landingEnabled && location.pathname === '/') {
+    return <Navigate to="/cbat" replace />
+  }
+
+  // The native app opens on the games, not on the landing page — every launch
+  // but the first one for a signed-out install, which gets the intro once. This
+  // is the launch route only: `/` stays reachable from the header logo
+  // afterwards, so the redirect stops applying once the app has moved off it.
+  // See useNativeLaunchRoute.
+  if (skipLaunchLanding && location.pathname === '/') {
     return <Navigate to="/cbat" replace />
   }
 
   // Slim ("CBAT-only") mode: native app always, or web when an admin enables
   // it site-wide. Any path outside the slim allow-list (learning content,
   // other games, etc.) redirects to the CBAT games home. On the web the
-  // slimmed landing at `/` is allow-listed and rendered; on native it is
-  // handled by the redirect above.
+  // slimmed landing at `/` is allow-listed and rendered; on native the launch
+  // redirect above decides whether it is shown.
   if (slim && !isSlimAllowed(location.pathname)) {
     return <Navigate to="/cbat" replace />
   }
