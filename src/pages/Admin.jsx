@@ -3509,7 +3509,7 @@ function SettingsTab({ API }) {
         />
         <Toggle
           label="Chat"
-          hint="Covers support chat, channels and direct messages. When off, the Chat nav entry, Help-page chat card, and /chat pages are hidden, and the chat API returns 503. Existing conversations are retained. Chat is always hidden inside the Android app regardless of this setting."
+          hint="Covers support chat, channels and direct messages. When off, the Community nav entry, Help-page chat card, and /chat pages are hidden, and the chat API returns 503. Existing conversations are retained. This applies to the Android app too, which no longer hides chat of its own accord."
           checked={draft.chatEnabled !== false}
           onChange={v => set('chatEnabled', v)}
         />
