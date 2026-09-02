@@ -5,7 +5,7 @@ import SEO from '../components/SEO'
 const PRIVACY_EMAIL = 'skywatchdev@proton.me'
 // Section 12 promises changes are posted with an updated effective date, so this
 // moves whenever the policy's substance does — not on typo fixes.
-const EFFECTIVE_DATE = '6 August 2026'
+const EFFECTIVE_DATE = '2 September 2026'
 
 function Section({ title, children }) {
   return (
@@ -56,6 +56,7 @@ export default function Privacy() {
             <li><span className="text-slate-700 font-medium">Support data</span> — content and email address provided when you submit a problem report.</li>
             <li><span className="text-slate-700 font-medium">Message data</span> — the content of messages you send in chat channels, direct messages and support threads, and any messages you report to us. See section 6.</li>
             <li><span className="text-slate-700 font-medium">Analytics data</span> — page views, click events, session replays, and device/browser information collected via PostHog.</li>
+            <li><span className="text-slate-700 font-medium">Approximate location</span> — the country and general area you are in, worked out from your IP address. We do not use GPS and the app never asks your device for your location. It is used for usage statistics only, and it is never shown to other users.</li>
             <li><span className="text-slate-700 font-medium">Presence data</span> — a "last seen" timestamp recorded periodically while you are actively using the app with the page visible and in focus. This is used by administrators to monitor platform usage.</li>
           </ul>
         </Section>
@@ -63,7 +64,7 @@ export default function Privacy() {
         <Section title="3. How we collect your data">
           <ul className="list-disc pl-5 space-y-1">
             <li>Directly from you when you register, sign in, or interact with the app.</li>
-            <li>Automatically through PostHog analytics as you use the app.</li>
+            <li>Automatically through PostHog analytics as you use the app, including the approximate location worked out from your IP address.</li>
             <li>Via Google when you choose to sign in with a Google account.</li>
           </ul>
         </Section>
@@ -174,6 +175,13 @@ export default function Privacy() {
               report a message to us. A report records the message, who sent it and who reported it,
               and is visible to administrators only. We may remove messages or withdraw a user's
               access to channels and direct messages.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Blocking</span> — you can block another
+              user at any time, from their name in a channel or from the actions on any of their
+              messages. You stop seeing their messages, and neither of you can send the other a
+              direct message. We record who you have blocked so we can apply it. The person you
+              block is not told. You can undo it at any time under Blocked Agents in your profile.
             </li>
           </ul>
           <p>
