@@ -64,6 +64,7 @@ const MOCK_STATS = {
   users: {
     totalUsers: 10, onlineUsers: 3, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
+    androidAppUsers: 4,
     emailsSent: 42, emailsFailed: 7,
     donation: {
       seen: 40, clicked: 6,
@@ -221,6 +222,41 @@ describe('Admin — Stats tab: donation funnel', () => {
 
     fireEvent.click(screen.getByText('Donation Asks'))
     await waitFor(() => expect(screen.queryByText('Maverick')).not.toBeInTheDocument())
+  })
+})
+
+describe('Admin — Stats tab: Android app users', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks(); mockAppSettings.value = {} })
+
+  it('shows how many accounts have ever used the app, as a share of everyone', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Android App Users')).toBeInTheDocument())
+    const card = screen.getByText('Android App Users').closest('div')
+    expect(within(card).getByText('4')).toBeInTheDocument()
+    expect(within(card).getByText(/40% of all accounts/)).toBeInTheDocument()
+  })
+
+  // The app is the CBAT-only experience, so this one keeps counting when the rest of the
+  // row greys out — and a backend that predates the field must show an honest zero.
+  it('stays live in CBAT-only mode and survives a payload without the field', async () => {
+    mockAppSettings.value = { slimModeEnabled: true }
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({
+          status: 'success',
+          data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, androidAppUsers: undefined } },
+        }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Android App Users')).toBeInTheDocument())
+    expect(screen.getByText('Android App Users').closest('[aria-disabled="true"]')).toBeNull()
+    expect(screen.getByText(/0% of all accounts/)).toBeInTheDocument()
   })
 })
 

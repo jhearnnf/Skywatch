@@ -132,6 +132,36 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.onlineUsers).toBe(2);
   });
 
+  // "Any version" is the whole question: the tile answers how many people ever
+  // got the app onto a phone, not how many are on the current release.
+  it('counts accounts that have ever reported an Android app build, whatever the version', async () => {
+    const admin = await createAdminUser();
+    await createUser({ lastClients: { android: { version: '1.0.0', build: '3', buildNumber: 3, lastSeenAt: new Date() } } });
+    await createUser({ lastClients: { android: { version: '1.4.2', build: '9', buildNumber: 9, lastSeenAt: new Date() } } });
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.androidAppUsers).toBe(2);
+  });
+
+  // The site opened in Chrome on a phone is not the app. osSeen.android lights up
+  // for both, so the count deliberately reads the reported native build instead.
+  it('excludes web users on Android phones and users on other platforms', async () => {
+    const admin = await createAdminUser();
+    await createUser({ osSeen: { android: new Date() } });
+    await createUser({ lastClients: { web: { version: 'a3f9c21', build: null, buildNumber: null, lastSeenAt: new Date() } } });
+    await createUser({ lastClients: { ios: { version: '1.0.0', build: '3', buildNumber: 3, lastSeenAt: new Date() } } });
+    await createUser();
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.androidAppUsers).toBe(0);
+  });
+
   it('counts users by subscription tier — only paying Stripe subscribers', async () => {
     const admin = await createAdminUser();
     await createUser({ subscriptionTier: 'free' });

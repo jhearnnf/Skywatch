@@ -448,6 +448,7 @@ router.get('/stats', async (_req, res) => {
     const [
       totalUsers, onlineUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
+      androidAppUsers,
       totalBrifsRead, totalBrifsOpened, readTimeAgg,
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
@@ -480,6 +481,15 @@ router.get('/stats', async (_req, res) => {
       User.countDocuments({ subscriptionTier: 'gold',   stripeSubscriptionId: { $type: 'string', $ne: '' } }),
       User.countDocuments({ difficultySetting: 'easy' }),
       User.countDocuments({ difficultySetting: 'medium' }),
+      // Accounts that have ever run the installed Android app, any version. The
+      // build a native client reports on the heartbeat is the only thing that
+      // says "this was the app and not the site" — `osSeen.android` would also
+      // count everyone who ever opened the website in Chrome on a phone, which
+      // is a different and much larger number.
+      //
+      // Never cleared once written, so this stays a lifetime count even for a
+      // tester who has since gone back to the browser.
+      User.countDocuments({ 'lastClients.android.lastSeenAt': { $ne: null } }),
       IntelligenceBriefRead.countDocuments({ completed: true }),
       IntelligenceBriefRead.countDocuments({ completed: false }),
       IntelligenceBriefRead.aggregate([{ $group: { _id: null, total: { $sum: '$timeSpentSeconds' } } }]),
@@ -622,6 +632,7 @@ router.get('/stats', async (_req, res) => {
           totalUsers, onlineUsers, freeUsers, trialUsers,
           subscribedUsers: silverUsers + goldUsers,
           easyPlayers, mediumPlayers,
+          androidAppUsers,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
           // The donate page is reported alongside the asks rather than added into them. It is

@@ -601,6 +601,18 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate"   {...slimStat} />
           <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate"   {...slimStat} />
           <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate"   {...slimStat} />
+          {/* Accounts that have run the installed Android app at least once, on any version.
+              Counted from the build the app reports on its heartbeat, so it means the app
+              specifically and not the website opened on an Android phone. Not greyed in slim
+              mode: the app IS the slim experience. */}
+          <StatCard
+            label="Android App Users"
+            value={fmtNum(users.androidAppUsers ?? 0)}
+            color="emerald"
+            sub={users.totalUsers
+              ? `${pct(users.androidAppUsers ?? 0, users.totalUsers)} of all accounts`
+              : 'nobody has installed it yet'}
+          />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <button
