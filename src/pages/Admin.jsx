@@ -3866,16 +3866,55 @@ const DEFAULT_DRAFT_ID = 'android_test_invite'
 // the preview is what the recipient actually receives, not an approximation.
 const EMAIL_DEFAULT_FOOTER = 'SkyWatch — Intelligence Study Platform for RAF Knowledge &amp; Aptitude.<br>If you didn&apos;t create this account, you can safely ignore this email.'
 
+// Mirrors backend/utils/emailTemplate.js:formatComposedBody, including the
+// "- " reason rows. Kept in lockstep so the preview is the email.
+const PARA_OPEN = '<p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">'
+
+function reasonRow(text) {
+  return '<tr>'
+    + '<td valign="top" style="width:26px;padding:0 0 14px;">'
+    + '<div style="width:18px;height:18px;line-height:18px;border-radius:9px;background:#dbeafe;'
+    + 'color:#1d4ed8;font-size:11px;font-weight:700;text-align:center;">&#10003;</div></td>'
+    + `<td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">${text}</td>`
+    + '</tr>'
+}
+
+function renderReasonBlocks(text) {
+  const lines = text.split('\n')
+  const out = []
+  let run = []
+  const flush = () => {
+    if (!run.length) return
+    out.push(
+      '</p>'
+      + '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" '
+      + 'style="margin:4px 0 26px;border-collapse:collapse;">'
+      + run.map(reasonRow).join('')
+      + '</table>'
+      + PARA_OPEN,
+    )
+    run = []
+  }
+  for (const line of lines) {
+    const m = line.match(/^\s*-\s+(.*)$/)
+    if (m && m[1].trim()) run.push(m[1].trim())
+    else { flush(); out.push(line) }
+  }
+  flush()
+  return out.join('\n')
+}
+
 function formatEmailBody(body, buttonHtml) {
   let out = String(body ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/(https?:\/\/[^\s]+?)([.,!?;:]*)(?=\s|$)/g,
       '<a href="$1" style="color:#1d4ed8;text-decoration:underline;">$1</a>$2')
   if (buttonHtml && !out.includes('{{button}}')) out += '\n\n{{button}}'
+  out = renderReasonBlocks(out.replace(/\{\{button\}\}/g, buttonHtml || ''))
   return out
-    .replace(/\{\{button\}\}/g, buttonHtml || '')
-    .replace(/\n{2,}/g, '</p><p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">')
+    .replace(/\n{2,}/g, `</p>${PARA_OPEN}`)
     .replace(/\n/g, '<br>')
+    .replace(/<p[^>]*>(\s|<br>)*<\/p>/g, '')
 }
 
 function buildEmailPreviewHTML(fields) {
@@ -4043,7 +4082,7 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
                 onChange={e => setField('body', e.target.value)}
                 className={`${inputCls} resize-y leading-relaxed`}
               />
-              <p className="text-[10px] text-slate-400 mt-1">Blank lines become paragraphs. <code className="font-mono">{'{{button}}'}</code> marks where the button appears (omit it and the button drops to the bottom).</p>
+              <p className="text-[10px] text-slate-400 mt-1">Blank lines become paragraphs. Lines starting <code className="font-mono">-</code> become ticked rows. <code className="font-mono">{'{{button}}'}</code> marks where the button appears (omit it and the button drops to the bottom).</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

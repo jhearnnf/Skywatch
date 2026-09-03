@@ -67,6 +67,62 @@ function buildCtaButton(label, href) {
   return `<a href="${href}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:13px 30px;border-radius:6px;">${text}</a>`;
 }
 
+// A run of "- " lines becomes one panel of ticked rows.
+//
+// The only markup the body understands, and it exists because the alternative
+// was prose. An outreach email is skimmed in about two seconds, and the reasons
+// someone should act cannot survive being the third sentence of a paragraph —
+// they have to be things the eye lands on. Everything else about the plain-text
+// editing model stays as it was: an admin who never types a dash never sees any
+// of this.
+//
+// Tables and inline styles rather than lists and classes, because Outlook does
+// not do the alternative. The block closes the surrounding <p> and opens a new
+// one so it is a sibling rather than a table nested inside a paragraph, which
+// browsers silently reword and some clients render with stray margins.
+const PARA_OPEN = '<p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">';
+
+function reasonRow(text) {
+  return '<tr>'
+    + '<td valign="top" style="width:26px;padding:0 0 14px;">'
+    + '<div style="width:18px;height:18px;line-height:18px;border-radius:9px;background:#dbeafe;'
+    + 'color:#1d4ed8;font-size:11px;font-weight:700;text-align:center;">&#10003;</div></td>'
+    + `<td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">${text}</td>`
+    + '</tr>';
+}
+
+function renderReasonBlocks(text) {
+  const lines = text.split('\n');
+  const out = [];
+  let run = [];
+
+  const flush = () => {
+    if (!run.length) return;
+    const rows = run.map(reasonRow).join('');
+    out.push(
+      '</p>'
+      + '<table width="100%" cellpadding="0" cellspacing="0" role="presentation" '
+      + 'style="margin:4px 0 26px;border-collapse:collapse;">'
+      + rows
+      + '</table>'
+      + PARA_OPEN,
+    );
+    run = [];
+  };
+
+  for (const line of lines) {
+    const m = line.match(/^\s*-\s+(.*)$/);
+    if (m && m[1].trim()) {
+      run.push(m[1].trim());
+    } else {
+      flush();
+      out.push(line);
+    }
+  }
+  flush();
+  return out.join('\n');
+}
+
 // Turn plain admin-authored text into the email's body HTML.
 //
 // Escape, auto-link any http(s) URLs that were pasted in (trailing sentence
@@ -85,10 +141,13 @@ function formatComposedBody(body, buttonHtml) {
     .replace(/(https?:\/\/[^\s]+?)([.,!?;:]*)(?=\s|$)/g,
       '<a href="$1" style="color:#1d4ed8;text-decoration:underline;">$1</a>$2');
   if (buttonHtml && !out.includes('{{button}}')) out += '\n\n{{button}}';
+  out = renderReasonBlocks(out.replace(/\{\{button\}\}/g, buttonHtml || ''));
   return out
-    .replace(/\{\{button\}\}/g, buttonHtml || '')
-    .replace(/\n{2,}/g, '</p><p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">')
-    .replace(/\n/g, '<br>');
+    .replace(/\n{2,}/g, `</p>${PARA_OPEN}`)
+    .replace(/\n/g, '<br>')
+    // A block at the very top or bottom leaves an empty paragraph behind, which
+    // is invisible but still carries its bottom margin.
+    .replace(/<p[^>]*>(\s|<br>)*<\/p>/g, '');
 }
 
 module.exports = { buildEmailHTML, buildCtaButton, formatComposedBody };

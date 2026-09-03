@@ -12,11 +12,10 @@
     "URL. The unsubscribe line is appended to the footer by the sender and is deliberately not",
     "editable here - it must not be possible to remove it by editing the copy."
   ],
-
   "subject": "How did your CBAT go?",
   "heading": "How did it go?",
-  "subtitle": "{{name}}, one quick question from SkyWatch.",
-  "body": "Hello {{name}},\n\nYou trained with SkyWatch for a while and then things went quiet. That usually means one thing: you have sat the real test.\n\nIf that is you, we would really like to know how it went. It is six quick questions and takes about a minute. There is nothing to sign in to, and the link below is yours alone.\n\n{{button}}\n\nYour answers do two jobs. They help us improve our practice tests for future applicants. And they let us record your result, so if you passed, a PASSED badge appears beside your name on every leaderboard.\n\nIf you have not sat it yet, just say so on the first question and we will leave you to it. Good luck.\n\nThanks,\nThe SkyWatch Team",
+  "subtitle": "{{name}}, six questions and about a minute.",
+  "body": "Hello {{name}},\n\nYou trained with SkyWatch for a while, and then things went quiet. That usually means one thing: you have sat the real test.\n\nIf that is you, would you tell us how it went?\n\n- Your answers go straight back into the training, so whoever is revising right now gets a better version than you had. What matched, what did not, and what we should fix.\n- If you passed, we will record it. A PASSED badge then appears beside your name on every leaderboard.\n- Six questions, about a minute, nothing to sign in to. The link below is yours alone.\n\n{{button}}\n\nNot sat it yet? Say so on the first question and we will leave you alone until after your test. Good luck with it.\n\nThanks,\nThe SkyWatch Team",
   "cta": "Answer the 6 questions",
   "footer": "SkyWatch is an independent study platform and is not affiliated with, endorsed by, or connected to the Royal Air Force or the Ministry of Defence.<br>You received this because you hold a SkyWatch account."
 }
