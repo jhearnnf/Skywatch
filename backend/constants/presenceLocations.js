@@ -116,4 +116,103 @@ function locationLabel(path) {
   return hit ? hit[1].slice(0, LOCATION_MAX) : null;
 }
 
-module.exports = { LOCATIONS, LOCATION_MAX, locationLabel };
+// ── Which CBAT hub card someone is standing on ───────────────────────────────
+//
+// Same heartbeat, a second question. `locationLabel` answers "what page is this
+// person on" in words; this answers "which tile on /cbat does that page belong
+// to", so the hub can float a dot over it for admins.
+//
+// A card is not a route. One card covers the game, both halves of a combined
+// tile, the practise mode and every leaderboard variant of it — an admin
+// looking at the Target tile wants to see the person reading Target's
+// leaderboard as being *at Target*, not somewhere else.
+//
+// These keys are the frontend's, from src/data/cbatGames.js. They are the card
+// identity the hub renders by, so this list must stay in step with it: a game
+// added there and missed here simply never shows a dot.
+const CBAT_CARDS = [
+  'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
+  'plane-turn', 'flag', 'visualisation', 'dpt', 'act', 'numerical-ops', 'dad',
+  'cut', 'sat', 'rtt', 'sit', 'slt', 'vlt', 'matf', 'vigilance', 'sma',
+];
+
+// Everything whose path segment is not already the card key. Two sources of
+// difference, both real rather than tidy-able:
+//   • the combined tiles — one card, two modes, and a route named after neither
+//     ('/cbat/trace' is the 'plane-turn' card);
+//   • leaderboard paths, which are keyed by *score model* (backend/constants/
+//     cbatGames.js) rather than by card, because several models share one tile.
+// The legacy redirect targets are here too: a client can beat once from the old
+// URL before the router replaces it.
+const CBAT_SEGMENT_TO_CARD = {
+  'trace':            'plane-turn',
+  'trace-1':          'plane-turn',
+  'trace-2':          'plane-turn',
+  'plane-turn':       'plane-turn',
+  'plane-turn-2d':    'plane-turn',
+  'plane-turn-3d':    'plane-turn',
+  'visualisation-2d': 'visualisation',
+  'visualisation-3d': 'visualisation',
+  'ant-practise':     'ant',
+};
+
+// Difficulty is a leaderboard split, not a card split: 'cut-easier' and 'cut'
+// are the same tile. Stripped before the lookup so a new Easier board never
+// needs an entry above.
+const CBAT_DIFFICULTY_SUFFIX = /-(easier|hard)$/;
+
+// Path → card key, or null for anything that is not a CBAT game page. Called
+// with client input, so it must not throw, and it returns a key only from the
+// allowlist above — an unknown segment can no more end up stored here than an
+// unknown path can end up stored as a label.
+function cbatCardKey(path) {
+  if (typeof path !== 'string') return null;
+
+  const clean = path.split('?')[0].split('#')[0].trim();
+  if (!clean || !clean.startsWith('/') || clean.length > 300) return null;
+
+  // The game page itself, or one of its leaderboards. Nothing else under /cbat
+  // belongs to a tile — /cbat is the hub, /cbat/report is the Aptitude Report.
+  const m = clean.match(/^\/cbat\/([a-z0-9-]{1,40})(?:\/leaderboard)?\/?$/);
+  if (!m) return null;
+
+  const seg = m[1].replace(CBAT_DIFFICULTY_SUFFIX, '');
+  if (CBAT_SEGMENT_TO_CARD[seg]) return CBAT_SEGMENT_TO_CARD[seg];
+  return CBAT_CARDS.includes(seg) ? seg : null;
+}
+
+// The path every card is reached by, which is the card key itself except for
+// the one tile whose route is named after neither of its modes.
+function cardPath(card) {
+  return card === 'plane-turn' ? '/cbat/trace' : `/cbat/${card}`;
+}
+
+// Label → card, for rows written before the card field existed.
+//
+// `lastLocation` has been recorded by every deployed backend since August, so
+// an admin can see someone is on "CBAT · Angles" whether or not the server
+// handling that person's heartbeat knows about tiles yet. Reading the tile back
+// out of the label is what lets the dots use that history instead of waiting
+// for it to be re-recorded.
+//
+// Built by running each card's own path through locationLabel() rather than
+// hand-written, so it cannot fall out of step with the table above: reword a
+// label and this follows it.
+//
+// Only the game pages come back. Every leaderboard is one label ("CBAT ·
+// Leaderboard") with the game deliberately dropped, so a label can never say
+// which tile a board belongs to — that is what the stored card is for, and why
+// this is a fallback rather than the mechanism.
+const CARD_BY_LABEL = new Map(
+  CBAT_CARDS.map(card => [locationLabel(cardPath(card)), card]),
+);
+
+function cbatCardFromLabel(label) {
+  if (typeof label !== 'string') return null;
+  return CARD_BY_LABEL.get(label) ?? null;
+}
+
+module.exports = {
+  LOCATIONS, LOCATION_MAX, locationLabel,
+  CBAT_CARDS, cbatCardKey, cbatCardFromLabel,
+};

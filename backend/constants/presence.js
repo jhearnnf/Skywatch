@@ -16,4 +16,18 @@ const PRESENCE_WINDOW_MS = 10 * 60 * 1000;
 // reported alongside it is always the true total, capped or not.
 const PRESENCE_LIST_LIMIT = 50;
 
-module.exports = { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT };
+// The tighter window behind the presence dots on the CBAT hub (see
+// `cbatCard` in GET /api/chat/presence).
+//
+// Deliberately far shorter than PRESENCE_WINDOW_MS, because the two answer
+// different questions. The strip says "who is around", and being forgiving
+// there is right: someone who shut the lid four minutes ago is still worth
+// listing. A dot sitting on the Target card is a claim about *now* — that
+// someone is on that page as you look at it — and ten minutes of slack would
+// leave dots parked on games nobody is playing.
+//
+// Three minutes is six of the client's 30s beats, so a couple of dropped
+// requests on a phone connection still keeps a live player's dot alight.
+const PRESENCE_HERE_WINDOW_MS = 3 * 60 * 1000;
+
+module.exports = { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT, PRESENCE_HERE_WINDOW_MS };

@@ -19,7 +19,12 @@ const EMPTY = { online: [], count: 0 }
 // and a poll that 403s twice a minute is noise in the network tab and the server
 // logs both. It also means the hook is honest about doing nothing — everything
 // it returns is empty, so callers can render unconditionally.
-export default function useChatPresence(enabled) {
+//
+// `pollMs` is the rail's 30s unless a caller needs finer. The CBAT hub does: it
+// draws a dot per person on the tile they are playing and slides it across when
+// they move, and at 30s a move lands up to a minute after it happened, on top of
+// the 30s the heartbeat itself takes to report it.
+export default function useChatPresence(enabled, pollMs = POLL_MS) {
   const { API, apiFetch } = useAuth()
   const [fetched, setFetched] = useState(EMPTY)
 
@@ -54,9 +59,9 @@ export default function useChatPresence(enabled) {
     }
 
     tick()
-    const id = setInterval(tick, POLL_MS)
+    const id = setInterval(tick, pollMs)
     return () => { cancelled = true; clearInterval(id) }
-  }, [enabled, load])
+  }, [enabled, load, pollMs])
 
   // Set of ids for the callers that only ask "is this one person online" —
   // the DM rows and the message avatars, both of which would otherwise scan the

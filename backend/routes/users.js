@@ -3,7 +3,7 @@ const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const { effectiveTier } = require('../utils/subscription');
 const { clearShowcaseCache } = require('../utils/cbatShowcase');
-const { locationLabel } = require('../constants/presenceLocations');
+const { locationLabel, cbatCardKey } = require('../constants/presenceLocations');
 const GameSessionQuizResult              = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt             = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult     = require('../models/GameSessionOrderOfBattleResult');
@@ -804,6 +804,12 @@ router.post('/heartbeat', protect, async (req, res) => {
     // somewhere unlabelled must clear the last answer, not leave it showing the
     // page they were on ten minutes ago as though they were still there.
     update.lastLocation = locationLabel(req.body?.path);
+
+    // The same path, resolved to the CBAT hub tile it belongs to, for the
+    // presence dots on /cbat. Also written unconditionally including the null,
+    // for the same reason: a dot must leave the card the moment its player
+    // does, not linger on the last game they happened to open.
+    update.lastCbatCard = cbatCardKey(req.body?.path);
 
     const client = sanitiseClientInfo(req.body?.client);
     if (client) {

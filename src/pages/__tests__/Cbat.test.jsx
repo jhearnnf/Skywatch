@@ -22,10 +22,24 @@ vi.mock('../../context/AppSettingsContext', () => ({
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 
 vi.mock('framer-motion', () => ({
+  AnimatePresence: ({ children }) => <>{children}</>,
   motion: {
-    div: ({ children, className, style }) => <div className={className} style={style}>{children}</div>,
+    // `rest` carries data-cbat-card, which the presence overlay measures the
+    // tiles by — dropping it here would hide the wiring from these tests.
+    div: ({ children, className, style, ...rest }) => (
+      <div className={className} style={style} {...dataOnly(rest)}>{children}</div>
+    ),
+    span: ({ children, className, style, animate, ...rest }) => (
+      <span className={className} style={style} data-x={animate?.x} {...dataOnly(rest)}>{children}</span>
+    ),
   },
 }))
+
+// Motion props (initial/animate/transition/exit) are objects React would warn
+// about on a DOM node, so only the data-* attributes are forwarded.
+function dataOnly(props) {
+  return Object.fromEntries(Object.entries(props).filter(([k]) => k.startsWith('data-')))
+}
 
 // Every CBAT game is visible on the hub as a clickable, imaged tile — no
 // `hidden` entries. These tests assert that end state across the whole list.
@@ -663,5 +677,63 @@ describe('CBAT hub — fitting the viewport', () => {
     // The 10rem above is only correct while usePhoneTight is mounted; without
     // the class the shell still pays py-6 and the page overflows by 24px.
     expect(document.body.classList.contains('phone-tight')).toBe(true)
+  })
+})
+
+describe('Cbat page — who is in which game (admin only)', () => {
+  beforeEach(() => {
+    mockUseAuth.mockReset()
+    localStorage.clear()
+  })
+
+  // One mock for both endpoints, dispatched on the URL: the hub polls presence
+  // and the side column fetches recent scores, and a blanket response would let
+  // one of them pass on the other's data.
+  function renderFor(user, online = []) {
+    const apiFetch = vi.fn((url) => {
+      const data = url.includes('/api/chat/presence')
+        ? { online, count: online.length }
+        : { recent: [] }
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data }) })
+    })
+    mockUseAuth.mockReturnValue({ user, API: '', apiFetch })
+    render(<Cbat />)
+    return apiFetch
+  }
+
+  const presenceCalls = (apiFetch) =>
+    apiFetch.mock.calls.filter(([url]) => url.includes('/api/chat/presence'))
+
+  const dots = () => Array.from(document.querySelectorAll('[data-cbat-dot]'))
+
+  it('marks the tile an agent is playing, for an admin', async () => {
+    renderFor({ _id: '1', isAdmin: true }, [
+      { _id: 'a', displayName: 'Viper', cbatCard: 'target' },
+    ])
+
+    await screen.findByTestId('cbat-presence-dots')
+    await vi.waitFor(() => expect(dots()).toHaveLength(1))
+    expect(dots()[0].dataset.cbatDot).toBe('target')
+  })
+
+  it('leaves the tiles unmarked for a regular user, and never asks who is online', () => {
+    // Presence says when people are at their computers, which is admin-only —
+    // see GET /api/chat/presence. A member must not even make the request.
+    const apiFetch = renderFor({ _id: '1' }, [
+      { _id: 'a', displayName: 'Viper', cbatCard: 'target' },
+    ])
+
+    expect(document.querySelector('[data-testid="cbat-presence-dots"]')).toBeNull()
+    expect(presenceCalls(apiFetch)).toHaveLength(0)
+  })
+
+  it('gives every tile the card key the dots are placed by', () => {
+    // The overlay finds a tile by this attribute, so a game without one can
+    // never show a dot however many people are in it.
+    renderFor({ _id: '1', isAdmin: true })
+    const marked = Array.from(document.querySelectorAll('[data-cbat-card]'))
+      .map(n => n.dataset.cbatCard)
+
+    expect(marked).toEqual(CBAT_GAMES.filter(g => !g.hidden).map(g => g.key))
   })
 })

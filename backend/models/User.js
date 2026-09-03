@@ -258,6 +258,16 @@ const userSchema = new mongoose.Schema(
     // each user reads. Admin-only, and only ever shown alongside lastSeen.
     lastLocation: { type: String, default: null },
 
+    // Which CBAT hub tile that page belongs to ('target', 'plane-turn'), for
+    // the presence dots admins see on /cbat. One key covers the game, its
+    // practise mode and all of its leaderboards, and is only ever one of the
+    // 22 in CBAT_CARDS — see backend/constants/presenceLocations.js.
+    //
+    // Kept separately from lastLocation rather than derived from it, because
+    // the label deliberately reduces every leaderboard to one string ("CBAT ·
+    // Leaderboard") and the tile it belongs to cannot be read back out of that.
+    lastCbatCard: { type: String, default: null },
+
     // Which build of the app this account was last running, kept per platform
     // so a user who plays on both keeps an answer for each — switching to the
     // phone must not erase what they were last on in the browser, and vice

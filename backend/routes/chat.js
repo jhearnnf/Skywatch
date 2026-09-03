@@ -11,7 +11,8 @@ const ProblemReport    = require('../models/ProblemReport');
 const User             = require('../models/User');
 const { generateAnnouncementDrafts } = require('../utils/announcementDrafts');
 const { resolveSelectedBadges } = require('../utils/selectedBadge');
-const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT } = require('../constants/presence');
+const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT, PRESENCE_HERE_WINDOW_MS } = require('../constants/presence');
+const { cbatCardFromLabel } = require('../constants/presenceLocations');
 const { medalsForUsers } = require('../utils/cbatMedalHolders');
 const BotKnowledge = require('../models/BotKnowledge');
 const { parseGuideUpload, renderGuideCorpus } = require('../utils/cbatGuideParser');
@@ -2301,9 +2302,20 @@ router.get('/admin/users/:userId/messages', adminOnly, async (req, res) => {
 // `count` is the true total even when `online` has been capped, so a busy day
 // reports "62 online" and lists the 50 most recent rather than quietly claiming
 // there are 50.
+//
+// `cbatCard` is the same signal read at a shorter range, for the presence dots
+// on the CBAT hub. It only carries the last few minutes (PRESENCE_HERE_WINDOW_MS)
+// because a dot on a game tile says someone is playing it right now, which is a
+// stronger claim than the strip's "around recently" and needs to be true.
+//
+// It falls back to the stored label when the row has no tile on it, which is
+// the case for anyone whose heartbeat was handled by a backend older than the
+// field. Otherwise this page would sit there knowing full well that someone is
+// on "CBAT · Angles" and refusing to say so on the Angles tile.
 router.get('/presence', adminOnly, async (req, res) => {
   try {
-    const since = new Date(Date.now() - PRESENCE_WINDOW_MS);
+    const since     = new Date(Date.now() - PRESENCE_WINDOW_MS);
+    const hereSince = Date.now() - PRESENCE_HERE_WINDOW_MS;
     // Bots never heartbeat, so they cannot appear here anyway — excluded
     // explicitly so that stays true if one ever gets a client. Banned accounts
     // are dropped: an admin scanning who is around does not need them, and a DM
@@ -2312,7 +2324,7 @@ router.get('/presence', adminOnly, async (req, res) => {
 
     const [users, count] = await Promise.all([
       User.find(filter)
-        .select('displayName agentNumber isAdmin lastSeen lastLocation')
+        .select('displayName agentNumber isAdmin lastSeen lastLocation lastCbatCard')
         .sort({ lastSeen: -1 })
         .limit(PRESENCE_LIST_LIMIT)
         .lean(),
@@ -2325,6 +2337,11 @@ router.get('/presence', adminOnly, async (req, res) => {
         // are in Community is the one row that carries no information. `isSelf`
         // lets the client mark the row instead.
         const isSelf = String(u._id) === String(req.user._id);
+        // Where they are on the hub, but only if they were there recently
+        // enough for a dot to be honest about it. Nulled rather than dropped
+        // from the row: the strip still wants to list someone whose dot has
+        // gone out.
+        const here = u.lastSeen && new Date(u.lastSeen).getTime() >= hereSince;
         return {
           _id:         u._id,
           displayName: u.displayName ?? null,
@@ -2333,10 +2350,20 @@ router.get('/presence', adminOnly, async (req, res) => {
           isSelf,
           lastSeen:    u.lastSeen ?? null,
           location:    isSelf ? null : (u.lastLocation ?? null),
+          // Unlike `location`, kept for the viewer's own row. An admin reading
+          // the hub is by definition on /cbat, which is no card at all, so
+          // their own dot only ever appears in the case that makes it useful:
+          // a second tab or device of theirs sitting in a game.
+          //
+          // Read from the label when the row carries no tile — the label is the
+          // same knowledge in a coarser form, and it is what every deployed
+          // backend has been recording since August.
+          cbatCard:    here ? (u.lastCbatCard ?? cbatCardFromLabel(u.lastLocation)) : null,
         };
       }),
       count,
-      windowMs: PRESENCE_WINDOW_MS,
+      windowMs:     PRESENCE_WINDOW_MS,
+      hereWindowMs: PRESENCE_HERE_WINDOW_MS,
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });

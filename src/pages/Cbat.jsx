@@ -8,6 +8,8 @@ import RecentCbatScores from '../components/RecentCbatScores'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
 import CbatLoungeChat from '../components/CbatLoungeChat'
+import CbatPresenceDots from '../components/cbat/CbatPresenceDots'
+import useChatPresence from '../hooks/useChatPresence'
 import { useLoungeOpen } from '../hooks/useLoungeOpen'
 import { useFixedColumn } from '../hooks/useFixedColumn'
 import { usePhoneTight } from '../hooks/usePhoneTight'
@@ -19,6 +21,13 @@ import PlayOnPcNote from '../components/cbat/PlayOnPcNote'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
+
+// How often the hub asks who is in which game, for the admin presence dots.
+// Faster than the community rail's 30s because the dots are meant to move as
+// people move: the heartbeat already costs up to 30s before a switch is even
+// recorded, and polling at 30s on top of that would routinely show a player in
+// the game they just left. Only admins poll at all.
+const PRESENCE_POLL_MS = 10_000
 
 function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) {
   if (!game.image) return null
@@ -345,6 +354,14 @@ export default function Cbat() {
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
   const visibleGames = CBAT_GAMES.filter(g => !g.hidden)
 
+  // Who is in which game right now, for the dots over the tiles. Admin only,
+  // and the gate is passed to the hook rather than checked around it so a
+  // member never fires the request at all. The overlay is measured off this
+  // wrapper, which is why the grid gains one.
+  const gridWrapRef = useRef(null)
+  const isAdmin     = !!user?.isAdmin
+  const presence    = useChatPresence(isAdmin, PRESENCE_POLL_MS)
+
   // The phone grid is four across, so a game count that is not a multiple of
   // four leaves dead cells on the last row — at 22 games, the two beside
   // Vigilance and SMA. The report link goes in them: it is the only thing on
@@ -476,7 +493,14 @@ export default function Cbat() {
       {/* Four across on a phone so all 22 games sit on one screen; the two-column
           130px card grid is untouched from `sm` up. The row gap was an inline
           2rem style, which beat every class and applied at all widths — it is a
-          responsive class now, which is what lets the phone grid be dense. */}
+          responsive class now, which is what lets the phone grid be dense.
+
+          The `relative` wrapper exists for the admin presence dots below: they
+          are one overlay layer positioned against it, not a mark inside each
+          tile, which is what lets a dot slide from one tile to another when its
+          player switches games. It is outside the grid so the layer is not
+          itself a grid cell. */}
+      <div className="relative" ref={gridWrapRef}>
       <div className={`grid grid-cols-4 gap-2 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-8${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
         {visibleGames.map((game, i) => {
           const isImplemented = !!game.path
@@ -506,6 +530,10 @@ export default function Cbat() {
           return (
             <motion.div
               key={game.key}
+              // What the presence overlay measures and keys its dots by. On the
+              // wrapper rather than the tile itself so it is present whether the
+              // tile is a link, a combined tile or a greyed-out "coming soon".
+              data-cbat-card={game.key}
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.35 }}
@@ -646,6 +674,12 @@ export default function Cbat() {
             </Link>
           </motion.div>
         )}
+      </div>
+
+      {/* Who is in which game, for admins only. Rendered after the grid so it
+          paints over the tiles, and pointer-events-none so it never takes a tap
+          from one. */}
+      {isAdmin && <CbatPresenceDots containerRef={gridWrapRef} online={presence.online} />}
       </div>
 
         </div>

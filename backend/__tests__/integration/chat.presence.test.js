@@ -11,7 +11,7 @@ const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
-const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT } = require('../../constants/presence');
+const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT, PRESENCE_HERE_WINDOW_MS } = require('../../constants/presence');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
@@ -84,7 +84,7 @@ describe('GET /api/chat/presence', () => {
     const { online } = (await presence(authCookie(admin._id))).body.data;
     for (const u of online) {
       expect(Object.keys(u).sort())
-        .toEqual(['_id', 'agentNumber', 'displayName', 'isAdmin', 'isSelf', 'lastSeen', 'location']);
+        .toEqual(['_id', 'agentNumber', 'cbatCard', 'displayName', 'isAdmin', 'isSelf', 'lastSeen', 'location']);
     }
   });
 
@@ -137,6 +137,100 @@ describe('where everyone is', () => {
   });
 });
 
+describe('which CBAT tile everyone is on', () => {
+  const find = (res, name) => res.body.data.online.find(u => u.displayName === name);
+
+  it('reports the tile the heartbeat resolved, for the dots on the hub', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({ displayName: 'Viper',  lastSeen: new Date(), lastCbatCard: 'target' });
+    await createUser({ displayName: 'Falcon', lastSeen: new Date(), lastCbatCard: 'plane-turn' });
+
+    const res = await presence(authCookie(admin._id));
+    expect(find(res, 'Viper').cbatCard).toBe('target');
+    expect(find(res, 'Falcon').cbatCard).toBe('plane-turn');
+  });
+
+  it('falls back to the label for a row written before the tile was recorded', async () => {
+    // Every deployed backend has stored the label since August, and an older one
+    // still handling heartbeats stores nothing else. The hub knows perfectly
+    // well where these people are, so it marks the tile.
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({ displayName: 'Viper',  lastSeen: new Date(), lastLocation: 'CBAT · Angles' });
+    await createUser({ displayName: 'Falcon', lastSeen: new Date(), lastLocation: 'CBAT · Trace 1/2' });
+
+    const res = await presence(authCookie(admin._id));
+    expect(find(res, 'Viper').cbatCard).toBe('angles');
+    expect(find(res, 'Falcon').cbatCard).toBe('plane-turn');
+  });
+
+  it('prefers the recorded tile over the label, which cannot name a leaderboard', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({
+      displayName:  'Viper',
+      lastSeen:     new Date(),
+      lastLocation: 'CBAT · Leaderboard',
+      lastCbatCard: 'target',
+    });
+
+    expect(find(await presence(authCookie(admin._id)), 'Viper').cbatCard).toBe('target');
+  });
+
+  it('reports null for someone who is online but not in a game', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({ displayName: 'Viper', lastSeen: new Date(), lastCbatCard: null, lastLocation: 'Community' });
+
+    expect(find(await presence(authCookie(admin._id)), 'Viper').cbatCard).toBeNull();
+  });
+
+  it('drops the tile once the beat is older than the dot window', async () => {
+    // The strip is forgiving about "around recently"; a dot on a game tile is a
+    // claim that someone is playing it right now, so it goes out much sooner.
+    // The row itself stays — they are still online.
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({
+      displayName:  'Viper',
+      lastSeen:     agoMs(PRESENCE_HERE_WINDOW_MS + 30_000),
+      lastCbatCard: 'target',
+    });
+
+    const viper = find(await presence(authCookie(admin._id)), 'Viper');
+    expect(viper.cbatCard).toBeNull();
+    expect(viper.location).toBeDefined();
+  });
+
+  it('keeps the tile for a beat inside the dot window', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({
+      displayName:  'Viper',
+      lastSeen:     agoMs(PRESENCE_HERE_WINDOW_MS - 30_000),
+      lastCbatCard: 'act',
+    });
+
+    expect(find(await presence(authCookie(admin._id)), 'Viper').cbatCard).toBe('act');
+  });
+
+  it('keeps the viewer own tile, unlike their location', async () => {
+    // An admin reading the hub is on /cbat, which is no tile at all — so the
+    // only time this is not null is a second tab or device of theirs sitting in
+    // a game, which is exactly when they would want to see it.
+    const admin = await createUser({
+      isAdmin: true, displayName: 'Control', lastSeen: new Date(),
+      lastLocation: 'CBAT · ACT', lastCbatCard: 'act',
+    });
+
+    const me = find(await presence(authCookie(admin._id)), 'Control');
+    expect(me.location).toBeNull();
+    expect(me.cbatCard).toBe('act');
+  });
+
+  it('says what window the dots are drawn from', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+
+    expect((await presence(authCookie(admin._id))).body.data.hereWindowMs)
+      .toBe(PRESENCE_HERE_WINDOW_MS);
+  });
+});
+
 describe('POST /api/users/heartbeat — reporting where you are', () => {
   const beat = (user, body) =>
     request(app).post('/api/users/heartbeat').set('Cookie', authCookie(user._id)).send(body);
@@ -173,6 +267,37 @@ describe('POST /api/users/heartbeat — reporting where you are', () => {
     expect((await reload(user)).lastLocation).toBeNull();
   });
 
+  it('stores the hub tile alongside the label', async () => {
+    const user = await createUser({ displayName: 'Viper' });
+    await beat(user, { path: '/cbat/trace' });
+
+    const stored = await reload(user);
+    // The label names the page; the card names the tile it belongs to, which
+    // the label cannot answer for a combined tile or a leaderboard.
+    expect(stored.lastLocation).toBe('CBAT · Trace 1/2');
+    expect(stored.lastCbatCard).toBe('plane-turn');
+  });
+
+  it('keeps someone on a game tile while they read its leaderboard', async () => {
+    const user = await createUser({ displayName: 'Viper' });
+    await beat(user, { path: '/cbat/target/leaderboard' });
+
+    const stored = await reload(user);
+    expect(stored.lastLocation).toBe('CBAT · Leaderboard');
+    expect(stored.lastCbatCard).toBe('target');
+  });
+
+  it('clears the tile the moment they leave the game', async () => {
+    const user = await createUser({ displayName: 'Viper' });
+    await beat(user, { path: '/cbat/act' });
+    expect((await reload(user)).lastCbatCard).toBe('act');
+
+    // Back on the hub. A dot left on ACT would be claiming they are still in
+    // it while they are looking at the tile.
+    await beat(user, { path: '/cbat' });
+    expect((await reload(user)).lastCbatCard).toBeNull();
+  });
+
   it('still records presence when the path is missing or junk', async () => {
     const user = await createUser({ displayName: 'Viper' });
 
@@ -184,6 +309,7 @@ describe('POST /api/users/heartbeat — reporting where you are', () => {
       // able to take it down with it.
       expect(stored.lastSeen).toBeTruthy();
       expect(stored.lastLocation).toBeNull();
+      expect(stored.lastCbatCard).toBeNull();
     }
   });
 
