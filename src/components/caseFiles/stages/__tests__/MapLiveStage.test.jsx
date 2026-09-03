@@ -20,11 +20,14 @@ vi.mock('framer-motion', () => {
 
 // ── MapCanvas mock ────────────────────────────────────────────────────────────
 vi.mock('../../MapCanvas', () => ({
-  default: ({ hotspots, units }) => (
+  default: ({ hotspots, units, movements }) => (
     <div
       data-testid="map-canvas"
       data-hotspots={hotspots?.length ?? 0}
       data-units={units?.length ?? 0}
+      data-movements={movements?.length ?? 0}
+      data-movement-ids={(movements ?? []).map((m) => m.id).join(',')}
+      data-movement-routes={(movements ?? []).map((m) => `${m.fromHotspotId}>${m.toHotspotId}`).join(',')}
     />
   ),
 }))
@@ -292,5 +295,61 @@ describe('MapLiveStage — unit accumulation', () => {
     fireEvent.click(screen.getByTestId('advance-phase-btn'))
     // Now both units should be visible
     expect(screen.getByTestId('map-canvas').dataset.units).toBe('2')
+  })
+})
+
+// ── Animated movements + legend ──────────────────────────────────────────────
+
+describe('MapLiveStage — animated movements', () => {
+  it('flies only the current phase, so earlier phases do not compete for attention', () => {
+    renderStage([
+      { id: 'p1', timeLabel: 'T1', units: [UNIT_1], subDecision: null },
+      { id: 'p2', timeLabel: 'T2', units: [UNIT_2], subDecision: null },
+    ])
+    const canvas = screen.getByTestId('map-canvas')
+    expect(canvas.getAttribute('data-movements')).toBe('1')
+    expect(canvas.getAttribute('data-movement-ids')).toBe('u-1')
+  })
+
+  it('hands the animation both ends of the journey, not the destination twice', () => {
+    renderStage([{ id: 'p1', timeLabel: 'T1', units: [UNIT_1], subDecision: null }])
+    expect(screen.getByTestId('map-canvas').getAttribute('data-movement-routes')).toBe('hs-1>hs-2')
+  })
+
+  it('keeps earlier phases on the map as settled rings once the phase advances', () => {
+    renderStage([
+      { id: 'p1', timeLabel: 'T1', units: [UNIT_1], subDecision: null },
+      { id: 'p2', timeLabel: 'T2', units: [UNIT_2], subDecision: null },
+    ])
+    fireEvent.click(screen.getByTestId('advance-phase-btn'))
+    const canvas = screen.getByTestId('map-canvas')
+    // Both units are on the map...
+    expect(canvas.getAttribute('data-units')).toBe('2')
+    // ...but only the new one is moving.
+    expect(canvas.getAttribute('data-movement-ids')).toBe('u-2')
+  })
+
+  it('names what is moving, in plain English, beneath the map', () => {
+    renderStage([{ id: 'p1', timeLabel: 'T1', units: [UNIT_1], subDecision: null }])
+    const legend = screen.getByTestId('movement-legend')
+    expect(legend.textContent).toContain('Armoured push')
+  })
+
+  it('lists each kind of movement once, however many of them there are', () => {
+    renderStage([
+      {
+        id: 'p1',
+        timeLabel: 'T1',
+        units: [UNIT_1, { ...UNIT_1, id: 'u-1b', toHotspotId: 'hs-3' }],
+        subDecision: null,
+      },
+    ])
+    const legend = screen.getByTestId('movement-legend')
+    expect(legend.textContent.match(/Armoured push/g)).toHaveLength(1)
+  })
+
+  it('drops the legend entirely on a phase where nothing moves', () => {
+    renderStage([{ id: 'p1', timeLabel: 'T1', units: [], subDecision: null }])
+    expect(screen.queryByTestId('movement-legend')).toBeNull()
   })
 })

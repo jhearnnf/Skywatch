@@ -23,17 +23,14 @@
  *
  * onSubmit({ subDecisions: [{ subDecisionId, selectedOptionIds: [string] }] })
  *
- * CONTRACT-AMBIGUITY: unit animation strategy — V1 uses destination-snap with
- * a motion.div fade-in rather than smooth path-following animation.
- * Rationale: MapCanvas renders units via react-leaflet CircleMarker which cannot
- * be driven by framer-motion directly without piercing the Leaflet layer.
- * Implementing a full SVG overlay that projects lat/lng to pixel coordinates
- * (and tracks map pan/zoom) is correct but complex for V1.
- * V2 can replace UnitsLayer with an animated SVG pane overlay using Leaflet's
- * containerPointToLatLng + map 'moveend'/'zoomend' events.
- * For V1: units appear at their DESTINATION position when the phase activates,
- * with a fade-in animation. The cumulative unit list is passed to MapCanvas as
- * `units` so the existing UnitsLayer renders them as CircleMarkers.
+ * Unit rendering is split in two, because the two questions a player has are
+ * different: "what is happening right now" and "what has happened so far".
+ *   • The CURRENT phase's units are handed to MapCanvas as `movements` and
+ *     played by MapMotionLayer — they fly their route from origin to target on
+ *     a loop, with an impact at the far end.
+ *   • Every unit from phase 0 up to the current one is also passed as `units`,
+ *     snapped to its destination, so earlier phases stay on the map as quiet
+ *     rings rather than a screen full of competing animations.
  *
  * CONTRACT-AMBIGUITY: phase progression — V1 is player-driven ("Advance" button).
  * Auto-timer (animationMs) is noted for V2.
@@ -44,6 +41,7 @@
 import React, { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import MapCanvas from '../MapCanvas'
+import { kindStyle, sideColor } from '../../../utils/caseFiles/motionGeometry'
 
 // ── Phase header chip ─────────────────────────────────────────────────────────
 
@@ -231,13 +229,26 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
   const isLastPhase  = currentPhaseIndex === totalPhases - 1
   const allPhasesComplete = completedPhases.size === totalPhases
 
-  // Accumulate all units from all phases that are at or before current phase
-  // CONTRACT-AMBIGUITY: V1 destination-snap — we show units at their
-  // DESTINATION position. They fade in when the phase that introduced them
-  // becomes active. All units from phase 0..currentPhaseIndex are rendered.
+  // Everything that has happened up to and including the phase on screen.
   const visibleUnits = phases
     .slice(0, currentPhaseIndex + 1)
     .flatMap(p => p.units ?? [])
+
+  // Just the phase on screen — these are the ones that actually fly.
+  const activeMovements = currentPhase?.units ?? []
+
+  // Key for the moving pieces, built from what is actually in the air. Without
+  // it a red dart arcing into Kyiv is atmosphere; with it, it is information.
+  const movementLegend = []
+  for (const unit of activeMovements) {
+    const key = `${unit.side}:${unit.kind}`
+    if (movementLegend.some(l => l.key === key)) continue
+    movementLegend.push({
+      key,
+      label: kindStyle(unit.kind).label,
+      color: sideColor(unit.side),
+    })
+  }
 
   // ── Sub-decision commit callback ─────────────────────────────────────────
 
@@ -329,14 +340,10 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
       </div>
 
       {/* ── Map — capped at 45vh so sub-decision card + footer remain visible */}
-      {/* CONTRACT-AMBIGUITY: units passed to MapCanvas as the cumulative list
-          from phases 0..currentPhaseIndex. The UnitsLayer in MapCanvas renders
-          them at their destination (fromHotspotId is used as origin by MapCanvas
-          V1 stub, which renders at fromHotspotId position). For MapLive we want
-          units at their DESTINATION — we therefore pass a transformed list where
-          fromHotspotId = toHotspotId so MapCanvas places the dot at the endpoint.
-          This is fully compatible with MapCanvas's existing UnitsLayer without
-          modifying it. */}
+      {/* UnitsLayer draws a ring at each unit's `fromHotspotId`, so the settled
+          history is passed with that field rewritten to the destination. The
+          live phase goes through `movements` untouched, because MapMotionLayer
+          needs both ends of the journey to fly it. */}
       <MapCanvas
         bounds={mapBounds}
         hotspots={hotspots}
@@ -344,8 +351,34 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
           ...u,
           fromHotspotId: u.toHotspotId,   // snap to destination
         }))}
+        movements={activeMovements}
         height="45vh"
       />
+
+      {/* Key for what is moving on the map right now. */}
+      {movementLegend.length > 0 && (
+        <div
+          data-testid="movement-legend"
+          className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1"
+        >
+          <span className="text-[10px] uppercase tracking-widest text-slate-500 intel-mono">
+            On the map now
+          </span>
+          {movementLegend.map(item => (
+            <span
+              key={item.key}
+              className="flex items-center gap-1.5 text-[11px] text-text-muted"
+            >
+              <span
+                aria-hidden="true"
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: item.color, boxShadow: `0 0 8px ${item.color}` }}
+              />
+              {item.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ── Sub-decision card (slides in when phase has one) ───────────── */}
       <AnimatePresence>

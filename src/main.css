@@ -2291,3 +2291,51 @@ body.play-mode .card-shadow {
 .leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-bottom::before { border-bottom-color: #0c1829; }
 .leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-left::before   { border-left-color: #0c1829; }
 .leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-right::before  { border-right-color: #0c1829; }
+
+/* ── Case Files map motion layer ──────────────────────────────────────────────
+   MapMotionLayer mounts as a child of the Leaflet container and covers it, so
+   the SVG's user units are the same screen-space container points Leaflet's
+   own projection hands back. It sits above the overlay pane (400) that carries
+   the hotspot markers but below the tooltip pane (650), and takes no pointer
+   events so clicking a hotspot still works straight through it. */
+.cf-motion-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 500;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.cf-motion-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  paint-order: stroke fill;
+}
+
+/* Marching ants along a drawn thrust axis. Leaflet renders a Polyline as a
+   plain SVG <path>, so a className on it is all that is needed — the offset
+   has to match the dashArray period (10 + 12) or the loop visibly jumps. */
+@keyframes cf-axis-flow {
+  to { stroke-dashoffset: -22; }
+}
+.cf-axis-flow {
+  animation: cf-axis-flow 1.1s linear infinite;
+}
+
+
+/* Halo under the map hotspot the player has just picked as a start point.
+   Leaflet draws a CircleMarker as an SVG <path>, so the scale has to be pinned
+   to the shape's own box rather than the (empty) user-space origin. */
+@keyframes cf-hotspot-pulse {
+  0%   { transform: scale(0.85); opacity: 0.75; }
+  70%  { transform: scale(2.1);  opacity: 0;    }
+  100% { transform: scale(2.1);  opacity: 0;    }
+}
+.cf-hotspot-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cf-hotspot-pulse 1.8s ease-out infinite;
+}

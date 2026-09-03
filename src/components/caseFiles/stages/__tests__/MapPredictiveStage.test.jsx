@@ -58,6 +58,9 @@ vi.mock('../../MapCanvas', () => ({
         ))}
         {/* Render axis count for assertions */}
         <span data-testid="axis-count">{axes?.length ?? 0}</span>
+        <span data-testid="axes-animated">
+          {(axes ?? []).every(a => a.animated) ? 'all' : 'some'}
+        </span>
       </div>
     )
   },
@@ -407,5 +410,20 @@ describe('MapPredictiveStage — submit', () => {
     fireEvent.click(screen.getByTestId('submit-analysis'))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     expect(onSubmit.mock.calls[0][0].axes).toEqual([])
+  })
+
+  it('makes every committed route flow towards its target', async () => {
+    render(
+      <MapPredictiveStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+      />
+    )
+    clickHotspot(screen, 'bel')
+    clickHotspot(screen, 'kyv')
+
+    await waitFor(() => expect(screen.getByTestId('axis-count').textContent).toBe('1'))
+    expect(screen.getByTestId('axes-animated').textContent.trim()).toBe('all')
   })
 })

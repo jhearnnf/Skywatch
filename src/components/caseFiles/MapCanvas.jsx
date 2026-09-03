@@ -6,8 +6,11 @@
  *   hotspots          [{ id, label, lat, lng, kind }]
  *   axes?             [{ id, fromHotspotId, toHotspotId, color?, dashed?, animated? }]
  *   units?            [{ id, side, kind, fromHotspotId, toHotspotId, animationMs }]
- *                     — V1 stub: rendered as CircleMarker at start position.
- *                       Animation to be wired by agent D5 (MapLiveStage).
+ *                     — static arrival rings, one per unit, at fromHotspotId.
+ *   movements?        [{ id, side, kind, fromHotspotId, toHotspotId, animationMs }]
+ *                     — the same shape, but played as a looping animation from
+ *                       origin to destination by MapMotionLayer.
+ *   showMovementLabels? boolean, default true
  *   focusedHotspotId? string
  *   onHotspotClick?   (id) => void
  *   onMapClick?       (latlng) => void
@@ -37,6 +40,7 @@ import {
 } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { boundsCentre, lookupHotspot } from '../../utils/caseFiles/mapHelpers'
+import MapMotionLayer from './MapMotionLayer'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -157,11 +161,16 @@ function SingleAxis({ axis, hotspots }) {
   const toLatLng   = [to.lat,   to.lng]
   const color      = axis.color ?? AXIS_COLOR_DEFAULT
 
+  // `animated` turns the axis into a marching-ants flow, so a route the player
+  // has drawn reads as a direction of travel rather than a static pencil line.
+  // The dash offset is animated in CSS (.cf-axis-flow in main.css) because a
+  // Leaflet Polyline is a plain SVG <path> and takes a className directly.
   const pathOptions = {
     color,
-    weight:    2.5,
+    weight:    axis.animated ? 3 : 2.5,
     opacity:   axis.dashed ? 0.65 : 0.9,
-    dashArray: axis.dashed ? '6 5' : undefined,
+    dashArray: axis.animated ? '10 12' : axis.dashed ? '6 5' : undefined,
+    className: axis.animated ? 'cf-axis-flow' : undefined,
   }
 
   const arrowPts = computeArrowhead(map, fromLatLng, toLatLng)
@@ -229,8 +238,26 @@ function HotspotsLayer({ hotspots, focusedHotspotId, onHotspotClick }) {
     const isFocused = hs.id === focusedHotspotId
 
     return (
+      <React.Fragment key={hs.id}>
+      {/* Expanding halo under the focused marker. On the predictive stage the
+          only feedback for "start point set" was a slightly larger dot, which
+          is easy to miss on a map full of dots — this makes the pending click
+          obvious without moving anything else on screen. */}
+      {isFocused && (
+        <CircleMarker
+          center={[hs.lat, hs.lng]}
+          radius={11}
+          interactive={false}
+          pathOptions={{
+            className:   'cf-hotspot-pulse',
+            color,
+            fillColor:   color,
+            fillOpacity: 0.15,
+            weight:      2,
+          }}
+        />
+      )}
       <CircleMarker
-        key={hs.id}
         center={[hs.lat, hs.lng]}
         radius={isFocused ? 11 : 8}
         pathOptions={{
@@ -257,6 +284,7 @@ function HotspotsLayer({ hotspots, focusedHotspotId, onHotspotClick }) {
           </div>
         </Tooltip>
       </CircleMarker>
+      </React.Fragment>
     )
   })
 }
@@ -268,6 +296,8 @@ export default function MapCanvas({
   hotspots = [],
   axes,
   units,
+  movements,
+  showMovementLabels = true,
   focusedHotspotId,
   onHotspotClick,
   onMapClick,
@@ -311,6 +341,14 @@ export default function MapCanvas({
 
         {units?.length > 0 && (
           <UnitsLayer units={units} hotspots={hotspots} />
+        )}
+
+        {movements?.length > 0 && (
+          <MapMotionLayer
+            movements={movements}
+            hotspots={hotspots}
+            showLabels={showMovementLabels}
+          />
         )}
       </MapContainer>
     </div>

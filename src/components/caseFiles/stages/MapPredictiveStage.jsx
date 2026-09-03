@@ -202,12 +202,16 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
 
   // ── Build axes prop for MapCanvas ─────────────────────────────────────────
 
+  // `animated` makes each committed route flow from its start point towards its
+  // target. A drawn line says "these two places are related"; a flowing one says
+  // which way the player thinks the attack goes, which is the whole prediction.
   const mapAxes = axes.map(a => ({
     id:            a.id,
     fromHotspotId: a.fromHotspotId,
     toHotspotId:   a.toHotspotId,
     color:         a.id === mainAxisId ? '#e74c3c' : '#c0392b',
     dashed:        false,
+    animated:      true,
   }))
 
   // In-progress axis (first hotspot selected, awaiting second)

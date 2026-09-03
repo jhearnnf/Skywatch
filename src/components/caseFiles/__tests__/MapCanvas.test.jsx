@@ -24,9 +24,19 @@ vi.mock('react-leaflet', () => ({
     )
   },
   Tooltip:  ({ children }) => <span>{children}</span>,
-  Polyline: () => null,
+  // Rendered rather than nulled so the axis styling (marching-ants class, dash
+  // pattern) can be asserted — Leaflet draws a Polyline as a plain SVG path and
+  // takes the className straight through.
+  Polyline: ({ pathOptions }) => (
+    <div
+      data-testid="polyline"
+      data-classname={pathOptions?.className ?? ''}
+      data-dasharray={pathOptions?.dashArray ?? ''}
+    />
+  ),
   useMap: () => ({
     fitBounds:                () => {},
+    getSize:                  () => ({ x: 600, y: 400 }),
     latLngToContainerPoint:   ([lat, lng]) => ({ x: lng * 10, y: lat * 10 }),
     containerPointToLatLng:   ([x, y])     => ({ lat: y / 10, lng: x / 10 }),
   }),
@@ -110,5 +120,52 @@ describe('MapCanvas — smoke tests', () => {
     )
     const wrapper = container.firstChild
     expect(wrapper.style.height).toBe('400px')
+  })
+
+  it('plays the movements it is given over the top of the map', () => {
+    render(
+      <MapCanvas
+        bounds={BOUNDS}
+        hotspots={HOTSPOTS}
+        movements={[
+          { id: 'm1', side: 'ru', kind: 'missile', fromHotspotId: 'bel', toHotspotId: 'kyv' },
+        ]}
+      />
+    )
+    expect(screen.getByTestId('map-motion-layer')).toBeDefined()
+    expect(screen.getByTestId('map-motion-m1')).toBeDefined()
+  })
+
+  it('adds no motion layer when there are no movements', () => {
+    render(<MapCanvas bounds={BOUNDS} hotspots={HOTSPOTS} />)
+    expect(screen.queryByTestId('map-motion-layer')).toBeNull()
+  })
+
+  it('can suppress the movement labels', () => {
+    render(
+      <MapCanvas
+        bounds={BOUNDS}
+        hotspots={HOTSPOTS}
+        showMovementLabels={false}
+        movements={[
+          { id: 'm1', side: 'ru', kind: 'missile', fromHotspotId: 'bel', toHotspotId: 'kyv' },
+        ]}
+      />
+    )
+    expect(screen.queryByText('Missile strike')).toBeNull()
+  })
+
+  it('gives an animated axis the flow class and a dash pattern to march', () => {
+    render(
+      <MapCanvas bounds={BOUNDS} hotspots={HOTSPOTS} axes={[{ ...AXES[0], animated: true }]} />
+    )
+    const line = screen.getAllByTestId('polyline')[0]
+    expect(line.getAttribute('data-classname')).toBe('cf-axis-flow')
+    expect(line.getAttribute('data-dasharray')).toBe('10 12')
+  })
+
+  it('leaves a plain axis unanimated', () => {
+    render(<MapCanvas bounds={BOUNDS} hotspots={HOTSPOTS} axes={AXES} />)
+    expect(screen.getAllByTestId('polyline')[0].getAttribute('data-classname')).toBe('')
   })
 })
