@@ -220,7 +220,59 @@ function DeltaBadge({ value, good = true }) {
   )
 }
 
-function StatCard({ label, value, sub, color = 'slate', disabled = false, delta, deltaGood = true }) {
+// The Android robot, drawn rather than typed: the 🤖 emoji is a generic grey robot
+// face on Windows, not the Android mascot, and it changes shape on every platform.
+// Green is Android's own #3DDC84.
+//
+// Sized by StatCard's watermark layer, not here — it fills the card as a background
+// and is drawn behind the text.
+function AndroidGlyph() {
+  return (
+    // viewBox is cropped to the artwork rather than the usual 0 0 24 24, so the robot fills
+    // whatever box it is given instead of floating in a third of it. It ends at y=13.2, the
+    // dome's flat base, with no empty band under it.
+    //
+    // xMidYMax pins that base to the BOTTOM of the box, so the card can sit the glyph flush
+    // on its bottom edge — any slack from an imperfect box aspect ratio is absorbed above the
+    // robot instead of opening a gap beneath it.
+    <svg viewBox="4 4 16 9.2" preserveAspectRatio="xMidYMax meet" className="h-full w-full" aria-hidden="true">
+      {/* antennae */}
+      <g fill="none" stroke="#3DDC84" strokeWidth="1.6" strokeLinecap="round">
+        <path d="M7.7 5 9.3 7.9" />
+        <path d="M16.3 5 14.7 7.9" />
+      </g>
+      {/* dome */}
+      <path d="M4.5 13.2a7.5 7.5 0 0 1 15 0z" fill="#3DDC84" />
+      {/* eyes */}
+      <circle cx="9.3" cy="10.3" r="0.95" fill="#ffffff" />
+      <circle cx="14.7" cy="10.3" r="0.95" fill="#ffffff" />
+    </svg>
+  )
+}
+
+// An envelope for the email cards, in the same solid style as AndroidGlyph — a filled
+// body with the flap cut out of it.
+//
+// The colour is passed in rather than taken from `currentColor`, because the card's text
+// colour is the wrong one to borrow: `text-red-700` is undefined in our inverted scale and
+// falls through to Tailwind's dark #b91c1c, which at watermark opacity is invisible on a
+// near-black card. These are the light end of each card's own hue instead.
+//
+// viewBox bottom IS the envelope's base (y=16), and xMidYMax pins that base to the bottom
+// of the box, so the card can stand it flush on its bottom edge. Same contract as
+// AndroidGlyph — see the watermark layer in StatCard.
+function EnvelopeGlyph({ color }) {
+  return (
+    <svg viewBox="0 0 24 16" preserveAspectRatio="xMidYMax meet" className="h-full w-full" aria-hidden="true">
+      <rect x="1" y="3.4" width="22" height="12.6" rx="1.8" fill={color} />
+      {/* Cut out in the page background rather than white: a white flap on a pale envelope
+          has almost no contrast once the whole layer drops to a wash. */}
+      <path d="M2.4 4.8 12 11.6 21.6 4.8" fill="none" stroke="#06101e" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function StatCard({ label, value, sub, color = 'slate', disabled = false, delta, deltaGood = true, icon }) {
   const colors = {
     slate:  'bg-slate-50  border-slate-200  text-slate-700',
     brand:  'bg-brand-50  border-brand-200  text-brand-700',
@@ -231,19 +283,54 @@ function StatCard({ label, value, sub, color = 'slate', disabled = false, delta,
   const palette = disabled ? colors.slate : (colors[color] ?? colors.slate)
   const showDelta = !disabled && delta != null && !Number.isNaN(delta)
   return (
+    // One standard card size across the whole Stats page. Two things make that true:
+    //   min-h-[5.75rem] is the height of a full card — p-4 (32) + value (28) + mb-0.5 (2)
+    //     + label (16) + mt-0.5 (2) + sub (12) — so a card with no sub line, or a shorter
+    //     one, still occupies the same box instead of shrinking to its content.
+    //   h-full lets it grow to its grid row when a neighbour genuinely needs more (a label
+    //     that wraps on a phone, where the grid is 2-up), so a row never has ragged cards.
+    // Both are needed: min-h alone leaves rows uneven, h-full alone does nothing between
+    // rows, because each row of the page is its own grid container.
     <div
-      className={`rounded-2xl border p-4 ${palette} ${disabled ? 'opacity-50 grayscale pointer-events-none' : ''}`}
+      className={`relative overflow-hidden h-full min-h-[5.75rem] rounded-2xl border p-4 ${palette} ${disabled ? 'opacity-50 grayscale pointer-events-none' : ''}`}
       aria-disabled={disabled || undefined}
     >
-      <div className="flex items-start justify-between gap-2 mb-0.5">
+      {/* The icon is the card's background, not a mark beside the value: it fills most of
+          the card, stands on the bottom edge and bleeds off the right one (the card clips
+          it), at low opacity behind the text. Absolutely positioned, so it adds nothing to
+          the card's height — the standard card size holds whether a card has one or not.
+
+          bottom-0 rather than centred: a glyph's base is a straight horizontal line, so
+          sitting it on the card's edge reads as part of the card rather than a sticker on
+          top of it. It relies on the glyph's own xMidYMax to have no dead space below the
+          artwork — see AndroidGlyph.
+
+          right-0 + translate-x-1/2 halves it: the layer's right edge starts on the card's
+          right edge, then moves out by half its own width, so the card clips the right half
+          away and what is left ends exactly on the border. Expressed as a translate rather
+          than a negative offset per size, so it stays exactly half at every breakpoint and
+          for any glyph.
+
+          Smaller and fainter below lg, which is where the admin shell stops being full
+          width: a card is ~150px there and the label runs straight across the artwork, so
+          a watermark sized for a 330px card would sit under the text rather than beside it. */}
+      {icon && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 bottom-0 h-14 w-[5.75rem] translate-x-1/2 opacity-20 lg:h-[4.5rem] lg:w-[7.5rem] lg:opacity-[0.28]"
+        >
+          {icon}
+        </span>
+      )}
+      <div className="relative flex items-start justify-between gap-2 mb-0.5">
         <p className="text-xl font-extrabold">{disabled ? '—' : (value ?? '—')}</p>
         {showDelta && <DeltaBadge value={delta} good={deltaGood} />}
       </div>
-      <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
-      {/* Wraps rather than nowrap: a card in the 4-up grid is ~160px wide and a
-          nowrap sub longer than that spilled straight out past the border. Cards
-          in a grid row stretch to a common height, so wrapping costs nothing. */}
-      {sub && <p className="text-[10px] opacity-50 mt-0.5 break-words">{sub}</p>}
+      <p className="relative text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
+      {/* Wraps rather than nowrap: a long sub with nowrap spilled straight out past
+          the border. It should rarely wrap now that Stats runs full width, and a
+          card that does wrap grows its whole row rather than overflowing. */}
+      {sub && <p className="relative text-[10px] opacity-50 mt-0.5 break-words">{sub}</p>}
     </div>
   )
 }
@@ -586,7 +673,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
     <div className="space-y-8">
       {/* Users */}
       <StatsSection title="Users" defaultOpen>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <button
             type="button"
             onClick={() => onViewUsers?.()}
@@ -594,58 +681,64 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           >
             <StatCard label="Users Online"      value={`${fmtNum(users.onlineUsers ?? 0)} / ${fmtNum(users.totalUsers)}`} color="brand" />
           </button>
-          <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate"   {...slimStat} />
-          <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber"   {...slimStat} />
-          <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)} color="emerald" {...slimStat} />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
-          <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate"   {...slimStat} />
-          <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate"   {...slimStat} />
-          <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate"   {...slimStat} />
-          {/* Accounts that have run the installed Android app at least once, on any version.
-              Counted from the build the app reports on its heartbeat, so it means the app
-              specifically and not the website opened on an Android phone. Not greyed in slim
-              mode: the app IS the slim experience. */}
+          {/* Beside Users Online because they answer the same question — who is actually
+              here, and on what. Neither is greyed in slim mode: the app IS the slim
+              experience.
+
+              Counts accounts that have run the installed Android app at least once, on any
+              version, from the build the app reports on its heartbeat. That means the app
+              specifically, not the website opened on an Android phone. */}
           <StatCard
             label="Android App Users"
             value={fmtNum(users.androidAppUsers ?? 0)}
             color="emerald"
+            icon={<AndroidGlyph />}
             sub={users.totalUsers
               ? `${pct(users.androidAppUsers ?? 0, users.totalUsers)} of all accounts`
               : 'nobody has installed it yet'}
           />
+          <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate"   {...slimStat} />
+          <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber"   {...slimStat} />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        {/* The tier trio stays together in reading order: this row opens on Paying
+            Subscribers, which the row above ends one card short of. */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+          <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)} color="emerald" {...slimStat} />
+          <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate"   {...slimStat} />
+          <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate"   {...slimStat} />
+          <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate"   {...slimStat} />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <button
             type="button"
             onClick={() => onViewEmailLog?.('sent')}
-            className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-brand-300 rounded-2xl"
+            className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-brand-300 rounded-2xl [&>div]:flex-1"
           >
-            <StatCard label="Emails Sent"   value={fmtNum(users.emailsSent)}   color="brand" sub="sent successfully" />
+            <StatCard label="Emails Sent"   value={fmtNum(users.emailsSent)}   color="brand" sub="sent successfully" icon={<EnvelopeGlyph color="#82c4ff" />} />
           </button>
           <button
             type="button"
             onClick={() => onViewEmailLog?.('failed')}
-            className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl"
+            className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl [&>div]:flex-1"
           >
-            <StatCard label="Emails Failed" value={fmtNum(users.emailsFailed)} color="red" sub="delivery failed" />
+            <StatCard label="Emails Failed" value={fmtNum(users.emailsFailed)} color="red" sub="delivery failed" icon={<EnvelopeGlyph color="#f87171" />} />
           </button>
           {/* The outreach questionnaire, as a response rate rather than a bare count: 12 replies
               is a triumph out of 20 sends and a dud out of 400, and the tile has to say which.
+              Counts finished runs, because "filled in" means reached the end.
 
-              Counts finished runs, because "filled in" means reached the end. Part-finished runs
-              are real answers — the form saves after every question — so they are named in the
-              sub line rather than folded into the headline or thrown away. */}
+              Label and sub are kept short deliberately. Cards are one standard size, and a
+              label or sub long enough to wrap is what breaks it — this card read as oversized
+              beside the two email tiles when it was "Questionnaires Filled In" over a sub
+              naming the part-finished runs. That count is in the questionnaire summary in
+              Admin ▸ Content. */}
           <StatCard
-            label="Questionnaires Filled In"
+            label="Questionnaires"
             value={`${fmtNum(questionnaire.completed)} / ${fmtNum(questionnaire.sent)}`}
             color="emerald"
             sub={questionnaire.sent
-              ? `${pct(questionnaire.completed, questionnaire.sent)} of those emailed`
-                + (questionnaire.started > questionnaire.completed
-                    ? ` · ${fmtNum(questionnaire.started - questionnaire.completed)} part-finished`
-                    : '')
-              : 'nobody has been emailed yet'}
+              ? `${pct(questionnaire.completed, questionnaire.sent)} filled in`
+              : 'nobody emailed yet'}
           />
         </div>
         {/* Donations. Two tiles, because at a glance there are only two questions: how much
@@ -662,7 +755,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             times is one conversion, not five — and the denominator is people who actually saw
             an ask (each reports its own impression), so the rate is a real click-through rate
             rather than clicks over everyone who merely earned a milestone. */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard
             label="Donations Received"
             value={fmtGBP(donation.received.totalPence)}
@@ -692,7 +785,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
       {/* Server / Performance */}
       <StatsSection title="Server & Performance" defaultOpen>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <CurrentTimeCard />
           <StatCard label="Uptime Since Deploy"  value={fmtUptime(server?.serverUptimeSeconds ?? 0)} color="brand" />
           <StatCard label="Total Loading Time"  value={fmtSeconds(Math.round((server?.totalLoadingMs ?? 0) / 1000))} color="brand" sub="cumulative user fetch wait" />
@@ -716,10 +809,10 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           // backend/constants/openRouterKeys.js. Previously each key had two
           // hand-written tiles, and a new key silently had no spend shown until
           // someone remembered to add them here.
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
             {Object.keys(openRouter).map(key => (
               <Fragment key={key}>
-                <button type="button" onClick={() => openRouterNav(key, 'today')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl">
+                <button type="button" onClick={() => openRouterNav(key, 'today')} className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-red-300 rounded-2xl [&>div]:flex-1">
                   <StatCard
                     label={<><span className="inline-block px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">TODAY</span>{key}</>}
                     value={fmtUSD(openRouter[key]?.today)}
@@ -727,7 +820,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
                     color="emerald"
                   />
                 </button>
-                <button type="button" onClick={() => openRouterNav(key, 'lifetime')} className="text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl">
+                <button type="button" onClick={() => openRouterNav(key, 'lifetime')} className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl [&>div]:flex-1">
                   <StatCard
                     label={<><span className="inline-block px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold tracking-wider mr-1.5 align-middle normal-case">LIFETIME</span>{key}</>}
                     value={fmtUSD(openRouter[key]?.lifetime)}
@@ -743,7 +836,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
       {/* Airstars + Briefs + Tutorials */}
       <StatsSection title="Economy & Content">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <StatCard label="Airstars in System" value={fmtNum(games.totalAirstarsEarned)}       color="amber" />
           <StatCard label="Briefs Read"        value={fmtNum(briefs.totalBrifsRead)}           color="slate" />
           <StatCard label="Briefs Opened"      value={fmtNum(briefs.totalBrifsOpened)}         color="slate" />
@@ -755,13 +848,13 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
       {/* Intel Recall */}
       <StatsSection title="Intel Recall">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <StatCard label="Played"           value={fmtNum(games.totalGamesPlayed)}  color="brand" />
           <StatCard label="Completed"        value={fmtNum(games.totalGamesCompleted)} color="slate" />
           <StatCard label="Perfect Score"    value={pct(games.totalPerfectScores, games.totalGamesCompleted)} color="emerald" />
           <StatCard label="Abandoned"        value={pct(games.totalGamesAbandoned, games.totalGamesPlayed)} color="red" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard label="Time Played"      value={fmtSeconds(games.quizTotalSeconds)} color="slate" />
           <StatCard label="Pass Rate"        value={pct(games.totalGamesWon, games.totalGamesCompleted)} color="emerald" />
           <StatCard label="Failed Recalls"   value={pct(games.totalGamesLost, games.totalGamesCompleted)} color="amber" sub={`below pass threshold`} />
@@ -770,26 +863,26 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
       {/* Battle of Order */}
       <StatsSection title="Battle of Order">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <StatCard label="Games"     value={fmtNum(games.boo?.total)}                                    color="brand" />
           <StatCard label="Won"       value={pct(games.boo?.won, games.boo?.total)}                       color="emerald" />
           <StatCard label="Defeated"  value={pct(games.boo?.defeated, games.boo?.total)}                  color="amber" />
           <StatCard label="Abandoned" value={pct(games.boo?.abandoned, games.boo?.total)}                 color="red" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard label="Time Played" value={fmtSeconds(games.boo?.totalSeconds)} color="slate" />
         </div>
       </StatsSection>
 
       {/* Where's That Aircraft */}
       <StatsSection title="Where's That Aircraft">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <StatCard label="Games"       value={fmtNum(games.wta?.total)}                                     color="brand" />
           <StatCard label="Won"         value={pct(games.wta?.won, games.wta?.total)}                        color="emerald" />
           <StatCard label="Abandoned"   value={pct(games.wta?.abandoned, games.wta?.total)}                  color="red" />
           <StatCard label="Time Played" value={fmtSeconds(games.wta?.totalSeconds)}                          color="slate" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard label="R1 Correct (ID)"    value={pct(games.wta?.round1Correct, games.wta?.total)}  color="amber" sub="Aircraft identified" />
           <StatCard label="R2 Correct (Base)"  value={pct(games.wta?.round2Correct, games.wta?.total)}  color="amber" sub="Base located" />
         </div>
@@ -797,13 +890,13 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
       {/* Flashcards */}
       <StatsSection title="Flashcards">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <StatCard label="Sessions"    value={fmtNum(games.flashcard?.sessions)}                                                                        color="brand" />
           <StatCard label="Cards Total" value={fmtNum(games.flashcard?.totalCards)}                                                                      color="slate" />
           <StatCard label="Recalled"    value={pct(games.flashcard?.recalled, games.flashcard?.totalCards)}                                              color="emerald" />
           <StatCard label="Missed"      value={pct((games.flashcard?.totalCards ?? 0) - (games.flashcard?.recalled ?? 0), games.flashcard?.totalCards)}  color="red" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard label="Time Played" value={fmtSeconds(games.flashcard?.totalSeconds)} color="slate" />
           <StatCard label="Abandoned"   value={fmtNum(games.flashcard?.abandoned)}        color="red" />
         </div>
@@ -811,12 +904,12 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
       {/* Aptitude Sync */}
       <StatsSection title="Aptitude Sync">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
           <StatCard label="Sessions"  value={fmtNum(games.aptitudeSync?.total)}                                         color="brand" />
           <StatCard label="Completed" value={pct(games.aptitudeSync?.completed, games.aptitudeSync?.total)}             color="emerald" />
           <StatCard label="Abandoned" value={pct(games.aptitudeSync?.abandoned, games.aptitudeSync?.total)}             color="red" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard label="Airstars Earned" value={fmtNum(games.aptitudeSync?.airstarsEarned)} color="amber" sub="across all sessions" />
           <StatCard label="Avg per Session" value={fmtNum(games.aptitudeSync?.completed ? Math.round((games.aptitudeSync?.airstarsEarned ?? 0) / games.aptitudeSync.completed) : 0)} color="slate" sub="completed sessions" />
         </div>
@@ -11166,13 +11259,16 @@ const TABS = [
 // Tabs whose *content* runs full width. Reports is a grid of charts and stat
 // cards, so on a desktop monitor the narrow column just meant a long scroll
 // past half-empty rows; the charts are all ResponsiveContainer-based and take
-// whatever width they're given. Every other tab is forms, tables and prose
-// that only stay readable in a narrow measure, so they keep max-w-2xl.
+// whatever width they're given. Stats is the same shape — rows of four cards and
+// a per-game table, none of which is prose — and inside max-w-2xl each card was
+// about 150px wide, narrow enough that labels and sub lines wrapped and cards in
+// the same section came out different heights. Every other tab is forms, tables
+// and prose that only stay readable in a narrow measure, so they keep max-w-2xl.
 //
 // This is about content only — the page shell (header + tab strip) is full
 // width on every tab, and needs the `admin-wide` body class below to be, since
 // AppShell's own max-w-3xl column would otherwise clamp it to 768px.
-const WIDE_TABS = new Set(['reports'])
+const WIDE_TABS = new Set(['reports', 'stats'])
 
 export default function Admin() {
   const { user, setUser, loading, API, apiFetch } = useAuth()

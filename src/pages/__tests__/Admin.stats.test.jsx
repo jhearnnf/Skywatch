@@ -66,6 +66,7 @@ const MOCK_STATS = {
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     androidAppUsers: 4,
     emailsSent: 42, emailsFailed: 7,
+    questionnaire: { sent: 20, started: 8, completed: 5 },
     donation: {
       seen: 40, clicked: 6,
       card:   { seen: 34, clicked: 4 },
@@ -238,6 +239,42 @@ describe('Admin — Stats tab: Android app users', () => {
     expect(within(card).getByText(/40% of all accounts/)).toBeInTheDocument()
   })
 
+  // It sits beside Users Online — same question, who is actually here and on what — which
+  // means the same grid row, not just somewhere on the page.
+  it('sits in the same row as Users Online', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    const row = (label) => screen.getByText(label).closest('.grid')
+    expect(row('Android App Users')).toBe(row('Users Online'))
+  })
+
+  // Drawn, not typed: 🤖 is a generic grey robot on Windows rather than the Android mascot.
+  // It is the card's background — absolutely positioned and clipped, so however big it gets
+  // the card keeps the standard size, and the text stays above it.
+  it('carries the Android glyph as a background without changing the card size', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Android App Users')).toBeInTheDocument())
+    const card = screen.getByText('Android App Users').closest('[class*="rounded-2xl"]')
+    expect(card.className).toContain('min-h-[5.75rem]')
+    expect(card.className).toContain('overflow-hidden')
+
+    const glyph = card.querySelector('svg').closest('span')
+    expect(glyph.className).toContain('absolute')
+    expect(glyph.className).toContain('pointer-events-none')
+
+    // Exactly half of it shows: the layer starts at the card's right edge and moves out by
+    // half its own width, so the card clips the right half and the cut lands on the border.
+    // A translate rather than a per-size negative offset, so it stays half at every size.
+    expect(glyph.className).toContain('right-0')
+    expect(glyph.className).toContain('translate-x-1/2')
+    expect(glyph.className).toContain('bottom-0')
+
+    // Text sits on its own stacking context above the watermark, not behind it.
+    expect(screen.getByText('Android App Users').className).toContain('relative')
+  })
+
   // The app is the CBAT-only experience, so this one keeps counting when the rest of the
   // row greys out — and a backend that predates the field must show an honest zero.
   it('stays live in CBAT-only mode and survives a payload without the field', async () => {
@@ -324,6 +361,135 @@ describe('Admin — Stats tab: CBAT-only mode', () => {
     await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
     expect(screen.getByText('Users Online').closest('[aria-disabled="true"]')).toBeNull()
     expect(screen.getByText('Donation Asks').closest('[aria-disabled="true"]')).toBeNull()
+  })
+})
+
+describe('Admin — Stats tab: card sizing', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const card = (label) => screen.getByText(label).closest('[class*="rounded-2xl"]')
+
+  // Cards are one standard size whether or not they carry a sub line. min-h sets that size;
+  // h-full lets a card grow with its row when a neighbour needs more. Without min-h, a card
+  // with no sub was a line shorter than one with, and since each row of the page is its own
+  // grid container, nothing equalised them.
+  it('gives every card the same size floor, sub line or not', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    for (const label of ['Free', 'Android App Users', 'Emails Sent', 'Questionnaires']) {
+      expect(card(label).className).toContain('min-h-[5.75rem]')
+      expect(card(label).className).toContain('h-full')
+    }
+  })
+
+  // A card inside a clickable wrapper has to stretch with it. The button is the grid item and
+  // stretches to the row; without these the card inside stayed at its own content height and
+  // sat visibly short next to an unwrapped one.
+  it('stretches the cards that sit inside a button', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    for (const label of ['Users Online', 'Emails Sent', 'Emails Failed', 'Donation Asks']) {
+      const button = card(label).closest('button')
+      expect(button.className).toContain('flex w-full')
+      expect(button.className).toContain('[&>div]:flex-1')
+    }
+  })
+})
+
+describe('Admin — Stats tab: email card glyphs', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const card = (label) => screen.getByText(label).closest('[class*="rounded-2xl"]')
+
+  it('watermarks both email cards with an envelope, tinted to each card', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Emails Sent')).toBeInTheDocument())
+    // The light end of each card's own hue: the text colours they would otherwise inherit
+    // are dark and vanish at watermark opacity.
+    expect(card('Emails Sent').querySelector('rect').getAttribute('fill')).toBe('#82c4ff')
+    expect(card('Emails Failed').querySelector('rect').getAttribute('fill')).toBe('#f87171')
+  })
+
+  // The questionnaire is a survey stat that happens to arrive by email, not an email stat —
+  // giving it the envelope too would say the row is three of the same thing.
+  it('leaves the questionnaire card unmarked', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Questionnaires')).toBeInTheDocument())
+    expect(card('Questionnaires').querySelector('svg')).toBeNull()
+  })
+})
+
+describe('Admin — Stats tab: outreach questionnaire', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows completed questionnaires over invites sent, with the response rate', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Questionnaires')).toBeInTheDocument())
+    expect(screen.getByText('5 / 20')).toBeInTheDocument()
+    expect(screen.getByText('25% filled in')).toBeInTheDocument()
+  })
+
+  // The card is content-height and sits beside two others in a 4-up grid, so a label or sub
+  // that wraps to a second line makes it visibly taller than its neighbours. Both stay short.
+  it('keeps the label and sub to one line each', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Questionnaires')).toBeInTheDocument())
+    expect(screen.getByText('Questionnaires').textContent.length).toBeLessThanOrEqual(16)
+    expect(screen.getByText('25% filled in').textContent.length).toBeLessThanOrEqual(20)
+  })
+
+  it('says nobody has been emailed rather than showing a rate out of zero', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats/donation-funnel')) {
+        return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: [] } }) })
+      }
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'success',
+            data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, questionnaire: { sent: 0, started: 0, completed: 0 } } },
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Questionnaires')).toBeInTheDocument())
+    expect(screen.getByText('nobody emailed yet')).toBeInTheDocument()
+  })
+
+  // A backend that has not shipped the block yet must show honest zeroes, not crash the tab.
+  it('survives a stats payload with no questionnaire block', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats/donation-funnel')) {
+        return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: [] } }) })
+      }
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'success',
+            data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, questionnaire: undefined } },
+          }),
+        })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Questionnaires')).toBeInTheDocument())
+    expect(screen.getByText('0 / 0')).toBeInTheDocument()
   })
 })
 
