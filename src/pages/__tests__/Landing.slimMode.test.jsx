@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Landing from '../Landing'
+import { CBAT_GUIDE_HREF } from '../../utils/guideHref'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -128,5 +129,33 @@ describe('Landing — slim (CBAT-only) mode', () => {
     for (const cta of ctas) {
       expect(cta.closest('a').getAttribute('href')).toBe('/login?tab=register')
     }
+  })
+})
+
+// ── Native chrome ─────────────────────────────────────────────────────────
+// Two things went wrong on the Android build specifically, both invisible on
+// the web because the safe-area insets are 0 there and dev/Vercel rewrite the
+// guide's clean URL for us.
+describe('Landing — native app', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  // main.css pushes every `header.fixed` down by env(safe-area-inset-top), so
+  // the page's own fixed header is taller than 3.5rem under the status bar. A
+  // flat pt-20 hid the CBAT TRAINING / FREE badge row behind it.
+  it('clears the status bar as well as the fixed header', () => {
+    const { container } = render(<Landing />)
+    const hero = container.querySelector('section')
+    expect(hero.className).toMatch(/pt-\[calc\(5rem\+env\(safe-area-inset-top\)\)\]/)
+    expect(hero.className).toMatch(/sm:pt-\[calc\(9rem\+env\(safe-area-inset-top\)\)\]/)
+  })
+
+  // The guide is a static document, so its href has to be one the platform can
+  // actually resolve — see utils/guideHref.js.
+  it('links the guide through the platform-aware href', () => {
+    render(<Landing />)
+    expect(screen.getByText('CBAT Guide').getAttribute('href')).toBe(CBAT_GUIDE_HREF)
   })
 })

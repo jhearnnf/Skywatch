@@ -161,7 +161,14 @@ export default function Landing() {
       </header>
 
       {/* ── Hero ───────────────────────────────────────────── */}
-      <section className="pt-20 sm:pt-36 pb-10 sm:pb-24 px-5 text-center max-w-3xl mx-auto">
+      {/* The top padding has to clear the fixed header above, and that header is
+          not always 3.5rem tall: main.css gives every `header.fixed` a
+          padding-top of env(safe-area-inset-top) so it clears the status bar.
+          On the native app that inset is real (~24-48px, more with a cutout), so
+          a flat pt-20 left the CBAT TRAINING / FREE badge row sitting underneath
+          the header. Carry the same inset here and the gap is identical on every
+          platform — the env() is 0 on the web, so nothing moves there. */}
+      <section className="pt-[calc(5rem+env(safe-area-inset-top))] sm:pt-[calc(9rem+env(safe-area-inset-top))] pb-10 sm:pb-24 px-5 text-center max-w-3xl mx-auto">
         <motion.div
           initial="hidden" animate="visible"
           variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
