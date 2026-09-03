@@ -43,7 +43,12 @@ export function stageTypeLabel(stageType) {
     phase_reveal:        'Phase Reveal',
     map_predictive:      'Map Prediction',
     map_live:            'Live Map',
-    actor_interrogation: 'Actor Interrogation',
+    // The stage type is plural everywhere else (StageRouter, STAGE_WEIGHTS).
+    // Keying this singular meant the debrief breakdown printed the raw
+    // "actor_interrogations" at players; the singular alias stays in case any
+    // stored content uses it.
+    actor_interrogations: 'Interrogations',
+    actor_interrogation:  'Interrogations',
     debrief:             'Debrief',
   }
   return LABELS[stageType] ?? stageType
@@ -59,10 +64,10 @@ export function stageTypeLabel(stageType) {
  *   60–79  → B  (solid)
  *   40–59  → C  (adequate)
  *   1–39   → D  (poor)
- *   0      → –  (no attempt / zero score)
+ *   0      → -  (no attempt / zero score)
  *
  * @param {number} pct  Integer percentage 0–100
- * @returns {'S'|'A'|'B'|'C'|'D'|'–'}
+ * @returns {'S'|'A'|'B'|'C'|'D'|'-'}
  */
 export function gradeForPct(pct) {
   if (pct >= 95) return 'S'  // 95–100: exceptional
@@ -70,5 +75,5 @@ export function gradeForPct(pct) {
   if (pct >= 60) return 'B'  // 60–79:  solid
   if (pct >= 40) return 'C'  // 40–59:  adequate
   if (pct >= 1)  return 'D'  // 1–39:   poor
-  return '–'                 // 0:      no attempt
+  return '-'                 // 0:      no attempt
 }

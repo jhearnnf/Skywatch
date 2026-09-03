@@ -12,7 +12,7 @@
 // colours. Using a small muted chip styled with existing slate tokens since no
 // faction-specific palette is defined.
 
-export default function ActorPortrait({ actor, isSelected, onClick }) {
+export default function ActorPortrait({ actor, isSelected, onClick, onHoverChange }) {
   const { name = 'Unknown', role = '', faction = '', portraitUrl, knowsAbout = [] } = actor
 
   // Initials fallback — up to 2 chars from name parts
@@ -38,6 +38,10 @@ export default function ActorPortrait({ actor, isSelected, onClick }) {
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
+      onMouseEnter={onHoverChange ? () => onHoverChange(true)  : undefined}
+      onMouseLeave={onHoverChange ? () => onHoverChange(false) : undefined}
+      onFocus={onHoverChange ? () => onHoverChange(true)  : undefined}
+      onBlur={onHoverChange ? () => onHoverChange(false) : undefined}
       data-testid={`actor-portrait-${actor.id}`}
       aria-pressed={isSelected}
       className={[
@@ -74,7 +78,13 @@ export default function ActorPortrait({ actor, isSelected, onClick }) {
 
       {/* Role */}
       {role ? (
-        <p className="text-[10px] text-text-muted text-center leading-tight line-clamp-1 w-full -mt-1">
+        // The tile is only ~112px wide, so most real roles ("Foreign Minister,
+        // Russian Federation") get clipped. Keep the clamp for layout and put
+        // the full string in a tooltip rather than losing it.
+        <p
+          title={role}
+          className="text-[10px] text-text-muted text-center leading-tight line-clamp-2 w-full -mt-1"
+        >
           {role}
         </p>
       ) : null}

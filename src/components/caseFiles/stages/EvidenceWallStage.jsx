@@ -193,8 +193,11 @@ export default function EvidenceWallStage({ stage, sessionContext, onSubmit }) {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-300/10 bg-surface">
         <span className="intel-mono text-brand-600">{phaseLabel}</span>
+        {/* "0 / ∞ connections" read as a broken counter. There is no cap, so
+            state the count plainly and repeat the target the objective set. */}
         <span className="intel-mono text-slate-500" aria-live="polite">
-          {connections.length} / ∞ connections
+          {connections.length} link{connections.length === 1 ? '' : 's'} made
+          <span className="text-slate-400"> · aim for 4 to 6</span>
         </span>
       </div>
 
@@ -210,7 +213,7 @@ export default function EvidenceWallStage({ stage, sessionContext, onSubmit }) {
             className="overflow-hidden"
           >
             <p className="px-4 py-1.5 text-[11px] text-brand-600 intel-mono bg-brand-100/40 border-b border-brand-600/20 text-center">
-              CARD SELECTED — tap another card to link, or tap the same card to cancel
+              CARD SELECTED. Tap another card to link, or tap the same card to cancel
             </p>
           </motion.div>
         )}
@@ -232,36 +235,6 @@ export default function EvidenceWallStage({ stage, sessionContext, onSubmit }) {
           style={{ ...CORKBOARD_BG }}
           data-testid="evidence-wall-board"
         >
-          {/* SVG layer — one per connection (absolutely over board) */}
-          {connections.map(({ fromItemId, toItemId }) => {
-            const from = posMapRef.current.get(fromItemId)
-            const to   = posMapRef.current.get(toItemId)
-            if (!from || !to) return null
-            return (
-              <RedStringConnector
-                key={makeConnectionKey(fromItemId, toItemId)}
-                from={from}
-                to={to}
-                committed
-                onClick={() => handleRemoveConnection(fromItemId, toItemId)}
-                width={boardSize.width}
-                height={boardSize.height}
-              />
-            )
-          })}
-
-          {/* In-progress string (selected card → mouse position) */}
-          {selectedItemId && mousePos && posMapRef.current.get(selectedItemId) && (
-            <RedStringConnector
-              key="in-progress"
-              from={posMapRef.current.get(selectedItemId)}
-              to={mousePos}
-              committed={false}
-              width={boardSize.width}
-              height={boardSize.height}
-            />
-          )}
-
           {/* Evidence cards grid */}
           <div
             className="relative z-10 p-4 grid gap-3"
@@ -280,6 +253,43 @@ export default function EvidenceWallStage({ stage, sessionContext, onSubmit }) {
               />
             ))}
           </div>
+
+          {/* String layer — drawn AFTER the cards, at a higher stacking level,
+              so a link between two non-adjacent cards reads as one continuous
+              string instead of two red stubs poking out of the gutters. This
+              matches the mobile corkboard, which already draws strings in
+              front. The SVGs are pointer-events:none except on the stroke
+              itself, so cards underneath stay clickable. */}
+          {connections.map(({ fromItemId, toItemId }) => {
+            const from = posMapRef.current.get(fromItemId)
+            const to   = posMapRef.current.get(toItemId)
+            if (!from || !to) return null
+            return (
+              <RedStringConnector
+                key={makeConnectionKey(fromItemId, toItemId)}
+                from={from}
+                to={to}
+                committed
+                onClick={() => handleRemoveConnection(fromItemId, toItemId)}
+                width={boardSize.width}
+                height={boardSize.height}
+                style={{ zIndex: 20 }}
+              />
+            )
+          })}
+
+          {/* In-progress string (selected card → mouse position) */}
+          {selectedItemId && mousePos && posMapRef.current.get(selectedItemId) && (
+            <RedStringConnector
+              key="in-progress"
+              from={posMapRef.current.get(selectedItemId)}
+              to={mousePos}
+              committed={false}
+              width={boardSize.width}
+              height={boardSize.height}
+              style={{ zIndex: 20 }}
+            />
+          )}
         </div>
       )}
 
@@ -308,10 +318,10 @@ export default function EvidenceWallStage({ stage, sessionContext, onSubmit }) {
                 className="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"
                 aria-hidden="true"
               />
-              Submitting…
+              Saving…
             </>
           ) : (
-            'Submit Analysis'
+            'Save Links and Continue'
           )}
         </button>
       </div>

@@ -230,3 +230,148 @@ describe('DebriefStage — close case', () => {
     await act(async () => { resolve() })
   })
 })
+
+// Case Files award no airstars or XP, so the score line and the invitation to
+// go again are the entire reward loop.
+describe('DebriefStage — personal best and replay', () => {
+  it('calls the first completed run a first run', () => {
+    render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+        scoring={SCORING}
+        personalBest={{ bestScore: SCORING.totalScore, completedCount: 1 }}
+      />
+    )
+    expect(screen.getByTestId('personal-best-line').textContent).toMatch(/first run/i)
+  })
+
+  it('celebrates a run that matches or beats the stored best', () => {
+    render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+        scoring={SCORING}
+        personalBest={{ bestScore: SCORING.totalScore, completedCount: 3 }}
+      />
+    )
+    expect(screen.getByTestId('personal-best-line').textContent).toMatch(/new personal best/i)
+  })
+
+  it('shows the standing best when this run fell short', () => {
+    render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+        scoring={SCORING}
+        personalBest={{ bestScore: SCORING.totalScore + 500, completedCount: 4 }}
+      />
+    )
+    const line = screen.getByTestId('personal-best-line').textContent
+    expect(line).toMatch(/personal best/i)
+    expect(line).toMatch(/run 4/i)
+  })
+
+  it('says nothing about records when there is no history to show', () => {
+    render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+        scoring={SCORING}
+      />
+    )
+    expect(screen.queryByTestId('personal-best-line')).toBeNull()
+  })
+
+  it('offers a replay only when the caller can handle one', () => {
+    const onReplay = vi.fn()
+    const { unmount } = render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+        scoring={SCORING}
+        onReplay={onReplay}
+      />
+    )
+    fireEvent.click(screen.getByTestId('replay-case-btn'))
+    expect(onReplay).toHaveBeenCalled()
+    unmount()
+
+    render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+        scoring={SCORING}
+      />
+    )
+    expect(screen.queryByTestId('replay-case-btn')).toBeNull()
+  })
+
+  it('titles the debrief with the chapter name rather than its slug', () => {
+    render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={{ ...SESSION_CONTEXT, chapterTitle: 'Road to Invasion' }}
+        onSubmit={vi.fn()}
+        scoring={SCORING}
+      />
+    )
+    expect(screen.getByText('Road to Invasion')).toBeDefined()
+  })
+})
+
+
+// The score screen is where a first-timer works out whether they did well and
+// what to do differently, so it has to answer both without any prior context.
+describe('DebriefStage — making the score readable', () => {
+  const SCORED = {
+    totalScore: 420,
+    breakdown: [
+      { stageIndex: 0, stageType: 'cold_open',     score: 0,   maxScore: 0,   notes: 'Not scored' },
+      { stageIndex: 1, stageType: 'evidence_wall', score: 120, maxScore: 250, notes: '3 of 6 real links found, 1 wrong' },
+      { stageIndex: 2, stageType: 'map_live',      score: 300, maxScore: 200, notes: '2 of 3 live calls right' },
+      { stageIndex: 3, stageType: 'debrief',       score: 0,   maxScore: 0,   notes: 'Not scored' },
+    ],
+  }
+
+  function renderScored() {
+    render(
+      <DebriefStage
+        stage={STAGE}
+        sessionContext={SESSION_CONTEXT}
+        onSubmit={vi.fn()}
+        scoring={SCORED}
+      />
+    )
+  }
+
+  it('shows what the score was out of', () => {
+    renderScored()
+    // 250 + 200; the unscored stages contribute nothing.
+    expect(screen.getByText(/\/ 450/)).toBeDefined()
+  })
+
+  it('explains each row with the reason the scorer worked out', () => {
+    renderScored()
+    expect(screen.getByText('3 of 6 real links found, 1 wrong')).toBeDefined()
+    expect(screen.getByText('2 of 3 live calls right')).toBeDefined()
+  })
+
+  it('leaves out the stages that carry no marks', () => {
+    renderScored()
+    // Briefing and Debrief listed as "0 / 0" read like two failed stages.
+    expect(screen.queryByText('Briefing')).toBeNull()
+    expect(screen.getAllByTestId(/^breakdown-row-/)).toHaveLength(2)
+  })
+
+  it('explains what the letter grades mean', () => {
+    renderScored()
+    expect(screen.getByText(/S is 95% and up/i)).toBeDefined()
+  })
+})

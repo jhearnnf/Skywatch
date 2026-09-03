@@ -202,15 +202,26 @@ export default function DecisionPointStage({ stage, sessionContext: _sessionCont
   const [selectedOptionId, setSelectedOptionId] = useState(null)
   const [committed, setCommitted]               = useState(false)
   const [submitting, setSubmitting]             = useState(false)
+  const [error, setError]                       = useState(null)
 
   async function handleLockIn() {
     if (!selectedOptionId || committed || submitting) return
     setCommitted(true)
     setSubmitting(true)
+    setError(null)
     // Stamp animation runs via framer-motion; we submit immediately so the
     // parent can advance the stage. The animation continues in parallel via
     // the exit transition on StampOverlay.
-    await onSubmit({ selectedOptionId })
+    try {
+      await onSubmit({ selectedOptionId })
+    } catch (err) {
+      // A rejected submit used to leave the card stamped, the button dead and
+      // the failure invisible. Hand the decision back so it can be retried.
+      console.error('[DecisionPointStage] onSubmit rejected:', err)
+      setCommitted(false)
+      setSubmitting(false)
+      setError('Could not lock that in. Please try again.')
+    }
   }
 
   return (
@@ -270,7 +281,12 @@ export default function DecisionPointStage({ stage, sessionContext: _sessionCont
       </div>
 
       {/* Sticky footer — Lock In button */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex justify-end">
+      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex items-center justify-end gap-3">
+        {error && (
+          <p role="alert" data-testid="lock-in-error" className="text-xs text-danger mr-auto">
+            {error}
+          </p>
+        )}
         <button
           type="button"
           data-testid="lock-in-btn"

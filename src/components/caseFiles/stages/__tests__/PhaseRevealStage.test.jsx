@@ -181,6 +181,44 @@ describe('PhaseRevealStage — Continue button', () => {
       updatedConnections: PRIOR_RESULTS_WITH_CONNECTIONS[0].connections,
     })
   })
+
+  // The shape useCaseFileSession actually produces. Reading only the flat
+  // `connections` key meant every real run forwarded an empty list, so
+  // phase_reveal could never score above its floor however well you played.
+  it('forwards connections from the { stageType, payload } shape the hook produces', async () => {
+    const connections = [{ fromItemId: 'ev-alpha', toItemId: 'ev-beta' }]
+    const { onSubmit } = renderStage({
+      ...SESSION_CONTEXT_EMPTY,
+      priorResults: [
+        { stageIndex: 0, stageType: 'cold_open',     payload: { completed: true } },
+        { stageIndex: 1, stageType: 'evidence_wall', payload: { connections } },
+      ],
+    })
+    fireEvent.click(screen.getByTestId('continue-btn'))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit).toHaveBeenCalledWith({ updatedConnections: connections })
+  })
+})
+
+// The assessments used to print raw ids ("ev_yelnya_armor"), which say nothing
+// to a player who never saw the seed file.
+describe('PhaseRevealStage — assessment labels', () => {
+  it('names each side of a resolved connection', () => {
+    renderStage({
+      ...SESSION_CONTEXT_EMPTY,
+      itemTitles: {
+        'ev-alpha': 'Hundreds of tanks parked at Yelnya',
+        'ev-beta':  'Field hospitals being built near the border',
+      },
+    })
+    expect(screen.getByText('Hundreds of tanks parked at Yelnya')).toBeDefined()
+    expect(screen.getByText('Field hospitals being built near the border')).toBeDefined()
+  })
+
+  it('falls back to the id when a title is missing', () => {
+    renderStage(SESSION_CONTEXT_EMPTY)
+    expect(screen.getByText('ev-alpha')).toBeDefined()
+  })
 })
 
 describe('PhaseRevealStage — empty payload', () => {

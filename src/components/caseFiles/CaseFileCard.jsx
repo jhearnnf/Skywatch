@@ -26,6 +26,9 @@ export default function CaseFileCard({ caseFile, onClick, tierLocked, minTier })
     coverImageUrl,
     status      = 'published',
     chapterCount = 0,
+    estimatedMinutes = null,
+    bestScore    = null,
+    completedCount = 0,
   } = caseFile
 
   const isLocked     = status === 'locked'
@@ -117,7 +120,25 @@ export default function CaseFileCard({ caseFile, onClick, tierLocked, minTier })
         <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-200/30">
           <span className="text-xs text-slate-500 intel-mono">
             {chapterCount} {chapterCount === 1 ? 'chapter' : 'chapters'}
+            {/* A case is a 35-minute sit-down. Saying so up front stops
+                someone starting one with five minutes to spare. */}
+            {estimatedMinutes > 0 && (
+              <span data-testid={`case-minutes-${caseFile.slug}`}>
+                {' · '}about {estimatedMinutes} min
+              </span>
+            )}
           </span>
+          {/* Your record on this case. Case Files award no airstars, so this is
+              the only thing on the menu that says you have played it before. */}
+          {!isLocked && !isTierLocked && completedCount > 0 && (
+            <span
+              data-testid={`case-best-${caseFile.slug}`}
+              className="text-xs text-brand-600 intel-mono"
+            >
+              Best {typeof bestScore === 'number' ? bestScore.toLocaleString('en') : '0'}
+              <span className="text-slate-500"> · {completedCount} run{completedCount === 1 ? '' : 's'}</span>
+            </span>
+          )}
           {isLocked && (
             <span className="text-xs text-slate-500 flex items-center gap-1">
               <PadlockIcon />

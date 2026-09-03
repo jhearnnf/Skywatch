@@ -31,28 +31,29 @@ describe('RelationshipLine', () => {
     expect(container.querySelector('svg')).toBeNull()
   })
 
-  it('renders no label chip when label is absent', () => {
-    render(<RelationshipLine from={FROM} to={TO} />)
+  // Labels are deliberately NOT drawn on the line. Actors in a pinboard row
+  // share a y coordinate, so their lines are horizontal and every chip landed
+  // in the same strip, overlapping each other and the cards underneath. The
+  // relationship text lives in the connections strip and the interrogation
+  // panel instead.
+  it('never draws a label on the line, even if one is passed', () => {
+    const { container } = render(<RelationshipLine from={FROM} to={TO} label="ally" />)
     expect(screen.queryByTestId('relationship-line-label')).toBeNull()
+    expect(container.querySelector('foreignObject')).toBeNull()
+    expect(screen.queryByText('ally')).toBeNull()
   })
 
-  it('renders label chip at midpoint when label is provided', () => {
-    render(<RelationshipLine from={FROM} to={TO} label="ally" />)
-    expect(screen.getByTestId('relationship-line-label')).toBeDefined()
-    expect(screen.getByText('ally')).toBeDefined()
-  })
-
-  it('places the label foreignObject near the geometric midpoint', () => {
-    const { container } = render(<RelationshipLine from={FROM} to={TO} label="rival" />)
-    const fo = container.querySelector('foreignObject')
-    expect(fo).not.toBeNull()
-
-    const expectedMx = (FROM.x + TO.x) / 2
-    const expectedMy = (FROM.y + TO.y) / 2
-
-    // foreignObject x is centred at midpoint (x = mx - 40)
-    expect(Number(fo.getAttribute('x'))).toBeCloseTo(expectedMx - 40, 0)
-    expect(Number(fo.getAttribute('y'))).toBeCloseTo(expectedMy - 10, 0)
+  it('brightens and thickens the line when highlighted', () => {
+    const { container: plain } = render(<RelationshipLine from={FROM} to={TO} />)
+    const { container: lit }   = render(<RelationshipLine from={FROM} to={TO} highlighted />)
+    const a = plain.querySelector('line')
+    const b = lit.querySelector('line')
+    expect(parseFloat(b.getAttribute('stroke-opacity'))).toBeGreaterThan(
+      parseFloat(a.getAttribute('stroke-opacity'))
+    )
+    expect(parseFloat(b.getAttribute('stroke-width'))).toBeGreaterThan(
+      parseFloat(a.getAttribute('stroke-width'))
+    )
   })
 
   it('passes width and height to SVG canvas', () => {

@@ -9,35 +9,41 @@
 const STAGE_OBJECTIVES = {
   cold_open: {
     label: 'Starting position',
-    text:  'Read the briefing. The thumbnails below are your starting clues — hover for a quick hint.',
+    text:  'Read the briefing. The thumbnails below are your starting clues. Tap one for a quick hint.',
   },
   evidence_wall: {
     label: 'Your job',
-    text:  'Link cards that share a theme — same place, same plan, same group. Aim for 4–6 strong links. Wrong links cost a little, so try ideas without worrying.',
+    text:  'Link cards that share a theme: same place, same plan, same group. Click one card, then another to link them, or click a red string to undo. Aim for 4 to 6. Wrong links cost very little, so try your ideas.',
   },
   map_predictive: {
-    label: 'Your job',
-    text:  'If they attack, where would they strike first? Click two places to draw a route. You have 3 routes total — star the one that goes for the capital.',
+    // Deliberately mechanical: the stage below asks the case-specific question
+    // in its own headline, and having the banner ask it again in near-identical
+    // words made the top of the screen read as a duplicated paragraph.
+    label: 'How this works',
+    text:  'Click one place, then another, to draw a route between them. Star the route you think is their main attack.',
   },
   actor_interrogations: {
     label: 'Your job',
-    text:  'Different people know different things. Pick who you think would actually know, and ask short, specific questions. Up to 3 per person.',
+    text:  'Different people know different things. Pick who you think would actually know, and ask short, specific questions. Up to 3 each. You score for how many different people you ask, so spread them around.',
   },
   decision_point: {
     label: 'Your call',
-    text:  'Pick what you think will actually happen. Each option shows a hint — read them before you lock in.',
+    text:  'Pick what you think will actually happen. Each option shows a hint, so read them before you lock in.',
   },
   phase_reveal: {
+    // The stage is read-only — there is nothing to add here. It used to say
+    // "add any extra links you spot", which sent players hunting for a control
+    // that does not exist.
     label: 'What happened',
-    text:  'New evidence has come in. Add any extra links you spot now that the picture is clearer.',
+    text:  'Here is which of your links held up, and the new evidence that came in. Read it, then carry on.',
   },
   map_live: {
     label: 'Your job',
-    text:  'Events are unfolding live. Answer each question as it appears on the map.',
+    text:  'This is what really happened, step by step. Press Next Step to move the clock on, and answer each question as it appears.',
   },
   debrief: {
     label: 'Mission review',
-    text:  'See what you got right, what you missed, and why each call mattered.',
+    text:  'See what you got right, what you missed, and why each call mattered. Case Files do not affect your airstars or your level.',
   },
 }
 

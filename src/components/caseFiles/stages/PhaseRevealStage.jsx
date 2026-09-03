@@ -23,12 +23,18 @@ import EvidenceCard from '../EvidenceCard'
 
 /**
  * Extract prior evidence_wall connections from priorResults.
- * Looks for the first result that carries a `connections` array.
+ *
+ * useCaseFileSession accumulates results as { stageIndex, stageType, payload },
+ * so the links live at `payload.connections`. This used to look only at
+ * `result.connections`, which never matched — so every run forwarded an empty
+ * list and phase_reveal could never score above its floor. The flat shape is
+ * still accepted in case a caller hands results in already-unwrapped.
  */
 function extractPriorConnections(priorResults) {
   if (!Array.isArray(priorResults)) return []
   for (const result of priorResults) {
-    if (Array.isArray(result?.connections)) return result.connections
+    if (Array.isArray(result?.payload?.connections)) return result.payload.connections
+    if (Array.isArray(result?.connections))          return result.connections
   }
   return []
 }
@@ -44,7 +50,7 @@ function PhaseLabel({ label }) {
       className="flex flex-col items-start gap-1"
     >
       <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-text-muted font-mono">
-        — Phase Update —
+        Phase Update
       </span>
       <h2 className="text-2xl sm:text-3xl font-black text-brand-600 leading-tight">
         {label}
@@ -73,9 +79,15 @@ function VerdictBadge({ verdict }) {
 }
 
 // ── Single connection resolution row ─────────────────────────────────────
-function ResolutionRow({ resolution }) {
+function ResolutionRow({ resolution, itemTitles }) {
   const { pairItemIds = [], verdict, explanation } = resolution
   const [idA, idB] = pairItemIds
+
+  // These rows used to print the raw database ids — "ev_yelnya_armor —
+  // ev_field_hospitals" — which meant nothing to anyone who had not read the
+  // seed file. Show the card headline the player actually saw, and keep the id
+  // as a fallback for content that has not been given one.
+  const labelFor = (id) => (id && itemTitles?.[id]) || id || '?'
 
   return (
     <div
@@ -84,12 +96,12 @@ function ResolutionRow({ resolution }) {
     >
       {/* Connection pair labels */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-bold text-text-muted bg-surface px-2 py-0.5 rounded font-mono">
-          {idA ?? '?'}
+        <span className="text-xs font-semibold text-text bg-surface px-2 py-0.5 rounded">
+          {labelFor(idA)}
         </span>
-        <span className="text-slate-500 text-xs" aria-hidden="true">—</span>
-        <span className="text-xs font-bold text-text-muted bg-surface px-2 py-0.5 rounded font-mono">
-          {idB ?? '?'}
+        <span className="text-slate-500 text-xs" aria-hidden="true">+</span>
+        <span className="text-xs font-semibold text-text bg-surface px-2 py-0.5 rounded">
+          {labelFor(idB)}
         </span>
         <VerdictBadge verdict={verdict} />
       </div>
@@ -121,14 +133,23 @@ export default function PhaseRevealStage({ stage, sessionContext, onSubmit }) {
   } = stage?.payload ?? {}
 
   const priorConnections = extractPriorConnections(sessionContext?.priorResults)
+  const itemTitles       = sessionContext?.itemTitles
 
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError]           = useState(null)
 
   async function handleContinue() {
     if (submitting) return
     setSubmitting(true)
+    setError(null)
     // CONTRACT-AMBIGUITY: forward prior connections unchanged (see file header)
-    await onSubmit({ updatedConnections: priorConnections })
+    try {
+      await onSubmit({ updatedConnections: priorConnections })
+    } catch (err) {
+      console.error('[PhaseRevealStage] onSubmit rejected:', err)
+      setSubmitting(false)
+      setError('Could not continue. Please try again.')
+    }
   }
 
   const hasResolutions = connectionResolutions.length > 0
@@ -155,7 +176,7 @@ export default function PhaseRevealStage({ stage, sessionContext, onSubmit }) {
           >
             {connectionResolutions.map((res, i) => (
               <motion.div key={`${res.pairItemIds?.[0]}-${res.pairItemIds?.[1]}-${i}`} variants={itemVariants}>
-                <ResolutionRow resolution={res} />
+                <ResolutionRow resolution={res} itemTitles={itemTitles} />
               </motion.div>
             ))}
           </motion.div>
@@ -205,7 +226,12 @@ export default function PhaseRevealStage({ stage, sessionContext, onSubmit }) {
       </div>
 
       {/* Sticky footer — Continue button */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex justify-end">
+      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex items-center justify-end gap-3">
+        {error && (
+          <p role="alert" data-testid="continue-error" className="text-xs text-danger mr-auto">
+            {error}
+          </p>
+        )}
         <button
           type="button"
           data-testid="continue-btn"

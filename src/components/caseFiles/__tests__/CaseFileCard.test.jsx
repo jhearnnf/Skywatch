@@ -133,3 +133,60 @@ describe('CaseFileCard — locked card', () => {
     expect(screen.getByText(/0 chapters/)).toBeDefined()
   })
 })
+
+// Case Files award no airstars, so the card footer is the only place the menu
+// records that you have played a case at all.
+describe('CaseFileCard — your record on the case', () => {
+  it('shows best score and run count once the case has been completed', () => {
+    render(
+      <CaseFileCard
+        caseFile={{ ...PUBLISHED_CASE, bestScore: 1240, completedCount: 3 }}
+        onClick={vi.fn()}
+      />
+    )
+    const badge = screen.getByTestId(`case-best-${PUBLISHED_CASE.slug}`)
+    expect(badge.textContent).toMatch(/1,240/)
+    expect(badge.textContent).toMatch(/3 runs/)
+  })
+
+  it('says nothing when the case has never been finished', () => {
+    render(
+      <CaseFileCard
+        caseFile={{ ...PUBLISHED_CASE, bestScore: null, completedCount: 0 }}
+        onClick={vi.fn()}
+      />
+    )
+    expect(screen.queryByTestId(`case-best-${PUBLISHED_CASE.slug}`)).toBeNull()
+  })
+
+  it('says nothing on a tier-locked card', () => {
+    render(
+      <CaseFileCard
+        caseFile={{ ...PUBLISHED_CASE, bestScore: 900, completedCount: 2 }}
+        tierLocked
+        minTier="gold"
+        onClick={vi.fn()}
+      />
+    )
+    expect(screen.queryByTestId(`case-best-${PUBLISHED_CASE.slug}`)).toBeNull()
+  })
+})
+
+
+// A case is a 35-minute sit-down; the menu should say so before you start one.
+describe('CaseFileCard — how long it takes', () => {
+  it('shows the estimated length alongside the chapter count', () => {
+    render(
+      <CaseFileCard
+        caseFile={{ ...PUBLISHED_CASE, estimatedMinutes: 35 }}
+        onClick={vi.fn()}
+      />
+    )
+    expect(screen.getByTestId(`case-minutes-${PUBLISHED_CASE.slug}`).textContent).toMatch(/about 35 min/)
+  })
+
+  it('says nothing when the content carries no estimate', () => {
+    render(<CaseFileCard caseFile={PUBLISHED_CASE} onClick={vi.fn()} />)
+    expect(screen.queryByTestId(`case-minutes-${PUBLISHED_CASE.slug}`)).toBeNull()
+  })
+})

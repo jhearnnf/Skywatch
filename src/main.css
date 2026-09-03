@@ -2273,3 +2273,21 @@ body.play-mode .card-shadow {
   .cbat-target-grid > .grid-system-target { min-height: 40px; }
 }
 
+
+/* ── Case Files map tooltips ──────────────────────────────────────────────────
+   Leaflet ships a white tooltip with a white arrow, which lands as a bright
+   card on top of the dark basemap the two map stages use. Restyle it onto the
+   dark surface tokens; the arrow border colour has to be set separately because
+   Leaflet draws it as a CSS triangle. */
+.leaflet-tooltip.cf-map-tooltip {
+  background: #0c1829;               /* surface-raised */
+  border: 1px solid rgba(72, 98, 130, 0.5);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  color: #ddeaf8;                    /* text */
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-top::before    { border-top-color: #0c1829; }
+.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-bottom::before { border-bottom-color: #0c1829; }
+.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-left::before   { border-left-color: #0c1829; }
+.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-right::before  { border-right-color: #0c1829; }

@@ -109,16 +109,19 @@ describe('ActorInterrogationsStage — rendering', () => {
     expect(screen.getByTestId('pinboard')).toBeDefined()
   })
 
-  it('shows 0 actors interrogated initially', () => {
+  it('counts people asked against the number on the board', () => {
     renderStage()
-    expect(screen.getByTestId('actors-interrogated-count').textContent).toContain('0')
+    expect(screen.getByTestId('actors-interrogated-count').textContent).toBe('0 of 3 people asked')
   })
 
-  it('shows 0 / total questions used initially', () => {
+  // The limit is 3 questions per person, not a pool of 9 to spend across
+  // everyone, so the counter states the per-person cap rather than a total.
+  it('states the per-person question limit, not a global budget', () => {
     renderStage()
-    // 3 actors × 3 questions = 9 max
-    expect(screen.getByTestId('questions-used-count').textContent).toContain('0')
-    expect(screen.getByTestId('questions-used-count').textContent).toContain('9')
+    const text = screen.getByTestId('questions-used-count').textContent
+    expect(text).toContain('0 questions used')
+    expect(text).toContain('up to 3 each')
+    expect(text).not.toContain('9')
   })
 
   it('renders the Done button', () => {
@@ -295,5 +298,73 @@ describe('ActorInterrogationsStage — Done / submit', () => {
       expect(actorIds).toEqual(['biden', 'lavrov'])
       expect(interrogations.every((i) => i.questionCount === 1)).toBe(true)
     })
+  })
+})
+
+
+// The relationship labels used to be chips pinned to the lines themselves.
+// Every actor in a pinboard row shares a y coordinate, so those lines are
+// horizontal and the chips piled up on each other and on the cards. The text
+// now lives in a strip under the board, and in the panel for touch users.
+describe('ActorInterrogationsStage — relationships you can actually read', () => {
+  it('prompts you to pick someone before anything is highlighted', () => {
+    renderStage()
+    expect(screen.getByTestId('connections-strip').textContent).toMatch(/Hover or open a person/i)
+  })
+
+  it('names who the hovered person is tied to, and how', () => {
+    renderStage()
+    fireEvent.mouseEnter(screen.getByTestId('actor-portrait-lavrov'))
+    const strip = screen.getByTestId('connections-strip')
+    expect(strip.textContent).toMatch(/Sergei Lavrov is tied to/i)
+    expect(strip.textContent).toMatch(/Vladimir Putin/)
+    expect(strip.textContent).toMatch(/reports to/)
+  })
+
+  it('reads the relationship from either end', () => {
+    renderStage()
+    fireEvent.mouseEnter(screen.getByTestId('actor-portrait-putin'))
+    expect(screen.getByTestId('connections-strip').textContent).toMatch(/Sergei Lavrov/)
+  })
+
+  it('says so when the selected person has no ties', () => {
+    renderStage()
+    fireEvent.mouseEnter(screen.getByTestId('actor-portrait-biden'))
+    expect(screen.getByTestId('connections-strip').textContent).toMatch(/Hover or open a person/i)
+  })
+
+  it('never draws the label on the board itself', () => {
+    renderStage()
+    fireEvent.mouseEnter(screen.getByTestId('actor-portrait-lavrov'))
+    expect(screen.queryByTestId('relationship-line-label')).toBeNull()
+  })
+
+  // A phone has no hover, so opening someone has to carry the same facts.
+  it('repeats the ties inside the interrogation panel', async () => {
+    renderStage()
+    fireEvent.click(screen.getByTestId('actor-portrait-lavrov'))
+    const panel = await screen.findByTestId('panel-connections')
+    expect(panel.textContent).toMatch(/Vladimir Putin/)
+    expect(panel.textContent).toMatch(/reports to/)
+  })
+})
+
+
+// Cards on one baseline make every same-row relationship a horizontal line, and
+// horizontal lines all overlap in the same strip.
+describe('ActorInterrogationsStage — pinboard stagger', () => {
+  it('pins neighbouring cards at different heights', () => {
+    renderStage()
+    const offsets = ACTORS.map(
+      a => screen.getByTestId(`actor-slot-${a.id}`).style.transform
+    )
+    expect(offsets[0]).not.toBe(offsets[1])
+    expect(offsets[1]).not.toBe(offsets[2])
+    offsets.forEach(t => expect(t).toMatch(/translateY\(\d+px\)/))
+  })
+
+  it('keeps the first card on the board baseline', () => {
+    renderStage()
+    expect(screen.getByTestId('actor-slot-lavrov').style.transform).toBe('translateY(0px)')
   })
 })

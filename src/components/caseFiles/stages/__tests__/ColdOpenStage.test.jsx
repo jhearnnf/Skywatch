@@ -44,12 +44,12 @@ const SESSION_CONTEXT = {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 describe('ColdOpenStage', () => {
 
-  it('renders the "Begin Briefing" button immediately', () => {
+  it('renders the continue button immediately', () => {
     render(
       <ColdOpenStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />
     )
     expect(screen.getByTestId('begin-briefing-btn')).toBeDefined()
-    expect(screen.getByText('Begin Briefing')).toBeDefined()
+    expect(screen.getByText('Open the Evidence Wall')).toBeDefined()
   })
 
   it('calls onSubmit with { completed: true } when button is clicked', async () => {
@@ -120,5 +120,31 @@ describe('ColdOpenStage', () => {
     ).not.toThrow()
     // INITIAL EVIDENCE section should not appear
     expect(screen.queryByText('INITIAL EVIDENCE')).toBeNull()
+  })
+})
+
+
+// The Android app is always the mobile layout and has no hover at all, so a
+// hover-only hint is simply unreachable there.
+describe('ColdOpenStage — starting-clue hints on touch', () => {
+  it('reveals the hint on tap, and hides it again', () => {
+    render(<ColdOpenStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
+    const first = STAGE.payload.startingItems[0]
+    const tile  = screen.getByTestId(`cold-open-thumb-${first.id}`)
+
+    expect(screen.queryByText(first.oneLineHint)).toBeNull()
+    fireEvent.click(tile)
+    expect(screen.getByText(first.oneLineHint)).toBeDefined()
+    fireEvent.click(tile)
+    expect(screen.queryByText(first.oneLineHint)).toBeNull()
+  })
+
+  it('exposes the tile to keyboard and assistive tech', () => {
+    render(<ColdOpenStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
+    const first = STAGE.payload.startingItems[0]
+    const tile  = screen.getByTestId(`cold-open-thumb-${first.id}`)
+    expect(tile.getAttribute('role')).toBe('button')
+    expect(tile.getAttribute('tabindex')).toBe('0')
+    expect(tile.getAttribute('aria-label')).toContain(first.oneLineHint)
   })
 })

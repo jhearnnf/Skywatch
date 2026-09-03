@@ -39,7 +39,7 @@ export default function CaseFilesGate({ reason, usedToday, limitToday, minTier }
         <SEO title="Case Files Offline" />
         <TerminalCard
           headline="CASE FILES OFFLINE"
-          body={'SYSTEM OFFLINE — CASE FILES DISABLED\nSTAND DOWN, AGENT.'}
+          body={'SYSTEM OFFLINE. CASE FILES DISABLED.\nSTAND DOWN, AGENT.'}
         />
       </>
     )

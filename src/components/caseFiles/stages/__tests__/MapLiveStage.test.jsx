@@ -149,6 +149,30 @@ describe('MapLiveStage — phase progression', () => {
 })
 
 describe('MapLiveStage — sub-decision', () => {
+  // The chip and the question have to agree: the phase whose call is open is
+  // the phase still on screen.
+  it('keeps the phase chip on the phase whose question is open', () => {
+    renderStage([
+      { id: 'p1', timeLabel: 'Feb 24, 04:00', units: [], subDecision: SUB_DECISION_SINGLE },
+      { id: 'p2', timeLabel: 'Feb 24, 08:00', units: [], subDecision: null },
+    ])
+    fireEvent.click(screen.getByTestId('advance-phase-btn'))
+    expect(screen.getByTestId('sub-decision-card')).toBeDefined()
+    expect(screen.getByTestId('phase-chip').textContent).toMatch('Feb 24, 04:00')
+  })
+
+  it('moves on to the next phase once the question is answered', async () => {
+    renderStage([
+      { id: 'p1', timeLabel: 'Feb 24, 04:00', units: [], subDecision: SUB_DECISION_SINGLE },
+      { id: 'p2', timeLabel: 'Feb 24, 08:00', units: [], subDecision: null },
+    ])
+    fireEvent.click(screen.getByTestId('advance-phase-btn'))
+    fireEvent.click(screen.getByTestId('sub-option-opt-a'))
+    await waitFor(() =>
+      expect(screen.getByTestId('phase-chip').textContent).toMatch('Feb 24, 08:00')
+    )
+  })
+
   it('shows sub-decision card when a phase has one (after advance)', () => {
     renderStage([
       { id: 'p1', timeLabel: 'T+0', units: [], subDecision: SUB_DECISION_SINGLE },

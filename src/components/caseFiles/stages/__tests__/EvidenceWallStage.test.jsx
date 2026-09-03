@@ -263,7 +263,7 @@ describe('EvidenceWallStage', () => {
     fireEvent.click(screen.getByTestId('evidence-card-item-b'))
 
     await waitFor(() => {
-      expect(screen.getByText(/1\s*\/.*connections/i)).toBeDefined()
+      expect(screen.getByText(/1 link made/i)).toBeDefined()
     })
   })
 

@@ -40,10 +40,18 @@ import { boundsCentre, lookupHotspot } from '../../utils/caseFiles/mapHelpers'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+// Basemap. CARTO's dark_all tiles used to be keyless; they now stamp
+// "API KEY REQUIRED" diagonally across every tile, which made the two map
+// stages look broken. Esri's dark canvas needs no key and matches the dark
+// theme. It ships geometry and labels as separate services, so both go on —
+// place names are load-bearing here (players pick out Kyiv, Belarus, Donbas).
+const TILE_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+const LABEL_TILE_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+const TILE_MAX_ZOOM = 16
 const ATTRIBUTION =
-  '© <a href="https://www.openstreetmap.org/copyright">OSM</a> · ' +
-  '© <a href="https://carto.com/attributions">CARTO</a>'
+  'Tiles © <a href="https://www.esri.com/">Esri</a>, DeLorme, NAVTEQ'
 
 const KIND_COLOR = {
   staging:   '#5baaff',   // brand-600
@@ -171,31 +179,42 @@ function SingleAxis({ axis, hotspots }) {
   )
 }
 
-// ── UnitsLayer — V1 stub: dots at start position ─────────────────────────────
+// ── UnitsLayer — a ring around the hotspot a unit has reached ────────────────
 // CONTRACT-AMBIGUITY: animation logic deferred to agent D5 (MapLiveStage).
+//
+// Units used to be a radius-5 filled dot drawn on top of a radius-8 hotspot,
+// in a colour keyed on 'friendly'/'hostile'/'neutral' — while the content
+// writes side as 'ru'/'ua'. So every unit fell through to the default slate
+// and rendered as a grey blob hidden inside the marker it had just reached,
+// which is why the live map looked like nothing was happening. They are now
+// an unfilled ring drawn OUTSIDE the hotspot, coloured by side.
+
+const UNIT_SIDE_COLOR = {
+  ru:       '#f87171',   // hostile red
+  hostile:  '#f87171',
+  ua:       '#4ade80',   // friendly green
+  friendly: '#4ade80',
+  neutral:  '#facc15',
+}
 
 function UnitsLayer({ units, hotspots }) {
   if (!units?.length) return null
 
-  const SIDE_COLOR = {
-    friendly: '#4ade80',
-    hostile:  '#f87171',
-    neutral:  '#facc15',
-  }
-
-  return units.map(unit => {
+  return units.map((unit, i) => {
     const from = lookupHotspot(hotspots, unit.fromHotspotId)
     if (!from) return null
-    const color = SIDE_COLOR[unit.side] ?? '#94a3b8'
+    const color = UNIT_SIDE_COLOR[unit.side] ?? '#94a3b8'
     return (
       <CircleMarker
-        key={unit.id}
+        // Seed content does not give units an id, and every undefined key is
+        // the same key as far as React is concerned.
+        key={unit.id ?? `${unit.side}-${unit.kind}-${unit.fromHotspotId}-${i}`}
         center={[from.lat, from.lng]}
-        radius={5}
-        pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 1.5 }}
+        radius={12}
+        pathOptions={{ color, fillColor: color, fillOpacity: 0.12, weight: 2.5 }}
       >
-        <Tooltip direction="top" offset={[0, -6]} opacity={0.9}>
-          <span className="text-xs">{unit.kind ?? unit.id}</span>
+        <Tooltip className="cf-map-tooltip" direction="top" offset={[0, -12]} opacity={1}>
+          <span className="text-xs text-text">{unit.kind ?? unit.id ?? 'Unit'}</span>
         </Tooltip>
       </CircleMarker>
     )
@@ -224,14 +243,14 @@ function HotspotsLayer({ hotspots, focusedHotspotId, onHotspotClick }) {
           onHotspotClick ? { click: () => onHotspotClick(hs.id) } : undefined
         }
       >
-        <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-          <div className="flex flex-col" style={{ color: '#0c1829', maxWidth: 220 }}>
-            <span className="text-xs font-semibold">{hs.label}</span>
+        <Tooltip className="cf-map-tooltip" direction="top" offset={[0, -8]} opacity={1}>
+          {/* Leaflet tooltips are white-space:nowrap by default, so the longer
+              `tooltip` sentence ran straight out of the box. Fix the width and
+              let it wrap. */}
+          <div className="flex flex-col" style={{ width: 220, whiteSpace: 'normal' }}>
+            <span className="text-xs font-semibold text-text">{hs.label}</span>
             {hs.tooltip && (
-              <span
-                className="text-[11px] font-normal leading-snug mt-0.5"
-                style={{ color: '#1f2937' }}
-              >
+              <span className="text-[11px] font-normal leading-snug mt-0.5 text-text-muted">
                 {hs.tooltip}
               </span>
             )}
@@ -276,9 +295,9 @@ export default function MapCanvas({
         <TileLayer
           url={TILE_URL}
           attribution={attribution ? ATTRIBUTION : ''}
-          maxZoom={19}
-          subdomains="abcd"
+          maxZoom={TILE_MAX_ZOOM}
         />
+        <TileLayer url={LABEL_TILE_URL} maxZoom={TILE_MAX_ZOOM} />
 
         <HotspotsLayer
           hotspots={hotspots}

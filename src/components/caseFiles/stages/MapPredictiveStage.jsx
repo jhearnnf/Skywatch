@@ -50,7 +50,7 @@ function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain }) {
   if (axes.length === 0) {
     return (
       <p className="text-sm text-slate-500 italic py-2">
-        No axes drawn yet. Click two hotspots on the map.
+        No routes yet. Click one place on the map, then click another.
       </p>
     )
   }
@@ -77,7 +77,7 @@ function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain }) {
               type="button"
               data-testid={`main-toggle-${axis.id}`}
               onClick={() => onToggleMain(axis.id)}
-              title={isMain ? 'Main effort (click to unmark)' : 'Mark as main effort'}
+              title={isMain ? 'This is your main attack. Click to unmark it.' : 'Mark this as the main attack'}
               className={[
                 'text-[10px] font-extrabold tracking-wider px-2 py-0.5 rounded-full border',
                 'transition-colors duration-150',
@@ -86,7 +86,7 @@ function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain }) {
                   : 'border-slate-400/40 text-slate-500 hover:border-amber-600/40 hover:text-amber-600',
               ].join(' ')}
             >
-              {isMain ? '★ MAIN' : '☆ MAIN'}
+              {isMain ? '★ MAIN ATTACK' : '☆ MAIN ATTACK'}
             </button>
 
             {/* Delete */}
@@ -94,7 +94,7 @@ function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain }) {
               type="button"
               data-testid={`delete-axis-${axis.id}`}
               onClick={() => onDelete(axis.id)}
-              title="Remove axis"
+              title="Remove this route"
               className="text-slate-500 hover:text-red-400 transition-colors duration-150 text-base leading-none px-1"
             >
               ×
@@ -109,7 +109,7 @@ function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain }) {
 // ── MapPredictiveStage ────────────────────────────────────────────────────────
 
 export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubmit }) {
-  const { mapBounds, hotspots = [], tokenCount = 3, prompt = 'Draw expected thrust axes' } =
+  const { mapBounds, hotspots = [], tokenCount = 3, prompt = 'Where do you think they will attack?' } =
     stage?.payload ?? {}
 
   const [axes,          setAxes]          = useState([])
@@ -222,11 +222,19 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h3 className="text-base font-bold text-text">{prompt}</h3>
-            {selectedHsId && (
-              <p className="text-xs text-brand-600 mt-0.5 intel-mono">
-                Origin selected — click destination hotspot
-              </p>
-            )}
+            {/* Always occupies its line. Mounting this only once a hotspot was
+                picked shoved the map down by its height mid-interaction, so the
+                second click landed on empty sea instead of the hotspot the
+                player was aiming at. */}
+            <p
+              aria-hidden={!selectedHsId}
+              className={[
+                'text-xs mt-0.5 intel-mono',
+                selectedHsId ? 'text-brand-600' : 'invisible',
+              ].join(' ')}
+            >
+              Start point set. Now click where the attack would go
+            </p>
           </div>
           <div
             className="text-sm intel-mono text-slate-500 shrink-0"
@@ -235,7 +243,7 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
             <span className="text-text font-bold">{tokensUsed}</span>
             <span className="mx-1">/</span>
             <span>{tokenCount}</span>
-            <span className="ml-1 text-slate-500">tokens used</span>
+            <span className="ml-1 text-slate-500">routes drawn</span>
           </div>
         </div>
 
@@ -265,14 +273,14 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
         {/* No-tokens warning */}
         {!canDraw && tokensUsed > 0 && (
           <p className="text-xs text-amber-600 intel-mono">
-            All tokens used. Remove an axis to draw another.
+            All {tokenCount} routes used. Remove one to draw another.
           </p>
         )}
 
         {/* Committed axes list */}
         <div>
           <h4 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
-            Committed Axes
+            Routes you have drawn
           </h4>
           <AxisList
             axes={axes}
@@ -297,7 +305,7 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
             pending ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90',
           ].join(' ')}
         >
-          {pending ? 'Committing…' : 'Commit Analysis'}
+          {pending ? 'Saving…' : 'Save Routes and Continue'}
         </button>
       </div>
     </div>

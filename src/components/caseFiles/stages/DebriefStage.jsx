@@ -33,7 +33,7 @@ const GRADE_COLOR = {
   B:  'text-brand-600',
   C:  'text-slate-600',
   D:  'text-danger',
-  '–': 'text-text-faint',
+  '-': 'text-text-faint',
 }
 
 function gradeColor(grade) {
@@ -64,8 +64,16 @@ function CountUpScore({ target, duration = 1800 }) {
     }
 
     rafRef.current = requestAnimationFrame(tick)
+
+    // Browsers stop servicing requestAnimationFrame in a hidden tab, so a
+    // debrief that mounts while the player is looking elsewhere freezes on a
+    // partial number — "10" under a breakdown that adds up to 192. Timers are
+    // throttled but still fire, so use one to settle on the real total.
+    const settle = setTimeout(() => setDisplayed(target), duration + 400)
+
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      clearTimeout(settle)
     }
   }, [target, duration])
 
@@ -96,8 +104,19 @@ function ScoringSkeletonBlock() {
 
 // ── Score banner ─────────────────────────────────────────────────────────────
 
-function ScoreBanner({ scoring }) {
+function ScoreBanner({ scoring, personalBest }) {
   const { totalScore } = scoring
+
+  // "192" on its own tells a first-timer nothing. The chapter's ceiling is the
+  // sum of what each stage was worth, so show what they were playing for.
+  const maxTotal = (scoring.breakdown ?? []).reduce((sum, r) => sum + (r.maxScore ?? 0), 0)
+
+  // `/best` is read after the run is scored, so bestScore already includes this
+  // attempt: matching it means this run is the best one.
+  const attempts   = personalBest?.completedCount ?? 0
+  const best       = personalBest?.bestScore
+  const isFirstRun = attempts <= 1
+  const isNewBest  = !isFirstRun && typeof best === 'number' && totalScore >= best
 
   return (
     <div className="flex flex-col items-center gap-3 py-6 border-b border-slate-300/20">
@@ -109,11 +128,34 @@ function ScoreBanner({ scoring }) {
         className="text-6xl sm:text-7xl font-black text-brand-600 tabular-nums"
       >
         <CountUpScore target={totalScore} />
+        {maxTotal > 0 && (
+          <span className="text-2xl sm:text-3xl font-bold text-text-faint align-middle ml-1">
+            {' / '}{maxTotal.toLocaleString('en')}
+          </span>
+        )}
       </motion.div>
 
       <p className="text-xs font-bold tracking-widest uppercase text-text-muted font-mono">
         Total Score
       </p>
+
+      {/* Personal-best line — Case Files award no airstars, so this and the
+          grades are the whole reward for coming back to a case. */}
+      {personalBest && (
+        <p
+          data-testid="personal-best-line"
+          className={[
+            'text-xs font-mono',
+            isNewBest ? 'text-amber-600 font-bold' : 'text-text-muted',
+          ].join(' ')}
+        >
+          {isFirstRun
+            ? 'First run on this case'
+            : isNewBest
+              ? `New personal best, beating your previous ${attempts - 1} run${attempts - 1 === 1 ? '' : 's'}`
+              : `Personal best ${best.toLocaleString('en')} · run ${attempts}`}
+        </p>
+      )}
     </div>
   )
 }
@@ -121,7 +163,10 @@ function ScoreBanner({ scoring }) {
 // ── Breakdown table ───────────────────────────────────────────────────────────
 
 function BreakdownTable({ breakdown }) {
-  if (!breakdown?.length) return null
+  // The briefing and the debrief itself carry no marks. Listing them as
+  // "0 / 0 - 0%" read like two stages the player had failed.
+  const rows = (breakdown ?? []).filter(r => (r.maxScore ?? 0) > 0)
+  if (!rows.length) return null
 
   return (
     <section className="flex flex-col gap-3">
@@ -141,7 +186,7 @@ function BreakdownTable({ breakdown }) {
         </div>
 
         {/* Data rows */}
-        {breakdown.map((row, i) => {
+        {rows.map((row, i) => {
           const pct   = row.maxScore ? Math.round((row.score / row.maxScore) * 100) : 0
           const grade = gradeForPct(pct)
           return (
@@ -156,8 +201,19 @@ function BreakdownTable({ breakdown }) {
                 'hover:bg-surface-raised/60 transition-colors duration-100',
               ].join(' ')}
             >
-              <span className="text-text font-medium truncate pr-2">
-                {stageTypeLabel(row.stageType)}
+              <span className="text-text font-medium pr-2 flex flex-col gap-0.5 min-w-0">
+                <span className="truncate">{stageTypeLabel(row.stageType)}</span>
+                {/* The scorer already works out WHY each stage scored what it
+                    did. The table used to throw it away, leaving a player with
+                    a number and no idea what to do differently. */}
+                {row.notes && (
+                  <span
+                    data-testid={`breakdown-note-${i}`}
+                    className="text-[11px] font-normal text-text-muted leading-snug"
+                  >
+                    {row.notes}
+                  </span>
+                )}
               </span>
               <span className="text-right text-text-muted font-mono text-xs self-center">
                 {formatScore(row.score, row.maxScore)}
@@ -172,6 +228,12 @@ function BreakdownTable({ breakdown }) {
           )
         })}
       </div>
+
+      {/* Grade key. A lone "C" is meaningless the first time you see one. */}
+      <p className="text-[10px] text-text-faint font-mono leading-relaxed">
+        Grades: S is 95% and up, A is 80%, B is 60%, C is 40%, D is under 40%.
+        A dash means no marks scored on that stage.
+      </p>
     </section>
   )
 }
@@ -259,13 +321,15 @@ function TeaserCard({ teaser }) {
 
 // ── DebriefStage (public) ─────────────────────────────────────────────────────
 
-export default function DebriefStage({ stage, sessionContext, onSubmit, scoring }) {
+export default function DebriefStage({ stage, sessionContext, onSubmit, scoring, personalBest, onReplay }) {
   const {
     annotatedReplayBeats = [],
     teaserNextChapter    = null,
   } = stage?.payload ?? {}
 
-  const chapterTitle = sessionContext?.chapterSlug ?? ''
+  // Falls back to the slug only when the caller has no title to hand; showing
+  // "road-to-invasion" above DEBRIEF looked like leaked plumbing.
+  const chapterTitle = sessionContext?.chapterTitle || sessionContext?.chapterSlug || ''
   const [submitting, setSubmitting] = useState(false)
 
   async function handleClose() {
@@ -310,7 +374,7 @@ export default function DebriefStage({ stage, sessionContext, onSubmit, scoring 
         <ScoringSkeletonBlock />
       ) : (
         <>
-          <ScoreBanner scoring={scoring} />
+          <ScoreBanner scoring={scoring} personalBest={personalBest} />
           <BreakdownTable breakdown={scoring.breakdown} />
         </>
       )}
@@ -329,7 +393,17 @@ export default function DebriefStage({ stage, sessionContext, onSubmit, scoring 
       </div>
 
       {/* ── Sticky footer: Close Case button ──────────────────────────── */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex justify-center">
+      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex flex-wrap justify-center gap-3">
+        {onReplay && (
+          <button
+            type="button"
+            data-testid="replay-case-btn"
+            onClick={onReplay}
+            className="px-6 py-3 rounded-2xl font-bold text-sm tracking-widest uppercase border border-brand-600/50 text-brand-600 hover:bg-brand-600/10 transition-colors"
+          >
+            Run It Again
+          </button>
+        )}
         <button
           type="button"
           data-testid="close-case-btn"

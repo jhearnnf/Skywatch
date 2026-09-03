@@ -70,6 +70,7 @@ export default function InterrogationPanel({
   onClose,
   isPending,
   contextDateLabel,
+  connections = [],
 }) {
   const [input, setInput] = useState('')
   const [sendError, setSendError] = useState(null)
@@ -83,6 +84,17 @@ export default function InterrogationPanel({
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [transcript, isPending])
+
+  // Escape closes. The panel is a dialog with aria-modal, so keyboard users
+  // expect it; before this the only way out was the small ✕ or re-clicking the
+  // actor's tile behind the panel.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === 'Escape') onClose?.()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   async function handleSend() {
     if (!canSend) return
@@ -111,6 +123,21 @@ export default function InterrogationPanel({
     !exhausted
 
   return (
+    <>
+      {/* Scrim. Without it the panel slid in over a fully lit, fully clickable
+          page and read as floating text rather than a panel — and there was no
+          click-away to close. */}
+      <motion.div
+        key="interrogation-scrim"
+        data-testid="interrogation-scrim"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        aria-hidden="true"
+        className="fixed inset-0 z-[1090] bg-black/50"
+      />
     <motion.div
       key="interrogation-panel"
       data-testid="interrogation-panel"
@@ -119,7 +146,10 @@ export default function InterrogationPanel({
       animate="visible"
       exit="exit"
       className={[
-        'fixed right-0 top-0 bottom-0 z-50',
+        // Above the app TopBar (z-[1001]), which otherwise painted over the
+        // panel's first 56px — hiding the actor's name and the close button.
+        // z-[1100] is what every other over-the-chrome overlay here uses.
+        'fixed right-0 top-0 bottom-0 z-[1100]',
         'flex flex-col bg-surface border-l border-slate-300/30 shadow-2xl',
         // Desktop: partial width; Mobile: full screen
         'w-full sm:w-[420px]',
@@ -144,6 +174,23 @@ export default function InterrogationPanel({
               {contextDateLabel}
             </p>
           ) : null}
+          {/* Who this person is tied to. It also appears on the board, but a
+              touch device has no hover, so this is the only place a phone
+              player ever sees it — and it is useful exactly here, while you
+              are deciding what to ask. */}
+          {connections.length > 0 && (
+            <div data-testid="panel-connections" className="flex flex-wrap gap-1 mt-2">
+              {connections.map((c) => (
+                <span
+                  key={c.id}
+                  className="text-[10px] leading-tight px-1.5 py-0.5 rounded border border-slate-300/30 bg-surface-raised text-text-muted"
+                >
+                  {c.name}
+                  {c.label && <span className="text-slate-500"> · {c.label}</span>}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <button
           onClick={onClose}
@@ -292,5 +339,6 @@ export default function InterrogationPanel({
         </div>
       </div>
     </motion.div>
+    </>
   )
 }

@@ -215,7 +215,9 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
     phases   = [],
   } = stage?.payload ?? {}
 
-  const chapterTitle  = sessionContext?.chapterSlug ?? ''
+  // Prefer the real title; the slug is a last resort so the eyebrow does not
+  // read "road-to-invasion".
+  const chapterTitle  = sessionContext?.chapterTitle || sessionContext?.chapterSlug || ''
   const totalPhases   = phases.length
 
   // Track which phase we're on (0-indexed), and which are complete
@@ -246,8 +248,12 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
         { subDecisionId, selectedOptionIds },
       ])
       setAwaitingDecision(false)
+      // The clock only moves once the call has been made. Answering is what
+      // reveals the next phase's units, so the read is "you predicted this —
+      // here is what actually happened".
+      setCurrentPhaseIndex(i => (i < totalPhases - 1 ? i + 1 : i))
     },
-    []
+    [totalPhases]
   )
 
   // ── Advance to next phase ─────────────────────────────────────────────────
@@ -261,11 +267,11 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
     setCompletedPhases(prev => new Set([...prev, currentPhaseIndex]))
 
     if (phase.subDecision) {
-      // Show sub-decision card; user must answer before advancing further
+      // Stay on this phase while its question is open. Advancing the index
+      // here used to put the NEXT phase's time and headline above a question
+      // about the phase just gone — "24 Feb 06:00, Hostomel airfield assault"
+      // sitting over "what would they hit in the opening hour?".
       setAwaitingDecision(true)
-      if (currentPhaseIndex < totalPhases - 1) {
-        setCurrentPhaseIndex(i => i + 1)
-      }
     } else {
       // No sub-decision: just move to next phase (or flag last complete)
       if (currentPhaseIndex < totalPhases - 1) {
@@ -286,12 +292,9 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
     }
   }
 
-  // Determine the sub-decision to show: the PREVIOUS phase's subDecision
-  // (since we advance the index when setting awaitingDecision).
-  // CONTRACT-AMBIGUITY: when awaitingDecision is true, the sub-decision
-  // belongs to the phase that was just advanced past (currentPhaseIndex - 1).
+  // The open question always belongs to the phase on screen.
   const activeSubDecision = awaitingDecision
-    ? phases[currentPhaseIndex - 1]?.subDecision ?? null
+    ? phases[currentPhaseIndex]?.subDecision ?? null
     : null
 
   // Phase is "live" (glowing chip) if it has not been completed yet
@@ -387,7 +390,7 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
               onClick={handleAdvance}
               className="px-5 py-2 rounded-xl text-sm font-bold tracking-wide bg-surface-raised border border-slate-300/40 text-text hover:border-brand-400/50 transition-colors duration-150"
             >
-              {isLastPhase ? 'Complete Phase' : 'Advance ›'}
+              {isLastPhase ? 'Finish the Timeline' : 'Next Step ›'}
             </button>
           )}
 
@@ -407,7 +410,7 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
                 submitting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90',
               ].join(' ')}
             >
-              {submitting ? 'Submitting…' : 'Submit Analysis'}
+              {submitting ? 'Saving…' : 'See Your Debrief'}
             </motion.button>
           )}
         </div>

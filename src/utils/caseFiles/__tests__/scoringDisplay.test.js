@@ -115,6 +115,18 @@ describe('gradeForPct', () => {
   })
 
   it('returns – at exactly 0', () => {
-    expect(gradeForPct(0)).toBe('–')
+    expect(gradeForPct(0)).toBe('-')
+  })
+})
+
+// The stage type is plural in StageRouter and in the backend's STAGE_WEIGHTS,
+// so a singular-only key left the debrief breakdown showing the raw type.
+describe('stageTypeLabel — actor interrogations', () => {
+  it('labels the plural stage type used everywhere else', () => {
+    expect(stageTypeLabel('actor_interrogations')).toBe('Interrogations')
+  })
+
+  it('still labels the singular alias', () => {
+    expect(stageTypeLabel('actor_interrogation')).toBe('Interrogations')
   })
 })

@@ -66,20 +66,45 @@ function useTypewriter(text, charDelay = 30, enabled = true) {
 // ── Thumbnail card (starting items) ──────────────────────────────────────────
 function ThumbnailItem({ item, index }) {
   const [hovered, setHovered] = useState(false)
+  const [pinned,  setPinned]  = useState(false)
   const { id, title, thumbnailUrl, imageCredit, oneLineHint } = item
+
+  // The hint used to be revealed on hover alone, with no tabIndex — so on a
+  // phone (and in the Android app, which is always mobile) it was unreachable,
+  // while the objective banner cheerfully told players to hover for it.
+  //
+  // Tap pins it open, kept separate from hover on purpose: a touch tap also
+  // fires an emulated mouseenter, so a single `hovered` flag would be set true
+  // by the tap and then toggled straight back off by the click, and the hint
+  // would blink and vanish. Showing on `hovered || pinned` means a tap can
+  // only ever reveal.
+  const showHint = hovered || pinned
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3 + index * 0.1, duration: 0.4 }}
+      role={oneLineHint ? 'button' : undefined}
+      tabIndex={oneLineHint ? 0 : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onFocus={()    => setHovered(true)}
       onBlur={()     => setHovered(false)}
-      className="relative flex flex-col rounded overflow-hidden border border-slate-300/20 bg-surface cursor-default select-none"
+      onClick={oneLineHint ? () => setPinned(p => !p) : undefined}
+      onKeyDown={oneLineHint ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          setPinned(p => !p)
+        }
+      } : undefined}
+      data-testid={`cold-open-thumb-${id}`}
+      className={[
+        'relative flex flex-col rounded overflow-hidden border border-slate-300/20 bg-surface select-none',
+        oneLineHint ? 'cursor-pointer' : 'cursor-default',
+      ].join(' ')}
       style={{ minWidth: 0 }}
-      aria-label={`${title}${oneLineHint ? ` — ${oneLineHint}` : ''}`}
+      aria-label={`${title}${oneLineHint ? `. ${oneLineHint}` : ''}`}
     >
       {/* Thumbnail image or placeholder */}
       <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
@@ -105,7 +130,7 @@ function ThumbnailItem({ item, index }) {
 
       {/* Hover hint overlay */}
       <AnimatePresence>
-        {hovered && oneLineHint && (
+        {showHint && oneLineHint && (
           <motion.div
             key="hint"
             initial={{ opacity: 0 }}
@@ -166,6 +191,11 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
   return (
     <div className="relative flex flex-col w-full h-full min-h-0 bg-surface">
       {/* Scrollable content — vignette applied here so it wraps content not footer */}
+      {/* Centring is done with auto margins on the first and last child rather
+          than justify-center, which would clip the top of the briefing out of
+          reach once the content is taller than the column. Without it the
+          folder sat pinned to the top of a full-height stage with a few hundred
+          pixels of empty board beneath it on a desktop viewport. */}
       <div
         className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center px-4 py-6"
         style={{
@@ -178,7 +208,7 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6 }}
-        className="intel-mono text-brand-600 mb-6 text-center tracking-widest"
+        className="intel-mono text-brand-600 mt-auto mb-6 text-center tracking-widest"
         aria-live="polite"
       >
         {dateDisplayed}
@@ -193,7 +223,7 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.2, duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-xl rounded-lg border border-amber-200/10 bg-surface-raised card-shadow"
+        className="w-full max-w-xl mb-auto rounded-lg border border-amber-200/10 bg-surface-raised card-shadow"
         style={{
           // Warm paper tint layered on top of the dark surface token
           backgroundImage:
@@ -222,7 +252,7 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
               className="mb-4 rounded border border-brand-600/20 bg-brand-100/20 px-3 py-2.5"
             >
               <p className="intel-mono text-[10px] tracking-widest text-brand-600 uppercase mb-1.5">
-                Background — what you need to know
+                Background: what you need to know
               </p>
               <ul className="flex flex-col gap-1.5">
                 {backgroundPrimer.map((row, i) => (
@@ -271,7 +301,7 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
 
       </div>
 
-      {/* ── Sticky footer: Begin Briefing button ──────────────────────── */}
+      {/* ── Sticky footer: continue button ────────────────────────────── */}
       <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex flex-col items-center gap-2">
         <button
           onClick={handleBegin}
@@ -294,7 +324,7 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
               <span>Accessing…</span>
             </>
           ) : (
-            'Begin Briefing'
+            'Open the Evidence Wall'
           )}
         </button>
 
