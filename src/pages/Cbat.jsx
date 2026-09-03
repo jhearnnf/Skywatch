@@ -15,6 +15,7 @@ import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 import { SLIM_APP } from '../utils/appMode'
 import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
+import PlayOnPcNote from '../components/cbat/PlayOnPcNote'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -331,6 +332,9 @@ export default function Cbat() {
   const cancelLongPress = () => clearTimeout(longPressRef.current.timer)
   useEffect(() => () => clearTimeout(longPressRef.current.timer), [])
   const [flickeringKey, setFlickeringKey] = useState(null)
+  // The "Play on a PC" note. Only ever reachable from the native app, where the
+  // link that opens it is the one that replaces the donation link.
+  const [pcNoteOpen, setPcNoteOpen] = useState(false)
   // Owned here rather than inside the widget: the split between Recent Scores
   // and the chat depends on it, so both halves of the column need to see it.
   const [loungeOpen, setLoungeOpen] = useLoungeOpen()
@@ -614,6 +618,23 @@ export default function Cbat() {
                 Support SkyWatch
               </Link>
             )}
+            {/* The native app has no donation link (see the footer note), which
+                left "Report a problem" stretched alone across the whole span
+                instead of the two-up pairing the web gets. This takes the empty
+                half: a phone-only player never otherwise learns that a PC gives
+                them a joystick, and the slot was already paid for. */}
+            {SLIM_APP && (
+              <button
+                type="button"
+                onClick={() => setPcNoteOpen(true)}
+                data-testid="cbat-grid-play-on-pc"
+                className="flex-1 flex items-center justify-center px-1 text-center no-underline
+                  text-[9px] font-semibold leading-[1.25] text-brand-600 active:text-brand-700
+                  underline underline-offset-2 transition-colors"
+              >
+                Play on a PC
+              </button>
+            )}
             <Link
               to="/report"
               data-testid="cbat-grid-report"
@@ -724,6 +745,19 @@ export default function Cbat() {
               </Link>
             </p>
           )}
+          {SLIM_APP && (
+            <p className="m-0">
+              <span className="hidden sm:inline">Every game runs in a desktop browser too. </span>
+              <button
+                type="button"
+                onClick={() => setPcNoteOpen(true)}
+                data-testid="cbat-footer-play-on-pc"
+                className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors"
+              >
+                Play on a PC
+              </button>
+            </p>
+          )}
           <p className="m-0">
             <span className="hidden sm:inline">A game not working right? </span>
             <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
@@ -732,6 +766,8 @@ export default function Cbat() {
           </p>
         </div>
       </div>
+
+      {pcNoteOpen && <PlayOnPcNote onClose={() => setPcNoteOpen(false)} />}
     </div>
   )
 }

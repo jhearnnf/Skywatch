@@ -347,6 +347,14 @@ describe('Cbat page — dense mobile grid', () => {
       for (const link of [donate, report]) expect(link.className).toContain('flex-1')
     })
 
+    // The app swaps this half for "Play on a PC" (Cbat.nativeSlim.test.jsx).
+    // The web has the donation link and does not need telling it is on a PC.
+    it('does not carry the app-only desktop link', () => {
+      renderWithUser()
+      expect(screen.queryByTestId('cbat-grid-play-on-pc')).toBeNull()
+      expect(screen.queryByTestId('cbat-footer-play-on-pc')).toBeNull()
+    })
+
     // Labels only down here. The framing sentences that used to sit above the
     // report link are what paid for the second destination, and they survive at
     // `sm` in the footer strip where there is width for them.
