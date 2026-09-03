@@ -3,6 +3,7 @@ const stripe       = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { protect, optionalAuth } = require('../middleware/auth');
 const User         = require('../models/User');
 const AppSettings  = require('../models/AppSettings');
+const DonationPageVisit = require('../models/DonationPageVisit');
 
 const router = express.Router();
 
@@ -117,6 +118,23 @@ router.post('/create-donation-session', optionalAuth, async (req, res) => {
 
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
     const userId    = req.user?._id ? req.user._id.toString() : '';
+
+    // Which ask sent them. Only /donate carries a `visitKey`, and stamping the
+    // press-through here rather than in the click handler means the funnel can
+    // only ever count a conversion the server genuinely started. The other two
+    // asks record their own click against the account they were shown to, so
+    // there is nothing to do for them.
+    //
+    // Best effort, and deliberately before the Stripe call rather than after:
+    // this must not be able to fail a donation, and it must not wait on one.
+    // Presence of the key is what identifies the page, not the signed-in state:
+    // a signed-in donor is keyed by account, but only /donate sends a key at all.
+    const clientKey = typeof req.body?.visitKey === 'string' ? req.body.visitKey : null;
+    const visitKey  = clientKey ? DonationPageVisit.keyFor(req.user?._id, clientKey) : null;
+    if (visitKey) {
+      await DonationPageVisit.recordCheckout(visitKey, req.user?._id ?? null)
+        .catch(err => console.error('Donation checkout record error:', err.message));
+    }
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',

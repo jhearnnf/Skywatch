@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -38,6 +38,33 @@ const MAX = 500
 
 const money = (n) => (Number.isInteger(n) ? `£${n}` : `£${n.toFixed(2)}`)
 
+// An id for this visit, so the admin donation funnel can pair "reached the page"
+// with "pressed through to Stripe" and report a real conversion rate rather than
+// two unrelated totals.
+//
+// sessionStorage, not localStorage: it lives for this browser tab and no longer.
+// That is enough to stop a reload — or a bounce back from a cancelled Checkout —
+// looking like a second person, and it deliberately leaves nothing behind on the
+// device afterwards. A signed-in visitor never needs it at all; the server keys
+// them by account and ignores whatever this returns.
+//
+// Wrapped because sessionStorage throws outright in some privacy modes, and a
+// stat is never worth breaking the page for. Null simply means this visit goes
+// uncounted.
+const VISIT_KEY_STORAGE = 'skywatch:donate-visit'
+
+function getVisitKey() {
+  try {
+    const existing = sessionStorage.getItem(VISIT_KEY_STORAGE)
+    if (existing) return existing
+    const key = (crypto.randomUUID?.() ?? `${Math.random()}${Math.random()}`).replace(/[^a-zA-Z0-9]/g, '')
+    sessionStorage.setItem(VISIT_KEY_STORAGE, key)
+    return key
+  } catch {
+    return null
+  }
+}
+
 export default function Donate() {
   const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -52,6 +79,27 @@ export default function Donate() {
   const [custom, setCustom] = useState('')
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
+
+  // Tell the server someone is looking at this. It is the impression half of the
+  // donation funnel and the only one /donate can report, since the post-game note
+  // and the questionnaire both record theirs against an account and this page is
+  // shown to people who do not have one.
+  //
+  // Fire and forget, and never in the native app, where the page does not render
+  // the ask at all. A failure here is invisible on purpose: the visitor came to
+  // give money, not to be counted.
+  useEffect(() => {
+    if (SLIM_APP) return
+    const visitKey = getVisitKey()
+    if (!visitKey) return
+    apiFetch(`${API}/api/donation/visit`, {
+      method:      'POST',
+      credentials: 'include',
+      headers:     { 'Content-Type': 'application/json' },
+      body:        JSON.stringify({ visitKey }),
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API])
 
   const amount = custom.trim() !== '' ? Number(custom) : preset
   const valid  = Number.isFinite(amount) && amount >= MIN && amount <= MAX
@@ -75,7 +123,10 @@ export default function Donate() {
         method:      'POST',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
-        body:        JSON.stringify({ amount }),
+        // The visit key rides along so the server can mark this visit as having
+        // pressed through. Only this page sends one, which is how the funnel
+        // tells a donation started here from one started on the questionnaire.
+        body:        JSON.stringify({ amount, visitKey: getVisitKey() }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.url) throw new Error(data.error || 'Could not start the payment. Please try again.')

@@ -56,6 +56,8 @@ const {
 } = require('../utils/rankOrdering');
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
+const SurveyResponse           = require('../models/SurveyResponse');
+const DonationPageVisit        = require('../models/DonationPageVisit');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
 const { fetchRssHeadlines }    = require('../utils/rssFetcher');
@@ -459,7 +461,9 @@ router.get('/stats', async (_req, res) => {
       aptitudeSyncCompleted,
       aptitudeSyncAirstarsAgg,
       emailsSent, emailsFailed,
-      donationCardSeen, donationLinkClicked,
+      cardSeenIds, cardClickedIds,
+      surveySeenIds, surveyClickedIds,
+      donatePageSeen, donatePageClicked,
     ] = await Promise.all([
       User.countDocuments(),
       // Same window as GET /api/chat/presence, from one constant — this tile and
@@ -548,12 +552,34 @@ router.get('/stats', async (_req, res) => {
       AptitudeSyncUsage.aggregate([{ $group: { _id: null, total: { $sum: { $ifNull: ['$airstarsEarned', 0] } } } }]),
       EmailLog.countDocuments({ status: 'sent' }),
       EmailLog.countDocuments({ status: 'failed' }),
-      // Donation funnel, counted in USERS rather than events: "3 of 40 people who saw the card
-      // clicked through" is the question being asked, and one enthusiast opening the link five
-      // times must not read as five conversions.
-      User.countDocuments({ 'donationPrompt.impressionCount': { $gt: 0 } }),
-      User.countDocuments({ 'donationPrompt.clickCount': { $gt: 0 } }),
+      // Donation funnel, counted in PEOPLE rather than events: "3 of 40 people who were asked
+      // clicked through" is the question, and one enthusiast opening the link five times must
+      // not read as five conversions.
+      //
+      // Three asks feed it, and they are stored in three places because each is shown under
+      // different circumstances. The post-game note and the questionnaire's closing ask are
+      // both recorded against an account, so they are fetched as id lists and unioned below —
+      // the same person can meet both, and must count once. /donate is public and mostly
+      // anonymous, so it keeps its own rows.
+      //
+      // `distinct` rather than a `$unionWith` pipeline: these are per-account documents in the
+      // low thousands, and two id arrays merged in a Set is far easier to read than the
+      // aggregation that would save the round trip.
+      User.distinct('_id', { 'donationPrompt.impressionCount': { $gt: 0 } }),
+      User.distinct('_id', { 'donationPrompt.clickCount': { $gt: 0 } }),
+      // Reaching the end of the questionnaire IS the impression: `completedAt` is stamped on
+      // the same request that advances to the closing screen, which is where the ask lives.
+      SurveyResponse.distinct('userId', { completedAt: { $ne: null } }),
+      SurveyResponse.distinct('userId', { donationClicked: true }),
+      DonationPageVisit.countDocuments(),
+      DonationPageVisit.countDocuments({ checkoutStartedAt: { $ne: null } }),
     ]);
+
+    // The union is over people, not rows: someone who saw the post-game note and later
+    // finished the questionnaire was asked twice but is one person who was asked.
+    const idSet = (...lists) => new Set(lists.flat().filter(Boolean).map(String));
+    const donationAskSeen    = idSet(cardSeenIds, surveySeenIds).size;
+    const donationAskClicked = idSet(cardClickedIds, surveyClickedIds).size;
 
     const aptitudeSyncAbandoned = aptitudeSyncTotal - aptitudeSyncCompleted;
 
@@ -566,7 +592,16 @@ router.get('/stats', async (_req, res) => {
           easyPlayers, mediumPlayers,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
-          donationCardSeen, donationLinkClicked,
+          // The donate page is reported alongside the asks rather than added into them. It is
+          // where the post-game note's link lands, so folding its visits into `seen` would
+          // count that click twice — once as a click and again as an impression.
+          donation: {
+            seen:    donationAskSeen,
+            clicked: donationAskClicked,
+            card:    { seen: cardSeenIds.length,   clicked: cardClickedIds.length },
+            survey:  { seen: surveySeenIds.length, clicked: surveyClickedIds.length },
+            page:    { visits: donatePageSeen,     checkouts: donatePageClicked },
+          },
         },
         games: {
           totalGamesPlayed:    totalGamesPlayed    + aptitudeSyncCompleted + aptitudeSyncAbandoned,
@@ -626,41 +661,108 @@ router.get('/stats', async (_req, res) => {
 
 // GET /api/admin/stats/donation-funnel
 //
-// The names behind the Donation Link tile: who saw the card and who clicked
-// through. The tile counts people, so this lists people too — one row per user
-// with their own impression/click totals, rather than one row per event.
+// The names behind the donation tiles: who was asked, where, and who clicked
+// through. The tiles count people, so this lists people too — one row per user
+// carrying what each ask did for them, rather than one row per event.
 //
-// Clickers first (they are the interesting half), then by most recently shown,
+// All three asks are merged here, because the same person meets more than one
+// of them: the post-game note leads to /donate, and a questionnaire recipient is
+// usually someone who has been shown the note before. Three separate lists would
+// make one person look like three.
+//
+// Anonymous /donate visitors are not here, and cannot be — that page is public
+// and most of the people it is shown to have no account to name. They are in the
+// Donate Page tile's totals, which is the only place they can be.
+//
+// Clickers first (they are the interesting half), then by most recent contact,
 // so the list opens on what just happened rather than on the oldest impression.
+const FUNNEL_SOURCE_LIMIT = 1000;
+const FUNNEL_ROW_LIMIT    = 500;
+
 router.get('/stats/donation-funnel', async (_req, res) => {
   try {
-    const users = await User.find({
-      $or: [
-        { 'donationPrompt.impressionCount': { $gt: 0 } },
-        { 'donationPrompt.clickCount':      { $gt: 0 } },
-      ],
-    })
-      .select('agentNumber displayName email subscriptionTier donationPrompt')
-      .sort({ 'donationPrompt.clickCount': -1, 'donationPrompt.lastShownAt': -1 })
-      .limit(500)
-      .lean();
+    const [cardIds, surveyRows, pageRows] = await Promise.all([
+      User.distinct('_id', {
+        $or: [
+          { 'donationPrompt.impressionCount': { $gt: 0 } },
+          { 'donationPrompt.clickCount':      { $gt: 0 } },
+        ],
+      }),
+      SurveyResponse.find({ completedAt: { $ne: null } })
+        .select('userId donationClicked completedAt')
+        .sort({ completedAt: -1 })
+        .limit(FUNNEL_SOURCE_LIMIT)
+        .lean(),
+      DonationPageVisit.find({ userId: { $ne: null } })
+        .select('userId arrivedAt checkoutStartedAt')
+        .sort({ arrivedAt: -1 })
+        .limit(FUNNEL_SOURCE_LIMIT)
+        .lean(),
+    ]);
 
-    res.json({
-      status: 'success',
-      data: {
-        users: users.map(u => ({
-          _id:             u._id,
-          agentNumber:     u.agentNumber,
-          displayName:     u.displayName,
-          email:           u.email,
-          subscriptionTier: u.subscriptionTier,
-          impressionCount: u.donationPrompt?.impressionCount ?? 0,
-          clickCount:      u.donationPrompt?.clickCount ?? 0,
-          dismissCount:    u.donationPrompt?.dismissCount ?? 0,
-          lastShownAt:     u.donationPrompt?.lastShownAt ?? null,
-        })),
-      },
-    });
+    const ids = new Map(); // id string -> ObjectId
+    const add = (id) => { if (id) ids.set(String(id), id); };
+    cardIds.forEach(add);
+    surveyRows.forEach(r => add(r.userId));
+    pageRows.forEach(r => add(r.userId));
+
+    // One lookup for every id from every source. The alternative — querying
+    // users per source and stitching the results — fetches the same account
+    // repeatedly for exactly the people who matter most here.
+    const users = ids.size
+      ? await User.find({ _id: { $in: [...ids.values()] } })
+          .select('agentNumber displayName email subscriptionTier donationPrompt')
+          .lean()
+      : [];
+
+    const byId = new Map(users.map(u => [String(u._id), {
+      _id:              u._id,
+      agentNumber:      u.agentNumber,
+      displayName:      u.displayName,
+      email:            u.email,
+      subscriptionTier: u.subscriptionTier,
+      impressionCount:  u.donationPrompt?.impressionCount ?? 0,
+      clickCount:       u.donationPrompt?.clickCount ?? 0,
+      dismissCount:     u.donationPrompt?.dismissCount ?? 0,
+      lastShownAt:      u.donationPrompt?.lastShownAt ?? null,
+      surveyAsked:      false,
+      surveyClicked:    false,
+      surveyAskedAt:    null,
+      pageVisited:      false,
+      pageCheckout:     false,
+      pageVisitedAt:    null,
+    }]));
+
+    for (const r of surveyRows) {
+      const row = byId.get(String(r.userId));
+      if (!row) continue;
+      row.surveyAsked   = true;
+      row.surveyClicked = row.surveyClicked || r.donationClicked === true;
+      // Rows arrive newest first, so the first one seen for a person is the
+      // most recent — later ones must not overwrite it.
+      row.surveyAskedAt = row.surveyAskedAt ?? r.completedAt ?? null;
+    }
+
+    for (const r of pageRows) {
+      const row = byId.get(String(r.userId));
+      if (!row) continue;
+      row.pageVisited   = true;
+      row.pageCheckout  = row.pageCheckout || r.checkoutStartedAt != null;
+      row.pageVisitedAt = row.pageVisitedAt ?? r.arrivedAt ?? null;
+    }
+
+    const clicked = (r) => r.clickCount > 0 || r.surveyClicked || r.pageCheckout;
+    const lastAt  = (r) => Math.max(
+      r.lastShownAt   ? new Date(r.lastShownAt).getTime()   : 0,
+      r.surveyAskedAt ? new Date(r.surveyAskedAt).getTime() : 0,
+      r.pageVisitedAt ? new Date(r.pageVisitedAt).getTime() : 0,
+    );
+
+    const rows = [...byId.values()]
+      .sort((a, b) => (clicked(b) - clicked(a)) || (lastAt(b) - lastAt(a)))
+      .slice(0, FUNNEL_ROW_LIMIT);
+
+    res.json({ status: 'success', data: { users: rows } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

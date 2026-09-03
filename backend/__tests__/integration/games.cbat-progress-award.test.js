@@ -282,8 +282,11 @@ describe('the donation funnel behind the admin stat', () => {
     const res = await request(app).get('/api/admin/stats').set('Cookie', authCookie(admin._id));
 
     expect(res.status).toBe(200);
-    expect(res.body.data.users.donationCardSeen).toBe(2);
-    expect(res.body.data.users.donationLinkClicked).toBe(1);
+    // The post-game note's own leg, and the same numbers rolled into the
+    // across-all-asks totals — nothing else has asked anyone here.
+    expect(res.body.data.users.donation.card).toEqual({ seen: 2, clicked: 1 });
+    expect(res.body.data.users.donation.seen).toBe(2);
+    expect(res.body.data.users.donation.clicked).toBe(1);
   });
 
   // Counted in people, not events — otherwise one enthusiast opening the link repeatedly would
@@ -298,7 +301,7 @@ describe('the donation funnel behind the admin stat', () => {
     await record('clicked');
 
     const res = await request(app).get('/api/admin/stats').set('Cookie', authCookie(admin._id));
-    expect(res.body.data.users.donationLinkClicked).toBe(1);
+    expect(res.body.data.users.donation.clicked).toBe(1);
 
     const saved = await User.findById(user._id).lean();
     expect(saved.donationPrompt.clickCount).toBe(3);   // the raw tally still accumulates

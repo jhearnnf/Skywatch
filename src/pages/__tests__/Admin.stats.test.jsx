@@ -65,7 +65,12 @@ const MOCK_STATS = {
     totalUsers: 10, onlineUsers: 3, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     emailsSent: 42, emailsFailed: 7,
-    donationCardSeen: 40, donationLinkClicked: 6,
+    donation: {
+      seen: 40, clicked: 6,
+      card:   { seen: 34, clicked: 4 },
+      survey: { seen: 8,  clicked: 2 },
+      page:   { visits: 25, checkouts: 5 },
+    },
   },
   games: {
     totalGamesPlayed: 50, totalGamesCompleted: 40, totalGamesWon: 30,
@@ -92,8 +97,8 @@ const MOCK_OPENROUTER = {
 }
 
 const MOCK_FUNNEL = [
-  { _id: 'u1', agentNumber: 101, displayName: 'Maverick', email: 'mav@example.com', impressionCount: 2, clickCount: 1, dismissCount: 0, lastShownAt: '2026-08-01T10:00:00.000Z' },
-  { _id: 'u2', agentNumber: 102, displayName: 'Goose',    email: 'goose@example.com', impressionCount: 3, clickCount: 0, dismissCount: 2, lastShownAt: '2026-07-30T10:00:00.000Z' },
+  { _id: 'u1', agentNumber: 101, displayName: 'Maverick', email: 'mav@example.com', impressionCount: 2, clickCount: 1, dismissCount: 0, lastShownAt: '2026-08-01T10:00:00.000Z', surveyAsked: false, surveyClicked: false, surveyAskedAt: null, pageVisited: true, pageCheckout: true, pageVisitedAt: '2026-08-01T10:05:00.000Z' },
+  { _id: 'u2', agentNumber: 102, displayName: 'Goose',    email: 'goose@example.com', impressionCount: 3, clickCount: 0, dismissCount: 2, lastShownAt: '2026-07-30T10:00:00.000Z', surveyAsked: true, surveyClicked: false, surveyAskedAt: '2026-07-31T10:00:00.000Z', pageVisited: false, pageCheckout: false, pageVisitedAt: null },
 ]
 
 function setupFetch() {
@@ -124,29 +129,45 @@ describe('Admin — Stats tab: donation funnel', () => {
   beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('shows clicked-through over saw-the-card, with the rate', async () => {
+  it('shows clicked-through over asked, with the rate', async () => {
     render(<Admin />)
 
-    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Donation Asks')).toBeInTheDocument())
     expect(screen.getByText('6 / 40')).toBeInTheDocument()
-    expect(screen.getByText(/15% of those who saw it clicked through/)).toBeInTheDocument()
+    expect(screen.getByText(/15% of those asked clicked through/)).toBeInTheDocument()
   })
 
-  // A zero denominator must read as "nobody has seen it" rather than dividing by zero into NaN%.
-  it('says so plainly before anyone has seen the card', async () => {
+  // The two new surfaces are why the tile stopped being one number: the questionnaire ask and
+  // the public page each convert differently and are judged separately.
+  it('breaks the asks down by surface, and reports the donate page on its own', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Donation Asks')).toBeInTheDocument())
+    expect(screen.getByText('Post-Game Ask')).toBeInTheDocument()
+    expect(screen.getByText('4 / 34')).toBeInTheDocument()
+    expect(screen.getByText('Questionnaire Ask')).toBeInTheDocument()
+    expect(screen.getByText('2 / 8')).toBeInTheDocument()
+    expect(screen.getByText('Donate Page')).toBeInTheDocument()
+    expect(screen.getByText('5 / 25')).toBeInTheDocument()
+    expect(screen.getByText(/20% reached Stripe/)).toBeInTheDocument()
+  })
+
+  // A zero denominator must read as "nobody has been asked" rather than dividing by zero into NaN%.
+  it('says so plainly before anyone has been asked', async () => {
     global.fetch = vi.fn().mockImplementation((url) => {
       if (url.includes('/api/admin/stats')) {
         return Promise.resolve({ ok: true, json: async () => ({
           status: 'success',
-          data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, donationCardSeen: 0, donationLinkClicked: 0 } },
+          data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, donation: undefined } },
         }) })
       }
       return Promise.resolve({ ok: true, json: async () => ({}) })
     })
 
     render(<Admin />)
-    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
-    expect(screen.getByText(/nobody has seen the card yet/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Donation Asks')).toBeInTheDocument())
+    expect(screen.getByText(/nobody has been asked yet/)).toBeInTheDocument()
+    expect(screen.getByText(/no visits to .donate yet/)).toBeInTheDocument()
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
   })
 
@@ -154,27 +175,29 @@ describe('Admin — Stats tab: donation funnel', () => {
   it('opens the list of who saw and who clicked when the tile is clicked', async () => {
     render(<Admin />)
 
-    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Donation Asks')).toBeInTheDocument())
     expect(screen.queryByText('Maverick')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Donation Link'))
+    fireEvent.click(screen.getByText('Donation Asks'))
 
     await waitFor(() => expect(screen.getByText('Maverick')).toBeInTheDocument())
     expect(screen.getByText('Goose')).toBeInTheDocument()
-    expect(screen.getByText('clicked ×1')).toBeInTheDocument()
-    expect(screen.getByText(/seen ×3 · dismissed ×2/)).toBeInTheDocument()
-    // Someone who only ever saw it must not read as a click-through.
-    expect(screen.getByText('seen only')).toBeInTheDocument()
+    expect(screen.getByText('clicked')).toBeInTheDocument()
+    // Each person's row names the asks that actually reached them.
+    expect(screen.getByText(/post-game ×2 \(clicked ×1\) · donate page \(checkout\)/)).toBeInTheDocument()
+    expect(screen.getByText(/post-game ×3 · dismissed ×2 · questionnaire/)).toBeInTheDocument()
+    // Someone who was only ever asked must not read as a click-through.
+    expect(screen.getByText('asked only')).toBeInTheDocument()
   })
 
   it('closes the list again on a second click', async () => {
     render(<Admin />)
 
-    await waitFor(() => expect(screen.getByText('Donation Link')).toBeInTheDocument())
-    fireEvent.click(screen.getByText('Donation Link'))
+    await waitFor(() => expect(screen.getByText('Donation Asks')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Donation Asks'))
     await waitFor(() => expect(screen.getByText('Maverick')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByText('Donation Link'))
+    fireEvent.click(screen.getByText('Donation Asks'))
     await waitFor(() => expect(screen.queryByText('Maverick')).not.toBeInTheDocument())
   })
 })
@@ -242,7 +265,7 @@ describe('Admin — Stats tab: CBAT-only mode', () => {
 
     await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
     expect(screen.getByText('Users Online').closest('[aria-disabled="true"]')).toBeNull()
-    expect(screen.getByText('Donation Link').closest('[aria-disabled="true"]')).toBeNull()
+    expect(screen.getByText('Donation Asks').closest('[aria-disabled="true"]')).toBeNull()
   })
 })
 

@@ -45,6 +45,12 @@ function renderPage({ user = null, query = '', ok = true, body = { url: 'https:/
 
 const lastBody = () => JSON.parse(apiFetch.mock.calls.at(-1)[1].body)
 
+// The page makes two kinds of call now: it reports its own arrival for the admin
+// donation funnel, then opens Checkout when someone presses the button. Picked
+// by URL rather than by position so a test about one is not broken by the other.
+const callsTo = (path) => apiFetch.mock.calls.filter(c => String(c[0]).includes(path))
+const bodyOf  = (call)  => JSON.parse(call[1].body)
+
 beforeEach(() => {
   mockSlimApp.value = false
   mockNavigate.mockReset()
@@ -90,9 +96,45 @@ describe('Donate page', () => {
     expect(screen.getByTestId('donate-submit')).toHaveTextContent('Donate £10')
 
     fireEvent.click(screen.getByTestId('donate-submit'))
-    await waitFor(() => expect(apiFetch).toHaveBeenCalled())
-    expect(apiFetch.mock.calls[0][0]).toContain('/api/stripe/create-donation-session')
-    expect(lastBody()).toEqual({ amount: 10 })
+    await waitFor(() => expect(callsTo('/api/stripe/create-donation-session')).toHaveLength(1))
+    expect(lastBody().amount).toBe(10)
+  })
+
+  // The impression half of the donation funnel. The post-game note and the
+  // questionnaire both record theirs against an account; this page is shown to
+  // people who do not have one, so it has to report its own.
+  it('tells the server someone reached the page', async () => {
+    renderPage()
+
+    await waitFor(() => expect(callsTo('/api/donation/visit')).toHaveLength(1))
+    expect(bodyOf(callsTo('/api/donation/visit')[0]).visitKey).toEqual(expect.any(String))
+  })
+
+  // Pairing the arrival with the press-through is what makes the funnel a rate
+  // rather than two unrelated totals.
+  it('carries the same visit key into the Checkout request', async () => {
+    renderPage()
+    await waitFor(() => expect(callsTo('/api/donation/visit')).toHaveLength(1))
+
+    fireEvent.click(screen.getByTestId('donate-submit'))
+    await waitFor(() => expect(callsTo('/api/stripe/create-donation-session')).toHaveLength(1))
+
+    expect(lastBody().visitKey).toBe(bodyOf(callsTo('/api/donation/visit')[0]).visitKey)
+  })
+
+  // A stat is never worth breaking the page for. Reported at mount, so the
+  // failure has to be armed before the render rather than after it.
+  it('still works when the arrival report fails', async () => {
+    mockParams.value = new URLSearchParams()
+    apiFetch = vi.fn((url) => String(url).includes('/api/donation/visit')
+      ? Promise.reject(new Error('offline'))
+      : Promise.resolve({ ok: true, json: async () => ({ url: 'https://checkout.stripe.com/x' }) }))
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch })
+    render(<Donate />)
+
+    fireEvent.click(screen.getByTestId('donate-submit'))
+    await waitFor(() => expect(window.location.href).toBe('https://checkout.stripe.com/x'))
+    expect(screen.queryByTestId('donate-error')).toBeNull()
   })
 
   it('redirects to the Stripe Checkout URL it is handed', async () => {

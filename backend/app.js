@@ -62,6 +62,9 @@ app.use('/api/users',  require('./routes/users'));
 app.use('/api/chat',   require('./routes/chat'));
 app.use('/api/tutorials', require('./routes/tutorials'));
 app.use('/api/stripe',        require('./routes/stripe'));
+// Public: /donate reports its own arrivals here, so the donation funnel has a
+// denominator for the one ask that is shown to people without an account.
+app.use('/api/donation',      require('./routes/donation'));
 app.use('/api/aptitude-sync', require('./routes/aptitudeSync'));
 app.use('/api/admin/social', require('./routes/social'));
 app.use('/api/brief-reels',   require('./routes/briefReels'));
