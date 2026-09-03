@@ -45,9 +45,13 @@ const DEFAULT_MIN_COMPLETIONS = 10;
 // anyway: a "not yet" answer defers them rather than spending the contact.
 const DEFAULT_DORMANT_DAYS = 21;
 
-// Candidates between this and DEFAULT_DORMANT_DAYS are shown in the admin list
+// Candidates between this and the dormancy threshold are shown in the admin list
 // but never included in a bulk send: recently quiet, plausibly just on a break.
 // An admin can still mail one individually if they recognise the name.
+//
+// This is a floor on the LIST, not a hard minimum: an admin who sets the
+// dormancy threshold below it is deliberately asking for those people, so the
+// floor drops to whichever of the two is lower. See buildCbatPasserCohort.
 const WARM_BAND_DAYS = 14;
 
 // Emails per send. Resend's batch endpoint takes up to 100; 50 keeps a single

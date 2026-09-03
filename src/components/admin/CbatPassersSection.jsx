@@ -83,6 +83,12 @@ export default function CbatPassersSection({ API }) {
 
   useEffect(() => { if (open && !data) load({ useSaved: true }) }, [open, data, load])
 
+  // The list starts at the warm band, except when the admin has typed a
+  // threshold below it — then it follows them down, so every value the input
+  // accepts actually changes what comes back.
+  const warmBandDays   = data?.thresholds?.warmBandDays ?? 14
+  const listedFromDays = Math.min(warmBandDays, dormantDays)
+
   const rows = useMemo(
     () => (data?.groups ?? []).flatMap(g => g.users),
     [data],
@@ -206,7 +212,9 @@ export default function CbatPassersSection({ API }) {
                 className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm bg-surface-raised text-text outline-none focus:ring-2 focus:ring-brand-600/40"
               />
               <p className="text-[10px] text-slate-400 mt-1">
-                Below {data?.thresholds?.warmBandDays ?? 14} days is never listed.
+                {listedFromDays < dormantDays
+                  ? `Listed from ${listedFromDays} days; ${listedFromDays}-${dormantDays} is warm and left out of a bulk send.`
+                  : `Listed from ${listedFromDays} days.`}
               </p>
             </div>
           </div>

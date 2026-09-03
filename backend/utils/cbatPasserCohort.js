@@ -129,6 +129,15 @@ async function buildCbatPasserCohort({
   const dormant = Math.max(0, Number(dormantDays) || 0);
   const minRuns = Math.max(0, Number(minCompletions) || 0);
 
+  // The floor for being LISTED at all, as opposed to being mailable in bulk.
+  // Normally the warm band sits below the threshold (14 under a default 21), so
+  // an admin can see the nearly-dormant names and mail one by hand. But an
+  // admin who deliberately types a threshold *below* the warm band is asking to
+  // see those people, and a fixed 14-day floor would silently answer "nobody"
+  // to every value they can type under it. So the floor follows the threshold
+  // down: whichever of the two is lower wins.
+  const listFrom = Math.min(WARM_BAND_DAYS, dormant);
+
   const rows = [];
   for (const u of candidates) {
     const id    = u._id.toString();
@@ -145,7 +154,7 @@ async function buildCbatPasserCohort({
     if (!activityMs || !playedMs) continue; // no usable dates — cannot place them
 
     const daysDormant = Math.floor((nowMs - activityMs) / DAY_MS);
-    if (daysDormant < WARM_BAND_DAYS) continue; // still clearly active
+    if (daysDormant < listFrom) continue; // still clearly active
 
     const invite = inviteByUser.get(id) ?? null;
 
@@ -201,7 +210,14 @@ async function buildCbatPasserCohort({
   const deferred  = rows.filter(r => r.invite?.deferredUntil && r.invite.deferredUntil > now);
 
   return {
-    thresholds: { minCompletions: minRuns, dormantDays: dormant, warmBandDays: WARM_BAND_DAYS },
+    thresholds: {
+      minCompletions: minRuns,
+      dormantDays:    dormant,
+      warmBandDays:   WARM_BAND_DAYS,
+      // What the list actually starts at, which is not always the warm band —
+      // see listFrom above. The admin panel reads this rather than assuming.
+      listedFromDays: listFrom,
+    },
     groups,
     totals: {
       candidates: rows.length,
@@ -219,7 +235,12 @@ async function buildCbatPasserCohort({
 
 function emptyCohort({ minCompletions, dormantDays }) {
   return {
-    thresholds: { minCompletions, dormantDays, warmBandDays: WARM_BAND_DAYS },
+    thresholds: {
+      minCompletions,
+      dormantDays,
+      warmBandDays:   WARM_BAND_DAYS,
+      listedFromDays: Math.min(WARM_BAND_DAYS, Math.max(0, Number(dormantDays) || 0)),
+    },
     groups: [],
     totals: { candidates: 0, ready: 0, warm: 0, emailed: 0, responded: 0, deferred: 0, remaining: 0 },
   };

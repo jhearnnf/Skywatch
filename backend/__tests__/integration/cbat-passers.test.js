@@ -8,6 +8,7 @@
  *   - Completions come from RESULT rows, so abandoned starts never qualify
  *   - The ≥N finished-games threshold
  *   - Dormancy banding (ready / warm / still-active)
+ *   - A threshold typed below the warm band lowers the list floor with it
  *   - Named, bot, admin, banned and opted-out exclusions
  *   - Grouping by the day of the last finished run
  *   - Send: invites created, emails batched, rows stamped
@@ -150,6 +151,29 @@ describe('cohort membership', () => {
     const row = res.body.data.groups.flatMap(g => g.users).find(x => x.email === u.email);
     expect(row.band).toBe('ready');
     expect(res.body.data.nextBatchIds.map(String)).toContain(row._id.toString());
+  });
+
+  // The warm band is a floor on the default view, not a hard minimum. A
+  // threshold typed below it has to actually take effect, or every value the
+  // input accepts under 14 would silently return nobody.
+  it('lists a 3-day gap when the threshold is dropped to 2 days', async () => {
+    const u = await candidate({ days: 3 });
+
+    expect(namesIn((await getList()).body)).not.toContain(u.email);
+
+    const res = await getList('?dormantDays=2');
+    const row = res.body.data.groups.flatMap(g => g.users).find(x => x.email === u.email);
+    expect(row).toBeDefined();
+    expect(row.band).toBe('ready'); // past the threshold, so nothing is held back
+    expect(res.body.data.thresholds.listedFromDays).toBe(2);
+    expect(res.body.data.nextBatchIds.map(String)).toContain(row._id.toString());
+  });
+
+  it('still keeps the warm band when the threshold is above it', async () => {
+    const u = await candidate({ days: 16 });
+    const res = await getList('?dormantDays=21');
+    expect(res.body.data.thresholds.listedFromDays).toBe(14);
+    expect(namesIn(res.body)).toContain(u.email);
   });
 });
 
