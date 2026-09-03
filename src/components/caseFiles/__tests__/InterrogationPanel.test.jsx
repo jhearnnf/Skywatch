@@ -58,14 +58,15 @@ describe('InterrogationPanel', () => {
     expect(screen.getByText('January 2024')).toBeDefined()
   })
 
-  it('renders existing transcript messages', () => {
+  it('renders existing transcript messages', async () => {
     renderPanel({ transcript: TRANSCRIPT })
     expect(screen.getByTestId('transcript-q-0')).toBeDefined()
     expect(screen.getByText('What are your intentions?')).toBeDefined()
     expect(screen.getByTestId('transcript-a-0')).toBeDefined()
     expect(screen.getByText('Peaceful.')).toBeDefined()
     expect(screen.getByText('Why the buildup?')).toBeDefined()
-    expect(screen.getByText('Defensive posture.')).toBeDefined()
+    // The newest answer types itself out, so it lands a beat after the render.
+    expect(await screen.findByText('Defensive posture.')).toBeDefined()
   })
 
   it('send button is disabled when input is empty', () => {
@@ -174,5 +175,63 @@ describe('InterrogationPanel', () => {
     fireEvent.click(screen.getByTestId('send-button'))
     await waitFor(() => expect(screen.getByTestId('send-error')).toBeDefined())
     expect(screen.getByText('Network failure')).toBeDefined()
+  })
+
+  // ── Portrait bay ───────────────────────────────────────────────────────────
+
+  it('puts the person you are interviewing on screen', () => {
+    renderPanel()
+    expect(screen.getByTestId('portrait-bay')).toBeDefined()
+    expect(screen.getByTestId('actor-face').getAttribute('aria-label')).toBe(
+      'Portrait of Sergei Lavrov'
+    )
+  })
+
+  it('shows the actor considering the question while one is in flight', () => {
+    renderPanel({ isPending: true })
+    expect(screen.getByTestId('actor-mood').getAttribute('data-mood')).toBe('thinking')
+    expect(screen.getByTestId('actor-face').getAttribute('data-mood')).toBe('thinking')
+  })
+
+  it('reacts with the mood the server sent back with the answer', async () => {
+    renderPanel({
+      transcript: [{ q: 'Why?', a: 'A plain answer.', mood: 'wry', askedAt: 'now' }],
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId('actor-mood').getAttribute('data-mood')).toBe('wry')
+    )
+    expect(screen.getByTestId('actor-mood').textContent).toBe('Wry')
+  })
+
+  it('falls back to reading the answer when no mood came back', async () => {
+    renderPanel({
+      transcript: [
+        { q: 'Will you invade?', a: 'That is a hypothetical I will not entertain.', askedAt: 'now' },
+      ],
+    })
+    await waitFor(() =>
+      expect(screen.getByTestId('actor-mood').getAttribute('data-mood')).toBe('guarded')
+    )
+  })
+
+  // ── Typewriter reveal ──────────────────────────────────────────────────────
+
+  it('types the newest answer out, and leaves older ones alone', async () => {
+    renderPanel({ transcript: TRANSCRIPT })
+    // The earlier answer is history and is drawn in full immediately.
+    expect(screen.getByTestId('transcript-a-0').textContent).toBe('Peaceful.')
+    // The newest one arrives a character at a time.
+    expect(screen.getByTestId('transcript-a-1').textContent.length).toBeLessThan(
+      'Defensive posture.'.length
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('transcript-a-1').textContent).toBe('Defensive posture.')
+    )
+  })
+
+  it('drops the rest of the line in when the transcript is clicked', () => {
+    renderPanel({ transcript: TRANSCRIPT })
+    fireEvent.click(screen.getByTestId('transcript-a-1'))
+    expect(screen.getByTestId('transcript-a-1').textContent).toBe('Defensive posture.')
   })
 })

@@ -12,6 +12,12 @@ const interrogationTranscriptEntrySchema = new mongoose.Schema(
     actorId:    { type: String, required: true },
     q:          { type: String, required: true },
     a:          { type: String, required: true },
+    // How the actor delivered the answer, used by the client to pick the
+    // expression on their portrait. Optional: it comes from a tag the model is
+    // asked to append, and the client falls back to reading the answer text
+    // when it is absent — every transcript written before this existed has no
+    // mood, and must still replay.
+    mood:       { type: String },
     askedAt:    { type: Date, default: Date.now },
   },
   { _id: false }

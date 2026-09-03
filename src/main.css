@@ -2325,6 +2325,58 @@ body.play-mode .card-shadow {
   animation: cf-axis-flow 1.1s linear infinite;
 }
 
+/* The blink an arcade portrait makes between lines, and the slow rise and fall
+   of the shoulders underneath it. Both run on the same figure, at periods that
+   do not divide into each other, so the loop never looks mechanical. */
+@keyframes cf-portrait-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%, 97%      { transform: scaleY(0.06); }
+}
+@keyframes cf-portrait-breathe {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(1.1px); }
+}
+/* Mouth movement while a line is being typed out. */
+@keyframes cf-portrait-talk {
+  0%, 100% { transform: scaleY(0.6); }
+  50%      { transform: scaleY(1.35); }
+}
+.cf-portrait-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cf-portrait-blink 6.3s ease-in-out infinite;
+}
+.cf-portrait-body {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  animation: cf-portrait-breathe 4.1s ease-in-out infinite;
+}
+.cf-portrait-mouth-talking {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cf-portrait-talk 0.22s ease-in-out infinite;
+}
+
+/* Scanline wash over the interview portrait — the CRT the arcade cabinet it is
+   imitating would have been played on. */
+.cf-portrait-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(6, 16, 30, 0)    0px,
+    rgba(6, 16, 30, 0)    2px,
+    rgba(6, 16, 30, 0.28) 3px,
+    rgba(6, 16, 30, 0.28) 4px
+  );
+}
+
+/* Blinking "press on" caret at the end of a line of dialogue. */
+@keyframes cf-dialogue-caret {
+  0%, 45%   { opacity: 1; }
+  55%, 100% { opacity: 0; }
+}
+.cf-dialogue-caret {
+  animation: cf-dialogue-caret 0.9s steps(1, end) infinite;
+}
 
 /* Halo under the map hotspot the player has just picked as a start point.
    Leaflet draws a CircleMarker as an SVG <path>, so the scale has to be pinned

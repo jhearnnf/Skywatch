@@ -9,7 +9,7 @@ const GameSessionCaseFileResult = require('../models/GameSessionCaseFileResult')
 const { scoreChapter } = require('../utils/caseFileScoring');
 const { sanitizeChapter, sanitizeChapterForList } = require('../utils/caseFileSanitize');
 const { callOpenRouter } = require('../utils/openRouter');
-const { assembleInterrogationPrompt } = require('../utils/caseFilePromptAssembly');
+const { assembleInterrogationPrompt, splitMoodTag } = require('../utils/caseFilePromptAssembly');
 const { effectiveTier } = require('../utils/subscription');
 
 // Model used for all actor interrogation calls.
@@ -639,7 +639,13 @@ router.post('/sessions/:sessionId/interrogate', protect, async (req, res) => {
       },
     });
 
-    const answer = aiResponse?.choices?.[0]?.message?.content ?? '';
+    // The completion carries a trailing [[mood: X]] annotation, asked for in
+    // the assembled prompt so the client can put the right expression on the
+    // actor's portrait. It is stripped here: nothing downstream, including the
+    // stored transcript, ever holds the tag itself.
+    const { answer, mood } = splitMoodTag(
+      aiResponse?.choices?.[0]?.message?.content ?? ''
+    );
 
     // ── 7. Persist transcript entry ──────────────────────────────────────────
     session.interrogationTranscripts.push({
@@ -647,13 +653,14 @@ router.post('/sessions/:sessionId/interrogate', protect, async (req, res) => {
       actorId,
       q: question.trim(),
       a: answer,
+      mood: mood ?? undefined,
       askedAt: new Date(),
     });
     await session.save();
 
     // ── 8. Return answer + remaining quota ───────────────────────────────────
     const questionsRemaining = maxQuestionsPerActor - (existingCount + 1);
-    return res.json({ answer, questionsRemaining });
+    return res.json({ answer, mood, questionsRemaining });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

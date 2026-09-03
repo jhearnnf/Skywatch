@@ -7,7 +7,12 @@
  * No DB; no network calls.
  */
 
-const { assembleInterrogationPrompt, _clearCache } = require('../../utils/caseFilePromptAssembly');
+const {
+  assembleInterrogationPrompt,
+  splitMoodTag,
+  MOODS,
+  _clearCache,
+} = require('../../utils/caseFilePromptAssembly');
 
 beforeEach(() => {
   _clearCache();
@@ -82,5 +87,77 @@ describe('assembleInterrogationPrompt', () => {
       contextDateLabel: 'Oct 2021',
     });
     expect(first.systemPrompt).toBe(second.systemPrompt);
+  });
+});
+
+describe('mood annotation', () => {
+  it('asks the actor to tag how they are delivering the answer', () => {
+    const { systemPrompt } = assembleInterrogationPrompt({
+      actorPromptKey:   'lavrov',
+      contextDateLabel: 'Nov 2021',
+    });
+    expect(systemPrompt).toContain('[[mood: X]]');
+    for (const mood of MOODS) {
+      expect(systemPrompt).toContain(mood);
+    }
+  });
+
+  it('tells the model the tag is stripped, so it does not editorialise about it', () => {
+    const { systemPrompt } = assembleInterrogationPrompt({
+      actorPromptKey:   'lavrov',
+      contextDateLabel: 'Nov 2021',
+    });
+    expect(systemPrompt).toContain('removed before the player sees anything');
+  });
+
+  it('keeps the mood instruction last, after the context date anchor', () => {
+    const { systemPrompt } = assembleInterrogationPrompt({
+      actorPromptKey:   'lavrov',
+      contextDateLabel: 'Nov 2021',
+    });
+    expect(systemPrompt.indexOf('roleplaying as of')).toBeLessThan(
+      systemPrompt.indexOf('[[mood: X]]')
+    );
+  });
+});
+
+describe('splitMoodTag', () => {
+  it('pulls the tag out and hands back clean prose', () => {
+    expect(splitMoodTag('We have made our position clear.\n[[mood: firm]]')).toEqual({
+      answer: 'We have made our position clear.',
+      mood:   'firm',
+    });
+  });
+
+  it('is case-insensitive and tolerates loose spacing', () => {
+    expect(splitMoodTag('Text. [[ MOOD :  Guarded ]]').mood).toBe('guarded');
+  });
+
+  it('returns a null mood when the model omitted the tag', () => {
+    expect(splitMoodTag('Just an answer.')).toEqual({
+      answer: 'Just an answer.',
+      mood:   null,
+    });
+  });
+
+  it('rejects a mood outside the list but still strips the tag from the prose', () => {
+    const { answer, mood } = splitMoodTag('An answer. [[mood: apoplectic]]');
+    expect(mood).toBe(null);
+    expect(answer).toBe('An answer.');
+  });
+
+  it('takes the last tag when a model emits more than one', () => {
+    expect(splitMoodTag('a [[mood: wry]] b [[mood: grave]]').mood).toBe('grave');
+  });
+
+  it('never leaks a tag into the answer, wherever it lands', () => {
+    const { answer } = splitMoodTag('[[mood: neutral]] Leading tag.');
+    expect(answer).toBe('Leading tag.');
+    expect(answer).not.toContain('mood');
+  });
+
+  it('handles a missing or non-string completion', () => {
+    expect(splitMoodTag(undefined)).toEqual({ answer: '', mood: null });
+    expect(splitMoodTag(null)).toEqual({ answer: '', mood: null });
   });
 });

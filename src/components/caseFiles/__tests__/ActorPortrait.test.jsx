@@ -32,10 +32,11 @@ describe('ActorPortrait', () => {
     expect(screen.getByText('Russia')).toBeDefined()
   })
 
-  it('shows initials when no portraitUrl is provided', () => {
+  it('draws a face when no portraitUrl is provided', () => {
     render(<ActorPortrait actor={ACTOR_NO_PORTRAIT} isSelected={false} onClick={vi.fn()} />)
-    // Initials: J(oe) B(iden) → "JB"
-    expect(screen.getByText('JB')).toBeDefined()
+    const face = screen.getByTestId('actor-face')
+    expect(face).toBeDefined()
+    expect(face.getAttribute('aria-label')).toBe('Portrait of Joe Biden')
   })
 
   it('renders portrait image when portraitUrl is provided', () => {

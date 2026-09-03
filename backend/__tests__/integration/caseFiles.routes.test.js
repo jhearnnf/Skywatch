@@ -918,6 +918,41 @@ describe('POST /api/case-files/sessions/:sessionId/interrogate', () => {
     expect(res.body.questionsRemaining).toBe(2);
   });
 
+  it('returns the mood tag as a field and strips it out of the answer', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockOpenRouterAnswer('We will not be lectured to.\n[[mood: firm]]')
+    );
+
+    const res = await request(app)
+      .post(`/api/case-files/sessions/${sessionId}/interrogate`)
+      .set('Cookie', cookie)
+      .send(interrogateBody());
+
+    expect(res.status).toBe(200);
+    expect(res.body.answer).toBe('We will not be lectured to.');
+    expect(res.body.mood).toBe('firm');
+
+    // And the tag never reaches storage either.
+    const saved = await GameSessionCaseFileResult.findById(sessionId).lean();
+    expect(saved.interrogationTranscripts[0].a).toBe('We will not be lectured to.');
+    expect(saved.interrogationTranscripts[0].mood).toBe('firm');
+  });
+
+  it('still answers when the model omits the mood tag', async () => {
+    jest.spyOn(global, 'fetch').mockReturnValueOnce(
+      mockOpenRouterAnswer('An answer with no tag.')
+    );
+
+    const res = await request(app)
+      .post(`/api/case-files/sessions/${sessionId}/interrogate`)
+      .set('Cookie', cookie)
+      .send(interrogateBody());
+
+    expect(res.status).toBe(200);
+    expect(res.body.answer).toBe('An answer with no tag.');
+    expect(res.body.mood).toBe(null);
+  });
+
   it('transcript is persisted on session after a successful interrogation', async () => {
     jest.spyOn(global, 'fetch').mockReturnValueOnce(
       mockOpenRouterAnswer('Mocked answer')

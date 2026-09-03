@@ -193,7 +193,8 @@ describe('ActorInterrogationsStage — question flow', () => {
 
     await waitFor(() => screen.getByTestId('transcript-q-0'))
     expect(screen.getByText('Tell me about the buildup.')).toBeDefined()
-    expect(screen.getByText('No comment.')).toBeDefined()
+    // The answer is revealed a character at a time by the panel.
+    expect(await screen.findByText('No comment.')).toBeDefined()
   })
 
   it('updates actors-interrogated count after asking a question', async () => {

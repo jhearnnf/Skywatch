@@ -148,13 +148,15 @@ export default function ActorInterrogationsStage({
     setPending(true)
     try {
       const result = await sendQuestion(actorId, question)
-      const { answer, questionsRemaining: qr } = result ?? {}
+      const { answer, questionsRemaining: qr, mood } = result ?? {}
 
       setTranscripts((prev) => ({
         ...prev,
         [actorId]: [
           ...(prev[actorId] ?? []),
-          { q: question, a: answer ?? '', askedAt: new Date().toISOString() },
+          // `mood` drives the portrait's reaction in InterrogationPanel. It is
+          // optional: the panel falls back to reading the answer itself.
+          { q: question, a: answer ?? '', mood, askedAt: new Date().toISOString() },
         ],
       }))
 

@@ -12,17 +12,10 @@
 // colours. Using a small muted chip styled with existing slate tokens since no
 // faction-specific palette is defined.
 
+import ActorFace from './ActorFace'
+
 export default function ActorPortrait({ actor, isSelected, onClick, onHoverChange }) {
   const { name = 'Unknown', role = '', faction = '', portraitUrl, knowsAbout = [] } = actor
-
-  // Initials fallback — up to 2 chars from name parts
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
 
   function handleClick() {
     if (onClick) onClick(actor)
@@ -55,8 +48,10 @@ export default function ActorPortrait({ actor, isSelected, onClick, onHoverChang
         .filter(Boolean)
         .join(' ')}
     >
-      {/* Portrait or initials circle */}
-      <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-slate-300/60">
+      {/* Portrait. A drawn face rather than two initials in a box: the board is
+          meant to read as people you can go and question, and eight identical
+          lettered tiles read as a filing cabinet. */}
+      <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-slate-300/60 bg-[#0b1727] flex items-end justify-center">
         {portraitUrl ? (
           <img
             src={portraitUrl}
@@ -65,9 +60,7 @@ export default function ActorPortrait({ actor, isSelected, onClick, onHoverChang
             draggable={false}
           />
         ) : (
-          <div className="w-full h-full bg-brand-200 flex items-center justify-center">
-            <span className="text-brand-600 text-xl font-extrabold intel-mono">{initials}</span>
-          </div>
+          <ActorFace actor={actor} size={62} idle />
         )}
       </div>
 
