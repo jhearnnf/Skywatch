@@ -370,6 +370,12 @@ function AppRoutes() {
               would lose most of the responses the campaign exists to collect. */}
           <Route path="/survey/:token/opt-out" element={<PageWrapper><SurveyOptOut /></PageWrapper>} />
           <Route path="/survey/:token"         element={<PageWrapper><Survey /></PageWrapper>} />
+          {/* And the same questionnaire with no token, for someone who is
+              already signed in: the page asks the server for this account's own
+              invite and carries on. Also outside RequireAuth, so a signed-out
+              visitor gets the page's own "sign in or use your emailed link"
+              screen rather than being bounced to /login with no explanation. */}
+          <Route path="/survey"                element={<PageWrapper><Survey /></PageWrapper>} />
           <Route path="/airstar-history"       element={<RequireAuth><PageWrapper><AirstarHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/cbat-game-history"     element={<RequireAuth><PageWrapper><CbatGameHistory /></PageWrapper></RequireAuth>} />

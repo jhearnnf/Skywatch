@@ -323,7 +323,16 @@ router.get('/responses', async (_req, res) => {
     }
 
     const invites = await SurveyInvite.countDocuments({ campaign: SURVEY_CAMPAIGN, sentAt: { $ne: null } });
-    const opened  = await SurveyInvite.countDocuments({ campaign: SURVEY_CAMPAIGN, openedAt: { $ne: null } });
+    // Opens are counted against emails sent, so `sentAt` is required here too.
+    // Someone who came in through the signed-in /survey link has an invite with
+    // no send behind it, and counting their open would put the open rate above
+    // 100% of a denominator they were never in.
+    const opened  = await SurveyInvite.countDocuments({
+      campaign: SURVEY_CAMPAIGN, sentAt: { $ne: null }, openedAt: { $ne: null },
+    });
+    // Answers that arrived without an invitation. Reported separately for the
+    // same reason: they are real responses but not part of the email funnel.
+    const selfServe = await SurveyInvite.countDocuments({ campaign: SURVEY_CAMPAIGN, selfServe: true });
 
     const byInvite = new Map(responses.map(r => [String(r.inviteId), r]));
 
@@ -387,6 +396,7 @@ router.get('/responses', async (_req, res) => {
         summary: {
           invitesSent: invites,
           opened,
+          selfServe,
           started:     responses.length,
           completed:   responses.filter(r => r.completedAt).length,
           optOuts,

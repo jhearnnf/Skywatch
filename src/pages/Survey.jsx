@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useLocation, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { captureLoginReturn } from '../utils/loginRedirect'
 import SEO from '../components/SEO'
 import { SLIM_APP } from '../utils/appMode'
 import { ROLE_GROUPS, OTHER_ROLE_KEY, filterRoleGroups, roleLabel } from '../data/surveyRoles'
@@ -12,6 +13,12 @@ import { ROLE_GROUPS, OTHER_ROLE_KEY, filterRoleGroups, roleLabel } from '../dat
  * Reached from an emailed link carrying an invite token, with no sign-in: the
  * token identifies the response. See backend/routes/survey.js for why that is
  * the right amount of identity here.
+ *
+ * Also reached at `/survey` with no token at all, by someone who is already
+ * signed in. That case asks the server for this account's own invite (POST
+ * /api/survey/self) and then runs the identical flow on the token it gets back,
+ * so a run started from an email and finished from the bare link is one
+ * response. Nothing below this point knows which way the reader arrived.
  *
  * DESIGNED AROUND FINISHING IT. Everything below is in service of the
  * completion rate, because an abandoned questionnaire tells us nothing and
@@ -126,8 +133,15 @@ const BOOKED_GRACE_DAYS = 7
 const DEFAULT_DEFER_DAYS = 60
 
 export default function Survey() {
-  const { token } = useParams()
-  const { API } = useAuth()
+  const { token: routeToken } = useParams()
+  const { API, user, loading: authLoading } = useAuth()
+  const location = useLocation()
+
+  // The token this run is answering under: the one in the URL, or the one the
+  // server hands back for the signed-in account when there is none.
+  const [selfToken,  setSelfToken]  = useState(null)
+  const [needsLogin, setNeedsLogin] = useState(false)
+  const token = routeToken ?? selfToken
   const isPreview = token === PREVIEW_TOKEN
 
   const [loading, setLoading]   = useState(true)
@@ -142,9 +156,45 @@ export default function Survey() {
   // so the page states the same date the deferral actually enforces.
   const [deferredUntil, setDeferredUntil] = useState(null)
 
+  // Resolve the bare `/survey` link into this account's invite.
+  //
+  // Waits for the auth check to finish first: on a cold load `user` is null for
+  // a moment even for a signed-in visitor, and acting on that would show the
+  // sign-in screen to someone who is already signed in.
+  useEffect(() => {
+    if (routeToken || authLoading) return
+    if (!user) {
+      // Same handshake the route guard uses, so signing in comes straight back
+      // here instead of dropping them on /home with the questionnaire lost.
+      captureLoginReturn(location)
+      setNeedsLogin(true)
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res  = await fetch(`${API}/api/survey/self`, {
+          method: 'POST',
+          credentials: 'include',
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (!res.ok) throw new Error(data.message || 'Could not open the questionnaire.')
+        setSelfToken(data.data.token)
+      } catch (err) {
+        if (cancelled) return
+        setFatal(err.message)
+        setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [API, routeToken, authLoading, user, location])
+
   // Load the invite. In preview there is nothing to load — the page is stood up
   // from a stub so it never reaches the API at all.
   useEffect(() => {
+    if (!token) return
     if (isPreview) {
       setMeta({
         name: 'Agent 1234567',
@@ -257,6 +307,37 @@ export default function Survey() {
 
   const stepIndex = CORE_STEPS.indexOf(step)
   const progress  = stepIndex >= 0 ? (stepIndex + 1) / CORE_STEPS.length : null
+
+  // No token in the URL and nobody signed in. There is nothing to look up, and
+  // the emailed link is still the right way in for most people who land here,
+  // so say both rather than redirecting to /login.
+  if (needsLogin) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center" data-testid="survey-needs-login">
+        <SEO title="Questionnaire" description="SkyWatch questionnaire." noIndex />
+        <div className="text-5xl mb-4">✉️</div>
+        <h1 className="text-xl font-extrabold text-slate-900 mb-2">Sign in to answer</h1>
+        <p className="text-sm text-slate-500 mb-6">
+          Sign in and this page will open your questionnaire. If you have the email we sent you,
+          the link in it works without signing in.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          <Link
+            to="/login"
+            className="inline-flex justify-center px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm no-underline"
+          >
+            Sign in
+          </Link>
+          <Link
+            to="/cbat"
+            className="inline-flex justify-center px-6 py-2.5 border border-slate-200 text-slate-600 font-bold rounded-xl text-sm no-underline"
+          >
+            Go to SkyWatch
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

@@ -1,11 +1,14 @@
 const router = require('express').Router();
 
+const { protect }    = require('../middleware/auth');
 const User           = require('../models/User');
 const AppSettings    = require('../models/AppSettings');
 const SurveyInvite   = require('../models/SurveyInvite');
 const SurveyResponse = require('../models/SurveyResponse');
 const surveyRoles    = require('../constants/surveyRoles.json');
 const {
+  SURVEY_CAMPAIGN,
+  SURVEY_TEST_CAMPAIGN,
   PASS_ANSWERS,
   RATING_MIN,
   RATING_MAX,
@@ -97,6 +100,69 @@ async function loadInvite(token) {
 function nameFor(user) {
   return user?.displayName?.trim() || (user?.agentNumber ? `Agent ${user.agentNumber}` : 'there');
 }
+
+/**
+ * POST /api/survey/self — the signed-in shortcut.
+ *
+ * `/survey` with no token is a real entry point, not a mistake: the link gets
+ * passed around (in chat, in an announcement, by someone who deleted the
+ * email), and a signed-in visitor already has more identity than the token
+ * carries. So instead of a second questionnaire that reads an account, this
+ * mints (or finds) that account's ordinary invite and hands back its token —
+ * the whole flow after this point is byte-for-byte the emailed one, including
+ * resuming a half-finished run, the badge and the deferral.
+ *
+ * Finding rather than always creating is what makes it safe to click twice, and
+ * what joins a self-serve answer to an invitation the person was already sent:
+ * the unique (userId, campaign) index means there is exactly one row to land
+ * on, so a run started from an email and continued from `/survey` is one
+ * response, not two.
+ *
+ * It never returns anyone else's token, and it is a POST because it can create
+ * a row — a GET that quietly issued a capability token would be fetchable by
+ * anything that follows links.
+ */
+router.post('/self', protect, async (req, res) => {
+  try {
+    const settings = await AppSettings.getSettings();
+    if (settings.cbatSurveyEnabled === false) {
+      return res.status(410).json({ message: 'This questionnaire has closed.' });
+    }
+
+    // Admins land in the dry-run campaign, exactly as the "mail yourself the
+    // real thing" button does. The owner walking the live link is the most
+    // likely visitor this endpoint will ever have, and their answers must not
+    // turn up in the response summary or the funnel — the campaign key is what
+    // keeps them out, and `isTest` stops the run writing a PASSED badge onto
+    // their own account. Nothing else about the flow changes.
+    const isTest   = !!req.user.isAdmin || !!req.user.isBot;
+    const campaign = isTest ? SURVEY_TEST_CAMPAIGN : SURVEY_CAMPAIGN;
+    const filter   = { userId: req.user._id, campaign };
+
+    let invite = await SurveyInvite.findOne(filter);
+    if (!invite) {
+      try {
+        invite = await SurveyInvite.create({
+          ...filter,
+          token: SurveyInvite.newToken(),
+          isTest,
+          selfServe: true,
+        });
+      } catch (err) {
+        // Raced against another tab. The index did its job; read back the row
+        // that won rather than failing the request.
+        if (err?.code !== 11000) throw err;
+        invite = await SurveyInvite.findOne(filter);
+      }
+    }
+
+    if (!invite) return res.status(500).json({ message: 'Could not open the questionnaire.' });
+
+    res.json({ status: 'success', data: { token: invite.token } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // GET /api/survey/:token — everything the page needs to render.
 router.get('/:token', throttle, async (req, res) => {

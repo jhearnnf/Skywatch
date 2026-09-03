@@ -114,6 +114,18 @@ export default function CbatQuestionnaireResults() {
             <Stat label="Unsubscribed" value={s.optOuts} />
           </div>
 
+          {/* Answers that came in through the signed-in /survey link, which had
+              no email behind them. Called out because they are counted in
+              Started and Finished but not in Emailed, so without this line the
+              percentages look wrong rather than explained. */}
+          {s.selfServe > 0 && (
+            <p className="text-[11px] text-slate-400 -mt-2 mb-4" data-testid="survey-self-serve-note">
+              {s.selfServe === 1
+                ? '1 of these opened the questionnaire from the signed-in link rather than an email, so it is not counted under Emailed.'
+                : `${s.selfServe} of these opened the questionnaire from the signed-in link rather than an email, so they are not counted under Emailed.`}
+            </p>
+          )}
+
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-6">
             <Stat label="Passed"      value={s.passed} />
             <Stat label="Did not"     value={s.failed} />

@@ -45,6 +45,15 @@ const surveyInviteSchema = new mongoose.Schema({
   // been sent and not deferred, is what makes it un-mailable for good.
   deferredUntil: { type: Date, default: null },
 
+  // Created by the signed-in shortcut (/survey with no token) rather than by a
+  // send. There is no email behind it, so `sentAt` stays null — which would
+  // otherwise read as "the send failed". Recorded so the email funnel in the
+  // admin report can count these separately instead of showing more responses
+  // than invitations. It does NOT hold them out of a later batch: an invite
+  // nobody has answered is still worth an email, and `isMailable` already
+  // stops once they finish or unsubscribe.
+  selfServe: { type: Boolean, default: false },
+
   // A dry run sent to an admin to walk the flow end to end. The questionnaire
   // behaves identically except that it writes nothing to the account behind it
   // — answering "yes I passed" on a test must not award a real PASSED badge.

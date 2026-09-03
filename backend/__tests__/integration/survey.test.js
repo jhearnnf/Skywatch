@@ -15,6 +15,8 @@
  *   - Opted-out and closed questionnaires refuse further answers
  *   - "Not yet" defers rather than ends: the booking date is recorded, the
  *     invite is held until it passes, and the run is never marked complete
+ *   - The signed-in shortcut (POST /self): one invite per account, joined to an
+ *     invitation they were already sent, admins kept out of the real campaign
  */
 
 process.env.JWT_SECRET = 'test_secret';
@@ -22,7 +24,7 @@ process.env.JWT_SECRET = 'test_secret';
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
-const { createSettings, createUser } = require('../helpers/factories');
+const { createSettings, createUser, createAdminUser, authCookie } = require('../helpers/factories');
 
 const SurveyInvite   = require('../../models/SurveyInvite');
 const SurveyResponse = require('../../models/SurveyResponse');
@@ -349,5 +351,80 @@ describe('the closing comment', () => {
   it('is truncated rather than rejected when over-long', async () => {
     await patch({ comment: 'x'.repeat(5000) });
     expect((await SurveyResponse.findOne({ inviteId: invite._id })).comment).toHaveLength(2000);
+  });
+});
+
+describe('POST /api/survey/self — the signed-in shortcut', () => {
+  const self = (userId) => request(app).post('/api/survey/self').set('Cookie', authCookie(userId));
+
+  it('refuses without a session', async () => {
+    const res = await request(app).post('/api/survey/self');
+    expect(res.status).toBe(401);
+  });
+
+  it('hands back the invite this account was already sent, rather than a second one', async () => {
+    const res = await self(user._id);
+    expect(res.status).toBe(200);
+    expect(res.body.data.token).toBe(token);
+    expect(await SurveyInvite.countDocuments({ userId: user._id })).toBe(1);
+  });
+
+  it('resumes a half-answered emailed run', async () => {
+    await patch({ satTest: true, role: 'pilot' });
+    const res = await self(user._id);
+    const loaded = await request(app).get(`/api/survey/${res.body.data.token}`);
+    expect(loaded.body.data.response.role).toBe('pilot');
+  });
+
+  it('creates an invite for someone who was never emailed', async () => {
+    const fresh = await createUser({ displayName: 'Kestrel' });
+    const res = await self(fresh._id);
+    expect(res.status).toBe(200);
+
+    const created = await SurveyInvite.findOne({ userId: fresh._id });
+    expect(created.token).toBe(res.body.data.token);
+    expect(created.selfServe).toBe(true);
+    expect(created.isTest).toBe(false);
+    expect(created.sentAt).toBeNull();
+
+    // And the token works on the questionnaire itself, with no session.
+    const loaded = await request(app).get(`/api/survey/${res.body.data.token}`);
+    expect(loaded.status).toBe(200);
+    expect(loaded.body.data.name).toBe('Kestrel');
+  });
+
+  it('is idempotent — a second click returns the same token', async () => {
+    const fresh = await createUser();
+    const first  = await self(fresh._id);
+    const second = await self(fresh._id);
+    expect(second.body.data.token).toBe(first.body.data.token);
+    expect(await SurveyInvite.countDocuments({ userId: fresh._id })).toBe(1);
+  });
+
+  it('an answer given this way still records the pass on the account', async () => {
+    const fresh = await createUser();
+    const res = await self(fresh._id);
+    await request(app).patch(`/api/survey/${res.body.data.token}`).send({ passedForRole: 'yes' });
+    expect((await User.findById(fresh._id)).cbatPassed).toBe(true);
+  });
+
+  it('puts an admin in the dry-run campaign so their answers stay out of the data', async () => {
+    const admin = await createAdminUser();
+    const res = await self(admin._id);
+    const created = await SurveyInvite.findOne({ userId: admin._id });
+    expect(created.campaign).toBe('cbat_outcome_test');
+    expect(created.isTest).toBe(true);
+
+    // isTest is what stops the dry run touching the account behind it.
+    await request(app).patch(`/api/survey/${res.body.data.token}`).send({ passedForRole: 'yes' });
+    expect((await User.findById(admin._id)).cbatPassed).toBeFalsy();
+  });
+
+  it('refuses once the questionnaire has been turned off', async () => {
+    await AppSettings.updateOne({}, { cbatSurveyEnabled: false });
+    const fresh = await createUser();
+    const res = await self(fresh._id);
+    expect(res.status).toBe(410);
+    expect(await SurveyInvite.countDocuments({ userId: fresh._id })).toBe(0);
   });
 });
