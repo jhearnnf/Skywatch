@@ -4254,28 +4254,18 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// USER DOSSIER PANEL — Reddit link + CBAT score sheets (Admin › Users)
+// REDDIT ACCOUNT PANEL (Admin › Users)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Both halves answer the same question: what do we know about this person's real
-// CBAT run that the app itself cannot observe? They ride under one button rather
-// than two because the expanded row already carries eight icon buttons and three
-// slide-down panels, and a ninth and tenth would tip it from dense into unusable.
-//
 // Defined at module level, never inside UsersTab: an inline component would
 // remount on every parent render and the handle field would lose focus on each
 // keystroke.
-function UserDossierPanel({ u, API, apiFetch, onChange, onToast }) {
-  const [handle,    setHandle]    = useState(u.redditUsername ?? '')
-  const [saving,    setSaving]    = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [lightbox,  setLightbox]  = useState(null)  // image being viewed full size
-  const [armed,     setArmed]     = useState(null)  // image _id whose delete is armed
-  const fileRef = useRef(null)
+function UserRedditPanel({ u, API, apiFetch, onChange, onToast }) {
+  const [handle, setHandle] = useState(u.redditUsername ?? '')
+  const [saving, setSaving] = useState(false)
 
-  const images = u.cbatResultImages ?? []
-  const saved  = u.redditUsername ?? ''
-  const dirty  = handle.trim() !== saved
+  const saved = u.redditUsername ?? ''
+  const dirty = handle.trim() !== saved
 
   async function saveHandle(next) {
     setSaving(true)
@@ -4297,6 +4287,73 @@ function UserDossierPanel({ u, API, apiFetch, onChange, onToast }) {
       setSaving(false)
     }
   }
+
+  return (
+    <div className="px-4 py-3 border-b border-slate-100">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reddit account</p>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={e => { e.preventDefault(); if (dirty) saveHandle(handle.trim()) }}
+      >
+        <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-brand-200">
+          <span className="px-2 py-1.5 text-sm text-slate-400 bg-slate-50 border-r border-slate-200 select-none">u/</span>
+          <input
+            value={handle}
+            onChange={e => setHandle(e.target.value)}
+            placeholder="username"
+            aria-label="Reddit username"
+            className="w-44 px-2 py-1.5 text-sm bg-transparent outline-none"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={!dirty || saving}
+          className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition-colors disabled:opacity-40"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {saved && (
+          <>
+            <a
+              href={`https://www.reddit.com/user/${saved}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-colors"
+            >
+              Open profile
+            </a>
+            <button
+              type="button"
+              onClick={() => saveHandle('')}
+              disabled={saving}
+              className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors disabled:opacity-40"
+            >
+              Unlink
+            </button>
+          </>
+        )}
+      </form>
+      <p className="text-[10px] text-slate-400 mt-1.5">
+        Paste a handle or a profile link. Admin only, never shown on their profile.
+      </p>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CBAT RESULT IMAGES PANEL (Admin › Users)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Screenshots of the user's real score sheet — the evidence behind the "passed
+// CBAT" tick, and the only place the actual battery numbers can be read.
+// Module level for the same reason as the panel above.
+function UserCbatResultsPanel({ u, API, apiFetch, onChange, onToast }) {
+  const [uploading, setUploading] = useState(false)
+  const [lightbox,  setLightbox]  = useState(null)  // image being viewed full size
+  const [armed,     setArmed]     = useState(null)  // image _id whose delete is armed
+  const fileRef = useRef(null)
+
+  const images = u.cbatResultImages ?? []
 
   // Uploaded one at a time even when several files are picked, so a rejected
   // file (too big, not an image) is skipped by name instead of failing the batch.
@@ -4358,123 +4415,70 @@ function UserDossierPanel({ u, API, apiFetch, onChange, onToast }) {
   }
 
   return (
-    <div className="px-4 py-3 border-b border-slate-100 space-y-4">
-      {/* Reddit account */}
-      <div>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Reddit account</p>
-        <form
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={e => { e.preventDefault(); if (dirty) saveHandle(handle.trim()) }}
-        >
-          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-brand-200">
-            <span className="px-2 py-1.5 text-sm text-slate-400 bg-slate-50 border-r border-slate-200 select-none">u/</span>
-            <input
-              value={handle}
-              onChange={e => setHandle(e.target.value)}
-              placeholder="username"
-              aria-label="Reddit username"
-              className="w-44 px-2 py-1.5 text-sm bg-transparent outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={!dirty || saving}
-            className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition-colors disabled:opacity-40"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {saved && (
-            <>
-              <a
-                href={`https://www.reddit.com/user/${saved}/`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-colors"
-              >
-                Open profile
-              </a>
+    <div className="px-4 py-3 border-b border-slate-100">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+        CBAT results {images.length > 0 && <span className="text-slate-500">({images.length})</span>}
+      </p>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        data-testid={`cbat-results-file-${u._id}`}
+        onChange={e => uploadFiles(e.target.files)}
+      />
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 font-semibold transition-colors disabled:opacity-40"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" x2="12" y1="3" y2="15" />
+        </svg>
+        {uploading ? 'Uploading…' : 'Upload CBAT results'}
+      </button>
+
+      {images.length === 0 ? (
+        <p className="text-[10px] text-slate-400 mt-1.5">
+          Screenshots of their real score sheet. Nothing uploaded yet.
+        </p>
+      ) : (
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3">
+          {images.map(img => (
+            <div key={img._id} className="relative">
               <button
                 type="button"
-                onClick={() => saveHandle('')}
-                disabled={saving}
-                className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors disabled:opacity-40"
+                onClick={() => setLightbox(img)}
+                title={img.caption || 'CBAT result'}
+                className="block w-full rounded-lg overflow-hidden border border-slate-200 hover:border-brand-400 transition-colors"
               >
-                Unlink
+                <img src={img.url} alt={img.caption || 'CBAT result'} className="w-full h-20 object-cover" />
               </button>
-            </>
-          )}
-        </form>
-        <p className="text-[10px] text-slate-400 mt-1.5">
-          Paste a handle or a profile link. Admin only, never shown on their profile.
-        </p>
-      </div>
-
-      {/* CBAT result images */}
-      <div>
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-          CBAT results {images.length > 0 && <span className="text-slate-500">({images.length})</span>}
-        </p>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          data-testid={`cbat-results-file-${u._id}`}
-          onChange={e => uploadFiles(e.target.files)}
-        />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-brand-200 text-brand-700 hover:bg-brand-50 font-semibold transition-colors disabled:opacity-40"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" x2="12" y1="3" y2="15" />
-          </svg>
-          {uploading ? 'Uploading…' : 'Upload CBAT results'}
-        </button>
-
-        {images.length === 0 ? (
-          <p className="text-[10px] text-slate-400 mt-1.5">
-            Screenshots of their real score sheet. Nothing uploaded yet.
-          </p>
-        ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3">
-            {images.map(img => (
-              <div key={img._id} className="relative">
-                <button
-                  type="button"
-                  onClick={() => setLightbox(img)}
-                  title={img.caption || 'CBAT result'}
-                  className="block w-full rounded-lg overflow-hidden border border-slate-200 hover:border-brand-400 transition-colors"
-                >
-                  <img src={img.url} alt={img.caption || 'CBAT result'} className="w-full h-20 object-cover" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => (armed === img._id ? removeImage(img._id) : setArmed(img._id))}
-                  onBlur={() => setArmed(prev => (prev === img._id ? null : prev))}
-                  title={armed === img._id ? 'Click again to delete' : 'Delete this image'}
-                  aria-label={armed === img._id ? 'Confirm delete image' : 'Delete image'}
-                  className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center rounded-full border font-bold leading-none transition-colors ${
-                    armed === img._id
-                      ? 'px-1.5 h-5 text-[9px] bg-red-500 border-red-500 text-white'
-                      : 'w-5 h-5 text-[10px] bg-surface border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-200'
-                  }`}
-                >
-                  {armed === img._id ? 'Sure?' : '✕'}
-                </button>
-                <p className="text-[9px] text-slate-400 mt-1 truncate" title={img.caption ?? ''}>
-                  {fmtDateTime(img.uploadedAt)}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              <button
+                type="button"
+                onClick={() => (armed === img._id ? removeImage(img._id) : setArmed(img._id))}
+                onBlur={() => setArmed(prev => (prev === img._id ? null : prev))}
+                title={armed === img._id ? 'Click again to delete' : 'Delete this image'}
+                aria-label={armed === img._id ? 'Confirm delete image' : 'Delete image'}
+                className={`absolute -top-1.5 -right-1.5 inline-flex items-center justify-center rounded-full border font-bold leading-none transition-colors ${
+                  armed === img._id
+                    ? 'px-1.5 h-5 text-[9px] bg-red-500 border-red-500 text-white'
+                    : 'w-5 h-5 text-[10px] bg-surface border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-200'
+                }`}
+              >
+                {armed === img._id ? 'Sure?' : '✕'}
+              </button>
+              <p className="text-[9px] text-slate-400 mt-1 truncate" title={img.caption ?? ''}>
+                {fmtDateTime(img.uploadedAt)}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {lightbox && (
         <Overlay zIndex={60} backdrop="rgba(8,14,30,0.92)" onDismiss={() => setLightbox(null)} className="flex items-center justify-center p-4">
@@ -4515,7 +4519,8 @@ function UsersTab({ API, onViewEmailHistory }) {
   const [awardPanel,  setAwardPanel]  = useState(null) // user._id of open panel
   const [awardAmount, setAwardAmount] = useState('')
   const [tierPanel,   setTierPanel]   = useState(null) // user._id of open panel
-  const [dossierPanel, setDossierPanel] = useState(null) // user._id of open Reddit/results panel
+  const [redditPanel,  setRedditPanel]  = useState(null) // user._id of open Reddit panel
+  const [resultsPanel, setResultsPanel] = useState(null) // user._id of open CBAT results panel
   const [expanded,    setExpanded]    = useState(() => new Set()) // user._ids expanded
   const [latestClients, setLatestClients] = useState({}) // newest native release per platform
   // Tester wash + pulse + sort priority. Switched in Settings › Beta Testing;
@@ -4564,7 +4569,8 @@ function UsersTab({ API, onViewEmailHistory }) {
       if (tierPanel === id)    setTierPanel(null)
       if (awardPanel === id)   setAwardPanel(null)
       if (resetPanel === id)   setResetPanel(null)
-      if (dossierPanel === id) setDossierPanel(null)
+      if (redditPanel === id)  setRedditPanel(null)
+      if (resultsPanel === id) setResultsPanel(null)
     }
     setExpanded(prev => {
       const next = new Set(prev)
@@ -5058,30 +5064,50 @@ function UsersTab({ API, onViewEmailHistory }) {
                   <path d="m19 9-5 5-4-4-3 3" />
                 </svg>
               </button>
-              {/* Reddit handle + screenshots of their real score sheet. One button
-                  for both because they are the same kind of thing — what we know
-                  about this person from outside the app. Lit brand-blue once
-                  either is on file, with the image count on the badge, so a
-                  scan of expanded rows shows who has evidence attached. */}
+              {/* Linked Reddit account. Lit brand-blue once a handle is on file,
+                  so a scan of expanded rows shows who we can find off the app. */}
               {(() => {
-                const shots  = u.cbatResultImages?.length ?? 0
-                const linked = !!u.redditUsername || shots > 0
-                const isOpen = dossierPanel === u._id
+                const isOpen = redditPanel === u._id
                 return (
-                  <button onClick={() => setDossierPanel(isOpen ? null : u._id)}
-                    title={u.redditUsername
-                      ? `Reddit u/${u.redditUsername} · ${shots} result image${shots === 1 ? '' : 's'}`
-                      : 'Link a Reddit account and upload CBAT results'}
-                    aria-label="Reddit account and CBAT results"
-                    className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
+                  <button onClick={() => setRedditPanel(isOpen ? null : u._id)}
+                    title={u.redditUsername ? `Reddit u/${u.redditUsername}` : 'Link a Reddit account'}
+                    aria-label="Linked Reddit account"
+                    className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
                       isOpen
                         ? 'border-brand-300 bg-brand-50 text-brand-700'
-                        : linked
+                        : u.redditUsername
                           ? 'border-brand-200 text-brand-600 hover:bg-brand-50'
                           : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </button>
+                )
+              })()}
+              {/* Screenshots of their real CBAT score sheet — the evidence behind
+                  the "passed CBAT" tick. Badged with how many are on file, the
+                  same way the email-history button is. */}
+              {(() => {
+                const shots  = u.cbatResultImages?.length ?? 0
+                const isOpen = resultsPanel === u._id
+                return (
+                  <button onClick={() => setResultsPanel(isOpen ? null : u._id)}
+                    title={shots
+                      ? `${shots} CBAT result image${shots === 1 ? '' : 's'}`
+                      : 'Upload CBAT results'}
+                    aria-label="CBAT result images"
+                    className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
+                      isOpen
+                        ? 'border-brand-300 bg-brand-50 text-brand-700'
+                        : shots
+                          ? 'border-brand-200 text-brand-600 hover:bg-brand-50'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect width="18" height="18" x="3" y="3" rx="2" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
                     </svg>
                     {shots > 0 && (
                       <span aria-hidden="true"
@@ -5161,9 +5187,20 @@ function UsersTab({ API, onViewEmailHistory }) {
               </div>
             )}
 
-            {/* Reddit account + CBAT result images (expanded) */}
-            {dossierPanel === u._id && (
-              <UserDossierPanel
+            {/* Reddit account panel (expanded) */}
+            {redditPanel === u._id && (
+              <UserRedditPanel
+                u={u}
+                API={API}
+                apiFetch={apiFetch}
+                onChange={patch => setUsers(prev => prev.map(x => x._id === u._id ? { ...x, ...patch } : x))}
+                onToast={setToast}
+              />
+            )}
+
+            {/* CBAT result images panel (expanded) */}
+            {resultsPanel === u._id && (
+              <UserCbatResultsPanel
                 u={u}
                 API={API}
                 apiFetch={apiFetch}

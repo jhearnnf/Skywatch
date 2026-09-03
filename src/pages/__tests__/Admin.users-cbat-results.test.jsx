@@ -67,15 +67,6 @@ const IMAGE = {
 
 function setupFetch(users, { spy, ok = true, message = 'nope' } = {}) {
   return vi.fn().mockImplementation((url, opts) => {
-    if (url.includes('/reddit') && opts?.method === 'PATCH') {
-      spy?.(url, opts)
-      if (!ok) return Promise.resolve({ ok: false, json: async () => ({ message }) })
-      const { redditUsername } = JSON.parse(opts.body)
-      return Promise.resolve({
-        ok: true,
-        json: async () => ({ status: 'success', data: { redditUsername: redditUsername || null } }),
-      })
-    }
     if (url.includes('/cbat-results') && opts?.method === 'POST') {
       spy?.(url, opts)
       if (!ok) return Promise.resolve({ ok: false, json: async () => ({ message }) })
@@ -96,83 +87,52 @@ function setupFetch(users, { spy, ok = true, message = 'nope' } = {}) {
   })
 }
 
-async function openPanel(users, opts) {
+async function expandRow(users, opts) {
   global.fetch = setupFetch(users, opts)
   render(<Admin />)
   fireEvent.click(await screen.findByRole('button', { name: /users/i }))
   await waitFor(() => screen.getByText('plain@test.com'))
   fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
-  fireEvent.click(screen.getByRole('button', { name: /reddit account and cbat results/i }))
+}
+
+async function openPanel(users, opts) {
+  await expandRow(users, opts)
+  fireEvent.click(screen.getByRole('button', { name: /cbat result images/i }))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-describe('Admin — Users tab: Reddit link + CBAT results', () => {
+describe('Admin — Users tab: CBAT result images', () => {
   beforeEach(() => {
     global.Audio = class { play = vi.fn().mockResolvedValue(undefined) }
     localStorage.clear()
   })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('offers the panel button only once the row is expanded', async () => {
+  it('offers the button only once the row is expanded', async () => {
     global.fetch = setupFetch([AGENT])
 
     render(<Admin />)
     fireEvent.click(await screen.findByRole('button', { name: /users/i }))
     await waitFor(() => screen.getByText('plain@test.com'))
 
-    expect(screen.queryByRole('button', { name: /reddit account and cbat results/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /cbat result images/i })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
-    expect(screen.getByRole('button', { name: /reddit account and cbat results/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /cbat result images/i })).toBeTruthy()
   })
 
   it('keeps the panel closed until the button is pressed', async () => {
-    global.fetch = setupFetch([AGENT])
+    await expandRow([AGENT])
 
-    render(<Admin />)
-    fireEvent.click(await screen.findByRole('button', { name: /users/i }))
-    await waitFor(() => screen.getByText('plain@test.com'))
-    fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
+    expect(screen.queryByRole('button', { name: 'Upload CBAT results' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /cbat result images/i }))
+    expect(screen.getByRole('button', { name: 'Upload CBAT results' })).toBeTruthy()
+  })
 
+  // The two panels are independent buttons; opening one must not open the other.
+  it('does not open the Reddit panel', async () => {
+    await openPanel([AGENT])
     expect(screen.queryByLabelText('Reddit username')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /reddit account and cbat results/i }))
-    expect(screen.getByLabelText('Reddit username')).toBeTruthy()
-  })
-
-  it('saves a typed handle to /reddit', async () => {
-    const spy = vi.fn()
-    await openPanel([AGENT], { spy })
-
-    fireEvent.change(screen.getByLabelText('Reddit username'), { target: { value: 'flying_badger' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(spy).toHaveBeenCalled())
-    const [url, opts] = spy.mock.calls[0]
-    expect(url).toMatch(/\/api\/admin\/users\/u1\/reddit$/)
-    expect(JSON.parse(opts.body)).toEqual({ redditUsername: 'flying_badger' })
-    await screen.findByText('Linked u/flying_badger')
-  })
-
-  it('links out to the profile and unlinks an already-linked account', async () => {
-    const spy = vi.fn()
-    await openPanel([{ ...AGENT, redditUsername: 'flying_badger' }], { spy })
-
-    const link = screen.getByRole('link', { name: 'Open profile' })
-    expect(link.getAttribute('href')).toBe('https://www.reddit.com/user/flying_badger/')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
-    await waitFor(() => expect(spy).toHaveBeenCalled())
-    expect(JSON.parse(spy.mock.calls[0][1].body)).toEqual({ redditUsername: '' })
-    await screen.findByText('Reddit account unlinked')
-  })
-
-  it('surfaces a rejected handle as a toast', async () => {
-    await openPanel([AGENT], { ok: false, message: 'Reddit usernames are 3–20 characters.' })
-
-    fireEvent.change(screen.getByLabelText('Reddit username'), { target: { value: 'no' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await screen.findByText('Reddit usernames are 3–20 characters.')
   })
 
   it('uploads a picked image and shows it as a thumbnail', async () => {
@@ -205,14 +165,9 @@ describe('Admin — Users tab: Reddit link + CBAT results', () => {
   })
 
   it('badges the button with the number of result images', async () => {
-    global.fetch = setupFetch([{ ...AGENT, cbatResultImages: [IMAGE] }])
+    await expandRow([{ ...AGENT, cbatResultImages: [IMAGE] }])
 
-    render(<Admin />)
-    fireEvent.click(await screen.findByRole('button', { name: /users/i }))
-    await waitFor(() => screen.getByText('plain@test.com'))
-    fireEvent.click(screen.getByRole('button', { name: /expand agent 001/i }))
-
-    const button = screen.getByRole('button', { name: /reddit account and cbat results/i })
+    const button = screen.getByRole('button', { name: /cbat result images/i })
     expect(button.textContent).toContain('1')
   })
 
