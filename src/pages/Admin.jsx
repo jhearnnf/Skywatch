@@ -5395,8 +5395,15 @@ function ContentTab({ API }) {
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       {modal && <ConfirmModal title={modal.label} onConfirm={confirmSave} onCancel={() => setModal(null)} />}
 
-      {/* ── Static Content ────────────────────────────────────────── */}
-      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Static Content</p>
+      {/* ── Emails & Outreach ─────────────────────────────────────
+          Deliberately NOT filed under Marketing further down. That group is
+          outbound promotion to the public (social posts); these are messages to
+          existing account holders, and the questionnaire in particular is
+          research correspondence — which is the word Privacy.jsx uses and the
+          basis it relies on. Labelling it marketing would contradict the policy
+          and invite exactly the "send more, more often" habit the campaign is
+          built to resist. */}
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Emails &amp; Outreach</p>
 
       {/* ── Welcome Email ─────────────────────────────────────────── */}
       <Section title="Welcome Email" collapsible onSave={() => save('Update Welcome Email', ['emailWelcomeEnabled', 'welcomeEmailSubject', 'welcomeEmailHeading', 'welcomeEmailBody', 'welcomeEmailCta', 'welcomeEmailFooter'])}>
@@ -5487,6 +5494,9 @@ function ContentTab({ API }) {
       {/* ── Potential CBAT Passers ────────────────────────────────
           The recipient list and the only send button in the app. */}
       <CbatPassersSection API={API} />
+
+      {/* ── Static Content ────────────────────────────────────────── */}
+      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Static Content</p>
 
       {/* ── Difficulty Select Screen ─────────────────────────────── */}
       <Section title="Difficulty Select Screen" collapsible onSave={() => save('Update Combat Readiness Screen', [
