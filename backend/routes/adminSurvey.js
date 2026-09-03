@@ -411,10 +411,14 @@ router.get('/responses', async (_req, res) => {
           roleCounts,
           // The free-text answers are the point of the whole exercise, so they
           // are surfaced in the summary rather than left to be dug out of rows.
+          // Named, because this is now the ONLY place the text itself is
+          // printed — the answer rows below carry the ratings and the pass
+          // answer, not a second copy of the paragraph.
           gaps: responses.filter(r => r.gaps?.trim()).map(r => ({
             gaps: r.gaps,
             role: r.role,
             agentNumber: r.userId?.agentNumber ?? null,
+            displayName: r.userId?.displayName ?? null,
           })),
           // Kept separate from `gaps` because they answer different questions.
           // One is a defect report about the training, the other is whatever
@@ -424,6 +428,7 @@ router.get('/responses', async (_req, res) => {
             role: r.role,
             passedForRole: r.passedForRole ?? null,
             agentNumber: r.userId?.agentNumber ?? null,
+            displayName: r.userId?.displayName ?? null,
           })),
         },
       },

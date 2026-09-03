@@ -38,6 +38,16 @@ const OPT_OUT_REASON_LABELS = {
 
 const PASS_LABELS = { yes: 'Passed', no: 'Did not pass', waiting: 'Waiting' }
 
+// Who wrote a piece of free text. The blocks above the tables are the only
+// place the text itself appears, so they have to carry enough to find the
+// person in the rows below: their name if they gave one, their agent number
+// either way.
+const writer = (x) => [
+  x.displayName?.trim() || (x.agentNumber ? `Agent ${x.agentNumber}` : null),
+  roleLabel(x.role) || 'Role not given',
+  x.displayName?.trim() && x.agentNumber ? `Agent ${x.agentNumber}` : null,
+].filter(Boolean).join(' · ')
+
 const TABS = [
   { id: 'answers', label: 'Answers' },
   { id: 'deferred', label: 'Not sat yet' },
@@ -138,7 +148,14 @@ export default function CbatQuestionnaireResults() {
           </div>
 
           {/* The free text is the point of the exercise, so it sits above the
-              tables rather than inside a tab someone has to think to open. */}
+              tables rather than inside a tab someone has to think to open.
+
+              It is printed HERE AND NOWHERE ELSE. The answer rows used to
+              repeat the same paragraphs underneath, which on a page with one
+              respondent showed the identical wall of text twice; the rows keep
+              the facts you scan for (role, ratings, pass, donate) and these
+              blocks keep the prose, each named so you can still tell who wrote
+              what. */}
           {s.gaps?.length > 0 && (
             <div className="mb-6">
               <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
@@ -148,10 +165,7 @@ export default function CbatQuestionnaireResults() {
                 {s.gaps.map((g, i) => (
                   <div key={i} className="rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2">
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{g.gaps}</p>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      {roleLabel(g.role) || 'Role not given'}
-                      {g.agentNumber ? ` · Agent ${g.agentNumber}` : ''}
-                    </p>
+                    <p className="text-[10px] text-slate-500 mt-1">{writer(g)}</p>
                   </div>
                 ))}
               </div>
@@ -171,9 +185,7 @@ export default function CbatQuestionnaireResults() {
                   <div key={i} className="rounded-xl border border-slate-200 bg-surface px-3 py-2">
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.comment}</p>
                     <p className="text-[10px] text-slate-500 mt-1">
-                      {roleLabel(c.role) || 'Role not given'}
-                      {c.passedForRole === 'yes' ? ' · Passed' : ''}
-                      {c.agentNumber ? ` · Agent ${c.agentNumber}` : ''}
+                      {writer(c)}{c.passedForRole === 'yes' ? ' · Passed' : ''}
                     </p>
                   </div>
                 ))}
@@ -274,14 +286,14 @@ function AnswersTable({ rows }) {
             {r.donationClicked && <span className="text-brand-700 font-semibold">Clicked donate</span>}
           </div>
 
-          {r.gaps && (
-            <p className="mt-1.5 text-xs text-slate-600 bg-amber-50/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
-              {r.gaps}
-            </p>
-          )}
-          {r.comment && (
-            <p className="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
-              {r.comment}
+          {/* What they wrote is printed in full above, under "What we did not
+              prepare them for" and "What they said". The row only says that
+              there is something up there with this person's name on it. */}
+          {(r.gaps || r.comment) && (
+            <p className="mt-1.5 text-[10px] text-slate-500">
+              {r.gaps && r.comment ? 'Wrote about the gaps, and left a comment'
+                : r.gaps ? 'Wrote about the gaps'
+                : 'Left a comment'} — above
             </p>
           )}
         </div>

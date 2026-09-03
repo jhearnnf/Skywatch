@@ -117,7 +117,9 @@ describe('CbatQuestionnaireResults — answers', () => {
     expect(table.getByText('Realism 4/5')).toBeInTheDocument()
     expect(table.getByText('Helped 5/5')).toBeInTheDocument()
     expect(table.getByText('Clicked donate')).toBeInTheDocument()
-    expect(table.getByText('Timing was tighter.')).toBeInTheDocument()
+    // The paragraph itself belongs to the block above, not to the row.
+    expect(table.queryByText('Timing was tighter.')).toBeNull()
+    expect(table.getByText(/Wrote about the gaps/)).toBeInTheDocument()
   })
 
   it('marks a run that stopped partway rather than hiding it', async () => {
@@ -155,13 +157,31 @@ describe('CbatQuestionnaireResults — comments', () => {
     expect(screen.queryByText('What they said')).not.toBeInTheDocument()
   })
 
-  it('shows a comment on the answer row it belongs to', async () => {
-    mount(payload({ responses: [{
-      _id: 'r9', userId: { agentNumber: '777' },
-      satTest: true, passedForRole: 'yes', comment: 'One more thing.',
-    }] }))
-    const table = within(await screen.findByTestId('results-answers'))
-    expect(table.getByText('One more thing.')).toBeInTheDocument()
+  // The page used to print each paragraph twice — once in the block above and
+  // again on the person's row — which with a single respondent filled the
+  // screen with the same wall of text.
+  it('prints each answer once, with the row pointing up at it', async () => {
+    mount(payload({
+      responses: [{
+        _id: 'r9', userId: { agentNumber: '777' },
+        satTest: true, passedForRole: 'yes', comment: 'One more thing.',
+      }],
+      summary: { comments: [{ comment: 'One more thing.', role: 'pilot', passedForRole: 'yes', agentNumber: '777' }] },
+    }))
+
+    expect(await screen.findByText('What they said')).toBeInTheDocument()
+    expect(screen.getAllByText('One more thing.')).toHaveLength(1)
+    const table = within(screen.getByTestId('results-answers'))
+    expect(table.getByText(/Left a comment/)).toBeInTheDocument()
+  })
+
+  it('names the writer so a block can be matched to a row', async () => {
+    mount(payload({ summary: {
+      gaps: [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '777', displayName: 'Kestrel' }],
+    } }))
+
+    expect(await screen.findByText('A test we had not seen.')).toBeInTheDocument()
+    expect(screen.getByText('Kestrel · Royal Air Force — Pilot · Agent 777')).toBeInTheDocument()
   })
 })
 
