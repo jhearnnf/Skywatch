@@ -52,6 +52,14 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   const rootRef = useRef(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState('')
+  const [query,     setQuery]     = useState('')
+  const [hits,      setHits]      = useState(null)
+  const [searching, setSearching] = useState(false)
+  // Rows the admin ticked in the search results, kept by id. The search results
+  // themselves come and go as the box is retyped or cleared, and a recipient
+  // must not vanish from the send with them — this is what the confirmation
+  // modal and the send body read for anyone who is not in the list above.
+  const [picked, setPicked] = useState(() => new Map())
 
   // The FIRST load deliberately sends no thresholds, so the server answers from
   // the saved settings and the inputs below can adopt them. Sending the
@@ -79,6 +87,9 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       // Pre-select the batch the server would pick. The admin can then add a
       // warm-band name or drop someone before sending.
       setSelected(new Set((json.data.nextBatchIds ?? []).map(String)))
+      // The ticks are being replaced wholesale, so the search picks they were
+      // partly made of go with them rather than surviving as orphans.
+      setPicked(new Map())
     } catch (err) {
       setError(err.message)
     } finally {
@@ -107,10 +118,14 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
     () => (data?.groups ?? []).flatMap(g => g.users),
     [data],
   )
-  const rowById = useMemo(
-    () => new Map(rows.map(r => [r._id.toString(), r])),
-    [rows],
-  )
+  // The list first, then anyone picked out of the search. A person who is in
+  // both is the same person, and the list's copy is the one whose numbers the
+  // admin has been reading.
+  const rowById = useMemo(() => {
+    const map = new Map(picked)
+    for (const r of rows) map.set(r._id.toString(), r)
+    return map
+  }, [rows, picked])
 
   // The server's own rule, echoed: never invited, a failed send worth retrying,
   // or a deferral that has run out.
@@ -121,6 +136,49 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
     if (next.has(id)) next.delete(id); else next.add(id)
     return next
   })
+
+  // Ticking a search hit also keeps a copy of the row, because clearing the box
+  // throws the results away and the recipient has to survive that.
+  const toggleHit = (row) => {
+    const id = row._id.toString()
+    toggle(id)
+    setPicked(prev => {
+      const next = new Map(prev)
+      if (next.has(id)) next.delete(id); else next.set(id, row)
+      return next
+    })
+  }
+
+  const search = useCallback(async (term) => {
+    const q = term.trim()
+    if (q.length < 2) { setHits(null); return }
+    setSearching(true); setError('')
+    try {
+      const qs = new URLSearchParams({
+        q,
+        minCompletions: String(minCompletions),
+        dormantDays:    String(dormantDays),
+      })
+      const res = await apiFetch(`${API}/api/admin/cbat-passers/search?${qs}`, { credentials: 'include' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.message || 'Search failed')
+      setHits(json.data.users ?? [])
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSearching(false)
+    }
+  }, [API, apiFetch, minCompletions, dormantDays])
+
+  // Typed searches settle before they are sent. 300ms is long enough that an
+  // address is not searched a character at a time and short enough not to feel
+  // like a button press.
+  useEffect(() => {
+    if (!open) return
+    if (query.trim().length < 2) { setHits(null); return }
+    const t = setTimeout(() => search(query), 300)
+    return () => clearTimeout(t)
+  }, [query, open, search])
 
   const selectedRows = useMemo(
     () => [...selected].map(id => rowById.get(id)).filter(Boolean),
@@ -153,6 +211,9 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       setResult(json.data)
       setConfirm(false)
       await load()
+      // Re-run the open search so a name that has just been mailed shows its
+      // tick there too, rather than still offering to send to them.
+      if (query.trim().length >= 2) await search(query)
     } catch (err) {
       setError(err.message)
       setConfirm(false)
@@ -246,7 +307,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
               {loading ? 'Loading…' : 'Refresh list'}
             </button>
             <button
-              onClick={() => setSelected(new Set())}
+              onClick={() => { setSelected(new Set()); setPicked(new Map()) }}
               disabled={!selected.size}
               data-testid="cbat-passers-untick-all"
               className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
@@ -278,6 +339,63 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
               {result.failedCount > 0 && ` ${result.failedCount} failed — those accounts stay in the list to retry.`}
             </div>
           )}
+
+          {/* Find one person, whatever the thresholds say.
+              The list below is a bulk worklist and its rules are averages: they
+              are right about a population and wrong about individuals. This
+              reaches past them, including past the do-not-contact list, because
+              those names are held back from a bulk send for being known to us
+              rather than for having nothing to tell us. It does not reach past
+              an unsubscribe, a ban or a bot. */}
+          <div className="mb-4">
+            <label htmlFor="cbat-passer-search" className="block text-xs font-semibold text-slate-500 mb-1">
+              Search for someone to send to
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="cbat-passer-search"
+                type="search"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Name, email or agent number"
+                data-testid="cbat-passers-search"
+                className="flex-1 min-w-0 border border-slate-400 rounded-xl px-3 py-2 text-sm bg-surface-raised text-text outline-none focus:ring-2 focus:ring-brand-600/40"
+              />
+              {query && (
+                <button
+                  onClick={() => { setQuery(''); setHits(null) }}
+                  className="px-3 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Finds anyone, including people left out of the list below. Ticking one here adds
+              them to the send.
+            </p>
+
+            {searching && <p className="text-[11px] text-slate-500 mt-2">Searching…</p>}
+
+            {hits && !searching && (
+              <div data-testid="cbat-passers-search-results" className="border border-slate-200 rounded-xl overflow-hidden mt-2 max-h-80 overflow-y-auto">
+                {hits.length === 0 && (
+                  <p className="px-4 py-4 text-center text-xs text-slate-500">
+                    Nobody matches “{query.trim()}”.
+                  </p>
+                )}
+                {hits.map(u => (
+                  <SearchHitRow
+                    key={u._id}
+                    user={u}
+                    minCompletions={minCompletions}
+                    checked={selected.has(u._id.toString())}
+                    onToggle={() => toggleHit(u)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* The list, grouped by the day of each candidate's last finished run */}
           <div className="border border-slate-200 rounded-xl overflow-hidden mb-4 max-h-[32rem] overflow-y-auto">
@@ -383,6 +501,50 @@ function Stat({ label, value, hint }) {
   )
 }
 
+// Why a search hit is not in the list above. Every one of these is a real
+// answer to "so where is he?", which is the question an admin has the moment
+// they search for someone and find them here instead of up there.
+function hitReason(user, minCompletions) {
+  switch (user.excludedReason) {
+    case null:
+    case undefined:              return null
+    case 'bot':                  return 'Bot account, cannot be emailed.'
+    case 'banned':               return 'Banned account, cannot be emailed.'
+    case 'no-email':             return 'No email address on the account.'
+    case 'opted-out':            return 'Unsubscribed from research email. Cannot be emailed.'
+    case 'admin':                return 'Admin account, so never in the list.'
+    case 'named':                return 'On the do-not-contact list. You can still send to them from here.'
+    case 'below-min-games':      return `Under the ${minCompletions}-game threshold (${user.completions} finished).`
+    case 'never-finished-a-game': return 'Has never finished a CBAT game.'
+    case 'still-active':         return 'Still active, so probably has not sat their test yet.'
+    default:                     return 'Not in the list above.'
+  }
+}
+
+function SearchHitRow({ user, minCompletions, checked, onToggle }) {
+  const reason  = hitReason(user, minCompletions)
+  const emailed = !!user.invite?.sentAt
+
+  return (
+    <div className="border-b border-slate-100 last:border-0">
+      <PasserRow
+        user={user}
+        checked={checked}
+        selectable={user.mailable}
+        onToggle={onToggle}
+      />
+      {reason && (
+        <p className={`px-4 pb-2 text-[10px] ${user.mailable ? 'text-slate-500' : 'text-rose-600'}`}>
+          {reason}
+        </p>
+      )}
+      {!reason && emailed && (
+        <p className="px-4 pb-2 text-[10px] text-slate-500">Already emailed for this questionnaire.</p>
+      )}
+    </div>
+  )
+}
+
 function PasserRow({ user, checked, selectable, onToggle }) {
   const name = user.displayName?.trim() || `Agent ${user.agentNumber}`
   const inv  = user.invite
@@ -415,7 +577,11 @@ function PasserRow({ user, checked, selectable, onToggle }) {
       </div>
       <div className="shrink-0 text-right">
         <p className="text-[10px] font-semibold text-slate-600">{user.completions} games</p>
-        <p className="text-[10px] text-slate-400">{user.daysDormant}d quiet</p>
+        {/* A search hit may have no activity at all, and "nulld quiet" is not
+            a thing to put on a screen. */}
+        <p className="text-[10px] text-slate-400">
+          {user.daysDormant == null ? 'never seen' : `${user.daysDormant}d quiet`}
+        </p>
       </div>
       <div className="shrink-0 w-24 text-right">
         {!inv && <span className="text-[10px] text-slate-400">Not emailed</span>}
@@ -547,6 +713,14 @@ function ConfirmSendModal({ rows, onConfirm, onCancel, sending }) {
                 {r.band === 'warm' && (
                   <span className="ml-1.5 text-[8px] font-bold px-1 py-px rounded bg-sky-200/60 text-sky-800 uppercase tracking-wide">
                     Too soon
+                  </span>
+                )}
+                {/* Someone added through the search box, who the list itself
+                    would never have offered. Worth saying out loud on the one
+                    screen that exists to be read before anything sends. */}
+                {r.excludedReason && (
+                  <span className="ml-1.5 text-[8px] font-bold px-1 py-px rounded bg-amber-200/60 text-amber-800 uppercase tracking-wide">
+                    Off list
                   </span>
                 )}
               </p>

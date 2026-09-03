@@ -6,7 +6,12 @@ const SurveyInvite   = require('../models/SurveyInvite');
 const SurveyResponse = require('../models/SurveyResponse');
 const AppSettings    = require('../models/AppSettings');
 
-const { buildCbatPasserCohort, selectNextBatch } = require('../utils/cbatPasserCohort');
+const {
+  buildCbatPasserCohort,
+  selectNextBatch,
+  searchSurveyCandidates,
+  describeSurveyUsersByIds,
+} = require('../utils/cbatPasserCohort');
 const { surveyEmailFields, renderSurveyEmail, sendSurveyBatch, surveyUrl, displayNameFor } = require('../utils/surveyEmail');
 const {
   SURVEY_CAMPAIGN,
@@ -53,6 +58,31 @@ router.get('/', async (req, res) => {
         nextBatchIds: nextBatch.map(u => u._id),
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/cbat-passers/search?q= — find one person by name, address or
+// agent number, whether or not the cohort would ever list them.
+//
+// The list is a bulk worklist and its thresholds are averages: they are right
+// about a population and wrong about individuals. This is the way round that,
+// and it deliberately reaches past the named exclusion list too — those people
+// are left out of a bulk send because we know them, not because they have
+// nothing to tell us, and several of them did sit the real test.
+//
+// It does NOT reach past an unsubscribe, a ban or a bot account. Those come
+// back flagged and untickable.
+router.get('/search', async (req, res) => {
+  try {
+    const q = (req.query.q ?? '').toString().trim();
+    if (q.length < 2) return res.json({ status: 'success', data: { users: [], query: q } });
+
+    const { minCompletions, dormantDays } = await resolveThresholds(req.query);
+    const users = await searchSurveyCandidates({ q, minCompletions, dormantDays });
+
+    res.json({ status: 'success', data: { users, query: q } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -112,8 +142,9 @@ router.get('/preview', async (req, res) => {
 //
 // The ONLY path in the codebase that sends a questionnaire email, and it runs
 // only when an admin presses the button. Body may carry `userIds` to send to a
-// hand-picked set (which is how a 'warm' band candidate gets included), or
-// nothing at all to take the next `limit` from the ready band.
+// hand-picked set (which is how a 'warm' band candidate, or someone found only
+// through the search box, gets included), or nothing at all to take the next
+// `limit` from the ready band.
 router.post('/send', async (req, res) => {
   try {
     const limit = Math.min(Number(req.body?.limit) || BATCH_SIZE, BATCH_SIZE);
@@ -122,13 +153,26 @@ router.post('/send', async (req, res) => {
 
     let chosen;
     if (Array.isArray(req.body?.userIds) && req.body.userIds.length) {
-      // Hand-picked. Still constrained to the cohort, so a stale page cannot
-      // mail someone who has since opted out or already been invited.
+      // Hand-picked. Cohort rows first, because they carry the numbers the
+      // admin was looking at when they ticked the box.
       const wanted = new Set(req.body.userIds.map(String));
       chosen = cohort.groups
         .flatMap(g => g.users)
-        .filter(u => wanted.has(u._id.toString()) && u.mailable)
-        .slice(0, limit);
+        .filter(u => wanted.has(u._id.toString()) && u.mailable);
+
+      // Anyone left over came from the search box, which reaches past the
+      // thresholds and the named exclusion list on purpose. They are resolved
+      // the same way the search described them, so the hard blocks — a ban, a
+      // bot, an unsubscribe, an invite already sent — still apply and a stale
+      // page still cannot mail someone twice.
+      const found = new Set(chosen.map(u => u._id.toString()));
+      const missing = [...wanted].filter(id => !found.has(id));
+      if (missing.length) {
+        const extras = await describeSurveyUsersByIds(missing, { minCompletions, dormantDays });
+        chosen = chosen.concat(extras.filter(u => u.mailable));
+      }
+
+      chosen = chosen.slice(0, limit);
     } else {
       chosen = selectNextBatch(cohort, limit);
     }

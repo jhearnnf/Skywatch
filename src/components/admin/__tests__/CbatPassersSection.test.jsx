@@ -41,10 +41,18 @@ const cohort = (over = {}) => ({
 })
 
 let sendBody
+let searchHits
+let searchUrls
 
 function mockApi(data = cohort()) {
   sendBody = null
+  searchHits = []
+  searchUrls = []
   global.fetch = vi.fn(async (url, opts = {}) => {
+    if (String(url).includes('/search')) {
+      searchUrls.push(String(url))
+      return { ok: true, json: async () => ({ data: { users: searchHits, query: 'q' } }) }
+    }
     if (String(url).includes('/send')) {
       sendBody = JSON.parse(opts.body)
       return { ok: true, json: async () => ({ data: { sentCount: 1, failedCount: 0, sent: ['a@example.com'], failed: [] } }) }
@@ -223,5 +231,103 @@ describe('CbatPassersSection — finding the results', () => {
     await open()
     fireEvent.click(screen.getByTestId('cbat-passers-results-link'))
     expect(await screen.findByTestId('results-page')).toBeInTheDocument()
+  })
+})
+
+// The list is a bulk worklist built from thresholds. The search box is how an
+// admin reaches one specific person the thresholds got wrong about, including
+// the people who are deliberately kept out of every bulk send.
+describe('CbatPassersSection — searching for someone specific', () => {
+  const type = (text) =>
+    fireEvent.change(screen.getByTestId('cbat-passers-search'), { target: { value: text } })
+
+  it('does not search until there is something to search for', async () => {
+    await open()
+    type('a')
+    await new Promise(r => setTimeout(r, 400))
+    expect(searchUrls).toHaveLength(0)
+  })
+
+  it('searches once the typing settles, and shows the hit', async () => {
+    searchHits = [person({ _id: 'u9', email: 'andreaspaschalis@gmail.com', excludedReason: 'named' })]
+    await open()
+    type('andreas')
+
+    expect(await screen.findByText('andreaspaschalis@gmail.com')).toBeInTheDocument()
+    expect(searchUrls).toHaveLength(1)
+    expect(searchUrls[0]).toContain('q=andreas')
+  })
+
+  it('says why a hit is missing from the list above', async () => {
+    searchHits = [person({ _id: 'u9', email: 'x@test.com', excludedReason: 'named' })]
+    await open()
+    type('x@test')
+
+    expect(await screen.findByText(/do-not-contact list/)).toBeInTheDocument()
+  })
+
+  it('lets an excluded person be ticked and sent to', async () => {
+    searchHits = [person({ _id: 'u9', email: 'x@test.com', excludedReason: 'named', mailable: true })]
+    await open()
+    type('x@test')
+    await screen.findByText('x@test.com')
+
+    const hits = screen.getByTestId('cbat-passers-search-results')
+    fireEvent.click(within(hits).getByRole('checkbox'))
+
+    fireEvent.click(screen.getByRole('button', { name: /Send bulk email \(2\)/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Send now' }))
+
+    await waitFor(() => expect(sendBody).not.toBeNull())
+    expect(sendBody.userIds).toEqual(expect.arrayContaining(['u1', 'u9']))
+  })
+
+  it('keeps a ticked hit in the send after the search box is cleared', async () => {
+    searchHits = [person({ _id: 'u9', email: 'x@test.com', excludedReason: 'named' })]
+    await open()
+    type('x@test')
+    await screen.findByText('x@test.com')
+
+    const hits = screen.getByTestId('cbat-passers-search-results')
+    fireEvent.click(within(hits).getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('cbat-passers-search-results')).not.toBeInTheDocument())
+
+    // Still going out, and still named on the confirmation.
+    fireEvent.click(screen.getByRole('button', { name: /Send bulk email \(2\)/ }))
+    expect(await screen.findByText(/Send to 2 people\?/)).toBeInTheDocument()
+    expect(screen.getByText('x@test.com')).toBeInTheDocument()
+  })
+
+  it('marks an off-list recipient on the confirmation', async () => {
+    searchHits = [person({ _id: 'u9', email: 'x@test.com', excludedReason: 'named' })]
+    await open()
+    type('x@test')
+    await screen.findByText('x@test.com')
+    fireEvent.click(within(screen.getByTestId('cbat-passers-search-results')).getByRole('checkbox'))
+
+    fireEvent.click(screen.getByRole('button', { name: /Send bulk email/ }))
+    await screen.findByText(/Send to 2 people\?/)
+    expect(screen.getByText('Off list')).toBeInTheDocument()
+  })
+
+  it('will not let a blocked account be ticked', async () => {
+    searchHits = [person({ _id: 'u9', email: 'gone@test.com', excludedReason: 'opted-out', mailable: false })]
+    await open()
+    type('gone@')
+    await screen.findByText('gone@test.com')
+
+    const hits = screen.getByTestId('cbat-passers-search-results')
+    expect(within(hits).getByRole('checkbox')).toBeDisabled()
+    expect(within(hits).getByText(/Unsubscribed/)).toBeInTheDocument()
+  })
+
+  it('says so when nobody matches', async () => {
+    searchHits = []
+    await open()
+    type('nobody')
+    expect(await screen.findByText(/Nobody matches/)).toBeInTheDocument()
   })
 })

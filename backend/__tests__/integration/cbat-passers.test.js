@@ -315,6 +315,148 @@ describe('POST /api/admin/cbat-passers/send', () => {
   });
 });
 
+// The search box exists because the thresholds are averages: right about a
+// population, wrong about individuals. It has to find the people the list
+// deliberately never returns, and the send has to accept them.
+describe('GET /api/admin/cbat-passers/search', () => {
+  const searchFor = (q) =>
+    request(app).get(`/api/admin/cbat-passers/search?q=${encodeURIComponent(q)}`).set('Cookie', cookie);
+
+  const hitFor = (body, email) => body.data.users.find(u => u.email === email);
+
+  it('401s without a cookie', async () => {
+    const res = await request(app).get('/api/admin/cbat-passers/search?q=someone');
+    expect(res.status).toBe(401);
+  });
+
+  it('finds a listed candidate by part of their address', async () => {
+    const u = await candidate({ email: 'findable.person@test.com' });
+    const res = await searchFor('findable');
+    expect(res.status).toBe(200);
+    const hit = hitFor(res.body, u.email);
+    expect(hit).toBeDefined();
+    expect(hit.excludedReason).toBeNull();
+    expect(hit.mailable).toBe(true);
+    expect(hit.completions).toBe(12);
+  });
+
+  it('finds someone on the do-not-contact list, and still lets them be mailed', async () => {
+    const u = await candidate({ email: 'andreaspaschalis@gmail.com' });
+
+    // Not in the list itself...
+    expect(namesIn((await getList()).body)).not.toContain(u.email);
+
+    // ...but findable, with the reason spelled out, and tickable.
+    const hit = hitFor((await searchFor('andreaspaschalis')).body, u.email);
+    expect(hit).toBeDefined();
+    expect(hit.excludedReason).toBe('named');
+    expect(hit.mailable).toBe(true);
+  });
+
+  it('finds someone under the thresholds and says which one they miss', async () => {
+    const quiet  = await candidate({ completions: 3 });
+    const active = await candidate({ completions: 20, days: 1 });
+
+    expect(hitFor((await searchFor(quiet.email)).body, quiet.email).excludedReason)
+      .toBe('below-min-games');
+    expect(hitFor((await searchFor(active.email)).body, active.email).excludedReason)
+      .toBe('still-active');
+  });
+
+  it('finds by display name and by agent number', async () => {
+    const u = await candidate({ displayName: 'Wing Commander Bob' });
+    expect(hitFor((await searchFor('wing commander')).body, u.email)).toBeDefined();
+    expect(hitFor((await searchFor(u.agentNumber)).body, u.email)).toBeDefined();
+  });
+
+  it('will not offer a banned, bot or unsubscribed account', async () => {
+    const bot    = await candidate({ email: 'blocked.bot@test.com',    isBot: true });
+    const banned = await candidate({ email: 'blocked.banned@test.com', isBanned: true });
+    const gone   = await candidate({ email: 'blocked.gone@test.com' });
+    await User.updateOne({ _id: gone._id }, { researchEmailOptOut: { at: new Date(), reason: null, campaign: 'x' } });
+
+    const res = await searchFor('blocked.');
+    for (const [email, reason] of [
+      [bot.email, 'bot'], [banned.email, 'banned'], [gone.email, 'opted-out'],
+    ]) {
+      const hit = hitFor(res.body, email);
+      expect(hit.excludedReason).toBe(reason);
+      expect(hit.mailable).toBe(false);
+    }
+  });
+
+  it('treats punctuation in the query as text, not as a pattern', async () => {
+    const u = await candidate({ email: 'dots.and+plus@test.com' });
+    const res = await searchFor('dots.and+plus');
+    expect(res.status).toBe(200);
+    expect(hitFor(res.body, u.email)).toBeDefined();
+  });
+
+  it('answers an empty query with nothing rather than everyone', async () => {
+    await candidate();
+    const res = await request(app).get('/api/admin/cbat-passers/search?q=a').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.users).toEqual([]);
+  });
+});
+
+describe('POST /api/admin/cbat-passers/send — hand-picked from the search', () => {
+  it('mails someone the list would never have offered', async () => {
+    const u = await candidate({ email: 'andreaspaschalis@gmail.com' });
+
+    const res = await request(app)
+      .post('/api/admin/cbat-passers/send')
+      .set('Cookie', cookie)
+      .send({ userIds: [u._id.toString()] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.sent).toContain(u.email);
+    expect((await SurveyInvite.findOne({ userId: u._id })).sentAt).toBeTruthy();
+  });
+
+  it('mails someone under the games threshold when picked by hand', async () => {
+    const u = await candidate({ completions: 2 });
+    const res = await request(app)
+      .post('/api/admin/cbat-passers/send')
+      .set('Cookie', cookie)
+      .send({ userIds: [u._id.toString()] });
+    expect(res.body.data.sent).toContain(u.email);
+  });
+
+  it('still refuses an unsubscribed account, however it was picked', async () => {
+    const u = await candidate();
+    await User.updateOne({ _id: u._id }, { researchEmailOptOut: { at: new Date(), reason: null, campaign: 'x' } });
+
+    const res = await request(app)
+      .post('/api/admin/cbat-passers/send')
+      .set('Cookie', cookie)
+      .send({ userIds: [u._id.toString()] });
+
+    expect(res.status).toBe(400);
+    expect(await SurveyInvite.countDocuments()).toBe(0);
+  });
+
+  it('still refuses to mail the same person twice', async () => {
+    const u = await candidate({ email: 'karatekiddnb@gmail.com' });
+    const body = { userIds: [u._id.toString()] };
+
+    expect((await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send(body)).status).toBe(200);
+    expect((await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send(body)).status).toBe(400);
+    expect(await SurveyInvite.countDocuments()).toBe(1);
+  });
+
+  it('ignores an id that is not an id rather than blowing up', async () => {
+    const u = await candidate();
+    const res = await request(app)
+      .post('/api/admin/cbat-passers/send')
+      .set('Cookie', cookie)
+      .send({ userIds: ['not-an-object-id', u._id.toString()] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.sentCount).toBe(1);
+  });
+});
+
 describe('GET /api/admin/cbat-passers/preview', () => {
   it('renders the email without creating an invite', async () => {
     await candidate();
