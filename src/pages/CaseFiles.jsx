@@ -5,6 +5,7 @@ import CaseFileCard from '../components/caseFiles/CaseFileCard'
 import CaseFilesGate from '../components/caseFiles/CaseFilesGate'
 import LockedCategoryModal from '../components/LockedCategoryModal'
 import SEO from '../components/SEO'
+import { authFetch } from '../utils/authFetch'
 
 // Inline mock — used as fallback when the API is unreachable.
 const MOCK_CASES = [
@@ -33,6 +34,17 @@ const MOCK_CASES = [
     chapterSlugs:  [],
   },
 ]
+
+// The API sorts by slug, which put the greyed-out "coming soon" Israel / Iran
+// card ahead of the one case you can actually play. Anything playable leads;
+// ties keep the server's order so the list stays stable.
+export function sortPlayableFirst(list) {
+  return [...list].sort((a, b) => {
+    const aLocked = a.status === 'locked' ? 1 : 0
+    const bLocked = b.status === 'locked' ? 1 : 0
+    return aLocked - bLocked
+  })
+}
 
 function SkeletonCard() {
   return (
@@ -72,7 +84,7 @@ export default function CaseFiles() {
 
     async function load() {
       try {
-        const r = await fetch(`${API}/api/case-files`, { credentials: 'include' })
+        const r = await authFetch(`${API}/api/case-files`)
         if (r.status === 403) {
           const body = await r.json().catch(() => ({}))
           if (!cancelled) setGate({ reason: body?.reason ?? 'disabled' })
@@ -80,15 +92,15 @@ export default function CaseFiles() {
         }
         if (!r.ok) {
           // Network/server error — fall back to mock so the page is never blank
-          if (!cancelled) setCases(MOCK_CASES)
+          if (!cancelled) setCases(sortPlayableFirst(MOCK_CASES))
           return
         }
         const d = await r.json()
         if (cancelled) return
         const list = Array.isArray(d) ? d : []
-        setCases(list.length ? list : MOCK_CASES)
+        setCases(sortPlayableFirst(list.length ? list : MOCK_CASES))
       } catch {
-        if (!cancelled) setCases(MOCK_CASES)
+        if (!cancelled) setCases(sortPlayableFirst(MOCK_CASES))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -119,10 +131,27 @@ export default function CaseFiles() {
 
       <div className="max-w-3xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-2xl font-extrabold text-slate-900 mb-1">Case Files</h1>
           <p className="text-sm text-slate-500">
             Investigate the world&#39;s biggest current affairs as an intelligence analyst.
+          </p>
+        </div>
+
+        {/* Nothing on this page used to say what a case IS, so the only way to
+            find out was to start one. Three lines is enough. */}
+        <div className="mb-8 rounded-2xl border border-brand-600/20 bg-brand-100/20 px-4 py-3">
+          <p className="intel-mono text-[10px] tracking-widest uppercase text-brand-600 mb-1.5">
+            New to this? Here is how a case works
+          </p>
+          <ol className="flex flex-col gap-1 text-[12px] text-slate-600 leading-snug">
+            <li>1. Read the briefing, then pin the evidence to a wall and link what connects.</li>
+            <li>2. Predict what happens next on a map, and question the people involved.</li>
+            <li>3. Watch how it really played out, and get a debrief on what you called right.</li>
+          </ol>
+          <p className="text-[11px] text-slate-500 mt-2">
+            No prior knowledge needed. Every card explains why it matters, and wrong
+            guesses cost very little.
           </p>
         </div>
 

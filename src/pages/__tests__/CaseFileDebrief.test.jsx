@@ -72,6 +72,23 @@ function make404() {
   return { ok: false, status: 404, json: async () => ({ message: 'not found' }) }
 }
 
+// Route by URL rather than by call order. The page makes several independent
+// requests (chapter, best, session) and the order they land in is an
+// implementation detail — a positional mockResolvedValueOnce chain broke every
+// time one moved.
+function mockFetchRoutes(routes) {
+  return vi.fn((url) => {
+    for (const [fragment, response] of routes) {
+      if (String(url).includes(fragment)) return Promise.resolve(response)
+    }
+    return Promise.resolve(make404())
+  })
+}
+
+const BEST_ROUTE    = '/best'
+const SESSION_ROUTE = '/sessions/'
+const CHAPTER_ROUTE = '/chapters/ch1'
+
 // ── Import after mocks ────────────────────────────────────────────────────────
 import CaseFileDebrief from '../CaseFileDebrief'
 
@@ -93,10 +110,11 @@ describe('CaseFileDebrief', () => {
   })
 
   it('renders DebriefStage with scoring after successful fetch', async () => {
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce(makeOk(CHAPTER))               // GET chapter
-      .mockResolvedValueOnce(makeOk(BEST_SESSION))           // GET best session
-      .mockResolvedValueOnce(makeOk(SESSION_WITH_SCORING))   // GET session details
+    global.fetch = mockFetchRoutes([
+      [BEST_ROUTE,    makeOk(BEST_SESSION)],
+      [SESSION_ROUTE, makeOk(SESSION_WITH_SCORING)],
+      [CHAPTER_ROUTE, makeOk(CHAPTER)],
+    ])
 
     render(<CaseFileDebrief />)
 
@@ -105,9 +123,10 @@ describe('CaseFileDebrief', () => {
   })
 
   it('renders "no completed session" empty state when best returns 404', async () => {
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce(makeOk(CHAPTER)) // GET chapter
-      .mockResolvedValueOnce(make404())        // GET best → 404
+    global.fetch = mockFetchRoutes([
+      [BEST_ROUTE,    make404()],
+      [CHAPTER_ROUTE, makeOk(CHAPTER)],
+    ])
 
     render(<CaseFileDebrief />)
 
@@ -143,9 +162,10 @@ describe('CaseFileDebrief', () => {
   })
 
   it('shows error state when chapter fetch fails', async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: false, status: 500, json: async () => ({ message: 'Server error' }),
-    })
+    global.fetch = mockFetchRoutes([
+      [BEST_ROUTE,    make404()],
+      [CHAPTER_ROUTE, { ok: false, status: 500, json: async () => ({ message: 'Server error' }) }],
+    ])
 
     render(<CaseFileDebrief />)
 
@@ -154,10 +174,11 @@ describe('CaseFileDebrief', () => {
   })
 
   it('closes/navigates when close button clicked', async () => {
-    global.fetch = vi.fn()
-      .mockResolvedValueOnce(makeOk(CHAPTER))
-      .mockResolvedValueOnce(makeOk(BEST_SESSION))
-      .mockResolvedValueOnce(makeOk(SESSION_WITH_SCORING))
+    global.fetch = mockFetchRoutes([
+      [BEST_ROUTE,    makeOk(BEST_SESSION)],
+      [SESSION_ROUTE, makeOk(SESSION_WITH_SCORING)],
+      [CHAPTER_ROUTE, makeOk(CHAPTER)],
+    ])
 
     render(<CaseFileDebrief />)
 

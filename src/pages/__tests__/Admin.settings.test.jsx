@@ -4,8 +4,9 @@ import Admin from '../Admin'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
+const mockNavigate = vi.fn()
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useLocation: () => ({ state: null }),
 }))
 
@@ -713,5 +714,36 @@ describe('Admin — Settings tab: Beta Testing', () => {
     await openBetaTesting()
     const section = screen.getByText('Beta Testing').closest('div').parentElement
     expect(within(section).queryByText('Save')).toBeNull()
+  })
+})
+
+
+// Slim mode is on site-wide, which strips the Play page the Case Files link
+// lives on — so without a way in from Admin an admin cannot preview the game
+// they are about to switch on.
+describe('Admin — Settings tab: Case Files testing link', () => {
+  beforeEach(() => {
+    global.Audio = MockAudio
+    audioInstances = []
+    mockNavigate.mockClear()
+  })
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  async function openCaseFiles() {
+    global.fetch = setupFetch()
+    render(<Admin />)
+    fireEvent.click(await screen.findByRole('button', { name: /settings/i }))
+    await waitFor(() => screen.getByText('Game Options'))
+    fireEvent.click(screen.getByText('Game Options'))
+    await waitFor(() => screen.getByText('Case Files'))
+    fireEvent.click(screen.getByText('Case Files'))
+    await waitFor(() => screen.getByTestId('open-case-files-btn'))
+  }
+
+  it('opens the case catalogue', async () => {
+    await openCaseFiles()
+    fireEvent.click(screen.getByTestId('open-case-files-btn'))
+    expect(mockNavigate).toHaveBeenCalledWith('/case-files')
   })
 })

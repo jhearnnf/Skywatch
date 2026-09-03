@@ -45,6 +45,7 @@ const SLIM_ALLOWED_PREFIXES = [
   '/admin',              // admins can still reach Settings to toggle slim off
   '/clipper',            // admin-only video tool — reachable for the same reason as /admin
   '/immerse',            // Hangar game — see note below
+  '/case-files',         // investigative scenarios — see note below
   '/chat',               // channels + DMs — see note below
   '/survey',             // emailed CBAT outcome questionnaire — see note below
 ]
@@ -74,6 +75,14 @@ const SLIM_ALLOWED_PREFIXES = [
 // hangarGameEnabled check happens in World3DRoute, which redirects to /cbat
 // when the game is off. Route-level gating stays in one place that way.
 
+// Note on '/case-files': allow-listed for the same reason as '/immerse' — this
+// list cannot see AppSettings, so the path is always routable and the real
+// gating happens inside (caseFilesEnabled, per-case tiers, daily limit). Slim
+// mode adds no nav entry for it and the Play page it is linked from is not
+// reachable, so in practice only a typed URL or the Admin → Game Options →
+// Case Files "Open Case Files" button lands here. That button is the whole
+// point: without this entry, turning slim mode on hides Case Files from the
+// admins who need to preview it, not just from players.
 export function isSlimAllowed(pathname) {
   return SLIM_ALLOWED_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(p + '/'),

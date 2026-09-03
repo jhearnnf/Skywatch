@@ -11,10 +11,13 @@
  * CONTRACT-AMBIGUITY: priorResults is built from the local accumulator inside
  * this hook as each stage is submitted. It is NOT re-fetched from the server —
  * this avoids an extra roundtrip and keeps the client state authoritative for
- * stage-to-stage hand-offs.
+ * stage-to-stage hand-offs. The one exception is a resumed session, where the
+ * server hands back the stage results it already holds so the accumulator can
+ * be seeded (phase_reveal needs the evidence_wall connections).
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { authFetch } from '../utils/authFetch'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
@@ -30,6 +33,9 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
   const [priorResults,      setPriorResults]      = useState([])
   const [scoring,           setScoring]           = useState(null)
   const [isCompleted,       setIsCompleted]       = useState(false)
+  const [resumed,           setResumed]           = useState(false)
+  // Bumped by restartSession to re-run init against a brand new session.
+  const [runNonce,          setRunNonce]          = useState(0)
 
   // Keep a ref to sessionId so submitStage/sendQuestion closures always see
   // the latest value without needing it in their dependency arrays.
@@ -51,12 +57,18 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
       setLoading(true)
       setError(null)
       setGate(null)
+      // Cleared here rather than only at mount, because restartSession re-runs
+      // this effect and must not inherit the abandoned run's answers.
+      setPriorResults([])
+      setScoring(null)
+      setIsCompleted(false)
+      setResumed(false)
+      setCurrentStageIndex(0)
 
       try {
         // 1. Fetch chapter metadata
-        const chapterRes = await fetch(
+        const chapterRes = await authFetch(
           `${API_BASE}/api/case-files/${caseSlug}/chapters/${chapterSlug}`,
-          { credentials: 'include' },
         )
         if (chapterRes.status === 403) {
           const body = await chapterRes.json().catch(() => ({}))
@@ -72,11 +84,10 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
         setTotalStages(ch.stages?.length ?? 0)
 
         // 2. Create a session
-        const sessionRes = await fetch(
+        const sessionRes = await authFetch(
           `${API_BASE}/api/case-files/${caseSlug}/chapters/${chapterSlug}/sessions`,
           {
             method:      'POST',
-            credentials: 'include',
             headers:     { 'Content-Type': 'application/json' },
           },
         )
@@ -97,6 +108,14 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
 
         setSessionId(sd.sessionId)
         setCurrentStageIndex(sd.currentStageIndex ?? 0)
+        setResumed(Boolean(sd.resumed))
+        if (Array.isArray(sd.stageResults) && sd.stageResults.length > 0) {
+          setPriorResults(sd.stageResults.map(r => ({
+            stageIndex: r.stageIndex,
+            stageType:  r.stageType,
+            payload:    r.payload ?? {},
+          })))
+        }
       } catch (err) {
         if (!cancelled) setError(err.message ?? 'Failed to load case file')
       } finally {
@@ -106,7 +125,7 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
 
     init()
     return () => { cancelled = true }
-  }, [caseSlug, chapterSlug])
+  }, [caseSlug, chapterSlug, runNonce])
 
   // ── submitStage ───────────────────────────────────────────────────────────
   const submitStage = useCallback(async (payload) => {
@@ -118,11 +137,10 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
     if (!sid || !stage) throw new Error('No active session or stage')
 
     // PATCH the current stage
-    const patchRes = await fetch(
+    const patchRes = await authFetch(
       `${API_BASE}/api/case-files/sessions/${sid}/stages/${idx}`,
       {
         method:      'PATCH',
-        credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
         body:        JSON.stringify({ stageType: stage.type, payload }),
       },
@@ -142,12 +160,11 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
 
     if (pd.isLastStage) {
       // Auto-complete the session
-      const completeRes = await fetch(
+      const completeRes = await authFetch(
         `${API_BASE}/api/case-files/sessions/${sid}/complete`,
         {
           method:      'POST',
-          credentials: 'include',
-          headers:     { 'Content-Type': 'application/json' },
+            headers:     { 'Content-Type': 'application/json' },
         },
       )
       if (!completeRes.ok) {
@@ -172,11 +189,10 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
 
     if (!sid) throw new Error('No active session')
 
-    const res = await fetch(
+    const res = await authFetch(
       `${API_BASE}/api/case-files/sessions/${sid}/interrogate`,
       {
         method:      'POST',
-        credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },
         body:        JSON.stringify({ stageIndex: idx, actorId, question }),
       },
@@ -189,6 +205,33 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
     return data?.data ?? data
   }, [])
 
+  // ── abandonSession ────────────────────────────────────────────────────────
+  // Marks the run as given up so the next visit starts a fresh one. Failure is
+  // deliberately swallowed: the caller is on its way out of the page either
+  // way, and the worst case is that the run stays resumable.
+  const abandonSession = useCallback(async () => {
+    const sid = sessionIdRef.current
+    if (!sid) return
+    try {
+      await authFetch(`${API_BASE}/api/case-files/sessions/${sid}/abandon`, {
+        method:      'POST',
+      })
+    } catch {
+      // ignore — see note above
+    }
+  }, [])
+
+  // ── restartSession ────────────────────────────────────────────────────────
+  // Throw this run away and begin the chapter again from stage 1 without
+  // leaving the page. Abandoning first is what stops the server handing the
+  // same half-finished session straight back.
+  const restartSession = useCallback(async () => {
+    await abandonSession()
+    sessionIdRef.current = null
+    setSessionId(null)
+    setRunNonce(n => n + 1)
+  }, [abandonSession])
+
   return {
     loading,
     error,
@@ -200,7 +243,10 @@ export default function useCaseFileSession({ caseSlug, chapterSlug }) {
     priorResults,
     scoring,
     isCompleted,
+    resumed,
     submitStage,
     sendQuestion,
+    abandonSession,
+    restartSession,
   }
 }

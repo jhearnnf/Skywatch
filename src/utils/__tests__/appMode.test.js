@@ -46,6 +46,16 @@ describe('appMode', () => {
       expect(isSlimAllowed('/immerse')).toBe(true)
     })
 
+    // Same reasoning as /immerse: this list cannot read AppSettings, so the
+    // path stays routable and caseFilesEnabled / tier / daily-limit gating
+    // happens inside. Slim mode adds no nav entry for it, so in practice only
+    // a typed URL or the Admin "Open Case Files" button lands here — which is
+    // the point, because admins have to be able to preview it.
+    it('allows case files so admins can still reach them in slim mode', () => {
+      expect(isSlimAllowed('/case-files')).toBe(true)
+      expect(isSlimAllowed('/case-files/russia-ukraine/road-to-invasion')).toBe(true)
+    })
+
     it('blocks learning content and other games', () => {
       for (const p of [
         '/home',
@@ -53,7 +63,6 @@ describe('appMode', () => {
         '/play',
         '/play/quiz',
         '/rankings',
-        '/case-files',
         '/quiz/abc',
         '/intel-brief-history',
       ]) {

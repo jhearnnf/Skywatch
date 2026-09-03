@@ -78,8 +78,10 @@ function makeHookReturn(overrides = {}) {
     priorResults:      [],
     scoring:           null,
     isCompleted:       false,
+    resumed:           false,
     submitStage:       vi.fn().mockResolvedValue(undefined),
     sendQuestion:      vi.fn().mockResolvedValue({ answer: 'ok', questionsRemaining: 2 }),
+    restartSession:    vi.fn().mockResolvedValue(undefined),
     ...overrides,
   }
 }
@@ -158,5 +160,91 @@ describe('CaseFilePlay', () => {
     useCaseFileSession.mockReturnValue(makeHookReturn({ isCompleted: false }))
     render(<CaseFilePlay />)
     expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  // The debrief stage is scored by POST /complete, which only fires once every
+  // stage is in — so rendering it in-flow always showed an empty "computing
+  // your score" screen, and the player then had to click through to a second
+  // debrief that finally had the number. Submit it for them instead.
+  describe('final debrief stage', () => {
+    it('submits the debrief stage automatically instead of rendering it', async () => {
+      const submitStage = vi.fn().mockResolvedValue(undefined)
+      useCaseFileSession.mockReturnValue(makeHookReturn({ currentStageIndex: 2, submitStage }))
+
+      render(<CaseFilePlay />)
+
+      await waitFor(() => expect(submitStage).toHaveBeenCalledWith({ viewed: true }))
+      expect(screen.queryByTestId('stage-router')).toBeNull()
+      expect(screen.getByText(/Scoring your analysis/i)).toBeDefined()
+    })
+
+    it('submits it only once even across re-renders', async () => {
+      const submitStage = vi.fn().mockResolvedValue(undefined)
+      useCaseFileSession.mockReturnValue(makeHookReturn({ currentStageIndex: 2, submitStage }))
+
+      const { rerender } = render(<CaseFilePlay />)
+      await waitFor(() => expect(submitStage).toHaveBeenCalledTimes(1))
+      rerender(<CaseFilePlay />)
+      expect(submitStage).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('resume', () => {
+    it('tells the player where they were picked back up', () => {
+      useCaseFileSession.mockReturnValue(makeHookReturn({ resumed: true, currentStageIndex: 1 }))
+      render(<CaseFilePlay />)
+      expect(screen.getByTestId('resume-notice').textContent).toMatch(/stage 2 of 3/i)
+    })
+
+    it('says nothing on a fresh run', () => {
+      useCaseFileSession.mockReturnValue(makeHookReturn({ resumed: false }))
+      render(<CaseFilePlay />)
+      expect(screen.queryByTestId('resume-notice')).toBeNull()
+    })
+
+    it('says nothing when the resumed run had not got past stage 1', () => {
+      useCaseFileSession.mockReturnValue(makeHookReturn({ resumed: true, currentStageIndex: 0 }))
+      render(<CaseFilePlay />)
+      expect(screen.queryByTestId('resume-notice')).toBeNull()
+    })
+  })
+
+  describe('leaving a case', () => {
+    it('Save and Exit leaves the run resumable', async () => {
+      const restartSession = vi.fn().mockResolvedValue(undefined)
+      useCaseFileSession.mockReturnValue(makeHookReturn({ restartSession }))
+      render(<CaseFilePlay />)
+
+      await act(async () => { screen.getByTestId('abort-case-btn').click() })
+      await act(async () => { screen.getByTestId('abort-save-btn').click() })
+
+      expect(restartSession).not.toHaveBeenCalled()
+      expect(mockNavigate).toHaveBeenCalledWith('/case-files')
+    })
+
+    // Giving up used to abandon the run and drop the player on the catalogue,
+    // which looked like nothing had happened. Starting over now happens in
+    // front of them, on the page they are already on.
+    it('Start Over restarts the run without leaving the page', async () => {
+      const restartSession = vi.fn().mockResolvedValue(undefined)
+      useCaseFileSession.mockReturnValue(makeHookReturn({ restartSession }))
+      render(<CaseFilePlay />)
+
+      await act(async () => { screen.getByTestId('abort-case-btn').click() })
+      await act(async () => { screen.getByTestId('abort-confirm-btn').click() })
+
+      expect(restartSession).toHaveBeenCalled()
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
+    it('closes the dialog after starting over', async () => {
+      useCaseFileSession.mockReturnValue(makeHookReturn())
+      render(<CaseFilePlay />)
+
+      await act(async () => { screen.getByTestId('abort-case-btn').click() })
+      expect(screen.getByTestId('abort-confirm-modal')).toBeDefined()
+      await act(async () => { screen.getByTestId('abort-confirm-btn').click() })
+      expect(screen.queryByTestId('abort-confirm-modal')).toBeNull()
+    })
   })
 })

@@ -1,6 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import CaseFiles from '../CaseFiles'
+import CaseFiles, { sortPlayableFirst } from '../CaseFiles'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -193,5 +193,38 @@ describe('CaseFiles page — tier gating', () => {
     render(<CaseFiles />)
     await waitFor(() => screen.getByTestId('case-file-card-gold-only-case'))
     expect(screen.queryByText('Premium')).toBeNull()
+  })
+})
+
+// The API sorts by slug, which put the greyed-out "coming soon" case ahead of
+// the only one you can play.
+describe('CaseFiles — ordering', () => {
+  it('sortPlayableFirst puts locked cases last', () => {
+    const sorted = sortPlayableFirst([
+      { slug: 'a-locked', status: 'locked' },
+      { slug: 'b-live',   status: 'published' },
+      { slug: 'c-locked', status: 'locked' },
+      { slug: 'd-live',   status: 'published' },
+    ])
+    expect(sorted.map(c => c.slug)).toEqual(['b-live', 'd-live', 'a-locked', 'c-locked'])
+  })
+
+  it('leaves the server order alone within each group', () => {
+    const input  = [{ slug: 'z', status: 'published' }, { slug: 'a', status: 'published' }]
+    const sorted = sortPlayableFirst(input)
+    expect(sorted.map(c => c.slug)).toEqual(['z', 'a'])
+    expect(sorted).not.toBe(input)
+  })
+})
+
+
+// Nothing on the catalogue used to say what a case actually involves, so the
+// only way to find out was to spend one of your daily attempts on it.
+describe('CaseFiles — orienting a first-timer', () => {
+  it('explains how a case works before you open one', async () => {
+    render(<CaseFiles />)
+    await waitFor(() => screen.getByText(/New to this\?/i))
+    expect(screen.getByText(/pin the evidence to a wall/i)).toBeDefined()
+    expect(screen.getByText(/No prior knowledge needed/i)).toBeDefined()
   })
 })

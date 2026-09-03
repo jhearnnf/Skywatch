@@ -257,6 +257,107 @@ describe('useCaseFileSession', () => {
     expect(result.current.currentStageIndex).toBe(0)
   })
 
+  // A refresh used to throw the run away and spend another daily attempt. The
+  // server now hands back the unfinished run; the hook has to adopt its stage
+  // index AND its stage results, because phase_reveal rebuilds the player's
+  // evidence-wall links from priorResults.
+  describe('resuming an unfinished run', () => {
+    it('seeds stage index and prior results from the resumed session', async () => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(makeOkResponse(CHAPTER))
+        .mockResolvedValueOnce(makeOkResponse({
+          sessionId:         'sess-resumed',
+          currentStageIndex: 2,
+          resumed:           true,
+          stageResults: [
+            { stageIndex: 0, stageType: 'cold_open',     payload: { completed: true } },
+            { stageIndex: 1, stageType: 'evidence_wall', payload: { connections: [{ fromItemId: 'a', toItemId: 'b' }] } },
+          ],
+        }))
+
+      const { result } = renderHook(() => useCaseFileSession(SLUG_ARGS))
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.sessionId).toBe('sess-resumed')
+      expect(result.current.currentStageIndex).toBe(2)
+      expect(result.current.resumed).toBe(true)
+      expect(result.current.priorResults).toHaveLength(2)
+      expect(result.current.priorResults[1].payload.connections).toEqual([
+        { fromItemId: 'a', toItemId: 'b' },
+      ])
+    })
+
+    it('reports a fresh session as not resumed', async () => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(makeOkResponse(CHAPTER))
+        .mockResolvedValueOnce(makeOkResponse(SESSION_RESPONSE))
+
+      const { result } = renderHook(() => useCaseFileSession(SLUG_ARGS))
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      expect(result.current.resumed).toBe(false)
+      expect(result.current.priorResults).toEqual([])
+    })
+
+    it('abandonSession posts to the abandon endpoint', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(makeOkResponse(CHAPTER))
+        .mockResolvedValueOnce(makeOkResponse(SESSION_RESPONSE))
+        .mockResolvedValueOnce(makeOkResponse({ abandoned: true }))
+      global.fetch = fetchMock
+
+      const { result } = renderHook(() => useCaseFileSession(SLUG_ARGS))
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => { await result.current.abandonSession() })
+
+      const [url, opts] = fetchMock.mock.calls[2]
+      expect(url).toContain('/api/case-files/sessions/sess-abc-123/abandon')
+      expect(opts.method).toBe('POST')
+    })
+
+    // "Give Up" means "start this case again", so the hook has to abandon the
+    // old run (or the server would just hand it straight back) and then create
+    // a fresh one, with none of the previous answers carried over.
+    it('restartSession abandons the run then starts a new one at stage 1', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(makeOkResponse(CHAPTER))
+        .mockResolvedValueOnce(makeOkResponse({
+          sessionId: 'sess-old', currentStageIndex: 2, resumed: true,
+          stageResults: [{ stageIndex: 0, stageType: 'cold_open', payload: { completed: true } }],
+        }))
+        .mockResolvedValueOnce(makeOkResponse({ abandoned: true }))   // abandon
+        .mockResolvedValueOnce(makeOkResponse(CHAPTER))                // re-init
+        .mockResolvedValueOnce(makeOkResponse({ sessionId: 'sess-new', currentStageIndex: 0 }))
+      global.fetch = fetchMock
+
+      const { result } = renderHook(() => useCaseFileSession(SLUG_ARGS))
+      await waitFor(() => expect(result.current.currentStageIndex).toBe(2))
+
+      await act(async () => { await result.current.restartSession() })
+      await waitFor(() => expect(result.current.sessionId).toBe('sess-new'))
+
+      expect(fetchMock.mock.calls[2][0]).toContain('/sessions/sess-old/abandon')
+      expect(result.current.currentStageIndex).toBe(0)
+      expect(result.current.resumed).toBe(false)
+      expect(result.current.priorResults).toEqual([])
+    })
+
+    it('abandonSession swallows a failed request', async () => {
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce(makeOkResponse(CHAPTER))
+        .mockResolvedValueOnce(makeOkResponse(SESSION_RESPONSE))
+        .mockRejectedValueOnce(new Error('offline'))
+
+      const { result } = renderHook(() => useCaseFileSession(SLUG_ARGS))
+      await waitFor(() => expect(result.current.loading).toBe(false))
+
+      await act(async () => {
+        await expect(result.current.abandonSession()).resolves.toBeUndefined()
+      })
+    })
+  })
+
   it('handles server response wrapped in { data: ... } envelope', async () => {
     global.fetch = vi.fn()
       .mockResolvedValueOnce(makeOkResponse({ data: CHAPTER }))           // chapter wrapped

@@ -25,6 +25,7 @@ import { useAuth } from '../context/AuthContext'
 import DebriefStage from '../components/caseFiles/stages/DebriefStage'
 import CaseFilesGate from '../components/caseFiles/CaseFilesGate'
 import SEO from '../components/SEO'
+import { authFetch } from '../utils/authFetch'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
@@ -51,6 +52,29 @@ export default function CaseFileDebrief() {
   const [chapter,  setChapter]  = useState(location.state?.chapter ?? null)
   const [scoring,  setScoring]  = useState(location.state?.scoring ?? null)
   const [noSession, setNoSession] = useState(false)
+  // { bestScore, completedCount } — drives the "personal best" line on the
+  // score banner. Fetched separately from the scoring fallback below so it is
+  // available on the happy path too, where scoring arrives via location.state.
+  const [personalBest, setPersonalBest] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadBest() {
+      try {
+        const r = await authFetch(
+          `${API}/api/case-files/${caseSlug}/chapters/${chapterSlug}/best`,
+        )
+        if (!r.ok) return
+        const d = await r.json()
+        const b = d?.data ?? d
+        if (!cancelled && typeof b?.bestScore === 'number') setPersonalBest(b)
+      } catch {
+        // Best-effort flourish — the debrief is fine without it.
+      }
+    }
+    loadBest()
+    return () => { cancelled = true }
+  }, [API, caseSlug, chapterSlug])
 
   useEffect(() => {
     let cancelled = false
@@ -63,9 +87,8 @@ export default function CaseFileDebrief() {
         // ── 1. Chapter (from state or re-fetched) ──────────────────────────
         let ch = chapter
         if (!ch) {
-          const r = await fetch(
+          const r = await authFetch(
             `${API}/api/case-files/${caseSlug}/chapters/${chapterSlug}`,
-            { credentials: 'include' },
           )
           if (r.status === 403) {
             const body = await r.json().catch(() => ({}))
@@ -81,9 +104,8 @@ export default function CaseFileDebrief() {
 
         // ── 2. Scoring (from state or re-fetched via best session) ─────────
         if (!scoring) {
-          const bestRes = await fetch(
+          const bestRes = await authFetch(
             `${API}/api/case-files/${caseSlug}/chapters/${chapterSlug}/best`,
-            { credentials: 'include' },
           )
 
           if (bestRes.status === 404) {
@@ -96,17 +118,28 @@ export default function CaseFileDebrief() {
           const bestData = await bestRes.json()
           const best = bestData?.data ?? bestData
 
-          // Fetch the full session for its scoring object
-          const sessRes = await fetch(
-            `${API}/api/case-files/sessions/${best.sessionId ?? best._id}`,
-            { credentials: 'include' },
-          )
-          if (!sessRes.ok) throw new Error(`Failed to fetch session (${sessRes.status})`)
-          const sessData = await sessRes.json()
-          const sess = sessData?.data ?? sessData
+          // No completed run for this chapter yet — /best answers 200 with
+          // nulls rather than 404 when the user simply hasn't finished it.
+          if (!best || (best.bestScore == null && !best.sessionId)) {
+            if (!cancelled) setNoSession(true)
+            return
+          }
+
+          // /best carries the scoring inline. Only fall back to fetching the
+          // session when an older server hasn't sent it.
+          let scored = best.scoring ?? null
+          if (!scored && (best.sessionId ?? best._id)) {
+            const sessRes = await authFetch(
+              `${API}/api/case-files/sessions/${best.sessionId ?? best._id}`,
+            )
+            if (!sessRes.ok) throw new Error(`Failed to fetch session (${sessRes.status})`)
+            const sessData = await sessRes.json()
+            const sess = sessData?.data ?? sessData
+            scored = sess.scoring ?? sess
+          }
           if (cancelled) return
 
-          setScoring(sess.scoring ?? sess)
+          setScoring(scored)
         }
       } catch (err) {
         if (!cancelled) setError(err.message ?? 'Failed to load debrief')
@@ -180,6 +213,7 @@ export default function CaseFileDebrief() {
   const sessionContext = {
     caseSlug,
     chapterSlug,
+    chapterTitle: chapter?.title,
     sessionId:    null,
     priorResults: [],
   }
@@ -192,6 +226,8 @@ export default function CaseFileDebrief() {
         sessionContext={sessionContext}
         onSubmit={handleClose}
         scoring={scoring}
+        personalBest={personalBest}
+        onReplay={() => navigate(`/case-files/${caseSlug}/${chapterSlug}`)}
       />
     </>
   )
