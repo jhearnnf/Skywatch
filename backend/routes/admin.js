@@ -57,6 +57,7 @@ const {
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const SurveyResponse           = require('../models/SurveyResponse');
+const { SURVEY_CAMPAIGN }      = require('../constants/survey');
 const DonationPageVisit        = require('../models/DonationPageVisit');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
@@ -570,8 +571,13 @@ router.get('/stats', async (_req, res) => {
       User.distinct('_id', { 'donationPrompt.clickCount': { $gt: 0 } }),
       // Reaching the end of the questionnaire IS the impression: `completedAt` is stamped on
       // the same request that advances to the closing screen, which is where the ask lives.
-      SurveyResponse.distinct('userId', { completedAt: { $ne: null } }),
-      SurveyResponse.distinct('userId', { donationClicked: true }),
+      //
+      // Filtered to the live campaign, like every other read of this collection. A dry run
+      // lives under its own campaign key precisely so it stays out of the numbers, and
+      // without this an admin testing the questionnaire on themselves showed up here as a
+      // real respondent who clicked a real donation ask.
+      SurveyResponse.distinct('userId', { campaign: SURVEY_CAMPAIGN, completedAt: { $ne: null } }),
+      SurveyResponse.distinct('userId', { campaign: SURVEY_CAMPAIGN, donationClicked: true }),
       DonationPageVisit.countDocuments(),
       DonationPageVisit.countDocuments({ checkoutStartedAt: { $ne: null } }),
       // What the funnel is actually for. Every count above stops at a click, and a
@@ -718,7 +724,7 @@ router.get('/stats/donation-funnel', async (_req, res) => {
           { 'donationPrompt.clickCount':      { $gt: 0 } },
         ],
       }),
-      SurveyResponse.find({ completedAt: { $ne: null } })
+      SurveyResponse.find({ campaign: SURVEY_CAMPAIGN, completedAt: { $ne: null } })
         .select('userId donationClicked completedAt')
         .sort({ completedAt: -1 })
         .limit(FUNNEL_SOURCE_LIMIT)

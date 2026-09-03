@@ -44,6 +44,7 @@ const User              = require('../../models/User');
 const SurveyInvite      = require('../../models/SurveyInvite');
 const SurveyResponse    = require('../../models/SurveyResponse');
 const DonationPageVisit = require('../../models/DonationPageVisit');
+const { SURVEY_CAMPAIGN, SURVEY_TEST_CAMPAIGN } = require('../../constants/survey');
 
 beforeAll(async () => { await db.connect(); });
 afterEach(async () => { await db.clearDatabase(); jest.clearAllMocks(); });
@@ -63,12 +64,17 @@ const donate = (body, cookie) => {
 
 // A completed questionnaire: reaching `completedAt` IS reaching the ask, since
 // the same request that advances to the closing screen stamps it.
-async function finishSurvey(user, { donationClicked = false } = {}) {
+//
+// The campaign comes from the constant rather than a literal. It used to be
+// spelled with hyphens here, which matched nothing and went unnoticed for as
+// long as nothing filtered on it.
+async function finishSurvey(user, { donationClicked = false, campaign = SURVEY_CAMPAIGN } = {}) {
   const invite = await SurveyInvite.create({
-    userId: user._id, token: SurveyInvite.newToken(), sentAt: new Date(), sentToEmail: user.email,
+    userId: user._id, token: SurveyInvite.newToken(), sentAt: new Date(),
+    sentToEmail: user.email, campaign,
   });
   return SurveyResponse.create({
-    inviteId: invite._id, userId: user._id, campaign: 'cbat-outcome-2026',
+    inviteId: invite._id, userId: user._id, campaign,
     completedAt: new Date(), donationClicked,
   });
 }
@@ -188,13 +194,31 @@ describe('GET /api/admin/stats — donation', () => {
     expect(donation.clicked).toBe(1);
   });
 
+  // A dry run lives under its own campaign key so that it stays out of every
+  // number. The funnel was the one read of this collection that forgot to filter,
+  // so an admin testing the questionnaire on themselves turned up here as a real
+  // respondent who had clicked a real donation ask.
+  it('ignores a questionnaire sent under the test campaign', async () => {
+    const admin  = await createAdminUser();
+    const tester = await createUser();
+    await finishSurvey(tester, { donationClicked: true, campaign: SURVEY_TEST_CAMPAIGN });
+
+    const donation = await stats(admin);
+
+    expect(donation.survey).toEqual({ seen: 0, clicked: 0 });
+    expect(donation.seen).toBe(0);
+    expect(donation.clicked).toBe(0);
+  });
+
   // A half-answered run is the normal case and is not an ask: the closing screen
   // is the only place the questionnaire mentions money.
   it('ignores a questionnaire nobody finished', async () => {
     const admin = await createAdminUser();
     const user  = await createUser();
     const invite = await SurveyInvite.create({ userId: user._id, token: SurveyInvite.newToken() });
-    await SurveyResponse.create({ inviteId: invite._id, userId: user._id, campaign: 'c', satTest: true });
+    await SurveyResponse.create({
+      inviteId: invite._id, userId: user._id, campaign: SURVEY_CAMPAIGN, satTest: true,
+    });
 
     const donation = await stats(admin);
 
