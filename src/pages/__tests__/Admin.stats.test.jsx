@@ -70,6 +70,7 @@ const MOCK_STATS = {
       card:   { seen: 34, clicked: 4 },
       survey: { seen: 8,  clicked: 2 },
       page:   { visits: 25, checkouts: 5 },
+      received: { donors: 3, totalPence: 4250 },
     },
   },
   games: {
@@ -137,18 +138,32 @@ describe('Admin — Stats tab: donation funnel', () => {
     expect(screen.getByText(/15% of those asked clicked through/)).toBeInTheDocument()
   })
 
-  // The two new surfaces are why the tile stopped being one number: the questionnaire ask and
-  // the public page each convert differently and are judged separately.
-  it('breaks the asks down by surface, and reports the donate page on its own', async () => {
+  // The one figure here that is money rather than intent, and the reason the row exists:
+  // every other count stops at a click, and a started Checkout session is not a payment.
+  it('leads with what was actually received', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Donations Received')).toBeInTheDocument())
+    expect(screen.getByText('£43')).toBeInTheDocument()
+    expect(screen.getByText(/from 3 donors/)).toBeInTheDocument()
+  })
+
+  // Four ratio tiles in a row meant reading "6 / 40" and then working out for yourself that it
+  // was the UNION of the two beneath it, not the sum. The split is still there, one click down.
+  it('keeps the per-surface split out of the row, and in the drill-down', async () => {
     render(<Admin />)
 
     await waitFor(() => expect(screen.getByText('Donation Asks')).toBeInTheDocument())
-    expect(screen.getByText('Post-Game Ask')).toBeInTheDocument()
-    expect(screen.getByText('4 / 34')).toBeInTheDocument()
-    expect(screen.getByText('Questionnaire Ask')).toBeInTheDocument()
-    expect(screen.getByText('2 / 8')).toBeInTheDocument()
-    expect(screen.getByText('Donate Page')).toBeInTheDocument()
-    expect(screen.getByText('5 / 25')).toBeInTheDocument()
+    expect(screen.queryByText('Post-game note')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Donation Asks'))
+
+    await waitFor(() => expect(screen.getByText('Where the asks landed')).toBeInTheDocument())
+    expect(screen.getByText('Post-game note')).toBeInTheDocument()
+    expect(screen.getByText(/12% clicked/)).toBeInTheDocument()
+    expect(screen.getByText('Questionnaire')).toBeInTheDocument()
+    expect(screen.getByText(/25% clicked/)).toBeInTheDocument()
+    expect(screen.getByText('Donate page')).toBeInTheDocument()
     expect(screen.getByText(/20% reached Stripe/)).toBeInTheDocument()
   })
 
@@ -167,7 +182,14 @@ describe('Admin — Stats tab: donation funnel', () => {
     render(<Admin />)
     await waitFor(() => expect(screen.getByText('Donation Asks')).toBeInTheDocument())
     expect(screen.getByText(/nobody has been asked yet/)).toBeInTheDocument()
+    expect(screen.getByText('£0')).toBeInTheDocument()
+    expect(screen.getByText(/nobody has donated yet/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Donation Asks'))
+
+    await waitFor(() => expect(screen.getByText('Where the asks landed')).toBeInTheDocument())
     expect(screen.getByText(/no visits to .donate yet/)).toBeInTheDocument()
+    expect(screen.getByText(/not shown yet/)).toBeInTheDocument()
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument()
   })
 

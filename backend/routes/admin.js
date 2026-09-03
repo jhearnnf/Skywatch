@@ -464,6 +464,7 @@ router.get('/stats', async (_req, res) => {
       cardSeenIds, cardClickedIds,
       surveySeenIds, surveyClickedIds,
       donatePageSeen, donatePageClicked,
+      donationReceivedAgg, donationAnonReceivedAgg,
     ] = await Promise.all([
       User.countDocuments(),
       // Same window as GET /api/chat/presence, from one constant — this tile and
@@ -573,6 +574,31 @@ router.get('/stats', async (_req, res) => {
       SurveyResponse.distinct('userId', { donationClicked: true }),
       DonationPageVisit.countDocuments(),
       DonationPageVisit.countDocuments({ checkoutStartedAt: { $ne: null } }),
+      // What the funnel is actually for. Every count above stops at a click, and a
+      // started Checkout session is not a payment — only Stripe's webhook knows that,
+      // and it writes both of these. Donors are people rather than payments: someone
+      // who gives twice is one supporter, and their gifts are summed onto one row.
+      //
+      // Two reads because a donor may or may not have had an account to record it
+      // against, and /donate does not require one — so unnamed donors are the normal
+      // case. The webhook writes exactly one of the two per payment, which is what
+      // makes adding them below safe.
+      User.aggregate([
+        { $match: { 'donationPrompt.donatedAt': { $ne: null } } },
+        { $group: {
+            _id: null,
+            donors: { $sum: 1 },
+            pence:  { $sum: { $ifNull: ['$donationPrompt.donatedTotalPence', 0] } },
+        }},
+      ]),
+      DonationPageVisit.aggregate([
+        { $match: { paidAt: { $ne: null } } },
+        { $group: {
+            _id: null,
+            donors: { $sum: 1 },
+            pence:  { $sum: { $ifNull: ['$paidPence', 0] } },
+        }},
+      ]),
     ]);
 
     // The union is over people, not rows: someone who saw the post-game note and later
@@ -601,6 +627,10 @@ router.get('/stats', async (_req, res) => {
             card:    { seen: cardSeenIds.length,   clicked: cardClickedIds.length },
             survey:  { seen: surveySeenIds.length, clicked: surveyClickedIds.length },
             page:    { visits: donatePageSeen,     checkouts: donatePageClicked },
+            received: {
+              donors:     (donationReceivedAgg[0]?.donors ?? 0) + (donationAnonReceivedAgg[0]?.donors ?? 0),
+              totalPence: (donationReceivedAgg[0]?.pence  ?? 0) + (donationAnonReceivedAgg[0]?.pence  ?? 0),
+            },
           },
         },
         games: {

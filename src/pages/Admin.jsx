@@ -49,9 +49,21 @@ import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
 
 const fmtNum = (n) => (n ?? 0).toLocaleString()
 
+const pct = (n, d) => d > 0 ? `${Math.round((n / d) * 100)}%` : '—'
+
 const fmtUSD = (n) => {
   const v = typeof n === 'number' ? n : 0
   return `$${v.toFixed(2)}`
+}
+
+// Stripe stores money in pence. Whole pounds once we are past a tenner, because
+// the pennies on a four-figure total are noise on a tile this size.
+const fmtGBP = (pence) => {
+  const p = typeof pence === 'number' ? pence : 0
+  const pounds = p / 100
+  return pounds >= 10 || Number.isInteger(pounds)
+    ? `£${Math.round(pounds).toLocaleString()}`
+    : `£${pounds.toFixed(2)}`
 }
 
 function fmtUptime(s) {
@@ -325,7 +337,84 @@ function lastContactAt(r) {
   return times.length ? new Date(Math.max(...times)) : null
 }
 
-function DonationFunnelList({ API }) {
+// The three asks, as rows. They were four tiles in a row until the arithmetic
+// got in the way: "Donation Asks" is the UNION of the first two (someone who met
+// both was asked twice but is one person), so the numbers never added up to what
+// the row above them said, and nothing about a tile hints at that. As labelled
+// rows with the denominator spelled out, and only on the screen of someone who
+// has deliberately opened the drill-down, they read plainly.
+//
+// The donate page stays out of the headline total: it is public and mostly
+// anonymous, and it is also where the post-game note's link LANDS, so folding
+// its visits in would count that same click twice, once as a click and again as
+// an impression. Here, one step down, it belongs beside the other two.
+function AskBreakdown({ donation }) {
+  const rows = [
+    {
+      key:   'card',
+      label: 'Post-game note',
+      hint:  'shown under a progress award',
+      seen:  donation.card.seen,
+      clicked: donation.card.clicked,
+      verb:  'clicked',
+      empty: 'not shown yet',
+    },
+    {
+      key:   'survey',
+      label: 'Questionnaire',
+      hint:  'the closing ask, so finishing it is the impression',
+      seen:  donation.survey.seen,
+      clicked: donation.survey.clicked,
+      verb:  'clicked',
+      empty: 'nobody has finished one yet',
+    },
+    {
+      key:   'page',
+      label: 'Donate page',
+      hint:  'includes visitors with no account',
+      seen:  donation.page.visits,
+      clicked: donation.page.checkouts,
+      verb:  'reached Stripe',
+      empty: 'no visits to /donate yet',
+    },
+  ]
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+      <div className="px-4 py-2 border-b border-slate-200">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          Where the asks landed
+        </p>
+      </div>
+      <ul className="divide-y divide-slate-100">
+        {rows.map(r => (
+          <li key={r.key} className="px-4 py-2.5 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-800">{r.label}</p>
+              <p className="text-[10px] text-slate-400">{r.hint}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              {r.seen ? (
+                <>
+                  <p className="text-xs font-bold text-slate-800">
+                    {fmtNum(r.clicked)} <span className="font-normal text-slate-400">of</span> {fmtNum(r.seen)}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {pct(r.clicked, r.seen)} {r.verb}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[10px] text-slate-400">{r.empty}</p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function DonationFunnelList({ API, donation }) {
   const { apiFetch } = useAuth()
   const [rows, setRows] = useState(null)
   const [error, setError] = useState('')
@@ -344,14 +433,24 @@ function DonationFunnelList({ API }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API])
 
-  if (error)  return <p className="mt-3 text-xs text-red-500">{error}</p>
-  if (!rows)  return <p className="mt-3 text-xs text-slate-400 animate-pulse">Loading donation funnel…</p>
-  if (!rows.length) {
-    return <p className="mt-3 text-xs text-slate-400">Nobody has been asked for a donation yet.</p>
-  }
-
+  // The breakdown is rendered from the stats payload the tiles already hold, so it
+  // is on screen the instant the panel opens — the names below are the part that
+  // needs a round trip, and it says so for itself.
   return (
-    <div className="mt-3 rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+    <div className="mt-3 space-y-3">
+      <AskBreakdown donation={donation} />
+      {error   ? <p className="text-xs text-red-500">{error}</p>
+       : !rows ? <p className="text-xs text-slate-400 animate-pulse">Loading the names…</p>
+       : !rows.length
+         ? <p className="text-xs text-slate-400">Nobody has been asked for a donation yet.</p>
+         : <PeopleAskedList rows={rows} />}
+    </div>
+  )
+}
+
+function PeopleAskedList({ rows }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
       <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2">
         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
           Asked for a donation
@@ -459,8 +558,6 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 
   const { users, games, briefs, tutorials, server } = stats
 
-  const pct = (n, d) => d > 0 ? `${Math.round((n / d) * 100)}%` : '—'
-
   // Defaulted rather than read straight off the payload: a backend that has not
   // shipped this block yet must show four honest zeroes, not crash the whole
   // Stats tab on a missing `page.visits`.
@@ -471,6 +568,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
     card:   { ...d0, ...(users.donation?.card   ?? {}) },
     survey: { ...d0, ...(users.donation?.survey ?? {}) },
     page:   { visits: 0, checkouts: 0, ...(users.donation?.page ?? {}) },
+    received: { donors: 0, totalPence: 0, ...(users.donation?.received ?? {}) },
   }
 
   // Slim (CBAT-only) mode removes the surfaces some of these stats measure — quiz difficulty and
@@ -520,19 +618,29 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             <StatCard label="Emails Failed" value={fmtNum(users.emailsFailed)} color="red" sub="delivery failed" />
           </button>
         </div>
-        {/* Donation funnel. Counted in people, not events — one enthusiast opening the link five
-            times is one conversion, not five. The denominator is people who actually saw an ask
-            (each reports its own impression), so the rate is a real click-through rate rather
-            than clicks over everyone who merely earned a milestone.
+        {/* Donations. Two tiles, because at a glance there are only two questions: how much
+            came in, and how many of the people we asked pressed the button. Everything else
+            — which of the three asks each click came from, and who — is a drill-down, and
+            lives in the panel below rather than as four ratio tiles you have to divide in
+            your head.
 
-            A row rather than one number, because the three asks are not interchangeable.
-            "Donation Asks" is the post-game note and the questionnaire's closing ask together,
-            both shown to a named account and deduplicated across the two — someone who met both
-            was asked twice but is one person — with the per-ask split beside it. "Donate Page" is
-            kept out of that total: it is public and mostly anonymous, and it is also where the
-            post-game note's link LANDS, so folding its visits in would count that same click
-            twice, once as a click and again as an impression. */}
+            "Received" is the only figure here that is money rather than intent. Every other
+            count stops at a click, and a started Checkout session is not a payment; this one
+            is written by Stripe's webhook.
+
+            The asks are counted in people, not events — one enthusiast opening the link five
+            times is one conversion, not five — and the denominator is people who actually saw
+            an ask (each reports its own impression), so the rate is a real click-through rate
+            rather than clicks over everyone who merely earned a milestone. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <StatCard
+            label="Donations Received"
+            value={fmtGBP(donation.received.totalPence)}
+            color="emerald"
+            sub={donation.received.donors
+              ? `from ${fmtNum(donation.received.donors)} ${donation.received.donors === 1 ? 'donor' : 'donors'}`
+              : 'nobody has donated yet'}
+          />
           <button
             type="button"
             onClick={() => setShowDonationFunnel(o => !o)}
@@ -548,31 +656,8 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
                 : 'nobody has been asked yet'}
             />
           </button>
-          <StatCard
-            label="Donate Page"
-            value={`${fmtNum(donation.page.checkouts)} / ${fmtNum(donation.page.visits)}`}
-            color="amber"
-            sub={donation.page.visits
-              ? `${pct(donation.page.checkouts, donation.page.visits)} reached Stripe`
-              : 'no visits to /donate yet'}
-          />
-          {/* The split behind the asks tile. Worth its own tile rather than a line of small print:
-              the questionnaire ask is new, and whether it out-converts the post-game note is the
-              thing the campaign is actually being judged on. */}
-          <StatCard
-            label="Post-Game Ask"
-            value={`${fmtNum(donation.card.clicked)} / ${fmtNum(donation.card.seen)}`}
-            color="slate"
-            sub={donation.card.seen ? `${pct(donation.card.clicked, donation.card.seen)} clicked through` : 'not shown yet'}
-          />
-          <StatCard
-            label="Questionnaire Ask"
-            value={`${fmtNum(donation.survey.clicked)} / ${fmtNum(donation.survey.seen)}`}
-            color="slate"
-            sub={donation.survey.seen ? `${pct(donation.survey.clicked, donation.survey.seen)} clicked through` : 'nobody has finished one yet'}
-          />
         </div>
-        {showDonationFunnel && <DonationFunnelList API={API} />}
+        {showDonationFunnel && <DonationFunnelList API={API} donation={donation} />}
       </StatsSection>
 
       {/* Server / Performance */}

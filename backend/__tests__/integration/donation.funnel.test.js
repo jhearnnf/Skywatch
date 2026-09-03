@@ -216,6 +216,64 @@ describe('GET /api/admin/stats — donation', () => {
     expect(donation.page).toEqual({ visits: 2, checkouts: 1 });
     expect(donation.seen).toBe(0);
   });
+
+  // The headline tile. Every other count in the block stops at a click, and a
+  // started Checkout session is not a payment — only Stripe's webhook knows one
+  // landed, and it writes `donatedAt` / `donatedTotalPence`.
+  it('totals what was actually received, in people and pence', async () => {
+    const admin = await createAdminUser();
+    await createUser({ donationPrompt: { donatedAt: new Date(), donatedTotalPence: 500 } });
+    await createUser({ donationPrompt: { donatedAt: new Date(), donatedTotalPence: 1250 } });
+
+    expect((await stats(admin)).received).toEqual({ donors: 2, totalPence: 1750 });
+  });
+
+  // Donors are people, not payments: a second gift raises the total without
+  // inventing a second supporter.
+  it('counts a repeat donor once', async () => {
+    const admin = await createAdminUser();
+    await createUser({ donationPrompt: { donatedAt: new Date(), donatedTotalPence: 3000 } });
+
+    expect((await stats(admin)).received).toEqual({ donors: 1, totalPence: 3000 });
+  });
+
+  it('reports zero when nobody has donated', async () => {
+    const admin = await createAdminUser();
+    await createUser({ donationPrompt: { impressionCount: 5, clickCount: 2 } });
+
+    expect((await stats(admin)).received).toEqual({ donors: 0, totalPence: 0 });
+  });
+
+  // /donate does not require an account, so a donor with no name is the normal
+  // case rather than the edge one. Leaving them out read as "we received
+  // nothing" on a tile that is meant to say how much came in.
+  it('counts a donation from someone with no account', async () => {
+    const admin = await createAdminUser();
+    await DonationPageVisit.recordPayment('g:' + 'd'.repeat(32), 300);
+
+    expect((await stats(admin)).received).toEqual({ donors: 1, totalPence: 300 });
+  });
+
+  it('adds named and unnamed donors into one total', async () => {
+    const admin = await createAdminUser();
+    await createUser({ donationPrompt: { donatedAt: new Date(), donatedTotalPence: 1000 } });
+    await DonationPageVisit.recordPayment('g:' + 'e'.repeat(32), 300);
+
+    expect((await stats(admin)).received).toEqual({ donors: 2, totalPence: 1300 });
+  });
+
+  // Reaching Stripe is intent; paying is not. The two must not be confused, or
+  // the tile reports money that was never charged.
+  it('does not count a checkout that was started but never paid', async () => {
+    const admin = await createAdminUser();
+    await visit({ visitKey: KEY });
+    await donate({ amount: 3, visitKey: KEY });
+
+    const donation = await stats(admin);
+
+    expect(donation.page.checkouts).toBe(1);
+    expect(donation.received).toEqual({ donors: 0, totalPence: 0 });
+  });
 });
 
 // ── The drill-down ───────────────────────────────────────────────────────────
