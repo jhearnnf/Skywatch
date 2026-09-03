@@ -1,0 +1,101 @@
+{
+  "_comment": [
+    "Roles offered by the CBAT outcome questionnaire (/survey/:token), grouped by service.",
+    "Data-only and imported directly by the frontend, the same way categories.json is.",
+    "",
+    "PROVENANCE DIFFERS BY GROUP, and that matters when reading the answers back.",
+    "The Royal Air Force group reuses the exact `key` values from cbatBatteries.json, which",
+    "were transcribed from real OASC 'Aptitude Scores' sheets. Those keys are authoritative,",
+    "and because they match, a questionnaire answer joins straight onto the battery the",
+    "Aptitude Report already scores that role against - no mapping table needed.",
+    "",
+    "Every other group is written from published recruitment role names rather than from a",
+    "score sheet we hold. They are believed accurate but are NOT verified the way the RAF",
+    "ones are, so treat a non-RAF answer as the respondent's own description of their role.",
+    "This is exactly why `other` exists and why the form keeps its free-text box: if the",
+    "'other' option starts collecting real traffic, that is the signal that a service's",
+    "role names need correcting here rather than evidence that respondents are confused.",
+    "",
+    "Keys are permanent once shipped - a stored SurveyResponse.role refers to one - so",
+    "rename a `label` freely but never a `key`."
+  ],
+
+  "otherKey": "other",
+
+  "groups": [
+    {
+      "service": "Royal Air Force",
+      "roles": [
+        { "key": "pilot",              "label": "Pilot",                            "battery": "pilot" },
+        { "key": "pilot-isr-rpas",     "label": "Pilot ISR (RPAS)",                 "battery": "pilot-isr-rpas" },
+        { "key": "wso",                "label": "Weapon Systems Officer (WSO)",     "battery": "wso" },
+        { "key": "control-officer-atc","label": "Control Officer (ATC)",            "battery": "control-officer-atc" },
+        { "key": "control-officer-wc", "label": "Control Officer (Weapons)",        "battery": "control-officer-wc" },
+        { "key": "operations-officer", "label": "Operations Officer",               "battery": "operations-officer" },
+        { "key": "intelligence",       "label": "Intelligence Officer",             "battery": "intelligence" },
+        { "key": "wsop-linguist",      "label": "WSOp (Air Signaller, Linguist)",   "battery": "wsop-linguist" },
+        { "key": "wsop-isr",           "label": "WSOp (ISR)",                       "battery": "wsop-isr" },
+        { "key": "wsop-rw",            "label": "WSOp (Rotary Wing)",               "battery": "wsop-rw" },
+        { "key": "wsop-am",            "label": "WSOp (Air Mover)",                 "battery": "wsop-am" },
+        { "key": "nco-control-atc",    "label": "Non-Commissioned Control (ATC)",   "battery": "nco-control-atc" },
+        { "key": "nco-control-wc",     "label": "Non-Commissioned Control (Weapons)","battery": "nco-control-wc" }
+      ]
+    },
+    {
+      "service": "Royal Navy / Fleet Air Arm",
+      "roles": [
+        { "key": "rn-pilot",      "label": "Pilot" },
+        { "key": "rn-observer",   "label": "Observer" },
+        { "key": "rn-aircrewman", "label": "Aircrewman" },
+        { "key": "rn-warfare",    "label": "Warfare Officer" }
+      ]
+    },
+    {
+      "service": "Army Air Corps",
+      "roles": [
+        { "key": "aac-pilot",      "label": "Army Pilot" },
+        { "key": "aac-groundcrew", "label": "Aviation Groundcrew" }
+      ]
+    },
+    {
+      "service": "Royal Australian Air Force",
+      "roles": [
+        { "key": "raaf-pilot",             "label": "Pilot" },
+        { "key": "raaf-air-combat-officer","label": "Air Combat Officer" },
+        { "key": "raaf-air-battle-manager","label": "Air Battle Manager" },
+        { "key": "raaf-aircrew",           "label": "Aircrew / Aviation Systems" },
+        { "key": "raaf-atc",               "label": "Air Traffic Controller" }
+      ]
+    },
+    {
+      "service": "Royal Canadian Air Force",
+      "roles": [
+        { "key": "rcaf-pilot",  "label": "Pilot" },
+        { "key": "rcaf-acso",   "label": "Air Combat Systems Officer (ACSO)" },
+        { "key": "rcaf-aec",    "label": "Aerospace Control Officer (AEC)" },
+        { "key": "rcaf-aesop",  "label": "Airborne Electronic Sensor Operator (AES Op)" },
+        { "key": "rcaf-ac-op",  "label": "Aerospace Control Operator" }
+      ]
+    },
+    {
+      "service": "Royal New Zealand Air Force",
+      "roles": [
+        { "key": "rnzaf-pilot",           "label": "Pilot" },
+        { "key": "rnzaf-air-warfare-off", "label": "Air Warfare Officer" },
+        { "key": "rnzaf-air-warfare-spec","label": "Air Warfare Specialist" }
+      ]
+    },
+    {
+      "service": "Irish Air Corps",
+      "roles": [
+        { "key": "iac-pilot", "label": "Pilot" }
+      ]
+    },
+    {
+      "service": "Something else",
+      "roles": [
+        { "key": "other", "label": "My role isn't listed" }
+      ]
+    }
+  ]
+}

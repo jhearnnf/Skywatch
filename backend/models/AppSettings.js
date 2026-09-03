@@ -368,6 +368,28 @@ const appSettingsSchema = new mongoose.Schema({
   welcomeEmailCta:     { type: String, default: '' },
   welcomeEmailFooter:  { type: String, default: '' },
 
+  // CBAT outcome questionnaire email — same shape as the welcome email above,
+  // and empty means "use the hardcoded default" in the same way (see
+  // utils/surveyEmail.js). Edited from Admin › Content.
+  //
+  // `cbatSurveyEnabled` gates the questionnaire PAGE, not the sending. Sending
+  // has no flag because it has no automation to gate: a mail only ever leaves
+  // when an admin presses the button. Turning this off closes the form to new
+  // answers without withdrawing links already in people's inboxes — they get a
+  // "this has closed" page rather than a broken one.
+  cbatSurveyEnabled:        { type: Boolean, default: true },
+  cbatSurveyEmailSubject:   { type: String,  default: '' },
+  cbatSurveyEmailHeading:   { type: String,  default: '' },
+  cbatSurveyEmailSubtitle:  { type: String,  default: '' },
+  cbatSurveyEmailBody:      { type: String,  default: '' },
+  cbatSurveyEmailCta:       { type: String,  default: '' },
+  cbatSurveyEmailFooter:    { type: String,  default: '' },
+
+  // Cohort thresholds for the questionnaire recipient list. Defaults live in
+  // constants/survey.js; 0/absent falls back to those.
+  cbatSurveyMinCompletions: { type: Number, default: 0 },
+  cbatSurveyDormantDays:    { type: Number, default: 0 },
+
   // Combat readiness (difficulty selection) screen — all optional; absent/empty falls back to hardcoded defaults
   combatReadinessTitle:    { type: String, default: '' },
   combatReadinessSubtitle: { type: String, default: '' },

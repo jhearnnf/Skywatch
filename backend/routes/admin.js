@@ -977,7 +977,7 @@ router.patch('/settings', requireReason, async (req, res) => {
       if (updatedKeys.some(k => k.startsWith('passThreshold') || k.endsWith('AnswerCount') || k.startsWith('easyAnswer') || k.startsWith('mediumAnswer'))) return 'change_quiz_settings';
       if (updatedKeys.some(k => k === 'tutorialContent')) return 'edit_tutorial_content';
       if (updatedKeys.some(k => k.startsWith('pathway') || k.endsWith('Categories'))) return 'change_pathway_settings';
-      if (updatedKeys.some(k => k.startsWith('email') || k.startsWith('welcome') || k.startsWith('combatReadiness'))) return 'change_content_settings';
+      if (updatedKeys.some(k => k.startsWith('email') || k.startsWith('welcome') || k.startsWith('cbatSurvey') || k.startsWith('combatReadiness'))) return 'change_content_settings';
       if (updatedKeys.some(k => k.startsWith('aiKeywords') || k.startsWith('aiQuestions') || k.startsWith('aiPrompts'))) return 'change_ai_settings';
       return 'change_app_settings';
     })();

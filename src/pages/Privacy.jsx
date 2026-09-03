@@ -85,6 +85,16 @@ export default function Privacy() {
             immediately.
           </p>
           <p>
+            <span className="text-slate-700 font-medium">Research emails</span> — we may occasionally
+            email you a short questionnaire about your experience of the aptitude tests, so we can
+            check our practice material still matches what candidates actually face. These are sent
+            to SkyWatch account holders only, never to anyone else, and never more than rarely. Every
+            one carries a one-click unsubscribe link that takes effect immediately and without you
+            having to answer anything. Once you unsubscribe we will not send you another. This is
+            separate from account emails such as sign-up confirmation and password resets, which are
+            necessary to run your account.
+          </p>
+          <p>
             We do not sell your personal data to third parties and we do not use it for advertising.
           </p>
         </Section>

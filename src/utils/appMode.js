@@ -46,7 +46,14 @@ const SLIM_ALLOWED_PREFIXES = [
   '/clipper',            // admin-only video tool — reachable for the same reason as /admin
   '/immerse',            // Hangar game — see note below
   '/chat',               // channels + DMs — see note below
+  '/survey',             // emailed CBAT outcome questionnaire — see note below
 ]
+
+// Note on '/survey': the questionnaire arrives by emailed link and identifies
+// the respondent by token rather than by session, so it has to answer for a
+// signed-out visitor on a device they have never used. Allow-listing it means
+// turning slim mode on site-wide cannot silently redirect a live campaign's
+// links to /cbat, which would look to the recipient like a broken email.
 
 // Note on '/donate': the path is allow-listed so the WEBSITE keeps its donation
 // page when an admin turns slim mode on site-wide, which is just a trimmed site

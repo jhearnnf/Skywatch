@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Default copy for the CBAT outcome questionnaire email.",
+    "",
+    "JSON, and in constants/ rather than beside the mailer, so the admin editor can import the",
+    "exact same strings the sender falls back to - same arrangement as categories.json. A",
+    "placeholder shown in the Admin > Content form that differed from what actually goes out",
+    "would be worse than showing nothing.",
+    "",
+    "An empty setting in AppSettings means 'use these'. Placeholders: {{name}} is the",
+    "recipient's display name, {{button}} is where the link button lands, {{link}} is the raw",
+    "URL. The unsubscribe line is appended to the footer by the sender and is deliberately not",
+    "editable here - it must not be possible to remove it by editing the copy."
+  ],
+
+  "subject": "How did your CBAT go?",
+  "heading": "How did it go?",
+  "subtitle": "{{name}}, one quick question from SkyWatch.",
+  "body": "Hello {{name}},\n\nYou trained with SkyWatch for a while and then things went quiet. That usually means one thing: you have sat the real test.\n\nIf that is you, we would really like to know how it went. It is six quick questions and takes about a minute. There is nothing to sign in to, and the link below is yours alone.\n\n{{button}}\n\nYour answers do two jobs. They help us improve our practice tests for future applicants. And they let us record your result, so if you passed, a PASSED badge appears beside your name on every leaderboard.\n\nIf you have not sat it yet, just say so on the first question and we will leave you to it. Good luck.\n\nThanks,\nThe SkyWatch Team",
+  "cta": "Answer the 6 questions",
+  "footer": "SkyWatch is an independent study platform and is not affiliated with, endorsed by, or connected to the Royal Air Force or the Ministry of Defence.<br>You received this because you hold a SkyWatch account."
+}

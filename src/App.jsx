@@ -96,6 +96,8 @@ import CbatDemoEmbed  from './pages/CbatDemoEmbed'
 import DeleteAccount  from './pages/DeleteAccount'
 import Subscription   from './pages/Subscription'
 import Share          from './pages/Share'
+import Survey         from './pages/Survey'
+import SurveyOptOut   from './pages/SurveyOptOut'
 import NotFound       from './pages/NotFound'
 
 // v2 admin
@@ -361,6 +363,12 @@ function AppRoutes() {
           <Route path="/privacy"          element={<PageWrapper><Privacy /></PageWrapper>} />
           <Route path="/delete-account"   element={<PageWrapper><DeleteAccount /></PageWrapper>} />
           <Route path="/share"            element={<PageWrapper><Share /></PageWrapper>} />
+          {/* Public, token-authenticated: the emailed CBAT outcome questionnaire.
+              Deliberately outside RequireAuth — the recipient may not be signed in
+              on the device they open the email on, and requiring a login here
+              would lose most of the responses the campaign exists to collect. */}
+          <Route path="/survey/:token/opt-out" element={<PageWrapper><SurveyOptOut /></PageWrapper>} />
+          <Route path="/survey/:token"         element={<PageWrapper><Survey /></PageWrapper>} />
           <Route path="/airstar-history"       element={<RequireAuth><PageWrapper><AirstarHistory /></PageWrapper></RequireAuth>} />
           <Route path="/game-history"          element={<RequireAuth><PageWrapper><GameHistory /></PageWrapper></RequireAuth>} />
           <Route path="/cbat-game-history"     element={<RequireAuth><PageWrapper><CbatGameHistory /></PageWrapper></RequireAuth>} />

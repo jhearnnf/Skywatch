@@ -38,6 +38,8 @@ import UpdateNotificationsEditor from './admin/UpdateNotificationsEditor'
 import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
+import CbatPassersSection from '../components/admin/CbatPassersSection'
+import SURVEY_EMAIL_COPY from '../../backend/constants/surveyEmailDefaults.json'
 import { CBAT_GAMES } from './Cbat'
 import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
 
@@ -5180,6 +5182,18 @@ const EMAIL_DEFAULTS = {
   welcomeEmailFooter:  'SkyWatch — Intelligence Study Platform.',
 }
 
+// Prefills for the CBAT questionnaire email form. Sourced from the same JSON the
+// sender falls back to, so what the admin sees in an untouched field is exactly
+// what would go out if they never touched it.
+const SURVEY_EMAIL_DEFAULTS = {
+  cbatSurveyEmailSubject:  SURVEY_EMAIL_COPY.subject,
+  cbatSurveyEmailHeading:  SURVEY_EMAIL_COPY.heading,
+  cbatSurveyEmailSubtitle: SURVEY_EMAIL_COPY.subtitle,
+  cbatSurveyEmailBody:     SURVEY_EMAIL_COPY.body,
+  cbatSurveyEmailCta:      SURVEY_EMAIL_COPY.cta,
+  cbatSurveyEmailFooter:   SURVEY_EMAIL_COPY.footer,
+}
+
 const CR_DEFAULTS = {
   combatReadinessTitle:    'Combat Readiness Assessment',
   combatReadinessSubtitle: 'Choose your recall difficulty.',
@@ -5205,7 +5219,7 @@ function ContentTab({ API }) {
           const s = d.data.settings
           // Pre-populate any empty fields with hardcoded defaults so inputs aren't blank on first visit
           const merged = { ...s }
-          Object.entries({ ...EMAIL_DEFAULTS, ...CR_DEFAULTS }).forEach(([k, v]) => {
+          Object.entries({ ...EMAIL_DEFAULTS, ...SURVEY_EMAIL_DEFAULTS, ...CR_DEFAULTS }).forEach(([k, v]) => {
             if (!merged[k]) merged[k] = v
           })
           setDraft(merged)
@@ -5290,6 +5304,71 @@ function ContentTab({ API }) {
           <p className="text-[11px] text-slate-400 mt-1.5">Sends a test email using the current saved content to your admin email address.</p>
         </div>
       </Section>
+
+      {/* ── CBAT Questionnaire Email ──────────────────────────────
+          The copy for the outcome questionnaire. Same shape as the welcome
+          email above: blank means "use the built-in default". {{name}} fills in
+          the recipient's display name and {{button}} places the link button. */}
+      <Section title="CBAT Questionnaire Email" collapsible onSave={() => save('Update CBAT Questionnaire Email', [
+        'cbatSurveyEnabled', 'cbatSurveyEmailSubject', 'cbatSurveyEmailHeading',
+        'cbatSurveyEmailSubtitle', 'cbatSurveyEmailBody', 'cbatSurveyEmailCta', 'cbatSurveyEmailFooter',
+        'cbatSurveyMinCompletions', 'cbatSurveyDormantDays',
+      ])}>
+        <Toggle
+          label="Questionnaire is open"
+          hint="When off, links already sent show a polite “this has closed” page instead of the form. Does not affect sending."
+          checked={draft.cbatSurveyEnabled !== false}
+          onChange={v => setDraft(p => ({ ...p, cbatSurveyEnabled: v }))}
+        />
+        {field('cbatSurveyEmailSubject',  'Subject',  SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailSubject)}
+        {field('cbatSurveyEmailHeading',  'Heading',  SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailHeading)}
+        {field('cbatSurveyEmailSubtitle', 'Subtitle', SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailSubtitle)}
+        {field('cbatSurveyEmailBody',     'Body',     SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailBody, 10)}
+        {field('cbatSurveyEmailCta',      'Button text', SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailCta)}
+        {field('cbatSurveyEmailFooter',   'Footer',   SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailFooter, 2)}
+        {/* The cohort defaults. The Potential CBAT Passers panel below starts
+            from these, so changing them here changes what it opens on; the
+            inputs in the panel itself are for trying a different cut without
+            committing to it. */}
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-3 pb-1">Recipient List Defaults</p>
+        {field('cbatSurveyMinCompletions', 'Minimum games finished', '10')}
+        {field('cbatSurveyDormantDays',    'Days dormant before contacting', '21')}
+        <p className="text-[11px] text-slate-400 pt-2">
+          <code className="font-mono">{'{{name}}'}</code> becomes their display name,{' '}
+          <code className="font-mono">{'{{button}}'}</code> places the button, and{' '}
+          <code className="font-mono">{'{{link}}'}</code> drops the raw link in. The unsubscribe
+          line is added to the footer automatically and cannot be removed.
+        </p>
+
+        {/* Walk-through copies of the two pages the email leads to. They run on
+            a stub — no invite, nothing saved, no payment — so the flow can be
+            checked without spending a real invitation on it. */}
+        <div className="pt-3 flex flex-wrap gap-2">
+          <a
+            href="/survey/preview"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors no-underline"
+          >
+            Try the questionnaire ↗
+          </a>
+          <a
+            href="/survey/preview/opt-out"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors no-underline"
+          >
+            Try the unsubscribe page ↗
+          </a>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-1.5">
+          Demos. Nothing is saved, no account changes and no payment is taken.
+        </p>
+      </Section>
+
+      {/* ── Potential CBAT Passers ────────────────────────────────
+          The recipient list and the only send button in the app. */}
+      <CbatPassersSection API={API} />
 
       {/* ── Difficulty Select Screen ─────────────────────────────── */}
       <Section title="Difficulty Select Screen" collapsible onSave={() => save('Update Combat Readiness Screen', [

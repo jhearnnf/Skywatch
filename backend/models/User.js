@@ -127,6 +127,30 @@ const userSchema = new mongoose.Schema(
     cbatPassed:   { type: Boolean, default: false },
     cbatPassedAt: { type: Date,    default: null },
 
+    // How we came to know. 'admin' is the original route — someone told us and
+    // it was typed into Admin › Users. 'questionnaire' means they answered "yes
+    // I passed" on the CBAT outcome survey, which sets the flag automatically.
+    //
+    // The evidence is identical in both cases (the user's own word for it), so
+    // this does not grade the claim — it records the route, so a self-reported
+    // pass can be told apart from one an admin entered deliberately if the two
+    // ever need separating.
+    cbatPassedSource: { type: String, enum: ['admin', 'questionnaire', null], default: null },
+
+    // Opted out of research/questionnaire email. Set from the one-click link in
+    // the questionnaire email footer, which honours the opt-out IMMEDIATELY and
+    // unconditionally — the reason below is asked afterwards and may be null,
+    // because an opt-out that depended on answering a question would not be an
+    // opt-out. Excludes the account from every future campaign cohort.
+    //
+    // Deliberately not a plain boolean: `at` is the audit trail for having
+    // honoured it, and there is no path that sets a reason without a date.
+    researchEmailOptOut: {
+      at:       { type: Date,   default: null },
+      reason:   { type: String, default: null },
+      campaign: { type: String, default: null },
+    },
+
     // Opt-OUT of the public progress wall on the landing page (see
     // utils/cbatShowcase.js). Stored as the objection rather than as consent so
     // the default — included, anonymised behind an agent number — needs no

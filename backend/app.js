@@ -53,7 +53,11 @@ app.use('/api/briefs',     require('./routes/briefs'));
 app.use('/api/case-files', require('./routes/caseFiles'));
 app.use('/api/games',      require('./routes/games'));
 app.use('/api/admin/reports', require('./routes/adminReports'));
+// Mounted ahead of the catch-all admin router so its paths win.
+app.use('/api/admin/cbat-passers', require('./routes/adminSurvey'));
 app.use('/api/admin',  require('./routes/admin'));
+// Public: the CBAT outcome questionnaire, authenticated by invite token only.
+app.use('/api/survey', require('./routes/survey'));
 app.use('/api/users',  require('./routes/users'));
 app.use('/api/chat',   require('./routes/chat'));
 app.use('/api/tutorials', require('./routes/tutorials'));
