@@ -219,13 +219,27 @@ export default function CbatPassersSection({ API }) {
             </div>
           </div>
 
-          <button
-            onClick={() => load()}
-            disabled={loading}
-            className="mb-4 px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
-          >
-            {loading ? 'Loading…' : 'Refresh list'}
-          </button>
+          {/* Loading the list pre-ticks the batch the server would send, which
+              is the right default but the wrong starting point when you only
+              want one or two names out of fifty. Untick all clears the ticks
+              without reloading, so the list underneath stays put. */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={() => load()}
+              disabled={loading}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
+            >
+              {loading ? 'Loading…' : 'Refresh list'}
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              disabled={!selected.size}
+              data-testid="cbat-passers-untick-all"
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
+            >
+              Untick all ({selected.size})
+            </button>
+          </div>
 
           {error && (
             <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 mb-3">

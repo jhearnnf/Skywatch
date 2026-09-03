@@ -100,6 +100,20 @@ describe('CbatPassersSection — the list', () => {
     expect(screen.getByRole('button', { name: /Send bulk email/ })).toBeDisabled()
   })
 
+  it('unticks everything without dropping the list', async () => {
+    await open()
+    // The load pre-ticks the server's batch, so there is something to clear.
+    expect(screen.getByRole('checkbox', { name: /Select Agent/ })).toBeChecked()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-untick-all'))
+
+    expect(screen.getByRole('checkbox', { name: /Select Agent/ })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: /Send bulk email \(0\)/ })).toBeDisabled()
+    expect(screen.getByTestId('cbat-passers-untick-all')).toBeDisabled()
+    // The row itself is untouched — this clears ticks, it does not reload.
+    expect(screen.getByText('Agent 1234567')).toBeInTheDocument()
+  })
+
   it('shows a failed send as retryable rather than done', async () => {
     mockApi(cohort({
       groups: [{ day: '2026-08-04', users: [person({
