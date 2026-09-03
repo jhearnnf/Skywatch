@@ -59,4 +59,36 @@ function buildEmailHTML({ heading, subtitle = '', body = '', middle = '', ctaTex
 </html>`;
 }
 
-module.exports = { buildEmailHTML };
+// The CTA button, as a single line. Built single-line on purpose: the newline
+// pass in formatComposedBody below would otherwise split it across paragraphs.
+function buildCtaButton(label, href) {
+  const text = label?.trim();
+  if (!text) return '';
+  return `<a href="${href}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:13px 30px;border-radius:6px;">${text}</a>`;
+}
+
+// Turn plain admin-authored text into the email's body HTML.
+//
+// Escape, auto-link any http(s) URLs that were pasted in (trailing sentence
+// punctuation is left outside the link), drop in the CTA button, then turn
+// blank lines into paragraphs and single newlines into <br> so the composition
+// renders the way it was typed. Button placement and linking both happen
+// before the newline pass so neither can run past a line break.
+//
+// Shared by every mailer that takes free text (the admin composer and the CBAT
+// questionnaire) AND mirrored on the client in Admin.jsx:buildEmailPreviewHTML.
+// It lives here so there is one definition to keep those in step — a preview
+// that formats differently to the real send is worse than no preview.
+function formatComposedBody(body, buttonHtml) {
+  let out = String(body ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/(https?:\/\/[^\s]+?)([.,!?;:]*)(?=\s|$)/g,
+      '<a href="$1" style="color:#1d4ed8;text-decoration:underline;">$1</a>$2');
+  if (buttonHtml && !out.includes('{{button}}')) out += '\n\n{{button}}';
+  return out
+    .replace(/\{\{button\}\}/g, buttonHtml || '')
+    .replace(/\n{2,}/g, '</p><p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">')
+    .replace(/\n/g, '<br>');
+}
+
+module.exports = { buildEmailHTML, buildCtaButton, formatComposedBody };

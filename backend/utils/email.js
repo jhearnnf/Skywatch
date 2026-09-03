@@ -2,7 +2,7 @@ const { Resend }      = require('resend');
 const AppSettings     = require('../models/AppSettings');
 const EmailLog        = require('../models/EmailLog');
 const { EMAIL_TYPES } = require('../constants/emailLog');
-const { buildEmailHTML } = require('./emailTemplate');
+const { buildEmailHTML, buildCtaButton, formatComposedBody } = require('./emailTemplate');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -158,28 +158,10 @@ async function sendAdminComposedEmail({ email, subject, heading, subtitle = '', 
 
   // The CTA button renders inline at a {{button}} marker in the body, so the
   // admin can place it right where it belongs (e.g. just below step 1) rather
-  // than always at the foot of the email. Built single-line so the newline pass
-  // below can't split it. Kept in sync with buildEmailPreviewHTML on the client.
-  const ctaLabel   = ctaText?.trim();
-  const ctaHref    = ctaUrl?.trim() || appUrl;
-  const buttonHtml = ctaLabel
-    ? `<a href="${ctaHref}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-size:12px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;padding:13px 30px;border-radius:6px;">${ctaLabel}</a>`
-    : '';
-
-  // Escape, auto-link any http(s) URLs the admin pasted (trailing sentence
-  // punctuation is left outside the link), drop in the CTA button, then turn
-  // blank lines into paragraphs and single newlines into <br> so the plain-text
-  // composition renders the way it was typed. Button placement and linking both
-  // happen before the newline pass so neither runs past a line break.
-  let bodyHtml = String(body ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/(https?:\/\/[^\s]+?)([.,!?;:]*)(?=\s|$)/g,
-      '<a href="$1" style="color:#1d4ed8;text-decoration:underline;">$1</a>$2');
-  if (buttonHtml && !bodyHtml.includes('{{button}}')) bodyHtml += '\n\n{{button}}';
-  bodyHtml = bodyHtml
-    .replace(/\{\{button\}\}/g, buttonHtml)
-    .replace(/\n{2,}/g, '</p><p style="font-size:15px;line-height:1.75;color:#334155;margin:0 0 20px;">')
-    .replace(/\n/g, '<br>');
+  // than always at the foot of the email. Formatting is shared with the client
+  // preview and the questionnaire mailer — see utils/emailTemplate.js.
+  const buttonHtml = buildCtaButton(ctaText, ctaUrl?.trim() || appUrl);
+  const bodyHtml   = formatComposedBody(body, buttonHtml);
 
   try {
     const { error } = await resend.emails.send({
