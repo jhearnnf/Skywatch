@@ -5,6 +5,7 @@ import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
 import { badgeText, badgeLabel } from '../../utils/chatBadge'
+import { hasAdminAlerts, adminBadgeLabel } from '../../utils/adminBadge'
 import ProfileBadge from '../ProfileBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { getLevelInfo } from '../../utils/levelUtils'
@@ -54,7 +55,7 @@ export default function Sidebar() {
   const clipperAvailable = isLocalEnvironment()
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
-  const { unsolvedCount } = useUnsolvedReports()
+  const { unsolvedCount, unresolvedSystemLogs } = useUnsolvedReports()
   const { hasUnread: chatUnread, badgeCount: chatBadgeCount = 0 } = useChatUnread() ?? {}
   const { levels: liveLevels, settings } = useAppSettings() ?? {}
   // Chat is a permanent entry for every signed-in user — it is a place you go
@@ -191,8 +192,8 @@ export default function Sidebar() {
             >
               <span className="relative text-lg w-6 text-center shrink-0">
                 ⚙️
-                {unsolvedCount > 0 && (
-                  <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
+                {hasAdminAlerts(unsolvedCount, unresolvedSystemLogs) && (
+                  <span className="nav-new-badge" aria-label={adminBadgeLabel(unsolvedCount, unresolvedSystemLogs)} />
                 )}
               </span>
               Admin

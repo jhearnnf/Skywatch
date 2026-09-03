@@ -6,6 +6,7 @@ import { useNewCategoryUnlock } from '../../context/NewCategoryUnlockContext'
 import { useUnsolvedReports } from '../../context/UnsolvedReportsContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
 import { badgeText, badgeLabel } from '../../utils/chatBadge'
+import { hasAdminAlerts, adminBadgeLabel } from '../../utils/adminBadge'
 import { useAppSettings } from '../../context/AppSettingsContext'
 import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
@@ -39,7 +40,7 @@ export default function BottomNav() {
   const slim = useSlimMode()
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
-  const { unsolvedCount } = useUnsolvedReports()
+  const { unsolvedCount, unresolvedSystemLogs } = useUnsolvedReports()
   const { hasUnread: chatUnread, badgeCount: chatBadgeCount = 0 } = useChatUnread() ?? {}
   const { settings } = useAppSettings() ?? {}
   // Permanent entry for every signed-in user, slim mode and native included.
@@ -85,7 +86,7 @@ export default function BottomNav() {
           const isLearn = to === '/learn-priority'
           const showBadge = to === '/play' && hasAnyNew && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
-          const showReportBadge = to === '/admin' && unsolvedCount > 0
+          const showReportBadge = to === '/admin' && hasAdminAlerts(unsolvedCount, unresolvedSystemLogs)
           // Admin gets the same translucent dark-red treatment as the sidebar,
           // so the entry reads as "staff only" wherever it appears.
           const isAdminItem = to === '/admin'
@@ -138,7 +139,7 @@ export default function BottomNav() {
                   <span className="nav-new-badge" aria-label="New category unlocked" />
                 )}
                 {showReportBadge && (
-                  <span className="nav-new-badge" aria-label={`${unsolvedCount} unsolved report${unsolvedCount !== 1 ? 's' : ''}`} />
+                  <span className="nav-new-badge" aria-label={adminBadgeLabel(unsolvedCount, unresolvedSystemLogs)} />
                 )}
                 {showChatBadge && (
                   <span className="nav-new-badge" aria-label="New message" />
