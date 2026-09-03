@@ -24,6 +24,9 @@ const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOf
 const GameSessionWhereAircraftResult  = require('../../models/GameSessionWhereAircraftResult');
 const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
 const EmailLog                        = require('../../models/EmailLog');
+const SurveyInvite                    = require('../../models/SurveyInvite');
+const SurveyResponse                  = require('../../models/SurveyResponse');
+const { SURVEY_CAMPAIGN, SURVEY_TEST_CAMPAIGN } = require('../../constants/survey');
 const mongoose = require('mongoose');
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -248,6 +251,58 @@ describe('GET /api/admin/stats — users section', () => {
 
     expect(users.emailsSent).toBe(2);
     expect(users.emailsFailed).toBe(1);
+  });
+});
+
+// ── users section — outreach questionnaire ───────────────────────────────────
+
+describe('GET /api/admin/stats — users.questionnaire', () => {
+  // One sent invite with an answer set attached, at whatever stage.
+  async function invite({ campaign = SURVEY_CAMPAIGN, sentAt = new Date(), response = null } = {}) {
+    const user = await createUser();
+    const inv  = await SurveyInvite.create({
+      userId: user._id, campaign, token: SurveyInvite.newToken(), sentAt,
+    });
+    if (response) {
+      await SurveyResponse.create({ inviteId: inv._id, userId: user._id, campaign, ...response });
+    }
+    return inv;
+  }
+
+  const fetchStats = async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    return res.body.data.users.questionnaire;
+  };
+
+  it('returns zeroes when nothing has been sent', async () => {
+    expect(await fetchStats()).toEqual({ sent: 0, started: 0, completed: 0 });
+  });
+
+  it('counts finished runs separately from part-finished ones', async () => {
+    await invite({ response: { completedAt: new Date(), satTest: true } });
+    await invite({ response: { satTest: true } });          // answered Q1 and stopped
+    await invite();                                          // emailed, never opened
+
+    expect(await fetchStats()).toEqual({ sent: 3, started: 2, completed: 1 });
+  });
+
+  // Invite rows are created before the send, so an unsent row is a send that failed
+  // rather than an email anyone received — counting it would flatter the response rate.
+  it('excludes invites whose send never went out', async () => {
+    await invite({ sentAt: null });
+    await invite({ response: { completedAt: new Date() } });
+
+    expect(await fetchStats()).toEqual({ sent: 1, started: 1, completed: 1 });
+  });
+
+  // A dry run lives under its own campaign key precisely so it stays out of the numbers.
+  it('excludes an admin test send', async () => {
+    await invite({ campaign: SURVEY_TEST_CAMPAIGN, response: { completedAt: new Date() } });
+
+    expect(await fetchStats()).toEqual({ sent: 0, started: 0, completed: 0 });
   });
 });
 

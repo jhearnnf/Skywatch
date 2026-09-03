@@ -57,6 +57,7 @@ const {
 const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const SurveyResponse           = require('../models/SurveyResponse');
+const SurveyInvite             = require('../models/SurveyInvite');
 const { SURVEY_CAMPAIGN }      = require('../constants/survey');
 const DonationPageVisit        = require('../models/DonationPageVisit');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
@@ -465,6 +466,7 @@ router.get('/stats', async (_req, res) => {
       emailsSent, emailsFailed,
       cardSeenIds, cardClickedIds,
       surveySeenIds, surveyClickedIds,
+      questionnaireSent, questionnaireStarted, questionnaireCompleted,
       donatePageSeen, donatePageClicked,
       donationReceivedAgg, donationAnonReceivedAgg,
     ] = await Promise.all([
@@ -588,6 +590,21 @@ router.get('/stats', async (_req, res) => {
       // real respondent who clicked a real donation ask.
       SurveyResponse.distinct('userId', { campaign: SURVEY_CAMPAIGN, completedAt: { $ne: null } }),
       SurveyResponse.distinct('userId', { campaign: SURVEY_CAMPAIGN, donationClicked: true }),
+      // How the outreach questionnaire is going: how many went out, how many people
+      // opened a question and answered something, and how many reached the end.
+      //
+      // Started and completed are counted separately because the form saves after every
+      // answer — a half-finished run is real, usable data rather than a failure, and
+      // reporting only completions would hide it. Sent is the denominator that makes
+      // either number mean anything.
+      //
+      // Campaign-filtered like every other read of these collections, which is what keeps
+      // an admin's dry run (SURVEY_TEST_CAMPAIGN) out of the tile. `sentAt` rather than a
+      // plain row count: invites are created before the send, so an unsent row is a send
+      // that failed, not an email anyone received.
+      SurveyInvite.countDocuments({ campaign: SURVEY_CAMPAIGN, sentAt: { $ne: null } }),
+      SurveyResponse.countDocuments({ campaign: SURVEY_CAMPAIGN }),
+      SurveyResponse.countDocuments({ campaign: SURVEY_CAMPAIGN, completedAt: { $ne: null } }),
       DonationPageVisit.countDocuments(),
       DonationPageVisit.countDocuments({ checkoutStartedAt: { $ne: null } }),
       // What the funnel is actually for. Every count above stops at a click, and a
@@ -638,6 +655,11 @@ router.get('/stats', async (_req, res) => {
           // The donate page is reported alongside the asks rather than added into them. It is
           // where the post-game note's link lands, so folding its visits into `seen` would
           // count that click twice — once as a click and again as an impression.
+          questionnaire: {
+            sent:      questionnaireSent,
+            started:   questionnaireStarted,
+            completed: questionnaireCompleted,
+          },
           donation: {
             seen:    donationAskSeen,
             clicked: donationAskClicked,
