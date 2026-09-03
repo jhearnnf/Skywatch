@@ -143,6 +143,29 @@ export default function CbatQuestionnaireResults() {
             </div>
           )}
 
+          {/* Kept apart from the gaps above because they answer different
+              questions: one is a defect report about the training, the other is
+              whatever the person wanted to say. */}
+          {s.comments?.length > 0 && (
+            <div className="mb-6">
+              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                What they said
+              </h2>
+              <div className="space-y-2">
+                {s.comments.map((c, i) => (
+                  <div key={i} className="rounded-xl border border-slate-200 bg-surface px-3 py-2">
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.comment}</p>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {roleLabel(c.role) || 'Role not given'}
+                      {c.passedForRole === 'yes' ? ' · Passed' : ''}
+                      {c.agentNumber ? ` · Agent ${c.agentNumber}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 mb-3">
             {TABS.map(t => (
               <button
@@ -237,8 +260,13 @@ function AnswersTable({ rows }) {
           </div>
 
           {r.gaps && (
-            <p className="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+            <p className="mt-1.5 text-xs text-slate-600 bg-amber-50/50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
               {r.gaps}
+            </p>
+          )}
+          {r.comment && (
+            <p className="mt-1.5 text-xs text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
+              {r.comment}
             </p>
           )}
         </div>

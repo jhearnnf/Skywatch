@@ -559,3 +559,35 @@ describe('GET /api/admin/cbat-passers/responses — the results page', () => {
     expect(res.body.data.summary.invitesSent).toBe(0);
   });
 });
+
+describe('comments on the results endpoint', () => {
+  it('surfaces them separately from the gaps answers', async () => {
+    const u = await candidate();
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    const invite = await SurveyInvite.findOne({ userId: u._id });
+
+    await request(app).patch(`/api/survey/${invite.token}`).send({
+      satTest: true, role: 'pilot', passedForRole: 'yes',
+      gaps: 'A test we had not seen.', comment: 'Genuinely helped, thank you.',
+    });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.summary.gaps).toHaveLength(1);
+    expect(res.body.data.summary.comments).toHaveLength(1);
+    expect(res.body.data.summary.comments[0]).toEqual(expect.objectContaining({
+      comment: 'Genuinely helped, thank you.',
+      role: 'pilot',
+      passedForRole: 'yes',
+    }));
+  });
+
+  it('leaves comments empty when nobody wrote one', async () => {
+    const u = await candidate();
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    const invite = await SurveyInvite.findOne({ userId: u._id });
+    await request(app).patch(`/api/survey/${invite.token}`).send({ satTest: true });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.summary.comments).toHaveLength(0);
+  });
+});

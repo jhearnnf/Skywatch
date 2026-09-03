@@ -485,6 +485,7 @@ export default function Survey() {
               API={API}
               preview={isPreview}
               onDonationClick={() => save({ donationClicked: true })}
+              onComment={(text) => save({ comment: text })}
             />
           )}
         </motion.div>
@@ -716,7 +717,7 @@ function SurveyClosed({ title, body }) {
 // The closing screen: thanks, then the badge they have just earned, then the
 // ask. The order is the point — the donation follows something given, not a
 // request out of nowhere.
-function DoneCard({ badge, name, API, preview = false, onDonationClick }) {
+function DoneCard({ badge, name, API, preview = false, onDonationClick, onComment }) {
   const [amount, setAmount] = useState(DONATION_PRESETS[0])
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
@@ -883,11 +884,75 @@ function DoneCard({ badge, name, API, preview = false, onDonationClick }) {
         </p>
       )}
 
+      <CommentBox onSubmit={onComment} />
+
       <div className="text-center mt-6">
         <Link to="/cbat" className="text-xs font-semibold text-slate-500 hover:text-slate-700 no-underline">
           Back to SkyWatch
         </Link>
       </div>
+    </div>
+  )
+}
+
+// The open box, kept closed until asked for.
+//
+// It sits BELOW the donation and starts as one line of text, because an open
+// textarea competes with the ask above it and most people have nothing to add.
+// Anyone who does have something to say will happily click one link to say it.
+// Nothing here is required and the questionnaire is already saved by this
+// point, so there is no wrong way to leave this screen.
+function CommentBox({ onSubmit }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [sent, setSent] = useState(false)
+
+  if (sent) {
+    return (
+      <p className="text-center text-xs text-slate-500 mt-5" data-testid="survey-comment-thanks">
+        Thank you, that is noted.
+      </p>
+    )
+  }
+
+  if (!open) {
+    return (
+      <div className="text-center mt-5">
+        <button
+          onClick={() => setOpen(true)}
+          data-testid="survey-comment-open"
+          className="text-xs font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+        >
+          Anything else you would like to tell us?
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-5" data-testid="survey-comment-box">
+      <label htmlFor="survey-comment" className="block text-xs font-semibold text-slate-500 mb-1.5">
+        Anything else you would like to tell us?
+      </label>
+      <textarea
+        id="survey-comment"
+        rows={4}
+        autoFocus
+        value={text}
+        maxLength={2000}
+        onChange={e => setText(e.target.value)}
+        placeholder="Whatever you like. We read all of these."
+        data-testid="survey-comment-input"
+        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface text-sm text-slate-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 resize-y transition-all"
+      />
+      <button
+        onClick={() => { onSubmit(text.trim()); setSent(true) }}
+        disabled={!text.trim()}
+        data-testid="survey-comment-submit"
+        className="w-full mt-2 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:border-brand-400 transition-colors disabled:opacity-40"
+      >
+        Send it
+      </button>
     </div>
   )
 }

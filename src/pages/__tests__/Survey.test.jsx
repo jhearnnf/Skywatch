@@ -506,3 +506,57 @@ describe('Survey — the donation ladder', () => {
     expect(other).toHaveAttribute('href', '/donate')
   })
 })
+
+describe('Survey — the closing comment box', () => {
+  const reachDone = async () => {
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
+    fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
+    fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
+    fireEvent.click(await screen.findByTestId('survey-helped-5'));     await advance()
+    fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
+    return screen.findByTestId('survey-done')
+  }
+
+  it('starts closed so it does not compete with the donation ask', async () => {
+    await reachDone()
+    expect(screen.getByTestId('survey-comment-open')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-comment-input')).not.toBeInTheDocument()
+  })
+
+  it('sits below the donation, not in front of it', async () => {
+    await reachDone()
+    const donate = screen.getByTestId('survey-donate')
+    const comment = screen.getByTestId('survey-comment-open')
+    expect(donate.compareDocumentPosition(comment) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('saves what they wrote', async () => {
+    await reachDone()
+    fireEvent.click(screen.getByTestId('survey-comment-open'))
+    fireEvent.change(await screen.findByTestId('survey-comment-input'), {
+      target: { value: 'The DPT drills carried me.' },
+    })
+    fireEvent.click(screen.getByTestId('survey-comment-submit'))
+
+    await waitFor(() => expect(patches).toContainEqual(
+      expect.objectContaining({ comment: 'The DPT drills carried me.' }),
+    ))
+    expect(await screen.findByTestId('survey-comment-thanks')).toBeInTheDocument()
+  })
+
+  it('cannot send an empty comment', async () => {
+    await reachDone()
+    fireEvent.click(screen.getByTestId('survey-comment-open'))
+    expect(await screen.findByTestId('survey-comment-submit')).toBeDisabled()
+  })
+
+  it('is offered even to someone who declined the donation', async () => {
+    await reachDone()
+    fireEvent.click(screen.getByText('Not this time'))
+    expect(await screen.findByTestId('survey-declined')).toBeInTheDocument()
+    expect(screen.getByTestId('survey-comment-open')).toBeInTheDocument()
+  })
+})

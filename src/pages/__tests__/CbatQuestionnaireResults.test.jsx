@@ -136,3 +136,31 @@ describe('CbatQuestionnaireResults — answers', () => {
     expect(await screen.findByText('nope')).toBeInTheDocument()
   })
 })
+
+describe('CbatQuestionnaireResults — comments', () => {
+  it('shows what people said, apart from the gaps answers', async () => {
+    mount(payload({ summary: {
+      gaps:     [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '1' }],
+      comments: [{ comment: 'Genuinely helped, thank you.', role: 'pilot', passedForRole: 'yes', agentNumber: '2' }],
+    } }))
+
+    expect(await screen.findByText('What we did not prepare them for')).toBeInTheDocument()
+    expect(screen.getByText('What they said')).toBeInTheDocument()
+    expect(screen.getByText('Genuinely helped, thank you.')).toBeInTheDocument()
+  })
+
+  it('hides the block when nobody wrote anything', async () => {
+    mount(payload())
+    await screen.findByText('Emailed')
+    expect(screen.queryByText('What they said')).not.toBeInTheDocument()
+  })
+
+  it('shows a comment on the answer row it belongs to', async () => {
+    mount(payload({ responses: [{
+      _id: 'r9', userId: { agentNumber: '777' },
+      satTest: true, passedForRole: 'yes', comment: 'One more thing.',
+    }] }))
+    const table = within(await screen.findByTestId('results-answers'))
+    expect(table.getByText('One more thing.')).toBeInTheDocument()
+  })
+})

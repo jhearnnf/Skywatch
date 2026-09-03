@@ -61,6 +61,17 @@ const surveyResponseSchema = new mongoose.Schema({
   // Q6.
   helpedRating: { type: Number, min: RATING_MIN, max: RATING_MAX, default: null },
 
+  // Anything else they wanted to say, asked on the closing screen once the
+  // questionnaire is already finished and saved.
+  //
+  // Deliberately NOT one of the six questions. Put in the flow it would be a
+  // seventh thing to get past, and an open box is the slowest kind; asked after
+  // the last answer is in, it cannot cost a single completion. What it catches
+  // is the thing no fixed question asks for — the detail that does not fit
+  // "what did we miss", and the occasional note about what the training did for
+  // them, which is worth having and worth reading.
+  comment: { type: String, trim: true, maxlength: 2000, default: null },
+
   // Set when they reach the donation screen and press through to Stripe. Not
   // proof of a completed payment — the webhook owns that, on User.donationPrompt
   // — only that the ask converted as far as Checkout.

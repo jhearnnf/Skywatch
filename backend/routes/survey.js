@@ -153,6 +153,7 @@ function sanitiseAnswers(body = {}) {
   if ('passedAnyRoleWhich' in body) out.passedAnyRoleWhich = text(body.passedAnyRoleWhich, 120);
   if ('realismRating' in body) out.realismRating = rating(body.realismRating);
   if ('gaps' in body)          out.gaps = text(body.gaps, 2000);
+  if ('comment' in body)       out.comment = text(body.comment, 2000);
   if ('helpedRating' in body)  out.helpedRating = rating(body.helpedRating);
   if ('donationClicked' in body && body.donationClicked === true) out.donationClicked = true;
 

@@ -406,6 +406,15 @@ router.get('/responses', async (_req, res) => {
             role: r.role,
             agentNumber: r.userId?.agentNumber ?? null,
           })),
+          // Kept separate from `gaps` because they answer different questions.
+          // One is a defect report about the training, the other is whatever
+          // the person wanted to say — and they want reading differently.
+          comments: responses.filter(r => r.comment?.trim()).map(r => ({
+            comment: r.comment,
+            role: r.role,
+            passedForRole: r.passedForRole ?? null,
+            agentNumber: r.userId?.agentNumber ?? null,
+          })),
         },
       },
     });

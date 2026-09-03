@@ -326,3 +326,28 @@ describe('the "not yet" branch — deferral rather than a dead end', () => {
     expect(res.body.data.deferredUntil).toBeTruthy();
   });
 });
+
+describe('the closing comment', () => {
+  it('is stored after the questionnaire is already finished', async () => {
+    await patch({ satTest: true, passedForRole: 'yes', complete: true });
+    const res = await patch({ comment: 'The DPT drills were the thing that carried me.' });
+
+    expect(res.status).toBe(200);
+    const row = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(row.comment).toBe('The DPT drills were the thing that carried me.');
+    // Finishing already happened; a late comment must not undo it.
+    expect(row.completedAt).toBeTruthy();
+  });
+
+  it('is separate from the "what did we miss" answer', async () => {
+    await patch({ gaps: 'The SLT format had changed.', comment: 'Thanks for building this.' });
+    const row = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(row.gaps).toBe('The SLT format had changed.');
+    expect(row.comment).toBe('Thanks for building this.');
+  });
+
+  it('is truncated rather than rejected when over-long', async () => {
+    await patch({ comment: 'x'.repeat(5000) });
+    expect((await SurveyResponse.findOne({ inviteId: invite._id })).comment).toHaveLength(2000);
+  });
+});
