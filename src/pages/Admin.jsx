@@ -562,6 +562,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   // shipped this block yet must show four honest zeroes, not crash the whole
   // Stats tab on a missing `page.visits`.
   const d0 = { seen: 0, clicked: 0 }
+  const questionnaire = { sent: 0, started: 0, completed: 0, ...(users.questionnaire ?? {}) }
   const donation = {
     ...d0,
     ...(users.donation ?? {}),
@@ -629,6 +630,23 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           >
             <StatCard label="Emails Failed" value={fmtNum(users.emailsFailed)} color="red" sub="delivery failed" />
           </button>
+          {/* The outreach questionnaire, as a response rate rather than a bare count: 12 replies
+              is a triumph out of 20 sends and a dud out of 400, and the tile has to say which.
+
+              Counts finished runs, because "filled in" means reached the end. Part-finished runs
+              are real answers — the form saves after every question — so they are named in the
+              sub line rather than folded into the headline or thrown away. */}
+          <StatCard
+            label="Questionnaires Filled In"
+            value={`${fmtNum(questionnaire.completed)} / ${fmtNum(questionnaire.sent)}`}
+            color="emerald"
+            sub={questionnaire.sent
+              ? `${pct(questionnaire.completed, questionnaire.sent)} of those emailed`
+                + (questionnaire.started > questionnaire.completed
+                    ? ` · ${fmtNum(questionnaire.started - questionnaire.completed)} part-finished`
+                    : '')
+              : 'nobody has been emailed yet'}
+          />
         </div>
         {/* Donations. Two tiles, because at a glance there are only two questions: how much
             came in, and how many of the people we asked pressed the button. Everything else
@@ -5079,8 +5097,17 @@ function UsersTab({ API, onViewEmailHistory }) {
                           ? 'border-brand-200 text-brand-600 hover:bg-brand-50'
                           : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}>
+                    {/* Snoo, drawn as a stroke icon so it sits with the other
+                        icons in this row rather than reading as a pasted logo.
+                        The antenna is what makes it legible at 16px — the head
+                        and smile alone would just be a face. */}
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      <ellipse cx="12" cy="14" rx="9" ry="7.5" />
+                      <path d="m13.4 6.7 2.1-3.6" />
+                      <circle cx="16.4" cy="2.6" r="1.4" fill="currentColor" />
+                      <circle cx="8.9" cy="13" r="1.3" fill="currentColor" stroke="none" />
+                      <circle cx="15.1" cy="13" r="1.3" fill="currentColor" stroke="none" />
+                      <path d="M8.6 17.1c.9.9 2.1 1.4 3.4 1.4s2.5-.5 3.4-1.4" />
                     </svg>
                   </button>
                 )
