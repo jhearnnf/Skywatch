@@ -449,14 +449,18 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('points at SAT, whose difficulty was rebuilt around the real test', () => {
-    // SAT now feeds the picture one fact at a time instead of all at once. A
-    // returning player would otherwise find a game that scores nothing like the
-    // one they left and have no way to know why, so the tile says so. Drop this
-    // once it has been true long enough to stop being news.
+  it('points at ANT, which has gained a practise drill', () => {
+    // ANT now has a Practise button beside Start: twelve plain speed, distance
+    // and time questions with no map or tables to read, on their own board.
+    // Nothing about the tile would otherwise tell a returning player it is
+    // there. Drop this once it has been true long enough to stop being news.
+    //
+    // One badge at a time, or the slot stops meaning "look here" — SAT's
+    // difficulty rebuild had the slot before this and gave it up for it.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['sat'])
-    expect(screen.getByText('Realistic Difficulty Update')).toBeTruthy()
+    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['ant'])
+    expect(screen.getByText('New Practise Mode')).toBeTruthy()
+    expect(screen.queryByText('Realistic Difficulty Update')).toBeNull()
   })
 
   it('no longer flags any game as new — the badge is gone entirely', () => {
