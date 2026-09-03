@@ -19,6 +19,7 @@ export const GAME_LABELS = {
   'target':           'Target',
   'instruments':      'Instruments',
   'ant':              'Airborne Numerical Test',
+  'ant-practise':     'ANT Practise',
   'flag':             'FLAG (Hard)',
   'flag-easier':      'FLAG (Easier)',
   'visualisation-2d': 'Visualisation 2D',

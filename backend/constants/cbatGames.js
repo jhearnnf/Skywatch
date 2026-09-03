@@ -5,6 +5,7 @@ const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSy
 const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTargetResult');
 const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatAntResult            = require('../models/GameSessionCbatAntResult');
+const GameSessionCbatAntPractiseResult    = require('../models/GameSessionCbatAntPractiseResult');
 const GameSessionCbatFlagResult           = require('../models/GameSessionCbatFlagResult');
 const GameSessionCbatFlagEasierResult     = require('../models/GameSessionCbatFlagEasierResult');
 const GameSessionCbatVisualisation2DResult = require('../models/GameSessionCbatVisualisation2DResult');
@@ -146,6 +147,18 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Airborne Numerical Test',
+  },
+  // ANT's Practise drill — eight plain questions on one page, no board to read.
+  // Marked out of the same 80 as ANT but on its own collection: the drill states
+  // the figures the game makes you hunt for, so the two totals are not the same
+  // achievement. Not an Easier difficulty, so no "(Hard)" is ever appended to
+  // ANT itself.
+  'ant-practise': {
+    Model: GameSessionCbatAntPractiseResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'ANT Practise',
   },
   'flag': {
     Model: GameSessionCbatFlagResult,

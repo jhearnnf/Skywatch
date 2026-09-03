@@ -54,6 +54,7 @@ const GAME_OFFSET = {
   'sma-easier':      35,
   'dpt-easier':      36,
   'dpt-hard':        37,
+  'ant-practise':    38,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -126,6 +127,14 @@ const FAKE_TUNING = {
     // 20 multiples-of-5 values, monotonically non-increasing, max 70, min 15.
     // Every ANT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
+  },
+  'ant-practise': {
+    // 8 questions at 10 exact / 5 close / 0, so totals are multiples of 5 out of
+    // 80 — the same scale as ANT. The drill states the figures outright rather
+    // than burying them on a board, so the band sits above ANT's own (top demo
+    // 75 against ANT's 70) while still clear of a perfect 80.
+    floor: 15, ceiling: 80, seedTime: 96.4, timeStep: 4.7,
+    scoreSequence: [75, 70, 70, 65, 65, 60, 60, 55, 55, 50, 50, 45, 45, 40, 35, 30, 30, 25, 20, 15],
   },
   'visualisation-2d': { floor: 1, ceiling: 7, seedScore: 7, seedTime: 70.5, scoreStep: 1, timeStep: 4.3 },
   'visualisation-3d': {
@@ -556,6 +565,10 @@ const WEEKLY_PER_PLAY = {
   'target':          520,  // real med 602
   'instruments':       4,  // real med 3
   'ant':              45,  // real med 50
+  // No production history yet. Set from the demo band's middle (45/80), a
+  // little above ANT's 45 since the drill is the easier of the two — reseat it
+  // once real runs exist.
+  'ant-practise':     50,
   'visualisation-2d':  4,  // real med 3
   'visualisation-3d':  4,  // real med 4
   'flag':            220,  // real med 246

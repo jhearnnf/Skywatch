@@ -8,6 +8,8 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
+import AntPractise from '../components/cbat/AntPractise'
+import { useAppSettings } from '../context/AppSettingsContext'
 import {
   buildRound,
   scoreAnswer,
@@ -830,12 +832,17 @@ function AntTutorial({ onExit, onProgress }) {
 export default function CbatAnt() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
+  // Practise ranks on its own board, so it has its own admin toggle. A
+  // disabled key hides the button and its leaderboard link, exactly as a
+  // disabled Trace mode drops out of the Trace selector.
+  const { settings } = useAppSettings() ?? {}
+  const practiseEnabled = (settings?.cbatGameEnabled ?? {})['ant-practise'] !== false
 
-  const [phase, setPhase] = useState('intro') // intro | tutorial | playing | feedback | results
+  const [phase, setPhase] = useState('intro') // intro | tutorial | practise | playing | feedback | results
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    // Hide the nav chrome during the live game and the practice tutorial.
-    if (phase === 'playing' || phase === 'feedback' || phase === 'tutorial') enterImmersive()
+    // Hide the nav chrome during the live game, the tutorial and the practise drill.
+    if (['playing', 'feedback', 'tutorial', 'practise'].includes(phase)) enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -1125,10 +1132,15 @@ export default function CbatAnt() {
                 </div>
               )}
 
-              <div className="text-center mb-4">
+              <div className="text-center mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
                 <Link to="/cbat/ant/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
                   {'View Leaderboard →'}
                 </Link>
+                {practiseEnabled && (
+                  <Link to="/cbat/ant-practise/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                    {'Practise Leaderboard →'}
+                  </Link>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-3 justify-center">
@@ -1138,6 +1150,14 @@ export default function CbatAnt() {
                 >
                   Tutorial
                 </button>
+                {practiseEnabled && (
+                  <button
+                    onClick={() => setPhase('practise')}
+                    className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
+                  >
+                    Practise
+                  </button>
+                )}
                 <button
                   onClick={startGame}
                   data-demo-start
@@ -1146,12 +1166,24 @@ export default function CbatAnt() {
                   Start
                 </button>
               </div>
+
+              {practiseEnabled && (
+                <p className="text-[11px] text-slate-500 mt-3 leading-snug">
+                  Practise puts 8 plain questions on one page with the numbers written out, so you can drill
+                  the four calculations in any order without reading the map and tables. Its own leaderboard.
+                </p>
+              )}
             </motion.div>
           )}
 
-          {/* Tutorial / practice mode */}
+          {/* Guided tutorial */}
           {phase === 'tutorial' && (
             <AntTutorial onExit={() => setPhase('intro')} onProgress={reportTutorialProgress} />
+          )}
+
+          {/* Practise drill — the four calculations as plain questions */}
+          {phase === 'practise' && (
+            <AntPractise onExit={() => setPhase('intro')} />
           )}
 
           {/* Playing / Feedback */}

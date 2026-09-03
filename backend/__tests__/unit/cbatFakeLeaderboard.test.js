@@ -11,6 +11,7 @@ const GAME_MAX = {
   'target':          null,   // accumulating score, no fixed ceiling (≥400 = Outstanding)
   'instruments':     null,   // time-limited, no fixed max
   'ant':             80,
+  'ant-practise':    80,    // 8 questions × 10 points
   'flag':            null,   // accumulating score, no fixed ceiling
   'flag-easier':     null,   // accumulating score, no fixed ceiling
   'visualisation-2d': null,  // small count, no ceiling assertion needed

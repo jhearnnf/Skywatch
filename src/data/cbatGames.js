@@ -145,6 +145,11 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'target':          { title: 'Target',            emoji: '🎯',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/target',         hideTime: true },
   'instruments':     { title: 'Instruments',       emoji: '🛫',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/instruments',    hideTime: true },
   'ant':             { title: 'ANT',               emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/ant' },
+  // The stripped drill that sits behind ANT's Practise button: the same four
+  // calculations as plain questions, all eight on one page. Marked out of the
+  // same 80 as ANT, but on its own board — the drill hands you the figures the
+  // game makes you find, so the two scores do not mean the same thing.
+  'ant-practise':    { title: 'ANT Practise',      emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, maxScore: 80, formatScore: (s) => `${s}`, backPath: '/cbat/ant' },
   'flag':            { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true, difficultyGroup: 'flag' },
   'flag-easier':     { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true, difficultyGroup: 'flag' },
   'visualisation-2d':{ title: 'Visualisation 2D',  emoji: '🧮',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
@@ -288,6 +293,12 @@ export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
       { ...g, key: 'plane-turn-3d', title: 'Trace Practise 3D' },
       { ...g, key: 'trace-1',       title: 'Trace 1' },
       { ...g, key: 'trace-2',       title: 'Trace 2' },
+    ]
+  }
+  if (g.key === 'ant') {
+    return [
+      { ...g, key: 'ant',          title: 'ANT' },
+      { ...g, key: 'ant-practise', title: 'ANT Practise' },
     ]
   }
   if (g.key === 'visualisation') {

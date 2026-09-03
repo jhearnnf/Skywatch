@@ -949,7 +949,7 @@ router.patch('/settings', requireReason, async (req, res) => {
     // admin toggle never persists. Every game is now implemented, so the
     // unimplemented set is empty.
     const CBAT_KNOWN_KEYS = new Set([
-      'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
+      'target', 'ant', 'ant-practise', 'symbols', 'code-duplicates', 'angles', 'instruments',
       'plane-turn-2d', 'plane-turn-3d', 'trace-1', 'trace-2', 'flag', 'flag-easier',
       'visualisation-2d', 'visualisation-3d',
       'dpt', 'dpt-hard', 'dpt-easier', 'act', 'numerical-ops', 'numerical-ops-easier', 'dad', 'sat', 'sat-easier', 'cut', 'cut-easier',
