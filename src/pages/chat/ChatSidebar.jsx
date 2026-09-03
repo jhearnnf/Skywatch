@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { isCbatGuideUrl, prepareGuideChrome } from '../../utils/guideHref'
 import BotBadge from '../../components/BotBadge'
 import AdminDmSearch from './components/AdminDmSearch'
 import PresenceStrip, { OnlineDot } from './components/PresenceStrip'
@@ -83,7 +84,17 @@ function GuideRow({ guide }) {
   const className = 'flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-100 transition-colors'
 
   if (internal) return <Link to={guide.url} className={className}>{body}</Link>
-  if (onSite)   return <a href={guide.url} className={className}>{body}</a>
+  // The CBAT guide is a cream document and the app paints light status-bar text
+  // for its dark theme, so leaving for it needs the same handover the landing
+  // page and the CBAT menu do. Guarded by URL: the rail's rows come from the
+  // database and any other document is not ours to restyle for.
+  if (onSite)   return (
+    <a
+      href={guide.url}
+      onClick={isCbatGuideUrl(guide.url) ? prepareGuideChrome : undefined}
+      className={className}
+    >{body}</a>
+  )
   return <a href={guide.url} target="_blank" rel="noopener noreferrer" className={className}>{body}</a>
 }
 

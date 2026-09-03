@@ -14,6 +14,7 @@ import { usePhoneTight } from '../hooks/usePhoneTight'
 import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 import { SLIM_APP } from '../utils/appMode'
+import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -431,10 +432,12 @@ export default function Cbat() {
           still gives the guide its crawl path from an indexable page.
 
           Plain <a>: the guide is a standalone document in public/, not an app
-          route, so a <Link> would 404 inside the SPA. */}
+          route, so a <Link> would 404 inside the SPA. The href is platform-aware
+          — see utils/guideHref.js. */}
       {!user && (
         <a
-          href="/cbat-guide"
+          href={CBAT_GUIDE_HREF}
+          onClick={prepareGuideChrome}
           className="group flex items-center gap-3 mb-6 rounded-xl border border-slate-200 bg-surface px-4 py-3 no-underline card-shadow transition-colors hover:border-brand-300 hover:bg-brand-50"
         >
           <span className="text-xl shrink-0">📖</span>

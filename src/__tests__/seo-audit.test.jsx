@@ -15,6 +15,7 @@ import { readdirSync, readFileSync, statSync } from 'fs'
 import { join, extname, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { formatTitle } from '../utils/seoTitle.js'
+import { CBAT_GUIDE_HREF } from '../utils/guideHref.js'
 
 // Resolved from this file rather than process.cwd() so the test does not depend
 // on where vitest was invoked from — and so it needs no Node globals, which the
@@ -199,17 +200,27 @@ describe('cbat-guide.html', () => {
 // the anchor exists and is a real one — a react-router <Link to="/cbat-guide">
 // would navigate inside the SPA, never hit the server rewrite, and render the
 // 404 instead of the document.
+//
+// The href itself comes from CBAT_GUIDE_HREF, which is the clean URL everywhere
+// a crawler runs and only becomes /cbat-guide.html inside the native app (where
+// there is no server to rewrite it). The pages must go through that constant
+// rather than hardcoding either form.
 describe('internal links to the guide', () => {
+  it('resolves to the canonical clean URL off-native', () => {
+    expect(CBAT_GUIDE_HREF).toBe('/cbat-guide')
+  })
+
   for (const page of ['Landing.jsx', 'Cbat.jsx']) {
     const src = readText('src', 'pages', page)
 
-    it(`${page} links the guide at its canonical clean URL`, () => {
-      expect(src).toMatch(/href="\/cbat-guide"/)
+    it(`${page} links the guide through the shared href`, () => {
+      expect(src).toMatch(/href=\{CBAT_GUIDE_HREF\}/)
+      expect(src).toMatch(/from '\.\.\/utils\/guideHref'/)
     })
 
     it(`${page} links it as a document, not an app route`, () => {
       expect(src).not.toMatch(/to="\/cbat-guide"/)
-      expect(src).not.toMatch(/href="\/cbat-guide\.html"/)
+      expect(src).not.toMatch(/href="\/cbat-guide(\.html)?"/)
     })
   }
 })

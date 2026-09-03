@@ -7,6 +7,7 @@ import { useSlimMode } from '../hooks/useSlimMode'
 import { captureEvent } from '../lib/posthog'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
+import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
 import SEO from '../components/SEO'
 import PreviewWindow from '../components/homePreview/PreviewWindow'
 import LiveGameGrid from '../components/landingGames/LiveGameGrid'
@@ -315,7 +316,9 @@ export default function Landing() {
 
           A plain <a>, not a react-router <Link>: the guide is a standalone
           document in public/, not an app route (see App.jsx), so a <Link> would
-          push a history entry and land on the SPA's 404. That also makes it a
+          push a history entry and land on the SPA's 404. The href comes from
+          CBAT_GUIDE_HREF because the native app has no server rewrite and needs
+          the file's real name — see utils/guideHref.js. That also makes it a
           real crawlable anchor, which matters — the landing page is the site's
           most-crawled URL and until this card existed nothing on the public site
           linked to the guide at all. Google had only the sitemap to find it by
@@ -331,8 +334,8 @@ export default function Landing() {
           the gap above. */}
       <section className="py-8 sm:py-12 px-5 max-w-4xl mx-auto">
         <motion.a
-          href="/cbat-guide"
-          onClick={() => captureEvent('landing_cbat_guide_clicked')}
+          href={CBAT_GUIDE_HREF}
+          onClick={() => { captureEvent('landing_cbat_guide_clicked'); prepareGuideChrome() }}
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
@@ -537,9 +540,10 @@ export default function Landing() {
         <div className="mt-4 flex items-center justify-center gap-3">
           {/* Second, always-present path to the guide. The card above can scroll
               past unread; a footer link is the one anchor every crawl of this
-              page is guaranteed to reach. Plain <a> for the same reason as the
-              card — it is a document, not a route. */}
-          <a href="/cbat-guide" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
+              page is guaranteed to reach. Plain <a>, and the same platform-aware
+              href, for the same reasons as the card — it is a document, not a
+              route. */}
+          <a href={CBAT_GUIDE_HREF} onClick={prepareGuideChrome} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
             CBAT Guide
           </a>
           <span className="text-xs text-slate-300">·</span>
