@@ -59,11 +59,11 @@ function pairExists(pairsArray, a, b) {
 // ── Per-stage scorers ─────────────────────────────────────────────────────────
 
 function scoreColdOpen() {
-  return { score: 0, notes: 'Cold open — no score' };
+  return { score: 0, notes: 'Not scored' };
 }
 
 function scoreDebrief() {
-  return { score: 0, notes: 'Debrief — no score' };
+  return { score: 0, notes: 'Not scored' };
 }
 
 function scoreEvidenceWall(stage, result) {
@@ -74,7 +74,7 @@ function scoreEvidenceWall(stage, result) {
   const pairCount         = validPairs.length;
 
   if (maxScore === 0 || pairCount === 0) {
-    return { score: 0, notes: 'Evidence wall — no valid pairs defined' };
+    return { score: 0, notes: 'No links to find here' };
   }
 
   let raw  = 0;
@@ -96,8 +96,8 @@ function scoreEvidenceWall(stage, result) {
   const penalty = noise * EVIDENCE_WALL_NOISE_PENALTY_RATIO * maxScore;
   const score   = Math.max(0, Math.min(maxScore, Math.round(raw - penalty)));
 
-  const notes = `${hits} of ${pairCount} valid connection${pairCount !== 1 ? 's' : ''}` +
-    (noise > 0 ? `, ${noise} noise` : '');
+  const notes = `${hits} of ${pairCount} real link${pairCount !== 1 ? 's' : ''} found` +
+    (noise > 0 ? `, ${noise} wrong` : '');
 
   return { score, notes };
 }
@@ -108,7 +108,7 @@ function scoreMapPredictive(stage, result) {
   const axes        = result.payload.axes || [];         // [{fromHotspotId, toHotspotId, markedAsMain}]
 
   if (maxScore === 0 || correctAxes.length === 0) {
-    return { score: 0, notes: 'Map predictive — no correct axes defined' };
+    return { score: 0, notes: 'No routes to find here' };
   }
 
   const perAxis    = maxScore / correctAxes.length;
@@ -133,8 +133,8 @@ function scoreMapPredictive(stage, result) {
   }
 
   const score = Math.min(maxScore, Math.round(raw));
-  const notes = `${hits} of ${correctAxes.length} correct axis${correctAxes.length !== 1 ? 'es' : ''}` +
-    (bonusApplied ? ', main-effort bonus applied' : '');
+  const notes = `${hits} of ${correctAxes.length} route${correctAxes.length !== 1 ? 's' : ''} right` +
+    (bonusApplied ? ', and you called the main attack' : '');
 
   return { score, notes };
 }
@@ -152,7 +152,7 @@ function scoreActorInterrogations(stage, result) {
   ).size;
 
   const score = Math.min(maxScore, Math.round(baseEngagement * distinctActors));
-  const notes = `${distinctActors} actor${distinctActors !== 1 ? 's' : ''} interrogated`;
+  const notes = `${distinctActors} ${distinctActors === 1 ? 'person' : 'people'} asked`;
 
   return { score, notes };
 }
@@ -192,9 +192,13 @@ function scoreDecisionPoint(stage, result, allResults) {
 
   const score = Math.min(maxScore, Math.round(base * consistencyMultiplier));
 
-  const realityLabel = `${realityPct}% reality`;
-  const multLabel    = `consistency ×${consistencyMultiplier.toFixed(2)}`;
-  const notes        = `Option ${selectedOptionId}: ${realityLabel}, ${multLabel}`;
+  // The raw option id and the words "reality"/"consistency" meant nothing to
+  // a player. Say what the two numbers actually are: how close the call was,
+  // and how much of it your own evidence backed up.
+  const notes = `Your call was ${realityPct}% right` +
+    (consistencyMultiplier > 1
+      ? `, boosted ×${consistencyMultiplier.toFixed(2)} by the links you made`
+      : '');
 
   return { score, notes };
 }
@@ -233,7 +237,7 @@ function scorePhaseReveal(stage, result, allResults) {
   const newConns     = updatedConns.filter(c => !originalKeys.has(connKey(c.fromItemId, c.toItemId)));
 
   if (pairCount === 0) {
-    return { score: 0, notes: 'Phase reveal — no valid pairs defined' };
+    return { score: 0, notes: 'No links to find here' };
   }
 
   let delta = 0;
@@ -249,7 +253,7 @@ function scorePhaseReveal(stage, result, allResults) {
   }
 
   const score = Math.min(maxScore, Math.round(delta));
-  const notes = `${hits} new valid connection${hits !== 1 ? 's' : ''} after reveal`;
+  const notes = `${hits} new link${hits !== 1 ? 's' : ''} spotted after the reveal`;
 
   return { score, notes };
 }
@@ -262,7 +266,7 @@ function scoreMapLive(stage, result) {
 
   const definedIds = Object.keys(subDecisionAnswers);
   if (definedIds.length === 0) {
-    return { score: 0, notes: 'Map live — no sub-decisions defined' };
+    return { score: 0, notes: 'No calls to make here' };
   }
 
   const fallbackPerSub = stageMax / definedIds.length;
@@ -290,7 +294,7 @@ function scoreMapLive(stage, result) {
   }
 
   const score = Math.min(stageMax, Math.round(earned));
-  const notes = `${correct} of ${definedIds.length} sub-decision${definedIds.length !== 1 ? 's' : ''} correct`;
+  const notes = `${correct} of ${definedIds.length} live call${definedIds.length !== 1 ? 's' : ''} right`;
 
   return { score, notes };
 }
@@ -321,7 +325,7 @@ function scoreChapter(chapter, stageResults) {
         stageType:  stage.type,
         score:      0,
         maxScore,
-        notes:      'Not submitted',
+        notes:      'Not answered',
       });
       continue;
     }

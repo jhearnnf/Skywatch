@@ -228,6 +228,68 @@ describe('GET /api/case-files/:caseSlug/chapters/:chapterSlug', () => {
   });
 });
 
+// The menu card is the only place a finished Case File leaves a mark — the
+// game awards no airstars — so the list has to carry the player's record.
+describe('GET /api/case-files — per-case progress', () => {
+  it('reports best score and completed runs for the signed-in player', async () => {
+    const caseDoc = await createCase({ slug: 'progress-case', status: 'published' });
+    const chapter = await createChapter(caseDoc.slug, { chapterSlug: 'progress-ch' });
+
+    for (const totalScore of [410, 880, 620]) {
+      await GameSessionCaseFileResult.create({
+        userId:      user._id,
+        caseSlug:    caseDoc.slug,
+        chapterSlug: chapter.chapterSlug,
+        completedAt: new Date(),
+        scoring:     { totalScore, breakdown: [] },
+      });
+    }
+    // An unfinished run must not count towards either number.
+    await GameSessionCaseFileResult.create({
+      userId:      user._id,
+      caseSlug:    caseDoc.slug,
+      chapterSlug: chapter.chapterSlug,
+      completedAt: null,
+    });
+
+    const res = await request(app).get('/api/case-files').set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    const row = res.body.find(c => c.slug === 'progress-case');
+    expect(row.bestScore).toBe(880);
+    expect(row.completedCount).toBe(3);
+  });
+
+  it('does not leak the record of another player', async () => {
+    const caseDoc = await createCase({ slug: 'progress-other', status: 'published' });
+    const chapter = await createChapter(caseDoc.slug, { chapterSlug: 'progress-other-ch' });
+
+    await GameSessionCaseFileResult.create({
+      userId:      otherUser._id,
+      caseSlug:    caseDoc.slug,
+      chapterSlug: chapter.chapterSlug,
+      completedAt: new Date(),
+      scoring:     { totalScore: 999, breakdown: [] },
+    });
+
+    const res = await request(app).get('/api/case-files').set('Cookie', cookie);
+
+    const row = res.body.find(c => c.slug === 'progress-other');
+    expect(row.bestScore).toBeNull();
+    expect(row.completedCount).toBe(0);
+  });
+
+  it('reports zeroes to a logged-out visitor', async () => {
+    await createCase({ slug: 'progress-guest', status: 'published' });
+
+    const res = await request(app).get('/api/case-files');
+
+    const row = res.body.find(c => c.slug === 'progress-guest');
+    expect(row.bestScore).toBeNull();
+    expect(row.completedCount).toBe(0);
+  });
+});
+
 // ── POST /:caseSlug/chapters/:chapterSlug/sessions ────────────────────────────
 describe('POST /api/case-files/:caseSlug/chapters/:chapterSlug/sessions', () => {
   it('creates a session and returns sessionId + currentStageIndex 0', async () => {
@@ -249,11 +311,72 @@ describe('POST /api/case-files/:caseSlug/chapters/:chapterSlug/sessions', () => 
 
     const url = `/api/case-files/${caseDoc.slug}/chapters/${chapter.chapterSlug}/sessions`;
     const r1 = await request(app).post(url).set('Cookie', cookie);
+    // An unfinished run is resumed, not replaced — give up on it first so the
+    // next POST starts a genuinely new one.
+    await request(app).post(`/api/case-files/sessions/${r1.body.sessionId}/abandon`).set('Cookie', cookie);
     const r2 = await request(app).post(url).set('Cookie', cookie);
 
     expect(r1.status).toBe(201);
     expect(r2.status).toBe(201);
     expect(r1.body.sessionId).not.toBe(r2.body.sessionId);
+  });
+
+  it('resumes an unfinished session instead of starting a new one', async () => {
+    const caseDoc = await createCase({ slug: 'resume-case', status: 'published' });
+    const chapter = await createChapter(caseDoc.slug, { chapterSlug: 'resume-ch' });
+
+    const url = `/api/case-files/${caseDoc.slug}/chapters/${chapter.chapterSlug}/sessions`;
+    const r1  = await request(app).post(url).set('Cookie', cookie);
+    expect(r1.status).toBe(201);
+
+    // Advance one stage, then come back as if the page had been reloaded.
+    const patch = await request(app)
+      .patch(`/api/case-files/sessions/${r1.body.sessionId}/stages/0`)
+      .set('Cookie', cookie)
+      .send({ stageType: chapter.stages[0].type, payload: { completed: true } });
+    expect(patch.status).toBe(200);
+
+    const r2 = await request(app).post(url).set('Cookie', cookie);
+    expect(r2.status).toBe(200);
+    expect(String(r2.body.sessionId)).toBe(String(r1.body.sessionId));
+    expect(r2.body.resumed).toBe(true);
+    expect(r2.body.currentStageIndex).toBe(1);
+    expect(r2.body.stageResults).toHaveLength(1);
+    expect(r2.body.stageResults[0].stageType).toBe(chapter.stages[0].type);
+  });
+
+  it('does not resume a session the player gave up on', async () => {
+    const caseDoc = await createCase({ slug: 'abandon-case', status: 'published' });
+    const chapter = await createChapter(caseDoc.slug, { chapterSlug: 'abandon-ch' });
+
+    const url = `/api/case-files/${caseDoc.slug}/chapters/${chapter.chapterSlug}/sessions`;
+    const r1  = await request(app).post(url).set('Cookie', cookie);
+
+    const ab = await request(app)
+      .post(`/api/case-files/sessions/${r1.body.sessionId}/abandon`)
+      .set('Cookie', cookie);
+    expect(ab.status).toBe(200);
+    expect(ab.body.abandoned).toBe(true);
+
+    const r2 = await request(app).post(url).set('Cookie', cookie);
+    expect(r2.status).toBe(201);
+    expect(String(r2.body.sessionId)).not.toBe(String(r1.body.sessionId));
+  });
+
+  it('resuming does not consume another daily attempt', async () => {
+    await createSettings({ caseFilesEnabled: true, caseFilesDailyLimitFree: 1 });
+    const caseDoc = await createCase({ slug: 'resume-limit', status: 'published', tiers: ['free'] });
+    const chapter = await createChapter(caseDoc.slug, { chapterSlug: 'resume-limit-ch' });
+
+    const url = `/api/case-files/${caseDoc.slug}/chapters/${chapter.chapterSlug}/sessions`;
+    const r1 = await request(app).post(url).set('Cookie', cookie);
+    expect(r1.status).toBe(201);
+
+    // The whole point: a refresh on the player's one attempt of the day must
+    // not spend it a second time.
+    const r2 = await request(app).post(url).set('Cookie', cookie);
+    expect(r2.status).toBe(200);
+    expect(r2.body.resumed).toBe(true);
   });
 
   it('returns 401 without auth', async () => {
@@ -580,6 +703,11 @@ describe('GET /api/case-files/:caseSlug/chapters/:chapterSlug/best', () => {
     expect(res.status).toBe(200);
     expect(res.body.bestScore).toBe(720);
     expect(res.body.completedCount).toBe(2);
+    // The debrief page opens straight off this response when it is reached by
+    // bookmark or refresh. Without the session it asked for
+    // /sessions/undefined and 500'd, so a bookmarked debrief never rendered.
+    expect(res.body.sessionId).toBeTruthy();
+    expect(res.body.scoring.totalScore).toBe(720);
   });
 
   it('returns 401 without auth', async () => {
@@ -1029,8 +1157,12 @@ describe('Access gating', () => {
       const ch      = await createChapter(caseDoc.slug, { chapterSlug: 'limit-ch' });
       const url     = `/api/case-files/${caseDoc.slug}/chapters/${ch.chapterSlug}/sessions`;
 
+      // Each run has to be given up on, or the next POST would resume it
+      // rather than spending another of the day's attempts.
       const r1 = await request(app).post(url).set('Cookie', cookie);
+      await request(app).post(`/api/case-files/sessions/${r1.body.sessionId}/abandon`).set('Cookie', cookie);
       const r2 = await request(app).post(url).set('Cookie', cookie);
+      await request(app).post(`/api/case-files/sessions/${r2.body.sessionId}/abandon`).set('Cookie', cookie);
       const r3 = await request(app).post(url).set('Cookie', cookie);
 
       expect(r1.status).toBe(201);
@@ -1054,7 +1186,9 @@ describe('Access gating', () => {
       const url     = `/api/case-files/${caseDoc.slug}/chapters/${ch.chapterSlug}/sessions`;
 
       const r1 = await request(app).post(url).set('Cookie', adminCookie);
+      await request(app).post(`/api/case-files/sessions/${r1.body.sessionId}/abandon`).set('Cookie', adminCookie);
       const r2 = await request(app).post(url).set('Cookie', adminCookie);
+      await request(app).post(`/api/case-files/sessions/${r2.body.sessionId}/abandon`).set('Cookie', adminCookie);
       const r3 = await request(app).post(url).set('Cookie', adminCookie);
 
       expect(r1.status).toBe(201);

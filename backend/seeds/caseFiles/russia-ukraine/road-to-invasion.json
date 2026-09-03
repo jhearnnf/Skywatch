@@ -3,8 +3,8 @@
   "chapterSlug": "road-to-invasion",
   "chapterNumber": 1,
   "title": "Road to Invasion",
-  "dateRangeLabel": "Sept 2021 – Feb 24 2022",
-  "summary": "It's late 2021. Russia has gathered a huge force on three sides of Ukraine and says it's only training. Western intelligence says it's the build-up to an invasion. Read the evidence, decide what Russia is really planning — then watch what actually happens, from the first cruise missiles to the convoy that stalled outside Kyiv.",
+  "dateRangeLabel": "Sept 2021 to 24 Feb 2022",
+  "summary": "It's late 2021. Russia has gathered a huge force on three sides of Ukraine and says it's only training. Western intelligence says it's the build-up to an invasion. Read the evidence, decide what Russia is really planning, then watch what actually happens, from the first cruise missiles to the convoy that stalled outside Kyiv.",
   "estimatedMinutes": 35,
   "status": "published",
   "sourcesJsonPath": "seeds/caseFiles/russia-ukraine/road-to-invasion.sources.json",
@@ -14,7 +14,7 @@
       "type": "cold_open",
       "payload": {
         "dateLabel": "28 September 2021",
-        "directorBriefing": "Russia has moved a lot of soldiers and equipment close to Ukraine. We need to work out whether this is sabre-rattling — or the real thing. Pin the evidence to the wall and look for patterns.",
+        "directorBriefing": "Russia has moved a lot of soldiers and equipment close to Ukraine. We need to work out whether this is sabre-rattling or the real thing. Pin the evidence to the wall and look for patterns.",
         "backgroundPrimer": [
           {
             "label": "The setup",
@@ -35,7 +35,7 @@
             "title": "Hundreds of tanks parked at Yelnya",
             "thumbnailUrl": null,
             "imageCredit": "Maxar Technologies, via AP",
-            "oneLineHint": "Far more tanks than a normal exercise — 250km from the border"
+            "oneLineHint": "Far more tanks than a normal exercise, and 250km from the border"
           },
           {
             "id": "ev_putin_essay",
@@ -59,7 +59,7 @@
       "id": "stage_ew_1",
       "type": "evidence_wall",
       "payload": {
-        "phaseLabel": "Phase 1: Sept – Dec 2021",
+        "phaseLabel": "Phase 1: Sept to Dec 2021",
         "items": [
           {
             "id": "ev_yelnya_armor",
@@ -99,8 +99,8 @@
             "title": "Field hospitals being built near the border",
             "type": "osint",
             "category": "Logistics",
-            "description": "Open-source analysts spot newly built field-hospital sites near the Russian–Ukrainian border. Their size and number suggest they're meant for real combat casualties, not training injuries.",
-            "whyItMatters": "You only build this many medical facilities when you expect a lot of wounded — i.e. real fighting.",
+            "description": "Open-source analysts spot newly built field-hospital sites near the Russian-Ukrainian border. Their size and number suggest they're meant for real combat casualties, not training injuries.",
+            "whyItMatters": "You only build this many medical facilities when you expect a lot of wounded, meaning real fighting.",
             "imageUrl": null,
             "imageCredit": "Konrad Muzyka, Rochan Consulting",
             "sourceUrl": "https://www.rochan-consulting.com/"
@@ -111,25 +111,25 @@
             "type": "document",
             "category": "Diplomatic signal",
             "description": "On 17 December 2021, Russia's Foreign Ministry publishes a draft 'Treaty on Security Guarantees', demanding NATO pulls back forces from Eastern Europe and promises never to admit Ukraine.",
-            "whyItMatters": "The demands are written so NATO almost has to refuse — which then gives Russia a public 'reason' for whatever it does next.",
+            "whyItMatters": "The demands are written so NATO almost has to refuse, which then gives Russia a public 'reason' for whatever it does next.",
             "imageUrl": null,
             "imageCredit": "Russian MFA, 17 December 2021",
             "sourceUrl": "https://mid.ru/en/"
           },
           {
             "id": "ev_haines_declass",
-            "title": "US warns: invasion possible by Jan–Feb",
+            "title": "US warns: invasion possible by Jan or Feb",
             "type": "document",
             "category": "Intelligence warning",
             "description": "The US Director of National Intelligence and other senior US officials publicly share declassified intelligence in November 2021. They assess that Russia is preparing a multi-front invasion of Ukraine as early as January or February 2022.",
-            "whyItMatters": "Governments rarely declassify intelligence — they did it here to take away Russia's element of surprise.",
+            "whyItMatters": "Governments rarely declassify intelligence. They did it here to take away Russia's element of surprise.",
             "imageUrl": null,
             "imageCredit": "US Director of National Intelligence, Nov 2021",
             "sourceUrl": "https://www.dni.gov/"
           },
           {
             "id": "ev_allied_resolve",
-            "title": "Russia–Belarus joint exercise in February",
+            "title": "Russia-Belarus joint exercise in February",
             "type": "document",
             "category": "Military build-up",
             "description": "Russia and Belarus announce a joint military exercise called 'Allied Resolve 2022' on Belarusian soil, scheduled for February 2022. The number of Russian troops involved is far larger than in previous years.",
@@ -182,7 +182,7 @@
         "hotspots": [
           { "id": "hs_yelnya",   "label": "Yelnya",         "lat": 54.58, "lng": 33.18, "kind": "staging", "tooltip": "Russian base ~250km north of Kyiv. Major tank build-up in 2021." },
           { "id": "hs_pogonovo", "label": "Pogonovo",       "lat": 51.42, "lng": 39.31, "kind": "staging", "tooltip": "Russian base in the Voronezh region. Second tank build-up spotted in November 2021." },
-          { "id": "hs_belarus",  "label": "Belarus border", "lat": 52.50, "lng": 30.50, "kind": "staging", "tooltip": "Belarus is allied with Russia and borders northern Ukraine — only ~100km from Kyiv." },
+          { "id": "hs_belarus",  "label": "Belarus border", "lat": 52.50, "lng": 30.50, "kind": "staging", "tooltip": "Belarus is allied with Russia and borders northern Ukraine, only ~100km from Kyiv." },
           { "id": "hs_crimea",   "label": "Crimea",         "lat": 44.95, "lng": 34.10, "kind": "naval",   "tooltip": "Russia took Crimea from Ukraine in 2014. Home base for Russia's Black Sea fleet." },
           { "id": "hs_kyiv",     "label": "Kyiv",           "lat": 50.45, "lng": 30.52, "kind": "capital", "tooltip": "Ukraine's capital. Whoever holds Kyiv controls the country's leadership." },
           { "id": "hs_kharkiv",  "label": "Kharkiv",        "lat": 49.99, "lng": 36.23, "kind": "border",  "tooltip": "Ukraine's second-biggest city, in the east, near the Russian border." },
@@ -190,7 +190,7 @@
           { "id": "hs_kherson",  "label": "Kherson",        "lat": 46.65, "lng": 32.62, "kind": "capital", "tooltip": "City in southern Ukraine. Controls the water supply that Crimea depends on." }
         ],
         "tokenCount": 3,
-        "prompt": "If Russia attacks, where do they go in? Click two places to draw a route. You have 3 routes — star the one you think is the main attack on the capital."
+        "prompt": "If Russia attacks, where do they go in? Click two places to draw a route. You have 3 routes. Star the one you think is the main attack on the capital."
       },
       "scoring": {
         "correctAxes": [
@@ -319,7 +319,7 @@
             "portraitUrl": null,
             "portraitCredit": null,
             "systemPromptKey": "xi",
-            "knowsAbout": ["China–Russia partnership", "Beijing's view on Ukraine", "What China will publicly support"],
+            "knowsAbout": ["China-Russia partnership", "Beijing's view on Ukraine", "What China will publicly support"],
             "suggestedQuestions": [
               "What did China and Russia agree at the recent summit?",
               "Will China back Russia if it invades Ukraine?",
@@ -352,21 +352,21 @@
         "prompt": "Late December 2021. Russia has put forces around Ukraine, demanded NATO pull back, and refuses to give ground. What do you think Russia will actually do?",
         "contextDateLabel": "December 2021",
         "signalsRecap": [
-          { "stageRef": "Evidence wall", "takeaway": "Two huge tank build-ups, plus a third on Crimea, plus field hospitals — far bigger than any normal exercise." },
+          { "stageRef": "Evidence wall", "takeaway": "Two huge tank build-ups, plus a third on Crimea, plus field hospitals. Far bigger than any normal exercise." },
           { "stageRef": "Map", "takeaway": "Three possible attack lines: Belarus → Kyiv, Yelnya → Kharkiv, and Crimea → southern Ukraine." },
-          { "stageRef": "Diplomacy", "takeaway": "An essay denying Ukraine's existence, plus demands on NATO that NATO can't accept — both look like setting up a public excuse." },
-          { "stageRef": "Allies", "takeaway": "The US has gone unusually public with its intelligence — a clear attempt to deter Russia by removing surprise." }
+          { "stageRef": "Diplomacy", "takeaway": "An essay denying Ukraine's existence, plus demands on NATO that NATO can't accept. Both look like setting up a public excuse." },
+          { "stageRef": "Allies", "takeaway": "The US has gone unusually public with its intelligence, a clear attempt to deter Russia by removing surprise." }
         ],
         "options": [
           {
             "id": "opt_diplomatic",
-            "text": "Just bluffing — Russia will pull back if NATO offers some concessions.",
+            "text": "Just bluffing. Russia will pull back if NATO offers some concessions.",
             "hint": "The demands could be a deliberate over-ask to force a smaller compromise. But this option ignores the size of the build-up and the field hospitals."
           },
           {
             "id": "opt_donbas",
-            "text": "A small attack — Russia will only push into the Donbas region in eastern Ukraine.",
-            "hint": "Russia already has forces in the Donbas backing separatists. A push there would be the cheapest, least risky option — but it doesn't explain why so much kit is gathered near Belarus and Crimea too."
+            "text": "A small attack. Russia will only push into the Donbas region in eastern Ukraine.",
+            "hint": "Russia already has forces in the Donbas backing separatists. A push there would be the cheapest, least risky option, but it doesn't explain why so much kit is gathered near Belarus and Crimea too."
           },
           {
             "id": "opt_full",
@@ -376,7 +376,7 @@
           {
             "id": "opt_hybrid",
             "text": "Recognises the breakaway eastern regions, sends in 'peacekeepers', then escalates into a full invasion.",
-            "hint": "This gives Russia a legal-sounding excuse for sending troops, then lets them keep going. It uses the political signals AND the military build-up — the most consistent with all the evidence so far."
+            "hint": "This gives Russia a legal-sounding excuse for sending troops, then lets them keep going. It uses the political signals AND the military build-up, which is the most consistent with all the evidence so far."
           }
         ]
       },
@@ -400,7 +400,7 @@
       "id": "stage_pr_1",
       "type": "phase_reveal",
       "payload": {
-        "newPhaseLabel": "Phase 2: 21 – 24 February 2022",
+        "newPhaseLabel": "Phase 2: 21 to 24 February 2022",
         "newItems": [
           {
             "id": "ev_recognition_speech",
@@ -408,7 +408,7 @@
             "title": "Putin recognises Donetsk and Luhansk as 'independent'",
             "category": "Political signal",
             "description": "President Putin gives an hour-long speech on Russian state TV recognising the two breakaway eastern Ukrainian regions as independent countries. This becomes the legal-sounding excuse for sending Russian troops in.",
-            "whyItMatters": "It's the first half of the hybrid play — make it look legal first, then send the troops.",
+            "whyItMatters": "It's the first half of the hybrid play: make it look legal first, then send the troops.",
             "imageUrl": null,
             "imageCredit": "kremlin.ru, 21 Feb 2022",
             "sourceUrl": "http://en.kremlin.ru/events/president/news/67828"
@@ -419,7 +419,7 @@
             "title": "Putin announces 'special military operation'",
             "category": "Political signal",
             "description": "In a pre-dawn televised speech on 24 February, President Putin announces what he calls a 'special military operation' to 'demilitarise' Ukraine. It is the public start of a full invasion.",
-            "whyItMatters": "The wording avoids the word 'war' — but the scale of what follows shows the real plan.",
+            "whyItMatters": "The wording avoids the word 'war', but the scale of what follows shows the real plan.",
             "imageUrl": null,
             "imageCredit": "kremlin.ru, 24 Feb 2022",
             "sourceUrl": "http://en.kremlin.ru/events/president/news/67843"
@@ -430,7 +430,7 @@
             "title": "Cruise missiles hit airfields and command sites",
             "category": "Military action",
             "description": "Around 4am Kyiv time, cruise missiles and air strikes hit Ukrainian airfields, command centres, and air-defence radar sites across the country.",
-            "whyItMatters": "This is the standard opening move of a modern invasion — knock out the defender's air force before sending in ground troops.",
+            "whyItMatters": "This is the standard opening move of a modern invasion: knock out the defender's air force before sending in ground troops.",
             "imageUrl": null,
             "imageCredit": "Reuters, 24 Feb 2022",
             "sourceUrl": "https://www.reuters.com/"
@@ -440,7 +440,7 @@
             "type": "satellite",
             "title": "Russian paratroopers attack Hostomel airfield",
             "category": "Military action",
-            "description": "Russian paratroopers fly in by helicopter to seize Hostomel airfield just outside Kyiv. The plan is to use it as an air bridge — landing more troops directly on the doorstep of the capital.",
+            "description": "Russian paratroopers fly in by helicopter to seize Hostomel airfield just outside Kyiv. The plan is to use it as an air bridge, landing more troops directly on the doorstep of the capital.",
             "whyItMatters": "If Russia holds Hostomel, they can fly waves of soldiers straight into Kyiv. Whoever wins this fight shapes the early war.",
             "imageUrl": null,
             "imageCredit": "Maxar Technologies",
@@ -456,7 +456,7 @@
           {
             "pairItemIds": ["ev_putin_essay", "ev_security_demands"],
             "verdict": "confirmed",
-            "explanation": "Both were the political setup for invasion — not alternatives to it. Russia wrote the public 'why' before doing the 'what'."
+            "explanation": "Both were the political setup for invasion, not alternatives to it. Russia wrote the public 'why' before doing the 'what'."
           },
           {
             "pairItemIds": ["ev_haines_declass", "ev_allied_resolve"],
@@ -466,7 +466,7 @@
           {
             "pairItemIds": ["ev_yelnya_armor", "ev_train_movements"],
             "verdict": "confirmed",
-            "explanation": "Trains kept feeding kit into Yelnya — a stockpile, not a normal exercise rotation."
+            "explanation": "Trains kept feeding kit into Yelnya: a stockpile, not a normal exercise rotation."
           },
           {
             "pairItemIds": ["ev_pogonovo_buildup", "ev_yelnya_armor"],
@@ -495,7 +495,7 @@
         "hotspots": [
           { "id": "hs_yelnya",   "label": "Yelnya",         "lat": 54.58, "lng": 33.18, "kind": "staging", "tooltip": "Russian base ~250km north of Kyiv. Major tank build-up in 2021." },
           { "id": "hs_pogonovo", "label": "Pogonovo",       "lat": 51.42, "lng": 39.31, "kind": "staging", "tooltip": "Russian base in the Voronezh region. Second tank build-up." },
-          { "id": "hs_belarus",  "label": "Belarus border", "lat": 52.50, "lng": 30.50, "kind": "staging", "tooltip": "Russia's ally — only ~100km from Kyiv." },
+          { "id": "hs_belarus",  "label": "Belarus border", "lat": 52.50, "lng": 30.50, "kind": "staging", "tooltip": "Russia's ally, only ~100km from Kyiv." },
           { "id": "hs_crimea",   "label": "Crimea",         "lat": 44.95, "lng": 34.10, "kind": "naval",   "tooltip": "Russia took Crimea from Ukraine in 2014." },
           { "id": "hs_kyiv",     "label": "Kyiv",           "lat": 50.45, "lng": 30.52, "kind": "capital", "tooltip": "Ukraine's capital. The decisive target." },
           { "id": "hs_kharkiv",  "label": "Kharkiv",        "lat": 49.99, "lng": 36.23, "kind": "border",  "tooltip": "Ukraine's second city, near the Russian border." },
@@ -505,7 +505,7 @@
         "phases": [
           {
             "id": "ph_strikes",
-            "timeLabel": "24 Feb 04:00 — Opening strikes",
+            "timeLabel": "24 Feb 04:00: Opening strikes",
             "units": [
               { "side": "ru", "kind": "missile", "fromHotspotId": "hs_crimea",  "toHotspotId": "hs_kherson", "animationMs": 1500 },
               { "side": "ru", "kind": "missile", "fromHotspotId": "hs_belarus", "toHotspotId": "hs_kyiv",    "animationMs": 1500 },
@@ -515,17 +515,17 @@
               "id": "sd_first_targets",
               "prompt": "Russia is striking first. What would you expect them to hit in the opening hour? (Pick all that apply.)",
               "options": [
-                { "id": "opt_airfields",     "text": "Airfields — so Ukrainian fighter jets can't take off." },
-                { "id": "opt_command_nodes", "text": "Command centres — so Ukrainian leadership can't coordinate." },
-                { "id": "opt_airdef",        "text": "Air-defence radars — so Russian planes can fly freely." },
-                { "id": "opt_civilian",      "text": "Civilian areas — apartment blocks, schools, hospitals." }
+                { "id": "opt_airfields",     "text": "Airfields, so Ukrainian fighter jets can't take off." },
+                { "id": "opt_command_nodes", "text": "Command centres, so Ukrainian leadership can't coordinate." },
+                { "id": "opt_airdef",        "text": "Air-defence radars, so Russian planes can fly freely." },
+                { "id": "opt_civilian",      "text": "Civilian areas: apartment blocks, schools, hospitals." }
               ],
               "selectionMode": "multi"
             }
           },
           {
             "id": "ph_hostomel",
-            "timeLabel": "24 Feb 06:00 — Hostomel airfield assault",
+            "timeLabel": "24 Feb 06:00: Hostomel airfield assault",
             "units": [
               { "side": "ru", "kind": "airborne", "fromHotspotId": "hs_belarus", "toHotspotId": "hs_kyiv", "animationMs": 2200 }
             ],
@@ -533,15 +533,15 @@
               "id": "sd_hostomel_reinforce",
               "prompt": "Russian paratroopers have just landed at Hostomel airfield, right outside Kyiv. As Ukraine, do you send forces to take it back immediately?",
               "options": [
-                { "id": "opt_yes_reinforce",   "text": "Yes — if Russia keeps Hostomel, they can fly more troops straight into Kyiv." },
-                { "id": "opt_no_focus_donbas", "text": "No — focus on the Donbas, that's the bigger threat." }
+                { "id": "opt_yes_reinforce",   "text": "Yes. If Russia keeps Hostomel, they can fly more troops straight into Kyiv." },
+                { "id": "opt_no_focus_donbas", "text": "No. Focus on the Donbas, that's the bigger threat." }
               ],
               "selectionMode": "single"
             }
           },
           {
             "id": "ph_convoy",
-            "timeLabel": "28 Feb — 40-mile Russian convoy stalls",
+            "timeLabel": "28 Feb: 40-mile Russian convoy stalls",
             "units": [
               { "side": "ru", "kind": "convoy", "fromHotspotId": "hs_belarus", "toHotspotId": "hs_kyiv", "animationMs": 3000 }
             ],
@@ -550,7 +550,7 @@
               "prompt": "A 40-mile-long Russian convoy is stalled north of Kyiv, not moving. Why has it stopped?",
               "options": [
                 { "id": "opt_ambushes",  "text": "Ukrainian forces are ambushing it from the woods." },
-                { "id": "opt_logistics", "text": "Logistics failure — running out of fuel, tyres, food." },
+                { "id": "opt_logistics", "text": "Logistics failure: running out of fuel, tyres, food." },
                 { "id": "opt_command",   "text": "Russian commanders aren't coordinating well." },
                 { "id": "opt_all",       "text": "All of the above." }
               ],
@@ -575,19 +575,19 @@
           {
             "refStageIndex": 1,
             "headline": "What armies need behind the front line",
-            "body": "Field hospitals, blood supplies, and tanks parked in huge numbers don't show up for an exercise — they show up when an army is getting ready for real fighting. This was the strongest sign of what was coming.",
+            "body": "Field hospitals, blood supplies, and tanks parked in huge numbers don't show up for an exercise. They show up when an army is getting ready for real fighting. This was the strongest sign of what was coming.",
             "takeaway": "Look at supplies, not just troops."
           },
           {
             "refStageIndex": 2,
             "headline": "The main attack came from Belarus",
-            "body": "Most people guessed the main target would be the Donbas, in the east. The real main target was Kyiv, attacked from Belarus to the north. The Russia–Belarus 'joint exercise' was actually the cover story for moving the forces that would go for Kyiv.",
+            "body": "Most people guessed the main target would be the Donbas, in the east. The real main target was Kyiv, attacked from Belarus to the north. The Russia-Belarus 'joint exercise' was actually the cover story for moving the forces that would go for Kyiv.",
             "takeaway": "Cover stories often tell you exactly what's about to happen."
           },
           {
             "refStageIndex": 4,
             "headline": "The two-step move",
-            "body": "On 21 February, Russia 'recognised' the breakaway eastern regions, giving itself a legal-sounding excuse to send troops. Three days later, on 24 February, it launched a full invasion. The combination of fake diplomacy plus full invasion was the actual plan — not one or the other.",
+            "body": "On 21 February, Russia 'recognised' the breakaway eastern regions, giving itself a legal-sounding excuse to send troops. Three days later, on 24 February, it launched a full invasion. The combination of fake diplomacy plus full invasion was the actual plan, not one or the other.",
             "takeaway": "When you can't pick between two options, the real answer often uses ALL the signals."
           },
           {

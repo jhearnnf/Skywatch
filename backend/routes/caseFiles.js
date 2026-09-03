@@ -123,12 +123,38 @@ router.get('/', optionalAuth, async (req, res) => {
     const slugs = cases.map(c => c.slug);
     const chapters = await GameCaseFileChapter.find(
       { caseSlug: { $in: slugs }, status: 'published' },
-      { caseSlug: 1, chapterSlug: 1, chapterNumber: 1 }
+      { caseSlug: 1, chapterSlug: 1, chapterNumber: 1, estimatedMinutes: 1 }
     ).sort({ caseSlug: 1, chapterNumber: 1 }).lean();
 
     const slugsByCase = {};
+    // "How long is this going to take?" is the first thing anyone asks of a
+    // 35-minute game, and the menu had no answer. Sum the published chapters.
+    const minutesByCase = {};
     for (const ch of chapters) {
       (slugsByCase[ch.caseSlug] ||= []).push(ch.chapterSlug);
+      minutesByCase[ch.caseSlug] = (minutesByCase[ch.caseSlug] ?? 0) + (ch.estimatedMinutes ?? 0);
+    }
+
+    // Best score + completed runs per case for the signed-in player. Case Files
+    // award no airstars, so this is the only trace a finished case leaves on
+    // the menu — without it every card looks untouched however often it is
+    // played. One aggregation rather than a request per card.
+    const progressByCase = {};
+    if (req.user) {
+      const rows = await GameSessionCaseFileResult.aggregate([
+        { $match: { userId: req.user._id, caseSlug: { $in: slugs }, completedAt: { $ne: null } } },
+        { $group: {
+          _id:            '$caseSlug',
+          bestScore:      { $max: '$scoring.totalScore' },
+          completedCount: { $sum: 1 },
+        } },
+      ]);
+      for (const r of rows) {
+        progressByCase[r._id] = {
+          bestScore:      typeof r.bestScore === 'number' ? r.bestScore : null,
+          completedCount: r.completedCount,
+        };
+      }
     }
 
     const result = cases.map(c => ({
@@ -142,6 +168,9 @@ router.get('/', optionalAuth, async (req, res) => {
       tiers:         c.tiers,
       chapterCount:  (slugsByCase[c.slug] || []).length,
       chapterSlugs:  slugsByCase[c.slug] || [],
+      estimatedMinutes: minutesByCase[c.slug] || null,
+      bestScore:      progressByCase[c.slug]?.bestScore ?? null,
+      completedCount: progressByCase[c.slug]?.completedCount ?? 0,
     }));
 
     res.json(result);
@@ -218,6 +247,14 @@ router.get('/:caseSlug/chapters/:chapterSlug/best', protect, async (req, res) =>
     res.json({
       bestScore:      best ? best.scoring?.totalScore ?? null : null,
       completedCount,
+      // The debrief page falls back to this endpoint when it is opened
+      // directly (a bookmark, a refresh) rather than reached from a finished
+      // run. It used to get only a score and then request
+      // /sessions/undefined, which 500s — so a bookmarked debrief has never
+      // rendered. Hand back the session itself.
+      sessionId:      best ? best._id : null,
+      scoring:        best ? best.scoring ?? null : null,
+      completedAt:    best ? best.completedAt ?? null : null,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -278,6 +315,42 @@ router.post('/:caseSlug/chapters/:chapterSlug/sessions', protect, async (req, re
       return res.status(403).json({ reason: 'tier', minTier: minTierForCase(caseDoc) });
     }
 
+    const chapterForResume = await GameCaseFileChapter.findOne({ caseSlug, chapterSlug }).lean();
+    if (!chapterForResume || chapterForResume.status !== 'published') {
+      return res.status(404).json({ message: 'Chapter not found or not published' });
+    }
+
+    // ── Resume an unfinished run before spending a new attempt ───────────────
+    // A refresh, a dropped connection or a closed tab used to throw the whole
+    // run away AND burn the day's attempt. Re-entering a chapter now picks up
+    // the existing record at the stage it reached. Giving up is explicit —
+    // the Abort dialog marks the session abandoned, which frees the next POST
+    // to start a fresh one (at the cost of another attempt).
+    const inProgress = await GameSessionCaseFileResult.findOne({
+      userId:      req.user._id,
+      caseSlug,
+      chapterSlug,
+      completedAt: null,
+      abandoned:   { $ne: true },
+    })
+      .sort({ startedAt: -1 })
+      .lean();
+
+    if (inProgress) {
+      return res.json({
+        sessionId:         inProgress._id,
+        currentStageIndex: Math.min(inProgress.currentStageIndex ?? 0, chapterForResume.stages.length),
+        resumed:           true,
+        // Stage components (phase_reveal especially) rebuild their starting
+        // state from earlier submissions, so hand them back on resume.
+        stageResults: (inProgress.stageResults || []).map(r => ({
+          stageIndex: r.stageIndex,
+          stageType:  r.stageType,
+          payload:    r.payload,
+        })),
+      });
+    }
+
     // ── Daily limit — counts new sessions started today (UTC) ────────────────
     // Each POST consumes one slot, so replays count separately. Mid-session
     // chapter navigation reuses the same record and doesn't double-count.
@@ -290,11 +363,6 @@ router.post('/:caseSlug/chapters/:chapterSlug/sessions', protect, async (req, re
       if (usedToday >= limit) {
         return res.status(429).json({ reason: 'limit', usedToday, limitToday: limit });
       }
-    }
-
-    const chapter = await GameCaseFileChapter.findOne({ caseSlug, chapterSlug }).lean();
-    if (!chapter || chapter.status !== 'published') {
-      return res.status(404).json({ message: 'Chapter not found or not published' });
     }
 
     const session = await GameSessionCaseFileResult.create({
@@ -389,6 +457,34 @@ router.patch('/sessions/:sessionId/stages/:stageIndex', protect, async (req, res
       totalStages:       chapter.stages.length,
       isLastStage,
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── POST /sessions/:sessionId/abandon — give up on a run (protect) ────────────
+// The counterpart to resume: re-entering a chapter picks the run back up, so
+// there has to be a way to say "I'm done with this one". Idempotent, and a
+// completed session is left alone.
+router.post('/sessions/:sessionId/abandon', protect, async (req, res) => {
+  try {
+    const session = await GameSessionCaseFileResult.findById(req.params.sessionId);
+    if (!session) return res.status(404).json({ message: 'Session not found' });
+
+    if (!session.userId.equals(req.user._id)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    if (session.completedAt) {
+      return res.status(400).json({ error: 'session_already_completed' });
+    }
+
+    if (!session.abandoned) {
+      session.abandoned = true;
+      await session.save();
+    }
+
+    res.json({ abandoned: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -43,7 +43,7 @@ describe('scoreChapter — empty stageResults', () => {
     const { breakdown } = scoreChapter(chapter, []);
     for (const entry of breakdown) {
       expect(entry.score).toBe(0);
-      expect(entry.notes).toBe('Not submitted');
+      expect(entry.notes).toBe('Not answered');
     }
   });
 
@@ -99,7 +99,7 @@ describe('scoreChapter — evidence_wall', () => {
     // score   = 125 - 5 = 120 (above the 30% floor of 75, so floor doesn't apply)
     expect(breakdown[0].score).toBe(120);
     expect(breakdown[0].score).toBeLessThan(maxScore);
-    expect(breakdown[0].notes).toContain('2 noise');
+    expect(breakdown[0].notes).toContain('2 wrong');
   });
 
   it('reverse-ordered pair is accepted (unordered matching)', () => {
@@ -172,7 +172,7 @@ describe('scoreChapter — map_predictive', () => {
     // perAxis = 150/2 = 75
     // H1→H2: 75 * 1.2 = 90; H3→H4: 75 × 1.0 = 75; total = 165 → capped at 150
     expect(breakdown[0].score).toBe(maxScore);
-    expect(breakdown[0].notes).toContain('main-effort bonus applied');
+    expect(breakdown[0].notes).toContain('you called the main attack');
   });
 
   it('matching main-effort axis without markedAsMain → no bonus', () => {
@@ -184,7 +184,7 @@ describe('scoreChapter — map_predictive', () => {
     const { breakdown } = scoreChapter(chapter, [result]);
     // Only 1 of 2 correct axes matched, no bonus → 75
     expect(breakdown[0].score).toBe(75);
-    expect(breakdown[0].notes).not.toContain('bonus');
+    expect(breakdown[0].notes).not.toContain('main attack');
   });
 
   it('wrong axes submitted → forgiveness floor (30% of maxScore)', () => {
@@ -372,7 +372,7 @@ describe('scoreChapter — map_live', () => {
     });
     const { breakdown } = scoreChapter(chapter, [result]);
     expect(breakdown[0].score).toBe(100);
-    expect(breakdown[0].notes).toBe('1 of 2 sub-decisions correct');
+    expect(breakdown[0].notes).toBe('1 of 2 live calls right');
   });
 
   it('honours explicit per-sub-decision maxScore when present', () => {
@@ -541,7 +541,7 @@ describe('scoreChapter — forgiveness floor', () => {
     };
     const { breakdown } = scoreChapter(makeChapter([stage]), []);
     expect(breakdown[0].score).toBe(0);
-    expect(breakdown[0].notes).toBe('Not submitted');
+    expect(breakdown[0].notes).toBe('Not answered');
   });
 
   it('cold_open / debrief stay at 0 even when attempted (maxScore is 0)', () => {
@@ -609,7 +609,7 @@ describe('scoreChapter — mixed chapter integration', () => {
     expect(breakdown[0].score).toBe(0);  // cold_open — Not submitted (cold_open = 0 anyway)
     expect(breakdown[1].score).toBe(250);
     expect(breakdown[2].score).toBe(0);  // map_live — Not submitted; floor does NOT apply
-    expect(breakdown[2].notes).toBe('Not submitted');
+    expect(breakdown[2].notes).toBe('Not answered');
     expect(totalScore).toBe(250);
   });
 });
