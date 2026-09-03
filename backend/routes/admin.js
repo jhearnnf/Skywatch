@@ -1534,6 +1534,107 @@ router.patch('/users/:id/cbat-passed', async (req, res) => {
   }
 });
 
+// Reddit handle typed into Admin › Users. Accepts whatever the admin had on the
+// clipboard — a bare handle, "u/name", "/u/name", "@name" or a full profile URL
+// with or without a trailing slash or query string — and stores the bare handle.
+// Returns null for anything empty, which is how the panel unlinks an account.
+//
+// Exported for the tests, which cover the paste shapes rather than the route.
+function normalizeRedditUsername(input) {
+  let s = (input ?? '').toString().trim();
+  if (!s) return null;
+  // Full URL: keep the segment after /u/ or /user/ and drop anything after it.
+  const urlMatch = s.match(/reddit\.com\/(?:u|user)\/([^/?#]+)/i);
+  if (urlMatch) s = urlMatch[1];
+  s = s.replace(/^\/?(?:u|user)\//i, '').replace(/^@/, '').replace(/\/+$/, '').trim();
+  if (!s) return null;
+  // Reddit's own rule: 3–20 characters, letters/digits/underscore/hyphen.
+  if (!/^[A-Za-z0-9_-]{3,20}$/.test(s)) return false; // false = present but invalid
+  return s;
+}
+
+// PATCH /api/admin/users/:id/reddit — link (or unlink) a Reddit handle.
+// Same lightweight shape as the tester and cbat-passed toggles: no reason, no
+// AdminAction entry, because this records a fact about the person rather than
+// taking an action against their account.
+router.patch('/users/:id/reddit', async (req, res) => {
+  try {
+    const redditUsername = normalizeRedditUsername(req.body?.redditUsername);
+    if (redditUsername === false) {
+      return res.status(400).json({
+        message: 'Reddit usernames are 3–20 characters, using letters, numbers, underscores or hyphens.',
+      });
+    }
+    const updated = await User.findByIdAndUpdate(
+      req.params.id, { redditUsername }, { returnDocument: 'after' }
+    );
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+    res.json({ status: 'success', data: { redditUsername } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/admin/users/:id/cbat-results — attach a screenshot of the user's real
+// CBAT score sheet. Takes a base64 data URL in the JSON body exactly as the
+// update-notification uploader does (see that route for why: the 10MB
+// express.json limit is the effective cap, so the client stays under ~8MB of
+// file). Uploads to its own Cloudinary folder and appends to the array.
+router.post('/users/:id/cbat-results', async (req, res) => {
+  try {
+    const dataUrl = (req.body?.dataUrl ?? '').toString();
+    if (!dataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ message: 'dataUrl must be an image data URL' });
+    }
+    const comma  = dataUrl.indexOf(',');
+    const b64    = comma >= 0 ? dataUrl.slice(comma + 1) : '';
+    const buffer = Buffer.from(b64, 'base64');
+    if (!buffer.length) return res.status(400).json({ message: 'Empty image payload' });
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const uploaded = await uploadBuffer(buffer, { folder: 'cbat-results' });
+    user.cbatResultImages.push({
+      url:      uploaded.secure_url,
+      publicId: uploaded.public_id,
+      caption:  (req.body?.caption ?? '').toString().trim() || null,
+    });
+    await user.save();
+
+    res.json({
+      status: 'success',
+      data: {
+        image:  user.cbatResultImages[user.cbatResultImages.length - 1],
+        images: user.cbatResultImages,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/admin/users/:id/cbat-results/:imageId — remove one screenshot.
+// The Cloudinary asset goes with it; a failure there is swallowed so a missing
+// or already-deleted asset can never strand the entry in the user's list.
+router.delete('/users/:id/cbat-results/:imageId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    const image = user.cbatResultImages.id(req.params.imageId);
+    if (!image) return res.status(404).json({ message: 'Image not found.' });
+
+    if (image.publicId) await destroyAsset(image.publicId).catch(() => {});
+    image.deleteOne();
+    await user.save();
+
+    res.json({ status: 'success', data: { images: user.cbatResultImages } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/users/:id/email — send an admin-composed email to a user.
 // The admin has already reviewed/edited the draft and confirmed in the modal, so
 // the request itself is the confirmation. Fields are re-validated server-side and

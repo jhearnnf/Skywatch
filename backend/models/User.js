@@ -137,6 +137,28 @@ const userSchema = new mongoose.Schema(
     // ever need separating.
     cbatPassedSource: { type: String, enum: ['admin', 'questionnaire', null], default: null },
 
+    // The user's Reddit handle, typed in by an admin from Admin › Users. Most of
+    // what we know about the real CBAT came off Reddit, so an account that also
+    // posts there is worth being able to find again — this is the only link
+    // between the two. Stored bare (no "u/" prefix, no URL) so it can be pasted
+    // straight into a profile link; the route normalises whatever was typed.
+    // Admin-facing only: never rendered on a public profile or leaderboard.
+    redditUsername: { type: String, trim: true, default: null },
+
+    // Screenshots of the user's real CBAT score sheet, uploaded by an admin from
+    // the same panel. These are the evidence behind `cbatPassed` — a sheet shows
+    // the actual battery scores, which nothing in the app can otherwise know and
+    // which is what the Aptitude Report is calibrated against.
+    //
+    // Cloudinary holds the bytes; `publicId` is kept so deleting an entry can
+    // delete the asset too rather than orphaning it.
+    cbatResultImages: [{
+      url:        { type: String, required: true, trim: true },
+      publicId:   { type: String, trim: true, default: null },
+      caption:    { type: String, trim: true, default: null },
+      uploadedAt: { type: Date, default: Date.now },
+    }],
+
     // Opted out of research/questionnaire email. Set from the one-click link in
     // the questionnaire email footer, which honours the opt-out IMMEDIATELY and
     // unconditionally — the reason below is asked afterwards and may be null,
