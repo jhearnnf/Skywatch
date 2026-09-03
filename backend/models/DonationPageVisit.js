@@ -29,9 +29,20 @@ const donationPageVisitSchema = new mongoose.Schema({
   // Checkout session endpoint rather than the click handler so it cannot claim
   // a conversion the server never actually started.
   //
-  // NOT proof of a payment. Stripe's webhook owns that, on User.donationPrompt.
+  // NOT proof of a payment. That is `paidAt` below.
   checkoutStartedAt: { type: Date,   default: null },
   checkoutCount:     { type: Number, default: 0 },
+
+  // Proof of a payment, written by Stripe's webhook and nothing else.
+  //
+  // A signed-in donor's money is recorded on User.donationPrompt instead, because
+  // the app needs it there anyway to stop asking them again. This pair is for
+  // everyone else, and until it existed an anonymous donation was logged to the
+  // console and stored nowhere at all — which, on a page that deliberately does
+  // not require an account, is most of them. Exactly one of the two places is
+  // written per payment, so the admin total can sum both without double counting.
+  paidAt:    { type: Date,   default: null },
+  paidPence: { type: Number, default: 0 },
 }, { timestamps: true });
 
 // A signed-in visitor is keyed by account so their visits collapse into one
@@ -68,6 +79,45 @@ donationPageVisitSchema.statics.recordCheckout = function recordCheckout(visitKe
       $set:        { checkoutStartedAt: when },
       $inc:        { checkoutCount: 1 },
       $setOnInsert: { visitKey, userId: userId ?? null, arrivedAt: when },
+    },
+    { upsert: true },
+  );
+};
+
+// Record that this visit actually paid. Only ever called for a donor we cannot
+// name; a signed-in one is recorded against their account.
+//
+// `paidPence` accumulates rather than overwrites for the same reason
+// User.donationPrompt.donatedTotalPence does: a visitKey outlives one payment
+// (signed out it survives for the session, and a second gift from the same tab
+// reuses the row), and a repeat donor must raise the total, not replace it.
+donationPageVisitSchema.statics.recordPayment = function recordPayment(visitKey, pence, when = new Date()) {
+  return this.updateOne(
+    { visitKey },
+    {
+      $set:         { paidAt: when },
+      $inc:         { paidPence: Math.max(0, Number(pence) || 0) },
+      $setOnInsert: { visitKey, userId: null, arrivedAt: when },
+    },
+    { upsert: true },
+  );
+};
+
+// Record a donation that arrived with no account and no visit key — a Stripe
+// Payment Link, which carries none of our metadata because we never built the
+// session. Keyed by the Checkout session id, which is unique per payment.
+//
+// `$set` rather than `$inc`, unlike the two above: one session is one payment,
+// so a redelivery of the same event must land on the same total rather than
+// adding to it. Stripe retries a non-2xx and can occasionally redeliver a
+// success, and this is the one path where that is cheap to make safe.
+donationPageVisitSchema.statics.recordSessionPayment = function recordSessionPayment(sessionId, pence, when = new Date()) {
+  const visitKey = `stripe:${sessionId}`;
+  return this.updateOne(
+    { visitKey },
+    {
+      $set:         { paidAt: when, paidPence: Math.max(0, Number(pence) || 0) },
+      $setOnInsert: { visitKey, userId: null, arrivedAt: when },
     },
     { upsert: true },
   );

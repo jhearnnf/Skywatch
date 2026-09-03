@@ -161,7 +161,11 @@ router.post('/create-donation-session', optionalAuth, async (req, res) => {
       // `kind` is load-bearing, not documentation: the webhook shares one
       // checkout.session.completed handler with subscriptions and reads this
       // to tell the two apart. See routes/stripeWebhook.js.
-      metadata: { kind: 'donation', amountPence: String(pence), userId },
+      //
+      // `visitKey` is how an anonymous payment finds its way home. The webhook
+      // has no account to write one against, and without this it could only log
+      // the money and forget it.
+      metadata: { kind: 'donation', amountPence: String(pence), userId, visitKey: visitKey ?? '' },
     });
 
     res.json({ url: session.url });
