@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import Overlay from '../ui/Overlay'
-import { roleLabel } from '../../data/surveyRoles'
 
 /**
  * Admin › Content › Potential CBAT Passers.
@@ -32,6 +32,7 @@ const fmtDay  = (ymd) => {
 
 export default function CbatPassersSection({ API }) {
   const { apiFetch } = useAuth()
+  const navigate = useNavigate()
 
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
@@ -43,8 +44,6 @@ export default function CbatPassersSection({ API }) {
   const [confirm,  setConfirm]  = useState(false)
   const [sending,  setSending]  = useState(false)
   const [result,   setResult]   = useState(null)
-  const [responses, setResponses] = useState(null)
-  const [showResponses, setShowResponses] = useState(false)
   const [open, setOpen] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState('')
@@ -162,15 +161,6 @@ export default function CbatPassersSection({ API }) {
     }
   }
 
-  const loadResponses = async () => {
-    setShowResponses(v => !v)
-    if (responses) return
-    try {
-      const res = await apiFetch(`${API}/api/admin/cbat-passers/responses`, { credentials: 'include' })
-      const json = await res.json().catch(() => ({}))
-      if (res.ok) setResponses(json.data)
-    } catch { /* summary is optional */ }
-  }
 
   const totals = data?.totals
 
@@ -306,11 +296,16 @@ export default function CbatPassersSection({ API }) {
             >
               {testing ? 'Sending…' : 'Email me a test'}
             </button>
+            {/* The results live on their own page. They are read repeatedly and
+                at a different time to this list, and the tables want more width
+                than the Content column has. Linked from here because this is
+                where you already are when you think to look. */}
             <button
-              onClick={loadResponses}
+              onClick={() => navigate('/admin/cbat-questionnaire')}
+              data-testid="cbat-passers-results-link"
               className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors"
             >
-              {showResponses ? 'Hide answers' : 'View answers'}
+              View results ↗
             </button>
           </div>
 
@@ -324,7 +319,6 @@ export default function CbatPassersSection({ API }) {
             Up to {data?.batchSize ?? 50} at a time. Already-emailed accounts cannot be selected.
           </p>
 
-          {showResponses && <ResponsesPanel data={responses} />}
         </div>
       )}
 
@@ -542,64 +536,5 @@ function ConfirmSendModal({ rows, onConfirm, onCancel, sending }) {
         </div>
       </motion.div>
     </Overlay>
-  )
-}
-
-function ResponsesPanel({ data }) {
-  if (!data) return <p className="text-xs text-slate-400 mt-4">Loading answers…</p>
-  const s = data.summary
-  const pct = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : '—')
-  const avg = (v) => (v == null ? '—' : v.toFixed(1))
-
-  return (
-    <div className="mt-5 border-t border-slate-100 pt-4">
-      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-4">
-        <Stat label="Sent" value={s.invitesSent} />
-        <Stat label="Started" value={s.started} hint={pct(s.started, s.invitesSent)} />
-        <Stat label="Finished" value={s.completed} hint={pct(s.completed, s.invitesSent)} />
-        <Stat label="Opted out" value={s.optOuts} />
-        <Stat label="Passed" value={s.passed} />
-        <Stat label="Did not" value={s.failed} />
-        <Stat label="Waiting" value={s.waiting} />
-        <Stat label="Not sat yet" value={s.notYet} />
-        <Stat label="Realism" value={avg(s.avgRealism)} hint="out of 5" />
-        <Stat label="Helped" value={avg(s.avgHelped)} hint="out of 5" />
-        <Stat label="Donate clicks" value={s.donationClicks} />
-      </div>
-
-      {s.gaps.length > 0 && (
-        <div className="mb-4">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
-            What we did not prepare them for
-          </p>
-          <div className="space-y-2">
-            {s.gaps.map((g, i) => (
-              <div key={i} className="rounded-xl border border-slate-200 px-3 py-2">
-                <p className="text-xs text-slate-700 whitespace-pre-wrap">{g.gaps}</p>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {roleLabel(g.role) || 'Role not given'}
-                  {g.agentNumber ? ` · Agent ${g.agentNumber}` : ''}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {Object.keys(s.roleCounts).length > 0 && (
-        <div>
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Roles</p>
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(s.roleCounts)
-              .sort((a, b) => b[1] - a[1])
-              .map(([key, count]) => (
-                <span key={key} className="text-[11px] font-semibold px-2 py-1 rounded-full border border-slate-200 text-slate-600">
-                  {key.startsWith('other:') ? key.slice(6) : (roleLabel(key) || key)} · {count}
-                </span>
-              ))}
-          </div>
-        </div>
-      )}
-    </div>
   )
 }

@@ -458,3 +458,104 @@ describe('POST /api/admin/cbat-passers/test — the dry run', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('GET /api/admin/cbat-passers/responses — the results page', () => {
+  const answer = (token, body) => request(app).patch(`/api/survey/${token}`).send(body);
+
+  const invited = async () => {
+    const u = await candidate();
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    const invite = await SurveyInvite.findOne({ userId: u._id });
+    return { user: u, invite };
+  };
+
+  it('names who unsubscribed, which the recipient list cannot', async () => {
+    const { user, invite } = await invited();
+    await request(app).post(`/api/survey/${invite.token}/opt-out`);
+    await request(app).patch(`/api/survey/${invite.token}/opt-out`)
+      .send({ reason: 'too_many_emails', passedForRole: 'yes' });
+
+    // Gone from the recipient list entirely — that query excludes opt-outs.
+    const list = await getList();
+    expect(namesIn(list.body)).not.toContain(user.email);
+
+    // …but present, by name and with their reason, in the results.
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.optedOut).toHaveLength(1);
+    expect(res.body.data.optedOut[0]).toEqual(expect.objectContaining({
+      email: user.email,
+      reason: 'too_many_emails',
+      passedForRole: 'yes',
+    }));
+  });
+
+  it('records an unsubscribe with no reason as exactly that', async () => {
+    const { invite } = await invited();
+    await request(app).post(`/api/survey/${invite.token}/opt-out`);
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.optedOut[0].reason).toBeNull();
+  });
+
+  it('lists who is waiting to sit it, with their date', async () => {
+    const { user, invite } = await invited();
+    const booked = new Date(Date.now() + 30 * DAY);
+    await answer(invite.token, { satTest: false });
+    await answer(invite.token, { testBookedFor: booked.toISOString() });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    const row = res.body.data.deferred[0];
+    expect(row.email).toBe(user.email);
+    expect(new Date(row.testBookedFor).toDateString()).toBe(booked.toDateString());
+    expect(row.due).toBe(false);
+  });
+
+  it('flags a deferral that has run out as due', async () => {
+    const { invite } = await invited();
+    await answer(invite.token, { satTest: false });
+    await SurveyInvite.updateOne({ _id: invite._id }, { deferredUntil: new Date(Date.now() - DAY) });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.deferred[0].due).toBe(true);
+  });
+
+  it('keeps an unsubscriber out of the waiting list even if they were deferred', async () => {
+    const { invite } = await invited();
+    await answer(invite.token, { satTest: false });
+    await request(app).post(`/api/survey/${invite.token}/opt-out`);
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.deferred).toHaveLength(0);
+    expect(res.body.data.optedOut).toHaveLength(1);
+  });
+
+  it('returns a partial run alongside the finished ones', async () => {
+    const { invite } = await invited();
+    await answer(invite.token, { satTest: true, passedForRole: 'yes' });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.responses).toHaveLength(1);
+    expect(res.body.data.responses[0].passedForRole).toBe('yes');
+    expect(res.body.data.summary.completed).toBe(0);   // they stopped partway
+    expect(res.body.data.summary.started).toBe(1);
+  });
+
+  it('counts opens for the funnel', async () => {
+    const { invite } = await invited();
+    await request(app).get(`/api/survey/${invite.token}`);
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.summary.opened).toBe(1);
+    expect(res.body.data.summary.invitesSent).toBe(1);
+  });
+
+  it('ignores the admin dry run entirely', async () => {
+    await request(app).post('/api/admin/cbat-passers/test').set('Cookie', cookie).send({});
+    const invite = await SurveyInvite.findOne({ isTest: true });
+    await request(app).post(`/api/survey/${invite.token}/opt-out`);
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.optedOut).toHaveLength(0);
+    expect(res.body.data.summary.invitesSent).toBe(0);
+  });
+});

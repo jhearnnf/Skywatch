@@ -281,8 +281,21 @@ router.delete('/invite/:userId', async (req, res) => {
   }
 });
 
-// GET /api/admin/cbat-passers/responses — every answer, plus the aggregates
-// worth reading at a glance.
+// GET /api/admin/cbat-passers/responses — everything the results page shows.
+//
+// Three groups, because the campaign produces three different kinds of outcome
+// and only one of them is an "answer":
+//
+//   responses  — people who told us something
+//   deferred   — people who have not sat it yet, and when they will
+//   optedOut   — people who asked us to stop
+//
+// The last one has to be fetched separately and cannot be derived from the
+// recipient list, because that list excludes opted-out accounts at the query
+// level (see cbatPasserCohort.js). Without this they would be a number in a
+// summary and nothing more, which is no use at all: an unsubscribe is a piece
+// of feedback about the campaign, and knowing WHO is how you notice you have
+// mailed the wrong cohort.
 router.get('/responses', async (_req, res) => {
   try {
     const responses = await SurveyResponse.find({ campaign: SURVEY_CAMPAIGN })
@@ -310,14 +323,70 @@ router.get('/responses', async (_req, res) => {
     }
 
     const invites = await SurveyInvite.countDocuments({ campaign: SURVEY_CAMPAIGN, sentAt: { $ne: null } });
-    const optOuts = await SurveyInvite.countDocuments({ campaign: SURVEY_CAMPAIGN, optedOutAt: { $ne: null } });
+    const opened  = await SurveyInvite.countDocuments({ campaign: SURVEY_CAMPAIGN, openedAt: { $ne: null } });
+
+    const byInvite = new Map(responses.map(r => [String(r.inviteId), r]));
+
+    // Who unsubscribed, with whatever they told us on the way out.
+    const optOutInvites = await SurveyInvite.find({ campaign: SURVEY_CAMPAIGN, optedOutAt: { $ne: null } })
+      .sort({ optedOutAt: -1 })
+      .populate('userId', 'agentNumber displayName email researchEmailOptOut')
+      .lean();
+
+    const optedOut = optOutInvites.map(inv => {
+      const answer = byInvite.get(String(inv._id));
+      return {
+        agentNumber: inv.userId?.agentNumber ?? null,
+        displayName: inv.userId?.displayName ?? null,
+        email:       inv.sentToEmail ?? inv.userId?.email ?? null,
+        optedOutAt:  inv.optedOutAt,
+        sentAt:      inv.sentAt,
+        // The reason and the pass answer are both optional and both asked AFTER
+        // the opt-out was applied, so either may be absent. Absent is not an
+        // error, it is someone who left without saying why.
+        reason:        inv.userId?.researchEmailOptOut?.reason ?? answer?.optOutReason ?? null,
+        passedForRole: answer?.passedForRole ?? null,
+        satTest:       answer?.satTest ?? null,
+      };
+    });
+
+    // Held until their test. Doubles as the worklist for the next round: when
+    // the date passes they rejoin the recipient list on their own.
+    const deferredInvites = await SurveyInvite.find({
+      campaign: SURVEY_CAMPAIGN,
+      deferredUntil: { $ne: null },
+      optedOutAt: null,
+    })
+      .sort({ deferredUntil: 1 })
+      .populate('userId', 'agentNumber displayName email')
+      .lean();
+
+    const now = new Date();
+    const deferred = deferredInvites.map(inv => {
+      const answer = byInvite.get(String(inv._id));
+      return {
+        agentNumber: inv.userId?.agentNumber ?? null,
+        displayName: inv.userId?.displayName ?? null,
+        email:       inv.sentToEmail ?? inv.userId?.email ?? null,
+        sentAt:        inv.sentAt,
+        deferredUntil: inv.deferredUntil,
+        due:           inv.deferredUntil <= now,
+        testBookedFor:     answer?.testBookedFor ?? null,
+        testBookedUnknown: !!answer?.testBookedUnknown,
+      };
+    });
+
+    const optOuts = optedOut.length;
 
     res.json({
       status: 'success',
       data: {
         responses,
+        optedOut,
+        deferred,
         summary: {
           invitesSent: invites,
+          opened,
           started:     responses.length,
           completed:   responses.filter(r => r.completedAt).length,
           optOuts,

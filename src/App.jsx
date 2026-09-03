@@ -97,6 +97,7 @@ import DeleteAccount  from './pages/DeleteAccount'
 import Subscription   from './pages/Subscription'
 import Share          from './pages/Share'
 import Survey         from './pages/Survey'
+import CbatQuestionnaireResults from './pages/CbatQuestionnaireResults'
 import SurveyOptOut   from './pages/SurveyOptOut'
 import NotFound       from './pages/NotFound'
 
@@ -378,6 +379,7 @@ function AppRoutes() {
               isAdmin; every /api/clipper route is adminOnly server-side too. */}
           <Route path="/clipper"           element={<RequireAuth><PageWrapper><Clipper /></PageWrapper></RequireAuth>} />
           <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />
+          <Route path="/admin/cbat-questionnaire" element={<RequireAuth><PageWrapper><CbatQuestionnaireResults /></PageWrapper></RequireAuth>} />
           {/* Admin-only preview of the post-game progress-award flow. Under /admin so it inherits
               the slim-mode allowlist and stays out of the player-facing routes. */}
           <Route path="/admin/award-preview" element={<RequireAuth><PageWrapper><CbatAwardPreview /></PageWrapper></RequireAuth>} />

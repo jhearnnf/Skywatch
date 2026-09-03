@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatPassersSection from '../CbatPassersSection'
 
@@ -55,9 +56,17 @@ function mockApi(data = cohort()) {
   })
 }
 
-// The panel is collapsed until opened, which is also what triggers the load.
+// The section links out to the results page, so it needs a router around it.
+// The stand-in route lets a test assert the navigation actually happened.
 const open = async () => {
-  render(<CbatPassersSection API="" />)
+  render(
+    <MemoryRouter initialEntries={['/admin']}>
+      <Routes>
+        <Route path="/admin" element={<CbatPassersSection API="" />} />
+        <Route path="/admin/cbat-questionnaire" element={<div data-testid="results-page" />} />
+      </Routes>
+    </MemoryRouter>,
+  )
   fireEvent.click(screen.getByText('Potential CBAT Passers'))
   await screen.findByText('Agent 1234567')
 }
@@ -192,5 +201,13 @@ describe('CbatPassersSection — sending', () => {
     const modal = heading.closest('div').parentElement
     expect(within(modal).getByText(/How did your CBAT go\?/)).toBeInTheDocument()
     expect(sendBody).toBeNull() // previewing is not sending
+  })
+})
+
+describe('CbatPassersSection — finding the results', () => {
+  it('links to the results page from beside the send button', async () => {
+    await open()
+    fireEvent.click(screen.getByTestId('cbat-passers-results-link'))
+    expect(await screen.findByTestId('results-page')).toBeInTheDocument()
   })
 })
