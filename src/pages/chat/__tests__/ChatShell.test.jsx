@@ -189,7 +189,7 @@ describe('ChatShell', () => {
   it('offers to start a support chat when none exists', async () => {
     overview({ support: null, channels: [], dms: [], viewer: VIEWER })
     render(<ChatShell />)
-    await waitFor(() => expect(screen.getByText('Start a chat with the SkyWatch team')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('A private thread with the SkyWatch team')).toBeTruthy())
   })
 
   it('pins an existing support thread above the channels', async () => {

@@ -50,6 +50,51 @@ function Row({
   )
 }
 
+// Support and the guides are not channels, and the rail used to say they were:
+// same flat row, same hairline divider, same column as General and your DMs.
+// The two things a newcomer needs first were therefore the two things that
+// looked most like something to scroll past.
+//
+// So they get their own zone at the top — inset cards on a tinted panel, each
+// with its icon in a tile and a plain label for what tapping it does ("Message
+// the team", "Read"). The message list starts below a solid rule, and the
+// distinction is legible before a single word is read: cards are things you
+// open, rows are conversations you keep up with.
+function ResourceCard({ as: As = 'div', tone = 'slate', active = false, children, ...props }) {
+  const tones = {
+    brand: 'bg-brand-100 border-brand-200 hover:border-brand-300',
+    slate: 'bg-slate-100 border-slate-200 hover:border-slate-300',
+  }
+  return (
+    <As
+      {...props}
+      className={`w-full flex items-start gap-2.5 text-left px-2.5 py-2.5 rounded-xl border
+        transition-colors ${tones[tone]} ${active ? 'ring-2 ring-brand-400' : ''}`}
+    >
+      {children}
+    </As>
+  )
+}
+
+// The tile is what separates a card's icon from a row's bare emoji at a glance.
+function CardIcon({ children, online = false }) {
+  return (
+    <div className="w-8 h-8 rounded-lg bg-surface border border-slate-200 shrink-0
+      flex items-center justify-center text-base leading-none relative">
+      {children}
+      {online && <OnlineDot className="absolute -right-0.5 -bottom-0.5 w-2 h-2 ring-1 ring-surface" />}
+    </div>
+  )
+}
+
+// Says what the card does, not what it is. A guide that only carried a title
+// and a book emoji still read as a channel called "CBAT Guide".
+function CardAction({ children }) {
+  return (
+    <span className="text-[10px] font-bold text-brand-600 shrink-0 pt-0.5">{children}</span>
+  )
+}
+
 // A guide is one of three things, and each needs a different link.
 //
 //   • an app route ("/rankings")            → react-router Link
@@ -58,49 +103,49 @@ function Row({
 //                                             the SPA, so routing to it with
 //                                             Link would just render the 404
 //   • anywhere off-site                     → anchor, new tab, and an ↗, since
-//                                             a rail row that looks like a
-//                                             channel and silently leaves the
+//                                             a card that silently leaves the
 //                                             site is a small trap
 //
 // A trailing file extension is what separates the first two. No unread dot or
 // timestamp on any of them: nothing here to keep up with.
-function GuideRow({ guide }) {
+function GuideCard({ guide }) {
   const onSite   = guide.url?.startsWith('/')
   const internal = onSite && !/\.[a-z0-9]+$/i.test(guide.url)
   const body = (
     <>
-      <div className="text-lg leading-none pt-0.5 shrink-0">{guide.emoji || '📖'}</div>
+      <CardIcon>{guide.emoji || '📖'}</CardIcon>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <p className="text-sm font-bold text-slate-700 truncate">{guide.title}</p>
-          {!onSite && <span aria-hidden="true" className="text-[10px] text-slate-400 shrink-0">↗</span>}
-        </div>
+        <p className="text-sm font-bold text-slate-800 truncate">{guide.title}</p>
         {guide.description && (
-          <p className="text-[11px] text-slate-400 truncate">{guide.description}</p>
+          <p className="text-[11px] text-slate-500 truncate mt-0.5">{guide.description}</p>
         )}
       </div>
+      <CardAction>{onSite ? 'Read' : 'Read ↗'}</CardAction>
     </>
   )
-  const className = 'flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-100 transition-colors'
 
-  if (internal) return <Link to={guide.url} className={className}>{body}</Link>
+  if (internal) return <ResourceCard as={Link} to={guide.url}>{body}</ResourceCard>
   // The CBAT guide is a cream document and the app paints light status-bar text
   // for its dark theme, so leaving for it needs the same handover the landing
   // page and the CBAT menu do. Guarded by URL: the rail's rows come from the
   // database and any other document is not ours to restyle for.
   if (onSite)   return (
-    <a
+    <ResourceCard
+      as="a"
       href={guide.url}
       onClick={isCbatGuideUrl(guide.url) ? prepareGuideChrome : undefined}
-      className={className}
-    >{body}</a>
+    >{body}</ResourceCard>
   )
-  return <a href={guide.url} target="_blank" rel="noopener noreferrer" className={className}>{body}</a>
+  return (
+    <ResourceCard as="a" href={guide.url} target="_blank" rel="noopener noreferrer">
+      {body}
+    </ResourceCard>
+  )
 }
 
-function SectionLabel({ children }) {
+function SectionLabel({ children, className = 'px-3 pt-3 pb-1.5' }) {
   return (
-    <p className="px-3 pt-3 pb-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+    <p className={`${className} text-[10px] font-bold text-slate-500 uppercase tracking-wider`}>
       {children}
     </p>
   )
@@ -144,45 +189,75 @@ export default function ChatSidebar({
       )}
 
       <div className="flex-1 overflow-y-auto">
-        <SectionLabel>Support</SectionLabel>
-        {support ? (
-          <Row
-            to={`/chat/${support._id}`}
-            icon="🛟"
-            title={SUPPORT_LABEL}
-            subtitle={support.status === 'closed' ? 'Closed' : 'Usually replies within a few hours'}
-            preview={support.preview}
-            unread={support.unread}
-            personalUnread={support.personalUnread}
-            timestamp={support.lastMessageAt}
-            active={String(activeId) === String(support._id)}
-          />
-        ) : loading ? (
-          // Offering "start a chat" before the rail has loaded would invite
-          // someone with an open support thread to start a second one.
-          <p className={placeholder}>Loading…</p>
-        ) : (
-          <button
-            type="button"
-            onClick={onStartSupport}
-            className="w-full flex items-center gap-3 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-100 transition-colors text-left"
-          >
-            <div className="text-lg leading-none shrink-0">🛟</div>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-slate-700">{SUPPORT_LABEL}</p>
-              <p className="text-[11px] text-slate-400">Start a chat with the SkyWatch team</p>
-            </div>
-          </button>
-        )}
+        {/* The help zone. Support and the guides sit together on one tinted
+            panel above a solid rule, so the rail reads as "get help, or read
+            up" and then "conversations" — rather than as one undifferentiated
+            list where the guide is the fourth thing that looks like a channel.
+            Both of these are things you dip into once; everything below the
+            rule is something you come back to. */}
+        <div className="p-2 pt-2.5 space-y-1.5 bg-slate-100/40">
+          <SectionLabel className="px-1 pb-0.5">Get help</SectionLabel>
+          {support ? (
+            <ResourceCard
+              as={Link}
+              tone="brand"
+              to={`/chat/${support._id}`}
+              aria-current={String(activeId) === String(support._id) ? 'page' : undefined}
+              active={String(activeId) === String(support._id)}
+            >
+              <CardIcon>🛟</CardIcon>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className={`text-sm truncate ${support.unread ? 'font-extrabold text-slate-900' : 'font-bold text-slate-800'}`}>
+                    {SUPPORT_LABEL}
+                  </p>
+                  {support.personalUnread > 0
+                    ? <CountBadge count={support.personalUnread} label={badgeLabel(support.personalUnread)} />
+                    : support.unread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
+                  <span className="ml-auto text-[10px] text-slate-400 shrink-0">
+                    {formatRelative(support.lastMessageAt)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  {support.status === 'closed' ? 'Closed' : 'Usually replies within a few hours'}
+                </p>
+                {support.preview && (
+                  <p className="text-xs text-slate-500 truncate mt-0.5">
+                    {support.preview.senderDisplayName ? `${support.preview.senderDisplayName}: ` : ''}
+                    {support.preview.body}
+                  </p>
+                )}
+              </div>
+            </ResourceCard>
+          ) : loading ? (
+            // Offering "start a chat" before the rail has loaded would invite
+            // someone with an open support thread to start a second one.
+            <p className="text-[11px] text-slate-400 px-1 pb-1">Loading…</p>
+          ) : (
+            <ResourceCard as="button" type="button" tone="brand" onClick={onStartSupport}>
+              <CardIcon>🛟</CardIcon>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-slate-800 truncate">{SUPPORT_LABEL}</p>
+                <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  A private thread with the SkyWatch team
+                </p>
+              </div>
+              <CardAction>Message</CardAction>
+            </ResourceCard>
+          )}
 
-        {/* Nothing to show when the team has not added any — an empty section
-            with a "coming soon" line would be noise above every channel. */}
-        {guides.length > 0 && (
-          <>
-            <SectionLabel>Guides</SectionLabel>
-            {guides.map(g => <GuideRow key={g._id} guide={g} />)}
-          </>
-        )}
+          {/* Nothing to show when the team has not added any — an empty section
+              with a "coming soon" line would be noise above every channel. */}
+          {guides.length > 0 && (
+            <>
+              <SectionLabel className="px-1 pt-2 pb-0.5">Guides</SectionLabel>
+              {guides.map(g => <GuideCard key={g._id} guide={g} />)}
+            </>
+          )}
+        </div>
+
+        {/* The rule between reading and talking. */}
+        <div className="border-b-2 border-slate-200" />
 
         <SectionLabel>Channels</SectionLabel>
         {channels.length === 0 ? (
