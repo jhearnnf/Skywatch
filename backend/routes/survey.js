@@ -86,6 +86,10 @@ function throttle(req, res, next) {
   next();
 }
 
+// The window is per-IP and in memory, so a test run — every request from one
+// address — would otherwise trip a limit meant for crawlers. Test-only hook.
+router.__resetThrottle = () => HITS.clear();
+
 // Keeps the map from growing without bound on a long-lived process.
 setInterval(() => {
   const now = Date.now();
@@ -140,6 +144,19 @@ router.post('/self', protect, async (req, res) => {
     const filter   = { userId: req.user._id, campaign };
 
     let invite = await SurveyInvite.findOne(filter);
+
+    // A finished dry run starts over. The test campaign is repeatable on
+    // purpose: the admin "send test email" button clears exactly this pair
+    // before every press, and without the same clearing here the owner who walked
+    // the flow once gets the closing thank-you screen for ever from `/survey`,
+    // with no way back to question one. Only the dry run resets: a real
+    // respondent reopening their link is *meant* to see the thank-you rather
+    // than be invited to answer twice.
+    if (invite && isTest && (invite.completedAt || invite.optedOutAt)) {
+      await SurveyResponse.deleteOne({ inviteId: invite._id });
+      await SurveyInvite.deleteOne({ _id: invite._id });
+      invite = null;
+    }
     if (!invite) {
       try {
         invite = await SurveyInvite.create({

@@ -38,6 +38,7 @@ afterEach(async () => { await db.clearDatabase(); });
 afterAll(async () => { await db.closeDatabase(); });
 
 beforeEach(async () => {
+  require('../../routes/survey').__resetThrottle();
   await createSettings();
   user   = await createUser({ displayName: 'Falcon' });
   token  = SurveyInvite.newToken();
@@ -418,6 +419,32 @@ describe('POST /api/survey/self — the signed-in shortcut', () => {
     // isTest is what stops the dry run touching the account behind it.
     await request(app).patch(`/api/survey/${res.body.data.token}`).send({ passedForRole: 'yes' });
     expect((await User.findById(admin._id)).cbatPassed).toBeFalsy();
+  });
+
+  it('starts the dry run over once an admin has finished it', async () => {
+    const admin = await createAdminUser();
+    const first = await self(admin._id);
+    await request(app).patch(`/api/survey/${first.body.data.token}`).send({ role: 'pilot', complete: true });
+    expect((await SurveyInvite.findOne({ userId: admin._id })).completedAt).toBeTruthy();
+
+    // Otherwise the bare /survey link shows the closing thank-you for ever.
+    const second = await self(admin._id);
+    expect(second.body.data.token).not.toBe(first.body.data.token);
+    expect(await SurveyInvite.countDocuments({ userId: admin._id })).toBe(1);
+
+    const loaded = await request(app).get(`/api/survey/${second.body.data.token}`);
+    expect(loaded.body.data.completed).toBe(false);
+    expect(loaded.body.data.response).toBeNull();
+  });
+
+  it('leaves a real respondent on their thank-you screen', async () => {
+    const fresh = await createUser();
+    const first = await self(fresh._id);
+    await request(app).patch(`/api/survey/${first.body.data.token}`).send({ role: 'pilot', complete: true });
+
+    const second = await self(fresh._id);
+    expect(second.body.data.token).toBe(first.body.data.token);
+    expect((await request(app).get(`/api/survey/${second.body.data.token}`)).body.data.completed).toBe(true);
   });
 
   it('refuses once the questionnaire has been turned off', async () => {
