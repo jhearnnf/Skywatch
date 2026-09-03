@@ -731,15 +731,27 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
               label or sub long enough to wrap is what breaks it — this card read as oversized
               beside the two email tiles when it was "Questionnaires Filled In" over a sub
               naming the part-finished runs. That count is in the questionnaire summary in
-              Admin ▸ Content. */}
-          <StatCard
-            label="Questionnaires"
-            value={`${fmtNum(questionnaire.completed)} / ${fmtNum(questionnaire.sent)}`}
-            color="emerald"
-            sub={questionnaire.sent
-              ? `${pct(questionnaire.completed, questionnaire.sent)} filled in`
-              : 'nobody emailed yet'}
-          />
+              Admin ▸ Content.
+
+              Clicking it opens the results page, the same one the Potential CBAT Passers
+              panel links to — the tile is a headline of that page, so it should be the way
+              in. Coming back from there lands on Admin ▸ Content with the panel already
+              expanded, rather than on Stats with the trail lost. */}
+          <button
+            type="button"
+            onClick={() => navigate('/admin/cbat-questionnaire', { state: { fromStats: true } })}
+            data-testid="stats-questionnaires-card"
+            className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-emerald-300 rounded-2xl [&>div]:flex-1"
+          >
+            <StatCard
+              label="Questionnaires"
+              value={`${fmtNum(questionnaire.completed)} / ${fmtNum(questionnaire.sent)}`}
+              color="emerald"
+              sub={questionnaire.sent
+                ? `${pct(questionnaire.completed, questionnaire.sent)} filled in`
+                : 'nobody emailed yet'}
+            />
+          </button>
         </div>
         {/* Donations. Two tiles, because at a glance there are only two questions: how much
             came in, and how many of the people we asked pressed the button. Everything else
@@ -5884,7 +5896,7 @@ const CR_DEFAULTS = {
   combatReadinessMediumLabel:  'Operative', combatReadinessMediumTag:  'MEDIUM', combatReadinessMediumStars:  '★★★★☆', combatReadinessMediumFlavor:  'Contextual, deeper questions.',
 }
 
-function ContentTab({ API }) {
+function ContentTab({ API, openPassers = false, onBootstrapConsumed }) {
   const [draft,       setDraft]       = useState({})
   const [modal,       setModal]       = useState(null)
   const [toast,       setToast]       = useState('')
@@ -6058,7 +6070,7 @@ function ContentTab({ API }) {
 
       {/* ── Potential CBAT Passers ────────────────────────────────
           The recipient list and the only send button in the app. */}
-      <CbatPassersSection API={API} />
+      <CbatPassersSection API={API} openOnMount={openPassers} onOpenConsumed={onBootstrapConsumed} />
 
       {/* ── Static Content ────────────────────────────────────────── */}
       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Static Content</p>
@@ -11275,11 +11287,18 @@ export default function Admin() {
   const { unsolvedCount, unresolvedSystemLogs, refresh: refreshUnsolvedCount } = useUnsolvedReports()
   const navigate = useNavigate()
   const location = useLocation()
-  const [tab, setTab] = useState(() => (location.state?.openLeads || location.state?.editBriefId) ? 'briefs' : 'stats')
+  const [tab, setTab] = useState(() => {
+    if (location.state?.openLeads || location.state?.editBriefId) return 'briefs'
+    if (location.state?.openPassers) return 'content'
+    return 'stats'
+  })
   const [leadsInitialSearch, setLeadsInitialSearch] = useState(() => location.state?.leadsSearch ?? '')
   const [openLeadsOnMount,   setOpenLeadsOnMount]   = useState(() => !!location.state?.openLeads)
   const [editBriefIdOnMount, setEditBriefIdOnMount] = useState(() => location.state?.editBriefId ?? null)
   const [intelInitial,       setIntelInitial]       = useState({ sub: null, emailStatus: null, emailUser: null })
+  // Set when we arrive back from the questionnaire results page: open Content
+  // with the Potential CBAT Passers panel already expanded.
+  const [openPassersOnMount, setOpenPassersOnMount] = useState(() => !!location.state?.openPassers)
 
   const openEmailLog = (status) => {
     setIntelInitial({ sub: 'email-log', emailStatus: status, emailUser: null })
@@ -11302,7 +11321,7 @@ export default function Admin() {
   }
 
   useEffect(() => {
-    if (location.state?.editBriefId || location.state?.openLeads) {
+    if (location.state?.editBriefId || location.state?.openLeads || location.state?.openPassers) {
       navigate(location.pathname, { replace: true, state: {} })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -11374,7 +11393,7 @@ export default function Admin() {
               {tab === 'reports'  && <ReportsTab  API={API} />}
               {tab === 'settings' && <SettingsTab API={API} />}
               {tab === 'users'    && <UsersTab    API={API} onViewEmailHistory={openUserEmailLog} />}
-              {tab === 'content'  && <ContentTab  API={API} />}
+              {tab === 'content'  && <ContentTab  API={API} openPassers={openPassersOnMount} onBootstrapConsumed={() => setOpenPassersOnMount(false)} />}
               {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
               {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} initialEmailUser={intelInitial.emailUser} onOpenBrief={openBriefFromReport} onBootstrapConsumed={() => setIntelInitial({ sub: null, emailStatus: null, emailUser: null })} />}
             </motion.div>

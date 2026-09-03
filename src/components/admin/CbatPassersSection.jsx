@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
@@ -30,7 +30,7 @@ const fmtDay  = (ymd) => {
   })
 }
 
-export default function CbatPassersSection({ API }) {
+export default function CbatPassersSection({ API, openOnMount = false, onOpenConsumed }) {
   const { apiFetch } = useAuth()
   const navigate = useNavigate()
 
@@ -44,7 +44,12 @@ export default function CbatPassersSection({ API }) {
   const [confirm,  setConfirm]  = useState(false)
   const [sending,  setSending]  = useState(false)
   const [result,   setResult]   = useState(null)
-  const [open, setOpen] = useState(false)
+  // Opened for us when the admin came here from the Questionnaires stat card
+  // (Stats ▸ Questionnaires → results page → ← Admin): the panel they were
+  // being sent to should be expanded and in view, not collapsed like every
+  // other section.
+  const [open, setOpen] = useState(openOnMount)
+  const rootRef = useRef(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState('')
 
@@ -82,6 +87,15 @@ export default function CbatPassersSection({ API }) {
   }, [API, apiFetch, minCompletions, dormantDays])
 
   useEffect(() => { if (open && !data) load({ useSaved: true }) }, [open, data, load])
+
+  // Scroll the panel into view once, on the arrival that opened it. The flag is
+  // consumed straight away so a later collapse is not undone by a re-render.
+  useEffect(() => {
+    if (!openOnMount) return
+    rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    onOpenConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // The list starts at the warm band, except when the admin has typed a
   // threshold below it — then it follows them down, so every value the input
@@ -171,7 +185,7 @@ export default function CbatPassersSection({ API }) {
   const totals = data?.totals
 
   return (
-    <div className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
+    <div ref={rootRef} data-testid="cbat-passers-section" className="bg-surface rounded-2xl border border-slate-300 overflow-hidden mb-4">
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full px-5 py-4 border-b border-slate-100 flex items-center justify-between text-left"

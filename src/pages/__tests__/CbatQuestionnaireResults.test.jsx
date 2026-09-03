@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatQuestionnaireResults from '../CbatQuestionnaireResults'
 
@@ -162,5 +162,29 @@ describe('CbatQuestionnaireResults — comments', () => {
     }] }))
     const table = within(await screen.findByTestId('results-answers'))
     expect(table.getByText('One more thing.')).toBeInTheDocument()
+  })
+})
+
+// Where "← Admin" goes back to. The results page is only ever reached from the
+// Potential CBAT Passers panel, or from the Questionnaires stat card that is a
+// headline of this page — either way, the panel is the place to return to.
+describe('CbatQuestionnaireResults — going back', () => {
+  it('returns to Admin with the passers panel flagged to open', async () => {
+    const AdminProbe = () => {
+      const { state } = useLocation()
+      return <div data-testid="admin-probe">{state?.openPassers ? 'passers-open' : 'plain'}</div>
+    }
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ data: payload() }) }))
+    render(
+      <MemoryRouter initialEntries={['/admin/cbat-questionnaire']}>
+        <Routes>
+          <Route path="/admin/cbat-questionnaire" element={<CbatQuestionnaireResults />} />
+          <Route path="/admin" element={<AdminProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByText('← Admin'))
+    expect((await screen.findByTestId('admin-probe')).textContent).toBe('passers-open')
   })
 })

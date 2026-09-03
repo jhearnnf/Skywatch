@@ -85,8 +85,11 @@ export default function CbatQuestionnaireResults() {
     >
       <SEO title="CBAT Questionnaire Results" description="Admin — questionnaire results." noIndex />
 
+      {/* Back to where this page is reached from: Admin ▸ Content with the
+          Potential CBAT Passers panel expanded, whether the admin came in from
+          that panel's "View results" or from the Questionnaires stat card. */}
       <button
-        onClick={() => navigate('/admin')}
+        onClick={() => navigate('/admin', { state: { openPassers: true } })}
         className="text-xs text-slate-500 hover:text-slate-700 transition-colors mb-3"
       >
         ← Admin
