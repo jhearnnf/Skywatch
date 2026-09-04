@@ -20,13 +20,30 @@
 //
 // Pack shape:
 //   { id, title, tabs: [{ id, title, text }], easierTabs: [id], questions: [...] }
-//   questions: { id, prompt, answer, distractors: [...], needs: [tabId, tabId], trap }
+//   questions: { id, prompt, answer, distractors: [...], needs: [tabId, tabId],
+//                trap, evidence: [...], trapEvidence }
 //     `needs`  — the tabs that must both be read; used to filter a pack down to
 //                the Easier tab subset, and pinned by a test so no question can
 //                reference a tab its difficulty never shows.
 //     `trap`   — which of the distractors is the plainly-stated one. Recorded so
 //                the post-game review can point at it; the player never sees the
 //                label during play.
+//     `evidence` — the walkthrough shown after a WRONG answer: the steps that
+//                take you from the tabs to the answer, in the order you would
+//                make them. A step usually carries a { tab, quote } pair and the
+//                quote is highlighted in place inside that tab, so the player
+//                sees the sentence rather than being told about it. A step with
+//                only a `why` is pure reasoning — arithmetic, or a fact from a
+//                tab the question does not `need` and therefore cannot open.
+//                Every quote must be an exact substring of its tab's text and
+//                every tab must be one the question `needs`; both are pinned by
+//                a test, because a copy edit to a tab would otherwise kill the
+//                highlight silently rather than loudly.
+//     `trapEvidence` — optional { tab, quote }: where the plainly-stated wrong
+//                answer actually sits, highlighted in amber alongside the green.
+//                Set it only where the trap is a sentence you can point at —
+//                plenty of traps are just plausible-sounding, and inventing a
+//                quote for those would teach the wrong lesson.
 
 export const VLT_PACKS = [
   // ─────────────────────────────────────────────────────────────────────────
@@ -86,6 +103,11 @@ export const VLT_PACKS = [
         answer: 'Type B',
         distractors: ['Type C', 'Type A', 'None of the three'],
         trap: 'Type C',
+        evidence: [
+          { tab: 'sites', quote: 'Calder has a mean tidal range of 5.2 metres', why: 'Start at the site: Calder has 5.2 metres of tidal range.' },
+          { tab: 'turbines', quote: 'The Type C is the most powerful at 1,400 kW, but requires a range of at least 6 metres', why: 'Type C needs 6 metres, so Calder cannot take one however powerful it is.' },
+          { tab: 'turbines', quote: 'The Type B generates 900 kW and requires a range of at least 4.5 metres', why: 'Type B needs only 4.5 metres, which Calder clears. That makes Type B the most powerful that fits.' },
+        ],
       },
       {
         id: 'tidal-vessel-cannot-reach',
@@ -95,6 +117,10 @@ export const VLT_PACKS = [
         answer: 'Strathorn',
         distractors: ['Calder', 'Fenwick', 'It can operate at all three'],
         trap: 'It can operate at all three',
+        evidence: [
+          { tab: 'sites', quote: 'Strathorn has a mean tidal range of 3.4 metres and a working depth of 9 metres', why: 'Strathorn is the shallow one at 9 metres of working depth.' },
+          { tab: 'maintenance', quote: 'The vessel cannot operate in water shallower than 12 metres', why: 'The jack-up vessel needs 12 metres. Calder has 14 and Fenwick 26, so only Strathorn is out of reach.' },
+        ],
       },
       {
         id: 'tidal-only-c-site',
@@ -105,6 +131,10 @@ export const VLT_PACKS = [
         answer: 'Fenwick',
         distractors: ['Calder', 'Strathorn', 'Calder and Fenwick'],
         trap: 'Calder and Fenwick',
+        evidence: [
+          { tab: 'turbines', quote: 'requires a range of at least 6 metres and cannot be installed in water shallower than 20 metres', why: 'Type C carries two conditions, not one: 6 metres of range AND 20 metres of depth.' },
+          { tab: 'sites', quote: 'Fenwick has a mean tidal range of 6.8 metres and a working depth of 26 metres', why: 'Only Fenwick clears both. Calder falls short on each count (5.2 m and 14 m), so pairing it with Fenwick is wrong.' },
+        ],
       },
       {
         id: 'tidal-calder-vs-fenwick-output',
@@ -115,6 +145,12 @@ export const VLT_PACKS = [
         answer: '500 kW',
         distractors: ['800 kW', '1,400 kW', 'They generate the same'],
         trap: '1,400 kW',
+        evidence: [
+          { tab: 'sites', quote: 'Calder has a mean tidal range of 5.2 metres', why: 'Calder has 5.2 metres of range, short of Type C, so its best is Type B.' },
+          { tab: 'turbines', quote: 'The Type B generates 900 kW', why: 'A Type B is 900 kW.' },
+          { tab: 'sites', quote: 'Fenwick has a mean tidal range of 6.8 metres and a working depth of 26 metres', why: 'Fenwick clears Type C on both range and depth.' },
+          { tab: 'turbines', quote: 'The Type C is the most powerful at 1,400 kW', why: 'A Type C is 1,400 kW, so the difference is 1,400 minus 900: 500 kW. The question asks for the gap, not the bigger figure.' },
+        ],
       },
       {
         id: 'tidal-service-interval-calder',
@@ -125,6 +161,12 @@ export const VLT_PACKS = [
         answer: 'Every 12 months',
         distractors: ['Every 9 months', 'Every 18 months', 'Every 6 months'],
         trap: 'Every 9 months',
+        evidence: [
+          { tab: 'sites', quote: 'Calder has a mean tidal range of 5.2 metres', why: 'Calder has 5.2 metres of tidal range.' },
+          { why: 'That clears Type B at 4.5 metres but not Type C at 6, so Calder runs Type B.' },
+          { tab: 'maintenance', quote: 'Type B every 12 months', why: 'Type B is serviced every 12 months.' },
+        ],
+        trapEvidence: { tab: 'maintenance', quote: 'Type C every 9 months' },
       },
       {
         id: 'tidal-no-export',
@@ -135,6 +177,10 @@ export const VLT_PACKS = [
         answer: 'Two',
         distractors: ['Three', 'One', 'Four'],
         trap: 'Three',
+        evidence: [
+          { tab: 'overview', quote: 'operates generating stations in three estuaries: Calder, Fenwick and Strathorn', why: 'The programme has three stations.' },
+          { tab: 'grid', quote: 'Strathorn has no export connection and charges a shoreside battery installation instead', why: 'Strathorn does not export at all, so two of the three do. Three stations is not three exporters.' },
+        ],
       },
       {
         id: 'tidal-northern-limit',
@@ -145,6 +191,11 @@ export const VLT_PACKS = [
         answer: 'Eight',
         distractors: ['Nine', 'Twenty', 'Thirteen'],
         trap: 'Nine',
+        evidence: [
+          { tab: 'grid', quote: 'Calder exports to the northern grid, which accepts up to 8 MW from the programme', why: 'Calder can push 8 MW at most.' },
+          { tab: 'turbines', quote: 'The Type B generates 900 kW', why: 'Each Type B is 900 kW, and 8 MW divided by 0.9 MW is 8.9.' },
+          { tab: 'grid', quote: 'Export limits are firm and are not raised for short periods of high generation', why: 'The limit is firm, so you round down. Eight units fit, nine would exceed it.' },
+        ],
       },
       {
         id: 'tidal-most-frequent-service',
@@ -155,6 +206,11 @@ export const VLT_PACKS = [
         answer: 'Fenwick',
         distractors: ['Calder', 'Strathorn', 'All three equally'],
         trap: 'All three equally',
+        evidence: [
+          { tab: 'sites', quote: 'Fenwick has a mean tidal range of 6.8 metres and a working depth of 26 metres', why: 'Fenwick is the only site with both 6+ metres of range and 20+ metres of depth, so it is the only Type C station.' },
+          { why: 'Calder tops out at Type B and Strathorn at Type A, so the three are not on the same schedule.' },
+          { tab: 'maintenance', quote: 'Type A units are serviced every 18 months, Type B every 12 months and Type C every 9 months', why: 'Type C is the 9-month interval, the shortest of the three. Fenwick is serviced most often.' },
+        ],
       },
       {
         id: 'tidal-strathorn-type',
@@ -164,6 +220,11 @@ export const VLT_PACKS = [
         answer: 'Type A only',
         distractors: ['Types A and B', 'Type C only', 'All three types'],
         trap: 'All three types',
+        evidence: [
+          { tab: 'sites', quote: 'Strathorn has a mean tidal range of 3.4 metres and a working depth of 9 metres', why: 'Strathorn has 3.4 metres of range.' },
+          { tab: 'turbines', quote: 'The Type A generates 600 kW and requires a tidal range of at least 3 metres', why: 'Type A needs 3 metres, so it fits.' },
+          { tab: 'turbines', quote: 'The Type B generates 900 kW and requires a range of at least 4.5 metres', why: 'Type B needs 4.5 metres and Type C needs 6, so neither qualifies. Type A only.' },
+        ],
       },
       {
         id: 'tidal-technicians',
@@ -174,6 +235,10 @@ export const VLT_PACKS = [
         answer: 'Twelve',
         distractors: ['Ten', 'Eight', 'Fourteen'],
         trap: 'Eight',
+        evidence: [
+          { tab: 'staffing', quote: 'Each station is staffed at four technicians for every six turbines or part thereof', why: 'Four technicians per six turbines, and the words “or part thereof” mean a partial block still counts as a whole one.' },
+          { why: 'Fourteen turbines is three blocks: six, six and two. Three lots of four technicians is twelve.' },
+        ],
       },
       {
         id: 'tidal-oldest',
@@ -183,6 +248,10 @@ export const VLT_PACKS = [
         answer: 'The northern grid',
         distractors: ['The eastern grid', 'It does not export', 'Both northern and eastern'],
         trap: 'The eastern grid',
+        evidence: [
+          { tab: 'history', quote: 'Calder was commissioned in 2019, Fenwick in 2022 and Strathorn in 2024', why: 'Calder is the oldest, commissioned in 2019.' },
+          { tab: 'grid', quote: 'Calder exports to the northern grid', why: 'Calder exports to the northern grid. The question never names Calder, which is the join you had to make.' },
+        ],
       },
       {
         id: 'tidal-battery-range',
@@ -192,6 +261,10 @@ export const VLT_PACKS = [
         answer: '3.4 metres',
         distractors: ['6.8 metres', '5.2 metres', '7.1 metres'],
         trap: '7.1 metres',
+        evidence: [
+          { tab: 'grid', quote: 'Strathorn has no export connection and charges a shoreside battery installation instead', why: 'The station with the battery is Strathorn.' },
+          { tab: 'sites', quote: 'Strathorn has a mean tidal range of 3.4 metres', why: 'Strathorn has a tidal range of 3.4 metres.' },
+        ],
       },
       // ── Hard-only: these join a tab the Easier subset never shows ──────────
       {
@@ -203,6 +276,11 @@ export const VLT_PACKS = [
         answer: 'October to March',
         distractors: ['April to September', 'All year', 'Never, the restriction does not apply there'],
         trap: 'Never, the restriction does not apply there',
+        evidence: [
+          { tab: 'sites', quote: 'Fenwick has a mean tidal range of 6.8 metres and a working depth of 26 metres', why: 'Fenwick is the only station whose range and depth allow a Type C at all.' },
+          { tab: 'environment', quote: 'Type C units may not be installed anywhere designated as seal habitat', why: 'Type C is barred from seal habitat.' },
+          { tab: 'environment', quote: 'Fenwick carries that designation between October and March each year', why: 'Fenwick is designated from October to March, and that is the window it cannot take one.' },
+        ],
       },
       {
         id: 'tidal-cancelled-range',
@@ -213,6 +291,10 @@ export const VLT_PACKS = [
         answer: 'Yes, its range exceeded the requirement',
         distractors: ['No, its range was too small', 'No, Type C was not approved then', 'The range was never surveyed'],
         trap: 'No, Type C was not approved then',
+        evidence: [
+          { tab: 'history', quote: 'Brackmoor would have had a tidal range of 7.1 metres', why: 'Brackmoor would have had 7.1 metres of range.' },
+          { tab: 'turbines', quote: 'requires a range of at least 6 metres', why: 'Type C needs at least 6 metres, so 7.1 clears it comfortably. Being cancelled does not change whether the range qualified.' },
+        ],
       },
       {
         id: 'tidal-certification-lapse',
@@ -224,6 +306,10 @@ export const VLT_PACKS = [
         answer: 'Six months, the certification is at its limit but has not lapsed',
         distractors: ['Three months', 'Twelve months, so it has lapsed', 'There is no break'],
         trap: 'There is no break',
+        evidence: [
+          { tab: 'environment', quote: 'Fenwick carries that designation between October and March each year', why: 'October to March inclusive is six months with no Type C work at Fenwick.' },
+          { tab: 'staffing', quote: 'lapses immediately if a technician spends more than six months away from that type', why: 'Certification lapses only after MORE than six months. Six exactly sits at the limit, not over it.' },
+        ],
       },
       {
         id: 'tidal-eastern-capacity',
@@ -234,6 +320,11 @@ export const VLT_PACKS = [
         answer: 'Fourteen',
         distractors: ['Fifteen', 'Twenty', 'Twenty-two'],
         trap: 'Twenty',
+        evidence: [
+          { tab: 'grid', quote: 'Fenwick exports to the eastern grid, which accepts up to 20 MW', why: 'The eastern grid takes 20 MW.' },
+          { tab: 'turbines', quote: 'The Type C is the most powerful at 1,400 kW', why: 'Each Type C is 1.4 MW, and 20 divided by 1.4 is 14.3.' },
+          { tab: 'grid', quote: 'Export limits are firm and are not raised for short periods of high generation', why: 'The limit is firm, so round down to fourteen. The 20 in the options is megawatts, not turbines.' },
+        ],
       },
     ],
   },
@@ -294,6 +385,10 @@ export const VLT_PACKS = [
         answer: 'Red only',
         distractors: ['Blue only', 'Either team', 'Neither team'],
         trap: 'Either team',
+        evidence: [
+          { tab: 'samples', quote: 'Class 2 is drilled core', why: 'Class 2 is drilled core.' },
+          { tab: 'teams', quote: 'The Red team is equipped for drilling and is the only team able to recover core', why: 'Red is the only team that can recover core, so Class 2 is Red only.' },
+        ],
       },
       {
         id: 'survey-class3-zone',
@@ -306,6 +401,11 @@ export const VLT_PACKS = [
         answer: 'Braid and Dunmore',
         distractors: ['Dunmore only', 'Ashfell and Cullen', 'None, all four are within the window'],
         trap: 'None, all four are within the window',
+        evidence: [
+          { tab: 'samples', quote: 'Class 3 is friable material, which must be sealed within two hours', why: 'Class 3 must be sealed within two hours of recovery.' },
+          { tab: 'transport', quote: 'no facility to seal or chill samples in transit', why: 'Nothing can be sealed on the way, so the journey itself has to fit inside those two hours.' },
+          { tab: 'transport', quote: 'from Braid 3 hours, from Cullen 40 minutes and from Dunmore 5 hours', why: 'Braid at 3 hours and Dunmore at 5 both blow the window. Ashfell at 90 minutes and Cullen at 40 are inside it.' },
+        ],
       },
       {
         id: 'survey-chilled-team',
@@ -316,6 +416,10 @@ export const VLT_PACKS = [
         answer: 'Blue, because it holds the only refrigerated container',
         distractors: ['Red, because it is the better equipped team', 'Either team', 'Both teams together'],
         trap: 'Either team',
+        evidence: [
+          { tab: 'samples', quote: 'kept below 10 °C for the whole journey', why: 'Class 3 has to stay below 10 °C the whole way.' },
+          { tab: 'teams', quote: 'The Blue team carries no drilling rig but is the only team with a refrigerated container', why: 'Only Blue has a refrigerated container, so only Blue can carry Class 3.' },
+        ],
       },
       {
         id: 'survey-longest-journey',
@@ -325,6 +429,11 @@ export const VLT_PACKS = [
         answer: 'June to August',
         distractors: ['May to September', 'All year', 'It is never accessible'],
         trap: 'May to September',
+        evidence: [
+          { tab: 'transport', quote: 'from Dunmore 5 hours', why: 'Dunmore is the longest journey at 5 hours.' },
+          { tab: 'seasons', quote: 'Dunmore is accessible between June and August only', why: 'Dunmore is open June to August. May to September belongs to Braid, which is not the longest journey.' },
+        ],
+        trapEvidence: { tab: 'seasons', quote: 'Braid is accessible between May and September only' },
       },
       {
         id: 'survey-year-round-core',
@@ -335,6 +444,10 @@ export const VLT_PACKS = [
         answer: 'Two',
         distractors: ['Four', 'Three', 'One'],
         trap: 'Four',
+        evidence: [
+          { tab: 'remit', quote: 'four zones: Ashfell, Braid, Cullen and Dunmore', why: 'There are four zones in total.' },
+          { tab: 'seasons', quote: 'Ashfell and Cullen are accessible all year', why: 'Only Ashfell and Cullen are open all year. Braid and Dunmore are seasonal, so the answer is two of the four.' },
+        ],
       },
       {
         id: 'survey-concurrent',
@@ -345,6 +458,10 @@ export const VLT_PACKS = [
         answer: 'No, zones are never surveyed concurrently',
         distractors: ['Yes, one team per zone', 'Yes, but only in the all-year zones', 'Only with a second drilling rig'],
         trap: 'Yes, one team per zone',
+        evidence: [
+          { tab: 'teams', quote: 'Two field teams are available', why: 'There really are two teams, which is what makes one team per zone sound workable.' },
+          { tab: 'remit', quote: 'Zones are surveyed one at a time and never concurrently', why: 'The remit bars two zones at once outright, whatever the teams could manage.' },
+        ],
       },
       {
         id: 'survey-class1-transport',
@@ -355,6 +472,10 @@ export const VLT_PACKS = [
         answer: 'No, Class 1 has no handling deadline',
         distractors: ['Yes, it exceeds the two-hour limit', 'Yes, unless it is chilled', 'Only in summer'],
         trap: 'Yes, it exceeds the two-hour limit',
+        evidence: [
+          { tab: 'transport', quote: 'from Dunmore 5 hours', why: 'The five-hour run is Dunmore.' },
+          { tab: 'samples', quote: 'Class 1 is loose surface material and needs no special handling', why: 'Class 1 has no handling requirement, so no clock is running. The two-hour limit belongs to Classes 2 and 3.' },
+        ],
       },
       {
         id: 'survey-cullen-window',
@@ -365,6 +486,11 @@ export const VLT_PACKS = [
         answer: 'All three classes',
         distractors: ['Class 1 only', 'Classes 1 and 2 only', 'Class 3 only'],
         trap: 'Class 1 only',
+        evidence: [
+          { tab: 'transport', quote: 'from Cullen 40 minutes', why: 'Cullen is 40 minutes from the store.' },
+          { tab: 'samples', quote: 'must be sealed within two hours of recovery', why: 'The tightest deadline any class carries is two hours, and 40 minutes is well inside it.' },
+          { why: 'Chilling for Class 3 is a question of which team recovers it, not of which zone it comes from, so that does not rule Cullen out either. All three classes work.' },
+        ],
       },
       {
         id: 'survey-braid-class2',
@@ -375,6 +501,11 @@ export const VLT_PACKS = [
         answer: 'No, the journey exceeds the two-hour sealing window',
         distractors: ['Yes, core is sealed at the store', 'Yes, if the Red team recovers them', 'Only between May and September'],
         trap: 'Only between May and September',
+        evidence: [
+          { tab: 'transport', quote: 'from Braid 3 hours', why: 'Braid is a three-hour journey.' },
+          { tab: 'samples', quote: 'Class 2 is drilled core, which must be sealed within two hours of recovery', why: 'Class 2 must be sealed within two hours.' },
+          { tab: 'transport', quote: 'no facility to seal or chill samples in transit', why: 'And nothing can be sealed on the road, so three hours breaks the requirement in every month of the season.' },
+        ],
       },
       {
         id: 'survey-night',
@@ -385,6 +516,10 @@ export const VLT_PACKS = [
         answer: 'No, neither team is equipped for night work',
         distractors: ['Yes, the Red team is equipped for it', 'Yes, with the refrigerated container', 'Only in June'],
         trap: 'Yes, the Red team is equipped for it',
+        evidence: [
+          { tab: 'seasons', quote: 'Dunmore is accessible between June and August only', why: 'Dunmore really is limited to three months.' },
+          { tab: 'teams', quote: 'Neither team is equipped to operate at night', why: 'Neither team can work at night, so the working day cannot be stretched to compensate.' },
+        ],
       },
       // ── Hard-only ─────────────────────────────────────────────────────────
       {
@@ -396,6 +531,10 @@ export const VLT_PACKS = [
         answer: 'The drilling rig’s eight-week availability',
         distractors: ['Braid’s five-month access season', 'The number of qualified operators', 'The refrigerated container'],
         trap: 'Braid’s five-month access season',
+        evidence: [
+          { tab: 'seasons', quote: 'Braid is accessible between May and September only', why: 'Braid is open five months, roughly 22 weeks.' },
+          { tab: 'equipment', quote: 'The drilling rig is shared with a separate programme and is available to the survey for eight weeks each year', why: 'The rig is available only eight weeks a year. Eight is the smaller number, so the rig binds before the season does.' },
+        ],
       },
       {
         id: 'survey-capacity',
@@ -406,6 +545,10 @@ export const VLT_PACKS = [
         answer: 'That cannot occur, only one zone is surveyed at a time',
         distractors: ['All sixty are analysed', 'Forty are analysed and twenty wait', 'The Class 3 samples are prioritised'],
         trap: 'Forty are analysed and twenty wait',
+        evidence: [
+          { tab: 'analysis', quote: 'Analysis capacity is forty samples a week across all classes combined', why: 'Capacity is forty a week, which makes sixty look like an overflow problem.' },
+          { tab: 'remit', quote: 'Zones are surveyed one at a time and never concurrently', why: 'But two zones cannot send in the same week at all. The premise of the question is the trap.' },
+        ],
       },
       {
         id: 'survey-report-order',
@@ -416,6 +559,10 @@ export const VLT_PACKS = [
         answer: 'One zone is still outstanding, and report numbers follow survey order rather than issue order',
         distractors: ['The three issued reports are numbered 1, 2 and 3', 'All four zones are complete', 'Reports are numbered as they are issued'],
         trap: 'Reports are numbered as they are issued',
+        evidence: [
+          { tab: 'reporting', quote: 'Zone reports are numbered in the order the zones were surveyed, not in the order the reports are issued', why: 'Numbering follows survey order, not issue order, so three issued reports need not be numbered 1, 2 and 3.' },
+          { tab: 'remit', quote: 'four zones: Ashfell, Braid, Cullen and Dunmore', why: 'There are four zones and three reports, so one zone is still outstanding.' },
+        ],
       },
       {
         id: 'survey-class3-analysis',
@@ -426,6 +573,10 @@ export const VLT_PACKS = [
         answer: 'Sealed within two hours and kept below 10 °C for the whole journey',
         distractors: ['Sealed within two hours only', 'Analysed within 24 hours and logged', 'Kept below 10 °C only'],
         trap: 'Analysed within 24 hours and logged',
+        evidence: [
+          { tab: 'samples', quote: 'Class 3 is friable material, which must be sealed within two hours and additionally kept below 10 °C for the whole journey', why: 'Class 3 carries two requirements on the way in: sealed within two hours, and below 10 °C throughout.' },
+          { tab: 'analysis', quote: 'Class 3 within 24 hours', why: 'The 24-hour figure is what the store does after arrival, not something the sample has already met.' },
+        ],
       },
     ],
   },
@@ -486,6 +637,10 @@ export const VLT_PACKS = [
         answer: 'The Rigid only',
         distractors: ['The Rigid and the Curtainsider', 'All three types', 'The Double-deck only'],
         trap: 'All three types',
+        evidence: [
+          { tab: 'bays', quote: 'Bays 5 and 6 have a low canopy and cannot take a vehicle over 3.5 metres tall', why: 'Bays 5 and 6 cap at 3.5 metres.' },
+          { tab: 'vehicles', quote: 'The Rigid is 3.1 metres tall', why: 'The Rigid is 3.1 metres and fits. The Curtainsider at 4.0 and the Double-deck at 4.7 do not.' },
+        ],
       },
       {
         id: 'depot-largest-consignment-bay',
@@ -496,6 +651,10 @@ export const VLT_PACKS = [
         answer: 'The Double-deck, because consignments are never split',
         distractors: ['Two Curtainsiders', 'Any vehicle, split across loads', 'The Curtainsider'],
         trap: 'Two Curtainsiders',
+        evidence: [
+          { tab: 'loads', quote: 'A consignment is never split across two vehicles', why: 'Consignments are never split, so two Curtainsiders is not available however neatly 26 and 26 covers 46.' },
+          { tab: 'vehicles', quote: 'The Double-deck is 4.7 metres tall and carries 46 pallets', why: 'Only the Double-deck carries 46 pallets in one vehicle.' },
+        ],
       },
       {
         id: 'depot-shift-gap',
@@ -506,6 +665,11 @@ export const VLT_PACKS = [
         answer: 'No, no shift runs between 21:00 and 05:00',
         distractors: ['Yes, that is what the overnight hold is for', 'Yes, on the late shift', 'Only on Saturdays'],
         trap: 'Yes, that is what the overnight hold is for',
+        evidence: [
+          { tab: 'operation', quote: 'every consignment is held overnight for checking before it leaves', why: 'The overnight hold is for checking, which is what makes loading overnight sound like the point of it.' },
+          { tab: 'shifts', quote: 'Loading may only take place while a shift is running', why: 'Loading needs a shift running.' },
+          { tab: 'shifts', quote: 'There is no night shift and no cover between 21:00 and 05:00', why: 'No shift runs overnight, so nothing can be loaded then.' },
+        ],
       },
       {
         id: 'depot-saturday-arrival',
@@ -516,6 +680,11 @@ export const VLT_PACKS = [
         answer: 'Monday',
         distractors: ['Sunday', 'Saturday evening', 'Tuesday'],
         trap: 'Sunday',
+        evidence: [
+          { tab: 'operation', quote: 'The depot runs every day except Sunday', why: 'The depot is shut on Sunday.' },
+          { tab: 'operation', quote: 'Nothing may be dispatched on the same day it arrives', why: 'And nothing goes out the day it arrives, so Saturday itself is ruled out.' },
+          { tab: 'loads', quote: 'A consignment that arrives on a day the depot closes the following day is held until the next working day', why: 'A Saturday arrival is held to the next working day, and that is Monday.' },
+        ],
       },
       {
         id: 'depot-any-bay',
@@ -526,6 +695,11 @@ export const VLT_PACKS = [
         answer: 'Four',
         distractors: ['Six', 'Two', 'None'],
         trap: 'Six',
+        evidence: [
+          { tab: 'vehicles', quote: 'The Double-deck is 4.7 metres tall', why: 'The Double-deck is 4.7 metres tall.' },
+          { tab: 'bays', quote: 'Bays 5 and 6 have a low canopy and cannot take a vehicle over 3.5 metres tall', why: 'That is over the 3.5-metre canopy, so bays 5 and 6 are out.' },
+          { tab: 'bays', quote: 'Bays 1 to 4 take vehicles of any size', why: 'Bays 1 to 4 take any size, so four of the six. “All six bays are in use” is about occupancy, not about what fits.' },
+        ],
       },
       {
         id: 'depot-loaders-per-shift',
@@ -536,6 +710,10 @@ export const VLT_PACKS = [
         answer: 'Twelve',
         distractors: ['Six', 'Fourteen', 'Eight'],
         trap: 'Six',
+        evidence: [
+          { tab: 'bays', quote: 'The depot has six loading bays', why: 'Six bays.' },
+          { tab: 'shifts', quote: 'Two shifts cover the working day', why: 'Two shifts a day, so six bays twice over is twelve bay-shifts. Six is the bays alone.' },
+        ],
       },
       {
         id: 'depot-eight-pallets',
@@ -546,6 +724,10 @@ export const VLT_PACKS = [
         answer: 'The Rigid',
         distractors: ['The Curtainsider', 'The Double-deck', 'Any of the three'],
         trap: 'Any of the three',
+        evidence: [
+          { tab: 'loads', quote: 'Consignments arrive in sizes of 8, 26 or 46 pallets, matching the fleet capacities exactly', why: 'Consignment sizes match the fleet capacities one for one.' },
+          { tab: 'vehicles', quote: 'The Rigid is 3.1 metres tall and carries 8 pallets', why: 'The Rigid is the 8-pallet vehicle.' },
+        ],
       },
       {
         id: 'depot-open-days',
@@ -556,6 +738,10 @@ export const VLT_PACKS = [
         answer: 'Twelve',
         distractors: ['Fourteen', 'Six', 'Ten'],
         trap: 'Fourteen',
+        evidence: [
+          { tab: 'operation', quote: 'The depot runs every day except Sunday', why: 'Six open days a week, not seven.' },
+          { tab: 'shifts', quote: 'Two shifts cover the working day', why: 'Two shifts on each of those six days is twelve. Fourteen would be a seven-day week.' },
+        ],
       },
       {
         id: 'depot-curtainsider-bays',
@@ -566,6 +752,11 @@ export const VLT_PACKS = [
         answer: 'Bays 1 to 4',
         distractors: ['All six bays', 'Bays 5 and 6', 'Bays 1 to 4 and bay 5'],
         trap: 'All six bays',
+        evidence: [
+          { tab: 'vehicles', quote: 'The Curtainsider is 4.0 metres tall', why: 'The Curtainsider is 4.0 metres tall.' },
+          { tab: 'bays', quote: 'Bays 5 and 6 have a low canopy and cannot take a vehicle over 3.5 metres tall', why: '4.0 is over the 3.5-metre canopy, so bays 5 and 6 are out.' },
+          { tab: 'bays', quote: 'Bays 1 to 4 take vehicles of any size', why: 'That leaves bays 1 to 4.' },
+        ],
       },
       {
         id: 'depot-no-same-day',
@@ -576,6 +767,10 @@ export const VLT_PACKS = [
         answer: 'No, nothing is dispatched on the day it arrives',
         distractors: ['Yes, the late shift covers it', 'Yes, if a bay is free', 'Only if it is an 8-pallet load'],
         trap: 'Yes, the late shift covers it',
+        evidence: [
+          { tab: 'shifts', quote: 'a late shift from 13:00 to 21:00', why: 'There is a late shift that day, which is the tempting part.' },
+          { tab: 'operation', quote: 'Nothing may be dispatched on the same day it arrives', why: 'But nothing leaves on its arrival day, whichever shifts are running and whatever the load is.' },
+        ],
       },
       // ── Hard-only ─────────────────────────────────────────────────────────
       {
@@ -587,6 +782,10 @@ export const VLT_PACKS = [
         answer: 'The Rigid and the Curtainsider',
         distractors: ['All three', 'The Rigid only', 'The Double-deck only'],
         trap: 'All three',
+        evidence: [
+          { tab: 'centres', quote: 'Ardley and Bexton have low approach bridges and accept vehicles no taller than 4.2 metres', why: 'Ardley caps at 4.2 metres.' },
+          { tab: 'vehicles', quote: 'The Double-deck is 4.7 metres tall', why: 'The Double-deck is 4.7 metres and is over the limit. The Rigid at 3.1 and the Curtainsider at 4.0 are both under it.' },
+        ],
       },
       {
         id: 'depot-bexton-46',
@@ -597,6 +796,11 @@ export const VLT_PACKS = [
         answer: 'Only the Double-deck carries 46 pallets, and Bexton cannot accept it',
         distractors: ['Nothing, it goes as two Curtainsiders', 'Bexton has no loading bay', 'It must wait for the early shift'],
         trap: 'Nothing, it goes as two Curtainsiders',
+        evidence: [
+          { tab: 'loads', quote: 'A consignment is never split across two vehicles', why: 'It cannot go as two Curtainsiders, because consignments are never split.' },
+          { why: 'Only the Double-deck carries 46 pallets, and it stands 4.7 metres tall.' },
+          { tab: 'centres', quote: 'Ardley and Bexton have low approach bridges and accept vehicles no taller than 4.2 metres', why: 'Bexton caps at 4.2 metres, so the one vehicle that could carry the load cannot get there.' },
+        ],
       },
       {
         id: 'depot-check-window',
@@ -608,6 +812,11 @@ export const VLT_PACKS = [
         answer: 'Two',
         distractors: ['One', 'Four', 'Six'],
         trap: 'One',
+        evidence: [
+          { tab: 'checks', quote: 'Checking begins when the late shift ends', why: 'Checking starts when the late shift ends, at 21:00.' },
+          { tab: 'shifts', quote: 'an early shift from 05:00 to 13:00', why: 'The early shift starts at 05:00, so the gap is eight hours.' },
+          { tab: 'checks', quote: 'Overnight checking takes four hours per consignment', why: 'Four hours each, so two consignments clear in eight, not one.' },
+        ],
       },
       {
         id: 'depot-loaders-total',
@@ -618,6 +827,10 @@ export const VLT_PACKS = [
         answer: 'Two',
         distractors: ['None', 'Eight', 'Six'],
         trap: 'None',
+        evidence: [
+          { tab: 'bays', quote: 'The depot has six loading bays', why: 'Six bays with one loader each, on two shifts, is twelve loaders working.' },
+          { tab: 'staffing', quote: 'The depot employs fourteen loaders in total across both shifts', why: 'Fourteen employed minus the twelve on bays leaves two.' },
+        ],
       },
     ],
   },

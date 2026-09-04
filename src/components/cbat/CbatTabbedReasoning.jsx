@@ -103,7 +103,7 @@ function ResultsScreen({ answers, totalTime, totalQuestions, grade, gameName }) 
         </div>
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-48 overflow-y-auto text-left">
+      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-80 overflow-y-auto text-left">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Answer Review</p>
         <div className="space-y-1.5">
           {answers.map((a, i) => (
@@ -121,10 +121,91 @@ function ResultsScreen({ answers, totalTime, totalQuestions, grade, gameName }) 
                   )}
                 </p>
               )}
+              {!a.correct && a.steps?.length > 0 && (
+                <div className="pl-5 mt-1.5">
+                  <Walkthrough steps={a.steps} showQuotes />
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Post-answer walkthrough ──────────────────────────────────────────────────
+// Getting one wrong is the only moment a player is guaranteed to want the
+// reasoning, so that is where the derivation goes rather than burying it in a
+// guide nobody opens. A question's authored `evidence` drives three things: the
+// tabs it came from reopen, the exact sentences inside them are marked, and the
+// steps that join them are listed underneath.
+//
+// All of it is optional. The System Logic Test builds its content numerically
+// and authors no evidence, so every branch here falls through and that game is
+// exactly as it was.
+
+// The tabs a walkthrough wants on screen, in the order it names them. Capped by
+// the caller at `panes`, though in practice a question needs two tabs and shows
+// two, which is the pane rule doing its job rather than a coincidence.
+function evidenceTabIds(question) {
+  const ids = []
+  for (const step of question?.evidence || []) {
+    if (step.tab && !ids.includes(step.tab)) ids.push(step.tab)
+  }
+  const trapTab = question?.trapEvidence?.tab
+  if (trapTab && !ids.includes(trapTab)) ids.push(trapTab)
+  return ids
+}
+
+// tabId → the spans to mark inside it. Answer quotes and the trap quote are
+// tagged differently so the tab renderer can colour them apart; resolving any
+// overlap between the two is the renderer's job, not this one's.
+function evidenceHighlights(question) {
+  const map = {}
+  const push = (tab, quote, kind) => {
+    if (!tab || !quote) return
+    if (!map[tab]) map[tab] = []
+    map[tab].push({ quote, kind })
+  }
+  for (const step of question?.evidence || []) push(step.tab, step.quote, 'answer')
+  push(question?.trapEvidence?.tab, question?.trapEvidence?.quote, 'trap')
+  return map
+}
+
+// Resolves each step against the run's own tab list, so a step can name the tab
+// by the number the player sees in the strip. Done at answer time rather than at
+// render time because the results screen outlives the run's tabs.
+function evidenceSteps(question, tabs) {
+  const labelById = new Map((tabs || []).map((t, i) => [t.id, `${i + 1} · ${t.title}`]))
+  return (question?.evidence || []).map(step => ({
+    why: step.why,
+    quote: step.quote || null,
+    tabLabel: step.tab ? labelById.get(step.tab) || null : null,
+  }))
+}
+
+// `showQuotes` is for the results screen, where the tabs are gone and the
+// sentence has to travel with the step. During play it stays off: the tab right
+// underneath is already showing that sentence highlighted, and printing it twice
+// makes the block look longer than the thinking it describes.
+function Walkthrough({ steps, showQuotes = false }) {
+  if (!steps?.length) return null
+  return (
+    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-3 text-left">
+      <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">How to get there</p>
+      <ol className="space-y-1.5">
+        {steps.map((step, i) => (
+          <li key={i} className="flex items-start gap-2 text-[11px] leading-snug">
+            <span className="text-brand-300 font-bold shrink-0">{i + 1}</span>
+            <span className="text-[#8a9bb5]">
+              {step.tabLabel && <span className="text-brand-300 font-bold">Tab {step.tabLabel}: </span>}
+              {showQuotes && step.quote && <span className="text-[#ddeaf8]">“{step.quote}” </span>}
+              {step.why}
+            </span>
+          </li>
+        ))}
+      </ol>
     </div>
   )
 }
@@ -284,6 +365,8 @@ export default function CbatTabbedReasoning({
       trap: q.trap ?? null,
       correct,
       ms: elapsedMs,
+      // Resolved now, while the run's tabs are still around to be numbered.
+      steps: correct ? [] : evidenceSteps(q, run?.tabs),
     }
     const next = [...answersRef.current, entry]
     setAnswers(next)
@@ -291,6 +374,14 @@ export default function CbatTabbedReasoning({
     setTotalElapsedMs(prev => prev + elapsedMs)
     totalElapsedRef.current += elapsedMs
     setFeedback({ correct, picked, answer: q.answer })
+
+    // Put the evidence on screen rather than one click away. Whichever tabs the
+    // player was reading have already done their job by this point, and landing
+    // back on the two that mattered is the lesson.
+    if (!correct) {
+      const wanted = evidenceTabIds(q).slice(0, panes)
+      if (wanted.length) setOpenTabIds(wanted)
+    }
   }
 
   function handlePick(option) {
@@ -358,6 +449,11 @@ export default function CbatTabbedReasoning({
   // Resolved in the index's own order rather than in open order, so the panes
   // stay put on screen instead of swapping sides when a tab is replaced.
   const openTabs = (run?.tabs || []).filter(t => openTabIds.includes(t.id))
+  // A timeout counts as wrong and gets the same walkthrough — running out of
+  // time is usually the search going wrong, which is the thing being explained.
+  const answeredWrong = !!feedback && !feedback.correct
+  const walkthroughSteps = answeredWrong ? evidenceSteps(currentQuestion, run?.tabs) : []
+  const tabHighlights = answeredWrong ? evidenceHighlights(currentQuestion) : null
   const introTuning = tuningFor(difficulty)
   // Everything on the intro card except the flashing difficulty button dims
   // during the launch flash — the same treatment FLAG, SAT and RTT use.
@@ -535,6 +631,14 @@ export default function CbatTabbedReasoning({
                               ? `⏱ Timeout. The answer was ${formatAnswer(feedback.answer, currentQuestion)}`
                               : `✗ The answer was ${formatAnswer(feedback.answer, currentQuestion)}`}
                         </p>
+                        {walkthroughSteps.length > 0 && (
+                          <div className="mb-3">
+                            <Walkthrough steps={walkthroughSteps} />
+                            <p className="text-[10px] text-slate-600 mt-1.5 text-center">
+                              The sentences it points at are highlighted in the tabs below.
+                            </p>
+                          </div>
+                        )}
                         <button
                           onClick={goNext}
                           data-demo-answer
@@ -558,7 +662,7 @@ export default function CbatTabbedReasoning({
                     key={tab.id}
                     className="bg-[#0a1628] border border-[#1a3a5c] rounded-b-xl rounded-tr-xl p-4 min-h-[180px] overflow-y-auto max-h-[46vh] lg:max-h-[58vh]"
                   >
-                    {renderTab(tab)}
+                    {renderTab(tab, tabHighlights?.[tab.id] || null)}
                   </div>
                 ))}
               </div>

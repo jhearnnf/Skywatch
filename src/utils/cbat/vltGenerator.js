@@ -11,7 +11,7 @@
 //
 // buildVltRun({ tabCount, questionCount, packId }, rng)
 //   → { packId, title, tabs, questions }
-//     questions = [{ id, prompt, answer, options, needs, trap }]
+//     questions = [{ id, prompt, answer, options, needs, trap, evidence, trapEvidence }]
 
 import { VLT_PACKS, VLT_PACK_BY_ID } from './vltPacks'
 
@@ -52,6 +52,8 @@ export function buildVltRun({ tabCount, questionCount, packId }, rng = Math.rand
     options: shuffle([q.answer, ...q.distractors], rng),
     needs: q.needs,
     trap: q.trap,
+    evidence: q.evidence || [],
+    trapEvidence: q.trapEvidence || null,
   }))
 
   return {

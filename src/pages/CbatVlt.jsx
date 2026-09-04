@@ -8,17 +8,38 @@
 import { useCallback } from 'react'
 import CbatTabbedReasoning from '../components/cbat/CbatTabbedReasoning'
 import { buildVltRun } from '../utils/cbat/vltGenerator'
+import { markUpTabText } from '../utils/cbat/vltHighlight'
 import {
   VLT_DIFFICULTIES, VLT_QUESTIONS, VLT_LAUNCH_MS,
   vltTuning, computeVltGrade,
   readStoredVltDifficulty, storeVltDifficulty,
 } from '../utils/cbat/vltDifficulty'
 
-function VltTab(tab) {
+// `highlights` arrives only after a wrong answer — during play the tab is plain
+// prose, because marking the load-bearing sentences mid-question would hand the
+// player the search the test is actually measuring.
+function VltTab(tab, highlights) {
+  const parts = highlights?.length ? markUpTabText(tab.text, highlights) : null
   return (
     <div>
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">{tab.title}</p>
-      <p className="text-sm text-[#ddeaf8] leading-relaxed">{tab.text}</p>
+      <p className="text-sm text-[#ddeaf8] leading-relaxed">
+        {parts
+          ? parts.map((part, i) => (part.kind
+            ? (
+              <mark
+                key={i}
+                data-testid={part.kind === 'trap' ? 'vlt-trap-mark' : 'vlt-evidence-mark'}
+                className={`rounded px-0.5 ${part.kind === 'trap'
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-green-500/20 text-green-400'}`}
+              >
+                {part.text}
+              </mark>
+            )
+            : <span key={i}>{part.text}</span>))
+          : tab.text}
+      </p>
     </div>
   )
 }
