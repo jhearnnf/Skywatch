@@ -480,7 +480,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
                     <span className="block text-sm font-semibold text-slate-800">{v.label}</span>
                     <span className="block text-[10px] text-slate-500">
                       {v.key === 'apology'
-                        ? 'Says the first link was broken, apologises, and asks again. For the people marked Broken link.'
+                        ? 'The normal invitation with one line at the top saying the first link was broken. For the people marked Broken link.'
                         : 'The normal first invitation. For anyone who has not been emailed yet.'}
                     </span>
                   </span>
