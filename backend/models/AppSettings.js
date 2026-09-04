@@ -385,6 +385,16 @@ const appSettingsSchema = new mongoose.Schema({
   cbatSurveyEmailCta:       { type: String,  default: '' },
   cbatSurveyEmailFooter:    { type: String,  default: '' },
 
+  // The second variant: sent to people whose first invitation carried a link
+  // they could not open. Empty means "use constants/surveyApologyEmailDefaults.json",
+  // same convention as the fields above.
+  cbatSurveyApologyEmailSubject:  { type: String, default: '' },
+  cbatSurveyApologyEmailHeading:  { type: String, default: '' },
+  cbatSurveyApologyEmailSubtitle: { type: String, default: '' },
+  cbatSurveyApologyEmailBody:     { type: String, default: '' },
+  cbatSurveyApologyEmailCta:      { type: String, default: '' },
+  cbatSurveyApologyEmailFooter:   { type: String, default: '' },
+
   // Cohort thresholds for the questionnaire recipient list. Defaults live in
   // constants/survey.js; 0/absent falls back to those.
   cbatSurveyMinCompletions: { type: Number, default: 0 },

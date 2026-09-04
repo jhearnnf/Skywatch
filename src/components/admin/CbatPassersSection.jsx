@@ -60,6 +60,12 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   // must not vanish from the send with them — this is what the confirmation
   // modal and the send body read for anyone who is not in the list above.
   const [picked, setPicked] = useState(() => new Map())
+  // Which of the two pieces of copy this send goes out with. Chosen per batch,
+  // never per campaign: the people whose first invitation carried a dead link
+  // need the apology, and everyone else must not be told about a mistake they
+  // never saw. Defaults to the apology while anyone is still owed one, because
+  // that is the batch the list will be pre-ticking.
+  const [variant, setVariant] = useState('standard')
 
   // The FIRST load deliberately sends no thresholds, so the server answers from
   // the saved settings and the inputs below can adopt them. Sending the
@@ -87,6 +93,9 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       // Pre-select the batch the server would pick. The admin can then add a
       // warm-band name or drop someone before sending.
       setSelected(new Set((json.data.nextBatchIds ?? []).map(String)))
+      // The pre-ticked batch puts the people we owe a working link first, so
+      // the picker starts on the copy that batch needs.
+      setVariant((json.data.totals?.needsResend ?? 0) > 0 ? 'apology' : 'standard')
       // The ticks are being replaced wholesale, so the search picks they were
       // partly made of go with them rather than surviving as orphans.
       setPicked(new Map())
@@ -188,7 +197,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   const openPreview = async () => {
     try {
       const first = selectedRows[0]
-      const qs = new URLSearchParams(first ? { userId: first._id } : {})
+      const qs = new URLSearchParams({ variant, ...(first ? { userId: first._id } : {}) })
       const res = await apiFetch(`${API}/api/admin/cbat-passers/preview?${qs}`, { credentials: 'include' })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Preview failed')
@@ -204,7 +213,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       const res = await apiFetch(`${API}/api/admin/cbat-passers/send`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds: [...selected], minCompletions, dormantDays }),
+        body: JSON.stringify({ userIds: [...selected], minCompletions, dormantDays, variant }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Send failed')
@@ -230,7 +239,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       const res = await apiFetch(`${API}/api/admin/cbat-passers/test`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ variant }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Test send failed')
@@ -333,6 +342,26 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             </div>
           )}
 
+          {/* A dead base URL has to be visible BEFORE the send, not discovered
+              afterwards in fifty other inboxes. The server refuses the send too;
+              this is so nobody has to find that out by pressing it. */}
+          {data?.linkProblem && (
+            <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 mb-3" data-testid="cbat-passers-link-problem">
+              <strong>Sending is blocked.</strong> {data.linkProblem}, so every link in the email
+              would be dead in the recipient&rsquo;s inbox. Send from the live admin at
+              skywatch.academy rather than a local server.
+            </p>
+          )}
+
+          {totals?.needsResend > 0 && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3" data-testid="cbat-passers-needs-resend">
+              <strong>{totals.needsResend}</strong>{' '}
+              {totals.needsResend === 1 ? 'person was' : 'people were'} emailed a link that did not
+              work. They are marked <em>Broken link</em> below, listed whatever the thresholds say,
+              and go to the front of the next batch. Send them the apology copy.
+            </p>
+          )}
+
           {result && (
             <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-3 py-2 mb-3">
               Sent {result.sentCount} email{result.sentCount === 1 ? '' : 's'}.
@@ -427,6 +456,43 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             ))}
           </div>
 
+          {/* Which email this batch goes out with. Two radios rather than a
+              select, because the choice changes what fifty people read and is
+              worth being able to see both options without opening anything. */}
+          <fieldset className="mb-4 border border-slate-200 rounded-xl px-4 py-3">
+            <legend className="px-1 text-xs font-semibold text-slate-500">Which email to send</legend>
+            <div className="flex flex-col gap-2">
+              {(data?.variants ?? [
+                { key: 'standard', label: 'Normal invitation' },
+                { key: 'apology',  label: 'Apology and working link' },
+              ]).map(v => (
+                <label key={v.key} className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="cbat-survey-variant"
+                    value={v.key}
+                    checked={variant === v.key}
+                    onChange={() => setVariant(v.key)}
+                    data-testid={`cbat-passers-variant-${v.key}`}
+                    className="mt-0.5 shrink-0 w-4 h-4 accent-brand-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-800">{v.label}</span>
+                    <span className="block text-[10px] text-slate-500">
+                      {v.key === 'apology'
+                        ? 'Says the first link was broken, apologises, and asks again. For the people marked Broken link.'
+                        : 'The normal first invitation. For anyone who has not been emailed yet.'}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-slate-400 mt-2">
+              Preview and &ldquo;Email me a test&rdquo; both use whichever is selected. Edit the wording
+              of either one in Admin &rsaquo; Content.
+            </p>
+          </fieldset>
+
           {/* Actions */}
           <div className="flex flex-wrap gap-2">
             <button
@@ -437,14 +503,14 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             </button>
             <button
               onClick={() => setConfirm(true)}
-              disabled={!selected.size}
+              disabled={!selected.size || !!data?.linkProblem}
               className="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold transition-colors disabled:opacity-40"
             >
               Send bulk email ({selected.size})
             </button>
             <button
               onClick={sendTest}
-              disabled={testing}
+              disabled={testing || !!data?.linkProblem}
               data-testid="cbat-passers-test-send"
               className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
             >
@@ -481,6 +547,8 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
         {confirm && (
           <ConfirmSendModal
             rows={selectedRows}
+            variantLabel={(data?.variants ?? []).find(v => v.key === variant)?.label
+              ?? (variant === 'apology' ? 'Apology and working link' : 'Normal invitation')}
             sending={sending}
             onConfirm={send}
             onCancel={() => setConfirm(false)}
@@ -569,8 +637,17 @@ function PasserRow({ user, checked, selectable, onToggle }) {
           {user.cbatPassed && (
             <span className="text-[8px] font-bold px-1 py-px rounded bg-emerald-200/60 text-emerald-800 uppercase tracking-wide">Passed</span>
           )}
-          {user.band === 'warm' && (
+          {user.band === 'warm' && !user.needsResend && (
             <span className="text-[8px] font-bold px-1 py-px rounded bg-sky-200/60 text-sky-800 uppercase tracking-wide">Too soon</span>
+          )}
+          {user.needsResend && (
+            <span
+              className="text-[8px] font-bold px-1 py-px rounded bg-rose-200/60 text-rose-800 uppercase tracking-wide"
+              title={`Emailed ${fmtDate(user.invite?.brokenLinkAt)} with a link that did not work`}
+              data-testid="cbat-passers-broken-badge"
+            >
+              Broken link
+            </span>
           )}
         </div>
         <p className="text-[10px] text-slate-500 truncate">{user.email}</p>
@@ -594,6 +671,9 @@ function PasserRow({ user, checked, selectable, onToggle }) {
           <span className="text-[10px] font-semibold text-rose-600" title={inv.sendError ?? 'Send failed'}>
             ⚠ Failed
           </span>
+        )}
+        {user.needsResend && (
+          <p className="text-[9px] text-rose-600 font-semibold">Link was dead</p>
         )}
         {inv?.completedAt && <p className="text-[9px] text-brand-700 font-semibold">Answered</p>}
         {inv?.optedOutAt && <p className="text-[9px] text-slate-400">Opted out</p>}
@@ -688,7 +768,7 @@ function PreviewModal({ preview, onClose }) {
 
 // Names every recipient before anything leaves. A bulk send is not reversible,
 // so the last thing between the admin and 50 strangers is a list they can read.
-function ConfirmSendModal({ rows, onConfirm, onCancel, sending }) {
+function ConfirmSendModal({ rows, variantLabel, onConfirm, onCancel, sending }) {
   return (
     <Overlay zIndex={50} backdrop="rgba(15,23,42,0.60)" onDismiss={sending ? undefined : onCancel} className="flex items-end sm:items-center justify-center p-4">
       <motion.div
@@ -704,6 +784,14 @@ function ConfirmSendModal({ rows, onConfirm, onCancel, sending }) {
             Each gets their own private link. This cannot be undone, and nobody here can be
             emailed for this questionnaire again.
           </p>
+          {/* Which of the two emails is about to go out. The list of names below
+              answers "to whom"; without this the modal never answers "saying
+              what", which is the half that was wrong last time. */}
+          {variantLabel && (
+            <p className="text-xs font-semibold text-slate-700 mt-2" data-testid="cbat-passers-confirm-variant">
+              Sending: {variantLabel}
+            </p>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-3 divide-y divide-slate-100">
           {rows.map(r => (
@@ -721,6 +809,11 @@ function ConfirmSendModal({ rows, onConfirm, onCancel, sending }) {
                 {r.excludedReason && (
                   <span className="ml-1.5 text-[8px] font-bold px-1 py-px rounded bg-amber-200/60 text-amber-800 uppercase tracking-wide">
                     Off list
+                  </span>
+                )}
+                {r.needsResend && (
+                  <span className="ml-1.5 text-[8px] font-bold px-1 py-px rounded bg-rose-200/60 text-rose-800 uppercase tracking-wide">
+                    Broken link
                   </span>
                 )}
               </p>

@@ -145,7 +145,12 @@ function toPasserRow(u, { runs, playedMs, activityMs, daysDormant, invite, dorma
       sendError:     invite.sendError ?? null,
       deferredUntil: invite.deferredUntil ?? null,
       sendCount:     invite.sendCount ?? 0,
+      brokenLinkAt:  invite.brokenLinkAt ?? null,
     },
+    // We already emailed them, and the link in it was dead. They are owed a
+    // working one, so they are listed whatever the thresholds say and they go
+    // to the front of the next batch.
+    needsResend: !!(invite?.brokenLinkAt && !invite.optedOutAt && !invite.completedAt),
     // Whether they can be sent to right now — never invited, a failed send
     // worth retrying, or a "not yet" whose deferral has expired. Computed from
     // the model's own rule so the list and the sender cannot disagree.
@@ -204,9 +209,16 @@ async function buildCbatPasserCohort({
 
   const rows = [];
   for (const u of candidates) {
-    const id    = u._id.toString();
-    const runs  = completions.get(id) ?? 0;
-    if (runs < minRuns) continue;
+    const id     = u._id.toString();
+    const invite = inviteByUser.get(id) ?? null;
+    const runs   = completions.get(id) ?? 0;
+
+    // Someone we mailed a dead link to is owed a working one, and that debt is
+    // not conditional on them still matching thresholds an admin may have moved
+    // since. They are listed regardless.
+    const owed = !!(invite?.brokenLinkAt && !invite.optedOutAt && !invite.completedAt);
+
+    if (!owed && runs < minRuns) continue;
 
     // lastSeen joins the activity signal here rather than in the loops above so
     // that someone with no CBAT rows at all still gets a sensible date — though
@@ -218,14 +230,14 @@ async function buildCbatPasserCohort({
     if (!activityMs || !playedMs) continue; // no usable dates — cannot place them
 
     const daysDormant = Math.floor((nowMs - activityMs) / DAY_MS);
-    if (daysDormant < listFrom) continue; // still clearly active
+    if (!owed && daysDormant < listFrom) continue; // still clearly active
 
     rows.push(toPasserRow(u, {
       runs,
       playedMs,
       activityMs,
       daysDormant,
-      invite: inviteByUser.get(id) ?? null,
+      invite,
       dormantDays: dormant,
       now,
     }));
@@ -251,6 +263,7 @@ async function buildCbatPasserCohort({
   const emailed   = rows.filter(r => r.invite?.sentAt);
   const responded = rows.filter(r => r.invite?.completedAt);
   const deferred  = rows.filter(r => r.invite?.deferredUntil && r.invite.deferredUntil > now);
+  const owedResend = rows.filter(r => r.needsResend);
 
   return {
     thresholds: {
@@ -270,8 +283,10 @@ async function buildCbatPasserCohort({
       responded:  responded.length,
       // Told us they have not sat it yet; held until their date comes round.
       deferred:   deferred.length,
+      // Mailed a link they could not open. Owed a working one.
+      needsResend: owedResend.length,
       // What "Send to next 50" has left to draw from.
-      remaining:  ready.filter(r => r.mailable).length,
+      remaining:  rows.filter(r => r.mailable && (r.needsResend || r.band === 'ready')).length,
     },
   };
 }
@@ -409,7 +424,7 @@ function emptyCohort({ minCompletions, dormantDays }) {
       listedFromDays: Math.min(WARM_BAND_DAYS, Math.max(0, Number(dormantDays) || 0)),
     },
     groups: [],
-    totals: { candidates: 0, ready: 0, warm: 0, emailed: 0, responded: 0, deferred: 0, remaining: 0 },
+    totals: { candidates: 0, ready: 0, warm: 0, emailed: 0, responded: 0, deferred: 0, needsResend: 0, remaining: 0 },
   };
 }
 
@@ -422,8 +437,11 @@ function emptyCohort({ minCompletions, dormantDays }) {
 function selectNextBatch(cohort, size) {
   return cohort.groups
     .flatMap(g => g.users)
-    .filter(u => u.band === 'ready' && u.mailable)
-    .sort((a, b) => a.lastPlayedAt - b.lastPlayedAt)
+    .filter(u => (u.needsResend || u.band === 'ready') && u.mailable)
+    // Anyone we already mailed a dead link to is served before anyone who has
+    // heard nothing from us at all: they have had their one email and it was
+    // useless, and every day this waits is a day they think we ignored them.
+    .sort((a, b) => (Number(b.needsResend) - Number(a.needsResend)) || (a.lastPlayedAt - b.lastPlayedAt))
     .slice(0, size);
 }
 

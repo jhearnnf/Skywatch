@@ -39,6 +39,17 @@ const surveyInviteSchema = new mongoose.Schema({
   // keeps working. EmailLog holds the per-send audit trail.
   sendCount: { type: Number, default: 0 },
 
+  // Set when a send went out with a link the recipient could not possibly open
+  // — the 2026-09-03 batch that carried http://localhost:5173 because the
+  // backend that sent it was a dev machine. The row still records a delivered
+  // email (it WAS delivered; it was just useless), so `sentAt` stays put and
+  // this is what says "we owe this person a working one".
+  //
+  // It overrides the "already contacted, leave them be" rule below, and is
+  // cleared by the next successful send. It is not a deferral and not an error:
+  // the send worked, the email arrived, and the contents were wrong.
+  brokenLinkAt: { type: Date, default: null },
+
   // Set when they answer "not yet". Until this date passes they are held out of
   // every batch; after it they return to the pool as an ordinary candidate.
   // Null means no deferral is in force — which, on an invite that has already
@@ -86,6 +97,7 @@ surveyInviteSchema.statics.isMailable = function isMailable(invite, now = new Da
   if (invite.optedOutAt) return false;            // asked us to stop
   if (invite.completedAt) return false;           // already answered
   if (!invite.sentAt) return true;                // send failed — retry is fine
+  if (invite.brokenLinkAt) return true;           // we mailed them a dead link — we owe them
   if (!invite.deferredUntil) return false;        // sent, answered nothing, leave them be
   return invite.deferredUntil <= now;             // deferred, and the wait is over
 };

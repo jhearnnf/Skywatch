@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Default copy for the SECOND questionnaire email: the one sent to people whose first",
+    "invitation carried a link they could not open.",
+    "",
+    "A separate variant rather than an edit to the normal copy, because both are needed at the",
+    "same time. Fifty-one people are owed an apology and a working link; everyone else has heard",
+    "nothing from us at all and must not be told we broke something they never saw.",
+    "",
+    "Same placeholders as surveyEmailDefaults.json: {{name}}, {{button}}, {{link}}. The",
+    "unsubscribe line is appended by the sender and cannot be edited away here. The token in the",
+    "link is the SAME one their first email carried, so anyone who kept that email and tries it",
+    "later still lands on their own questionnaire."
+  ],
+  "subject": "That link we sent you was broken. Here is one that works.",
+  "heading": "Our link was broken",
+  "subtitle": "{{name}}, six questions and about a minute. Working link this time.",
+  "body": "Hello {{name}},\n\nA few days ago we emailed to ask how your CBAT went. The link in that email was broken. It pointed at a test computer rather than the website, so if you tapped it, nothing happened at all.\n\nThat one is entirely on us, and we are sorry for wasting your time. Here is the same question with a link that actually goes somewhere.\n\n- Six questions, about a minute, and nothing to sign in to.\n- Your answers go straight back into the training, so whoever is revising right now gets a better version than you had.\n- If you passed, we will record it, and a PASSED badge appears next to your name on every leaderboard.\n\n{{button}}\n\nNot sat it yet? Say so on the first question and we will leave you alone until after your test.\n\nThanks for bearing with us,\nThe SkyWatch Team",
+  "cta": "Answer the 6 questions",
+  "footer": "SkyWatch is an independent study platform and is not affiliated with, endorsed by, or connected to the Royal Air Force or the Ministry of Defence.<br>You received this because you hold a SkyWatch account."
+}

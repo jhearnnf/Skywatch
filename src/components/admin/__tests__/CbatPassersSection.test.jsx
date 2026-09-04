@@ -331,3 +331,110 @@ describe('CbatPassersSection — searching for someone specific', () => {
     expect(await screen.findByText(/Nobody matches/)).toBeInTheDocument()
   })
 })
+
+// ── The 2026-09-03 regression, from the admin's side ───────────────────────
+//
+// Fifty-one people were sent a link to http://localhost:5173. The panel gave no
+// hint before the send that the links would be dead, and no hint afterwards
+// that anyone was owed a working one. Both are now on screen.
+describe('CbatPassersSection — a base URL that would be dead in the inbox', () => {
+  it('says so and refuses to let the send be started', async () => {
+    mockApi(cohort({ }))
+    // The server reports the problem; the panel does not work it out itself.
+    const withProblem = cohort()
+    withProblem.linkProblem = 'CLIENT_URL points at this machine ("http://localhost:5173")'
+    mockApi(withProblem)
+
+    await open()
+
+    expect(screen.getByTestId('cbat-passers-link-problem')).toHaveTextContent(/points at this machine/i)
+    expect(screen.getByText(/Send bulk email/)).toBeDisabled()
+    expect(screen.getByTestId('cbat-passers-test-send')).toBeDisabled()
+  })
+
+  it('leaves the send alone when the base URL is fine', async () => {
+    const fine = cohort()
+    fine.linkProblem = null
+    mockApi(fine)
+
+    await open()
+
+    expect(screen.queryByTestId('cbat-passers-link-problem')).not.toBeInTheDocument()
+    expect(screen.getByText(/Send bulk email/)).not.toBeDisabled()
+  })
+})
+
+describe('CbatPassersSection — people owed a working link', () => {
+  const owed = () => {
+    const data = cohort({
+      groups: [{
+        day: '2026-08-04',
+        users: [person({
+          needsResend: true,
+          mailable: true,
+          invite: { sentAt: iso(Date.now() - DAY), brokenLinkAt: iso(Date.now() - DAY), sendCount: 1 },
+        })],
+      }],
+      totals: { needsResend: 1, emailed: 1 },
+    })
+    return data
+  }
+
+  it('marks them in the list and counts them at the top', async () => {
+    mockApi(owed())
+    await open()
+
+    expect(screen.getByTestId('cbat-passers-broken-badge')).toBeInTheDocument()
+    expect(screen.getByTestId('cbat-passers-needs-resend'))
+      .toHaveTextContent(/emailed a link that did not work/i)
+  })
+
+  it('starts on the apology copy, because that is the batch it pre-ticks', async () => {
+    mockApi(owed())
+    await open()
+
+    expect(screen.getByTestId('cbat-passers-variant-apology')).toBeChecked()
+    expect(screen.getByTestId('cbat-passers-variant-standard')).not.toBeChecked()
+  })
+
+  it('starts on the normal invitation when nobody is owed anything', async () => {
+    await open()
+    expect(screen.getByTestId('cbat-passers-variant-standard')).toBeChecked()
+  })
+})
+
+describe('CbatPassersSection — choosing which email goes out', () => {
+  it('sends the variant that is selected', async () => {
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-variant-apology'))
+    fireEvent.click(screen.getByText(/Send bulk email/))
+    fireEvent.click(await screen.findByText('Send now'))
+
+    await waitFor(() => expect(sendBody).toBeTruthy())
+    expect(sendBody.variant).toBe('apology')
+  })
+
+  it('names the chosen email on the confirmation, not just the recipients', async () => {
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-variant-apology'))
+    fireEvent.click(screen.getByText(/Send bulk email/))
+
+    expect(await screen.findByTestId('cbat-passers-confirm-variant'))
+      .toHaveTextContent(/Apology and working link/i)
+  })
+
+  it('previews the variant that is selected', async () => {
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-variant-apology'))
+    fireEvent.click(screen.getByText('Preview email'))
+
+    await waitFor(() => {
+      const previewCall = global.fetch.mock.calls
+        .map(c => String(c[0])).find(u => u.includes('/preview'))
+      expect(previewCall).toMatch(/variant=apology/)
+    })
+  })
+})

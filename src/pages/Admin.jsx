@@ -40,6 +40,7 @@ import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
 import CbatPassersSection from '../components/admin/CbatPassersSection'
 import SURVEY_EMAIL_COPY from '../../backend/constants/surveyEmailDefaults.json'
+import SURVEY_APOLOGY_COPY from '../../backend/constants/surveyApologyEmailDefaults.json'
 import { CBAT_GAMES } from './Cbat'
 import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
 
@@ -5887,6 +5888,16 @@ const SURVEY_EMAIL_DEFAULTS = {
   cbatSurveyEmailBody:     SURVEY_EMAIL_COPY.body,
   cbatSurveyEmailCta:      SURVEY_EMAIL_COPY.cta,
   cbatSurveyEmailFooter:   SURVEY_EMAIL_COPY.footer,
+
+  // The second variant, sent to people whose first invitation carried a link
+  // they could not open. Kept alongside rather than instead of the copy above,
+  // because both go out in the same week to different halves of the list.
+  cbatSurveyApologyEmailSubject:  SURVEY_APOLOGY_COPY.subject,
+  cbatSurveyApologyEmailHeading:  SURVEY_APOLOGY_COPY.heading,
+  cbatSurveyApologyEmailSubtitle: SURVEY_APOLOGY_COPY.subtitle,
+  cbatSurveyApologyEmailBody:     SURVEY_APOLOGY_COPY.body,
+  cbatSurveyApologyEmailCta:      SURVEY_APOLOGY_COPY.cta,
+  cbatSurveyApologyEmailFooter:   SURVEY_APOLOGY_COPY.footer,
 }
 
 const CR_DEFAULTS = {
@@ -6014,6 +6025,8 @@ function ContentTab({ API, openPassers = false, onBootstrapConsumed }) {
       <Section title="CBAT Questionnaire Email" collapsible onSave={() => save('Update CBAT Questionnaire Email', [
         'cbatSurveyEnabled', 'cbatSurveyEmailSubject', 'cbatSurveyEmailHeading',
         'cbatSurveyEmailSubtitle', 'cbatSurveyEmailBody', 'cbatSurveyEmailCta', 'cbatSurveyEmailFooter',
+        'cbatSurveyApologyEmailSubject', 'cbatSurveyApologyEmailHeading', 'cbatSurveyApologyEmailSubtitle',
+        'cbatSurveyApologyEmailBody', 'cbatSurveyApologyEmailCta', 'cbatSurveyApologyEmailFooter',
         'cbatSurveyMinCompletions', 'cbatSurveyDormantDays',
       ])}>
         <Toggle
@@ -6028,6 +6041,23 @@ function ContentTab({ API, openPassers = false, onBootstrapConsumed }) {
         {field('cbatSurveyEmailBody',     'Body',     SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailBody, 10)}
         {field('cbatSurveyEmailCta',      'Button text', SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailCta)}
         {field('cbatSurveyEmailFooter',   'Footer',   SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailFooter, 2)}
+
+        {/* The apology variant. Picked per batch in the Potential CBAT Passers
+            panel, not here: this is only where its wording lives. It exists
+            because a send once went out with a link that pointed at a developer
+            machine, and the fifty people who got it need telling that, while
+            everyone else must never hear about it. */}
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-3 pb-1">Apology Version</p>
+        <p className="text-[11px] text-slate-400 pb-1">
+          For people whose first invitation carried a link that did not work. Choose it per batch in
+          Potential CBAT Passers.
+        </p>
+        {field('cbatSurveyApologyEmailSubject',  'Subject',  SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailSubject)}
+        {field('cbatSurveyApologyEmailHeading',  'Heading',  SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailHeading)}
+        {field('cbatSurveyApologyEmailSubtitle', 'Subtitle', SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailSubtitle)}
+        {field('cbatSurveyApologyEmailBody',     'Body',     SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailBody, 10)}
+        {field('cbatSurveyApologyEmailCta',      'Button text', SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailCta)}
+        {field('cbatSurveyApologyEmailFooter',   'Footer',   SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailFooter, 2)}
         {/* The cohort defaults. The Potential CBAT Passers panel below starts
             from these, so changing them here changes what it opens on; the
             inputs in the panel itself are for trying a different cut without

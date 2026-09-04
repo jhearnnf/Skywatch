@@ -12,7 +12,17 @@ const {
   searchSurveyCandidates,
   describeSurveyUsersByIds,
 } = require('../utils/cbatPasserCohort');
-const { surveyEmailFields, renderSurveyEmail, sendSurveyBatch, surveyUrl, displayNameFor } = require('../utils/surveyEmail');
+const {
+  surveyEmailFields,
+  renderSurveyEmail,
+  sendSurveyBatch,
+  surveyUrl,
+  displayNameFor,
+  clientUrl,
+  clientUrlProblem,
+  resolveVariant,
+  EMAIL_VARIANTS,
+} = require('../utils/surveyEmail');
 const {
   SURVEY_CAMPAIGN,
   SURVEY_TEST_CAMPAIGN,
@@ -53,6 +63,14 @@ router.get('/', async (req, res) => {
       data: {
         ...cohort,
         batchSize: BATCH_SIZE,
+        // What the links in the email would actually say. Shown in the admin
+        // list because a dead base URL has to be visible BEFORE the send, not
+        // discovered afterwards in someone else's inbox.
+        linkBase: clientUrl(),
+        linkProblem: clientUrlProblem(),
+        // The two pieces of copy a send can go out with, so the picker is built
+        // from what the sender actually supports rather than a hardcoded pair.
+        variants: Object.entries(EMAIL_VARIANTS).map(([key, v]) => ({ key, label: v.label })),
         // Ids only — the rows themselves are already in `groups`, and the admin
         // list highlights these rather than rendering a second copy.
         nextBatchIds: nextBatch.map(u => u._id),
@@ -117,7 +135,8 @@ router.get('/preview', async (req, res) => {
     // and issuing a real token for a preview would leave an invite row behind
     // that quietly excluded the person from the next batch.
     const token = existing?.token ?? 'preview-token-not-a-real-link';
-    const fields = await surveyEmailFields();
+    const variant = resolveVariant(req.query.variant);
+    const fields = await surveyEmailFields(variant);
     const { subject, html } = renderSurveyEmail({ fields, user, token });
 
     res.json({
@@ -131,6 +150,7 @@ router.get('/preview', async (req, res) => {
           : null,
         isPlaceholder: !user._id,
         link: surveyUrl(token),
+        variant,
       },
     });
   } catch (err) {
@@ -147,6 +167,14 @@ router.get('/preview', async (req, res) => {
 // `limit` from the ready band.
 router.post('/send', async (req, res) => {
   try {
+    const linkProblem = clientUrlProblem();
+    if (linkProblem) {
+      return res.status(400).json({
+        message: `${linkProblem}. Every link in the email would be dead in the recipient's inbox, so nothing has been sent. Send from https://skywatch.academy/admin instead.`,
+      });
+    }
+
+    const variant = resolveVariant(req.body?.variant);
     const limit = Math.min(Number(req.body?.limit) || BATCH_SIZE, BATCH_SIZE);
     const { minCompletions, dormantDays } = await resolveThresholds(req.body ?? {});
     const cohort = await buildCbatPasserCohort({ minCompletions, dormantDays });
@@ -222,6 +250,7 @@ router.post('/send', async (req, res) => {
 
     const { sent, failed } = await sendSurveyBatch(
       recipients.map(r => ({ user: r.user, token: r.token })),
+      { variant },
     );
 
     const sentIds   = new Set(sent.map(s => s.userId.toString()));
@@ -236,7 +265,9 @@ router.post('/send', async (req, res) => {
       return SurveyInvite.updateOne(
         { _id: r.invite._id },
         sentIds.has(id)
-          ? { $set: { sentAt: now, sendError: null, deferredUntil: null, sentToEmail: r.user.email }, $inc: { sendCount: 1 } }
+          // brokenLinkAt is cleared here and only here: the debt is settled by an
+          // email that actually went out, not by an admin ticking something.
+          ? { $set: { sentAt: now, sendError: null, deferredUntil: null, brokenLinkAt: null, sentToEmail: r.user.email }, $inc: { sendCount: 1 } }
           : { $set: { sentAt: r.invite.sentAt ?? null, sendError: failedMap.get(id) ?? 'unknown send failure' } },
       );
     }));
@@ -248,6 +279,7 @@ router.post('/send', async (req, res) => {
         failed: failed.map(f => ({ email: f.email, error: f.error })),
         sentCount:   sent.length,
         failedCount: failed.length,
+        variant,
       },
     });
   } catch (err) {
@@ -276,6 +308,15 @@ router.post('/test', async (req, res) => {
     const to = (req.body?.email ?? '').toString().trim() || req.user.email;
     if (!to) return res.status(400).json({ message: 'No address to send to.' });
 
+    // A dry run whose link cannot be opened tests nothing, and it is exactly
+    // the send an admin makes from a dev machine.
+    const linkProblem = clientUrlProblem();
+    if (linkProblem) {
+      return res.status(400).json({
+        message: `${linkProblem}. The link in the test email would be dead outside this machine, so nothing has been sent.`,
+      });
+    }
+
     const previous = await SurveyInvite.findOne({ userId: req.user._id, campaign: SURVEY_TEST_CAMPAIGN });
     if (previous) {
       await SurveyResponse.deleteOne({ inviteId: previous._id });
@@ -290,9 +331,11 @@ router.post('/test', async (req, res) => {
       isTest: true,
     });
 
-    const { sent, failed } = await sendSurveyBatch([
-      { user: { ...req.user.toObject?.() ?? req.user, email: to }, token: invite.token },
-    ]);
+    const variant = resolveVariant(req.body?.variant);
+    const { sent, failed } = await sendSurveyBatch(
+      [{ user: { ...req.user.toObject?.() ?? req.user, email: to }, token: invite.token }],
+      { variant },
+    );
 
     if (failed.length) {
       await SurveyInvite.updateOne({ _id: invite._id }, { sendError: failed[0].error });
@@ -300,7 +343,7 @@ router.post('/test', async (req, res) => {
     }
 
     await SurveyInvite.updateOne({ _id: invite._id }, { sentAt: new Date(), $inc: { sendCount: 1 } });
-    res.json({ status: 'success', data: { sentTo: sent[0]?.email ?? to, link: surveyUrl(invite.token) } });
+    res.json({ status: 'success', data: { sentTo: sent[0]?.email ?? to, link: surveyUrl(invite.token), variant } });
   } catch (err) {
     res.status(502).json({ message: `Test email failed: ${err.message}` });
   }

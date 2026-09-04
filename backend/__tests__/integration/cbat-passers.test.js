@@ -14,10 +14,17 @@
  *   - Send: invites created, emails batched, rows stamped
  *   - Send is idempotent — a second send cannot mail the same person twice
  *   - Preview renders without creating an invite
+ *   - A send is refused outright when the links would be dead in the inbox
+ *   - A delivered-but-broken link puts someone back in the list, at the front
+ *   - The apology copy is a separate email, chosen per send
  *   - A deferred "not yet" respondent is held, then returns to the pool
  */
 
 process.env.JWT_SECRET = 'test_secret';
+// The sender refuses to build an email whose links point at the machine that
+// sent it, so the suite has to look like a real deployment. The guard's own
+// tests put a local URL back for the length of one assertion.
+process.env.CLIENT_URL = 'https://skywatch.academy';
 
 const request = require('supertest');
 const app     = require('../../app');
@@ -32,6 +39,8 @@ const {
 const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetResult');
 const GameSessionCbatStart        = require('../../models/GameSessionCbatStart');
 const SurveyInvite                = require('../../models/SurveyInvite');
+const { SURVEY_CAMPAIGN }         = require('../../constants/survey');
+const { SURVEY_DEFAULTS, SURVEY_APOLOGY_DEFAULTS } = require('../../utils/surveyEmail');
 const User                        = require('../../models/User');
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -755,5 +764,199 @@ describe('comments on the results endpoint', () => {
 
     const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
     expect(res.body.data.summary.comments).toHaveLength(0);
+  });
+});
+
+// ── The 2026-09-03 regression ──────────────────────────────────────────────
+//
+// Fifty-one people were emailed a link to http://localhost:5173, because the
+// backend that sent the batch was a development machine. Nothing in the code
+// objected: the send succeeded, the invites were stamped as delivered, and the
+// rule that stops anyone being mailed twice then made those people permanently
+// unreachable for the campaign. Three things had to change, and all three are
+// pinned here.
+describe('a send whose links would be dead in the inbox', () => {
+  const withClientUrl = async (url, fn) => {
+    const before = process.env.CLIENT_URL;
+    process.env.CLIENT_URL = url;
+    try { await fn(); } finally { process.env.CLIENT_URL = before; }
+  };
+
+  it('is refused, and mails nobody', async () => {
+    await candidate();
+    const { __batchMock, __sendMock } = require('resend');
+    __batchMock.mockClear();
+    __sendMock.mockClear();
+
+    await withClientUrl('http://localhost:5173', async () => {
+      const res = await request(app)
+        .post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/points at this machine/i);
+    });
+
+    // Not "the wrong email went out" — nothing went out, and no invite row was
+    // left behind to block the working one that follows.
+    expect(__batchMock).not.toHaveBeenCalled();
+    expect(__sendMock).not.toHaveBeenCalled();
+    expect(await SurveyInvite.countDocuments({})).toBe(0);
+  });
+
+  it('is refused for a plain http host too, not only for localhost', async () => {
+    await candidate();
+    await withClientUrl('http://skywatch.academy', async () => {
+      const res = await request(app)
+        .post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/not https/i);
+    });
+  });
+
+  it('tells the list itself, so it is visible before the button is pressed', async () => {
+    await candidate();
+    await withClientUrl('http://localhost:5173', async () => {
+      const res = await request(app).get('/api/admin/cbat-passers').set('Cookie', cookie);
+      expect(res.body.data.linkProblem).toMatch(/points at this machine/i);
+    });
+
+    const ok = await request(app).get('/api/admin/cbat-passers').set('Cookie', cookie);
+    expect(ok.body.data.linkProblem).toBeNull();
+  });
+
+  it('refuses the admin dry run on the same rule', async () => {
+    await withClientUrl('http://localhost:5173', async () => {
+      const res = await request(app)
+        .post('/api/admin/cbat-passers/test').set('Cookie', cookie).send({});
+      expect(res.status).toBe(400);
+    });
+  });
+});
+
+describe('someone who was mailed a link that did not work', () => {
+  // The state scripts/flagBrokenSurveyLinks.js leaves behind: a delivered
+  // invite, flagged from the delivered message Resend still holds.
+  async function owed(overrides = {}) {
+    const u = await candidate(overrides);
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    await SurveyInvite.updateOne(
+      { userId: u._id, campaign: SURVEY_CAMPAIGN },
+      { $set: { brokenLinkAt: new Date() } },
+    );
+    return u;
+  }
+
+  it('can be mailed again, though an ordinary delivered invite cannot', async () => {
+    const u = await owed();
+
+    const res = await request(app).get('/api/admin/cbat-passers').set('Cookie', cookie);
+    const row = res.body.data.groups.flatMap(g => g.users).find(r => r._id === u._id.toString());
+
+    expect(row.needsResend).toBe(true);
+    expect(row.mailable).toBe(true);
+    expect(res.body.data.totals.needsResend).toBe(1);
+    expect(res.body.data.nextBatchIds.map(String)).toContain(u._id.toString());
+  });
+
+  it('is listed even when the thresholds have moved past them', async () => {
+    const u = await owed({ completions: 12, days: 30 });
+
+    // A cut nobody could satisfy. The debt is not conditional on an admin
+    // leaving the sliders where they were when the bad send happened.
+    const res = await request(app)
+      .get('/api/admin/cbat-passers?minCompletions=999&dormantDays=999')
+      .set('Cookie', cookie);
+
+    const ids = res.body.data.groups.flatMap(g => g.users).map(r => r._id);
+    expect(ids).toContain(u._id.toString());
+  });
+
+  it('goes ahead of people who have heard nothing from us at all', async () => {
+    // The untouched candidate has been quiet longer, so on last-played order
+    // alone they would sort first. Being owed an email wins.
+    const owedUser = await owed({ days: 30 });
+    await candidate({ days: 60 });
+
+    const res = await request(app).get('/api/admin/cbat-passers').set('Cookie', cookie);
+    expect(res.body.data.nextBatchIds[0]).toBe(owedUser._id.toString());
+  });
+
+  it('stops being owed once a send actually goes out', async () => {
+    const u = await owed();
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
+      .send({ userIds: [u._id.toString()], variant: 'apology' });
+
+    const invite = await SurveyInvite.findOne({ userId: u._id, campaign: SURVEY_CAMPAIGN });
+    expect(invite.brokenLinkAt).toBeNull();
+    expect(invite.sendCount).toBe(2);
+  });
+
+  it('keeps the same token, so the link in the first email starts working', async () => {
+    const u = await owed();
+    const before = await SurveyInvite.findOne({ userId: u._id, campaign: SURVEY_CAMPAIGN });
+
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
+      .send({ userIds: [u._id.toString()], variant: 'apology' });
+
+    const after = await SurveyInvite.findOne({ userId: u._id, campaign: SURVEY_CAMPAIGN });
+    expect(after.token).toBe(before.token);
+  });
+
+  it('is left alone if they answered or unsubscribed anyway', async () => {
+    const u = await owed();
+    await SurveyInvite.updateOne({ userId: u._id }, { $set: { completedAt: new Date() } });
+
+    const res = await request(app).get('/api/admin/cbat-passers').set('Cookie', cookie);
+    const row = res.body.data.groups.flatMap(g => g.users).find(r => r._id === u._id.toString());
+    expect(row.needsResend).toBe(false);
+    expect(row.mailable).toBe(false);
+  });
+});
+
+describe('choosing which email a batch goes out with', () => {
+  const lastMessage = () => {
+    const { __batchMock } = require('resend');
+    return __batchMock.mock.calls.at(-1)[0][0];
+  };
+
+  it('sends the normal invitation by default', async () => {
+    await candidate();
+    const { __batchMock } = require('resend');
+    __batchMock.mockClear();
+
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    expect(lastMessage().subject).toBe(SURVEY_DEFAULTS.subject);
+  });
+
+  it('sends the apology when it is asked for', async () => {
+    await candidate();
+    const { __batchMock } = require('resend');
+    __batchMock.mockClear();
+
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
+      .send({ variant: 'apology' });
+
+    const msg = lastMessage();
+    expect(msg.subject).toBe(SURVEY_APOLOGY_DEFAULTS.subject);
+    // Both variants must carry a real, reachable link. That is the entire point
+    // of the second one existing.
+    expect(msg.html).toMatch(/https:\/\/skywatch\.academy\/survey\/[0-9a-f]{64}/);
+    expect(msg.html).not.toMatch(/localhost/);
+  });
+
+  it('falls back to the normal email rather than erroring on a variant it does not know', async () => {
+    await candidate();
+    const res = await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
+      .send({ variant: 'nonsense' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.variant).toBe('standard');
+  });
+
+  it('previews whichever one is selected', async () => {
+    await candidate();
+    const res = await request(app)
+      .get('/api/admin/cbat-passers/preview?variant=apology').set('Cookie', cookie);
+    expect(res.body.data.subject).toBe(SURVEY_APOLOGY_DEFAULTS.subject);
+    expect(res.body.data.variant).toBe('apology');
   });
 });
