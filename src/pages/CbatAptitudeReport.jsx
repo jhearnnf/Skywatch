@@ -761,8 +761,9 @@ export default function CbatAptitudeReport() {
             <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-shadow">
               <h2 className="text-sm font-extrabold text-slate-900 mb-0.5">Play these next</h2>
               <p className="text-[11px] text-slate-600 mb-3">
-                Ranked by what each adds to this role&apos;s score. The green figure is roughly what it is worth. Only
-                Hard runs count, so these open on Hard.
+                Ranked by what helps you most right now. A % is a test we cannot measure yet, and playing it is what
+                lets us judge your score. A number is roughly the points it adds. Only Hard runs count, so these open
+                on Hard.
               </p>
               <div className="space-y-1.5">
                 {report.focus.map((f) => {
@@ -770,11 +771,12 @@ export default function CbatAptitudeReport() {
                   const game = test?.games?.[0]
                   return (
                     <div key={`${f.domainKey}-${f.code}`} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#060e1a] border border-[#1a3a5c]">
-                      {/* Points where the score has a base to express them against; the share of
-                          the role the play would let us measure where it hasn't (nothing scored
-                          yet, so there is no score for a point to be a point of). */}
+                      {/* One currency per kind, and it is the one the row was ranked on. Points for
+                          a scored test, because there is a base to express them against. Coverage for
+                          a test we cannot measure yet, because its points would rest on a stanine we
+                          have never seen, and the share of the role it opens up is a certainty. */}
                       <span className="font-mono font-extrabold text-emerald-300 text-sm w-12 shrink-0">
-                        {f.gain === null ? `+${f.coverageGain}%` : `+${f.gain}`}
+                        {f.kind === 'unlock' ? `+${f.coverageGain}%` : `+${f.gain}`}
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-xs font-bold text-slate-800 truncate">

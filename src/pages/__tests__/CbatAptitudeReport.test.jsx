@@ -76,7 +76,7 @@ const report = {
     { kind: 'unlock', code: 'SAT', label: 'Situational Awareness Test', match: 'direct', domainKey: 'StrgcTM',
       domainLabel: 'Strategic Task Management', domainWeight: 17, stanine: null,
       needsRuns: [{ gameKey: 'sat', label: 'Situational Awareness Test', runs: 1, runsNeeded: 2 }],
-      easierOnly: false, gain: 1.2 },
+      easierOnly: false, opensDomain: false, gain: 1.2, coverageGain: 4.3 },
   ],
 }
 
@@ -152,8 +152,13 @@ describe('CbatAptitudeReport', () => {
     render(<CbatAptitudeReport />)
     await screen.findByText('100')
 
+    // Two currencies, one per kind. A scored test is worth points; a test we cannot measure yet is
+    // worth the share of the role it would open up, because its points would rest on a stanine
+    // nobody has seen. Showing the guess is what put a worth-more grind above the one game
+    // standing between a user and a verdict.
     expect(screen.getByText('+4.9')).toBeInTheDocument()
-    expect(screen.getByText('+1.2')).toBeInTheDocument()
+    expect(screen.getByText('+4.3%')).toBeInTheDocument()
+    expect(screen.queryByText('+1.2')).not.toBeInTheDocument()
     // Both instructions name the difficulty: CUT and SAT are split games and only their Hard runs
     // feed this score, so "average 409+" on its own would be advice a user could follow on Easier
     // and get nothing for.

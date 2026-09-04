@@ -402,6 +402,69 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     for (const f of focus) expect(f.gain).toBeLessThan(MAX_SCORE);
   });
 
+  // ── What leads the list ────────────────────────────────────────────────────────────────────
+  // WSOP (Air Signaller, Linguist) is the shape that exposed this: five domains, and the Verbal
+  // Logic Test is the only game feeding Verbal Reasoning. Skip it and a fifth of the role is
+  // invisible, the battery is stuck on 'provisional', and no amount of FLAG will ever produce a
+  // verdict.
+  describe('a battery that cannot be judged yet', () => {
+    // Every game the battery is tested on, minus the ones named.
+    const playBatteryExcept = (batteryKey, skip, pick = (a => a.median)) => Promise.all(
+      [...batteryGames(batteryKey)].filter(g => !skip.includes(g)).map(g => play(g, pick)),
+    );
+
+    it('puts the test that would unlock a verdict above a worth-more improvement', async () => {
+      await playBatteryExcept('wsop-linguist', ['vlt']);
+
+      const res = await request(app).get('/api/games/cbat/report/wsop-linguist').set('Cookie', cookie);
+      const focus = res.body.data.focus;
+
+      expect(res.body.data.status).toBe('provisional');
+      expect(res.body.data.coverage).toBeLessThan(MIN_COVERAGE_FOR_VERDICT);
+      // The regression: FLAG is worth more points than the Verbal Logic Test could ever be, and
+      // used to be recommended first — sending the user to grind a number the page then refused to
+      // treat as a verdict.
+      expect(focus[0]).toMatchObject({ code: 'VLT', kind: 'unlock', opensDomain: true });
+      expect(focus.some(f => f.kind === 'improve' && f.gain > focus[0].gain)).toBe(true);
+      // Unlocks are priced on what they let us measure, and every one of them leads.
+      expect(focus[0].coverageGain).toBeGreaterThan(0);
+      const kinds = focus.map(f => f.kind);
+      expect(kinds.indexOf('improve')).toBeGreaterThan(kinds.lastIndexOf('unlock'));
+    });
+
+    it('prices a test that opens a domain against the base it would create, not the base without it', async () => {
+      // Strong across everything measured, so the assumed stanine for an unseen run is BELOW the
+      // user's current average. Playing the Verbal Logic Test therefore brings the estimate down:
+      // it adds its domain's whole weight to the denominator and dilutes everything already there.
+      // The old formula divided by the base that excluded the domain and reported a gain.
+      await playBatteryExcept('wsop-linguist', ['vlt'], a => a.strong);
+
+      const res = await request(app).get('/api/games/cbat/report/wsop-linguist').set('Cookie', cookie);
+      const vlt = res.body.data.focus.find(f => f.code === 'VLT');
+
+      expect(vlt.gain).toBeLessThan(0);
+      // Still the top of the list, and still worth playing — it is priced on coverage, which is
+      // the figure the UI shows and the only one that is not a guess.
+      expect(res.body.data.focus[0].code).toBe('VLT');
+      expect(vlt.coverageGain).toBeGreaterThan(0);
+    });
+
+    it('leads with improvements once there is a verdict to move', async () => {
+      // Skipping Numerical Operations leaves its domain half measured rather than unmeasured, so
+      // coverage stays above the floor and the battery gets a real pass or fail. Points are the
+      // objective again.
+      await playBatteryExcept('wsop-linguist', ['numerical-ops']);
+
+      const res = await request(app).get('/api/games/cbat/report/wsop-linguist').set('Cookie', cookie);
+      const focus = res.body.data.focus;
+
+      expect(res.body.data.coverage).toBeGreaterThanOrEqual(MIN_COVERAGE_FOR_VERDICT);
+      expect(['pass', 'fail']).toContain(res.body.data.status);
+      expect(focus.every(f => f.kind === 'improve')).toBe(true);
+      expect(focus.map(f => f.gain)).toEqual([...focus.map(f => f.gain)].sort((a, b) => b - a));
+    });
+  });
+
   it('offers a concrete score to aim at for the next stanine', async () => {
     await play('cut', a => a.median);
     const res = await request(app).get('/api/games/cbat/report/control-officer-atc').set('Cookie', cookie);

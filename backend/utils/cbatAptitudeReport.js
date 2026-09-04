@@ -254,40 +254,71 @@ function buildBatteryReport(battery, form) {
         : score >= battery.cutoff ? 'pass' : 'fail',
     coverage,
     domains,
-    focus: buildFocus(domains, measuredWeight),
+    focus: buildFocus(domains, measuredWeight, coverage),
   };
 }
 
 // ── "What should I work on?" ─────────────────────────────────────────────────────────────────
-// Ranks every actionable test by how much the battery score would move if the user gained one
-// stanine on it. That marginal value is the whole reason a report beats a leaderboard: it accounts
-// for the fact that on Control Officer (ATC), one stanine of CUT is worth roughly five times one
-// stanine of ACT — a thing no amount of staring at per-game scores will tell you.
+// The ranked answer to the only question a report has to earn: what do I play tonight. Two kinds
+// of row come back, and each is priced in the currency that is true for it.
 //
-//   gain = (domainWeight / measuredWeight) × (testMult / domainScoredMult) × 20
+// 'improve' — a scored test, priced in SCORE POINTS: what the battery score does if the user
+//             gains one stanine on it.
 //
-// measuredWeight — not 100 — is the denominator because that's the base the score is renormalised
-// over, so the figure is what the user would actually see the number do.
+//               gain = (domainWeight / measuredWeight) × (testMult / domainScoredMult) × 20
 //
-// Two kinds of row come back, both actionable and deliberately in one ranked list rather than two:
-//   'improve' — scored, and one stanine better is worth `gain`
-//   'unlock'  — a game they've played fewer than three times, so it isn't counting yet. `gain` is
-//               what it would be worth at an average stanine of 5, which is the honest expectation
-//               for a run we haven't seen.
+//             measuredWeight — not 100 — is the denominator because that's the base the score is
+//             renormalised over, so the figure is what the user would actually see the number do.
+//             That marginal value is the whole reason a report beats a leaderboard: on Control
+//             Officer (ATC), one stanine of CUT is worth roughly five times one stanine of ACT.
+//
+// 'unlock'  — a game played fewer than three times, so it isn't counting yet. Priced in COVERAGE:
+//             the share of the battery's weight the test would ADD to what we can measure.
+//
+// UNLOCKS ARE NOT PRICED IN POINTS, for two reasons, and this used to be wrong in both directions.
+//
+// The first is arithmetic. An unlock in a domain with nothing else scored doesn't just add to the
+// top of the battery's fraction — the domain isn't in `measuredWeight` at all, so playing it adds
+// the domain's whole weight to the BOTTOM and dilutes everything already measured. Pricing it as
+// a share of the current base reported a gain for a play that can move the score DOWN: on WSOP
+// (Air Signaller, Linguist), a user averaging stanine 5.7 across the 80 weight they had measured
+// was told the Verbal Logic Test was worth +5, when three median runs would in fact take them
+// from 114 to 111. `gain` is now the honest difference between the score now and the score after,
+// and it can be negative. It is still returned, because it is a true number and the admin view
+// reads it, but nothing ranks or renders it.
+//
+// The second is that the number is a guess whichever way it is computed. An unlock's points rest
+// on ASSUMED_UNLOCK_STANINE — a run we have never seen — while its coverage figure is a
+// certainty. Ranking a certainty against a guess is how FLAG ended up above the one test standing
+// between a user and a verdict.
+//
+// WHICH BLOCK LEADS is the whole product decision here, and it turns on MIN_COVERAGE_FOR_VERDICT.
+// Below that floor the battery reports 'provisional': there is no pass or fail, and no amount of
+// improving a measured test will produce one. Coverage is the objective, so every unlock outranks
+// every improve. At or above the floor the verdict exists and the only thing left to move is the
+// number, so improvements lead and the leftover unlocks follow.
+//
 // Tests with no SkyWatch game at all are gaps, not focus items — they're reported separately and
-// never appear here, because "work on TRT" is advice a user cannot act on.
+// never appear here, because "work on RCOG" is advice a user cannot act on.
 //
-// A BATTERY WITH NOTHING MEASURED STILL GETS A LIST. `gain` is a share of the renormalised base,
-// so with no scored test there is no base and the points figure is undefined — but that is exactly
-// the user who most needs telling what to play, and returning [] left the newest player with no
-// advice at all. Those rows come back with `gain: null` and are ranked on `coverageGain` instead:
-// the share of the battery's weight the test would ADD to what we can measure. That is the honest
-// currency at zero coverage, and it is the one the /cbat card leads with anyway, because a score
-// built on 8% of a role is not a thing to show anyone.
+// A BATTERY WITH NOTHING MEASURED STILL GETS A LIST. With no scored test there is no base and a
+// points figure is undefined, so `gain` comes back null — but that is exactly the user who most
+// needs telling what to play, and returning [] left the newest player with no advice at all.
+// Every row there is an unlock ranked on coverage, which is what the /cbat card leads with anyway.
 const FOCUS_LIMIT = 5;
 
-function buildFocus(domains, measuredWeight) {
+// The stanine an unplayed test is assumed to land on, for the one number that has to guess at one.
+// 5 is the middle of the 1-9 scale and the honest expectation for a run we have not seen.
+const ASSUMED_UNLOCK_STANINE = 5;
+
+function buildFocus(domains, measuredWeight, coverage) {
   const out = [];
+
+  // The battery's current numerator and score, so an unlock can be priced as the difference
+  // between the score now and the score after — the only honest way to price a play that changes
+  // the denominator as well as the top of the fraction.
+  const stanineWeight = domains.reduce((a, d) => a + (d.stanine === null ? 0 : d.stanine * d.weight), 0);
+  const currentScore = measuredWeight ? (stanineWeight / measuredWeight) * (MAX_SCORE / MAX_STANINE) : null;
 
   for (const d of domains) {
     const scored = d.tests.filter(t => t.state === 'scored');
@@ -309,10 +340,18 @@ function buildFocus(domains, measuredWeight) {
       });
     }
 
-    // An unscored test would join its domain's scored pool, so its share is measured against that
-    // pool grown by its own multiplier.
     for (const t of d.tests) {
       if (t.state !== 'needs-runs' && t.state !== 'easier-only') continue;
+      // A domain with nothing scored is not in `measuredWeight`, so this play brings the domain's
+      // whole weight into the base rather than joining a base it is already part of. Both cases
+      // are the same subtraction once the new base is worked out properly.
+      const opensDomain = scoredMult === 0;
+      const newDomainStanine =
+        ((opensDomain ? 0 : d.stanine * scoredMult) + ASSUMED_UNLOCK_STANINE * t.mult) / (scoredMult + t.mult);
+      const newWeight = measuredWeight + (opensDomain ? d.weight : 0);
+      const newStanineWeight =
+        stanineWeight - (opensDomain ? 0 : d.stanine * d.weight) + newDomainStanine * d.weight;
+
       out.push({
         kind: 'unlock',
         code: t.code, label: t.label, match: t.match,
@@ -320,17 +359,24 @@ function buildFocus(domains, measuredWeight) {
         stanine: null,
         needsRuns: t.needsRuns ?? [],
         easierOnly: t.state === 'easier-only',
-        gain: measuredWeight ? (d.weight / measuredWeight) * (t.mult / (scoredMult + t.mult)) * (MAX_SCORE / MAX_STANINE) : null,
+        // True where this play would put a domain of the role on the report for the first time.
+        // Those are the rows the score cannot currently see at all.
+        opensDomain,
+        gain: measuredWeight ? (newStanineWeight / newWeight) * (MAX_SCORE / MAX_STANINE) - currentScore : null,
         coverageGain: totalMult ? (d.weight * t.mult) / totalMult : 0,
       });
     }
   }
 
-  // Points where there is a base to express them against, coverage where there is not. Never a
-  // mix: at zero measured weight every row is an unlock with a null gain.
-  const rank = measuredWeight ? (f => f.gain) : (f => f.coverageGain);
+  // Coverage first while the score cannot be judged, points first once it can. Within a block
+  // every row is the same kind and so ranked on the same figure it displays — the order always
+  // matches the numbers beside it.
+  const unlocksLead = coverage < MIN_COVERAGE_FOR_VERDICT;
+  const block = f => ((f.kind === 'unlock') === unlocksLead ? 0 : 1);
+  const rank = f => (f.kind === 'unlock' ? f.coverageGain : f.gain);
+
   return out
-    .sort((a, b) => rank(b) - rank(a))
+    .sort((a, b) => block(a) - block(b) || rank(b) - rank(a))
     .slice(0, FOCUS_LIMIT)
     .map(f => ({
       ...f,
