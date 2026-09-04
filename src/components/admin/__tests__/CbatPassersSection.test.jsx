@@ -43,11 +43,15 @@ const cohort = (over = {}) => ({
 let sendBody
 let searchHits
 let searchUrls
+let settingsPatch
+let savedSettings
 
 function mockApi(data = cohort()) {
   sendBody = null
   searchHits = []
   searchUrls = []
+  settingsPatch = null
+  savedSettings = { cbatSurveyEmailSubject: 'Saved subject', cbatSurveyEnabled: true }
   global.fetch = vi.fn(async (url, opts = {}) => {
     if (String(url).includes('/search')) {
       searchUrls.push(String(url))
@@ -56,6 +60,13 @@ function mockApi(data = cohort()) {
     if (String(url).includes('/send')) {
       sendBody = JSON.parse(opts.body)
       return { ok: true, json: async () => ({ data: { sentCount: 1, failedCount: 0, sent: ['a@example.com'], failed: [] } }) }
+    }
+    if (String(url).includes('/api/admin/settings')) {
+      if ((opts.method ?? 'GET') === 'PATCH') {
+        settingsPatch = JSON.parse(opts.body)
+        return { ok: true, json: async () => ({ data: { settings: savedSettings } }) }
+      }
+      return { ok: true, json: async () => ({ data: { settings: savedSettings } }) }
     }
     if (String(url).includes('/preview')) {
       return { ok: true, json: async () => ({ data: { subject: 'How did your CBAT go?', html: '<p>hi</p>', recipient: { _id: 'u1', email: 'a@example.com', name: 'Agent 1234567' }, isPlaceholder: false, link: 'https://skywatch.academy/survey/tok' } }) }
@@ -75,7 +86,7 @@ const open = async () => {
       </Routes>
     </MemoryRouter>,
   )
-  fireEvent.click(screen.getByText('Potential CBAT Passers'))
+  fireEvent.click(screen.getByText('Potential CBAT Passers Survey'))
   await screen.findByText('Agent 1234567')
 }
 
@@ -389,12 +400,15 @@ describe('CbatPassersSection — people owed a working link', () => {
       .toHaveTextContent(/emailed a link that did not work/i)
   })
 
-  it('starts on the apology copy, because that is the batch it pre-ticks', async () => {
+  // It used to preselect the apology whenever anyone was owed one. That made
+  // the exceptional email the default and left the decision one un-read radio
+  // button away from reaching the wrong half of the list.
+  it('still starts on the normal invitation, even with people owed a resend', async () => {
     mockApi(owed())
     await open()
 
-    expect(screen.getByTestId('cbat-passers-variant-apology')).toBeChecked()
-    expect(screen.getByTestId('cbat-passers-variant-standard')).not.toBeChecked()
+    expect(screen.getByTestId('cbat-passers-variant-standard')).toBeChecked()
+    expect(screen.getByTestId('cbat-passers-variant-apology')).not.toBeChecked()
   })
 
   it('starts on the normal invitation when nobody is owed anything', async () => {
@@ -436,5 +450,72 @@ describe('CbatPassersSection — choosing which email goes out', () => {
         .map(c => String(c[0])).find(u => u.includes('/preview'))
       expect(previewCall).toMatch(/variant=apology/)
     })
+  })
+})
+
+// ── The settings this panel took over from Content ─────────────────────────
+//
+// The copy, the thresholds and the open/closed switch used to be a section of
+// their own further up the page, a long way from the list of people they get
+// sent to. Two variants made that worse: twelve near-identical boxes under one
+// heading with nothing saying which half went to whom.
+describe('CbatPassersSection — editing the wording in place', () => {
+  it('opens the chosen template behind its pencil, without selecting it', async () => {
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-edit-apology'))
+
+    const editor = await screen.findByTestId('cbat-passers-template-editor')
+    expect(within(editor).getByText('Apology and working link')).toBeInTheDocument()
+    // Reading the apology copy must not arm the apology send.
+    expect(screen.getByTestId('cbat-passers-variant-standard')).toBeChecked()
+  })
+
+  it('loads what is currently saved rather than the built-in default', async () => {
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-edit-standard'))
+    await screen.findByTestId('cbat-passers-template-editor')
+
+    expect(await screen.findByDisplayValue('Saved subject')).toBeInTheDocument()
+  })
+
+  it('saves the six fields under the right keys, with a reason', async () => {
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-edit-apology'))
+    await screen.findByTestId('cbat-passers-template-editor')
+    fireEvent.click(await screen.findByTestId('cbat-passers-template-save'))
+
+    await waitFor(() => expect(settingsPatch).toBeTruthy())
+    expect(Object.keys(settingsPatch)).toEqual(expect.arrayContaining([
+      'cbatSurveyApologyEmailSubject', 'cbatSurveyApologyEmailHeading',
+      'cbatSurveyApologyEmailSubtitle', 'cbatSurveyApologyEmailBody',
+      'cbatSurveyApologyEmailCta', 'cbatSurveyApologyEmailFooter',
+    ]))
+    expect(settingsPatch.reason).toBeTruthy()
+  })
+
+  it('saves the thresholds and the open switch together', async () => {
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-survey-enabled'))
+    fireEvent.click(screen.getByTestId('cbat-passers-save-defaults'))
+
+    await waitFor(() => expect(settingsPatch).toBeTruthy())
+    expect(settingsPatch).toEqual(expect.objectContaining({
+      cbatSurveyMinCompletions: 10,
+      cbatSurveyDormantDays: 21,
+      cbatSurveyEnabled: false,
+    }))
+  })
+
+  it('reflects the saved open/closed switch on load', async () => {
+    const closed = cohort()
+    closed.surveyEnabled = false
+    mockApi(closed)
+
+    await open()
+    expect(screen.getByTestId('cbat-passers-survey-enabled')).not.toBeChecked()
   })
 })

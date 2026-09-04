@@ -66,6 +66,11 @@ router.get('/', async (req, res) => {
         // What the links in the email would actually say. Shown in the admin
         // list because a dead base URL has to be visible BEFORE the send, not
         // discovered afterwards in someone else's inbox.
+        // The questionnaire's own open/closed switch. It lives with the send
+        // list rather than in a separate content panel, because "is the form
+        // still accepting answers" is a question you ask while looking at who
+        // has been asked, not while editing copy.
+        surveyEnabled: (await AppSettings.getSettings()).cbatSurveyEnabled !== false,
         linkBase: clientUrl(),
         linkProblem: clientUrlProblem(),
         // The two pieces of copy a send can go out with, so the picker is built

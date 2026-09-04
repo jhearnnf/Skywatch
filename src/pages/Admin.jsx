@@ -39,8 +39,6 @@ import SEO from '../components/SEO'
 import { has3DModel } from '../data/aircraftModels'
 import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } from '../../backend/constants/categories.json'
 import CbatPassersSection from '../components/admin/CbatPassersSection'
-import SURVEY_EMAIL_COPY from '../../backend/constants/surveyEmailDefaults.json'
-import SURVEY_APOLOGY_COPY from '../../backend/constants/surveyApologyEmailDefaults.json'
 import { CBAT_GAMES } from './Cbat'
 import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
 
@@ -5878,28 +5876,6 @@ const EMAIL_DEFAULTS = {
   welcomeEmailFooter:  'SkyWatch — Intelligence Study Platform.',
 }
 
-// Prefills for the CBAT questionnaire email form. Sourced from the same JSON the
-// sender falls back to, so what the admin sees in an untouched field is exactly
-// what would go out if they never touched it.
-const SURVEY_EMAIL_DEFAULTS = {
-  cbatSurveyEmailSubject:  SURVEY_EMAIL_COPY.subject,
-  cbatSurveyEmailHeading:  SURVEY_EMAIL_COPY.heading,
-  cbatSurveyEmailSubtitle: SURVEY_EMAIL_COPY.subtitle,
-  cbatSurveyEmailBody:     SURVEY_EMAIL_COPY.body,
-  cbatSurveyEmailCta:      SURVEY_EMAIL_COPY.cta,
-  cbatSurveyEmailFooter:   SURVEY_EMAIL_COPY.footer,
-
-  // The second variant, sent to people whose first invitation carried a link
-  // they could not open. Kept alongside rather than instead of the copy above,
-  // because both go out in the same week to different halves of the list.
-  cbatSurveyApologyEmailSubject:  SURVEY_APOLOGY_COPY.subject,
-  cbatSurveyApologyEmailHeading:  SURVEY_APOLOGY_COPY.heading,
-  cbatSurveyApologyEmailSubtitle: SURVEY_APOLOGY_COPY.subtitle,
-  cbatSurveyApologyEmailBody:     SURVEY_APOLOGY_COPY.body,
-  cbatSurveyApologyEmailCta:      SURVEY_APOLOGY_COPY.cta,
-  cbatSurveyApologyEmailFooter:   SURVEY_APOLOGY_COPY.footer,
-}
-
 const CR_DEFAULTS = {
   combatReadinessTitle:    'Combat Readiness Assessment',
   combatReadinessSubtitle: 'Choose your recall difficulty.',
@@ -5925,7 +5901,7 @@ function ContentTab({ API, openPassers = false, onBootstrapConsumed }) {
           const s = d.data.settings
           // Pre-populate any empty fields with hardcoded defaults so inputs aren't blank on first visit
           const merged = { ...s }
-          Object.entries({ ...EMAIL_DEFAULTS, ...SURVEY_EMAIL_DEFAULTS, ...CR_DEFAULTS }).forEach(([k, v]) => {
+          Object.entries({ ...EMAIL_DEFAULTS, ...CR_DEFAULTS }).forEach(([k, v]) => {
             if (!merged[k]) merged[k] = v
           })
           setDraft(merged)
@@ -6018,88 +5994,14 @@ function ContentTab({ API, openPassers = false, onBootstrapConsumed }) {
         </div>
       </Section>
 
-      {/* ── CBAT Questionnaire Email ──────────────────────────────
-          The copy for the outcome questionnaire. Same shape as the welcome
-          email above: blank means "use the built-in default". {{name}} fills in
-          the recipient's display name and {{button}} places the link button. */}
-      <Section title="CBAT Questionnaire Email" collapsible onSave={() => save('Update CBAT Questionnaire Email', [
-        'cbatSurveyEnabled', 'cbatSurveyEmailSubject', 'cbatSurveyEmailHeading',
-        'cbatSurveyEmailSubtitle', 'cbatSurveyEmailBody', 'cbatSurveyEmailCta', 'cbatSurveyEmailFooter',
-        'cbatSurveyApologyEmailSubject', 'cbatSurveyApologyEmailHeading', 'cbatSurveyApologyEmailSubtitle',
-        'cbatSurveyApologyEmailBody', 'cbatSurveyApologyEmailCta', 'cbatSurveyApologyEmailFooter',
-        'cbatSurveyMinCompletions', 'cbatSurveyDormantDays',
-      ])}>
-        <Toggle
-          label="Questionnaire is open"
-          hint="When off, links already sent show a polite “this has closed” page instead of the form. Does not affect sending."
-          checked={draft.cbatSurveyEnabled !== false}
-          onChange={v => setDraft(p => ({ ...p, cbatSurveyEnabled: v }))}
-        />
-        {field('cbatSurveyEmailSubject',  'Subject',  SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailSubject)}
-        {field('cbatSurveyEmailHeading',  'Heading',  SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailHeading)}
-        {field('cbatSurveyEmailSubtitle', 'Subtitle', SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailSubtitle)}
-        {field('cbatSurveyEmailBody',     'Body',     SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailBody, 10)}
-        {field('cbatSurveyEmailCta',      'Button text', SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailCta)}
-        {field('cbatSurveyEmailFooter',   'Footer',   SURVEY_EMAIL_DEFAULTS.cbatSurveyEmailFooter, 2)}
+      {/* The questionnaire's copy, thresholds and open/closed switch used to be
+          a section of their own here. They now live in the panel below, beside
+          the list of people they get sent to — the pencil on each option opens
+          the wording, and the thresholds save from where they are typed. */}
 
-        {/* The apology variant. Picked per batch in the Potential CBAT Passers
-            panel, not here: this is only where its wording lives. It exists
-            because a send once went out with a link that pointed at a developer
-            machine, and the fifty people who got it need telling that, while
-            everyone else must never hear about it. */}
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-3 pb-1">Apology Version</p>
-        <p className="text-[11px] text-slate-400 pb-1">
-          For people whose first invitation carried a link that did not work. Choose it per batch in
-          Potential CBAT Passers.
-        </p>
-        {field('cbatSurveyApologyEmailSubject',  'Subject',  SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailSubject)}
-        {field('cbatSurveyApologyEmailHeading',  'Heading',  SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailHeading)}
-        {field('cbatSurveyApologyEmailSubtitle', 'Subtitle', SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailSubtitle)}
-        {field('cbatSurveyApologyEmailBody',     'Body',     SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailBody, 10)}
-        {field('cbatSurveyApologyEmailCta',      'Button text', SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailCta)}
-        {field('cbatSurveyApologyEmailFooter',   'Footer',   SURVEY_EMAIL_DEFAULTS.cbatSurveyApologyEmailFooter, 2)}
-        {/* The cohort defaults. The Potential CBAT Passers panel below starts
-            from these, so changing them here changes what it opens on; the
-            inputs in the panel itself are for trying a different cut without
-            committing to it. */}
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-3 pb-1">Recipient List Defaults</p>
-        {field('cbatSurveyMinCompletions', 'Minimum games finished', '10')}
-        {field('cbatSurveyDormantDays',    'Days dormant before contacting', '21')}
-        <p className="text-[11px] text-slate-400 pt-2">
-          <code className="font-mono">{'{{name}}'}</code> becomes their display name,{' '}
-          <code className="font-mono">{'{{button}}'}</code> places the button, and{' '}
-          <code className="font-mono">{'{{link}}'}</code> drops the raw link in. The unsubscribe
-          line is added to the footer automatically and cannot be removed.
-        </p>
-
-        {/* Walk-through copies of the two pages the email leads to. They run on
-            a stub — no invite, nothing saved, no payment — so the flow can be
-            checked without spending a real invitation on it. */}
-        <div className="pt-3 flex flex-wrap gap-2">
-          <a
-            href="/survey/preview"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors no-underline"
-          >
-            Try the questionnaire ↗
-          </a>
-          <a
-            href="/survey/preview/opt-out"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors no-underline"
-          >
-            Try the unsubscribe page ↗
-          </a>
-        </div>
-        <p className="text-[11px] text-slate-400 mt-1.5">
-          Demos. Nothing is saved, no account changes and no payment is taken.
-        </p>
-      </Section>
-
-      {/* ── Potential CBAT Passers ────────────────────────────────
-          The recipient list and the only send button in the app. */}
+      {/* ── Potential CBAT Passers Survey ──────────────────
+          The recipient list, both email templates, the questionnaire's settings
+          and the only send button in the app. */}
       <CbatPassersSection API={API} openOnMount={openPassers} onOpenConsumed={onBootstrapConsumed} />
 
       {/* ── Static Content ────────────────────────────────────────── */}

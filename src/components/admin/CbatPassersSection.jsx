@@ -3,12 +3,21 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import Overlay from '../ui/Overlay'
+import SURVEY_COPY from '../../../backend/constants/surveyEmailDefaults.json'
+import SURVEY_APOLOGY_COPY from '../../../backend/constants/surveyApologyEmailDefaults.json'
 
 /**
  * Admin › Content › Potential CBAT Passers.
  *
  * The recipient list for the CBAT outcome questionnaire, and the only place in
  * the app that can send one.
+ *
+ * It also owns the questionnaire's settings, which used to sit in a separate
+ * "CBAT Questionnaire Email" section further up Content. Splitting them was a
+ * mistake in practice: the copy was edited in one place, the recipients chosen
+ * in another, and the two variants of the email could not be compared against
+ * the list of people about to receive them. The pencil beside each option here
+ * opens the same fields that section held.
  *
  * NOTHING SENDS WITHOUT A DELIBERATE CLICK, and the click is guarded by a
  * confirmation that names every recipient. There is no scheduler behind this
@@ -21,6 +30,32 @@ import Overlay from '../ui/Overlay'
  * yet" and gave a date is held until it passes and then rejoins the pool, so
  * the list stays a live worklist rather than a ledger that only ever grows.
  */
+
+// The settings keys behind each variant, and the strings an untouched field
+// falls back to. Same JSON the sender reads, so a blank box is not a guess.
+const TEMPLATES = {
+  standard: {
+    label: 'Normal invitation',
+    hint: 'The normal first invitation. For anyone who has not been emailed yet.',
+    prefix: 'cbatSurveyEmail',
+    defaults: SURVEY_COPY,
+  },
+  apology: {
+    label: 'Apology and working link',
+    hint: 'The normal invitation with one line at the top saying the first link was broken. For the people marked Broken link.',
+    prefix: 'cbatSurveyApologyEmail',
+    defaults: SURVEY_APOLOGY_COPY,
+  },
+}
+
+const TEMPLATE_FIELDS = [
+  { key: 'Subject',  label: 'Subject',     from: 'subject'  },
+  { key: 'Heading',  label: 'Heading',     from: 'heading'  },
+  { key: 'Subtitle', label: 'Subtitle',    from: 'subtitle' },
+  { key: 'Body',     label: 'Body',        from: 'body', rows: 12 },
+  { key: 'Cta',      label: 'Button text', from: 'cta'      },
+  { key: 'Footer',   label: 'Footer',      from: 'footer', rows: 2 },
+]
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '')
 const fmtDay  = (ymd) => {
@@ -66,6 +101,15 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   // never saw. Defaults to the apology while anyone is still owed one, because
   // that is the batch the list will be pre-ticking.
   const [variant, setVariant] = useState('standard')
+  // Which variant's wording is open for editing, or null. Separate from the
+  // selected variant: an admin may want to read the apology copy while still
+  // intending to send the normal one.
+  const [editing, setEditing] = useState(null)
+  // The questionnaire's open/closed switch and the saved threshold defaults,
+  // both of which used to live in a Content section of their own.
+  const [surveyEnabled, setSurveyEnabled] = useState(true)
+  const [savingDefaults, setSavingDefaults] = useState(false)
+  const [notice, setNotice] = useState('')
 
   // The FIRST load deliberately sends no thresholds, so the server answers from
   // the saved settings and the inputs below can adopt them. Sending the
@@ -93,9 +137,12 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       // Pre-select the batch the server would pick. The admin can then add a
       // warm-band name or drop someone before sending.
       setSelected(new Set((json.data.nextBatchIds ?? []).map(String)))
-      // The pre-ticked batch puts the people we owe a working link first, so
-      // the picker starts on the copy that batch needs.
-      setVariant((json.data.totals?.needsResend ?? 0) > 0 ? 'apology' : 'standard')
+      // The picker always opens on the normal invitation. It used to preselect
+      // the apology whenever anyone was owed one, which quietly made the
+      // exceptional email the default and put the decision one un-read radio
+      // button away from going out to the wrong half of the list.
+      setVariant('standard')
+      if (typeof json.data.surveyEnabled === 'boolean') setSurveyEnabled(json.data.surveyEnabled)
       // The ticks are being replaced wholesale, so the search picks they were
       // partly made of go with them rather than surviving as orphans.
       setPicked(new Map())
@@ -189,6 +236,30 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
     return () => clearTimeout(t)
   }, [query, open, search])
 
+  // The thresholds above are a scratch pad by default: type a different cut,
+  // see who it catches, and nothing is written down. This is the button that
+  // commits them, together with the open/closed switch, so the panel opens on
+  // them next time. Both used to be fields in a separate Content section.
+  const saveSettings = async (fields, label) => {
+    setSavingDefaults(true); setError(''); setNotice('')
+    try {
+      const res = await apiFetch(`${API}/api/admin/settings`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...fields, reason: label }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.message || 'Could not save')
+      }
+      setNotice(`${label} saved.`)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSavingDefaults(false)
+    }
+  }
+
   const selectedRows = useMemo(
     () => [...selected].map(id => rowById.get(id)).filter(Boolean),
     [selected, rowById],
@@ -261,7 +332,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
         className="w-full px-5 py-4 border-b border-slate-100 flex items-center justify-between text-left"
       >
         <div>
-          <h3 className="font-bold text-slate-800">Potential CBAT Passers</h3>
+          <h3 className="font-bold text-slate-800">Potential CBAT Passers Survey</h3>
           <p className="text-[11px] text-slate-500 mt-0.5">
             Trained hard, then went quiet. Nothing sends without your click.
           </p>
@@ -303,6 +374,27 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             </div>
           </div>
 
+          {/* The questionnaire's own switch. Off does not stop sending; it makes
+              links that are already out show a "this has closed" page. It sits
+              with the send list because it is read while looking at who has
+              been asked, not while editing copy. */}
+          <label className="flex items-start gap-2 mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={surveyEnabled}
+              onChange={e => setSurveyEnabled(e.target.checked)}
+              data-testid="cbat-passers-survey-enabled"
+              className="mt-0.5 shrink-0 w-4 h-4 accent-brand-600"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-slate-800">Questionnaire is open</span>
+              <span className="block text-[10px] text-slate-500">
+                When off, links already sent show a polite &ldquo;this has closed&rdquo; page instead of
+                the form. Does not affect sending.
+              </span>
+            </span>
+          </label>
+
           {/* Loading the list pre-ticks the batch the server would send, which
               is the right default but the wrong starting point when you only
               want one or two names out of fifty. Untick all clears the ticks
@@ -323,11 +415,29 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             >
               Untick all ({selected.size})
             </button>
+            <button
+              onClick={() => saveSettings({
+                cbatSurveyMinCompletions: minCompletions,
+                cbatSurveyDormantDays:    dormantDays,
+                cbatSurveyEnabled:        surveyEnabled,
+              }, 'Questionnaire settings')}
+              disabled={savingDefaults}
+              data-testid="cbat-passers-save-defaults"
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
+            >
+              {savingDefaults ? 'Saving…' : 'Save as defaults'}
+            </button>
           </div>
 
           {error && (
             <p className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 mb-3">
               {error}
+            </p>
+          )}
+
+          {notice && (
+            <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-3" data-testid="cbat-passers-notice">
+              {notice}
             </p>
           )}
 
@@ -466,25 +576,39 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
                 { key: 'standard', label: 'Normal invitation' },
                 { key: 'apology',  label: 'Apology and working link' },
               ]).map(v => (
-                <label key={v.key} className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="cbat-survey-variant"
-                    value={v.key}
-                    checked={variant === v.key}
-                    onChange={() => setVariant(v.key)}
-                    data-testid={`cbat-passers-variant-${v.key}`}
-                    className="mt-0.5 shrink-0 w-4 h-4 accent-brand-600"
-                  />
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-slate-800">{v.label}</span>
-                    <span className="block text-[10px] text-slate-500">
-                      {v.key === 'apology'
-                        ? 'The normal invitation with one line at the top saying the first link was broken. For the people marked Broken link.'
-                        : 'The normal first invitation. For anyone who has not been emailed yet.'}
+                <div key={v.key} className="flex items-start gap-2">
+                  <label className="flex items-start gap-2 cursor-pointer min-w-0 flex-1">
+                    <input
+                      type="radio"
+                      name="cbat-survey-variant"
+                      value={v.key}
+                      checked={variant === v.key}
+                      onChange={() => setVariant(v.key)}
+                      data-testid={`cbat-passers-variant-${v.key}`}
+                      className="mt-0.5 shrink-0 w-4 h-4 accent-brand-600"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-800">{v.label}</span>
+                      <span className="block text-[10px] text-slate-500">
+                        {TEMPLATES[v.key]?.hint}
+                      </span>
                     </span>
-                  </span>
-                </label>
+                  </label>
+                  {/* Editing the wording is a different act to choosing it, so it
+                      is a separate control rather than something that happens on
+                      selection. Opening the apology copy to read it must not
+                      arm the apology send. */}
+                  <button
+                    type="button"
+                    onClick={() => setEditing(v.key)}
+                    aria-label={`Edit the ${TEMPLATES[v.key]?.label ?? v.key} wording`}
+                    title="Edit this email"
+                    data-testid={`cbat-passers-edit-${v.key}`}
+                    className="shrink-0 px-2 py-1 rounded-lg border border-slate-200 text-slate-500 text-xs hover:bg-slate-50 transition-colors"
+                  >
+                    ✎
+                  </button>
+                </div>
               ))}
             </div>
             <p className="text-[10px] text-slate-400 mt-2">
@@ -527,6 +651,25 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             >
               View results ↗
             </button>
+            {/* Walk-through copies of the two pages the email leads to. They run
+                on a stub, so the flow can be checked without spending a real
+                invitation on it. */}
+            <a
+              href="/survey/preview"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors no-underline"
+            >
+              Try the questionnaire ↗
+            </a>
+            <a
+              href="/survey/preview/opt-out"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors no-underline"
+            >
+              Try the unsubscribe page ↗
+            </a>
           </div>
 
           {testResult && (
@@ -543,6 +686,15 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       )}
 
       <AnimatePresence>
+        {editing && (
+          <TemplateEditorModal
+            API={API}
+            apiFetch={apiFetch}
+            variant={editing}
+            onClose={() => setEditing(null)}
+            onSaved={(label) => { setEditing(null); setNotice(`${label} saved.`) }}
+          />
+        )}
         {preview && <PreviewModal preview={preview} onClose={() => setPreview(null)} />}
         {confirm && (
           <ConfirmSendModal
@@ -836,6 +988,150 @@ function ConfirmSendModal({ rows, variantLabel, onConfirm, onCancel, sending }) 
           >
             {sending ? 'Sending…' : 'Send now'}
           </button>
+        </div>
+      </motion.div>
+    </Overlay>
+  )
+}
+
+// The wording of one of the two emails, edited where it is chosen.
+//
+// This used to be a dozen fields in a "CBAT Questionnaire Email" section
+// further up Content, a long way from the list of people about to receive
+// them. Two variants made that arrangement worse rather than better: twelve
+// near-identical boxes under one heading, with nothing on screen saying which
+// half went to whom.
+//
+// Values are fetched fresh on open rather than passed down, because the panel
+// never needed them before and holding a copy of every setting just to edit six
+// of them would mean deciding what to do when the two drift apart.
+function TemplateEditorModal({ API, apiFetch, variant, onClose, onSaved }) {
+  const tpl = TEMPLATES[variant]
+  const [draft,  setDraft]  = useState(null)
+  const [reason, setReason] = useState('Edit questionnaire email copy')
+  const [busy,   setBusy]   = useState(false)
+  const [error,  setError]  = useState('')
+
+  useEffect(() => {
+    let live = true
+    apiFetch(`${API}/api/admin/settings`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (!live) return
+        const saved = d.data?.settings ?? {}
+        setDraft(Object.fromEntries(
+          TEMPLATE_FIELDS.map(f => [f.key, saved[`${tpl.prefix}${f.key}`] ?? '']),
+        ))
+      })
+      .catch(() => live && setError('Could not load the current wording.'))
+    return () => { live = false }
+  }, [API, apiFetch, tpl.prefix])
+
+  const save = async () => {
+    if (!reason.trim()) return
+    setBusy(true); setError('')
+    try {
+      const updates = Object.fromEntries(
+        TEMPLATE_FIELDS.map(f => [`${tpl.prefix}${f.key}`, draft[f.key] ?? '']),
+      )
+      const res = await apiFetch(`${API}/api/admin/settings`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updates, reason: reason.trim() }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.message || 'Could not save')
+      }
+      onSaved(tpl.label)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Overlay zIndex={50} backdrop="rgba(15,23,42,0.60)" onDismiss={busy ? undefined : onClose} className="flex items-end sm:items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-surface rounded-2xl w-full max-w-2xl h-[88vh] flex flex-col overflow-hidden shadow-2xl"
+        data-testid="cbat-passers-template-editor"
+      >
+        <div className="shrink-0 px-6 pt-5 pb-4 border-b border-slate-100">
+          <h3 className="text-base font-bold text-slate-900">{tpl.label}</h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Leave a box empty to use the built-in wording shown in it.
+          </p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-2">
+          {!draft && !error && <p className="py-6 text-center text-xs text-slate-500">Loading…</p>}
+          {draft && TEMPLATE_FIELDS.map(f => (
+            <div key={f.key} className="py-2.5 border-b border-slate-100 last:border-0">
+              <label className="block text-xs font-semibold text-slate-500 mb-1" htmlFor={`tpl-${f.key}`}>
+                {f.label}
+              </label>
+              {f.rows ? (
+                <textarea
+                  id={`tpl-${f.key}`}
+                  rows={f.rows}
+                  placeholder={tpl.defaults[f.from]}
+                  value={draft[f.key]}
+                  onChange={e => setDraft(d => ({ ...d, [f.key]: e.target.value }))}
+                  className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm resize-none outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+                />
+              ) : (
+                <input
+                  id={`tpl-${f.key}`}
+                  type="text"
+                  placeholder={tpl.defaults[f.from]}
+                  value={draft[f.key]}
+                  onChange={e => setDraft(d => ({ ...d, [f.key]: e.target.value }))}
+                  className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+                />
+              )}
+            </div>
+          ))}
+
+          <p className="text-[11px] text-slate-400 py-3">
+            <code className="font-mono">{'{{name}}'}</code> becomes their display name,{' '}
+            <code className="font-mono">{'{{button}}'}</code> places the button, and{' '}
+            <code className="font-mono">{'{{link}}'}</code> drops the raw link in. The unsubscribe
+            line is added to the footer automatically and cannot be removed.
+          </p>
+        </div>
+
+        <div className="shrink-0 px-6 py-4 border-t border-slate-100">
+          {error && <p className="text-xs text-rose-600 mb-2">{error}</p>}
+          <label className="block text-xs font-semibold text-slate-500 mb-1" htmlFor="tpl-reason">
+            Reason (required)
+          </label>
+          <input
+            id="tpl-reason"
+            type="text"
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm mb-3 outline-none focus:ring-2 focus:ring-brand-600/40 bg-surface-raised text-text"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              disabled={busy}
+              className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={save}
+              disabled={busy || !draft || !reason.trim()}
+              data-testid="cbat-passers-template-save"
+              className="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold transition-colors disabled:opacity-40"
+            >
+              {busy ? 'Saving…' : 'Save wording'}
+            </button>
+          </div>
         </div>
       </motion.div>
     </Overlay>
