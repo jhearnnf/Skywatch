@@ -108,6 +108,19 @@ function CardAction({ children }) {
 //
 // A trailing file extension is what separates the first two. No unread dot or
 // timestamp on any of them: nothing here to keep up with.
+// A guide staged for review. Only admins are ever sent these rows, so the badge
+// does not gate anything; it answers the question an admin asks on seeing an
+// unfamiliar card in their own rail, which is "can everyone else see this?".
+// Amber rather than red: this is a draft, not a fault.
+function AdminOnlyBadge() {
+  return (
+    <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-extrabold uppercase
+      tracking-wider bg-amber-100 text-amber-700 border border-amber-200">
+      Admin only
+    </span>
+  )
+}
+
 function GuideCard({ guide }) {
   const onSite   = guide.url?.startsWith('/')
   const internal = onSite && !/\.[a-z0-9]+$/i.test(guide.url)
@@ -115,7 +128,14 @@ function GuideCard({ guide }) {
     <>
       <CardIcon>{guide.emoji || '📖'}</CardIcon>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-slate-800 truncate">{guide.title}</p>
+        {/* The badge sits on the title row rather than after the description,
+            so it is read before the card is opened rather than after. The title
+            keeps `truncate` and the badge keeps its width, so a long title
+            shortens instead of pushing the badge off the card. */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="text-sm font-bold text-slate-800 truncate">{guide.title}</p>
+          {guide.adminOnly && <AdminOnlyBadge />}
+        </div>
         {guide.description && (
           <p className="text-[11px] text-slate-500 truncate mt-0.5">{guide.description}</p>
         )}

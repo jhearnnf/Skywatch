@@ -83,6 +83,26 @@ export default function ChatGuidesEditor({ API, Toast }) {
     } finally { setBusy(false) }
   }
 
+  // Staging toggle. Separate from Hide because they answer different questions:
+  // Hide takes a link out of the rail entirely, this one leaves it in the rail
+  // for admins so a draft can be reviewed where it will actually live.
+  const setAdminOnly = async (guide, adminOnly) => {
+    setBusy(true); setErr('')
+    try {
+      const r = await apiFetch(`${API}/api/chat/admin/guides/${guide._id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminOnly }),
+      })
+      if (!r.ok) throw new Error('Could not update that guide')
+      await load()
+      setToast(adminOnly ? 'Guide is now admin only' : 'Guide is now live for everyone')
+    } catch (e) {
+      setErr(e.message)
+    } finally { setBusy(false) }
+  }
+
   const remove = async (guide) => {
     if (!window.confirm(`Remove "${guide.title}" from Guides?\n\nThe link is deleted. Hide it instead if you only want it out of the rail.`)) return
     setBusy(true); setErr('')
@@ -119,7 +139,15 @@ export default function ChatGuidesEditor({ API, Toast }) {
     <div key={g._id} className={`rounded-xl border border-slate-300 px-3 py-2 flex items-center gap-3 ${g.isHidden ? 'opacity-80' : ''}`}>
       <span className="text-lg shrink-0">{g.emoji || '📖'}</span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-slate-800 truncate">{g.title}</p>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="text-sm font-bold text-slate-800 truncate">{g.title}</p>
+          {g.adminOnly && (
+            <span className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-extrabold uppercase
+              tracking-wider bg-amber-100 text-amber-700 border border-amber-200">
+              Admin only
+            </span>
+          )}
+        </div>
         <p className="text-[11px] text-slate-400 truncate">
           {g.url}{g.description ? ` · ${g.description}` : ''} · order {g.order}
         </p>
@@ -145,6 +173,16 @@ export default function ChatGuidesEditor({ API, Toast }) {
           className="text-xs text-slate-600 hover:text-slate-700 px-2 py-1 rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors"
         >
           {g.isHidden ? 'Show' : 'Hide'}
+        </button>
+        <button
+          onClick={() => setAdminOnly(g, !g.adminOnly)}
+          disabled={busy}
+          title={g.adminOnly
+            ? 'Publish this guide to everyone'
+            : 'Show this guide to admins only, so it can be reviewed before release'}
+          className="text-xs text-amber-600 hover:text-amber-700 px-2 py-1 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors"
+        >
+          {g.adminOnly ? 'Publish' : 'Admin only'}
         </button>
         <button
           onClick={() => remove(g)}

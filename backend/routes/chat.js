@@ -569,7 +569,12 @@ router.get('/overview', async (req, res) => {
       })(),
       // Off-site reading, curated by the team. Same call as everything else in
       // the rail so the section costs no extra round trip.
-      ChatGuide.find({ isHidden: false }).sort({ order: 1, title: 1 }).lean(),
+      //
+      // Admin-only guides are filtered out in the query rather than after it,
+      // so a draft's title and URL never reach a non-admin's browser at all.
+      ChatGuide.find(
+        req.user.isAdmin ? { isHidden: false } : { isHidden: false, adminOnly: { $ne: true } },
+      ).sort({ order: 1, title: 1 }).lean(),
     ]);
 
     // Current names for whoever wrote each preview. The rail line is "Name:
@@ -696,6 +701,9 @@ router.get('/overview', async (req, res) => {
         url:         g.url,
         description: g.description ?? '',
         emoji:       g.emoji ?? null,
+        // Only ever true for an admin: the query above never returns these
+        // rows to anyone else, so the rail can badge on the flag alone.
+        adminOnly:   Boolean(g.adminOnly),
       })),
       channels,
       // A bot DM is listed under `bots`, not here — it is a tool, not a person
@@ -2836,13 +2844,14 @@ const serializeGuide = (g) => ({
   emoji:       g.emoji ?? null,
   order:       g.order ?? 0,
   isHidden:    Boolean(g.isHidden),
+  adminOnly:   Boolean(g.adminOnly),
   updatedAt:   g.updatedAt,
 });
 
 // GET /api/chat/admin/guides — every guide, hidden ones included
 router.get('/admin/guides', adminOnly, async (_req, res) => {
   try {
-    const guides = await ChatGuide.find({}).sort({ isHidden: 1, order: 1, title: 1 }).lean();
+    const guides = await ChatGuide.find({}).sort({ isHidden: 1, adminOnly: -1, order: 1, title: 1 }).lean();
     res.json({ status: 'success', data: { guides: guides.map(serializeGuide) } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -2866,6 +2875,7 @@ router.post('/admin/guides', adminOnly, async (req, res) => {
       emoji:       (req.body?.emoji ?? '').toString().trim().slice(0, 8) || null,
       order:       Number.isFinite(Number(req.body?.order)) ? Number(req.body.order) : 0,
       isHidden:    req.body?.isHidden === true,
+      adminOnly:   req.body?.adminOnly === true,
     });
 
     await AdminAction.create({
@@ -2909,6 +2919,9 @@ router.patch('/admin/guides/:id', adminOnly, async (req, res) => {
     }
     if (req.body?.isHidden !== undefined) {
       guide.isHidden = req.body.isHidden === true;
+    }
+    if (req.body?.adminOnly !== undefined) {
+      guide.adminOnly = req.body.adminOnly === true;
     }
     guide.updatedAt = new Date();
     await guide.save();
