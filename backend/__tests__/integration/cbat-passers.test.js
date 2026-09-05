@@ -16,7 +16,7 @@
  *   - Preview renders without creating an invite
  *   - A send is refused outright when the links would be dead in the inbox
  *   - A delivered-but-broken link puts someone back in the list, at the front
- *   - The apology copy is a separate email, chosen per send
+ *   - An unknown variant falls back to the invitation rather than erroring
  *   - A deferred "not yet" respondent is held, then returns to the pool
  */
 
@@ -40,7 +40,7 @@ const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetR
 const GameSessionCbatStart        = require('../../models/GameSessionCbatStart');
 const SurveyInvite                = require('../../models/SurveyInvite');
 const { SURVEY_CAMPAIGN }         = require('../../constants/survey');
-const { SURVEY_DEFAULTS, SURVEY_APOLOGY_DEFAULTS } = require('../../utils/surveyEmail');
+const { SURVEY_DEFAULTS } = require('../../utils/surveyEmail');
 const User                        = require('../../models/User');
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -884,7 +884,7 @@ describe('someone who was mailed a link that did not work', () => {
   it('stops being owed once a send actually goes out', async () => {
     const u = await owed();
     await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
-      .send({ userIds: [u._id.toString()], variant: 'apology' });
+      .send({ userIds: [u._id.toString()] });
 
     const invite = await SurveyInvite.findOne({ userId: u._id, campaign: SURVEY_CAMPAIGN });
     expect(invite.brokenLinkAt).toBeNull();
@@ -896,7 +896,7 @@ describe('someone who was mailed a link that did not work', () => {
     const before = await SurveyInvite.findOne({ userId: u._id, campaign: SURVEY_CAMPAIGN });
 
     await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
-      .send({ userIds: [u._id.toString()], variant: 'apology' });
+      .send({ userIds: [u._id.toString()] });
 
     const after = await SurveyInvite.findOne({ userId: u._id, campaign: SURVEY_CAMPAIGN });
     expect(after.token).toBe(before.token);
@@ -913,7 +913,12 @@ describe('someone who was mailed a link that did not work', () => {
   });
 });
 
-describe('choosing which email a batch goes out with', () => {
+// There is one email. The apology copy that used to sit beside it was written
+// for the September 2026 batch whose links were dead, and was removed once
+// everyone owed one had been re-sent — so what is guarded here is that an
+// 'apology' still in an old bookmark or an unrefreshed admin tab sends the
+// ordinary invitation rather than 500ing or, worse, nothing.
+describe('the email a batch goes out with', () => {
   const lastMessage = () => {
     const { __batchMock } = require('resend');
     return __batchMock.mock.calls.at(-1)[0][0];
@@ -928,20 +933,22 @@ describe('choosing which email a batch goes out with', () => {
     expect(lastMessage().subject).toBe(SURVEY_DEFAULTS.subject);
   });
 
-  it('sends the apology when it is asked for', async () => {
+  it('carries a real, reachable link', async () => {
     await candidate();
     const { __batchMock } = require('resend');
     __batchMock.mockClear();
 
-    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
-      .send({ variant: 'apology' });
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
 
     const msg = lastMessage();
-    expect(msg.subject).toBe(SURVEY_APOLOGY_DEFAULTS.subject);
-    // Both variants must carry a real, reachable link. That is the entire point
-    // of the second one existing.
     expect(msg.html).toMatch(/https:\/\/skywatch\.academy\/survey\/[0-9a-f]{64}/);
     expect(msg.html).not.toMatch(/localhost/);
+  });
+
+  it('offers only the invitation', async () => {
+    await candidate();
+    const res = await request(app).get('/api/admin/cbat-passers').set('Cookie', cookie);
+    expect(res.body.data.variants.map(v => v.key)).toEqual(['standard']);
   });
 
   it('falls back to the normal email rather than erroring on a variant it does not know', async () => {
@@ -952,11 +959,24 @@ describe('choosing which email a batch goes out with', () => {
     expect(res.body.data.variant).toBe('standard');
   });
 
-  it('previews whichever one is selected', async () => {
+  // The removed variant is the one an old bookmark or a stale tab will ask for.
+  it('sends the invitation to anyone still asking for the apology', async () => {
+    await candidate();
+    const { __batchMock } = require('resend');
+    __batchMock.mockClear();
+
+    const res = await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
+      .send({ variant: 'apology' });
+
+    expect(res.body.data.variant).toBe('standard');
+    expect(lastMessage().subject).toBe(SURVEY_DEFAULTS.subject);
+  });
+
+  it('previews the invitation for a variant that no longer exists', async () => {
     await candidate();
     const res = await request(app)
       .get('/api/admin/cbat-passers/preview?variant=apology').set('Cookie', cookie);
-    expect(res.body.data.subject).toBe(SURVEY_APOLOGY_DEFAULTS.subject);
-    expect(res.body.data.variant).toBe('apology');
+    expect(res.body.data.subject).toBe(SURVEY_DEFAULTS.subject);
+    expect(res.body.data.variant).toBe('standard');
   });
 });

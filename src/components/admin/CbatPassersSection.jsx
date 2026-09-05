@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import Overlay from '../ui/Overlay'
 import SURVEY_COPY from '../../../backend/constants/surveyEmailDefaults.json'
-import SURVEY_APOLOGY_COPY from '../../../backend/constants/surveyApologyEmailDefaults.json'
 
 /**
  * Admin › Content › Potential CBAT Passers.
@@ -14,10 +13,9 @@ import SURVEY_APOLOGY_COPY from '../../../backend/constants/surveyApologyEmailDe
  *
  * It also owns the questionnaire's settings, which used to sit in a separate
  * "CBAT Questionnaire Email" section further up Content. Splitting them was a
- * mistake in practice: the copy was edited in one place, the recipients chosen
- * in another, and the two variants of the email could not be compared against
- * the list of people about to receive them. The pencil beside each option here
- * opens the same fields that section held.
+ * mistake in practice: the copy was edited in one place and the recipients
+ * chosen in another, with neither on screen beside the other. The pencil beside
+ * the email here opens the same fields that section held.
  *
  * NOTHING SENDS WITHOUT A DELIBERATE CLICK, and the click is guarded by a
  * confirmation that names every recipient. There is no scheduler behind this
@@ -31,8 +29,14 @@ import SURVEY_APOLOGY_COPY from '../../../backend/constants/surveyApologyEmailDe
  * the list stays a live worklist rather than a ledger that only ever grows.
  */
 
-// The settings keys behind each variant, and the strings an untouched field
-// falls back to. Same JSON the sender reads, so a blank box is not a guess.
+// The settings keys behind the email, and the strings an untouched field falls
+// back to. Same JSON the sender reads, so a blank box is not a guess.
+//
+// There used to be a second entry here, "Apology and working link", for the
+// people whose first invitation carried a dead link. That batch has been
+// re-sent and the copy is gone: a one-off apology sitting permanently beside
+// the live invitation is a mis-click away from telling fifty people about a
+// mistake they never saw.
 const TEMPLATES = {
   standard: {
     label: 'Normal invitation',
@@ -40,13 +44,11 @@ const TEMPLATES = {
     prefix: 'cbatSurveyEmail',
     defaults: SURVEY_COPY,
   },
-  apology: {
-    label: 'Apology and working link',
-    hint: 'The normal invitation with one line at the top saying the first link was broken. For the people marked Broken link.',
-    prefix: 'cbatSurveyApologyEmail',
-    defaults: SURVEY_APOLOGY_COPY,
-  },
 }
+
+// The only variant the sender still offers. Named rather than inlined so the
+// preview, the test send and the confirmation all say the same thing.
+const VARIANT = 'standard'
 
 const TEMPLATE_FIELDS = [
   { key: 'Subject',  label: 'Subject',     from: 'subject'  },
@@ -95,15 +97,8 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   // must not vanish from the send with them — this is what the confirmation
   // modal and the send body read for anyone who is not in the list above.
   const [picked, setPicked] = useState(() => new Map())
-  // Which of the two pieces of copy this send goes out with. Chosen per batch,
-  // never per campaign: the people whose first invitation carried a dead link
-  // need the apology, and everyone else must not be told about a mistake they
-  // never saw. Defaults to the apology while anyone is still owed one, because
-  // that is the batch the list will be pre-ticking.
-  const [variant, setVariant] = useState('standard')
-  // Which variant's wording is open for editing, or null. Separate from the
-  // selected variant: an admin may want to read the apology copy while still
-  // intending to send the normal one.
+  // Whether the email's wording is open for editing. There is one email, so
+  // this is the whole of the choice: read it, or send it.
   const [editing, setEditing] = useState(null)
   // The questionnaire's open/closed switch and the saved threshold defaults,
   // both of which used to live in a Content section of their own.
@@ -137,11 +132,6 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       // Pre-select the batch the server would pick. The admin can then add a
       // warm-band name or drop someone before sending.
       setSelected(new Set((json.data.nextBatchIds ?? []).map(String)))
-      // The picker always opens on the normal invitation. It used to preselect
-      // the apology whenever anyone was owed one, which quietly made the
-      // exceptional email the default and put the decision one un-read radio
-      // button away from going out to the wrong half of the list.
-      setVariant('standard')
       if (typeof json.data.surveyEnabled === 'boolean') setSurveyEnabled(json.data.surveyEnabled)
       // The ticks are being replaced wholesale, so the search picks they were
       // partly made of go with them rather than surviving as orphans.
@@ -268,7 +258,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   const openPreview = async () => {
     try {
       const first = selectedRows[0]
-      const qs = new URLSearchParams({ variant, ...(first ? { userId: first._id } : {}) })
+      const qs = new URLSearchParams({ variant: VARIANT, ...(first ? { userId: first._id } : {}) })
       const res = await apiFetch(`${API}/api/admin/cbat-passers/preview?${qs}`, { credentials: 'include' })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Preview failed')
@@ -284,7 +274,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       const res = await apiFetch(`${API}/api/admin/cbat-passers/send`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds: [...selected], minCompletions, dormantDays, variant }),
+        body: JSON.stringify({ userIds: [...selected], minCompletions, dormantDays, variant: VARIANT }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Send failed')
@@ -310,7 +300,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       const res = await apiFetch(`${API}/api/admin/cbat-passers/test`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ variant }),
+        body: JSON.stringify({ variant: VARIANT }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Test send failed')
@@ -468,7 +458,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
               <strong>{totals.needsResend}</strong>{' '}
               {totals.needsResend === 1 ? 'person was' : 'people were'} emailed a link that did not
               work. They are marked <em>Broken link</em> below, listed whatever the thresholds say,
-              and go to the front of the next batch. Send them the apology copy.
+              and go to the front of the next batch.
             </p>
           )}
 
@@ -566,56 +556,32 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             ))}
           </div>
 
-          {/* Which email this batch goes out with. Two radios rather than a
-              select, because the choice changes what fifty people read and is
-              worth being able to see both options without opening anything. */}
-          <fieldset className="mb-4 border border-slate-200 rounded-xl px-4 py-3">
-            <legend className="px-1 text-xs font-semibold text-slate-500">Which email to send</legend>
-            <div className="flex flex-col gap-2">
-              {(data?.variants ?? [
-                { key: 'standard', label: 'Normal invitation' },
-                { key: 'apology',  label: 'Apology and working link' },
-              ]).map(v => (
-                <div key={v.key} className="flex items-start gap-2">
-                  <label className="flex items-start gap-2 cursor-pointer min-w-0 flex-1">
-                    <input
-                      type="radio"
-                      name="cbat-survey-variant"
-                      value={v.key}
-                      checked={variant === v.key}
-                      onChange={() => setVariant(v.key)}
-                      data-testid={`cbat-passers-variant-${v.key}`}
-                      className="mt-0.5 shrink-0 w-4 h-4 accent-brand-600"
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-800">{v.label}</span>
-                      <span className="block text-[10px] text-slate-500">
-                        {TEMPLATES[v.key]?.hint}
-                      </span>
-                    </span>
-                  </label>
-                  {/* Editing the wording is a different act to choosing it, so it
-                      is a separate control rather than something that happens on
-                      selection. Opening the apology copy to read it must not
-                      arm the apology send. */}
-                  <button
-                    type="button"
-                    onClick={() => setEditing(v.key)}
-                    aria-label={`Edit the ${TEMPLATES[v.key]?.label ?? v.key} wording`}
-                    title="Edit this email"
-                    data-testid={`cbat-passers-edit-${v.key}`}
-                    className="shrink-0 px-2 py-1 rounded-lg border border-slate-200 text-slate-500 text-xs hover:bg-slate-50 transition-colors"
-                  >
-                    ✎
-                  </button>
-                </div>
-              ))}
+          {/* What these people are about to read. There is nothing to choose
+              any more, but the panel still names the email and keeps its
+              wording one click away: the send is not reversible, and "to whom"
+              is only half of what an admin needs to know before pressing it. */}
+          <div className="mb-4 border border-slate-200 rounded-xl px-4 py-3">
+            <p className="text-xs font-semibold text-slate-500 mb-2">The email they get</p>
+            <div className="flex items-start gap-2">
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-slate-800">{TEMPLATES[VARIANT].label}</span>
+                <span className="block text-[10px] text-slate-500">{TEMPLATES[VARIANT].hint}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setEditing(VARIANT)}
+                aria-label={`Edit the ${TEMPLATES[VARIANT].label} wording`}
+                title="Edit this email"
+                data-testid="cbat-passers-edit-standard"
+                className="shrink-0 px-2 py-1 rounded-lg border border-slate-200 text-slate-500 text-xs hover:bg-slate-50 transition-colors"
+              >
+                ✎
+              </button>
             </div>
             <p className="text-[10px] text-slate-400 mt-2">
-              Preview and &ldquo;Email me a test&rdquo; both use whichever is selected. Edit the wording
-              of either one in Admin &rsaquo; Content.
+              Preview and &ldquo;Email me a test&rdquo; both use this wording.
             </p>
-          </fieldset>
+          </div>
 
           {/* Actions */}
           <div className="flex flex-wrap gap-2">
@@ -699,8 +665,8 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
         {confirm && (
           <ConfirmSendModal
             rows={selectedRows}
-            variantLabel={(data?.variants ?? []).find(v => v.key === variant)?.label
-              ?? (variant === 'apology' ? 'Apology and working link' : 'Normal invitation')}
+            variantLabel={(data?.variants ?? []).find(v => v.key === VARIANT)?.label
+              ?? TEMPLATES[VARIANT].label}
             sending={sending}
             onConfirm={send}
             onCancel={() => setConfirm(false)}
@@ -936,9 +902,9 @@ function ConfirmSendModal({ rows, variantLabel, onConfirm, onCancel, sending }) 
             Each gets their own private link. This cannot be undone, and nobody here can be
             emailed for this questionnaire again.
           </p>
-          {/* Which of the two emails is about to go out. The list of names below
-              answers "to whom"; without this the modal never answers "saying
-              what", which is the half that was wrong last time. */}
+          {/* Which email is about to go out. The list of names below answers
+              "to whom"; without this the modal never answers "saying what",
+              which is the half that was wrong last time. */}
           {variantLabel && (
             <p className="text-xs font-semibold text-slate-700 mt-2" data-testid="cbat-passers-confirm-variant">
               Sending: {variantLabel}
@@ -994,13 +960,12 @@ function ConfirmSendModal({ rows, variantLabel, onConfirm, onCancel, sending }) 
   )
 }
 
-// The wording of one of the two emails, edited where it is chosen.
+// The wording of the email, edited where it is sent.
 //
 // This used to be a dozen fields in a "CBAT Questionnaire Email" section
 // further up Content, a long way from the list of people about to receive
-// them. Two variants made that arrangement worse rather than better: twelve
-// near-identical boxes under one heading, with nothing on screen saying which
-// half went to whom.
+// them, and for a while it held two near-identical sets of six with nothing on
+// screen saying which half went to whom.
 //
 // Values are fetched fresh on open rather than passed down, because the panel
 // never needed them before and holding a copy of every setting just to edit six

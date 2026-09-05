@@ -37,31 +37,25 @@ const REPLY_TO = process.env.RESEND_REPLY_TO || null;
 // Fallback copy, shared with the admin editor via constants/surveyEmailDefaults.json
 // so the placeholders shown in the form are the strings that actually send. An
 // empty setting means "use the default" — same convention as the welcome email.
-const SURVEY_DEFAULTS         = require('../constants/surveyEmailDefaults.json');
-const SURVEY_APOLOGY_DEFAULTS = require('../constants/surveyApologyEmailDefaults.json');
+const SURVEY_DEFAULTS = require('../constants/surveyEmailDefaults.json');
 
-// Two pieces of copy, chosen per send rather than per campaign.
+// The copy a send goes out with, keyed by variant.
 //
-// 'standard' is the invitation. 'apology' is for the people whose first
-// invitation carried a link they could not open: it says so, apologises, and
-// asks again. Both are needed at once — the people who were mailed a dead link
-// need telling, and the people who have heard nothing from us must not be told
-// we broke something they never saw. One editable body could not do both, and
-// swapping the copy back and forth between batches is exactly the kind of
-// manual step that produced the broken send in the first place.
+// There is one. An 'apology' variant lived here too, for the people whose first
+// invitation carried a link they could not open (see scripts/
+// flagBrokenSurveyLinks.js); it was written for that single September 2026
+// batch, everyone owed one has since been re-sent, and it was removed rather
+// than left lying next to the live invitation where a mis-click could send it
+// to people who never saw the mistake.
 //
-// The token is unchanged either way, so somebody who kept the first email and
-// tries that link later still lands on their own questionnaire.
+// Kept as a map because `resolveVariant` below is what makes an unknown or
+// stale variant fall back to the invitation instead of erroring — including
+// 'apology' itself, which an old bookmarked preview URL may still ask for.
 const EMAIL_VARIANTS = {
   standard: {
     label:    'Normal invitation',
     defaults: SURVEY_DEFAULTS,
     prefix:   'cbatSurveyEmail',
-  },
-  apology: {
-    label:    'Apology and working link',
-    defaults: SURVEY_APOLOGY_DEFAULTS,
-    prefix:   'cbatSurveyApologyEmail',
   },
 };
 
@@ -274,7 +268,6 @@ async function sendSequentially(messages) {
 
 module.exports = {
   SURVEY_DEFAULTS,
-  SURVEY_APOLOGY_DEFAULTS,
   EMAIL_VARIANTS,
   DEFAULT_VARIANT,
   resolveVariant,

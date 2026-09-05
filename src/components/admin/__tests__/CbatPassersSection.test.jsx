@@ -400,55 +400,54 @@ describe('CbatPassersSection — people owed a working link', () => {
       .toHaveTextContent(/emailed a link that did not work/i)
   })
 
-  // It used to preselect the apology whenever anyone was owed one. That made
-  // the exceptional email the default and left the decision one un-read radio
-  // button away from reaching the wrong half of the list.
-  it('still starts on the normal invitation, even with people owed a resend', async () => {
+  // They are still first in the queue and still marked, but what they get is
+  // the ordinary invitation: the apology copy was a one-off for the September
+  // 2026 send and no longer exists.
+  it('offers no apology email to send them', async () => {
     mockApi(owed())
     await open()
 
-    expect(screen.getByTestId('cbat-passers-variant-standard')).toBeChecked()
-    expect(screen.getByTestId('cbat-passers-variant-apology')).not.toBeChecked()
-  })
-
-  it('starts on the normal invitation when nobody is owed anything', async () => {
-    await open()
-    expect(screen.getByTestId('cbat-passers-variant-standard')).toBeChecked()
+    expect(screen.queryByTestId('cbat-passers-variant-apology')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Apology and working link/i)).not.toBeInTheDocument()
   })
 })
 
-describe('CbatPassersSection — choosing which email goes out', () => {
-  it('sends the variant that is selected', async () => {
+describe('CbatPassersSection — the email that goes out', () => {
+  it('names it, with nothing to choose between', async () => {
     await open()
 
-    fireEvent.click(screen.getByTestId('cbat-passers-variant-apology'))
+    expect(screen.getByText('Normal invitation')).toBeInTheDocument()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+  })
+
+  it('sends the invitation', async () => {
+    await open()
+
     fireEvent.click(screen.getByText(/Send bulk email/))
     fireEvent.click(await screen.findByText('Send now'))
 
     await waitFor(() => expect(sendBody).toBeTruthy())
-    expect(sendBody.variant).toBe('apology')
+    expect(sendBody.variant).toBe('standard')
   })
 
-  it('names the chosen email on the confirmation, not just the recipients', async () => {
+  it('names it on the confirmation, not just the recipients', async () => {
     await open()
 
-    fireEvent.click(screen.getByTestId('cbat-passers-variant-apology'))
     fireEvent.click(screen.getByText(/Send bulk email/))
 
     expect(await screen.findByTestId('cbat-passers-confirm-variant'))
-      .toHaveTextContent(/Apology and working link/i)
+      .toHaveTextContent(/Normal invitation/i)
   })
 
-  it('previews the variant that is selected', async () => {
+  it('previews it', async () => {
     await open()
 
-    fireEvent.click(screen.getByTestId('cbat-passers-variant-apology'))
     fireEvent.click(screen.getByText('Preview email'))
 
     await waitFor(() => {
       const previewCall = global.fetch.mock.calls
         .map(c => String(c[0])).find(u => u.includes('/preview'))
-      expect(previewCall).toMatch(/variant=apology/)
+      expect(previewCall).toMatch(/variant=standard/)
     })
   })
 })
@@ -457,18 +456,16 @@ describe('CbatPassersSection — choosing which email goes out', () => {
 //
 // The copy, the thresholds and the open/closed switch used to be a section of
 // their own further up the page, a long way from the list of people they get
-// sent to. Two variants made that worse: twelve near-identical boxes under one
-// heading with nothing saying which half went to whom.
+// sent to. For a while it also held two near-identical sets of six boxes with
+// nothing saying which half went to whom.
 describe('CbatPassersSection — editing the wording in place', () => {
-  it('opens the chosen template behind its pencil, without selecting it', async () => {
+  it('opens the email behind its pencil', async () => {
     await open()
 
-    fireEvent.click(screen.getByTestId('cbat-passers-edit-apology'))
+    fireEvent.click(screen.getByTestId('cbat-passers-edit-standard'))
 
     const editor = await screen.findByTestId('cbat-passers-template-editor')
-    expect(within(editor).getByText('Apology and working link')).toBeInTheDocument()
-    // Reading the apology copy must not arm the apology send.
-    expect(screen.getByTestId('cbat-passers-variant-standard')).toBeChecked()
+    expect(within(editor).getByText('Normal invitation')).toBeInTheDocument()
   })
 
   it('loads what is currently saved rather than the built-in default', async () => {
@@ -483,15 +480,15 @@ describe('CbatPassersSection — editing the wording in place', () => {
   it('saves the six fields under the right keys, with a reason', async () => {
     await open()
 
-    fireEvent.click(screen.getByTestId('cbat-passers-edit-apology'))
+    fireEvent.click(screen.getByTestId('cbat-passers-edit-standard'))
     await screen.findByTestId('cbat-passers-template-editor')
     fireEvent.click(await screen.findByTestId('cbat-passers-template-save'))
 
     await waitFor(() => expect(settingsPatch).toBeTruthy())
     expect(Object.keys(settingsPatch)).toEqual(expect.arrayContaining([
-      'cbatSurveyApologyEmailSubject', 'cbatSurveyApologyEmailHeading',
-      'cbatSurveyApologyEmailSubtitle', 'cbatSurveyApologyEmailBody',
-      'cbatSurveyApologyEmailCta', 'cbatSurveyApologyEmailFooter',
+      'cbatSurveyEmailSubject', 'cbatSurveyEmailHeading',
+      'cbatSurveyEmailSubtitle', 'cbatSurveyEmailBody',
+      'cbatSurveyEmailCta', 'cbatSurveyEmailFooter',
     ]))
     expect(settingsPatch.reason).toBeTruthy()
   })
