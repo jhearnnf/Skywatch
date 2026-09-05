@@ -409,8 +409,12 @@ function ReportSkeleton() {
             <span className={`${CARD_OPEN} text-slate-500`} aria-hidden="true">Open &rarr;</span>
           </div>
 
+          {/* Names the work, not the result. This used to promise "what to play next", which the
+              card then failed to deliver most of the time: four different figures can land here
+              and only one of them is a recommendation. Reading the recent runs is the one thing
+              that is true of every load, so it is the only thing safe to say before one arrives. */}
           <p data-testid="aptitude-card-action" className={`${CARD_ACTION} text-brand-700`}>
-            Working out what to play next{dots}
+            Checking your recent runs{dots}
           </p>
 
           {/* An indeterminate pass across an empty rail. It never rests at a width,

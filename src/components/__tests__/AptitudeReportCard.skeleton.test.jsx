@@ -98,7 +98,10 @@ describe('AptitudeReportCard — loading skeleton', () => {
     // And no unit either. The card that lands is far more often counting runs toward a first
     // score than reporting a pass mark, so a placeholder naming a pass mark would lie twice.
     expect(container.textContent).not.toContain('pass mark')
-    expect(container.textContent).toContain('Working out what to play next')
+    // And it may not promise a recommendation either: only one of the four figures that can land
+    // here is one, so the placeholder names the work rather than the result.
+    expect(container.textContent).toContain('Checking your recent runs')
+    expect(container.textContent).not.toContain('what to play next')
   })
 
   // Nothing in the held space may rest at, or animate towards, a width that
