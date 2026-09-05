@@ -356,6 +356,141 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
+/* Stick-flown CBAT games (ACT, RTT, SMA): widen the shell on desktop so the
+   joystick panel has a rail beside the instructions card instead of sitting
+   inside it. In the card it was tall enough to push Start below the fold on a
+   1080p window while the page had empty space either side. Toggled from each
+   page while the instructions are up. See components/cbat/CbatStickLayout.jsx. */
+@media (min-width: 1024px) {
+  body.cbat-stick-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* ── The joystick panel is an arcade cabinet ────────────────────────────────
+   Everything else in CBAT is a flight-test instrument and stays sober. This one
+   panel is allowed to be a machine you walked up to and put a coin in, because
+   that is what plugging a stick into a browser feels like when it works.
+
+   Kept on the RAF palette — electric blue and amber, never neon pink — so it
+   reads as an arcade cabinet in this app's world rather than a sticker from a
+   different one. */
+.cbat-arcade-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(91, 170, 255, 0.09), transparent 60%),
+    #050b14;
+  box-shadow:
+    inset 0 0 0 1px rgba(91, 170, 255, 0.14),
+    0 0 22px rgba(91, 170, 255, 0.08);
+}
+
+/* CRT scanlines. Faint on purpose: legible first, atmospheric second. */
+.cbat-arcade-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(91, 170, 255, 0.05) 0px,
+    rgba(91, 170, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Everything the panel draws sits above the scanlines. */
+.cbat-arcade-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* A cabinet button: flat top, hard lip underneath, and it depresses when you
+   press it rather than fading like a web button. */
+.cbat-arcade-btn {
+  border-bottom-width: 3px;
+  transition: transform 90ms ease, filter 90ms ease;
+}
+.cbat-arcade-btn:active {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+}
+
+/* One segment of an LED axis meter. */
+.cbat-led {
+  transition: background-color 90ms linear, box-shadow 90ms linear;
+}
+.cbat-led-on {
+  background-color: #5baaff;
+  box-shadow: 0 0 5px rgba(91, 170, 255, 0.85);
+}
+.cbat-led-centre {
+  background-color: #f59e0b;
+  box-shadow: 0 0 5px rgba(245, 158, 11, 0.85);
+}
+
+/* "JOYSTICK DETECTED!" — the one moment in the CBAT UI that gets to be an
+   arcade cabinet. A stick is rare enough on this site that finding one deserves
+   to be announced, and a slow pulse reads as a machine waiting for you rather
+   than as a warning. Deliberately unhurried: a fast blink would be an alarm. */
+@keyframes cbat-stick-detected {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 6px rgba(91, 170, 255, 0.95), 0 0 18px rgba(91, 170, 255, 0.5);
+  }
+  50% {
+    opacity: 0.55;
+    text-shadow: 0 0 3px rgba(91, 170, 255, 0.45), 0 0 9px rgba(91, 170, 255, 0.15);
+  }
+}
+.cbat-stick-detected {
+  animation: cbat-stick-detected 1.8s ease-in-out infinite;
+}
+
+/* Attract mode — the cabinet trying to get your attention across the arcade.
+   A hard STEPPED blink, not a fade: arcade attract text snaps on and off, and
+   that snap is most of why it catches the eye from the other side of the room.
+   Amber rather than the panel's blue so it reads as "come here" against a
+   cabinet that has gone quiet.
+
+   The blink is on the headline only. The hint underneath it stays still and
+   legible, because the thing a player has to READ must not be flashing. */
+@keyframes cbat-stick-attract {
+  0%, 49.9% {
+    opacity: 1;
+    color: #f5a524;
+    text-shadow: 0 0 8px rgba(245, 165, 36, 0.95), 0 0 24px rgba(245, 165, 36, 0.5);
+  }
+  50%, 100% {
+    opacity: 0.16;
+    color: #f5a524;
+    text-shadow: none;
+  }
+}
+.cbat-stick-attract {
+  animation: cbat-stick-attract 1.05s steps(1, end) infinite;
+}
+
+/* The cabinet itself breathing while it waits. Slower than the headline so the
+   two are clearly one machine rather than two things flashing at each other. */
+@keyframes cbat-arcade-idle {
+  0%, 100% {
+    border-color: #1a3a5c;
+    box-shadow: inset 0 0 0 1px rgba(91, 170, 255, 0.14), 0 0 18px rgba(245, 165, 36, 0.05);
+  }
+  50% {
+    border-color: #4a3a1e;
+    box-shadow: inset 0 0 0 1px rgba(245, 165, 36, 0.2), 0 0 26px rgba(245, 165, 36, 0.16);
+  }
+}
+.cbat-arcade-idle {
+  animation: cbat-arcade-idle 2.1s ease-in-out infinite;
+}
+
 /* Chat: the two-pane layout (conversation rail + open thread) needs the whole
    width — inside max-w-3xl the rail would eat half of a 768px column and leave
    the messages in a gutter. Applies from the md breakpoint, not lg, because

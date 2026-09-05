@@ -33,12 +33,47 @@ afterEach(() => {
 describe('StickSetup', () => {
   it('says nothing is detected, and why that might be a lie', async () => {
     navigator.getGamepads = vi.fn(() => [])
-    render(<StickSetup />)
+    const { container } = render(<StickSetup />)
     await frames()
-    expect(screen.getByText('NOT DETECTED')).toBeInTheDocument()
+    // Said once, loudly, rather than as an abbreviation in the corner.
+    expect(screen.getByText(/no joystick detected/i)).toBeInTheDocument()
     // Browsers hide a gamepad until it is used, so "not detected" is very
     // often "not pressed yet" — the copy has to say so.
     expect(screen.getByText(/press a button on the stick/i)).toBeInTheDocument()
+    // The cabinet goes into attract mode: dimmed back, and breathing so it
+    // catches the eye from across the page.
+    expect(container.firstChild.dataset.stickConnected).toBe('no')
+    expect(container.firstChild.className).toContain('cbat-arcade-idle')
+    expect(container.firstChild.className).not.toContain('opacity-100')
+  })
+
+  // A stick is rare enough on this site that finding one gets an arcade banner
+  // rather than a status chip nobody reads. It is the loudest thing on the
+  // panel on purpose, and it must not be there when there is nothing to
+  // announce.
+  // Matched on the data attributes, not the words: both states say "joystick
+  // detected" and only one of them is the good news.
+  it('announces a detected stick, and shows attract mode when there is none', async () => {
+    navigator.getGamepads = vi.fn(() => [])
+    const { container, rerender } = render(<StickSetup />)
+    await frames()
+    expect(container.querySelector('[data-stick-detected]')).toBeNull()
+    const attract = container.querySelector('[data-stick-missing]')
+    expect(attract).toBeInTheDocument()
+    expect(attract.className).toContain('cbat-stick-attract')
+
+    mock = installMockStick()
+    rerender(<StickSetup />)
+    await frames()
+    const banner = container.querySelector('[data-stick-detected]')
+    expect(banner).toBeInTheDocument()
+    expect(banner.textContent).toMatch(/joystick detected!/i)
+    // Slow pulse, driven by the keyframes in main.css.
+    expect(banner.className).toContain('cbat-stick-detected')
+    expect(container.querySelector('[data-stick-missing]')).toBeNull()
+    // And the cabinet comes up to full brightness.
+    expect(container.firstChild.dataset.stickConnected).toBe('yes')
+    expect(container.firstChild.className).toContain('opacity-100')
   })
 
   it('shows a detected stick as flying on a guessed mapping', async () => {

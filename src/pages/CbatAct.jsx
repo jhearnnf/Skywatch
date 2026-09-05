@@ -44,6 +44,8 @@ import {
 } from '../utils/cbat/actStickInput'
 import { useMockStick } from '../utils/cbat/useMockStick'
 import StickSetup from '../components/cbat/StickSetup'
+import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import { useStickPresence } from '../utils/cbat/useStickPresence'
 import ActCraftPicker from '../components/cbat/ActCraftPicker'
 import ActPlayerCraft from '../components/cbat/ActPlayerCraft'
 import { getAircraftRoster } from '../lib/offlineRoster'
@@ -1486,6 +1488,9 @@ export default function CbatAct() {
   // well as 'playing' — the arena is mounted behind that overlay, so widening
   // only on 'playing' would resize it under the player as the round starts.
   useGameBodyClass('cbat-act-wide', phase === 'callsign' || phase === 'playing')
+  // Room for the joystick rail beside the instructions card. Only while the
+  // card is up — the game itself has its own width rule above.
+  useGameBodyClass('cbat-stick-wide', phase === 'intro')
 
   // Fetch the aircraft roster for the craft picker.
   useEffect(() => {
@@ -1797,11 +1802,37 @@ export default function CbatAct() {
 // ── Intro screen ─────────────────────────────────────────────────────────────
 function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, onCraftChange, craftLoading }) {
   const [stickRate, setStickRate] = useState(readStoredActStickRate)
+  // The steer rate only means anything with a stick attached — on a mouse the
+  // drag distance is the rate — so it appears when there is one to steer with.
+  const stickConnected = useStickPresence() || mockStick
   const changeStickRate = (value) => {
     setStickRate(value)
     storeActStickRate(value)
   }
   return (
+    <CbatStickLayout
+      stick={
+        <StickSetup title="Joystick" mockActive={mockStick}>
+          {stickConnected && (<>
+          <label htmlFor="act-stick-rate" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
+            <span>Steer rate</span>
+            <span className="font-mono text-brand-600">{stickRate}</span>
+          </label>
+          <input
+            id="act-stick-rate"
+            type="range"
+            min={MIN_ACT_STICK_RATE}
+            max={MAX_ACT_STICK_RATE}
+            step="10"
+            value={stickRate}
+            onChange={(e) => changeStickRate(Number(e.target.value))}
+            className="w-full accent-brand-600 cursor-pointer"
+          />
+          <p className="mt-1 text-[10px] text-[#8a9bb5]">How fast the ball turns with the stick hard over.</p>
+          </>)}
+        </StickSetup>
+      }
+    >
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -1854,27 +1885,6 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
         loading={craftLoading}
       />
 
-      {/* Joystick. The steer rate lives inside the panel rather than beside it
-          because it only means anything with a stick attached — on a mouse the
-          drag distance is the rate. */}
-      <StickSetup title="Joystick" mockActive={mockStick}>
-        <label htmlFor="act-stick-rate" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
-          <span>Steer rate</span>
-          <span className="font-mono text-brand-600">{stickRate}</span>
-        </label>
-        <input
-          id="act-stick-rate"
-          type="range"
-          min={MIN_ACT_STICK_RATE}
-          max={MAX_ACT_STICK_RATE}
-          step="10"
-          value={stickRate}
-          onChange={(e) => changeStickRate(Number(e.target.value))}
-          className="w-full accent-brand-600 cursor-pointer"
-        />
-        <p className="mt-1 text-[10px] text-[#8a9bb5]">How fast the ball turns with the stick hard over.</p>
-      </StickSetup>
-
       {personalBest && (
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
@@ -1898,6 +1908,7 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
       </button>
       <p className="text-[10px] text-slate-500 mt-3">Tap to enable audio.</p>
     </motion.div>
+    </CbatStickLayout>
   )
 }
 
