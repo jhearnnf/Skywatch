@@ -65,6 +65,23 @@ describe('CbatStickLayout', () => {
     expect(spacer.className).toContain('hidden')
   })
 
+  // ACT puts its headphones notice here. The track is reserved either way, so a
+  // game growing a right-hand panel never shifts the card sideways.
+  it('fills the third column when a game has something for it', () => {
+    const { container } = render(
+      <CbatStickLayout stick={<p>stick panel</p>} aside={<p>headphones</p>}>
+        <p>card</p>
+      </CbatStickLayout>,
+    )
+    const third = container.firstChild.children[2]
+    expect(third.textContent).toBe('headphones')
+    // No longer decorative, so it is not hidden from assistive tech.
+    expect(third.getAttribute('aria-hidden')).toBeNull()
+    // Still the same reveal breakpoint, or the card drifts between sizes.
+    expect(third.className).toContain('hidden')
+    expect(third.className).toContain('lg:block')
+  })
+
   it('names the rail for anyone navigating by landmark', () => {
     render(<CbatStickLayout stick={<p>stick panel</p>}><p>card</p></CbatStickLayout>)
     expect(screen.getByLabelText('Joystick setup')).toBeInTheDocument()

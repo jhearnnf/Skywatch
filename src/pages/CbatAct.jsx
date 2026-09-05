@@ -45,6 +45,7 @@ import {
 import { useMockStick } from '../utils/cbat/useMockStick'
 import StickSetup from '../components/cbat/StickSetup'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import CbatArcadeNotice from '../components/cbat/CbatArcadeNotice'
 import { useStickPresence } from '../utils/cbat/useStickPresence'
 import ActCraftPicker from '../components/cbat/ActCraftPicker'
 import ActPlayerCraft from '../components/cbat/ActPlayerCraft'
@@ -1805,12 +1806,25 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
   // The steer rate only means anything with a stick attached — on a mouse the
   // drag distance is the rate — so it appears when there is one to steer with.
   const stickConnected = useStickPresence() || mockStick
+
+  // ACT is the one CBAT game that is unplayable without audio, and the tinted
+  // note this replaces sat between two other boxes and got skipped straight
+  // past. It is a blinking cabinet now, in the right-hand column on a wide
+  // screen and inside the card on a narrow one — the warning has to reach a
+  // phone player too, and that is where the side columns do not exist.
+  const headphonesNotice = (
+    <CbatArcadeNotice title="Audio" headline="Headphones" icon={'\u{1F3A7}'}>
+      This game relies heavily on audio cues — you&apos;ll struggle to pick out your callsign or
+      the BLEEP without them.
+    </CbatArcadeNotice>
+  )
   const changeStickRate = (value) => {
     setStickRate(value)
     storeActStickRate(value)
   }
   return (
     <CbatStickLayout
+      aside={headphonesNotice}
       stick={
         <StickSetup title="Joystick" mockActive={mockStick}>
           {stickConnected && (<>
@@ -1851,13 +1865,8 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
         hold on to it. You'll be asked for it when the round ends.
       </p>
 
-      <div className="bg-amber-500/10 border border-amber-500/40 rounded-lg p-3 mb-5 flex items-start gap-2 text-left">
-        <span className="text-lg shrink-0 leading-none mt-0.5">🎧</span>
-        <p className="text-xs text-amber-800">
-          <span className="font-bold text-amber-900">Headphones strongly recommended.</span>
-          {' '}This game relies heavily on audio cues — you'll struggle to pick out your callsign or the BLEEP without them.
-        </p>
-      </div>
+      {/* Only below lg. Above it this same notice is the right-hand column. */}
+      <div className="w-full mb-5 lg:hidden">{headphonesNotice}</div>
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
