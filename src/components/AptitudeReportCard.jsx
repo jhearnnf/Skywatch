@@ -324,7 +324,18 @@ function ScoredCard({ target, label }) {
                 {target.score ?? '-'}
                 <span className={`${CARD_UNIT} text-slate-600`}> / pass mark {target.cutoff}</span>
               </p>
-              <p className={`hidden sm:block text-[11px] font-bold ${TONE_TEXT[verdict.tone]}`}>{verdict.label}</p>
+              {/* Geometrically the skeleton's action line, and it has to be: it sits in the same
+                  slot and it is the last thing between the score and the rail. It carried its own
+                  `text-[11px] font-bold` for a while, which looks identical and is not — CARD_ACTION
+                  sets `leading-[1.2]` where a bare class inherits 1.5, so the scored card came in
+                  three pixels taller than the box held for it. Three pixels over the layout
+                  animation's 300ms is below the rate the eye reads as motion, so it landed as a
+                  twitch rather than a glide. Take the geometry from the constant and it cannot
+                  drift again. */}
+              <p
+                data-testid="aptitude-card-verdict"
+                className={`hidden sm:block ${CARD_ACTION} ${TONE_TEXT[verdict.tone]}`}
+              >{verdict.label}</p>
             </div>
             <span className={`${CARD_OPEN} text-brand-700`}>Open &rarr;</span>
           </div>

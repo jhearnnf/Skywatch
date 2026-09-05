@@ -194,6 +194,31 @@ describe('AptitudeReportCard — loading skeleton', () => {
     }
   })
 
+  // The one box the two shapes do NOT share a testid for, and the one that drifted.
+  // The scored card's verdict sits where the skeleton's action line sits and is the
+  // last thing above the rail, so its line box has to be the same to the pixel. It
+  // is gated `hidden sm:block` — that is the phone trick, not geometry — so the gate
+  // and the colour come off before the comparison and everything else must match.
+  //
+  // Worth a test of its own because the failure is invisible by eye at rest: three
+  // pixels only shows up as a twitch at the moment the skeleton comes down, which is
+  // the one moment nobody is looking at this card on purpose.
+  it('gives the scored verdict line the skeleton action line box', async () => {
+    const d = deferred()
+    const loading = renderWith(vi.fn().mockReturnValue(d.promise))
+    const skeletonAction = loading.container
+      .querySelector('[data-testid="aptitude-card-action"]').className
+    loading.unmount()
+
+    const scored = renderWith(vi.fn().mockResolvedValue(summary()))
+    await waitFor(() => expect(skeleton()).toBeNull())
+    const verdictLine = scored.container
+      .querySelector('[data-testid="aptitude-card-verdict"]').className
+
+    const ungate = c => c.replace(/(?:^|\s)(?:hidden|sm:block)(?=\s|$)/g, '').replace(/\s+/g, ' ').trim()
+    expect(geometry(ungate(verdictLine))).toBe(geometry(skeletonAction))
+  })
+
   // One wrapper owns the outer spacing for every state, which is what lets the
   // size change between them animate instead of snapping. Both shapes therefore
   // sit inside the same box rather than each carrying their own margin.
