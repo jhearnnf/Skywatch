@@ -181,7 +181,7 @@ function ResultsScreen({ answers, totalTime }) {
   const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
 
   const grade = pct >= 90 ? { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '🧭', color: 'text-brand-300' }
+    : pct >= 70 ? { label: 'Good', emoji: '🧭', color: 'text-brand-600' }
     : pct >= 50 ? { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
     : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
 
@@ -195,12 +195,12 @@ function ResultsScreen({ answers, totalTime }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}/{TOTAL_QUESTIONS}</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{TOTAL_QUESTIONS}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -417,20 +417,20 @@ export default function CbatDAD() {
               <p className="text-4xl mb-3">🧭</p>
               <p className="text-xl font-extrabold text-white mb-2">Directions &amp; Distances</p>
               <p className="text-sm text-slate-400 mb-5">
-                Read each journey carefully. An object — a ship, aircraft or drone — sets off, and only its first leg gives a compass heading; every turn after that is relative to the way <span className="text-brand-300">it</span> is facing. Track its route and work out which direction it ends up from the start point.
+                Read each journey carefully. An object — a ship, aircraft or drone — sets off, and only its first leg gives a compass heading; every turn after that is relative to the way <span className="text-brand-600">it</span> is facing. Track its route and work out which direction it ends up from the start point.
               </p>
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]">
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">1.</span>
+                  <span className="text-brand-600 font-bold shrink-0">1.</span>
                   <span>Read the route — text only, no map while you solve.</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">2.</span>
+                  <span className="text-brand-600 font-bold shrink-0">2.</span>
                   <span>Pick the compass direction the object ended up, relative to the start.</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">3.</span>
+                  <span className="text-brand-600 font-bold shrink-0">3.</span>
                   <span>The route is then drawn so you can check your answer.</span>
                 </div>
                 <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
@@ -446,7 +446,7 @@ export default function CbatDAD() {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_QUESTIONS}
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -456,7 +456,7 @@ export default function CbatDAD() {
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/dad/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/dad/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -477,13 +477,13 @@ export default function CbatDAD() {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Q <span className="text-brand-300">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
+                  Q <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
                 </span>
                 <span className="text-slate-400">
                   ✓ <span className="text-green-400">{correctSoFar}</span>
                 </span>
                 <span className="text-slate-400">
-                  ⏱ <span className={qRemainingMs < 10000 ? 'text-red-400' : 'text-brand-300'}>{remainingSec}s</span>
+                  ⏱ <span className={qRemainingMs < 10000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span>
                 </span>
               </div>
 
@@ -506,7 +506,7 @@ export default function CbatDAD() {
               >
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">The Route</p>
                 <p className="text-sm sm:text-lg text-[#ddeaf8] leading-relaxed">{currentQuestion.prose}</p>
-                <p className="text-sm font-bold text-brand-300 mt-3 sm:mt-4">
+                <p className="text-sm font-bold text-brand-600 mt-3 sm:mt-4">
                   Which direction is {objectPhrase(currentQuestion.subject)} from the start point?
                 </p>
               </motion.div>

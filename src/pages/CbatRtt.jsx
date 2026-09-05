@@ -116,7 +116,7 @@ function ResultsScreen({ stats, tuning }) {
   const pct = Math.round((stats.totalScore / maxRttScore(tuning)) * 100)
   const grade = computeGrade(stats.totalScore, tuning)
   const gradeColor = grade === 'Outstanding' ? 'text-green-400'
-    : grade === 'Good' ? 'text-brand-300'
+    : grade === 'Good' ? 'text-brand-600'
       : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
   const accuracy = stats.framesTaken
     ? Math.round((stats.framesOnTarget / stats.framesTaken) * 100)
@@ -137,7 +137,7 @@ function ResultsScreen({ stats, tuning }) {
         ].map(([label, value]) => (
           <div key={label} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-            <p className="font-mono font-bold text-brand-300">{value}</p>
+            <p className="font-mono font-bold text-brand-600">{value}</p>
           </div>
         ))}
       </div>
@@ -393,7 +393,7 @@ export default function CbatRtt() {
                     />
                   ))}
                 </div>
-                <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+                <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
                 <p className={`text-sm text-slate-400 mb-5${dim}`}>
                   You are looking through a sensor camera slung under an aircraft. Slew it onto each target and
@@ -402,12 +402,12 @@ export default function CbatRtt() {
                 </p>
 
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Slew</span><span>the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Shoot</span><span>click, or press Space, with the target inside the reticle — dead centre is worth double</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Targets</span><span>{tuning.targets} passes: {tuning.kinds.map(k => RTT_KINDS[k].label.toLowerCase()).join(', ')}</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Cover</span><span>targets pass behind cloud and terrain — predict where they come out and pick the track back up</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Drift</span><span>the aircraft never sits still — the picture wanders on its own and you have to keep trimming it back</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Cue</span><span>an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Slew</span><span>the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Shoot</span><span>click, or press Space, with the target inside the reticle — dead centre is worth double</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Targets</span><span>{tuning.targets} passes: {tuning.kinds.map(k => RTT_KINDS[k].label.toLowerCase()).join(', ')}</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Cover</span><span>targets pass behind cloud and terrain — predict where they come out and pick the track back up</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Drift</span><span>the aircraft never sits still — the picture wanders on its own and you have to keep trimming it back</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Cue</span><span>an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
                   <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1"><span className="shrink-0">⏱</span><span>the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
                 </div>
 
@@ -418,7 +418,7 @@ export default function CbatRtt() {
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
                   <label htmlFor="rtt-sensitivity" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
                     <span>Slew sensitivity</span>
-                    <span className="font-mono text-brand-300">{sensitivity.toFixed(2)}×</span>
+                    <span className="font-mono text-brand-600">{sensitivity.toFixed(2)}×</span>
                   </label>
                   <input
                     id="rtt-sensitivity"
@@ -442,13 +442,13 @@ export default function CbatRtt() {
                 {personalBest && (
                   <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-                    <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
+                    <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
                     <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                   </div>
                 )}
 
                 <div className={`text-center mb-4${dim}`}>
-                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">View Leaderboard →</Link>
+                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
                 </div>
 
                 <button
@@ -497,7 +497,7 @@ export default function CbatRtt() {
                   <div className="absolute top-0 left-0 right-0 flex items-start justify-between gap-3 p-3">
                     <div>
                       <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500 leading-none mb-0.5">Sensor</p>
-                      <p ref={el => (hudRef.current.label = el)} className="font-mono text-sm font-extrabold text-brand-300 leading-none">STAND BY</p>
+                      <p ref={el => (hudRef.current.label = el)} className="font-mono text-sm font-extrabold text-brand-600 leading-none">STAND BY</p>
                       <p ref={el => (hudRef.current.count = el)} className="font-mono text-[10px] text-slate-500 leading-none mt-1">– of {sim.run.targets.length}</p>
                       {/* How much of the current pass is left. Without it, a
                           target running out of time is something that happens

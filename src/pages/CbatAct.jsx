@@ -1341,7 +1341,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
     >
       <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Round {roundIdx + 1} of {TOTAL_ROUNDS} — debrief</p>
       <p className="text-xl font-extrabold text-white mb-4">
-        Callsign was <span className="text-brand-300 uppercase tracking-wider">{stats.callsign.join(' ')}</span>
+        Callsign was <span className="text-brand-600 uppercase tracking-wider">{stats.callsign.join(' ')}</span>
       </p>
 
       <div className="grid grid-cols-2 gap-2 mb-4 text-left">
@@ -1372,7 +1372,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Round score</p>
-        <p className="text-3xl font-mono font-extrabold text-brand-300">{Math.round(stats.score)}</p>
+        <p className="text-3xl font-mono font-extrabold text-brand-600">{Math.round(stats.score)}</p>
       </div>
 
       <button
@@ -1386,7 +1386,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
 }
 
 function Stat({ label, value, good, bad }) {
-  const tone = good ? 'text-green-400' : bad ? 'text-red-400' : 'text-brand-300'
+  const tone = good ? 'text-green-400' : bad ? 'text-red-400' : 'text-brand-600'
   return (
     <div className="bg-[#060e1a] rounded-md border border-[#1a3a5c] p-2">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
@@ -1811,12 +1811,12 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
       <p className="text-xl font-extrabold text-white mb-2">Auditory Capacity Test</p>
       <p className="text-sm text-slate-400 mb-5">
         Steer the ball through every shape. Listen for your callsign — when you hear
-        <span className="text-brand-300 font-bold"> "avoid the next circle/square" </span>
+        <span className="text-brand-600 font-bold"> "avoid the next circle/square" </span>
         with your full callsign, skip that one. Triangles are always default-thread.
       </p>
 
       <p className="text-sm text-slate-400 mb-5">
-        On the final round you'll be read a <span className="text-brand-300 font-bold">{CODE_LENGTH}-digit code</span> —
+        On the final round you'll be read a <span className="text-brand-600 font-bold">{CODE_LENGTH}-digit code</span> —
         hold on to it. You'll be asked for it when the round ends.
       </p>
 
@@ -1830,15 +1830,15 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">🎯</span>
+          <span className="text-brand-600 font-bold shrink-0">🎯</span>
           <span>Default: thread every shape (+20 each, −10 if missed)</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">🔇</span>
+          <span className="text-brand-600 font-bold shrink-0">🔇</span>
           <span>"Avoid" instructions: skip = +25, miss = −25</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">⚡</span>
+          <span className="text-brand-600 font-bold shrink-0">⚡</span>
           <span>Tap BLEEP fast when you hear it (+25/+20/+10), miss or false tap = −10</span>
         </div>
         <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
@@ -1860,7 +1860,7 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
       <StickSetup title="Joystick" mockActive={mockStick}>
         <label htmlFor="act-stick-rate" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
           <span>Steer rate</span>
-          <span className="font-mono text-brand-300">{stickRate}</span>
+          <span className="font-mono text-brand-600">{stickRate}</span>
         </label>
         <input
           id="act-stick-rate"
@@ -1878,13 +1878,13 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
       {personalBest && (
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-          <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
+          <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
         </div>
       )}
 
       <div className="text-center mb-4">
-        <Link to="/cbat/act/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+        <Link to="/cbat/act/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
           View Leaderboard →
         </Link>
       </div>
@@ -2037,9 +2037,9 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
     // narrow one. Everything below lg is unchanged.
     <div className={`w-full max-w-2xl${isDemo ? '' : ' lg:max-w-none lg:w-[min(100%,max(42rem,calc((100vh_-_280px)_*_4_/_3)))]'}`}>
       <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
-        <span className="text-slate-400">Round <span className="text-brand-300">{roundIdx + 1}</span>/{TOTAL_ROUNDS}</span>
+        <span className="text-slate-400">Round <span className="text-brand-600">{roundIdx + 1}</span>/{TOTAL_ROUNDS}</span>
         <span className="text-slate-400">
-          Score <span className="text-brand-300">{Math.round(stats.score)}</span>
+          Score <span className="text-brand-600">{Math.round(stats.score)}</span>
           {debug && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
         </span>
       </div>
@@ -2056,7 +2056,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
           >
             <div className="text-center px-6">
               <p className="text-xs text-slate-400 uppercase tracking-widest mb-3">Your callsign for this round</p>
-              <p className="text-3xl sm:text-5xl font-extrabold text-brand-300 uppercase tracking-[0.25em]">
+              <p className="text-3xl sm:text-5xl font-extrabold text-brand-600 uppercase tracking-[0.25em]">
                 {state.userCallsign.join(' ')}
               </p>
               <p className="text-xs text-slate-500 mt-4">Memorise it — it won't be shown again until the debrief.</p>

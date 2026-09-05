@@ -161,7 +161,7 @@ function WeightTable({ currentWeight, flashActive = false, cueAnchors = false, h
           {WEIGHT_TABLE.map(row => {
             const active = row.weight === currentWeight
             return (
-              <tr key={row.weight} className={active ? `bg-[#102040] text-brand-300 font-bold${flashActive ? ' cbat-cell-flash' : ''}` : 'text-[#ddeaf8]'}>
+              <tr key={row.weight} className={active ? `bg-[#102040] text-brand-600 font-bold${flashActive ? ' cbat-cell-flash' : ''}` : 'text-[#ddeaf8]'}>
                 <td className="px-2 py-0.5">{row.weight}</td>
                 <td
                   className={`px-2 py-0.5 text-right${active && highlight?.has('mpm') ? ' cbat-cell-flash' : ''}`}
@@ -218,7 +218,7 @@ function DataTable({ round, flashWeight = false, cueAnchors = false, highlight =
             </td>
             <td className={`px-2 py-2${hl('arrive')}`} data-anchor={cueAnchors && round.show.arrivalTime ? 'arrive' : undefined}>
               {showArrival
-                ? <span className={round.show.arrivalTime ? undefined : 'text-brand-300 font-bold'}>{formatHHMM(round.arrivalMin)}</span>
+                ? <span className={round.show.arrivalTime ? undefined : 'text-brand-600 font-bold'}>{formatHHMM(round.arrivalMin)}</span>
                 : <span className="text-amber-400">?</span>}
             </td>
             <td className="px-2 py-2 border-l border-[#1a3a5c]">
@@ -227,7 +227,7 @@ function DataTable({ round, flashWeight = false, cueAnchors = false, highlight =
             <td className="px-2 py-2" data-anchor={cueAnchors && hasParcel && round.show.weight ? 'weightkg' : undefined}>
               {hasParcel && round.show.weight
                 ? (flashWeight
-                    ? <span className="cbat-cell-flash inline-block px-1.5 font-bold text-brand-300">{round.weight}</span>
+                    ? <span className="cbat-cell-flash inline-block px-1.5 font-bold text-brand-600">{round.weight}</span>
                     : round.weight)
                 : <span className="text-slate-600">—</span>}
             </td>
@@ -256,7 +256,7 @@ function SolutionBreakdown({ round }) {
               {step.tokens.map((tok, j) => (
                 typeof tok === 'string'
                   ? <span key={j} className="text-slate-400">{tok}</span>
-                  : <span key={j} className="px-1 text-brand-300 font-bold cbat-cell-flash">{tok.text}</span>
+                  : <span key={j} className="px-1 text-brand-600 font-bold cbat-cell-flash">{tok.text}</span>
               ))}
               <span className="text-slate-500">=</span>
               <span className="text-[#ddeaf8] font-bold">{step.result}</span>
@@ -279,7 +279,7 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
   const pct = Math.round((totalScore / maxScore) * 100)
   const gradeStyle =
     grade === 'Outstanding' ? { emoji: '\u{1F396}️', color: 'text-green-400' }
-    : grade === 'Good' ? { emoji: '✈️', color: 'text-brand-300' }
+    : grade === 'Good' ? { emoji: '✈️', color: 'text-brand-600' }
     : grade === 'Needs Work' ? { emoji: '\u{1F527}', color: 'text-amber-400' }
     : { emoji: '\u{1F4A5}', color: 'text-red-400' }
 
@@ -292,7 +292,7 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4">
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">accuracy</p>
           </div>
         </div>
@@ -303,7 +303,7 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
           <span className="text-slate-600 mx-2">{'·'}</span>
           Miss <span className="text-red-400 font-mono">{miss}</span>
           <span className="text-slate-600 mx-2">{'·'}</span>
-          Total <span className="text-brand-300 font-mono">{totalTime.toFixed(1)}s</span>
+          Total <span className="text-brand-600 font-mono">{totalTime.toFixed(1)}s</span>
         </p>
       </div>
 
@@ -322,7 +322,7 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
                 <span className="flex-1 min-w-0 font-mono text-[11px] text-right truncate">
                   <span className="text-slate-400">{a.userInput || '—'}</span>
                   <span className="text-slate-600 mx-1">{'→'}</span>
-                  <span className="text-brand-300">
+                  <span className="text-brand-600">
                     {a.type === 'arrival' ? formatHHMM(a.correctAnswer) : a.correctAnswer}
                   </span>
                 </span>
@@ -388,7 +388,7 @@ const ALL_PANELS = { map: true, data: true, solve: true, weight: true, answer: t
 // source. `id` must match a `data-anchor` stamped on the panel value it comes
 // from; the overlay draws a line only when a matching visible anchor exists.
 function Cue({ id, children }) {
-  return <b data-cue={id} className="cbat-cue text-brand-300 font-bold">{children}</b>
+  return <b data-cue={id} className="cbat-cue text-brand-600 font-bold">{children}</b>
 }
 
 const ANT_TUTORIAL_STEPS = [
@@ -399,10 +399,10 @@ const ANT_TUTORIAL_STEPS = [
     body: (
       <>
         Every round you fly a parcel across the network. The <b className="text-green-400">green</b> node
-        is your <b className="text-brand-300">start</b>, the <b className="text-amber-400">amber</b> node is
-        the <b className="text-brand-300">via</b> point you route through, and the <b className="text-red-400">red</b> node
-        is the <b className="text-brand-300">destination</b>. The two active legs are drawn in blue, each with
-        a <b className="text-brand-300">distance pill</b> — here 72 and 72, so the whole trip is 144 miles.
+        is your <b className="text-brand-600">start</b>, the <b className="text-amber-400">amber</b> node is
+        the <b className="text-brand-600">via</b> point you route through, and the <b className="text-red-400">red</b> node
+        is the <b className="text-brand-600">destination</b>. The two active legs are drawn in blue, each with
+        a <b className="text-brand-600">distance pill</b> — here 72 and 72, so the whole trip is 144 miles.
       </>
     ),
   },
@@ -414,11 +414,11 @@ const ANT_TUTORIAL_STEPS = [
     title: 'Read the flight data',
     body: (
       <>
-        The <b className="text-brand-300">Journey</b> columns repeat the route. <b className="text-brand-300">Timings</b> give
-        the current time (<b className="text-brand-300">Now</b>) and <b className="text-brand-300">Arrive</b> time in 24-hour
-        HHMM. <b className="text-brand-300">Parcel</b> shows its weight in kg — and that weight sets your pace.
-        Read it off the <b className="text-brand-300">Weight Reference</b>: 200 kg means <b className="text-brand-300">6 miles/min</b> and{' '}
-        <b className="text-brand-300">5 gal/hr</b> (the matching row is highlighted).
+        The <b className="text-brand-600">Journey</b> columns repeat the route. <b className="text-brand-600">Timings</b> give
+        the current time (<b className="text-brand-600">Now</b>) and <b className="text-brand-600">Arrive</b> time in 24-hour
+        HHMM. <b className="text-brand-600">Parcel</b> shows its weight in kg — and that weight sets your pace.
+        Read it off the <b className="text-brand-600">Weight Reference</b>: 200 kg means <b className="text-brand-600">6 miles/min</b> and{' '}
+        <b className="text-brand-600">5 gal/hr</b> (the matching row is highlighted).
       </>
     ),
   },
@@ -429,9 +429,9 @@ const ANT_TUTORIAL_STEPS = [
     title: 'Solve: Arrival Time',
     body: (
       <>
-        Find the <b className="text-brand-300">Arrival Time</b>. First the flight time: distance ÷ speed ={' '}
-        <Cue id="distance">144</Cue> ÷ <Cue id="mpm">6</Cue> = 24 min. Add that to <b className="text-brand-300">Now</b>{' '}
-        (<Cue id="now">1000</Cue>) and enter the result as <b className="text-brand-300">HHMM</b>.
+        Find the <b className="text-brand-600">Arrival Time</b>. First the flight time: distance ÷ speed ={' '}
+        <Cue id="distance">144</Cue> ÷ <Cue id="mpm">6</Cue> = 24 min. Add that to <b className="text-brand-600">Now</b>{' '}
+        (<Cue id="now">1000</Cue>) and enter the result as <b className="text-brand-600">HHMM</b>.
       </>
     ),
   },
@@ -444,7 +444,7 @@ const ANT_TUTORIAL_STEPS = [
       <>
         The leg distances are <b className="text-amber-400">hidden</b> this time — work back from the clock.
         Flight time = Arrive − Now = <Cue id="arrive">1024</Cue> − <Cue id="now">1000</Cue> = 24 min. Distance ={' '}
-        flight time × speed = 24 × <Cue id="mpm">6</Cue>. Enter it in <b className="text-brand-300">miles</b>.
+        flight time × speed = 24 × <Cue id="mpm">6</Cue>. Enter it in <b className="text-brand-600">miles</b>.
       </>
     ),
   },
@@ -455,9 +455,9 @@ const ANT_TUTORIAL_STEPS = [
     title: 'Solve: Fuel',
     body: (
       <>
-        Fuel burn uses <b className="text-brand-300">gal/hr</b>, not miles. <Cue id="weightkg">200</Cue> kg burns{' '}
+        Fuel burn uses <b className="text-brand-600">gal/hr</b>, not miles. <Cue id="weightkg">200</Cue> kg burns{' '}
         <Cue id="gph">5</Cue> gal/hr, and you're in the air 24 of the 60 minutes in an hour. So fuel =
-        5 × 24 ÷ 60. Enter it in <b className="text-brand-300">gallons</b> — journeys are always set so this
+        5 × 24 ÷ 60. Enter it in <b className="text-brand-600">gallons</b> — journeys are always set so this
         lands on a whole number.
       </>
     ),
@@ -471,7 +471,7 @@ const ANT_TUTORIAL_STEPS = [
       <>
         No parcel this round, so no weight table — you're given the distances instead. Speed ={' '}
         total distance × 60 ÷ flight-time minutes. Total = 72 + 72 = <Cue id="distance">144</Cue>,
-        flight time = <b className="text-brand-300">24 min</b>. Enter the speed in <b className="text-brand-300">mph</b>.
+        flight time = <b className="text-brand-600">24 min</b>. Enter the speed in <b className="text-brand-600">mph</b>.
       </>
     ),
   },
@@ -677,13 +677,13 @@ function AntTutorial({ onExit, onProgress }) {
       {/* Coach card */}
       <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] uppercase tracking-wide text-brand-300 font-bold">Practice Mode</span>
+          <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => goToStep(stepIdx - 1)}
               disabled={stepIdx === 0}
               aria-label="Previous section"
-              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
             >
               {'‹'}
             </button>
@@ -692,7 +692,7 @@ function AntTutorial({ onExit, onProgress }) {
               onClick={() => goToStep(stepIdx + 1)}
               disabled={stepIdx === ANT_TUTORIAL_STEPS.length - 1}
               aria-label="Next section"
-              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
             >
               {'›'}
             </button>
@@ -745,7 +745,7 @@ function AntTutorial({ onExit, onProgress }) {
             {enabled.solve ? (
               <>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Solve For</p>
-                <p className="text-lg font-bold text-brand-300">
+                <p className="text-lg font-bold text-brand-600">
                   {QUESTION_META[round.type].label}
                   <span className="text-xs text-slate-500 font-mono font-normal ml-2">
                     ({QUESTION_META[round.type].unit})
@@ -1095,19 +1095,19 @@ export default function CbatAnt() {
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'⏱'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'⏱'}</span>
                   <span>{ROUND_COUNT} rounds, {ROUND_TIME} seconds each — the clock pauses while you review</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u{1F9EE}'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
                   <span>Speed = Distance / Time. Parcel weight sets miles/min and gal/hr.</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u{1F3AF}'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
                   <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {ROUND_COUNT * 10}.</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u{1F4CF}'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F4CF}'}</span>
                   <span>
                     Every answer is a whole number. Close counts as within 5 miles, 10 mph or 2 minutes —
                     fuel must be exact. Times entered as HHMM (e.g. 1430).
@@ -1123,7 +1123,7 @@ export default function CbatAnt() {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore} pts
                     <span className="text-slate-500 mx-1">{'·'}</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -1133,11 +1133,11 @@ export default function CbatAnt() {
               )}
 
               <div className="text-center mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-                <Link to="/cbat/ant/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/ant/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   {'View Leaderboard →'}
                 </Link>
                 {practiseEnabled && (
-                  <Link to="/cbat/ant-practise/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                  <Link to="/cbat/ant-practise/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                     {'Practise Leaderboard →'}
                   </Link>
                 )}
@@ -1192,15 +1192,15 @@ export default function CbatAnt() {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-300">{roundIndex + 1}</span>/{ROUND_COUNT}
+                  Round <span className="text-brand-600">{roundIndex + 1}</span>/{ROUND_COUNT}
                 </span>
                 <span className="text-slate-400">
-                  Score <span className="text-brand-300">{totalScoreSoFar}</span>
+                  Score <span className="text-brand-600">{totalScoreSoFar}</span>
                 </span>
                 <span className="text-slate-400">
                   {reviewing
-                    ? <span className="text-brand-300">Reviewing — clock paused</span>
-                    : <>{'⏱'} <span className={timeLeft < 10 ? 'text-red-400' : 'text-brand-300'}>{timeLeft.toFixed(1)}s</span></>}
+                    ? <span className="text-brand-600">Reviewing — clock paused</span>
+                    : <>{'⏱'} <span className={timeLeft < 10 ? 'text-red-400' : 'text-brand-600'}>{timeLeft.toFixed(1)}s</span></>}
                 </span>
               </div>
 
@@ -1221,7 +1221,7 @@ export default function CbatAnt() {
                   <JourneyMap round={round} reveal={reviewing} highlight={solutionHighlight} />
                   {!round.show.segments && (
                     reviewing
-                      ? <p className="text-[10px] text-brand-300 text-center mt-2">Distances now shown</p>
+                      ? <p className="text-[10px] text-brand-600 text-center mt-2">Distances now shown</p>
                       : <p className="text-[10px] text-amber-400 text-center mt-2">Distances hidden — compute total distance</p>
                   )}
                 </div>
@@ -1233,7 +1233,7 @@ export default function CbatAnt() {
                   {/* Ask */}
                   <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Solve For</p>
-                    <p className="text-lg font-bold text-brand-300">
+                    <p className="text-lg font-bold text-brand-600">
                       {QUESTION_META[round.type].label}
                       <span className="text-xs text-slate-500 font-mono font-normal ml-2">
                         ({QUESTION_META[round.type].unit})
@@ -1275,7 +1275,7 @@ export default function CbatAnt() {
                             : `✗ Off`}
                         </p>
                         <p className="text-xs font-mono text-slate-300 mt-1">
-                          Correct: <span className="text-brand-300 font-bold">
+                          Correct: <span className="text-brand-600 font-bold">
                             {formatCorrect({ type: feedback.type, correctAnswer: feedback.correct })}
                           </span>
                           {feedback.user && (
@@ -1327,7 +1327,7 @@ export default function CbatAnt() {
                         </div>
                         <div className="sm:w-36 shrink-0 bg-[#060e1a] border border-[#1a3a5c] rounded-xl p-3 flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-0 text-center">
                           <p className="text-[10px] text-slate-500 uppercase tracking-wide sm:mb-1">Formula</p>
-                          <p className="text-xs font-mono text-brand-300 leading-tight">
+                          <p className="text-xs font-mono text-brand-600 leading-tight">
                             Speed = Distance / Time
                           </p>
                         </div>

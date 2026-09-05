@@ -68,7 +68,7 @@ export default function CbatAwardPreview() {
     return (
       <div className="max-w-md mx-auto px-5 py-16 text-center">
         <p className="text-sm text-slate-500">Admins only.</p>
-        <Link to="/cbat" className="text-brand-300 text-sm underline">Back to CBAT</Link>
+        <Link to="/cbat" className="text-brand-600 text-sm underline">Back to CBAT</Link>
       </div>
     )
   }

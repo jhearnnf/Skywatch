@@ -121,7 +121,7 @@ function StarGrid({ stars, pendingRow, lastEvent, clears }) {
         <tbody>
           {CELLS.map(r => (
             <tr key={r}>
-              <th className={`px-0.5 font-bold text-right ${pendingRow === r ? 'text-brand-300' : 'text-slate-600'}`} style={{ width: LABEL_SIZE }}>{r + 1}</th>
+              <th className={`px-0.5 font-bold text-right ${pendingRow === r ? 'text-brand-600' : 'text-slate-600'}`} style={{ width: LABEL_SIZE }}>{r + 1}</th>
               {CELLS.map(c => {
                 const star = byCell.get(`${r},${c}`)
                 const isLast = lastEvent && lastEvent.row === r && lastEvent.col === c
@@ -141,7 +141,7 @@ function StarGrid({ stars, pendingRow, lastEvent, clears }) {
                     style={{ width: CELL_SIZE, height: CELL_SIZE }}
                   >
                     {star && (
-                      <span className={`leading-none lg:text-2xl ${star.priority ? 'text-amber-300' : 'text-brand-300'}`}>
+                      <span className={`leading-none lg:text-2xl ${star.priority ? 'text-amber-300' : 'text-brand-600'}`}>
                         {star.priority ? '◆' : '★'}
                       </span>
                     )}
@@ -151,7 +151,7 @@ function StarGrid({ stars, pendingRow, lastEvent, clears }) {
                   </td>
                 )
               })}
-              <th className={`px-0.5 font-bold text-left ${pendingRow === r ? 'text-brand-300' : 'text-slate-600'}`} style={{ width: LABEL_SIZE }}>{r + 1}</th>
+              <th className={`px-0.5 font-bold text-left ${pendingRow === r ? 'text-brand-600' : 'text-slate-600'}`} style={{ width: LABEL_SIZE }}>{r + 1}</th>
             </tr>
           ))}
           <tr>
@@ -188,7 +188,7 @@ function Keypad({ onDigit, onClear, pendingRow }) {
         <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">
           {pendingRow === null ? 'Enter row' : 'Enter column'}
         </p>
-        <span className="font-mono text-2xl font-bold tracking-[0.4em] text-brand-300">
+        <span className="font-mono text-2xl font-bold tracking-[0.4em] text-brand-600">
           {pendingRow === null ? <span className="text-slate-600">__</span> : <>{pendingRow + 1}<span className="text-slate-600">_</span></>}
         </span>
       </div>
@@ -223,7 +223,7 @@ function Keypad({ onDigit, onClear, pendingRow }) {
 
 function ResultsScreen({ stats, grade }) {
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '⭐' : grade === 'Needs Work' ? '🔧' : '💥'
-  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-300' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
+  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
     <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
@@ -233,13 +233,13 @@ function ResultsScreen({ stats, grade }) {
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Score</p>
-        <p className="text-4xl font-mono font-bold text-brand-300">{stats.score}</p>
+        <p className="text-4xl font-mono font-bold text-brand-600">{stats.score}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Stars</p>
-          <p className="text-xl font-mono font-bold text-brand-300">{stats.starsCleared}</p>
+          <p className="text-xl font-mono font-bold text-brand-600">{stats.starsCleared}</p>
         </div>
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Priority</p>
@@ -511,7 +511,7 @@ export default function CbatVigilance() {
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]">
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">★</span>
+                  <span className="text-brand-600 font-bold shrink-0">★</span>
                   <span>A star is worth {STAR_POINTS} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
                 </div>
                 <div className="flex items-start gap-2">
@@ -539,13 +539,13 @@ export default function CbatVigilance() {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
+                  <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                 </div>
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/vigilance/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/vigilance/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -563,10 +563,10 @@ export default function CbatVigilance() {
           {phase === 'playing' && snapshot && (
             <div className="w-full max-w-md lg:max-w-4xl flex flex-col items-center">
               <div className="w-full max-w-md flex items-center justify-between text-xs font-mono mb-2 px-1">
-                <span className="text-slate-400">Score <span className="text-brand-300">{snapshot.score}</span></span>
+                <span className="text-slate-400">Score <span className="text-brand-600">{snapshot.score}</span></span>
                 <span className="text-slate-400">★ <span className="text-green-400">{snapshot.starsCleared}</span></span>
                 <span className="text-slate-400">
-                  ⏱ <span className={snapshot.remainingMs < 30000 ? 'text-red-400' : 'text-brand-300'}>
+                  ⏱ <span className={snapshot.remainingMs < 30000 ? 'text-red-400' : 'text-brand-600'}>
                     {Math.ceil(snapshot.remainingMs / 1000)}s
                   </span>
                 </span>

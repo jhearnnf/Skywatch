@@ -61,7 +61,7 @@ export default function ActCraftPicker({ options, value, onChange, loading }) {
               ) : (
                 <span className="w-10 h-10 flex items-center justify-center text-xl">✈️</span>
               )}
-              <span className={`text-[9px] text-center leading-tight truncate w-full ${selected ? 'text-brand-300' : 'text-slate-400 group-hover:text-brand-300'}`}>
+              <span className={`text-[9px] text-center leading-tight truncate w-full ${selected ? 'text-brand-600' : 'text-slate-400 group-hover:text-brand-600'}`}>
                 {opt.title}
               </span>
             </motion.button>

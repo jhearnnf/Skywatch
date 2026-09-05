@@ -40,7 +40,7 @@ function ResultsScreen({ rounds, totalTime }) {
   const pct = Math.round((correct / TOTAL_ROUNDS) * 100)
 
   const grade = pct >= 90 ? { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '🧩', color: 'text-brand-300' }
+    : pct >= 70 ? { label: 'Good', emoji: '🧩', color: 'text-brand-600' }
     : pct >= 50 ? { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
     : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
 
@@ -61,12 +61,12 @@ function ResultsScreen({ rounds, totalTime }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_ROUNDS} correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -76,7 +76,7 @@ function ResultsScreen({ rounds, totalTime }) {
         {tiers.map((t, ti) => (
           <div key={t} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{t}</p>
-            <p className="text-xl font-mono font-bold text-brand-300">{tierCorrect[ti]}/5</p>
+            <p className="text-xl font-mono font-bold text-brand-600">{tierCorrect[ti]}/5</p>
           </div>
         ))}
       </div>
@@ -365,15 +365,15 @@ export default function CbatCodeDuplicates() {
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">1–5</span>
+                  <span className="text-brand-600 font-bold shrink-0">1–5</span>
                   <span>Easy — 7 to 10 digits</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">6–10</span>
+                  <span className="text-brand-600 font-bold shrink-0">6–10</span>
                   <span>Medium — 8 to 12 digits</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">11–15</span>
+                  <span className="text-brand-600 font-bold shrink-0">11–15</span>
                   <span>Hard — 12 to 15 digits</span>
                 </div>
                 <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
@@ -385,7 +385,7 @@ export default function CbatCodeDuplicates() {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -395,7 +395,7 @@ export default function CbatCodeDuplicates() {
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/code-duplicates/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/code-duplicates/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -416,20 +416,20 @@ export default function CbatCodeDuplicates() {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-300">{round}</span>/{TOTAL_ROUNDS}
+                  Round <span className="text-brand-600">{round}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
                       needs to see that the run will not be submitted, rather
                       than find out from a leaderboard that never moved. */}
                   {debugUsed && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
                 </span>
                 <span className="text-slate-400">
-                  <span className="text-brand-300">{tierLabel}</span>
+                  <span className="text-brand-600">{tierLabel}</span>
                 </span>
                 <span className="text-slate-400">
                   ✓ <span className="text-green-400">{roundResults.filter(r => r.correct).length}</span>
                 </span>
                 <span className="text-slate-400">
-                  ⏱ <span className="text-brand-300">{elapsed.toFixed(1)}s</span>
+                  ⏱ <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
               </div>
 
@@ -471,7 +471,7 @@ export default function CbatCodeDuplicates() {
                           initial={{ opacity: 0, scale: 0.5 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: i * 0.06 }}
-                          className="inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-lg bg-[#060e1a] border border-[#1a3a5c] text-2xl font-mono font-bold text-brand-300"
+                          className="inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-lg bg-[#060e1a] border border-[#1a3a5c] text-2xl font-mono font-bold text-brand-600"
                         >
                           {digit}
                         </motion.span>
@@ -495,7 +495,7 @@ export default function CbatCodeDuplicates() {
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-3">
                       How many times did this digit appear?
                     </p>
-                    <p className="text-5xl font-mono font-bold text-brand-300 mb-6">{queryDigit}</p>
+                    <p className="text-5xl font-mono font-bold text-brand-600 mb-6">{queryDigit}</p>
                     <div className="flex items-center justify-center gap-3">
                       <input
                         ref={inputRef}
@@ -533,7 +533,7 @@ export default function CbatCodeDuplicates() {
                         {isCorrect ? 'Correct!' : 'Wrong'}
                       </p>
                       <p className="text-sm text-slate-400 mb-1">
-                        The digit <span className="font-mono font-bold text-brand-300">{queryDigit}</span> appeared <span className="font-mono font-bold text-brand-300">{actualCount}</span> time{actualCount !== 1 ? 's' : ''}.
+                        The digit <span className="font-mono font-bold text-brand-600">{queryDigit}</span> appeared <span className="font-mono font-bold text-brand-600">{actualCount}</span> time{actualCount !== 1 ? 's' : ''}.
                       </p>
                       {!isCorrect && (
                         <p className="text-sm text-slate-500">
@@ -548,7 +548,7 @@ export default function CbatCodeDuplicates() {
                             key={i}
                             className={`inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-md text-lg font-mono font-bold border ${
                               digit === queryDigit
-                                ? 'bg-brand-600/20 border-brand-400 text-brand-300'
+                                ? 'bg-brand-600/20 border-brand-400 text-brand-600'
                                 : 'bg-[#060e1a] border-[#1a3a5c] text-slate-500'
                             }`}
                           >
@@ -589,7 +589,7 @@ export default function CbatCodeDuplicates() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-300 font-bold">
+                    <span className="text-xs text-brand-600 font-bold">
                       {round === 6 ? 'Medium — sequences are now longer' : 'Hard — maximum length sequences'}
                     </span>
                   </motion.div>

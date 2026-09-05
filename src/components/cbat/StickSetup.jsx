@@ -42,7 +42,7 @@ function AxisBar({ label, value }) {
           style={{ left: `${pct}%` }}
         />
       </div>
-      <span className="w-10 shrink-0 text-right font-mono text-[10px] text-brand-300">{value.toFixed(2)}</span>
+      <span className="w-10 shrink-0 text-right font-mono text-[10px] text-brand-600">{value.toFixed(2)}</span>
     </div>
   )
 }
@@ -174,13 +174,13 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
 
   const btn = 'px-3 py-1.5 rounded text-xs font-bold cursor-pointer transition-colors'
   const primary = `${btn} bg-brand-600 hover:bg-brand-700 text-white`
-  const ghost = `${btn} border border-[#1a3a5c] text-slate-500 hover:text-brand-300`
+  const ghost = `${btn} border border-[#1a3a5c] text-slate-500 hover:text-brand-600`
 
   return (
     <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] text-slate-500 uppercase tracking-wide">{title}</span>
-        <span className={`font-mono text-[10px] ${view.connected ? 'text-brand-300' : 'text-slate-500'}`}>
+        <span className={`font-mono text-[10px] ${view.connected ? 'text-brand-600' : 'text-slate-500'}`}>
           {view.connected ? (view.calibrated ? 'CALIBRATED' : 'DEFAULT MAPPING') : 'NOT DETECTED'}
         </span>
       </div>
@@ -213,7 +213,7 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
             {view.calibrated && (
               <button type="button" onClick={forget} className={ghost}>Forget</button>
             )}
-            {saved && <span className="font-mono text-[10px] text-brand-300">SAVED</span>}
+            {saved && <span className="font-mono text-[10px] text-brand-600">SAVED</span>}
           </div>
         </>
       )}

@@ -145,10 +145,10 @@ function CountdownScreen({ count, tileCount }) {
     <div className="w-full max-w-md" data-testid="symbols-countdown">
       {/* HUD — same row as in play, holding its place with resting values */}
       <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 text-slate-400 opacity-50">
-        <span>Round <span className="text-brand-300">1</span>/{TOTAL_ROUNDS}</span>
-        <span>Tier <span className="text-brand-300">1</span></span>
+        <span>Round <span className="text-brand-600">1</span>/{TOTAL_ROUNDS}</span>
+        <span>Tier <span className="text-brand-600">1</span></span>
         <span>{'✓'} <span className="text-green-400">0</span></span>
-        <span>{'⏱'} <span className="text-brand-300">0.0s</span></span>
+        <span>{'⏱'} <span className="text-brand-600">0.0s</span></span>
       </div>
 
       {/* Progress bar — empty, ready to fill */}
@@ -192,7 +192,7 @@ function CountdownScreen({ count, tileCount }) {
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ duration: 0.22 }}
             className={`font-mono font-extrabold drop-shadow-[0_0_18px_rgba(6,16,26,0.9)] ${
-              isGo ? 'text-5xl sm:text-6xl text-green-400' : 'text-7xl sm:text-8xl text-brand-300'
+              isGo ? 'text-5xl sm:text-6xl text-green-400' : 'text-7xl sm:text-8xl text-brand-600'
             }`}
           >
             {isGo ? 'GO' : count}
@@ -232,7 +232,7 @@ function ResultsScreen({ answers, totalTime }) {
     : 0
 
   const grade = pct >= 90 ? { label: 'Outstanding', emoji: '\u{1F396}\uFE0F', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '\u2708\uFE0F', color: 'text-brand-300' }
+    : pct >= 70 ? { label: 'Good', emoji: '\u2708\uFE0F', color: 'text-brand-600' }
     : pct >= 50 ? { label: 'Needs Work', emoji: '\u{1F527}', color: 'text-amber-400' }
     : { label: 'Failed', emoji: '\u{1F4A5}', color: 'text-red-400' }
 
@@ -246,18 +246,18 @@ function ResultsScreen({ answers, totalTime }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_ROUNDS} correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(2)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(2)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
         {correctTimes.length > 0 && (
           <p className="text-xs text-slate-500 mt-3">
-            Avg find time: <span className="text-brand-300 font-mono">{avgTime.toFixed(2)}s</span>
+            Avg find time: <span className="text-brand-600 font-mono">{avgTime.toFixed(2)}s</span>
           </p>
         )}
       </div>
@@ -266,7 +266,7 @@ function ResultsScreen({ answers, totalTime }) {
         {['Tier 1', 'Tier 2', 'Tier 3'].map((label, i) => (
           <div key={i} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-            <p className="text-xl font-mono font-bold text-brand-300">
+            <p className="text-xl font-mono font-bold text-brand-600">
               {tierCorrect[i].correct}/{tierCorrect[i].total}
             </p>
           </div>
@@ -555,10 +555,10 @@ export default function CbatSymbols() {
           <button
             onClick={startCountdown}
             disabled={phase === 'countdown'}
-            className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#1a3a5c] bg-[#0a1628] text-[11px] font-bold text-brand-300 transition-colors ${
+            className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#1a3a5c] bg-[#0a1628] text-[11px] font-bold text-brand-600 transition-colors ${
               phase === 'countdown'
                 ? 'opacity-40 cursor-default'
-                : 'hover:text-brand-200 hover:border-brand-400'
+                : 'hover:text-brand-700 hover:border-brand-400'
             }`}
           >
             <span aria-hidden="true">{'⚡'}</span> Fast Restart
@@ -598,15 +598,15 @@ export default function CbatSymbols() {
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">T1</span>
+                  <span className="text-brand-600 font-bold shrink-0">T1</span>
                   <span>{'Rounds 1\u20135 \u00b7 grid of 12\u201315 symbols'}</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">T2</span>
+                  <span className="text-brand-600 font-bold shrink-0">T2</span>
                   <span>{'Rounds 6\u201310 \u00b7 grid of 15\u201320 symbols'}</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">T3</span>
+                  <span className="text-brand-600 font-bold shrink-0">T3</span>
                   <span>{'Rounds 11\u201315 \u00b7 grid of 18\u201325 symbols'}</span>
                 </div>
                 <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
@@ -618,7 +618,7 @@ export default function CbatSymbols() {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
                     <span className="text-slate-500 mx-1">{'\u00b7'}</span>
                     {personalBest.bestTime.toFixed(2)}s
@@ -628,7 +628,7 @@ export default function CbatSymbols() {
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/symbols/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/symbols/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   {'View Leaderboard \u2192'}
                 </Link>
               </div>
@@ -652,20 +652,20 @@ export default function CbatSymbols() {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-300">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
+                  Round <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
                       needs to see that the run will not be submitted, rather
                       than find out from a leaderboard that never moved. */}
                   {debugUsed && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
                 </span>
                 <span className="text-slate-400">
-                  Tier <span className="text-brand-300">{currentRound.tier + 1}</span>
+                  Tier <span className="text-brand-600">{currentRound.tier + 1}</span>
                 </span>
                 <span className="text-slate-400">
                   {'\u2713'} <span className="text-green-400">{answers.filter(a => a.correct).length}</span>
                 </span>
                 <span className="text-slate-400">
-                  {'\u23F1'} <span className="text-brand-300">{elapsed.toFixed(1)}s</span>
+                  {'\u23F1'} <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
               </div>
 
@@ -763,7 +763,7 @@ export default function CbatSymbols() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-300 font-bold">
+                    <span className="text-xs text-brand-600 font-bold">
                       Tier {tierFor(currentIdx) + 1} {'\u2014 grid grows larger'}
                     </span>
                   </motion.div>

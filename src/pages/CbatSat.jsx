@@ -135,7 +135,7 @@ const WAYPOINT_ARROW = { N: '↑', S: '↓', E: '→', W: '←' }
 // Each callsign owns a colour so the panel reads at a glance when it switches:
 // York blue, Leeds red, Hull yellow.
 const CALLSIGN_THEME = {
-  York: { panel: '#0a1628', field: '#060e1a', border: '#1a3a5c', dot: '#5baaff', text: 'text-brand-300' },
+  York: { panel: '#0a1628', field: '#060e1a', border: '#1a3a5c', dot: '#5baaff', text: 'text-brand-600' },
   Leeds: { panel: '#1c0d12', field: '#120709', border: '#5c1f2a', dot: '#ff7b8a', text: 'text-red-300' },
   Hull: { panel: '#1a1405', field: '#120d03', border: '#5c4a12', dot: '#fbbf24', text: 'text-amber-300' },
 }
@@ -382,7 +382,7 @@ function ObservePanels({ situation, card, fields }) {
 // ── Results screen (embedded inside CbatGameOver) ────────────────────────────
 const GRADE_STYLE = {
   Outstanding: { emoji: '🎖️', color: 'text-green-400' },
-  Good:        { emoji: '🗺️', color: 'text-brand-300' },
+  Good:        { emoji: '🗺️', color: 'text-brand-600' },
   'Needs Work':{ emoji: '🔧', color: 'text-amber-400' },
   Failed:      { emoji: '💥', color: 'text-red-400' },
 }
@@ -405,12 +405,12 @@ function ResultsScreen({ answers, totalTime, tuning }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}/{total}</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{total}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -455,11 +455,11 @@ const SAT_TUTORIAL_STEPS = [
     title: 'Read the grid',
     body: (
       <>
-        Units sit on a <b className="text-brand-300">10×10 grid</b> (columns 0–9 on top, rows A–J on the left).
-        Each marker's <b className="text-brand-300">colour</b> is its allegiance — <span style={{ color: ALLEGIANCE_COLOR.friendly }}>yellow friendly</span>,{' '}
+        Units sit on a <b className="text-brand-600">10×10 grid</b> (columns 0–9 on top, rows A–J on the left).
+        Each marker's <b className="text-brand-600">colour</b> is its allegiance — <span style={{ color: ALLEGIANCE_COLOR.friendly }}>yellow friendly</span>,{' '}
         <span style={{ color: ALLEGIANCE_COLOR.hostile }}>red hostile</span>, <span style={{ color: ALLEGIANCE_COLOR.unknown }}>white unknown</span>.
-        The <b className="text-brand-300">letter</b> is the type (T/H/J), the <b className="text-brand-300">number</b> is how many, and the <b className="text-brand-300">arrow</b> is its heading.
-        All three are shown together here so you can learn them. In the game you get <b className="text-brand-300">one contact at a time</b>.
+        The <b className="text-brand-600">letter</b> is the type (T/H/J), the <b className="text-brand-600">number</b> is how many, and the <b className="text-brand-600">arrow</b> is its heading.
+        All three are shown together here so you can learn them. In the game you get <b className="text-brand-600">one contact at a time</b>.
       </>
     ),
   },
@@ -468,9 +468,9 @@ const SAT_TUTORIAL_STEPS = [
     title: 'The controller aircraft',
     body: (
       <>
-        Two or three controller aircraft (callsigns <b className="text-brand-300">York</b>, <b className="text-brand-300">Leeds</b>, <b className="text-brand-300">Hull</b>) each have a
-        <b className="text-brand-300"> Next Waypoint</b>, time to it, <b className="text-brand-300">Altitude</b> and <b className="text-brand-300">Comms Channel</b>.
-        The whole panel is filled in together here. In the game you only ever get <b className="text-brand-300">one field of one aircraft</b> at a time, so York's altitude and York's channel arrive separately. On Hard the panel stays on screen with its other boxes dashed out; on Easier the field gets the screen to itself.
+        Two or three controller aircraft (callsigns <b className="text-brand-600">York</b>, <b className="text-brand-600">Leeds</b>, <b className="text-brand-600">Hull</b>) each have a
+        <b className="text-brand-600"> Next Waypoint</b>, time to it, <b className="text-brand-600">Altitude</b> and <b className="text-brand-600">Comms Channel</b>.
+        The whole panel is filled in together here. In the game you only ever get <b className="text-brand-600">one field of one aircraft</b> at a time, so York's altitude and York's channel arrive separately. On Hard the panel stays on screen with its other boxes dashed out; on Easier the field gets the screen to itself.
       </>
     ),
   },
@@ -479,9 +479,9 @@ const SAT_TUTORIAL_STEPS = [
     title: 'Listen to the radio',
     body: (
       <>
-        Some details only come over the <b className="text-brand-300">radio</b> — and you're asked which callsign was given which instruction.
+        Some details only come over the <b className="text-brand-600">radio</b> — and you're asked which callsign was given which instruction.
         Keep your sound on; the caption here is a fallback. Remember who was told what.
-        Occasionally a unit on the grid <b className="text-brand-300">calls for support</b> and one aircraft is sent to respond —
+        Occasionally a unit on the grid <b className="text-brand-600">calls for support</b> and one aircraft is sent to respond —
         note the grid cell and what was sitting in it.
       </>
     ),
@@ -491,7 +491,7 @@ const SAT_TUTORIAL_STEPS = [
     title: 'Now recall it',
     body: (
       <>
-        Nothing comes back. Once the last card has gone you answer multiple-choice questions <b className="text-brand-300">from memory</b>. Try one below.
+        Nothing comes back. Once the last card has gone you answer multiple-choice questions <b className="text-brand-600">from memory</b>. Try one below.
       </>
     ),
   },
@@ -558,13 +558,13 @@ function SatTutorial({ onExit, onProgress }) {
       {/* Coach card */}
       <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] uppercase tracking-wide text-brand-300 font-bold">Practice Mode</span>
+          <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
           <div className="flex items-center gap-1.5">
             <button onClick={() => goToStep(stepIdx - 1)} disabled={stepIdx === 0} aria-label="Previous section"
-              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer">‹</button>
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer">‹</button>
             <span className="text-[10px] text-slate-500 tabular-nums">{stepIdx + 1} / {SAT_TUTORIAL_STEPS.length}</span>
             <button onClick={() => goToStep(stepIdx + 1)} disabled={stepIdx === SAT_TUTORIAL_STEPS.length - 1} aria-label="Next section"
-              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer">›</button>
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer">›</button>
           </div>
         </div>
         <AnimatePresence mode="wait" initial={false}>
@@ -596,12 +596,12 @@ function SatTutorial({ onExit, onProgress }) {
               <span className="text-base">🔊</span>
               <span className="text-[10px] text-slate-500 uppercase tracking-wide">Radio</span>
               {step.focus === 'radio' && (
-                <button onClick={() => speak(sit.comms[0]?.speech, true)} className="sm:hidden ml-auto shrink-0 text-[10px] text-brand-300 hover:text-brand-200 bg-transparent border-0 cursor-pointer">Play again</button>
+                <button onClick={() => speak(sit.comms[0]?.speech, true)} className="sm:hidden ml-auto shrink-0 text-[10px] text-brand-600 hover:text-brand-700 bg-transparent border-0 cursor-pointer">Play again</button>
               )}
             </div>
             <p className="text-[11px] sm:text-xs leading-snug text-green-300 font-mono break-words flex-1 min-w-0">{sit.comms[0]?.text || '—'}</p>
             {step.focus === 'radio' && (
-              <button onClick={() => speak(sit.comms[0]?.speech, true)} className="hidden sm:inline shrink-0 text-[10px] text-brand-300 hover:text-brand-200 bg-transparent border-0 cursor-pointer">Play again</button>
+              <button onClick={() => speak(sit.comms[0]?.speech, true)} className="hidden sm:inline shrink-0 text-[10px] text-brand-600 hover:text-brand-700 bg-transparent border-0 cursor-pointer">Play again</button>
             )}
           </div>
           <div className="text-center">
@@ -982,23 +982,23 @@ export default function CbatSat() {
                   />
                 ))}
               </div>
-              <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+              <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
               <p className={`text-base text-slate-400 mb-5${dim}`}>
-                Build and hold a mental picture of a changing battlefield. Each situation feeds you one piece of information at a time — a contact on the grid, one field of a controller aircraft, or a call over the <span className="text-brand-300">radio</span>. Each one vanishes before the next arrives, then you answer from memory.
+                Build and hold a mental picture of a changing battlefield. Each situation feeds you one piece of information at a time — a contact on the grid, one field of a controller aircraft, or a call over the <span className="text-brand-600">radio</span>. Each one vanishes before the next arrives, then you answer from memory.
               </p>
 
               <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-base text-[#ddeaf8]${dim}`}>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">1.</span>
+                  <span className="text-brand-600 font-bold shrink-0">1.</span>
                   <span>Observe — contacts (type, count, allegiance, heading), aircraft data, and radio calls, one at a time.</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">2.</span>
+                  <span className="text-brand-600 font-bold shrink-0">2.</span>
                   <span>Each one holds for {tuning.cardMs / 1000}s, then it's gone for good. Answer multiple-choice recall questions.</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">3.</span>
+                  <span className="text-brand-600 font-bold shrink-0">3.</span>
                   <span>{tuning.situations} situations · {satTotalQuestions(tuning)} questions total.</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#8a9bb5] pt-1">
@@ -1010,7 +1010,7 @@ export default function CbatSat() {
               {personalBest && (
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{satTotalQuestions(tuning)}
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -1020,7 +1020,7 @@ export default function CbatSat() {
               )}
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-sm text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -1076,7 +1076,7 @@ export default function CbatSat() {
                 </div>
                 <div className="w-20 bg-[#0a1628] border border-[#1a3a5c] rounded-lg flex flex-col items-center justify-center">
                   <p className="text-[11px] text-slate-500 uppercase">Time</p>
-                  <p className={`text-2xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-300'}`}>{observeSec}s</p>
+                  <p className={`text-2xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-600'}`}>{observeSec}s</p>
                 </div>
               </div>
 
@@ -1128,9 +1128,9 @@ export default function CbatSat() {
             <div className="w-full max-w-md">
               {/* HUD */}
               <div className="flex items-center justify-between text-sm font-mono mb-2 px-1">
-                <span className="text-slate-400">Q <span className="text-brand-300">{globalQ}</span>/{runTotalQuestions}</span>
+                <span className="text-slate-400">Q <span className="text-brand-600">{globalQ}</span>/{runTotalQuestions}</span>
                 <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span></span>
-                <span className="text-slate-400">⏱ <span className={qRemainingMs < 6000 ? 'text-red-400' : 'text-brand-300'}>{remainingSec}s</span></span>
+                <span className="text-slate-400">⏱ <span className={qRemainingMs < 6000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span></span>
               </div>
 
               {/* Progress bar */}

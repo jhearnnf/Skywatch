@@ -179,7 +179,7 @@ function ResultsScreen({ answers, totalTime, grade }) {
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / SIT_ROUNDS) * 100)
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '🛰️' : grade === 'Needs Work' ? '🔧' : '💥'
-  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-300' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
+  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
     <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
@@ -191,12 +191,12 @@ function ResultsScreen({ answers, totalTime, grade }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}/{SIT_ROUNDS}</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{SIT_ROUNDS}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -581,7 +581,7 @@ export default function CbatSit() {
                   />
                 ))}
               </div>
-              <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{introTuning.blurb}</p>
+              <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{introTuning.blurb}</p>
 
               <p className={`text-sm text-slate-400 mb-5${dim}`}>
                 Study the ground one layer at a time, from above. No layer shows the whole picture, so putting it together is on you. A camera then flies over the same ground in 3D, and not from the direction you studied it.
@@ -589,15 +589,15 @@ export default function CbatSit() {
 
               <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">1.</span>
+                  <span className="text-brand-600 font-bold shrink-0">1.</span>
                   <span>Study the layers. Each one holds a single kind of thing, and you move between them as you like. Only the hills appear on every layer.</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">2.</span>
-                  <span>The clip is a <span className="text-brand-300">3D pass</span> showing all of it at once, from a different direction. The hills never move, so use them to work out which way round you are looking.</span>
+                  <span className="text-brand-600 font-bold shrink-0">2.</span>
+                  <span>The clip is a <span className="text-brand-600">3D pass</span> showing all of it at once, from a different direction. The hills never move, so use them to work out which way round you are looking.</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">3.</span>
+                  <span className="text-brand-600 font-bold shrink-0">3.</span>
                   <span>Two questions per clip, and no second viewing. Answer the question you were asked, and only that one.</span>
                 </div>
                 <div className="flex items-start gap-2 text-xs text-amber-400/80 pt-1">
@@ -629,7 +629,7 @@ export default function CbatSit() {
               {personalBest && (
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {introTuning.label}</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{SIT_ROUNDS}
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -639,7 +639,7 @@ export default function CbatSit() {
               )}
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -662,14 +662,14 @@ export default function CbatSit() {
             <div className="w-full">
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
                 <span className="text-slate-400">
-                  Clip <span className="text-brand-300">{currentIdx + 1}</span>/{SIT_CLIPS}
+                  Clip <span className="text-brand-600">{currentIdx + 1}</span>/{SIT_CLIPS}
                   <span className="text-slate-600 mx-1">·</span>
-                  Q<span className="text-brand-300">{answers.length + (phase === 'feedback' ? 0 : 1)}</span>/{SIT_ROUNDS}
+                  Q<span className="text-brand-600">{answers.length + (phase === 'feedback' ? 0 : 1)}</span>/{SIT_ROUNDS}
                 </span>
                 <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span></span>
                 <span className="text-slate-400">
                   {phase === 'answer' || phase === 'study'
-                    ? <>⏱ <span className={remainingMs < 4000 ? 'text-red-400' : 'text-brand-300'}>{Math.ceil(remainingMs / 1000)}s</span></>
+                    ? <>⏱ <span className={remainingMs < 4000 ? 'text-red-400' : 'text-brand-600'}>{Math.ceil(remainingMs / 1000)}s</span></>
                     : phase === 'clip' ? 'CLIP' : ''}
                 </span>
               </div>
@@ -698,7 +698,7 @@ export default function CbatSit() {
                         Study the layers · {layerIdx + 1} of {current.layers.length}
                       </p>
                       <p className="font-mono text-sm font-bold">
-                        <span className={remainingMs < 8000 ? 'text-red-400' : 'text-brand-300'}>
+                        <span className={remainingMs < 8000 ? 'text-red-400' : 'text-brand-600'}>
                           {Math.ceil(remainingMs / 1000)}s
                         </span>
                         <span className="text-slate-600 text-[10px] ml-1">left</span>
@@ -744,7 +744,7 @@ export default function CbatSit() {
                     <button
                       onClick={endStudyEarly}
                       data-demo-answer
-                      className="w-full mt-2.5 px-6 py-2.5 rounded-lg border border-[#1a3a5c] bg-[#060e1a] text-brand-300 font-bold text-sm hover:bg-[#0f2240] hover:border-brand-400 transition-colors cursor-pointer"
+                      className="w-full mt-2.5 px-6 py-2.5 rounded-lg border border-[#1a3a5c] bg-[#060e1a] text-brand-600 font-bold text-sm hover:bg-[#0f2240] hover:border-brand-400 transition-colors cursor-pointer"
                     >
                       Skip study time · Go to the clip
                     </button>

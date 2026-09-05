@@ -759,7 +759,7 @@ const DptControls = memo(function DptControls({
   const dirDisabled = inputMode === 'ALT'
   const dirBtn = (d, label) => {
     const isActive = turnDir === d && !dirDisabled
-    const inactiveCls = 'bg-[#0a1628] border-[#1a3a5c] text-brand-300 hover:bg-[#0f2240]'
+    const inactiveCls = 'bg-[#0a1628] border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240]'
     const disabledCls = 'bg-[#060e1a] border-[#1a3a5c] text-slate-600 cursor-not-allowed opacity-50'
     return (
       <button
@@ -792,7 +792,7 @@ const DptControls = memo(function DptControls({
         className={`flex-1 pt-1.5 pb-3 rounded-t-lg font-mono font-bold text-xs border transition-colors ${
           isActive
             ? (useAltAccent ? 'text-white' : 'bg-brand-600 border-brand-400 text-white')
-            : 'bg-[#0a1628] border-[#1a3a5c] text-brand-300 hover:bg-[#0f2240]'
+            : 'bg-[#0a1628] border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240]'
         }`}
         style={useAltAccent
           ? { background: accent.solid, borderColor: accent.border, touchAction: 'manipulation' }
@@ -821,7 +821,7 @@ const DptControls = memo(function DptControls({
         if (r.label === label && Date.now() - r.t < 500) return
         fire()
       }}
-      className="aspect-square rounded-lg font-mono font-bold text-xl bg-[#0a1628] border border-[#1a3a5c] text-brand-300 hover:bg-[#0f2240] active:bg-[#163055] transition-colors select-none"
+      className="aspect-square rounded-lg font-mono font-bold text-xl bg-[#0a1628] border border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240] active:bg-[#163055] transition-colors select-none"
       style={{ touchAction: 'manipulation' }}
     >{label}</button>
   )
@@ -851,7 +851,7 @@ const DptControls = memo(function DptControls({
       >
         {dirBtn('L', 'L')}
         <div>
-          <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg py-2 mb-2 text-center font-mono text-xl tracking-[0.3em] text-brand-300 flex items-center justify-center gap-3">
+          <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg py-2 mb-2 text-center font-mono text-xl tracking-[0.3em] text-brand-600 flex items-center justify-center gap-3">
             <span className="text-[10px] text-slate-500 tracking-normal">{inputMode}</span>
             <span className="text-2xl tracking-[0.4em]">{display}</span>
           </div>
@@ -921,7 +921,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
           onSelect={onDifficulty}
         />
       </div>
-      <p className="text-[11px] text-brand-300 text-center mb-3">{tuning.blurb}</p>
+      <p className="text-[11px] text-brand-600 text-center mb-3">{tuning.blurb}</p>
 
       <p className="text-xs text-slate-400 text-center mb-3">
         Vector multiple aircraft through gates and intercept enemy contacts.
@@ -930,7 +930,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
       {/* Instructions */}
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">🎯</span>
+          <span className="text-brand-600 shrink-0">🎯</span>
           <span>Vector aircraft through gates using compass bearings</span>
         </div>
         <div className="flex items-start gap-2">
@@ -955,15 +955,15 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
           </>
         )}
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">⌨️</span>
+          <span className="text-brand-600 shrink-0">⌨️</span>
           <span><span className="font-mono text-slate-700">BRG</span>: type a 3-digit compass bearing (e.g. <span className="font-mono text-slate-700">010</span>, <span className="font-mono text-slate-700">250</span>)</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">📏</span>
+          <span className="text-brand-600 shrink-0">📏</span>
           <span><span className="font-mono text-slate-700">ALT</span>: type 3 digits in 100s of ft &mdash; <span className="font-mono text-slate-700">020</span> = 2,000ft, <span className="font-mono text-slate-700">055</span> = 5,500ft, <span className="font-mono text-slate-700">100</span> = 10,000ft (max)</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">⏱</span>
+          <span className="text-brand-600 shrink-0">⏱</span>
           <span>{tuning.lengthBlurb}</span>
         </div>
       </div>
@@ -1004,7 +1004,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
       {personalBest && (
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-2 text-center">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-          <p className="text-lg font-mono font-bold text-brand-300">
+          <p className="text-lg font-mono font-bold text-brand-600">
             {personalBest.bestScore} pts
             {personalBest.bestTime != null && (
               <>
@@ -1018,7 +1018,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
       )}
 
       <div className="text-center mb-4">
-        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
           View Leaderboard →
         </Link>
       </div>
@@ -1063,7 +1063,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
                 alt={a.title}
                 className="w-14 h-14 object-contain group-hover:scale-110 transition-transform drop-shadow-[0_0_6px_rgba(91,170,255,0.4)]"
               />
-              <span className="text-[10px] text-slate-400 group-hover:text-brand-300 text-center leading-tight truncate w-full">
+              <span className="text-[10px] text-slate-400 group-hover:text-brand-600 text-center leading-tight truncate w-full">
                 {a.title}
               </span>
             </motion.button>
@@ -2107,12 +2107,12 @@ export default function CbatDpt() {
                 const lowTime   = roundLeft < 10
                 return (
                   <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
-                    <span className="text-slate-400">RND <span className="text-brand-300">{displayRound(round, runTuning)}</span>/{runTuning.rounds.length}</span>
+                    <span className="text-slate-400">RND <span className="text-brand-600">{displayRound(round, runTuning)}</span>/{runTuning.rounds.length}</span>
                     <span className="text-slate-400">
-                      SCORE <span className="text-brand-300">{totalScore}</span>
+                      SCORE <span className="text-brand-600">{totalScore}</span>
                       {cheatUsed && <span className="ml-2 text-amber-400">DEBUG · NO SUBMIT</span>}
                     </span>
-                    <span className="text-slate-400">⏱ <span className={lowTime ? 'text-red-400' : 'text-brand-300'}>{roundLeft.toFixed(1)}s</span></span>
+                    <span className="text-slate-400">⏱ <span className={lowTime ? 'text-red-400' : 'text-brand-600'}>{roundLeft.toFixed(1)}s</span></span>
                   </div>
                 )
               })()}
@@ -2235,8 +2235,8 @@ export default function CbatDpt() {
                   <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
                     <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-                      <div className="flex justify-between"><span>Gates hit</span><span className="text-brand-300 font-mono">{gatesHit}</span></div>
-                      <div className="flex justify-between"><span>Intercepts</span><span className="text-brand-300 font-mono">{interceptions}</span></div>
+                      <div className="flex justify-between"><span>Gates hit</span><span className="text-brand-600 font-mono">{gatesHit}</span></div>
+                      <div className="flex justify-between"><span>Intercepts</span><span className="text-brand-600 font-mono">{interceptions}</span></div>
                       <div className="flex justify-between"><span>Danger zones</span><span className="text-red-400 font-mono">{dangerZoneViolations}</span></div>
                       <div className="flex justify-between"><span>Separation</span><span className="text-red-400 font-mono">{separationViolations}</span></div>
                     </div>

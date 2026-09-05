@@ -305,7 +305,7 @@ function CommentaryPanel({ log, open, onToggle }) {
     return (
       <aside className="hidden lg:block lg:shrink-0 lg:sticky lg:top-2" style={ARENA_STYLE}>
         <button onClick={onToggle} title="Show commentary"
-          className="w-8 h-full flex flex-col items-center gap-2 pt-2 bg-[#0a1628] border border-[#1a3a5c] rounded-lg text-slate-400 hover:text-brand-300 cursor-pointer">
+          className="w-8 h-full flex flex-col items-center gap-2 pt-2 bg-[#0a1628] border border-[#1a3a5c] rounded-lg text-slate-400 hover:text-brand-600 cursor-pointer">
           <span className="text-xs">◀</span>
           <span className="text-[10px] font-extrabold uppercase tracking-wider" style={{ writingMode: 'vertical-rl' }}>Commentary</span>
         </button>
@@ -318,7 +318,7 @@ function CommentaryPanel({ log, open, onToggle }) {
         <div className="shrink-0 flex items-center justify-between px-2 py-1.5 border-b border-[#1a3a5c]">
           <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-500">Commentary</span>
           <button onClick={onToggle} title="Minimise"
-            className="text-slate-400 hover:text-brand-300 text-[10px] font-bold uppercase tracking-wide px-1 cursor-pointer">
+            className="text-slate-400 hover:text-brand-600 text-[10px] font-bold uppercase tracking-wide px-1 cursor-pointer">
             Hide ▶
           </button>
         </div>
@@ -347,7 +347,7 @@ function ResultsScreen({ stats, tuning }) {
   const row = (label, val, sub) => (
     <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-xl font-mono font-bold text-brand-300">{val}</p>
+      <p className="text-xl font-mono font-bold text-brand-600">{val}</p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
     </div>
   )
@@ -687,7 +687,7 @@ export default function CbatCut() {
                     dimmed={launching && difficulty !== CUT_DIFFICULTIES[1].key}
                   />
                 </div>
-                <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+                <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
                 <p className={`text-sm text-slate-400 mb-5${dim}`}>
                   Six aircraft displays run at once, but you can only view two at a time. Keep every system in
@@ -695,11 +695,11 @@ export default function CbatCut() {
                 </p>
 
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Engine</span><span>keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Nav</span><span>hold airspeed within ±{SPEED_TOL} kts of required</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Sensor</span><span>re-activate Air &amp; Ground sensors on time; select the ordered camera</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Mission</span><span>drop the ordered station at its scheduled Clock time (from Message)</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">System</span><span>keep hydraulic pressure 90–110; enter comms codes in 15s</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Engine</span><span>keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Nav</span><span>hold airspeed within ±{SPEED_TOL} kts of required</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Sensor</span><span>re-activate Air &amp; Ground sensors on time; select the ordered camera</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Mission</span><span>drop the ordered station at its scheduled Clock time (from Message)</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">System</span><span>keep hydraulic pressure 90–110; enter comms codes in 15s</span></div>
                   <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1"><span className="shrink-0">🕑</span><span>The Clock shows in-game time — some tasks are scheduled to it</span></div>
                   <div className="flex items-start gap-2 text-xs text-[#8a9bb5]"><span className="shrink-0">⏱</span><span>3 minutes — the Message display feeds every task</span></div>
                 </div>
@@ -707,13 +707,13 @@ export default function CbatCut() {
                 {personalBest && (
                   <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-                    <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
+                    <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
                     <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                   </div>
                 )}
 
                 <div className={`text-center mb-4${dim}`}>
-                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">View Leaderboard →</Link>
+                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
                 </div>
 
                 <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>

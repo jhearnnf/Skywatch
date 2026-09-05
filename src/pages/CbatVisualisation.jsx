@@ -377,7 +377,7 @@ function ResultsScreen({ answers, totalTime }) {
     : 0
 
   const grade = pct >= 90 ? { label: 'Outstanding', emoji: '\u{1F396}️', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '✈️', color: 'text-brand-300' }
+    : pct >= 70 ? { label: 'Good', emoji: '✈️', color: 'text-brand-600' }
     : pct >= 50 ? { label: 'Needs Work', emoji: '\u{1F527}', color: 'text-amber-400' }
     : { label: 'Failed', emoji: '\u{1F4A5}', color: 'text-red-400' }
 
@@ -392,12 +392,12 @@ function ResultsScreen({ answers, totalTime }) {
       <div className="grid grid-cols-2 gap-2 mb-2">
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Score</p>
-          <p className="text-xl font-mono font-bold text-brand-300">{correct}/{TOTAL_ROUNDS}</p>
+          <p className="text-xl font-mono font-bold text-brand-600">{correct}/{TOTAL_ROUNDS}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">{pct}%</p>
         </div>
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Time</p>
-          <p className="text-xl font-mono font-bold text-brand-300">{totalTime.toFixed(1)}s</p>
+          <p className="text-xl font-mono font-bold text-brand-600">{totalTime.toFixed(1)}s</p>
           <p className="text-[10px] text-slate-500 mt-0.5">
             {correctTimes.length ? `avg ${avgTime.toFixed(2)}s per solve` : 'no solves'}
           </p>
@@ -408,7 +408,7 @@ function ResultsScreen({ answers, totalTime }) {
         {['Tier 1', 'Tier 2'].map((label, i) => (
           <div key={i} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-            <p className="text-xl font-mono font-bold text-brand-300">
+            <p className="text-xl font-mono font-bold text-brand-600">
               {tierCorrect[i].correct}/{tierCorrect[i].total}
             </p>
           </div>
@@ -762,11 +762,11 @@ export default function CbatVisualisation({ forcedMode = null }) {
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u{1F551}'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F551}'}</span>
                   <span>{'30 seconds per round · 8 rounds'}</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u{1F4A1}'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F4A1}'}</span>
                   <span>{is3D
                     ? 'Mentally rotate each shape to match the prompt — the dot must end up on the same corner.'
                     : 'Match letters — e.g. side “A” meets the other side “A”'}</span>
@@ -780,7 +780,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
                     <span className="text-slate-500 mx-1">{'·'}</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -790,7 +790,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
               )}
 
               <div className="text-center mb-4">
-                <Link to={leaderboardHref} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to={leaderboardHref} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   {'View Leaderboard →'}
                 </Link>
               </div>
@@ -810,7 +810,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-300">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
+                  Round <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
                       needs to see that the run will not be submitted, rather
                       than find out from a leaderboard that never moved. */}
@@ -820,10 +820,10 @@ export default function CbatVisualisation({ forcedMode = null }) {
                   {'✓'} <span className="text-green-400">{answers.filter(a => a.correct).length}</span>
                 </span>
                 <span className="text-slate-400">
-                  {'⏱'} <span className={roundTimeLeft <= 5 ? 'text-red-400' : 'text-brand-300'}>{Math.max(0, roundTimeLeft).toFixed(1)}s</span>
+                  {'⏱'} <span className={roundTimeLeft <= 5 ? 'text-red-400' : 'text-brand-600'}>{Math.max(0, roundTimeLeft).toFixed(1)}s</span>
                 </span>
                 <span className="text-slate-400">
-                  Total <span className="text-brand-300">{elapsed.toFixed(1)}s</span>
+                  Total <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
               </div>
 

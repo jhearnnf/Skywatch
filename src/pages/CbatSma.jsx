@@ -145,7 +145,7 @@ function ResultsScreen({ stats, tuning }) {
   const grade = computeGrade(stats.totalScore, tuning)
   const pct = scorePercent(stats.totalScore, tuning)
   const gradeColor = grade === 'Outstanding' ? 'text-green-400'
-    : grade === 'Good' ? 'text-brand-300'
+    : grade === 'Good' ? 'text-brand-600'
       : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
@@ -163,7 +163,7 @@ function ResultsScreen({ stats, tuning }) {
         ].map(([label, value]) => (
           <div key={label} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-            <p className="font-mono font-bold text-brand-300">{value}</p>
+            <p className="font-mono font-bold text-brand-600">{value}</p>
           </div>
         ))}
       </div>
@@ -472,7 +472,7 @@ export default function CbatSma() {
                     />
                   ))}
                 </div>
-                <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+                <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
                 <p className={`text-sm text-slate-400 mb-5${dim}`}>
                   A red dot drifts across the display and a crosshair sits fixed at the centre. Keep the
@@ -481,12 +481,12 @@ export default function CbatSma() {
                 </p>
 
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Control</span><span>your input sets how fast the dot moves, not where it goes. Centre the control and the dot keeps drifting, so you are always holding something.</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Mouse</span><span>the further the pointer sits from the middle of the display, the harder the dot is pushed that way</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Touch</span><span>hold anywhere on the pad below and move from there. Where you first touch becomes the centre.</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Joystick</span><span>push away to send the dot down, pull back to bring it up, exactly as the real test does</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Keys</span><span>arrow keys or WASD, if you have neither a mouse nor a touchscreen</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-300 font-bold shrink-0">Scoring</span><span>you earn points for every second the dot is inside the ring, and the most for holding it dead centre</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Control</span><span>your input sets how fast the dot moves, not where it goes. Centre the control and the dot keeps drifting, so you are always holding something.</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Mouse</span><span>the further the pointer sits from the middle of the display, the harder the dot is pushed that way</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Touch</span><span>hold anywhere on the pad below and move from there. Where you first touch becomes the centre.</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Joystick</span><span>push away to send the dot down, pull back to bring it up, exactly as the real test does</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Keys</span><span>arrow keys or WASD, if you have neither a mouse nor a touchscreen</span></div>
+                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Scoring</span><span>you earn points for every second the dot is inside the ring, and the most for holding it dead centre</span></div>
                   <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1"><span className="shrink-0">⏱</span><span>{Math.round(tuning.durationMs / 1000)} seconds, after {LEAD_IN_MS / 1000} seconds to get hold of it. A perfect run is {maxSmaScore(tuning)}.</span></div>
                   {/* Never imply we have reproduced the apparatus. The real test
                       is flown on a stick and a set of foot pedals; this is one
@@ -503,7 +503,7 @@ export default function CbatSma() {
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
                   <label htmlFor="sma-sensitivity" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
                     <span>Control sensitivity</span>
-                    <span className="font-mono text-brand-300">{sensitivity.toFixed(2)}×</span>
+                    <span className="font-mono text-brand-600">{sensitivity.toFixed(2)}×</span>
                   </label>
                   <input
                     id="sma-sensitivity"
@@ -527,13 +527,13 @@ export default function CbatSma() {
                 {personalBest && (
                   <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-                    <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
+                    <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
                     <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                   </div>
                 )}
 
                 <div className={`text-center mb-4${dim}`}>
-                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">View Leaderboard →</Link>
+                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
                 </div>
 
                 <button
@@ -584,7 +584,7 @@ export default function CbatSma() {
               {/* Which of the four is actually flying. Without it, "my joystick
                   isn't doing anything" is impossible to diagnose from here. */}
               <p className="mt-2 text-[10px] uppercase tracking-widest text-slate-600">
-                Flying on <span ref={el => (hudRef.current.source = el)} className="text-brand-300">Mouse</span>
+                Flying on <span ref={el => (hudRef.current.source = el)} className="text-brand-600">Mouse</span>
               </p>
             </div>
           )}

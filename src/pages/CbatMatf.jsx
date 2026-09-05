@@ -105,7 +105,7 @@ function SheetPanel({ sheet }) {
     <div className="overflow-auto max-h-[46vh] lg:max-h-[70vh] border border-[#1a3a5c] rounded-lg bg-[#060e1a] p-2 space-y-3">
       {sheet.tables.map(table => (
         <table key={table.airSpeed} className="border-collapse font-mono w-full text-[10px] sm:text-xs lg:text-sm" style={{ minWidth: '460px' }}>
-          <caption className="caption-top text-left text-[10px] lg:text-xs font-bold text-brand-300 uppercase tracking-wide pb-1">
+          <caption className="caption-top text-left text-[10px] lg:text-xs font-bold text-brand-600 uppercase tracking-wide pb-1">
             Air Speed {table.airSpeed} kt
           </caption>
           <thead>
@@ -149,7 +149,7 @@ function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade 
   const correct = gridCorrect + tableCorrect
   const accuracy = attempted ? Math.round((correct / attempted) * 100) : 0
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '📋' : grade === 'Needs Work' ? '🔧' : '💥'
-  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-300' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
+  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
     <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
@@ -161,12 +161,12 @@ function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade 
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}</p>
             <p className="text-sm text-slate-400">correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{accuracy}%</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{accuracy}%</p>
             <p className="text-sm text-slate-400">of {attempted} attempted</p>
           </div>
         </div>
@@ -175,11 +175,11 @@ function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Part 1 · Grid</p>
-          <p className="text-2xl font-mono font-bold text-brand-300">{gridCorrect}</p>
+          <p className="text-2xl font-mono font-bold text-brand-600">{gridCorrect}</p>
         </div>
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Part 2 · Wind Sheet</p>
-          <p className="text-2xl font-mono font-bold text-brand-300">{tableCorrect}</p>
+          <p className="text-2xl font-mono font-bold text-brand-600">{tableCorrect}</p>
         </div>
       </div>
       <p className="text-[11px] text-slate-600 mt-3">{totalTime.toFixed(0)}s total</p>
@@ -419,7 +419,7 @@ export default function CbatMatf() {
                   />
                 ))}
               </div>
-              <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{introTuning.blurb}</p>
+              <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{introTuning.blurb}</p>
 
               <p className={`text-sm text-slate-400 mb-5${dim}`}>
                 Two parts against the clock. Answer as many as you can. Nothing here is hard to understand, and everything here is hard to do quickly.
@@ -427,18 +427,18 @@ export default function CbatMatf() {
 
               <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">1.</span>
+                  <span className="text-brand-600 font-bold shrink-0">1.</span>
                   <span>Coordinate grid, running from minus {introTuning.gridExtent} to plus {introTuning.gridExtent} both ways. Bring one number across, one down, read where they meet.</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <span className="text-brand-300 font-bold shrink-0">2.</span>
+                  <span className="text-brand-600 font-bold shrink-0">2.</span>
                   <span>Wind sheet, in three steps. Air speed picks the table, wind velocity picks the row, wind angle picks the column. Then read the one of Drift Correction or Ground Speed you were asked for.</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-brand-300/90 pt-1">
+                <div className="flex items-start gap-2 text-xs text-brand-600/90 pt-1">
                   <span className="shrink-0">💡</span>
                   <span>On the grid the pair works either way round. The value at 4, −11 is the value at −11, 4. Don’t spend a moment deciding which is which.</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-brand-300/90">
+                <div className="flex items-start gap-2 text-xs text-brand-600/90">
                   <span className="shrink-0">💡</span>
                   <span>On the wind sheet, check the air speed on the table you have landed in before you read anything off it. Every table looks the same, and the right row and column of the wrong table is offered as an answer.</span>
                 </div>
@@ -455,13 +455,13 @@ export default function CbatMatf() {
               {personalBest && (
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {introTuning.label}</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore} correct</p>
+                  <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore} correct</p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                 </div>
               )}
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -506,10 +506,10 @@ export default function CbatMatf() {
           {playing && question && (
             <div className="w-full">
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
-                <span className="text-slate-400">Part <span className="text-brand-300">{phase === 'part1' ? 1 : 2}</span>/2</span>
+                <span className="text-slate-400">Part <span className="text-brand-600">{phase === 'part1' ? 1 : 2}</span>/2</span>
                 <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span>/{attempted}</span>
                 <span className="text-slate-400">
-                  ⏱ <span className={remainingMs < 15000 ? 'text-red-400' : 'text-brand-300'}>{Math.ceil(remainingMs / 1000)}s</span>
+                  ⏱ <span className={remainingMs < 15000 ? 'text-red-400' : 'text-brand-600'}>{Math.ceil(remainingMs / 1000)}s</span>
                 </span>
               </div>
 
@@ -545,7 +545,7 @@ export default function CbatMatf() {
                       <span className="text-slate-600 mx-2">·</span>
                       <span className="text-slate-500 text-xs font-sans font-normal">ANGLE </span>{question.windAngle}°
                     </p>
-                    <p className="text-xs font-bold text-brand-300 uppercase tracking-wide mt-1">
+                    <p className="text-xs font-bold text-brand-600 uppercase tracking-wide mt-1">
                       Read the {question.readoutLabel}
                     </p>
                   </div>

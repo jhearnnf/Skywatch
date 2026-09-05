@@ -33,9 +33,9 @@ function Dots({ colors }) {
 function Trace2HUD({ round, score, phase }) {
   return (
     <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
-      <span className="text-slate-400">ROUND <span className="text-brand-300">{Math.min(round + 1, TRACE2_ROUNDS)}</span>/{TRACE2_ROUNDS}</span>
+      <span className="text-slate-400">ROUND <span className="text-brand-600">{Math.min(round + 1, TRACE2_ROUNDS)}</span>/{TRACE2_ROUNDS}</span>
       <span className="text-slate-400">{phase === 'watch' ? '👀 WATCH' : phase === 'question' ? '❓ RECALL' : ''}</span>
-      <span className="text-slate-400">SCORE <span className="text-brand-300">{score}</span></span>
+      <span className="text-slate-400">SCORE <span className="text-brand-600">{score}</span></span>
     </div>
   )
 }
@@ -56,19 +56,19 @@ function StartScreen({ onStart, personalBest, traceModeSelector }) {
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">👀</span>
+          <span className="text-brand-600 shrink-0">👀</span>
           <span>Watch <span className="font-bold text-red-300">Red</span>, <span className="font-bold text-yellow-300">Yellow</span>, <span className="font-bold text-blue-300">Blue</span> and <span className="font-bold text-green-300">Green</span> fly for a few seconds.</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">🧠</span>
+          <span className="text-brand-600 shrink-0">🧠</span>
           <span>Track their turns, climbs, entry/exit sides and orientation.</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">❓</span>
+          <span className="text-brand-600 shrink-0">❓</span>
           <span>Answer one multiple-choice question per round, from memory.</span>
         </div>
         <div className="flex items-start gap-2">
-          <span className="text-brand-300 shrink-0">🏆</span>
+          <span className="text-brand-600 shrink-0">🏆</span>
           <span>+1 per correct answer. 8 rounds — aim for 8/8.</span>
         </div>
       </div>
@@ -76,13 +76,13 @@ function StartScreen({ onStart, personalBest, traceModeSelector }) {
       {personalBest && (
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-2 text-center">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-          <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}/{TRACE2_ROUNDS}</p>
+          <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}/{TRACE2_ROUNDS}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
         </div>
       )}
 
       <div className="text-center mb-4">
-        <Link to="/cbat/trace-2/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">View Leaderboard →</Link>
+        <Link to="/cbat/trace-2/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
       </div>
 
       <div className="flex justify-center">
@@ -276,7 +276,7 @@ export default function CbatTrace2({ traceModeSelector }) {
             <p className="text-sm text-slate-400 mb-5">All {TRACE2_ROUNDS} rounds finished.</p>
             <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 sm:p-5">
               <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
-              <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-300">
+              <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600">
                 {correctCount}<span className="text-slate-400">/{TRACE2_ROUNDS}</span>
               </p>
               <p className="text-xs text-slate-500 mt-1">correct</p>
@@ -383,7 +383,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                         onClick={startReplay}
                         animate={{ opacity: [0.7, 1, 0.7] }}
                         transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
-                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-[#1a3a5c] bg-[#0a1628] text-slate-400 hover:text-brand-300 hover:border-brand-500 text-[11px] font-bold uppercase tracking-wide transition-colors"
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-[#1a3a5c] bg-[#0a1628] text-slate-400 hover:text-brand-600 hover:border-brand-500 text-[11px] font-bold uppercase tracking-wide transition-colors"
                       >
                         🔁 Replay round
                       </motion.button>

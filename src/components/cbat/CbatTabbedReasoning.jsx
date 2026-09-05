@@ -67,7 +67,7 @@ function TabStrip({ tabs, openIds, onSelect }) {
                 : 'bg-[#060e1a] border-transparent text-slate-600 hover:text-[#ddeaf8]'
             }`}
           >
-            <span className={`mr-1.5 ${open ? 'text-brand-300' : 'text-slate-700'}`}>{i + 1}</span>
+            <span className={`mr-1.5 ${open ? 'text-brand-600' : 'text-slate-700'}`}>{i + 1}</span>
             {tab.title}
           </button>
         )
@@ -80,7 +80,7 @@ function ResultsScreen({ answers, totalTime, totalQuestions, grade, gameName }) 
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / totalQuestions) * 100)
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '📗' : grade === 'Needs Work' ? '🔧' : '💥'
-  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-300' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
+  const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
     <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
@@ -92,12 +92,12 @@ function ResultsScreen({ answers, totalTime, totalQuestions, grade, gameName }) 
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}/{totalQuestions}</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{totalQuestions}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -197,9 +197,9 @@ function Walkthrough({ steps, showQuotes = false }) {
       <ol className="space-y-1.5">
         {steps.map((step, i) => (
           <li key={i} className="flex items-start gap-2 text-[11px] leading-snug">
-            <span className="text-brand-300 font-bold shrink-0">{i + 1}</span>
+            <span className="text-brand-600 font-bold shrink-0">{i + 1}</span>
             <span className="text-[#8a9bb5]">
-              {step.tabLabel && <span className="text-brand-300 font-bold">Tab {step.tabLabel}: </span>}
+              {step.tabLabel && <span className="text-brand-600 font-bold">Tab {step.tabLabel}: </span>}
               {showQuotes && step.quote && <span className="text-[#ddeaf8]">“{step.quote}” </span>}
               {step.why}
             </span>
@@ -508,14 +508,14 @@ export default function CbatTabbedReasoning({
                   />
                 ))}
               </div>
-              <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{introTuning.blurb}</p>
+              <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{introTuning.blurb}</p>
 
               <p className={`text-sm text-slate-400 mb-5${dim}`}>{introLead}</p>
 
               <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
                 {introBullets.map((b, i) => (
                   <div key={i} className={`flex items-start gap-2 ${b.muted ? 'text-xs text-[#8a9bb5]' : ''}`}>
-                    <span className="text-brand-300 font-bold shrink-0">{b.icon}</span>
+                    <span className="text-brand-600 font-bold shrink-0">{b.icon}</span>
                     <span>{b.text}</span>
                   </div>
                 ))}
@@ -533,7 +533,7 @@ export default function CbatTabbedReasoning({
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">
                     Personal Best · {introTuning.label}
                   </p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{totalQuestions}
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -543,7 +543,7 @@ export default function CbatTabbedReasoning({
               )}
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -568,13 +568,13 @@ export default function CbatTabbedReasoning({
                 <span className="text-slate-400">
                   {phase === 'reading'
                     ? readPhaseLabel
-                    : <>Q <span className="text-brand-300">{currentIdx + 1}</span>/{totalQuestions}</>}
+                    : <>Q <span className="text-brand-600">{currentIdx + 1}</span>/{totalQuestions}</>}
                 </span>
                 {phase === 'playing' && (
                   <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span></span>
                 )}
                 <span className="text-slate-400">
-                  ⏱ <span className={remainingMs < 10000 ? 'text-red-400' : 'text-brand-300'}>{remainingSec}s</span>
+                  ⏱ <span className={remainingMs < 10000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span>
                 </span>
               </div>
 

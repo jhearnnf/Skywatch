@@ -91,7 +91,7 @@ function Stat({ label, value }) {
   return (
     <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-2.5 text-center">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
-      <p className="text-base font-mono font-bold text-brand-300">{value}</p>
+      <p className="text-base font-mono font-bold text-brand-600">{value}</p>
     </div>
   )
 }
@@ -117,7 +117,7 @@ function ByCalculation({ answers }) {
               />
             </div>
             <span className="w-24 shrink-0 text-right font-mono text-slate-400">
-              <span className="text-brand-300 font-bold">{row.exact}</span>/{PRACTISE_PER_TYPE} exact
+              <span className="text-brand-600 font-bold">{row.exact}</span>/{PRACTISE_PER_TYPE} exact
             </span>
           </div>
         ))}
@@ -159,7 +159,7 @@ function MarkedSheet({ run, answers }) {
             </div>
 
             <p className="text-xs font-mono text-slate-400 mb-2">
-              Correct: <span className="text-brand-300 font-bold">{formatCorrect(round.type, round.correctAnswer)}</span>
+              Correct: <span className="text-brand-600 font-bold">{formatCorrect(round.type, round.correctAnswer)}</span>
               {a.userInput.trim() !== '' && (
                 <>
                   <span className="text-slate-600 mx-2">{'·'}</span>
@@ -330,7 +330,7 @@ export default function AntPractise({ onExit }) {
       <div className="flex items-baseline justify-between gap-3 mb-1">
         <h2 className="text-base font-extrabold text-white">ANT Practise</h2>
         <span className="text-xs font-mono text-slate-400">
-          {'⏱'} <span className="text-brand-300">{elapsed.toFixed(1)}s</span>
+          {'⏱'} <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
         </span>
       </div>
       <p className="text-xs text-slate-500 mb-4 leading-snug">
@@ -357,7 +357,7 @@ export default function AntPractise({ onExit }) {
       <div className="sticky bottom-0 mt-4 -mx-1 px-1 pt-3 pb-3 bg-[#06101e]/95 backdrop-blur-sm border-t border-[#1a3a5c]">
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-slate-400">
-            <span className="text-brand-300 font-bold font-mono">{answeredCount}</span>
+            <span className="text-brand-600 font-bold font-mono">{answeredCount}</span>
             {` of ${PRACTISE_QUESTION_COUNT} answered`}
             {answeredCount < PRACTISE_QUESTION_COUNT && (
               <span className="text-slate-600">{' · blanks score 0'}</span>
@@ -380,7 +380,7 @@ export default function AntPractise({ onExit }) {
         >
           {'← Back to ANT'}
         </button>
-        <Link to={`/cbat/${GAME_KEY}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+        <Link to={`/cbat/${GAME_KEY}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
           {'Leaderboard →'}
         </Link>
       </div>

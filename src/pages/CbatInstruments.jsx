@@ -135,7 +135,7 @@ function ResultsScreen({ answers, totalTime }) {
   const grade = gradeFor(correct)
   const gradeStyle =
     grade === 'Outstanding' ? { emoji: '\u{1F396}\uFE0F', color: 'text-green-400' }
-    : grade === 'Good' ? { emoji: '\u2708\uFE0F', color: 'text-brand-300' }
+    : grade === 'Good' ? { emoji: '\u2708\uFE0F', color: 'text-brand-600' }
     : grade === 'Needs Work' ? { emoji: '\u{1F527}', color: 'text-amber-400' }
     : { emoji: '\u{1F4A5}', color: 'text-red-400' }
   const correctTimes = answers.filter(a => a.correct).map(a => a.roundTime)
@@ -153,20 +153,20 @@ function ResultsScreen({ answers, totalTime }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{correct}</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}</p>
             <p className="text-sm text-slate-400">correct / {rounds}</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">accuracy</p>
           </div>
         </div>
         {correctTimes.length > 0 && (
           <p className="text-xs text-slate-500 mt-3">
-            Avg answer time: <span className="text-brand-300 font-mono">{avgTime.toFixed(2)}s</span>
+            Avg answer time: <span className="text-brand-600 font-mono">{avgTime.toFixed(2)}s</span>
             <span className="text-slate-600 mx-2">{'\u00b7'}</span>
-            Total: <span className="text-brand-300 font-mono">{totalTime.toFixed(1)}s</span>
+            Total: <span className="text-brand-600 font-mono">{totalTime.toFixed(1)}s</span>
           </p>
         )}
       </div>
@@ -424,15 +424,15 @@ export default function CbatInstruments() {
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u23F1'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u23F1'}</span>
                   <span>90-second total time limit</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u{1F9ED}'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F9ED}'}</span>
                   <span>Needles calibrate each round — wait for them to settle, then choose</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">{'\u2713'}</span>
+                  <span className="text-brand-600 font-bold shrink-0">{'\u2713'}</span>
                   <span>One correct statement, four distractors — variables swapped subtly</span>
                 </div>
               </div>
@@ -440,7 +440,7 @@ export default function CbatInstruments() {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore} correct
                   </p>
                   <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
@@ -448,7 +448,7 @@ export default function CbatInstruments() {
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/instruments/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/instruments/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   {'View Leaderboard \u2192'}
                 </Link>
               </div>
@@ -469,13 +469,13 @@ export default function CbatInstruments() {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-300">{answers.length + (phase === 'feedback' ? 0 : 1)}</span>
+                  Round <span className="text-brand-600">{answers.length + (phase === 'feedback' ? 0 : 1)}</span>
                 </span>
                 <span className="text-slate-400">
                   {'\u2713'} <span className="text-green-400">{correctSoFar}</span>
                 </span>
                 <span className="text-slate-400">
-                  {'\u23F1'} <span className={timeRemaining < 10 ? 'text-red-400' : 'text-brand-300'}>{timeRemaining.toFixed(1)}s</span>
+                  {'\u23F1'} <span className={timeRemaining < 10 ? 'text-red-400' : 'text-brand-600'}>{timeRemaining.toFixed(1)}s</span>
                 </span>
               </div>
 

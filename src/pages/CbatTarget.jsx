@@ -686,7 +686,7 @@ function ResultsScreen({ stats }) {
   const grade = computeGrade(stats.totalScore)
   const gradeStyle = {
     'Outstanding': { emoji: '\u{1F396}\uFE0F', color: 'text-green-400' },
-    'Good':        { emoji: '\u2708\uFE0F',    color: 'text-brand-300' },
+    'Good':        { emoji: '\u2708\uFE0F',    color: 'text-brand-600' },
     'Needs Work':  { emoji: '\u{1F527}',       color: 'text-amber-400' },
     'Failed':      { emoji: '\u{1F4A5}',       color: 'text-red-400' },
   }[grade]
@@ -694,7 +694,7 @@ function ResultsScreen({ stats }) {
   const row = (label, val, sub, wide = false) => (
     <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 ${wide ? 'col-span-2' : ''}`}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-xl font-mono font-bold text-brand-300">{val}</p>
+      <p className="text-xl font-mono font-bold text-brand-600">{val}</p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
     </div>
   )
@@ -733,23 +733,23 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
 
       <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">{'⏱'}</span>
+          <span className="text-brand-600 font-bold shrink-0">{'⏱'}</span>
           <span>2-minute total time limit</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">Scene</span>
+          <span className="text-brand-600 font-bold shrink-0">Scene</span>
           <span>click shapes matching each target label</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">Light</span>
+          <span className="text-brand-600 font-bold shrink-0">Light</span>
           <span>press LOCK when your 3-light pattern matches the target</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">Scan</span>
+          <span className="text-brand-600 font-bold shrink-0">Scan</span>
           <span>press ID when your radar aircraft matches the scan target</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">System</span>
+          <span className="text-brand-600 font-bold shrink-0">System</span>
           <span>click any scrolling code matching a system target</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
@@ -765,13 +765,13 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
       {personalBest && (
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-          <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
+          <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
           <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
         </div>
       )}
 
       <div className="text-center mb-4">
-        <Link to="/cbat/target/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+        <Link to="/cbat/target/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
           {'View Leaderboard \u2192'}
         </Link>
       </div>
@@ -809,29 +809,29 @@ const DEMO_STROKE_UNSET = '#ffffff'   // outline before a side colour is assigne
 const DEMO_PHASES = [
   {
     part: 'body', key: 'tank', token: 3,
-    caption: <>Start with the <b className="text-brand-300">shape</b>. A square is a <b className="text-brand-300">tank</b> — that's what you sweep the scene for first.</>,
+    caption: <>Start with the <b className="text-brand-600">shape</b>. A square is a <b className="text-brand-600">tank</b> — that's what you sweep the scene for first.</>,
   },
   {
     part: 'colour', key: 'hostile', token: 2,
-    caption: <>Now the <b className="text-brand-300">colour</b>. Red means <b className="text-red-400">hostile</b> — blue is friendly, yellow neutral.</>,
+    caption: <>Now the <b className="text-brand-600">colour</b>. Red means <b className="text-red-400">hostile</b> — blue is friendly, yellow neutral.</>,
   },
   {
     part: 'damaged', key: 'damaged', token: 0,
-    caption: <>The <b className="text-brand-300">X</b> through the middle means <b className="text-brand-300">damaged</b>.</>,
+    caption: <>The <b className="text-brand-600">X</b> through the middle means <b className="text-brand-600">damaged</b>.</>,
   },
   {
     part: 'priority', key: 'hi-pri', token: 1,
-    caption: <><b className="text-brand-300">Arms</b> around the outside mark it <b className="text-brand-300">high-priority</b>.</>,
+    caption: <><b className="text-brand-600">Arms</b> around the outside mark it <b className="text-brand-600">high-priority</b>.</>,
   },
   {
     part: 'direction', key: null, token: 4,
-    caption: <>The <b className="text-brand-300">arrow</b> shows which way it's facing — this one is heading <b className="text-brand-300">north</b>. Check the compass.</>,
+    caption: <>The <b className="text-brand-600">arrow</b> shows which way it's facing — this one is heading <b className="text-brand-600">north</b>. Check the compass.</>,
   },
 ]
 const DEMO_DONE_CAPTION = (
   <>
     That's the whole description: a{' '}
-    <b className="text-brand-300">damaged, high-priority, hostile tank facing north</b>.
+    <b className="text-brand-600">damaged, high-priority, hostile tank facing north</b>.
     Every word has to match before you click it — so now go and find them.
   </>
 )
@@ -840,10 +840,10 @@ const DEMO_DONE_CAPTION = (
 // of a scene salted with near misses. Only clearing them all moves the tutorial on.
 const DEMO_HUNT_CAPTION = (found) => (
   <>
-    Click every <b className="text-brand-300">damaged, high-priority, hostile tank facing north</b>{' '}
-    in the scene — there are <b className="text-brand-300">{DEMO_HUNT_REQUIRED}</b>. Several are
+    Click every <b className="text-brand-600">damaged, high-priority, hostile tank facing north</b>{' '}
+    in the scene — there are <b className="text-brand-600">{DEMO_HUNT_REQUIRED}</b>. Several are
     close but wrong, so check every word before you click.{' '}
-    <b className="text-brand-300">Found {found} of {DEMO_HUNT_REQUIRED}.</b>
+    <b className="text-brand-600">Found {found} of {DEMO_HUNT_REQUIRED}.</b>
   </>
 )
 
@@ -878,10 +878,10 @@ const TUTORIAL_STEPS = [
     title: 'Spot the targets',
     body: (
       <>
-        When the game begins, read the <b className="text-brand-300">Scene Targets</b> panel,
-        then click the matching targets you see in the <b className="text-brand-300">scene</b>.
-        The first target is always <b className="text-brand-300">unknown</b> — check the{' '}
-        <b className="text-brand-300">key</b> to work out which shape that is (a diamond),
+        When the game begins, read the <b className="text-brand-600">Scene Targets</b> panel,
+        then click the matching targets you see in the <b className="text-brand-600">scene</b>.
+        The first target is always <b className="text-brand-600">unknown</b> — check the{' '}
+        <b className="text-brand-600">key</b> to work out which shape that is (a diamond),
         then click every one you can find. Watch out for the{' '}
         <b className="text-red-400">red pulsing circle</b> too — click it as fast as you can;
         in the real game these keep appearing, and the quicker you clear them the more points
@@ -898,8 +898,8 @@ const TUTORIAL_STEPS = [
     title: 'Read a full target',
     body: (
       <>
-        Real targets aren't just a shape. Every <b className="text-brand-300">mark</b> on the symbol
-        is one <b className="text-brand-300">word</b> in its description — watch this one get built up.
+        Real targets aren't just a shape. Every <b className="text-brand-600">mark</b> on the symbol
+        is one <b className="text-brand-600">word</b> in its description — watch this one get built up.
       </>
     ),
   },
@@ -909,9 +909,9 @@ const TUTORIAL_STEPS = [
     title: 'Match the lights',
     body: (
       <>
-        Now watch the <b className="text-brand-300">Light Target</b> pattern. The moment your{' '}
-        <b className="text-brand-300">Light</b> panel shows the same three colours,
-        press <b className="text-brand-300">LOCK</b>.
+        Now watch the <b className="text-brand-600">Light Target</b> pattern. The moment your{' '}
+        <b className="text-brand-600">Light</b> panel shows the same three colours,
+        press <b className="text-brand-600">LOCK</b>.
       </>
     ),
   },
@@ -924,9 +924,9 @@ const TUTORIAL_STEPS = [
     title: 'Identify the aircraft',
     body: (
       <>
-        The <b className="text-brand-300">Scan Target</b> shows an aircraft to find. Watch the{' '}
-        <b className="text-brand-300">Scan</b> radar — when the aircraft on it matches the target,
-        press <b className="text-brand-300">ID</b>.
+        The <b className="text-brand-600">Scan Target</b> shows an aircraft to find. Watch the{' '}
+        <b className="text-brand-600">Scan</b> radar — when the aircraft on it matches the target,
+        press <b className="text-brand-600">ID</b>.
       </>
     ),
   },
@@ -940,8 +940,8 @@ const TUTORIAL_STEPS = [
     title: 'Catch the code',
     body: (
       <>
-        The <b className="text-brand-300">System Target</b> shows a code. Watch the{' '}
-        <b className="text-brand-300">System</b> feed — when that code scrolls into view it will
+        The <b className="text-brand-600">System Target</b> shows a code. Watch the{' '}
+        <b className="text-brand-600">System</b> feed — when that code scrolls into view it will
         flash. Click it before it scrolls away.
       </>
     ),
@@ -1403,13 +1403,13 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
       >
         <div ref={coachRef} className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] uppercase tracking-wide text-brand-300 font-bold">Practice Mode</span>
+            <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => goToStep(stepIdx - 1)}
                 disabled={stepIdx === 0}
                 aria-label="Previous section"
-                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
               >
                 {'‹'}
               </button>
@@ -1418,7 +1418,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
                 onClick={() => goToStep(stepIdx + 1)}
                 disabled={stepIdx === TUTORIAL_STEPS.length - 1}
                 aria-label="Next section"
-                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
               >
                 {'›'}
               </button>
@@ -2123,10 +2123,10 @@ export default function CbatTarget() {
           {/* Top HUD strip */}
           <div className="cbat-target-hud">
             <span className="font-mono text-xs text-slate-400">
-              ⏱ <span className="text-brand-300">{remainingS.toFixed(1)}s</span>
+              ⏱ <span className="text-brand-600">{remainingS.toFixed(1)}s</span>
             </span>
             <span className="font-mono text-xs text-slate-400">
-              Score: <span className={stats.totalScore >= 0 ? 'text-brand-300' : 'text-red-400'}>{stats.totalScore}</span>
+              Score: <span className={stats.totalScore >= 0 ? 'text-brand-600' : 'text-red-400'}>{stats.totalScore}</span>
             </span>
           </div>
 

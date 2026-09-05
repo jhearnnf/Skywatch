@@ -54,7 +54,7 @@ const buildAcSchedule = (tuning) => buildQuestionSchedule(
 // ── Grade badge helper ────────────────────────────────────────────────────────
 const GRADE_STYLE = {
   'Outstanding': { emoji: '🎖️', color: 'text-green-400' },
-  'Good':        { emoji: '✈️', color: 'text-brand-300' },
+  'Good':        { emoji: '✈️', color: 'text-brand-600' },
   'Needs Work':  { emoji: '🔧', color: 'text-amber-400' },
   'Failed':      { emoji: '💥', color: 'text-red-400' },
 }
@@ -67,7 +67,7 @@ function ResultsScreen({ stats, tuning }) {
   const row = (label, val, sub) => (
     <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-      <p className="text-xl font-mono font-bold text-brand-300">{val}</p>
+      <p className="text-xl font-mono font-bold text-brand-600">{val}</p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
     </div>
   )
@@ -126,7 +126,7 @@ function IntroScreen({
           dimmed={launching && difficulty !== FLAG_DIFFICULTIES[1].key}
         />
       </div>
-      <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+      <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
       <p className={`text-sm text-slate-400 mb-5${dim}`}>
         Track aircraft, solve maths under pressure, and strike target shapes. All at once.
@@ -134,19 +134,19 @@ function IntroScreen({
 
       <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2${dim}`}>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">⏱</span>
+          <span className="text-brand-600 font-bold shrink-0">⏱</span>
           <span>60-second mission</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">🎯</span>
+          <span className="text-brand-600 font-bold shrink-0">🎯</span>
           <span>Click shapes when an aircraft circle overlaps them</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">✈️</span>
+          <span className="text-brand-600 font-bold shrink-0">✈️</span>
           <span>Only ringed aircraft carry a callsign — press YES/NO on whether that callsign is currently on screen</span>
         </div>
         <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-300 font-bold shrink-0">🔢</span>
+          <span className="text-brand-600 font-bold shrink-0">🔢</span>
           <span>Solve maths questions on the numpad before they time out</span>
         </div>
         <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
@@ -160,13 +160,13 @@ function IntroScreen({
       {personalBest && (
         <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-          <p className="text-lg font-mono font-bold text-brand-300">{personalBest.bestScore}</p>
+          <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
           <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
         </div>
       )}
 
       <div className={`text-center mb-4${dim}`}>
-        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
           View Leaderboard →
         </Link>
       </div>
@@ -207,9 +207,9 @@ const FLAG_TUTORIAL_STEPS = [
     body: (
       <>
         The play field is live. Aircraft drift across it trailing a{' '}
-        <b className="text-brand-300">white ring</b>. The moment a ring overlaps one of the
-        coloured <b className="text-brand-300">shapes</b>, that shape is armed — click it, or tap
-        its matching <b className="text-brand-300">colour button</b> below, to strike it. Land four
+        <b className="text-brand-600">white ring</b>. The moment a ring overlaps one of the
+        coloured <b className="text-brand-600">shapes</b>, that shape is armed — click it, or tap
+        its matching <b className="text-brand-600">colour button</b> below, to strike it. Land four
         strikes to move on. In the real game a wrong click loses points.
       </>
     ),
@@ -219,12 +219,12 @@ const FLAG_TUTORIAL_STEPS = [
     title: 'Monitor the aircraft',
     body: (
       <>
-        Only aircraft inside a <b className="text-brand-300">white ring</b> carry a{' '}
-        <b className="text-brand-300">callsign</b>, and it only flashes on for a moment before it
-        hides — so you have to <b className="text-brand-300">remember it</b>. Watch this one blink on
+        Only aircraft inside a <b className="text-brand-600">white ring</b> carry a{' '}
+        <b className="text-brand-600">callsign</b>, and it only flashes on for a moment before it
+        hides — so you have to <b className="text-brand-600">remember it</b>. Watch this one blink on
         and off. When a callsign shows in the prompt below, press{' '}
-        <b className="text-brand-300">YES</b> if it's the one on screen, or{' '}
-        <b className="text-brand-300">NO</b> if it isn't. Answer two correctly to continue.
+        <b className="text-brand-600">YES</b> if it's the one on screen, or{' '}
+        <b className="text-brand-600">NO</b> if it isn't. Answer two correctly to continue.
       </>
     ),
   },
@@ -233,7 +233,7 @@ const FLAG_TUTORIAL_STEPS = [
     title: 'Solve the maths',
     body: (
       <>
-        A <b className="text-brand-300">maths</b> question drops onto the numpad. Tap the digits to
+        A <b className="text-brand-600">maths</b> question drops onto the numpad. Tap the digits to
         enter the answer before it times out — the entry submits itself once you've keyed enough
         digits. Solve this one to finish.
       </>
@@ -474,13 +474,13 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
       {/* Coach card */}
       <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] uppercase tracking-wide text-brand-300 font-bold">Practice Mode</span>
+          <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => goToStep(stepIdx - 1)}
               disabled={stepIdx === 0}
               aria-label="Previous section"
-              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
             >
               {'‹'}
             </button>
@@ -489,7 +489,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
               onClick={() => goToStep(stepIdx + 1)}
               disabled={stepIdx === FLAG_TUTORIAL_STEPS.length - 1}
               aria-label="Next section"
-              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-300 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
             >
               {'›'}
             </button>
@@ -516,8 +516,8 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
 
       {/* Per-step status line */}
       <div className="flex items-center justify-end h-4 mb-1 px-1 text-[10px] font-mono">
-        {targetsActive && <span className="text-brand-300">Strikes {targetHits}/{TUT_TARGET_HITS_REQUIRED}</span>}
-        {aircraftActive && <span className="text-brand-300">Correct {acCorrect}/{TUT_AC_CORRECT_REQUIRED}</span>}
+        {targetsActive && <span className="text-brand-600">Strikes {targetHits}/{TUT_TARGET_HITS_REQUIRED}</span>}
+        {aircraftActive && <span className="text-brand-600">Correct {acCorrect}/{TUT_AC_CORRECT_REQUIRED}</span>}
       </div>
 
       {/* Practice arena — mirrors the live game: the field on top, then the
@@ -1187,10 +1187,10 @@ export default function CbatFlag() {
                 {/* HUD */}
                 <div className="cbat-flag-hud flex items-center justify-between text-xs font-mono mb-2 px-1 max-[600px]:mb-1 max-[600px]:shrink-0">
                   <span className="text-slate-400">
-                    ⏱ <span className="text-brand-300">{remainingS.toFixed(1)}s</span>
+                    ⏱ <span className="text-brand-600">{remainingS.toFixed(1)}s</span>
                   </span>
                   <span className="text-slate-400">
-                    Score: <span className={stats.totalScore >= 0 ? 'text-brand-300' : 'text-red-400'}>{stats.totalScore}</span>
+                    Score: <span className={stats.totalScore >= 0 ? 'text-brand-600' : 'text-red-400'}>{stats.totalScore}</span>
                   </span>
                 </div>
 

@@ -180,7 +180,7 @@ function ResultsScreen({ answers, totalTime }) {
   const r2Correct = r2.filter(a => a.correct).length
 
   const grade = pct >= 90 ? { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '✈️', color: 'text-brand-300' }
+    : pct >= 70 ? { label: 'Good', emoji: '✈️', color: 'text-brand-600' }
     : pct >= 50 ? { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
     : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
 
@@ -194,12 +194,12 @@ function ResultsScreen({ answers, totalTime }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_QUESTIONS} correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -208,11 +208,11 @@ function ResultsScreen({ answers, totalTime }) {
       <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Round 1 (10°)</p>
-          <p className="text-xl font-mono font-bold text-brand-300">{r1Correct}/{ROUND_1_COUNT}</p>
+          <p className="text-xl font-mono font-bold text-brand-600">{r1Correct}/{ROUND_1_COUNT}</p>
         </div>
         <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Round 2 (5°)</p>
-          <p className="text-xl font-mono font-bold text-brand-300">{r2Correct}/{ROUND_2_COUNT}</p>
+          <p className="text-xl font-mono font-bold text-brand-600">{r2Correct}/{ROUND_2_COUNT}</p>
         </div>
       </div>
 
@@ -411,11 +411,11 @@ export default function CbatAngles() {
 
               <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">R1</span>
+                  <span className="text-brand-600 font-bold shrink-0">R1</span>
                   <span>10 angles — multiples of 10°</span>
                 </div>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-300 font-bold shrink-0">R2</span>
+                  <span className="text-brand-600 font-bold shrink-0">R2</span>
                   <span>10 angles — multiples of 5°</span>
                 </div>
                 <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
@@ -427,7 +427,7 @@ export default function CbatAngles() {
               {personalBest && (
                 <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_QUESTIONS} ({Math.round((personalBest.bestScore / TOTAL_QUESTIONS) * 100)}%)
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -437,7 +437,7 @@ export default function CbatAngles() {
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/angles/leaderboard" className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to="/cbat/angles/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -458,19 +458,19 @@ export default function CbatAngles() {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-300">{currentRound}</span>/2
+                  Round <span className="text-brand-600">{currentRound}</span>/2
                 </span>
                 <span className="text-slate-400">
-                  Q <span className="text-brand-300">{questionInRound}</span>/{roundTotal}
+                  Q <span className="text-brand-600">{questionInRound}</span>/{roundTotal}
                 </span>
                 <span className="text-slate-400">
-                  Overall <span className="text-brand-300">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
+                  Overall <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
                 </span>
                 <span className="text-slate-400">
                   ✓ <span className="text-green-400">{answers.filter(a => a.correct).length}</span>
                 </span>
                 <span className="text-slate-400">
-                  ⏱ <span className="text-brand-300">{elapsed.toFixed(1)}s</span>
+                  ⏱ <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
               </div>
 
@@ -583,7 +583,7 @@ export default function CbatAngles() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-300 font-bold">Round 2 — angles now in 5° increments</span>
+                    <span className="text-xs text-brand-600 font-bold">Round 2 — angles now in 5° increments</span>
                   </motion.div>
                 )}
               </AnimatePresence>

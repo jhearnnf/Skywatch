@@ -101,13 +101,13 @@ function KeyButton({ children, onClick, accent, disabled, canSubmit, demoAnswer 
         accent === 'submit'
           ? (canSubmit && !disabled
               ? 'bg-brand-600 hover:bg-brand-700 border-brand-600 text-white cursor-pointer'
-              : 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80] cursor-not-allowed')
+              : 'bg-[#0a1628] border-[#1a3a5c] text-slate-500 cursor-not-allowed')
           : accent === 'back'
             ? (disabled
-                ? 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80] cursor-not-allowed'
+                ? 'bg-[#0a1628] border-[#1a3a5c] text-slate-500 cursor-not-allowed'
                 : 'bg-[#1a3a5c] hover:bg-[#254a6e] border-[#1a3a5c] text-white cursor-pointer')
             : (disabled
-                ? 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80] cursor-not-allowed'
+                ? 'bg-[#0a1628] border-[#1a3a5c] text-slate-500 cursor-not-allowed'
                 : 'bg-[#0a1628] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer')
       }`}
     >
@@ -132,7 +132,7 @@ function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
 // ── Results screen ───────────────────────────────────────────────────────────
 const GRADE_STYLE = {
   'Outstanding': { emoji: '🎖️', color: 'text-green-400' },
-  'Good':        { emoji: '✈️', color: 'text-brand-300' },
+  'Good':        { emoji: '✈️', color: 'text-brand-600' },
   'Needs Work':  { emoji: '🔧', color: 'text-amber-400' },
   'Failed':      { emoji: '💥', color: 'text-red-400' },
 }
@@ -160,12 +160,12 @@ function ResultsScreen({ answers, totalTime, tuning }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{pct}%</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_QUESTIONS} correct</p>
           </div>
           <div className="w-px h-12 bg-[#1a3a5c]" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-300 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>
@@ -175,7 +175,7 @@ function ResultsScreen({ answers, totalTime, tuning }) {
         {perRound.map(({ r, correct }) => (
           <div key={r} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">R{r}</p>
-            <p className="text-xl font-mono font-bold text-brand-300">{correct}/{QUESTIONS_PER_ROUND}</p>
+            <p className="text-xl font-mono font-bold text-brand-600">{correct}/{QUESTIONS_PER_ROUND}</p>
           </div>
         ))}
       </div>
@@ -521,7 +521,7 @@ export default function CbatNumericalOps() {
                   dimmed={launching && difficulty !== NUMERICAL_OPS_DIFFICULTIES[1].key}
                 />
               </div>
-              <p className={`text-[11px] text-brand-300 mb-3${dim}`}>{tuning.blurb}</p>
+              <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
               <p className={`text-sm text-slate-400 mb-5${dim}`}>
                 Solve two-number arithmetic against the clock. Four rounds of five questions, with numbers getting bigger each round. 20 seconds per question.
@@ -530,7 +530,7 @@ export default function CbatNumericalOps() {
               <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2${dim}`}>
                 {[1, 2, 3, 4].map(r => (
                   <div key={r} className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                    <span className="text-brand-300 font-bold shrink-0">R{r}</span>
+                    <span className="text-brand-600 font-bold shrink-0">R{r}</span>
                     <span>5 questions · numbers 1–{tuning.roundMax[r - 1]} · +, −, ×, ÷</span>
                   </div>
                 ))}
@@ -549,7 +549,7 @@ export default function CbatNumericalOps() {
               {personalBest && (
                 <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-                  <p className="text-lg font-mono font-bold text-brand-300">
+                  <p className="text-lg font-mono font-bold text-brand-600">
                     {personalBest.bestScore}%
                     <span className="text-slate-500 mx-1">·</span>
                     {personalBest.bestTime.toFixed(1)}s
@@ -559,7 +559,7 @@ export default function CbatNumericalOps() {
               )}
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -581,19 +581,19 @@ export default function CbatNumericalOps() {
               {/* HUD */}
               <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-300">{currentRound}</span>/{ROUNDS}
+                  Round <span className="text-brand-600">{currentRound}</span>/{ROUNDS}
                 </span>
                 <span className="text-slate-400">
-                  Q <span className="text-brand-300">{questionInRound}</span>/{QUESTIONS_PER_ROUND}
+                  Q <span className="text-brand-600">{questionInRound}</span>/{QUESTIONS_PER_ROUND}
                 </span>
                 <span className="text-slate-400">
-                  Overall <span className="text-brand-300">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
+                  Overall <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
                 </span>
                 <span className="text-slate-400">
                   ✓ <span className="text-green-400">{correctSoFar}</span>
                 </span>
                 <span className="text-slate-400">
-                  ⏱ <span className={qRemainingMs < 5000 ? 'text-red-400' : 'text-brand-300'}>{remainingSec}s</span>
+                  ⏱ <span className={qRemainingMs < 5000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span>
                 </span>
               </div>
 
@@ -621,13 +621,13 @@ export default function CbatNumericalOps() {
                 <div className="relative z-10 text-center">
                   <p className="text-4xl sm:text-5xl font-mono font-bold text-white tracking-wider">
                     {currentQuestion.a}
-                    <span className="text-brand-300 mx-3">{formatOp(currentQuestion.op)}</span>
+                    <span className="text-brand-600 mx-3">{formatOp(currentQuestion.op)}</span>
                     {currentQuestion.b}
-                    <span className="text-slate-500 mx-3">=</span>
+                    <span className="text-slate-600 mx-3">=</span>
                     <span className={`inline-block min-w-[3ch] text-left ${
                       phase === 'feedback'
                         ? (feedback?.correct ? 'text-green-400' : 'text-red-400')
-                        : 'text-brand-300'
+                        : 'text-brand-600'
                     }`}>
                       {phase === 'feedback' && feedback?.picked === null
                         ? '—'
@@ -678,7 +678,7 @@ export default function CbatNumericalOps() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-300 font-bold">
+                    <span className="text-xs text-brand-600 font-bold">
                       Round {currentRound} — numbers now up to {runTuning.roundMax[currentRound - 1]}
                     </span>
                   </motion.div>

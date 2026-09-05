@@ -124,7 +124,7 @@ function FormPercentile({ form, cfg }) {
       ) : (
         <p className="text-sm font-bold text-[#ddeaf8] mt-2">
           You're in the top{' '}
-          <span className="text-xl font-mono font-extrabold text-brand-300">{topPct}%</span>
+          <span className="text-xl font-mono font-extrabold text-brand-600">{topPct}%</span>
           {' '}of agents!
         </p>
       )}
@@ -388,7 +388,7 @@ export default function CbatLeaderboard() {
       <div className="text-center py-20">
         <p className="text-4xl mb-3">❓</p>
         <p className="font-bold text-slate-800">Unknown game</p>
-        <Link to="/cbat" className="text-sm text-brand-300 hover:text-brand-200 mt-2 inline-block">Back to CBAT</Link>
+        <Link to="/cbat" className="text-sm text-brand-600 hover:text-brand-700 mt-2 inline-block">Back to CBAT</Link>
       </div>
     )
   }
