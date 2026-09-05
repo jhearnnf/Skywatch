@@ -27,6 +27,11 @@ export const CBAT_ADMIN_VIEW_KEY = 'sw_cbat_admin_view'
 // on next visit.
 export const CBAT_FLAG_DIFFICULTY_KEY = 'sw_cbat_flag_difficulty'
 
+// ANT's difficulty selection ('easier' | 'hard'). Same contract as FLAG's, but
+// the two ANT boards are different games rather than one game at two loads —
+// see src/utils/cbat/antDifficulty.js.
+export const CBAT_ANT_DIFFICULTY_KEY = 'sw_cbat_ant_difficulty'
+
 // CRO "first brief" flag — set when the user picks a category in the welcome
 // flow so BriefReader can suppress in-brief navigation that would derail the
 // funnel. TTL keeps a stale flag from leaking into a later session.

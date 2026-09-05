@@ -26,7 +26,9 @@ import AircraftQuestion from './CbatFlag/AircraftQuestion'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
-import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Shared by both difficulties. The only things a difficulty changes are how
@@ -91,7 +93,7 @@ function ResultsScreen({ stats, tuning }) {
 
 // ── Intro screen ──────────────────────────────────────────────────────────────
 function IntroScreen({
-  onStart, onTutorial, personalBest, aircraftList, aircraftLoading,
+  onStart, onTutorial, personalBest, bestLoading, aircraftList, aircraftLoading,
   difficulty, onDifficulty, tuning, launching,
 }) {
   const disabled = aircraftLoading || aircraftList.length === 0
@@ -110,22 +112,12 @@ function IntroScreen({
       {/* FLAG_DIFFICULTIES is ordered [easier, hard], so the easier option lands
           left and hard lands right. The pair sits under the title, matching CUT. */}
       <p className={`text-xl font-extrabold text-white mb-2${dim}`}>FLAG</p>
-      <div className="flex items-center justify-center gap-3 mb-1">
-        <DifficultyButton
-          tuning={FLAG_DIFFICULTIES[0]}
-          selected={difficulty === FLAG_DIFFICULTIES[0].key}
-          onSelect={onDifficulty}
-          flashing={launching && difficulty === FLAG_DIFFICULTIES[0].key}
-          dimmed={launching && difficulty !== FLAG_DIFFICULTIES[0].key}
-        />
-        <DifficultyButton
-          tuning={FLAG_DIFFICULTIES[1]}
-          selected={difficulty === FLAG_DIFFICULTIES[1].key}
-          onSelect={onDifficulty}
-          flashing={launching && difficulty === FLAG_DIFFICULTIES[1].key}
-          dimmed={launching && difficulty !== FLAG_DIFFICULTIES[1].key}
-        />
-      </div>
+      <CbatModeRow
+        modes={FLAG_DIFFICULTIES}
+        value={difficulty}
+        onSelect={onDifficulty}
+        launching={launching}
+      />
       <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
       <p className={`text-sm text-slate-400 mb-5${dim}`}>
@@ -157,13 +149,9 @@ function IntroScreen({
 
       {/* Personal best and the leaderboard link both follow the selected
           difficulty — the two boards are entirely separate. */}
-      {personalBest && (
-        <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-          <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
-          <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-        </div>
-      )}
+      <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
+        {best => best.bestScore}
+      </CbatPersonalBest>
 
       <div className={`text-center mb-4${dim}`}>
         <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
@@ -656,7 +644,10 @@ export default function CbatFlag() {
   const runTuningRef = useRef(tuning)
   const [runDifficulty, setRunDifficulty] = useState(difficulty)
   const runTuning = flagTuning(runDifficulty)
-  const [personalBest, setPersonalBest] = useState(null)
+  // Keyed by board, so a flip never shows one difficulty's score under the
+  // other's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: refreshBest } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [aircraftList, setAircraftList] = useState([])
@@ -724,16 +715,6 @@ export default function CbatFlag() {
       body: JSON.stringify(body),
     }).catch(() => {})
   }, [user, apiFetch, API])
-
-  // Personal best is per-difficulty (separate collections), so it refetches
-  // whenever the selection changes.
-  useEffect(() => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/${tuning.gameKey}/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, tuning.gameKey])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch the aircraft list
   useEffect(() => {
@@ -944,10 +925,8 @@ export default function CbatFlag() {
         .then((r) => {
           setScoreSaved(!!r?.synced)
           setQueued(!!r?.queued)
-          apiFetch(`${API}/api/games/cbat/${playedTuning.gameKey}/personal-best`)
-            .then(r => r.json())
-            .then(d => { if (d.data) setPersonalBest(d.data) })
-            .catch(() => {})
+          // The board the run was played on, not whatever is selected now.
+          refreshBest(playedTuning.gameKey)
         })
         .catch(() => {})
       return finalStats
@@ -1116,19 +1095,25 @@ export default function CbatFlag() {
     else setPhase('launching')
   }, [aircraftList, tuning, demo, startGame])
 
+  // Keyed to `phase` alone. Depending on startGame meant any re-render
+  // that changed its identity cleared the pending timeout and started a
+  // fresh one, so an unrelated render could quietly extend the flash.
+  const startGameRef = useRef(startGame)
+  useEffect(() => { startGameRef.current = startGame })
   useEffect(() => {
     if (phase !== 'launching') return
-    const t = setTimeout(() => startGame(), FLAG_LAUNCH_MS)
+    const t = setTimeout(() => startGameRef.current(), FLAG_LAUNCH_MS)
     return () => clearTimeout(t)
-  }, [phase, startGame])
+  }, [phase])
 
   const chooseDifficulty = useCallback((key) => {
     setDifficulty(key)
     storeFlagDifficulty(key)
-    // Clear the old board's best here rather than in the fetch effect — it
-    // belongs to the difficulty being left, and showing it under the new
-    // label until the refetch lands would be wrong.
-    setPersonalBest(null)
+    // No clearing here any more. This used to null the best so the old board's
+    // number couldn't sit under the new board's label, which was right but
+    // unmounted the whole panel and made the card jump. The cache is keyed by
+    // board now, so the panel keeps its height and simply has nothing to show
+    // for a beat.
   }, [])
 
   const remainingS = Math.max(0, GAME_DURATION - elapsed)
@@ -1156,7 +1141,7 @@ export default function CbatFlag() {
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
             }
             <h1 className="text-sm font-extrabold text-[#ddeaf8]">FLAG</h1>
-            {phase === 'playing' && <DifficultyMarker tuning={runTuning} />}
+            {phase === 'playing' && <ModeMarker mode={runTuning} />}
           </div>
 
           <div className="cbat-flag-body flex flex-col items-center max-[600px]:w-full">
@@ -1165,6 +1150,7 @@ export default function CbatFlag() {
                 onStart={beginLaunch}
                 onTutorial={() => setPhase('tutorial')}
                 personalBest={personalBest}
+                bestLoading={bestLoading}
                 aircraftList={aircraftList}
                 aircraftLoading={aircraftLoading}
                 difficulty={difficulty}

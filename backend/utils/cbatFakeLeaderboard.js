@@ -55,6 +55,7 @@ const GAME_OFFSET = {
   'dpt-easier':      36,
   'dpt-hard':        37,
   'ant-practise':    38,
+  'ant-hard':        39,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -127,6 +128,14 @@ const FAKE_TUNING = {
     // 20 multiples-of-5 values, monotonically non-increasing, max 70, min 15.
     // Every ANT total is a multiple of 5 (10 exact / 5 partial / 0 miss × 8 rounds).
     scoreSequence: [70, 65, 60, 55, 50, 50, 45, 45, 40, 40, 35, 35, 30, 30, 25, 25, 20, 20, 15, 15],
+  },
+  // Twelve rounds out of 120 with the reading load that costs most of the
+  // marks, so a strong demo run sits at the same share of the ceiling as ANT's
+  // (70/80) rather than at the same number. Totals are multiples of 5 for the
+  // same reason ANT's are: every round scores 10, 5 or 0.
+  'ant-hard': {
+    floor: 20, ceiling: 115, seedTime: 402.8, timeStep: 12.6,
+    scoreSequence: [105, 100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 55, 50, 45, 40, 35, 30, 30, 25, 20],
   },
   'ant-practise': {
     // 8 questions at 10 exact / 5 close / 0, so totals are multiples of 5 out of
@@ -504,7 +513,7 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
 // 20-row limit. A real run below the lowest demo is displaced off the board
 // until it beats that floor. Other games keep gap-fill padding
 // (limit - real.length) and short-circuit when real already fills the board.
-const FULL_SEQUENCE_GAMES = new Set(['ant', 'code-duplicates', 'flag', 'flag-easier', 'cut']);
+const FULL_SEQUENCE_GAMES = new Set(['ant', 'ant-hard', 'code-duplicates', 'flag', 'flag-easier', 'cut']);
 
 function padLeaderboard(real, gameKey, { limit = 20, isAdmin = false } = {}) {
   const cfg = CBAT_GAMES[gameKey];
@@ -565,6 +574,10 @@ const WEEKLY_PER_PLAY = {
   'target':          520,  // real med 602
   'instruments':       4,  // real med 3
   'ant':              45,  // real med 50
+  // No production history yet — the board starts empty. Set from the demo
+  // band's middle (65/120), which is the same share of the ceiling as ANT's 45
+  // of 80. Reseat it once real runs exist.
+  'ant-hard':         65,
   // No production history yet. Set from the demo band's middle (45/80), a
   // little above ANT's 45 since the drill is the easier of the two — reseat it
   // once real runs exist.

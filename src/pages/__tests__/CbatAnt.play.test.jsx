@@ -2,6 +2,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatAnt from '../CbatAnt'
 import { WEIGHT_TABLE, parseHHMM } from '../../utils/antGenerator'
+import { ANT_LAUNCH_MS } from '../../utils/cbat/antDifficulty'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -56,9 +57,19 @@ function distanceAnswer() {
   return String(travel * row.mpm)
 }
 
+// Start no longer drops straight into round 1: ANT ships an Easier/Hard split,
+// and pressing Start flashes the chosen difficulty for a beat first so you can
+// see which board you are about to play. Every run has to step over that,
+// whether or not the test itself cares about timers, so the fake clock is
+// installed here rather than per test. afterEach puts the real one back.
+//
+// This drills the Easier board — the original eight-round one on the plain
+// `ant` key, which is the default and what the panels below are written for.
 function startGame() {
+  vi.useFakeTimers()
   render(<CbatAnt />)
   fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
+  act(() => { vi.advanceTimersByTime(ANT_LAUNCH_MS + 10) })
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────

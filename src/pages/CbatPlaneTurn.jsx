@@ -14,7 +14,10 @@ import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { useTraceMode, TRACE_MODES } from '../hooks/useTraceMode'
 import { useModeFromSearch } from '../hooks/useModeFromSearch'
-import TraceModeSelector from '../components/TraceModeSelector'
+import { CbatModeRow } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import { TRACE_MODE_KEYS, traceModes } from '../utils/cbat/traceModes'
 // Aircraft control model: full local-frame flight controls.
 //   - Pitch (climb/dive): rotation around the aircraft's local right axis (model -Z).
 //   - Yaw (left/right):   rotation around the aircraft's local up axis (model +Y).
@@ -86,7 +89,7 @@ function randomPackagePos(planeR, planeC) {
 }
 
 // ── Aircraft Selection Screen ────────────────────────────────────────────────
-function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, traceModeSelector }) {
+function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading, mode, traceModeSelector }) {
   const gameMode3D     = mode === '3d'
   const gameModeTrace1 = mode === 'trace1'
   const gameModeTrace2 = mode === 'trace2'
@@ -116,11 +119,8 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
 
   return (
     <div>
-      {traceModeSelector && (
-        <div className="mb-4 flex justify-center">{traceModeSelector}</div>
-      )}
-
       <h2 className="text-lg font-bold text-slate-800 text-center mb-1">{heading}</h2>
+      {traceModeSelector && <div className="mb-2">{traceModeSelector}</div>}
       <p className="text-xs text-slate-400 text-center mb-3">{subheading}</p>
 
       {/* Mode banner */}
@@ -213,12 +213,10 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
         </div>
       )}
 
-      {personalBest && !gameModeTrace2 && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-2 text-center">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-          <p className="text-lg font-mono font-bold text-brand-600">{pbLine}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-        </div>
+      {!gameModeTrace2 && (
+        <CbatPersonalBest best={personalBest} loading={bestLoading} className="max-w-md mx-auto">
+          {() => pbLine}
+        </CbatPersonalBest>
       )}
 
       {!gameModeTrace2 && (
@@ -229,15 +227,14 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
         </div>
       )}
 
-      {gameModeTrace2 ? null : (
+      {/* Only the practice modes let you pick an aircraft. Trace 1 flies the
+          Hawk T2 and nothing else, so a grid of one was a choice that wasn't
+          one — it gets a Start button, the same as Trace 2. */}
+      {gameModeTrace2 || gameModeTrace1 ? null : (
         <>
-          <h2 className="text-lg font-bold text-slate-800 text-center mb-1">
-            {gameModeTrace1 ? 'Aircraft' : 'Choose Your Aircraft'}
-          </h2>
+          <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
           <p className="text-xs text-slate-400 text-center mb-3">
-            {gameModeTrace1
-              ? 'Trace 1 uses the Hawk T2 — tap to start.'
-              : `Select an aircraft, then navigate through ${MAX_LEVEL} levels.`}
+            Select an aircraft, then navigate through {MAX_LEVEL} levels.
           </p>
         </>
       )}
@@ -265,8 +262,22 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
         </div>
       )}
 
-      {!gameModeTrace2 && !loading && aircraft.length > 0 && (
-        <div className={`grid gap-3 max-w-md mx-auto ${gameModeTrace1 ? 'grid-cols-1 max-w-[180px]' : 'grid-cols-3 sm:grid-cols-4'}`}>
+      {/* Trace 1's Start. The roster is still fetched, because the run needs the
+          Hawk T2's model — it just isn't a decision the player has to make. */}
+      {gameModeTrace1 && !loading && aircraft.length > 0 && (
+        <div className="flex justify-center">
+          <button
+            onClick={() => onSelect(aircraft[0])}
+            data-demo-start
+            className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+          >
+            Start
+          </button>
+        </div>
+      )}
+
+      {!gameModeTrace2 && !gameModeTrace1 && !loading && aircraft.length > 0 && (
+        <div className="grid gap-3 max-w-md mx-auto grid-cols-3 sm:grid-cols-4">
           {aircraft.map((a, i) => (
             <motion.button
               key={a.briefId}
@@ -285,7 +296,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, mode, trace
               <img
                 src={a.cutoutUrl}
                 alt={a.title}
-                className={`object-contain group-hover:scale-110 transition-transform drop-shadow-[0_0_6px_rgba(91,170,255,0.4)] ${gameModeTrace1 ? 'w-20 h-20' : 'w-14 h-14'}`}
+                className="object-contain group-hover:scale-110 transition-transform drop-shadow-[0_0_6px_rgba(91,170,255,0.4)] w-14 h-14"
               />
               <span className="text-[10px] text-slate-400 group-hover:text-brand-600 text-center leading-tight truncate w-full">
                 {a.title}
@@ -458,7 +469,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
   // disabled, fall back to the first one still on (Trace 1 is the headline).
   const isAdmin = !!user?.isAdmin
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
-  const MODE_KEY = { '2d': 'plane-turn-2d', '3d': 'plane-turn-3d', trace1: 'trace-1', trace2: 'trace-2' }
+  const MODE_KEY = TRACE_MODE_KEYS
   const isModeEnabled = (m) => isAdmin || cbatGameEnabled[MODE_KEY[m]] !== false
   useEffect(() => {
     if (isAdmin || !settings) return
@@ -524,7 +535,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
   const [totalRotations, setTotalRotations] = useState(0)
   const [totalTime, setTotalTime]           = useState(0)
 
-  const [personalBest, setPersonalBest] = useState(null)
+
   const [scoreSaved, setScoreSaved]     = useState(false)
   const [queued, setQueued]             = useState(false)
 
@@ -587,20 +598,11 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
       .finally(() => setLoadingAircraft(false))
   }, [user])
 
-  // Fetch personal best (re-runs when mode changes). Trace 1 has its own endpoint;
-  // Trace 2 has no PB (selector stub only).
-  useEffect(() => {
-    if (!user) return
-    setPersonalBest(null)
-    if (mode === 'trace2') return
-    const url = mode === 'trace1'
-      ? `${API}/api/games/cbat/trace-1/personal-best`
-      : `${API}/api/games/cbat/plane-turn-${mode}/personal-best`
-    apiFetch(url)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, mode])
+  // Personal best follows the selected mode, cached per board so switching
+  // between the four keeps the panel's height instead of unmounting it. Trace 2
+  // keeps its own best on its own screen, so it asks for nothing here.
+  const { best: personalBest, loading: bestLoading, refresh: refreshBest } =
+    useCbatPersonalBest(gameModeTrace2 ? null : MODE_KEY[mode], { user, apiFetch, API })
 
   // Submit score — mode determines the backend gameKey, which fixes the mode
   // on the saved doc server-side (body no longer needs to send it).
@@ -617,10 +619,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/plane-turn-${mode}/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        refreshBest()
       })
       .catch(() => {})
   }, [apiFetch, API, mode])
@@ -643,10 +642,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/trace-1/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        refreshBest()
       })
       .catch(() => {})
   }, [apiFetch, API])
@@ -1306,7 +1302,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
           on its own menu so users can switch back to Practise / Trace 1. */}
       {user && gameModeTrace2 && (
         <Suspense fallback={null}>
-          <CbatTrace2 traceModeSelector={<TraceModeSelector value={mode} onChange={setMode} isModeEnabled={isModeEnabled} />} />
+          <CbatTrace2 traceModeSelector={<CbatModeRow modes={traceModes(isModeEnabled)} value={mode} onSelect={setMode} />} />
         </Suspense>
       )}
 
@@ -1322,8 +1318,9 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                 onSelect={handleSelect}
                 loading={loadingAircraft}
                 personalBest={personalBest}
+                bestLoading={bestLoading}
                 mode={mode}
-                traceModeSelector={<TraceModeSelector value={mode} onChange={setMode} isModeEnabled={isModeEnabled} />}
+                traceModeSelector={<CbatModeRow modes={traceModes(isModeEnabled)} value={mode} onSelect={setMode} />}
               />
             </div>
           )}

@@ -8,7 +8,9 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
-import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import {
   CUT_DIFFICULTIES, CUT_LAUNCH_MS, cutTuning,
   readStoredCutDifficulty, storeCutDifficulty,
@@ -405,7 +407,6 @@ export default function CbatCut() {
       return next
     })
   }, [])
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [finalStats, setFinalStats] = useState(null)
@@ -430,16 +431,10 @@ export default function CbatCut() {
   // has room beside the arena (mirrors the cbat-recent-wide pattern on the hub).
   useGameBodyClass('cbat-cut-wide', phase === 'playing')
 
-  // Personal best
-  // Per-difficulty (separate collections), so this refetches on every switch.
-  const fetchPB = useCallback((gameKey) => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, apiFetch, API])
-  useEffect(() => { fetchPB(tuning.gameKey) }, [fetchPB, tuning.gameKey])
+  // Keyed by board, so flipping mode never shows one board's score under
+  // another's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: fetchPB } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
 
   const doFinish = useCallback(() => {
     const sim = simRef.current
@@ -513,17 +508,20 @@ export default function CbatCut() {
     else setPhase('launching')
   }, [tuning, isDemo, startGame])
 
+  // Keyed to `phase` alone. Depending on startGame meant any re-render
+  // that changed its identity cleared the pending timeout and started a
+  // fresh one, so an unrelated render could quietly extend the flash.
+  const startGameRef = useRef(startGame)
+  useEffect(() => { startGameRef.current = startGame })
   useEffect(() => {
     if (phase !== 'launching') return
-    const t = setTimeout(() => startGame(), CUT_LAUNCH_MS)
+    const t = setTimeout(() => startGameRef.current(), CUT_LAUNCH_MS)
     return () => clearTimeout(t)
-  }, [phase, startGame])
+  }, [phase])
 
   const chooseDifficulty = useCallback((key) => {
     setDifficulty(key)
     storeCutDifficulty(key)
-    // The old board's best belongs to the difficulty being left.
-    setPersonalBest(null)
   }, [])
 
   const goToIntro = useCallback(() => { setPhase('intro') }, [])
@@ -648,7 +646,7 @@ export default function CbatCut() {
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
             }
             <h1 className="text-sm font-extrabold text-slate-900">Cognitive Updating Test</h1>
-            {phase === 'playing' && <DifficultyMarker tuning={runTuning} />}
+            {phase === 'playing' && <ModeMarker mode={runTuning} />}
             {phase === 'playing' && (
               <span className="ml-auto font-mono text-xs text-slate-500 flex gap-3">
                 <span>⏱ <span className={remainingMs < 20000 ? 'text-red-500' : 'text-slate-600'}>{fmtClock(remainingMs)}</span></span>
@@ -671,22 +669,12 @@ export default function CbatCut() {
                     The title is too long to sit between them on a phone, so it
                     goes above and the pair sits under it. */}
                 <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Cognitive Updating Test</p>
-                <div className="flex items-center justify-center gap-3 mb-1">
-                  <DifficultyButton
-                    tuning={CUT_DIFFICULTIES[0]}
-                    selected={difficulty === CUT_DIFFICULTIES[0].key}
-                    onSelect={chooseDifficulty}
-                    flashing={launching && difficulty === CUT_DIFFICULTIES[0].key}
-                    dimmed={launching && difficulty !== CUT_DIFFICULTIES[0].key}
-                  />
-                  <DifficultyButton
-                    tuning={CUT_DIFFICULTIES[1]}
-                    selected={difficulty === CUT_DIFFICULTIES[1].key}
-                    onSelect={chooseDifficulty}
-                    flashing={launching && difficulty === CUT_DIFFICULTIES[1].key}
-                    dimmed={launching && difficulty !== CUT_DIFFICULTIES[1].key}
-                  />
-                </div>
+                <CbatModeRow
+                  modes={CUT_DIFFICULTIES}
+                  value={difficulty}
+                  onSelect={chooseDifficulty}
+                  launching={launching}
+                />
                 <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
                 <p className={`text-sm text-slate-400 mb-5${dim}`}>
@@ -704,13 +692,9 @@ export default function CbatCut() {
                   <div className="flex items-start gap-2 text-xs text-[#8a9bb5]"><span className="shrink-0">⏱</span><span>3 minutes — the Message display feeds every task</span></div>
                 </div>
 
-                {personalBest && (
-                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-                    <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
-                    <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-                  </div>
-                )}
+                <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
+                  {best => best.bestScore}
+                </CbatPersonalBest>
 
                 <div className={`text-center mb-4${dim}`}>
                   <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>

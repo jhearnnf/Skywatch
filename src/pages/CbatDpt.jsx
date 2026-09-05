@@ -15,7 +15,9 @@ import DptAircraftLayer from '../components/DptAircraftLayer'
 import { useGLTF } from '@react-three/drei'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
-import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import {
   DPT_DIFFICULTIES, dptTuning, dptGameKey, firstRound, lastRound, displayRound,
   readStoredDptDifficulty, storeDptDifficulty,
@@ -901,7 +903,7 @@ const DptControls = memo(function DptControls({
 // title here the way it does on every other split game. There is no launch flash:
 // picking an aircraft IS the Start button, and the logo intro that follows
 // already marks the moment the run begins.
-function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty, onDifficulty }) {
+function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading, difficulty, onDifficulty }) {
   const tuning = dptTuning(difficulty)
   return (
     <div>
@@ -909,18 +911,11 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
           left and hard lands right. The pair sits UNDER the title, matching
           FLAG, CUT and every other split game. */}
       <h2 className="text-lg font-bold text-text text-center mb-2">Dynamic Projection Test</h2>
-      <div className="flex items-center justify-center gap-3 mb-1">
-        <DifficultyButton
-          tuning={DPT_DIFFICULTIES[0]}
-          selected={difficulty === DPT_DIFFICULTIES[0].key}
-          onSelect={onDifficulty}
-        />
-        <DifficultyButton
-          tuning={DPT_DIFFICULTIES[1]}
-          selected={difficulty === DPT_DIFFICULTIES[1].key}
-          onSelect={onDifficulty}
-        />
-      </div>
+      <CbatModeRow
+        modes={DPT_DIFFICULTIES}
+        value={difficulty}
+        onSelect={onDifficulty}
+      />
       <p className="text-[11px] text-brand-600 text-center mb-3">{tuning.blurb}</p>
 
       <p className="text-xs text-slate-400 text-center mb-3">
@@ -1001,21 +996,19 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, difficulty,
         )}
       </div>
 
-      {personalBest && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-2 text-center">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-          <p className="text-lg font-mono font-bold text-brand-600">
-            {personalBest.bestScore} pts
-            {personalBest.bestTime != null && (
+      <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className="max-w-md mx-auto">
+        {best => (
+          <>
+            {best.bestScore} pts
+            {best.bestTime != null && (
               <>
                 <span className="text-slate-500 mx-1">·</span>
-                {personalBest.bestTime.toFixed(1)}s
+                {best.bestTime.toFixed(1)}s
               </>
             )}
-          </p>
-          <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-        </div>
-      )}
+          </>
+        )}
+      </CbatPersonalBest>
 
       <div className="text-center mb-4">
         <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
@@ -1131,7 +1124,6 @@ export default function CbatDpt() {
   const [separationViolations, setSeparationViolations]   = useState(0)
   const [elapsed, setElapsed]                             = useState(0)
 
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved]     = useState(false)
   const [queued, setQueued]             = useState(false)
   // Admin cheats — round-skip (111/222/.../888) and aircraft-size (9XX).
@@ -1259,17 +1251,12 @@ export default function CbatDpt() {
       .catch(() => {})
   }, [user])
 
-  // Fetch personal best. Keyed off the card's difficulty rather than the run's:
-  // the two boards have different ceilings (1,700 and 5,200), so showing one
-  // difficulty's best beside the other's Start button would be meaningless.
-  useEffect(() => {
-    if (!user) return
-    setPersonalBest(null)
-    apiFetch(`${API}/api/games/cbat/${dptGameKey(difficulty)}/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, difficulty])
+  // Keyed off the card's difficulty rather than the run's: the two boards have
+  // different ceilings (1,700 and 5,200), so showing one difficulty's best
+  // beside the other's Start button would be meaningless. The cache holds the
+  // panel's height across a flip instead of blanking it.
+  const { best: personalBest, refresh: refreshBest, loading: bestLoading } =
+    useCbatPersonalBest(dptGameKey(difficulty), { user, apiFetch, API })
 
   // Pre-warm the GLB cache as soon as the selectable aircraft and fighter
   // pool are known. Without this the first aircraft's .glb isn't fetched
@@ -1976,10 +1963,7 @@ export default function CbatDpt() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        refreshBest()
       })
       .catch(() => {})
   }, [apiFetch, API])
@@ -2054,7 +2038,7 @@ export default function CbatDpt() {
             : <CbatQuitButton onConfirm={handleMenu} confirmNeeded={['intro', 'playing', 'over'].includes(phase)} label={<>&larr; Quit</>} />
           }
           <h1 className="text-sm font-extrabold text-text">DPT</h1>
-          {phase !== 'select' && <DifficultyMarker tuning={runTuning} />}
+          {phase !== 'select' && <ModeMarker mode={runTuning} />}
         </div>
       </div>
 
@@ -2082,6 +2066,7 @@ export default function CbatDpt() {
                 onSelect={handleSelect}
                 loading={loadingAircraft}
                 personalBest={personalBest}
+                bestLoading={bestLoading}
                 difficulty={difficulty}
                 onDifficulty={handleDifficulty}
               />

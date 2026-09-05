@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CBAT_ADMIN_GAMES, CBAT_GAMES, CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_BY_KEY } from '../cbatGames'
-import { CBAT_GAMES as BACKEND_CBAT_GAMES, cbatHardKeyFor } from '../../../backend/constants/cbatGames'
+import { CBAT_GAMES as BACKEND_CBAT_GAMES, cbatHardKeyFor, isCbatEasierKey } from '../../../backend/constants/cbatGames'
 import batteryData from '../../../backend/constants/cbatBatteries.json'
 
 // CBAT_ADMIN_GAMES drives the per-game enable/disable rows on the admin Settings
@@ -17,17 +17,28 @@ import batteryData from '../../../backend/constants/cbatBatteries.json'
 
 const EASIER_SUFFIX = '-easier'
 const backendKeys = Object.keys(BACKEND_CBAT_GAMES)
-const easierKeys = backendKeys.filter(k => k.endsWith(EASIER_SUFFIX))
+
+// Usually the key ends in '-easier'. ANT's Easier half is the plain `ant` key —
+// the original board, which had to keep the key its existing scores sit on — so
+// the rule comes from the registry rather than from the string.
+const easierKeys = backendKeys.filter(isCbatEasierKey)
 
 // The Hard half of each split. Normally the Easier key minus its suffix — but
 // not for DPT, whose plain `dpt` had to stay the pre-split eight-round board
 // (clients predating the split still address it), putting Hard on `dpt-hard`.
 const splitHardKeys = new Set(easierKeys.map(cbatHardKeyFor))
 
-// Keys that are a difficulty half and nothing else, so they get no hub tile and
-// no admin toggle — the parent tile's toggle gates the page for both halves, the
-// same way a `-easier` key is gated. `dpt-hard`'s parent tile is `dpt`.
-const DIFFICULTY_ONLY = new Set([...easierKeys, ...[...splitHardKeys].filter(k => !CBAT_GAMES.some(g => g.key === k))])
+// Keys that are a difficulty half and NOTHING ELSE, so they get no hub tile and
+// no admin toggle — the parent tile's toggle gates the page for both halves.
+// `dpt-hard`'s parent tile is `dpt`; `ant-hard`'s is `ant`.
+//
+// A key that is also a hub tile in its own right is excluded, which is what
+// keeps `ant` toggleable: it is simultaneously ANT's tile and ANT's Easier half,
+// so its toggle gates the whole page rather than one difficulty.
+const isHubTile = k => CBAT_GAMES.some(g => g.key === k)
+const DIFFICULTY_ONLY = new Set(
+  [...easierKeys, ...splitHardKeys].filter(k => !isHubTile(k)),
+)
 
 const toggleableKeys = backendKeys.filter(k => !DIFFICULTY_ONLY.has(k))
 
@@ -47,10 +58,14 @@ describe('CBAT_ADMIN_GAMES', () => {
     }
   })
 
-  it('offers no toggle for an Easier difficulty', () => {
+  it('offers no toggle for a key named as an Easier difficulty', () => {
     // The parent game's toggle gates the page — the route is /cbat/sit whichever
     // difficulty is chosen — so a second toggle would imply a control that does
     // not exist.
+    //
+    // Suffix, not isCbatEasierKey: ANT's Easier half is the plain `ant` key,
+    // which IS the page's toggle. What must never appear here is a key that
+    // exists only to name a difficulty of a tile that is already listed.
     for (const g of CBAT_ADMIN_GAMES) {
       expect([g.key, g.key.endsWith(EASIER_SUFFIX)]).toEqual([g.key, false])
     }
@@ -133,7 +148,7 @@ describe('frontend ↔ backend registry coverage', () => {
       // Both halves of a split carry a label; everything else carries none —
       // including `dpt`, the retired eight-round board, which is neither half
       // of DPT's split and names itself instead.
-      const expectLabel = key.endsWith(EASIER_SUFFIX) || splitHardKeys.has(key)
+      const expectLabel = easierKeys.includes(key) || splitHardKeys.has(key)
       expect([key, !!CBAT_DIFFICULTY_BY_KEY[key]]).toEqual([key, expectLabel])
     }
   })

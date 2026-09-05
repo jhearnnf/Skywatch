@@ -40,6 +40,7 @@ const GameSessionCbatTargetResult         = CBAT_GAMES['target'].Model;
 const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatAntPractiseResult    = CBAT_GAMES['ant-practise'].Model;
+const GameSessionCbatAntHardResult        = CBAT_GAMES['ant-hard'].Model;
 const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
 const GameSessionCbatFlagEasierResult     = CBAT_GAMES['flag-easier'].Model;
 const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
@@ -2658,10 +2659,11 @@ router.post('/cbat/instruments/result', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/cbat/ant/result and /ant-practise/result
-// Identical payloads — Practise is the same four calculations over 12 questions
-// instead of 8 rounds. The collection is fixed by the route and never read from
-// the body, so a run can only land on the board it was played for.
+// POST /api/games/cbat/ant/result, /ant-hard/result and /ant-practise/result
+// Identical payloads — Practise is the same four calculations as plain
+// questions, and Hard is a twelve-round board out of 120 rather than eight out
+// of 80. The collection is fixed by the route and never read from the body, so
+// a run can only land on the board it was played for.
 async function submitAntResult(req, res, Model) {
   try {
     const { totalScore, exactCount, partialCount, missCount, roundsPlayed, totalTime, grade } = req.body;
@@ -2680,6 +2682,7 @@ async function submitAntResult(req, res, Model) {
   }
 }
 router.post('/cbat/ant/result', protect, (req, res) => submitAntResult(req, res, GameSessionCbatAntResult));
+router.post('/cbat/ant-hard/result', protect, (req, res) => submitAntResult(req, res, GameSessionCbatAntHardResult));
 router.post('/cbat/ant-practise/result', protect, (req, res) => submitAntResult(req, res, GameSessionCbatAntPractiseResult));
 
 // POST /api/games/cbat/flag/result and /flag-easier/result
@@ -3251,6 +3254,7 @@ router.get('/cbat/symbols/leaderboard', protect, (req, res) => cbatLeaderboard(r
 router.get('/cbat/target/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'target'));
 router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments'));
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
+router.get('/cbat/ant-hard/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant-hard'));
 router.get('/cbat/ant-practise/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant-practise'));
 router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
 router.get('/cbat/flag-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag-easier'));
@@ -3466,6 +3470,7 @@ router.get('/cbat/symbols/personal-best', protect, (req, res) => cbatPersonalBes
 router.get('/cbat/target/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'target'));
 router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments'));
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
+router.get('/cbat/ant-hard/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant-hard'));
 router.get('/cbat/ant-practise/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant-practise'));
 router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
 router.get('/cbat/flag-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag-easier'));

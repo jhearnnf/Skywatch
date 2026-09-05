@@ -44,9 +44,8 @@ function Trace2HUD({ round, score, phase }) {
 function StartScreen({ onStart, personalBest, traceModeSelector }) {
   return (
     <div>
-      {traceModeSelector && <div className="mb-4 flex justify-center">{traceModeSelector}</div>}
-
       <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Trace 2</h2>
+      {traceModeSelector && <div className="mb-2">{traceModeSelector}</div>}
       <p className="text-xs text-slate-400 text-center mb-3">Watch four aircraft manoeuvre — then recall what they did.</p>
 
       <div className="max-w-md mx-auto mb-3 rounded-lg border-2 border-emerald-700 bg-emerald-100 p-3 text-sm">

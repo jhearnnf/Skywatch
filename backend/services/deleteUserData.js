@@ -24,6 +24,7 @@ const OWNED_BY_USER = [
   'GameSessionCbatAnglesResult',
   'GameSessionCbatAntResult',
   'GameSessionCbatAntPractiseResult',
+  'GameSessionCbatAntHardResult',
   'GameSessionCbatCodeDuplicatesResult',
   'GameSessionCbatCutResult',
   'GameSessionCbatCutEasierResult',

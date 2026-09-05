@@ -36,7 +36,7 @@
 // here, and a run can finish a round early by clearing every gate.
 export const CBAT_GAMES = [
   { key: 'target',          emoji: '🎯', title: 'Target',           desc: 'Multi-task across eight panels — hunt shapes, match lights, ID aircraft, find codes.', path: '/cbat/target',          image: '/images/Target.png', estMinutes: 2 },
-  { key: 'ant',             emoji: '📡', title: 'ANT',              desc: 'Airborne Numerical Test — speed, distance and time. Compute arrival, distance, fuel or speed against the clock.', path: '/cbat/ant',             image: '/images/ANT.png', estMinutes: 5, badge: 'New Practise Mode' },
+  { key: 'ant',             emoji: '📡', title: 'ANT',              desc: 'Airborne Numerical Test — speed, distance and time. Easier gives you the figures on a board; Hard is the written test with weather, fuel and two aircraft.', path: '/cbat/ant',             image: '/images/ANT.png', estMinutes: [5, 12], badge: 'New Hard Mode' },
   { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Spot the target symbol in a growing grid, round by round.', path: '/cbat/symbols',         image: '/images/Symbols.png', estMinutes: 1 },
   { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates', image: '/images/Code Duplicates.png', estMinutes: 2 },
   { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles',          image: '/images/Angles.png', estMinutes: 1 },
@@ -144,7 +144,12 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols', timeDecimals: 2 },
   'target':          { title: 'Target',            emoji: '🎯',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/target',         hideTime: true },
   'instruments':     { title: 'Instruments',       emoji: '🛫',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/instruments',    hideTime: true },
-  'ant':             { title: 'ANT',               emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/ant' },
+  // ANT's two halves are two different games, not one game at two loads, so
+  // they do not share a ceiling: Easier is the original eight-round board out
+  // of 80 and Hard is twelve rounds out of 120. Plain 'ant' IS the Easier
+  // half — it keeps its key so every score ever set on it still ranks.
+  'ant':             { title: 'ANT',               emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/ant', difficultyGroup: 'ant' },
+  'ant-hard':        { title: 'ANT',               emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/ant', difficultyGroup: 'ant' },
   // The stripped drill that sits behind ANT's Practise button: the same four
   // calculations as plain questions, all eight on one page. Marked out of the
   // same 80 as ANT, but on its own board — the drill hands you the figures the
@@ -205,6 +210,13 @@ export const CBAT_LEADERBOARD_CONFIG = {
 // `difficultyGroup` on each CBAT_LEADERBOARD_CONFIG entry; order is the order
 // the pills appear in.
 export const CBAT_DIFFICULTY_GROUPS = {
+  // ANT is the one split whose Easier half has no '-easier' suffix: plain 'ant'
+  // is the original board and had to keep its key so its existing scores stay
+  // on it. Hard is the new realistic board, ranking from zero.
+  ant: [
+    { gameKey: 'ant',      label: 'Easier' },
+    { gameKey: 'ant-hard', label: 'Hard' },
+  ],
   flag: [
     { gameKey: 'flag-easier', label: 'Easier' },
     { gameKey: 'flag',        label: 'Hard' },
@@ -295,6 +307,11 @@ export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
       { ...g, key: 'trace-2',       title: 'Trace 2' },
     ]
   }
+  // No 'ant-hard' row: like every other split, the difficulty halves share the
+  // parent tile's toggle. ANT is the odd case where the parent key IS one of the
+  // halves, so disabling `ant` takes the whole page down, Hard included.
+  // Practise keeps its own toggle because it is a separate board, not a
+  // difficulty.
   if (g.key === 'ant') {
     return [
       { ...g, key: 'ant',          title: 'ANT' },

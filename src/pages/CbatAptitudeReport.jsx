@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import {
   MAX_SCORE, MAX_STANINE, BATTERY_GROUPS, BATTERY_BY_KEY,
-  gamePath, gameTitle, gameEmoji, gameHasDifficulties, onHard,
+  gamePath, gameTitle, gameEmoji, scoredDifficulty, onHard,
   stanineBand, stanineBeatsPct, stanineTone, reportVerdict, statusColour, TONE_TEXT,
 } from '../data/cbatBatteries'
 
@@ -22,9 +22,10 @@ import {
 
 // The sentence that closes a tooltip on a game that is already counting: what to do to move it up.
 function levelUpHint(gameKey) {
-  return gameHasDifficulties(gameKey)
-    ? ' Play more Hard runs to level up. Easier runs do not count.'
-    : ' Play more runs to level up.'
+  const difficulty = scoredDifficulty(gameKey)
+  if (!difficulty) return ' Play more runs to level up.'
+  const other = difficulty === 'Hard' ? 'Easier' : 'Hard'
+  return ` Play more ${difficulty} runs to level up. ${other} runs do not count.`
 }
 
 // The 1-9 stanine bar. Green fill to the achieved stanine, a red tick at the target — exactly the
@@ -859,8 +860,8 @@ export default function CbatAptitudeReport() {
                       {game && (
                         <Link
                           to={gamePath(game)}
-                          title={gameHasDifficulties(game)
-                            ? `Opens ${gameTitle(game)} with Hard already selected. Only Hard runs count towards this report.`
+                          title={scoredDifficulty(game)
+                            ? `Opens ${gameTitle(game)} with ${scoredDifficulty(game)} already selected. Only ${scoredDifficulty(game)} runs count towards this report.`
                             : `Opens ${gameTitle(game)}.`}
                           className="shrink-0 px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold transition-colors no-underline"
                         >

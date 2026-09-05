@@ -239,7 +239,7 @@ const appSettingsSchema = new mongoose.Schema({
     type: Map,
     of: Boolean,
     default: () => ({
-      target: true, ant: true, 'ant-practise': true, symbols: true, 'code-duplicates': true,
+      target: true, ant: true, 'ant-hard': true, 'ant-practise': true, symbols: true, 'code-duplicates': true,
       angles: true, instruments: true,
       'plane-turn-2d': true, 'plane-turn-3d': true, 'trace-1': true, 'trace-2': true,
       flag: true, 'flag-easier': true, 'visualisation-2d': true, 'visualisation-3d': true,
@@ -508,7 +508,7 @@ appSettingsSchema.statics.getSettings = async function () {
     // keys so admins keep whatever state they had, then the legacy key is dropped.
     {
       const KNOWN_KEYS = {
-        target: true, ant: true, 'ant-practise': true, symbols: true, 'code-duplicates': true,
+        target: true, ant: true, 'ant-hard': true, 'ant-practise': true, symbols: true, 'code-duplicates': true,
         angles: true, instruments: true,
         'plane-turn-2d': true, 'plane-turn-3d': true, 'trace-1': true, 'trace-2': true,
         flag: true, 'flag-easier': true, 'visualisation-2d': true, 'visualisation-3d': true,

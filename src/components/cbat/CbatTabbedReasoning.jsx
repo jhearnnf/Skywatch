@@ -37,7 +37,9 @@ import { initialDifficulty } from '../../utils/cbat/difficultyParam'
 import SEO from '../SEO'
 import CbatQuitButton from '../CbatQuitButton'
 import CbatGameOver from '../CbatGameOver'
-import { DifficultyButton, DifficultyMarker } from '../CbatDifficultySelect'
+import { CbatModeRow, ModeMarker } from '../CbatModeSelector'
+import CbatPersonalBest from '../CbatPersonalBest'
+import { useCbatPersonalBest } from '../../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 
 // ── Tab strip ────────────────────────────────────────────────────────────────
@@ -260,7 +262,6 @@ export default function CbatTabbedReasoning({
   const [feedback, setFeedback] = useState(null)
   const [remainingMs, setRemainingMs] = useState(0)
   const [totalElapsedMs, setTotalElapsedMs] = useState(0)
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
 
@@ -276,20 +277,11 @@ export default function CbatTabbedReasoning({
   useEffect(() => { answersRef.current = answers }, [answers])
   useEffect(() => { totalElapsedRef.current = totalElapsedMs }, [totalElapsedMs])
 
-  const fetchBest = useCallback((key) => {
-    apiFetch(`${API}/api/games/cbat/${key}/personal-best`)
-      .then(r => r.json())
-      .then(d => setPersonalBest(d?.data ?? null))
-      .catch(() => {})
-  }, [apiFetch, API])
+  // Keyed by board, so flipping mode never shows one board's score under
+  // another's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: fetchBest } =
+    useCbatPersonalBest(tuningFor(difficulty).gameKey, { user, apiFetch, API })
 
-  // Personal best follows the SELECTED difficulty on the intro card, so the
-  // number on screen always belongs to the board the next run will land on.
-  useEffect(() => {
-    if (!user) return
-    if (phase !== 'intro') return
-    fetchBest(tuningFor(difficulty).gameKey)
-  }, [user, difficulty, phase, fetchBest, tuningFor])
 
   useEffect(() => () => {
     clearInterval(tickRef.current)
@@ -469,7 +461,7 @@ export default function CbatTabbedReasoning({
           : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['reading', 'playing'].includes(phase)} />
         }
         <h1 className="text-sm font-extrabold text-slate-900">{gameName}</h1>
-        {phase !== 'intro' && <DifficultyMarker tuning={runTuning} />}
+        {phase !== 'intro' && <ModeMarker mode={runTuning} />}
       </div>
 
       {!user && (
@@ -496,18 +488,12 @@ export default function CbatTabbedReasoning({
                   lands left and hard lands right. The pair sits under the title,
                   matching FLAG, CUT, Numerical Operations, SAT and RTT. */}
               <p className={`text-xl font-extrabold text-white mb-2${dim}`}>{gameName}</p>
-              <div className="flex items-center justify-center gap-3 mb-1">
-                {difficulties.map(t => (
-                  <DifficultyButton
-                    key={t.key}
-                    tuning={t}
-                    selected={difficulty === t.key}
-                    onSelect={setDifficulty}
-                    flashing={phase === 'launching' && difficulty === t.key}
-                    dimmed={phase === 'launching' && difficulty !== t.key}
-                  />
-                ))}
-              </div>
+              <CbatModeRow
+                modes={difficulties}
+                value={difficulty}
+                onSelect={setDifficulty}
+                launching={phase === 'launching'}
+              />
               <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{introTuning.blurb}</p>
 
               <p className={`text-sm text-slate-400 mb-5${dim}`}>{introLead}</p>
@@ -528,19 +514,15 @@ export default function CbatTabbedReasoning({
                 </div>
               </div>
 
-              {personalBest && (
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">
-                    Personal Best · {introTuning.label}
-                  </p>
-                  <p className="text-lg font-mono font-bold text-brand-600">
-                    {personalBest.bestScore}/{totalQuestions}
+              <CbatPersonalBest label={introTuning.label} best={personalBest} loading={bestLoading} className={dim}>
+                {best => (
+                  <>
+                    {best.bestScore}/{totalQuestions}
                     <span className="text-slate-500 mx-1">·</span>
-                    {personalBest.bestTime.toFixed(1)}s
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-                </div>
-              )}
+                    {best.bestTime.toFixed(1)}s
+                  </>
+                )}
+              </CbatPersonalBest>
 
               <div className={`text-center mb-4${dim}`}>
                 <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">

@@ -27,7 +27,12 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import StickSetup from '../components/cbat/StickSetup'
-import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import { useStickPresence } from '../utils/cbat/useStickPresence'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { useMockStick } from '../utils/cbat/useMockStick'
 import { createSmaInput, SMA_SOURCE_LABEL } from '../utils/cbat/smaInput'
@@ -188,6 +193,8 @@ export default function CbatSma() {
   const isDemo = !!useCbatDemo()
 
   const [phase, setPhase] = useState('intro')   // intro | launching | playing | results
+  // Room for the joystick rail beside the instructions card.
+  useGameBodyClass('cbat-stick-wide', phase === 'intro' || phase === 'launching')
   const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredSmaDifficulty))
   const tuning = smaTuning(difficulty)
   // The difficulty the run on screen is being played at. Pinned at launch so a
@@ -205,6 +212,10 @@ export default function CbatSma() {
   // Admin ?stick=mock — a synthetic joystick, so the stick path can be flown
   // without one. See mockGamepad.js.
   const mockStick = useMockStick()
+  // Control sensitivity is a stick setting the moment there is a stick, so it
+  // moves into the joystick panel. With no stick it still scales the mouse,
+  // touch pad and keys, so it stays on the card.
+  const stickConnected = useStickPresence() || mockStick
 
   const simRef = useRef(null)
   const inputRef = useRef(null)
@@ -213,7 +224,6 @@ export default function CbatSma() {
   const padRectRef = useRef(null)
   const hudRef = useRef({})
 
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [finalStats, setFinalStats] = useState(null)
@@ -228,16 +238,10 @@ export default function CbatSma() {
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
-  // Personal best is per-difficulty (separate collections), so this refetches on
-  // every switch.
-  const fetchPB = useCallback((gameKey) => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, apiFetch, API])
-  useEffect(() => { fetchPB(tuning.gameKey) }, [fetchPB, tuning.gameKey])
+  // Keyed by board, so flipping mode never shows one board's score under
+  // another's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: fetchPB } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
 
   const doFinish = useCallback(() => {
     const sim = simRef.current
@@ -396,23 +400,52 @@ export default function CbatSma() {
     else setPhase('launching')
   }, [tuning, isDemo, startGame])
 
+  // Keyed to `phase` alone. Depending on startGame meant any re-render that
+  // changed its identity cleared the pending timeout and started a fresh one,
+  // so an unrelated render could quietly extend the flash.
+  const startGameRef = useRef(startGame)
+  useEffect(() => { startGameRef.current = startGame })
   useEffect(() => {
     if (phase !== 'launching') return undefined
-    const t = setTimeout(() => startGame(), SMA_LAUNCH_MS)
+    const t = setTimeout(() => startGameRef.current(), SMA_LAUNCH_MS)
     return () => clearTimeout(t)
-  }, [phase, startGame])
+  }, [phase])
 
   const chooseDifficulty = useCallback((key) => {
     setDifficulty(key)
     storeSmaDifficulty(key)
-    // The old board's best belongs to the difficulty being left.
-    setPersonalBest(null)
   }, [])
 
   const changeSensitivity = useCallback((value) => {
     setSensitivity(value)
     storeSmaSensitivity(value)
   }, [])
+
+  // The corpus's whole message about this test is that the apparatus varies
+  // station to station and that the right response to one that feels wrong is to
+  // get it changed rather than fight it — so the equivalent stays in front of the
+  // player wherever it is rendered, never buried in a settings menu.
+  const sensitivityControl = (
+    <>
+      <label htmlFor="sma-sensitivity" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
+        <span>Control sensitivity</span>
+        <span className="font-mono text-brand-600">{sensitivity.toFixed(2)}×</span>
+      </label>
+      <input
+        id="sma-sensitivity"
+        type="range"
+        min={MIN_SMA_SENSITIVITY}
+        max={MAX_SMA_SENSITIVITY}
+        step="0.05"
+        value={sensitivity}
+        onChange={(e) => changeSensitivity(Number(e.target.value))}
+        className="w-full accent-brand-600 cursor-pointer"
+      />
+      <p className="text-[10px] text-slate-600 mt-1">
+        Full deflection moves the dot {(CONTROL_RATE * sensitivity).toFixed(2)} of the way to the edge each second.
+      </p>
+    </>
+  )
 
   const goToIntro = useCallback(() => {
     simRef.current = null
@@ -448,30 +481,30 @@ export default function CbatSma() {
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
             }
             <h1 className="text-sm font-extrabold text-slate-900">Sensory Motor Apparatus Test</h1>
-            {phase === 'playing' && <DifficultyMarker tuning={runTuning} />}
+            {phase === 'playing' && <ModeMarker mode={runTuning} />}
           </div>
 
           {/* Intro */}
           {(phase === 'intro' || launching) && (
-            <div className="flex flex-col items-center">
+            <CbatStickLayout
+              stick={(
+                <StickSetup title="Joystick" mockActive={mockStick}>
+                  {stickConnected ? sensitivityControl : null}
+                </StickSetup>
+              )}
+            >
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
               >
                 <p className={`text-4xl mb-3${dim}`}>🕹️</p>
                 <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Sensory Motor Apparatus Test</p>
-                <div className="flex items-center justify-center gap-3 mb-1">
-                  {SMA_DIFFICULTIES.map(t => (
-                    <DifficultyButton
-                      key={t.key}
-                      tuning={t}
-                      selected={difficulty === t.key}
-                      onSelect={chooseDifficulty}
-                      flashing={launching && difficulty === t.key}
-                      dimmed={launching && difficulty !== t.key}
-                    />
-                  ))}
-                </div>
+                <CbatModeRow
+                  modes={SMA_DIFFICULTIES}
+                  value={difficulty}
+                  onSelect={chooseDifficulty}
+                  launching={launching}
+                />
                 <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
                 <p className={`text-sm text-slate-400 mb-5${dim}`}>
@@ -495,42 +528,17 @@ export default function CbatSma() {
                   <div className="flex items-start gap-2 text-xs text-[#8a9bb5]"><span className="shrink-0">ℹ️</span><span>On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. Here both axes are on one control, because nobody has the pedals at home.</span></div>
                 </div>
 
-                {/* Sensitivity. The corpus's whole message about this test is
-                    that the apparatus varies station to station and that the
-                    right response to one that feels wrong is to get it changed
-                    rather than fight it — so the equivalent belongs on the card,
-                    not buried in a settings menu. */}
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
-                  <label htmlFor="sma-sensitivity" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
-                    <span>Control sensitivity</span>
-                    <span className="font-mono text-brand-600">{sensitivity.toFixed(2)}×</span>
-                  </label>
-                  <input
-                    id="sma-sensitivity"
-                    type="range"
-                    min={MIN_SMA_SENSITIVITY}
-                    max={MAX_SMA_SENSITIVITY}
-                    step="0.05"
-                    value={sensitivity}
-                    onChange={(e) => changeSensitivity(Number(e.target.value))}
-                    className="w-full accent-brand-600 cursor-pointer"
-                  />
-                  <p className="text-[10px] text-slate-600 mt-1">
-                    Full deflection moves the dot {(CONTROL_RATE * sensitivity).toFixed(2)} of the way to the edge each second.
-                  </p>
-                </div>
-
-                <div className={dim.trim()}>
-                  <StickSetup title="Joystick" mockActive={mockStick} />
-                </div>
-
-                {personalBest && (
-                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-                    <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
-                    <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+                {/* On the card only while there is no stick. With one plugged
+                    in this same control renders inside the joystick panel. */}
+                {!stickConnected && (
+                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
+                    {sensitivityControl}
                   </div>
                 )}
+
+                <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
+                  {best => best.bestScore}
+                </CbatPersonalBest>
 
                 <div className={`text-center mb-4${dim}`}>
                   <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
@@ -545,7 +553,7 @@ export default function CbatSma() {
                   Start
                 </button>
               </motion.div>
-            </div>
+            </CbatStickLayout>
           )}
 
           {/* Playing */}

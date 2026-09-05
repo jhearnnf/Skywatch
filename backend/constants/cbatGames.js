@@ -6,6 +6,7 @@ const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTa
 const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatAntResult            = require('../models/GameSessionCbatAntResult');
 const GameSessionCbatAntPractiseResult    = require('../models/GameSessionCbatAntPractiseResult');
+const GameSessionCbatAntHardResult        = require('../models/GameSessionCbatAntHardResult');
 const GameSessionCbatFlagResult           = require('../models/GameSessionCbatFlagResult');
 const GameSessionCbatFlagEasierResult     = require('../models/GameSessionCbatFlagEasierResult');
 const GameSessionCbatVisualisation2DResult = require('../models/GameSessionCbatVisualisation2DResult');
@@ -141,18 +142,36 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Instruments',
   },
+  // ANT's split is the only one where the two halves are different GAMES rather
+  // than one game at two loads. Easier is the original eight-round board — this
+  // key, untouched, with every score ever set on it still ranking. Hard is the
+  // rebuild off the first-hand accounts: word problems, weather, two-lookup
+  // fuel, part journeys and two aircraft, twelve rounds out of 120.
+  //
+  // So plain 'ant' IS the Easier half, not the pre-split board. It names its own
+  // difficulty in its label because the suffix cannot: `hardKey` is what marks
+  // it as an Easier board (see cbatHardKeyFor), the same escape hatch DPT uses
+  // in the other direction.
   'ant': {
     Model: GameSessionCbatAntResult,
     primaryField: 'totalScore',
     sortDir: -1,
     bestOp: '$max',
     label: 'Airborne Numerical Test',
+    hardKey: 'ant-hard',
+  },
+  'ant-hard': {
+    Model: GameSessionCbatAntHardResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Airborne Numerical Test',   // cbatLabelWithDifficulty appends "(Hard)"
   },
   // ANT's Practise drill — eight plain questions on one page, no board to read.
-  // Marked out of the same 80 as ANT but on its own collection: the drill states
-  // the figures the game makes you hunt for, so the two totals are not the same
-  // achievement. Not an Easier difficulty, so no "(Hard)" is ever appended to
-  // ANT itself.
+  // Marked out of the same 80 as the Easier ANT board but on its own collection:
+  // the drill states the figures the game makes you hunt for, so the two totals
+  // are not the same achievement. Neither half of the difficulty split, so it
+  // never carries an "(Easier)" or "(Hard)" suffix.
   'ant-practise': {
     Model: GameSessionCbatAntPractiseResult,
     primaryField: 'totalScore',
@@ -461,17 +480,31 @@ function cbatHardKeyFor(easierKey) {
   return CBAT_GAMES[easierKey]?.hardKey || easierKey.slice(0, -EASIER_SUFFIX.length);
 }
 
-const HARD_KEYS = new Set(
-  Object.keys(CBAT_GAMES).filter(k => k.endsWith(EASIER_SUFFIX)).map(cbatHardKeyFor),
-);
+// Easier boards. Normally the key carries the suffix; a board that names a
+// `hardKey` declares itself one without it, which is how plain 'ant' can be the
+// Easier half of ANT's split while keeping the key its existing scores sit on.
+function isCbatEasierKey(gameKey) {
+  return gameKey.endsWith(EASIER_SUFFIX) || Boolean(CBAT_GAMES[gameKey]?.hardKey);
+}
+
+const EASIER_KEYS = new Set(Object.keys(CBAT_GAMES).filter(isCbatEasierKey));
+
+const HARD_KEYS = new Set([...EASIER_KEYS].map(cbatHardKeyFor));
 
 function cbatLabelWithDifficulty(gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return null;
-  if (gameKey.endsWith(EASIER_SUFFIX)) return cfg.label;   // already carries "(Easier)"
   // A retired pre-split board is neither difficulty and names itself (see 'dpt').
   if (cfg.legacyBoard) return cfg.label;
+  if (EASIER_KEYS.has(gameKey)) {
+    // Most Easier boards spell it out in their own label because nothing else
+    // reads that label. ANT's cannot: `ant` is also the key its tutorial files
+    // under, and a tutorial row on the admin report is deliberately bare (one
+    // tutorial, both difficulties). So its label stays plain and the suffix is
+    // added here instead.
+    return cfg.label.includes('(Easier)') ? cfg.label : `${cfg.label} (Easier)`;
+  }
   return HARD_KEYS.has(gameKey) ? `${cfg.label} (Hard)` : cfg.label;
 }
 
-module.exports = { CBAT_GAMES, cbatLabelWithDifficulty, cbatHardKeyFor };
+module.exports = { CBAT_GAMES, cbatLabelWithDifficulty, cbatHardKeyFor, isCbatEasierKey };

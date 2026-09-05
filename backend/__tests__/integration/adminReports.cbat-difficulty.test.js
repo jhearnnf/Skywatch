@@ -5,7 +5,7 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
 const GameSessionCbatStart = require('../../models/GameSessionCbatStart');
-const { CBAT_GAMES, cbatLabelWithDifficulty, cbatHardKeyFor } = require('../../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty, cbatHardKeyFor, isCbatEasierKey } = require('../../constants/cbatGames');
 
 let admin, cookie, u1, u2;
 
@@ -99,7 +99,11 @@ describe('GET /api/admin/reports/cbat — every split game names both difficulti
       .set('Cookie', cookie);
 
     const { gameLabels } = res.body.data;
-    const easierKeys = Object.keys(CBAT_GAMES).filter(k => k.endsWith('-easier'));
+    // Usually the key ends in '-easier'. ANT's Easier half is the plain `ant`
+    // key — the original board, which kept the key its existing scores sit on
+    // — and declares itself with a `hardKey`. isCbatEasierKey is the one place
+    // that knows the rule.
+    const easierKeys = Object.keys(CBAT_GAMES).filter(isCbatEasierKey);
     expect(easierKeys.length).toBeGreaterThan(0);
 
     // Hard normally lives on the Easier key minus its suffix, but not always:
@@ -114,7 +118,7 @@ describe('GET /api/admin/reports/cbat — every split game names both difficulti
     }
 
     for (const [key, cfg] of Object.entries(CBAT_GAMES)) {
-      if (key.endsWith('-easier') || hardKeys.has(key)) continue;
+      if (isCbatEasierKey(key) || hardKeys.has(key)) continue;
       // A retired pre-split board is neither difficulty and names itself.
       expect(gameLabels[key]).toBe(cfg.label);
     }

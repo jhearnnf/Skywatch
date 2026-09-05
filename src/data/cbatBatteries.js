@@ -7,7 +7,7 @@
 // the role picker.
 
 import batteryData from '../../backend/constants/cbatBatteries.json'
-import { CBAT_LEADERBOARD_CONFIG } from './cbatGames'
+import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_BY_KEY } from './cbatGames'
 
 export const { maxScore: MAX_SCORE, maxStanine: MAX_STANINE, domains: DOMAINS, tests: TESTS, batteries: BATTERIES } = batteryData
 
@@ -27,23 +27,36 @@ export const BATTERY_GROUPS = BATTERIES.reduce((acc, b) => {
 // the same field the leaderboard's pill pair is built from — so a newly split game is covered here
 // without a second list to keep in step.
 //
-// It matters on this page because the report scores Hard runs and nothing else. Anywhere the sheet
-// tells you to go and play something it has to name the difficulty, but ONLY for the games that
-// have one: "play more Target on Hard" would send a user looking for a setting that isn't there.
+// It matters on this page because anywhere the sheet tells you to go and play something it has to
+// name the difficulty, but ONLY for the games that have one: "play more Target on Hard" would send
+// a user looking for a setting that isn't there.
 export function gameHasDifficulties(gameKey) {
   return Boolean(CBAT_LEADERBOARD_CONFIG[gameKey]?.difficultyGroup)
+}
+
+// WHICH difficulty the key a battery scores actually is — 'Easier', 'Hard', or null for a game with
+// no split. Not the same question as gameHasDifficulties, and the report needs this one.
+//
+// For nearly every split game the scored key is the Hard half, so the two used to be interchangeable
+// and the page assumed Hard outright. ANT broke that: its Easier half is the original board on the
+// plain 'ant' key, which is the key the battery scores, so a sheet hard-coded to Hard would send a
+// user to a board whose runs it does not count. Reading the difficulty off the registry keeps the
+// wording and the link honest whichever half a battery happens to point at.
+export function scoredDifficulty(gameKey) {
+  return CBAT_DIFFICULTY_BY_KEY[gameKey] ?? null
 }
 
 // Where a focus item sends the user. Every scorable game has a leaderboard config carrying the
 // route to its instructions page, which is where you'd want to land before a run anyway.
 //
-// Split games get ?difficulty=hard on the end. Only Hard runs feed this report, and a game's card
-// opens on whatever difficulty that user last chose (Easier until they change it), so without the
-// param the page would tell someone to play Hard and then hand them an Easier card. See
-// src/utils/cbat/difficultyParam.js for what the game does with it.
+// Split games get ?difficulty= on the end, naming the half this report actually scores. A game's
+// card opens on whatever difficulty that user last chose, so without the param the page would tell
+// someone to play one board and then hand them the other. See src/utils/cbat/difficultyParam.js for
+// what the game does with it.
 export function gamePath(gameKey) {
   const path = CBAT_LEADERBOARD_CONFIG[gameKey]?.backPath ?? '/cbat'
-  return gameHasDifficulties(gameKey) ? `${path}?difficulty=hard` : path
+  const difficulty = scoredDifficulty(gameKey)
+  return difficulty ? `${path}?difficulty=${difficulty.toLowerCase()}` : path
 }
 
 export function gameTitle(gameKey) {
@@ -54,16 +67,17 @@ export function gameEmoji(gameKey) {
   return CBAT_LEADERBOARD_CONFIG[gameKey]?.emoji ?? '🎮'
 }
 
-// Every "go and play this" in the report has to name the difficulty, because only Hard runs feed
-// it. Saying just "play it more" is advice that quietly fails: the game card opens on the
-// difficulty that user last chose, which is Easier until they change it, so the runs they go away
-// and do would leave the score exactly where it was.
+// Every "go and play this" in the report has to name the difficulty, because only runs on the half
+// it scores feed it. Saying just "play it more" is advice that quietly fails: the game card opens on
+// the difficulty that user last chose, so the runs they go away and do could leave the score exactly
+// where it was.
 //
 // Empty for a game with no split, where naming a difficulty would send someone hunting for a
-// button that isn't on the card. Keyed off the same registry field the links are, so the wording
-// and the ?difficulty=hard on the link can't disagree.
+// button that isn't on the card. Reads the same helper the links do, so the wording and the
+// ?difficulty= on the link can't disagree.
 export function onHard(gameKey) {
-  return gameHasDifficulties(gameKey) ? ' on Hard' : ''
+  const difficulty = scoredDifficulty(gameKey)
+  return difficulty ? ` on ${difficulty}` : ''
 }
 
 // Plain words for a stanine. The bands are the real ones: a stanine has a fixed meaning against the

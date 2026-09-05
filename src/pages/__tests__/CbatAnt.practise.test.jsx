@@ -1,9 +1,10 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import CbatAnt from '../CbatAnt'
 import { formatHHMM } from '../../utils/antGenerator'
 import { PRACTISE_QUESTION_COUNT, PRACTISE_MAX_SCORE } from '../../utils/cbat/antPractise'
 import { submitCbatResult } from '../../lib/cbatOutbox'
+import { ANT_LAUNCH_MS } from '../../utils/cbat/antDifficulty'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -60,9 +61,16 @@ function setupUser() {
 const boxes = () => [...document.querySelectorAll('input[inputmode="numeric"]')]
 const markBtn = () => screen.getByRole('button', { name: /mark my answers/i })
 
+// Practise is a mode now, not a button beside Start: you pick it in the row at
+// the top of the card and press Start, the same way you reach Easier or Hard.
+// The launch flash sits in between, so the fake clock has to step over it.
 function openPractise() {
+  vi.useFakeTimers()
   render(<CbatAnt />)
-  fireEvent.click(screen.getByRole('button', { name: /^practise$/i }))
+  fireEvent.click(document.querySelector('[data-mode="practise"]'))
+  fireEvent.click(document.querySelector('[data-demo-start]'))
+  act(() => { vi.advanceTimersByTime(ANT_LAUNCH_MS + 10) })
+  vi.useRealTimers()
 }
 
 function correctAnswerFor(round) {
@@ -171,11 +179,13 @@ describe('CbatAnt — practise sheet', () => {
     expect(submitCbatResult.mock.calls.some(([key]) => key === 'ant')).toBe(false)
   })
 
-  it('hides Practise when an admin disables the ant-practise board', () => {
+  it('drops Practise out of the mode row when an admin disables the board', () => {
     mockSettings.current = { cbatGameEnabled: { 'ant-practise': false } }
     render(<CbatAnt />)
-    expect(screen.queryByRole('button', { name: /^practise$/i })).toBeNull()
-    // ANT itself is untouched.
+    expect(document.querySelector('[data-mode="practise"]')).toBeNull()
+    // The other two boards, and everything beside Start, are untouched.
+    expect(document.querySelector('[data-mode="easier"]')).toBeTruthy()
+    expect(document.querySelector('[data-mode="hard"]')).toBeTruthy()
     expect(screen.getByRole('button', { name: /^start$/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /^tutorial$/i })).toBeTruthy()
   })

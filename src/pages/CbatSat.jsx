@@ -11,7 +11,9 @@ import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
-import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import {
   SAT_DIFFICULTIES, SAT_LAUNCH_MS, satTuning, satTotalQuestions, computeGrade,
   readStoredSatDifficulty, storeSatDifficulty,
@@ -702,7 +704,6 @@ export default function CbatSat() {
   const [totalElapsedMs, setTotalElapsedMs] = useState(0)
   const [cardIdx, setCardIdx] = useState(0)
   const [audioOn, setAudioOn] = useState(true)
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
 
@@ -719,17 +720,11 @@ export default function CbatSat() {
   const currentSituation = situations[situationIdx] || null
   const currentQuestion = currentSituation?.questions[questionIdx] || null
 
-  // Fetch personal best. Per-difficulty (separate collections), so this refetches
-  // on every switch.
-  const fetchPB = useCallback((gameKey) => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, apiFetch, API])
+  // Keyed by board, so flipping mode never shows one board's score under
+  // another's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: fetchPB } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
 
-  useEffect(() => { fetchPB(tuning.gameKey) }, [fetchPB, tuning.gameKey])
 
   // Stop any speech when the component unmounts.
   useEffect(() => () => stopSpeech(), [])
@@ -889,17 +884,20 @@ export default function CbatSat() {
     setPhase('launching')
   }, [tuning, isDemo, startGame])
 
+  // Keyed to `phase` alone. Depending on startGame meant any re-render
+  // that changed its identity cleared the pending timeout and started a
+  // fresh one, so an unrelated render could quietly extend the flash.
+  const startGameRef = useRef(startGame)
+  useEffect(() => { startGameRef.current = startGame })
   useEffect(() => {
     if (phase !== 'launching') return
-    const t = setTimeout(() => startGame(), SAT_LAUNCH_MS)
+    const t = setTimeout(() => startGameRef.current(), SAT_LAUNCH_MS)
     return () => clearTimeout(t)
-  }, [phase, startGame])
+  }, [phase])
 
   const chooseDifficulty = useCallback((key) => {
     setDifficulty(key)
     storeSatDifficulty(key)
-    // The old board's best belongs to the difficulty being left.
-    setPersonalBest(null)
   }, [])
 
   const goToIntro = useCallback(() => {
@@ -938,7 +936,7 @@ export default function CbatSat() {
           : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['observe', 'playing', 'feedback'].includes(phase)} />
         }
         <h1 className="text-sm font-extrabold text-slate-900">Situational Awareness Test</h1>
-        {['observe', 'playing', 'feedback'].includes(phase) && <DifficultyMarker tuning={runTuning} />}
+        {['observe', 'playing', 'feedback'].includes(phase) && <ModeMarker mode={runTuning} />}
       </div>
 
       {/* Not logged in */}
@@ -970,18 +968,12 @@ export default function CbatSat() {
                   too long to sit between them on a phone, so it goes above and
                   the pair sits under it. */}
               <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Situational Awareness Test</p>
-              <div className="flex items-center justify-center gap-3 mb-1">
-                {SAT_DIFFICULTIES.map(t => (
-                  <DifficultyButton
-                    key={t.key}
-                    tuning={t}
-                    selected={difficulty === t.key}
-                    onSelect={chooseDifficulty}
-                    flashing={launching && difficulty === t.key}
-                    dimmed={launching && difficulty !== t.key}
-                  />
-                ))}
-              </div>
+              <CbatModeRow
+                modes={SAT_DIFFICULTIES}
+                value={difficulty}
+                onSelect={chooseDifficulty}
+                launching={launching}
+              />
               <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
               <p className={`text-base text-slate-400 mb-5${dim}`}>
@@ -1007,17 +999,15 @@ export default function CbatSat() {
                 </div>
               </div>
 
-              {personalBest && (
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center${dim}`}>
-                  <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-600">
-                    {personalBest.bestScore}/{satTotalQuestions(tuning)}
+              <CbatPersonalBest best={personalBest} loading={bestLoading} className={dim}>
+                {best => (
+                  <>
+                    {best.bestScore}/{satTotalQuestions(tuning)}
                     <span className="text-slate-500 mx-1">·</span>
-                    {personalBest.bestTime.toFixed(1)}s
-                  </p>
-                  <p className="text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-                </div>
-              )}
+                    {best.bestTime.toFixed(1)}s
+                  </>
+                )}
+              </CbatPersonalBest>
 
               <div className={`text-center mb-4${dim}`}>
                 <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-sm text-brand-600 hover:text-brand-700 transition-colors">

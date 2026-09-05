@@ -9,6 +9,19 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import AntPractise from '../components/cbat/AntPractise'
+import AntHardGame from '../components/cbat/AntHardGame'
+import { CbatModeRow } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import {
+  ANT_LAUNCH_MS,
+  ANT_TUNING,
+  antModes,
+  antTuning,
+  readStoredAntDifficulty,
+  storeAntDifficulty,
+} from '../utils/cbat/antDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import { useAppSettings } from '../context/AppSettingsContext'
 import {
   buildRound,
@@ -838,11 +851,21 @@ export default function CbatAnt() {
   const { settings } = useAppSettings() ?? {}
   const practiseEnabled = (settings?.cbatGameEnabled ?? {})['ant-practise'] !== false
 
-  const [phase, setPhase] = useState('intro') // intro | tutorial | practise | playing | feedback | results
+  // intro | launching | tutorial | practise | playing | feedback | results | hard
+  //
+  // 'hard' is the whole other board. ANT's split is not one game at two loads
+  // like FLAG's — Easier is this original eight-round board and Hard is the
+  // rebuild in AntHardGame, so the difficulty picks a component rather than a
+  // tuning object. See src/utils/cbat/antDifficulty.js.
+  const [phase, setPhase] = useState('intro')
+  // Default 'easier'; a user's own choice is remembered. `?difficulty=` sets the
+  // opening choice for one arrival without overwriting what they picked.
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredAntDifficulty))
+  const tuning = antTuning(difficulty)
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     // Hide the nav chrome during the live game, the tutorial and the practise drill.
-    if (['playing', 'feedback', 'tutorial', 'practise'].includes(phase)) enterImmersive()
+    if (['playing', 'feedback', 'tutorial', 'practise', 'hard'].includes(phase)) enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -864,7 +887,11 @@ export default function CbatAnt() {
   const [totalElapsed, setTotalElapsed] = useState(0)
   const [answerInput, setAnswerInput] = useState('')
   const [feedback, setFeedback] = useState(null) // { points, exact, partial, correct, user }
-  const [personalBest, setPersonalBest] = useState(null)
+  // Keyed by board: the three boards are separate collections scored out of 80,
+  // 120 and 80, so one figure could never stand for all of them, and blanking
+  // the value on every flip is what used to make the card jump.
+  const { best: personalBest, loading: bestLoading, refresh: refreshBest } =
+    useCbatPersonalBest(antTuning(difficulty).gameKey, { user, apiFetch, API })
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
 
@@ -884,15 +911,6 @@ export default function CbatAnt() {
   useEffect(() => { answersRef.current = answers }, [answers])
   useEffect(() => { roundIndexRef.current = roundIndex }, [roundIndex])
   useEffect(() => { answerRef.current = answerInput }, [answerInput])
-
-  // Fetch personal best
-  useEffect(() => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/ant/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user])
 
   const submitScore = useCallback((finalAnswers, finalTime) => {
     const totalScore = finalAnswers.reduce((s, a) => s + a.points, 0)
@@ -915,13 +933,11 @@ export default function CbatAnt() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/ant/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        // This component only ever plays the Easier board.
+        refreshBest('ant')
       })
       .catch(() => {})
-  }, [apiFetch, API, markGameCompleted])
+  }, [apiFetch, API, markGameCompleted, refreshBest])
 
   const endGame = useCallback((finalAnswers) => {
     clearInterval(tickRef.current)
@@ -1011,6 +1027,35 @@ export default function CbatAnt() {
     startRound(0)
   }, [startRound, startTracking])
 
+  const chooseDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeAntDifficulty(key)
+  }, [])
+
+  // Start doesn't drop straight into the game: the chosen difficulty flashes
+  // first, so which board you are about to play is the last thing you see.
+  const beginLaunch = useCallback(() => {
+    if (phase !== 'intro') return
+    setPhase('launching')
+  }, [phase])
+
+  // Keyed to `phase` alone. Depending on startGame meant any re-render that
+  // changed its identity cleared the pending timeout and started a fresh one,
+  // so an unrelated render could quietly extend the flash.
+  const launchRef = useRef(null)
+  useEffect(() => {
+    launchRef.current = () => {
+      if (difficulty === 'hard') setPhase('hard')
+      else if (difficulty === 'practise') setPhase('practise')
+      else startGame()
+    }
+  })
+  useEffect(() => {
+    if (phase !== 'launching') return
+    const t = setTimeout(() => launchRef.current(), ANT_LAUNCH_MS)
+    return () => clearTimeout(t)
+  }, [phase])
+
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
     setPhase('intro')
@@ -1043,6 +1088,19 @@ export default function CbatAnt() {
     ? answers.reduce((s, a) => s + a.points, 0)
     : totalScoreSoFar
 
+  // During the launch flash everything on the card except the chosen
+  // difficulty button greys out, so the flashing button is the only thing
+  // left alive.
+  const launching = phase === 'launching'
+  const introDim = launching ? ' cbat-launch-dim' : ''
+  const isHard = difficulty === 'hard'
+  const isPractise = difficulty === 'practise'
+  // The drill has its own admin toggle, so it can vanish from the row. A
+  // remembered choice pointing at a mode that is no longer offered would leave
+  // Start with nowhere to go, so it falls back to the original board.
+  const modes = antModes(practiseEnabled)
+  const activeMode = modes.some(m => m.key === difficulty) ? difficulty : 'easier'
+
   const formatCorrect = (r) => {
     if (!r) return ''
     if (r.type === 'arrival') return formatHHMM(r.correctAnswer)
@@ -1053,9 +1111,16 @@ export default function CbatAnt() {
     <div className="cbat-ant-page">
       <SEO title="ANT — CBAT" description="Airborne Numerical Test: speed, distance and time calculations under pressure." />
 
+      {/* The Hard board is a separate game with its own panels, header and
+          results, so it takes the screen rather than sharing this one's. */}
+      {phase === 'hard' && (
+        <AntHardGame tuning={ANT_TUNING.hard} onExit={goToIntro} />
+      )}
+
+      {phase !== 'hard' && (<>
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
+        {phase === 'intro' || phase === 'launching'
           ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
           : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['playing', 'feedback'].includes(phase)} />
         }
@@ -1078,101 +1143,161 @@ export default function CbatAnt() {
         <div className="flex flex-col items-center">
 
           {/* Intro */}
-          {phase === 'intro' && (
+          {(phase === 'intro' || phase === 'launching') && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="w-full max-w-xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
             >
-              <p className="text-4xl mb-3">{'\u{1F4E1}'}</p>
-              <p className="text-xl font-extrabold text-white mb-1">ANT</p>
-              <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Airborne Numerical Test</p>
-              <p className="text-sm text-slate-400 mb-5">
-                Speed, distance and time under pressure. Deliver a parcel across an eight-node network — each
-                round one value is missing (Arrival Time, Total Distance, Fuel, or Speed). Calculate it from
-                the data shown.
+              <p className={`text-4xl mb-3${introDim}`}>{'\u{1F4E1}'}</p>
+
+              {/* Ordered [easier, hard, practise]. The row sits UNDER the title,
+                  matching every other CBAT game, and it is the only place a
+                  board is chosen — which is why there is one leaderboard link
+                  below rather than one per board. */}
+              <p className={`text-xl font-extrabold text-white mb-1${introDim}`}>ANT</p>
+              <p className={`text-xs text-slate-500 uppercase tracking-wide mb-2${introDim}`}>Airborne Numerical Test</p>
+              <CbatModeRow
+                modes={modes}
+                value={activeMode}
+                onSelect={chooseDifficulty}
+                launching={launching}
+              />
+              <p className={`text-[11px] text-brand-600 mb-3${introDim}`}>{tuning.blurb}</p>
+
+              <p className={`text-sm text-slate-400 mb-5${introDim}`}>
+                {isPractise
+                  ? 'The arithmetic on its own. Eight plain questions on one page with every figure written out, so you can drill the four calculations in any order without reading a map or a table.'
+                  : isHard
+                  ? 'The test as candidates describe it. Every round is a written objective and the last line is the actual question. Weather, fuel, part journeys, and two aircraft at once at the end.'
+                  : 'Speed, distance and time under pressure. Deliver a parcel across an eight-node network — each round one value is missing (Arrival Time, Total Distance, Fuel, or Speed). Calculate it from the data shown.'}
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4 text-left space-y-2">
+              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4 text-left space-y-2${introDim}`}>
                 <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
                   <span className="text-brand-600 font-bold shrink-0">{'⏱'}</span>
-                  <span>{ROUND_COUNT} rounds, {ROUND_TIME} seconds each — the clock pauses while you review</span>
-                </div>
-                <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
-                  <span>Speed = Distance / Time. Parcel weight sets miles/min and gal/hr.</span>
-                </div>
-                <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
-                  <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {ROUND_COUNT * 10}.</span>
-                </div>
-                <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-600 font-bold shrink-0">{'\u{1F4CF}'}</span>
                   <span>
-                    Every answer is a whole number. Close counts as within 5 miles, 10 mph or 2 minutes —
-                    fuel must be exact. Times entered as HHMM (e.g. 1430).
+                    {isPractise
+                      ? `${tuning.rounds} questions on one page, untimed — work them in any order`
+                      : `${tuning.rounds} rounds, ${tuning.roundTime} seconds each — the clock pauses while you review`}
                   </span>
                 </div>
-              </div>
-
-              {/* Preview of weight table */}
-              <div className="mb-4">
-                <WeightTable currentWeight={null} />
-              </div>
-
-              {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-600">
-                    {personalBest.bestScore} pts
-                    <span className="text-slate-500 mx-1">{'·'}</span>
-                    {personalBest.bestTime.toFixed(1)}s
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-                </div>
-              )}
-
-              <div className="text-center mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-                <Link to="/cbat/ant/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-                  {'View Leaderboard →'}
-                </Link>
-                {practiseEnabled && (
-                  <Link to="/cbat/ant-practise/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-                    {'Practise Leaderboard →'}
-                  </Link>
+                {isPractise ? (
+                  <>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
+                      <span>Every figure is written out for you. No map, no tables, no hunting.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
+                      <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}, on its own leaderboard.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4A1}'}</span>
+                      <span>Get these automatic before you take Hard on. On that board the reading is what costs you, not the arithmetic.</span>
+                    </div>
+                  </>
+                ) : isHard ? (
+                  <>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4C4}'}</span>
+                      <span>Read the last line of the objective box first. It tells you what is being asked.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
+                      <span>Weight gives you speed on the Load chart. Speed gives you miles per gallon on the Fuel chart.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u26C8'}</span>
+                      <span>A weather leg has its revised speed given to you in the flight data. One of them makes you faster.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u2708'}</span>
+                      <span>The last three rounds fly two aircraft with a chart each. Check you are reading the right one.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
+                      <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4CF}'}</span>
+                      <span>
+                        Every answer is a whole number. Close counts as within 3 minutes, 5 miles, 10 mph or
+                        1 gallon. Times entered as HHMM (e.g. 1430).
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
+                      <span>Speed = Distance / Time. Parcel weight sets miles/min and gal/hr.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
+                      <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
+                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4CF}'}</span>
+                      <span>
+                        Every answer is a whole number. Close counts as within 5 miles, 10 mph or 2 minutes —
+                        fuel must be exact. Times entered as HHMM (e.g. 1430).
+                      </span>
+                    </div>
+                  </>
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-3 justify-center">
+              {/* Preview of weight table — the Easier board's one reference. Hard
+                  reads two bar charts instead, and they live inside the game. */}
+              {!isHard && (
+                <div className={`mb-4${introDim}`}>
+                  <WeightTable currentWeight={null} />
+                </div>
+              )}
+
+              <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={introDim}>
+                {best => (
+                  <>
+                    {best.bestScore} pts
+                    <span className="text-slate-500 mx-1">{'·'}</span>
+                    {best.bestTime.toFixed(1)}s
+                  </>
+                )}
+              </CbatPersonalBest>
+
+              <div className={`text-center mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1${introDim}`}>
+                {/* One link. Each mode is its own board, and the row above already
+                    says which one you are looking at. */}
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                  {'View Leaderboard →'}
+                </Link>
+              </div>
+
+              <div className={`flex flex-wrap gap-3 justify-center${introDim}`}>
+                {/* Tutorial always sits beside Start, on every CBAT game that
+                    has one. Modes are chosen in the row at the top; nothing
+                    that switches board belongs down here. */}
                 <button
                   onClick={() => setPhase('tutorial')}
                   className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
                 >
                   Tutorial
                 </button>
-                {practiseEnabled && (
-                  <button
-                    onClick={() => setPhase('practise')}
-                    className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
-                  >
-                    Practise
-                  </button>
-                )}
                 <button
-                  onClick={startGame}
+                  onClick={beginLaunch}
+                  disabled={launching}
                   data-demo-start
-                  className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+                  className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
                 >
                   Start
                 </button>
               </div>
 
-              {practiseEnabled && (
-                <p className="text-[11px] text-slate-500 mt-3 leading-snug">
-                  Practise puts 8 plain questions on one page with the numbers written out, so you can drill
-                  the four calculations in any order without reading the map and tables. Its own leaderboard.
-                </p>
-              )}
+              <p className={`text-[11px] text-slate-500 mt-3 leading-snug${introDim}`}>
+                The tutorial walks the Easier board panel by panel. It is the quickest way in,
+                whichever mode you go on to play.
+              </p>
             </motion.div>
           )}
 
@@ -1359,6 +1484,7 @@ export default function CbatAnt() {
           )}
         </div>
       )}
+      </>)}
     </div>
   )
 }

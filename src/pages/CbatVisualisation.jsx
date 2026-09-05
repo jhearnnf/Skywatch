@@ -21,7 +21,10 @@ import {
 import { buildRounds as buildRounds3D } from '../utils/cbat/visualisation3DPuzzle'
 import { useVisualisationMode, VISUALISATION_MODES } from '../hooks/useVisualisationMode'
 import { useModeFromSearch } from '../hooks/useModeFromSearch'
-import VisualisationModeSelector from '../components/VisualisationModeSelector'
+import { CbatModeRow } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import { visualisationMode, visualisationModes } from '../utils/cbat/visualisationModes'
 import Visualisation3DShape, { VisualisationShapeCanvas } from '../components/cbat/Visualisation3DShape'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
@@ -493,7 +496,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
   const roundStartRef = useRef(0)
   const advanceTimeoutRef = useRef(null)
   const roundTimeoutRef = useRef(null)
-  const [personalBest, setPersonalBest] = useState(null)
+
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [animationData, setAnimationData] = useState(null)
@@ -506,16 +509,10 @@ export default function CbatVisualisation({ forcedMode = null }) {
   const promptSvgRefs = useRef([])
   const tileSvgRefs = useRef([])
 
-  // Personal best — re-fetch when the user toggles mode so the intro card
-  // reflects the selected variant.
-  useEffect(() => {
-    if (!user) return
-    setPersonalBest(null)
-    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, gameKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Personal best follows the selected mode. Cached per board, so toggling 2D
+  // and 3D keeps the panel's height instead of unmounting it mid-fetch.
+  const { best: personalBest, loading: bestLoading, refresh: refreshBest } =
+    useCbatPersonalBest(gameKey, { user, apiFetch, API })
 
   const submitScore = useCallback((finalAnswers, finalTime) => {
     const correct = finalAnswers.filter(a => a.correct).length
@@ -542,10 +539,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        refreshBest()
       })
       .catch(() => {})
   }, [apiFetch, API, gameKey, markGameCompleted])
@@ -747,13 +741,14 @@ export default function CbatVisualisation({ forcedMode = null }) {
               animate={{ opacity: 1, y: 0 }}
               className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
             >
-              <div className="flex justify-center mb-3">
-                <VisualisationModeSelector value={mode} onChange={setMode} isModeEnabled={isModeEnabled} />
-              </div>
               <p className="text-4xl mb-3">{is3D ? '\u{1F9CA}' : '\u{1F9EE}'}</p>
-              <p className="text-xl font-extrabold text-white mb-2">
-                Visualisation {is3D ? '3D' : '2D'}
-              </p>
+              <p className="text-xl font-extrabold text-white mb-1">Visualisation</p>
+              <CbatModeRow
+                modes={visualisationModes(isModeEnabled)}
+                value={mode}
+                onSelect={setMode}
+              />
+              <p className="text-[11px] text-brand-600 mb-3">{visualisationMode(mode).blurb}</p>
               <p className="text-sm text-slate-400 mb-5">
                 {is3D
                   ? 'Two 3D composite shapes are shown with a highlighted corner on each. Pick the option (A–E) where the SAME shapes carry their dots on the SAME logical corners — just rotated.'
@@ -777,17 +772,15 @@ export default function CbatVisualisation({ forcedMode = null }) {
                 </div>
               </div>
 
-              {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-600">
-                    {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
+              <CbatPersonalBest label={is3D ? '3D' : '2D'} best={personalBest} loading={bestLoading}>
+                {best => (
+                  <>
+                    {best.bestScore}/{TOTAL_ROUNDS} ({Math.round((best.bestScore / TOTAL_ROUNDS) * 100)}%)
                     <span className="text-slate-500 mx-1">{'·'}</span>
-                    {personalBest.bestTime.toFixed(1)}s
-                  </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-                </div>
-              )}
+                    {best.bestTime.toFixed(1)}s
+                  </>
+                )}
+              </CbatPersonalBest>
 
               <div className="text-center mb-4">
                 <Link to={leaderboardHref} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">

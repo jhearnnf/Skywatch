@@ -10,12 +10,16 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import RttScene from '../components/RttScene'
-import { DifficultyButton, DifficultyMarker } from '../components/CbatDifficultySelect'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { playRttShutter } from '../utils/sound'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { createRttInput } from '../utils/cbat/rttInput'
 import { useMockStick } from '../utils/cbat/useMockStick'
 import StickSetup from '../components/cbat/StickSetup'
+import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import { useStickPresence } from '../utils/cbat/useStickPresence'
 import {
   RTT_DIFFICULTIES, RTT_LAUNCH_MS, rttTuning,
   readStoredRttDifficulty, storeRttDifficulty, computeGrade,
@@ -171,6 +175,11 @@ export default function CbatRtt() {
   // Admin ?stick=mock — a synthetic joystick, so the stick path can be flown
   // without one. See mockGamepad.js.
   const mockStick = useMockStick()
+  // Slew sensitivity becomes a stick setting the moment there is a stick, so
+  // it moves into the joystick panel and every control shaping how the camera
+  // follows your hand sits in one place. With no stick it still governs the
+  // mouse, so it stays on the card where it has always been.
+  const stickConnected = useStickPresence() || mockStick
 
   const [sim, setSim] = useState(null)
   const simRef = useRef(null)
@@ -185,7 +194,6 @@ export default function CbatRtt() {
   const [events, setEvents] = useState([])
   const [flash, setFlash] = useState(null)
 
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [finalStats, setFinalStats] = useState(null)
@@ -199,17 +207,13 @@ export default function CbatRtt() {
   }, [phase, enterImmersive, exitImmersive])
 
   useGameBodyClass('cbat-rtt-wide', phase === 'playing')
+  // Room for the joystick rail beside the instructions card.
+  useGameBodyClass('cbat-stick-wide', phase === 'intro' || phase === 'launching')
 
-  // Personal best is per-difficulty (separate collections), so this refetches on
-  // every switch.
-  const fetchPB = useCallback((gameKey) => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/${gameKey}/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user, apiFetch, API])
-  useEffect(() => { fetchPB(tuning.gameKey) }, [fetchPB, tuning.gameKey])
+  // Keyed by board, so flipping mode never shows one board's score under
+  // another's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: fetchPB } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
 
   // The stick lives for exactly as long as the arena it is measured against.
   useEffect(() => {
@@ -319,23 +323,49 @@ export default function CbatRtt() {
     else setPhase('launching')
   }, [tuning, isDemo, startGame])
 
+  // Keyed to `phase` alone. Depending on startGame meant any re-render
+  // that changed its identity cleared the pending timeout and started a
+  // fresh one, so an unrelated render could quietly extend the flash.
+  const startGameRef = useRef(startGame)
+  useEffect(() => { startGameRef.current = startGame })
   useEffect(() => {
     if (phase !== 'launching') return
-    const t = setTimeout(() => startGame(), RTT_LAUNCH_MS)
+    const t = setTimeout(() => startGameRef.current(), RTT_LAUNCH_MS)
     return () => clearTimeout(t)
-  }, [phase, startGame])
+  }, [phase])
 
   const chooseDifficulty = useCallback((key) => {
     setDifficulty(key)
     storeRttDifficulty(key)
-    // The old board's best belongs to the difficulty being left.
-    setPersonalBest(null)
   }, [])
 
   const changeSensitivity = useCallback((value) => {
     setSensitivity(value)
     storeSensitivity(value)
   }, [])
+
+  // The real test's own advice is that adapting to the sensitivity of the stick
+  // in front of you matters more than any amount of gaming, so this stays in
+  // front of the player rather than buried in a settings menu — wherever it is
+  // rendered.
+  const sensitivityControl = (
+    <>
+      <label htmlFor="rtt-sensitivity" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
+        <span>Slew sensitivity</span>
+        <span className="font-mono text-brand-600">{sensitivity.toFixed(2)}×</span>
+      </label>
+      <input
+        id="rtt-sensitivity"
+        type="range"
+        min={MIN_SENSITIVITY}
+        max={MAX_SENSITIVITY}
+        step="0.05"
+        value={sensitivity}
+        onChange={(e) => changeSensitivity(Number(e.target.value))}
+        className="w-full accent-brand-600 cursor-pointer"
+      />
+    </>
+  )
 
   const goToIntro = useCallback(() => {
     runningRef.current = false
@@ -369,30 +399,30 @@ export default function CbatRtt() {
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
             }
             <h1 className="text-sm font-extrabold text-slate-900">Rapid Tracking Test</h1>
-            {phase === 'playing' && <DifficultyMarker tuning={runTuning} />}
+            {phase === 'playing' && <ModeMarker mode={runTuning} />}
           </div>
 
           {/* Intro */}
           {(phase === 'intro' || launching) && (
-            <div className="flex flex-col items-center">
+            <CbatStickLayout
+              stick={(
+                <StickSetup title="Joystick" mockActive={mockStick}>
+                  {stickConnected ? sensitivityControl : null}
+                </StickSetup>
+              )}
+            >
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
               >
                 <p className={`text-4xl mb-3${dim}`}>📷</p>
                 <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Rapid Tracking Test</p>
-                <div className="flex items-center justify-center gap-3 mb-1">
-                  {RTT_DIFFICULTIES.map(t => (
-                    <DifficultyButton
-                      key={t.key}
-                      tuning={t}
-                      selected={difficulty === t.key}
-                      onSelect={chooseDifficulty}
-                      flashing={launching && difficulty === t.key}
-                      dimmed={launching && difficulty !== t.key}
-                    />
-                  ))}
-                </div>
+                <CbatModeRow
+                  modes={RTT_DIFFICULTIES}
+                  value={difficulty}
+                  onSelect={chooseDifficulty}
+                  launching={launching}
+                />
                 <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
                 <p className={`text-sm text-slate-400 mb-5${dim}`}>
@@ -411,41 +441,17 @@ export default function CbatRtt() {
                   <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1"><span className="shrink-0">⏱</span><span>the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
                 </div>
 
-                {/* Sensitivity. The real test's own advice is that adapting to
-                    the sensitivity of the stick in front of you matters more
-                    than any amount of gaming, so it belongs on the card rather
-                    than buried in settings. */}
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
-                  <label htmlFor="rtt-sensitivity" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
-                    <span>Slew sensitivity</span>
-                    <span className="font-mono text-brand-600">{sensitivity.toFixed(2)}×</span>
-                  </label>
-                  <input
-                    id="rtt-sensitivity"
-                    type="range"
-                    min={MIN_SENSITIVITY}
-                    max={MAX_SENSITIVITY}
-                    step="0.05"
-                    value={sensitivity}
-                    onChange={(e) => changeSensitivity(Number(e.target.value))}
-                    className="w-full accent-brand-600 cursor-pointer"
-                  />
-                </div>
-
-                {/* Joystick. Sits under the sensitivity slider rather than
-                    inside it: the slider applies to whatever is flying, stick
-                    or mouse, so it is not a joystick setting. */}
-                <div className={dim.trim()}>
-                  <StickSetup title="Joystick" mockActive={mockStick} />
-                </div>
-
-                {personalBest && (
-                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4${dim}`}>
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best · {tuning.label}</p>
-                    <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
-                    <p className="text-[10px] text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+                {/* On the card only while there is no stick. With one plugged
+                    in this same control renders inside the joystick panel. */}
+                {!stickConnected && (
+                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
+                    {sensitivityControl}
                   </div>
                 )}
+
+                <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
+                  {best => best.bestScore}
+                </CbatPersonalBest>
 
                 <div className={`text-center mb-4${dim}`}>
                   <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
@@ -460,7 +466,7 @@ export default function CbatRtt() {
                   Start
                 </button>
               </motion.div>
-            </div>
+            </CbatStickLayout>
           )}
 
           {/* Playing */}
