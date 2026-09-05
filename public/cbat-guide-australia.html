@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADF Aviation Screening (MACTS): the candidate guide</title>
+<meta name="description" content="The three testing stages an Australian aircrew applicant sits, what happens at East Sale, and where the CBAT advice does and does not apply.">
+
+<!--
+  ADMIN PREVIEW. Not linked publicly and deliberately kept out of the index:
+  robots noindex below, a Disallow in public/robots.txt, and no sitemap entry.
+  The Community rail shows it to admins only, via the ChatGuide `adminOnly`
+  flag. Going live means changing all four together. See the same note in
+  cbat-guide-canada.html for the checklist.
+
+  Served at /cbat-guide-australia (vercel.json rewrite, and staticDocRoutes()
+  in vite.config.js for dev) and at /cbat-guide-australia.html directly.
+
+  This guide is thinner than the Canadian one on purpose. The evidence base is
+  about a quarter the size, and the grades reflect that rather than papering
+  over it. Do not pad it out with general web knowledge: the whole value of
+  these guides is that every claim traces to somebody who was there.
+-->
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1d3f76">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/guide-assets/guide.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="kicker"><a href="/">A SkyWatch Academy guide</a> · draft, admin preview</div>
+    <h1>ADF <span>Aviation Screening</span></h1>
+    <p class="sub">Australia tests aircrew applicants three separate times, in three different places,
+    and only the last one decides anything. Most preparation advice online is aimed at the wrong stage.
+    This is what each one contains and which is the one that matters.</p>
+    <div class="byline">Built from candidate write-ups and years of archived discussion. Two long
+    accounts of the Aviation Screening Program do most of the work here, supported by a few dozen
+    shorter ones. That is a thinner base than the Canadian guide rests on and the grades say so. Note
+    also that the Australian process is tri-service: Air Force, Navy and Army aircrew applicants go
+    through the same screening, so there is no separate naval test to look for.</div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <button class="btn toctoggle" id="toctoggle">☰ Contents</button>
+    <div class="tocbody" id="tocbody">
+      <h4>Contents</h4>
+      <a href="#start" data-t="start">Start here</a>
+      <a href="#names" data-t="names">What everything is called</a>
+      <a href="#stages" data-t="stages">The three testing stages</a>
+      <a href="#additional" data-t="additional">Additional pilot testing</a>
+      <a href="#asp" data-t="asp">The Aviation Screening Program</a>
+      <a href="#odds" data-t="odds">Odds, attempts and outcomes</a>
+      <a href="#prep" data-t="prep">Preparation</a>
+      <a href="#uk" data-t="uk">Compared with the UK</a>
+    </div>
+  </nav>
+  <main id="main">
+
+<section id="start">
+  <h2>Start here</h2>
+  <p class="h2sub">The short version</p>
+  <p class="lead">The mistake almost everybody makes is treating the Australian process as one test. It
+  is three, spread over months, and they get harder in order. The first two happen at a recruiting
+  centre and are gates. The third is a four day residential program at RAAF Base East Sale, and that is
+  the one that decides whether you fly.</p>
+
+  <div class="tiles">
+    <div class="tile"><div class="n acc">3</div><div class="l">separate testing stages, in three different places</div></div>
+    <div class="tile"><div class="n acc">4</div><div class="l">days at East Sale, of which two are testing</div></div>
+    <div class="tile"><div class="n acc">2</div><div class="l">lifetime attempts at the screening program</div></div>
+    <div class="tile"><div class="n acc">10-20%</div><div class="l">of candidates at screening reportedly leave with a pilot offer</div></div>
+  </div>
+
+  <h3>How sure am I about each point?</h3>
+  <p class="lead">The same grading as the other guides on this site. It matters more here, because the
+  Australian evidence base is smaller and several key points rest on one or two accounts.</p>
+  <div class="pills">
+    <span class="chip c-green"><i class="dot"></i>Well established</span>
+    <span class="chip c-amber"><i class="dot"></i>Reported, treat with care</span>
+    <span class="chip c-red"><i class="dot"></i>Probably wrong or out of date</span>
+    <span class="chip c-grey"><i class="dot"></i>Unresolved</span>
+  </div>
+
+  <div class="note"><strong>Thinner than it looks.</strong> Two detailed candidate write-ups, from 2019
+  and 2022, supply a large share of what follows. They agree with each other closely, which is
+  reassuring, but they are still two people. Where only they say something, it is graded amber no matter
+  how confident they sound.</div>
+</section>
+
+<section id="names">
+  <h2>Vocabulary</h2>
+  <p class="h2sub">What everything is called</p>
+  <p class="lead">None of the British terms work here, and the Australian terms are mostly acronyms that
+  mean nothing until somebody expands them.</p>
+
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Term</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td><strong>YOU session</strong></td><td>Your Opportunities Unlimited. The first recruiting appointment, with general aptitude testing. Everyone does this, for every job in the ADF.</td></tr>
+        <tr><td><strong>Additional testing</strong></td><td>The pilot specific test at a recruiting centre. Sometimes called the OATB. This is the second gate.</td></tr>
+        <tr><td><strong>ASP</strong></td><td>Aviation Screening Program. The four day residential assessment at RAAF Base East Sale, Victoria.</td></tr>
+        <tr><td><strong>MACTS</strong></td><td>The test battery sat during the ASP. This is the Australian equivalent of the CBAT.</td></tr>
+        <tr><td><strong>ACMC</strong></td><td>Aviation Candidate Management Centre. The building at East Sale where the testing happens.</td></tr>
+        <tr><td><strong>DFR</strong></td><td>Defence Force Recruiting. Your point of contact throughout.</td></tr>
+        <tr><td><strong>OA</strong></td><td>Officer Aviation. The employment category covering pilot and the mission roles.</td></tr>
+        <tr><td><strong>OSB</strong></td><td>Officer Selection Board. Comes after the ASP, and is an interview and group exercise, not aptitude testing.</td></tr>
+        <tr><td><strong>FSP</strong></td><td>Flight Screening Program. The older, longer, actual-flying screening. Superseded. See below.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="facts">
+    <div class="item amber">
+      <div class="stmt">Flight screening, where you were assessed flying a real light aircraft over roughly two weeks, has been replaced by two days of computer based testing.</div>
+      <div class="note2">A candidate describing the change: “The main test that will determine your natural aptitude to pilot an aircraft will be determined by MACTS. It is a new computer based assessment that you will undergo in Aviation Screening Program (over two days). No more Flight Screening over two weeks.” Older accounts and guides describe flying CT4s at Tamworth. If you find advice about logging hours before flight screening, it is describing a process that no longer runs in that form. Graded amber because the timing of the change is not clearly documented in these accounts and MACTS is mentioned as far back as 2018.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Superseded</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">It is tri-service. Air Force, Navy and Army aircrew applicants are screened together, at the same place, on the same test.</div>
+      <div class="note2">Candidates are briefed by all three services during the ASP and receive offers across them. One reports leaving with “ADFA Air Force and Army pilot, ADFA and DEO mission (RAAF), and also ADFA and DEO AvWO”, the last being a Navy aviation role. Another notes their course produced five pilot offers, three Air Force and two Navy. So there is no separate Royal Australian Navy aptitude test to prepare for, and any guide promising one is describing something that does not exist.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Structure</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="stages">
+  <h2>The pipeline</h2>
+  <p class="h2sub">The three testing stages</p>
+  <p class="lead">Each stage filters, and each is a completely different test. The most useful thing one
+  candidate wrote about the relationship between them was blunt and worth quoting in full.</p>
+
+  <div class="brief">
+    <span class="bh">A candidate on the three stages</span>
+    “YOU session aptitude test = do you have a functioning brain? Additional testing = quick maths, plus
+    can you read numbers and letters on the speedometer, plus do you at least know where you are or
+    figure out where you are if the information is given? MACTS = sorry, your lifestyle and life…”
+    <span class="bsrc">The same candidate elsewhere: “MACTS is nothing like YOU session assessment or additional testing.”</span>
+  </div>
+
+  <ol class="key">
+    <li><strong>Online aptitude test.</strong> Sent to you after you apply. Pattern recognition, number sequences and simple worded maths. One candidate reports it taking about ten minutes and unlocking every job in the ADF despite not finishing it. Low stakes. Do some general pattern practice and move on.</li>
+    <li><strong>YOU session.</strong> Historically a computer based session at a recruiting centre with a general reasoning test of about 75 questions in 60 minutes and a mathematical reasoning test of about 30 questions in 30 minutes. More recently reported as a roughly 20 minute phone conversation about motivation and fitness, with the aptitude testing moved online. If you do badly, one account reports a six month wait before you may repeat it.</li>
+    <li><strong>Additional testing.</strong> The pilot specific one, at a recruiting centre. Four separately timed sections. This is the stage the guide below covers in detail.</li>
+    <li><strong>Assessment day.</strong> Psychologist interview, medical and a defence interview. Since around 2023 these have been split into separate appointments rather than one day, with the medical at an external clinic and the psychologist interview often virtual.</li>
+    <li><strong>ASP at East Sale.</strong> Four days, two of them testing. MACTS. This is the one.</li>
+    <li><strong>Officer Selection Board.</strong> Group activity, written task and a board interview. Not aptitude testing.</li>
+  </ol>
+
+  <div class="note"><strong>Watch the prerequisites.</strong> Several aircrew roles require senior
+  secondary mathematics to even sit the additional testing. One candidate with strong YOU session scores
+  was blocked at that point and completed a nine week online mathematics course specifically to become
+  eligible. If your school maths does not meet the standard, that is a separate problem to solve early,
+  and it is not solved by doing well on the tests.</div>
+</section>
+
+<section id="additional">
+  <h2>Stage two</h2>
+  <p class="h2sub">Additional pilot testing</p>
+  <p class="lead">This is the best documented stage, because it is short, it happens at a recruiting
+  centre, and candidates remember it clearly. Two independent accounts describe four timed sections,
+  and they agree on the shape.</p>
+
+  <div class="testhead"><span class="tn">The four sections</span><span class="ta">Additional testing</span></div>
+
+  <div class="facts">
+    <div class="item amber">
+      <div class="stmt">Section one is instrument reading. Six to eight dials on screen, and each question asks you to read one of them.</div>
+      <div class="note2">The gauges reported include RPM, airspeed, altitude, temperature, fuel, oil, fuel-air ratio and voltage. One account gives roughly 40 questions in about 10 minutes and says they did not finish. The advice that actually helps comes from a third candidate: use the instruction pages at the start to memorise what each division on each dial is worth, because the test is measuring how fast you extract a number, not whether you understand instruments.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Format</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Section two is aircraft orientation from written instructions. You are shown an aircraft, given manoeuvres, and pick the resulting attitude from five options.</div>
+      <div class="note2">Instructions of the form “roll 45 degrees left, nose up 60 degrees”. About 30 questions in 15 minutes. The candidate who described it warns that the wrong answers are deliberately similar and offers one concrete tip: keep straight in your head that down is towards the wheels and up is towards the roof, because that is where people invert themselves under time pressure.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Format</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Section three is the same idea from the other direction: read an artificial horizon and compass, and pick the aircraft’s attitude.</div>
+      <div class="note2">About 30 questions in 15 minutes. Reported as the easiest of the four by the candidate who described it, with one specific complaint worth knowing in advance: the ground and sky are not always differently coloured, so working out whether the aircraft is climbing or descending is harder than it should be. Note that this section is reportedly skipped for some non-pilot aircrew roles, which sit only the simpler spatial test.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Format</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Section four is maths and estimation, and it is the one nobody likes.</div>
+      <div class="note2">Roughly 40 questions in 9 minutes by one account, and an older one describes 60 questions in 60 seconds, so the exact format has moved. The useful insight is about technique rather than speed: “Some questions don’t require exact answers, and you can easily rule out several answers because they are obviously wrong. Other questions are just estimations to the nearest hundred or thousand.” You are given pen and paper. The same candidate says do not bother using it.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Format</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Every section is scored on speed and accuracy together, and answering more matters.</div>
+      <div class="note2">Stated directly by one candidate: “They are all marked on speed and accuracy, that is, it’s better to do more and get close to the right answer than do less but get them all 100% correct.” That single sentence changes how you should sit the whole thing, and it is consistent with the two accounts that report not finishing sections and passing anyway. Graded amber because it comes from one person and no official source confirms it.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Strategy</span></div>
+    </div>
+  </div>
+
+  <div class="note"><strong>Bring photo identification.</strong> Trivial, and it very nearly cost one
+  candidate their sitting. You need a licence or passport to sit the test.</div>
+</section>
+
+<section id="asp">
+  <h2>Stage three</h2>
+  <p class="h2sub">The Aviation Screening Program</p>
+  <p class="lead">Four days at RAAF Base East Sale in Victoria. You are flown in, put in a flight suit,
+  accommodated on base and fed in the messes. Two of the four days carry the testing.</p>
+
+  <ol class="key">
+    <li><strong>Day one, arrival.</strong> Fly to Melbourne, met by a chaperone, driven to Sale. Visitor pass, accommodation, fitted for a flight suit, briefed at the ACMC, dinner in the officers’ mess. Every account says the same thing about the evening: sleep.</li>
+    <li><strong>Day two.</strong> Briefings from Air Force, Navy and Army, a look at the PC-21 and the cockpit procedural trainer, sometimes the simulators. Then the first testing block in the afternoon. Dinner, bed.</li>
+    <li><strong>Day three.</strong> The second testing block, first thing. Then tours of the School of Air Traffic Control and the air mission training school while results are processed. Then, one by one, the debrief: your scores, your options, and whether you are being put forward for the role you came for.</li>
+    <li><strong>Day four, departure.</strong> Early start, driven back to Melbourne.</li>
+  </ol>
+
+  <div class="facts">
+    <div class="item grey">
+      <div class="stmt">How long the testing runs is genuinely unresolved. Accounts say two hours per day and four hours per day, and both sound confident.</div>
+      <div class="note2">A 2019 write-up: “The test is 4 hours long but split into two 2 hour session over the 2 days.” A 2022 write-up: “The test will be two 4-hour periods over the second and third days.” A 2023 account independently supports the longer version, describing “4 hours of cognitive testing each day” with a five minute break every hour, as does a 2021 candidate. On weight of evidence the longer figure looks current, and the shorter one may describe an earlier or shorter variant, but I cannot resolve it and the difference is large enough to matter.</div>
+      <div class="meta"><span class="chip c-grey"><i class="dot"></i>Unresolved</span><span class="tag">Format</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">The testing is designed to make you feel like you failed, and everyone reports feeling exactly that.</div>
+      <div class="note2">This is the most consistent theme in every Australian account, as it is in the Canadian ones. “These tests are designed to make you feel like that.” “After each session you WILL feel like trash, but don’t let it get to your head, you most likely did better than you thought.” “I came out feeling like I totally stuffed up and all other 8 candidates felt the same way.” One candidate who was certain they had failed was offered pilot. Do not let the feeling change how you attack the next block.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">What to expect</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">The first testing block is scheduled for the afternoon on purpose, when you are already tired.</div>
+      <div class="note2">One candidate is emphatic about it: “Remember they purposely make you sit the first test session in the afternoon so that you are already tired!” A 2023 account says the same about the second block from the other direction: “You are taken asap in the morning to see how you think off minimal awakeness.” Whether that is genuinely the design or a candidate’s reasonable inference, the scheduling is consistently reported, and the practical response is the same either way. Protect your sleep and do not treat the first evening as revision time.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">What to expect</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">You are given your scores in person and told which roles you are being put forward for, before you leave.</div>
+      <div class="note2">Candidates are called in one at a time on the final afternoon, given a breakdown of how they performed in each section, and told their options across all three services. One account describes then having about ten days to decide between the roles offered. This is a substantially more informative outcome than a pass or fail, and every account treats the tours of the other trades earlier that day as deliberate preparation for it.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Debrief</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Not getting pilot is the normal outcome, and the program is built to sell you the alternatives.</div>
+      <div class="note2">Candidates describe the tours of air traffic control and the mission training school as the “softening up” tour, and they are frank that it works. Roles that come up repeatedly as outcomes are weapon systems officer, electronic warfare officer, air battle manager, maritime patrol, air traffic control and the Navy aviation warfare officer. Two separate accounts say that most people who sit the ASP are offered mission aircrew rather than pilot. Going in with only one acceptable outcome is the mistake the write-ups warn about most.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Outcome</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="odds">
+  <h2>The numbers</h2>
+  <p class="h2sub">Odds, attempts and outcomes</p>
+
+  <div class="facts">
+    <div class="item amber">
+      <div class="stmt">Roughly 10 to 20% of candidates at screening come away with a pilot offer.</div>
+      <div class="note2">Two independent accounts give the figure. A 2022 candidate: “only about 10% get a pilot.” A 2023 candidate: “the reality is that only about 10-20% get a pilot job offer”, adding that a pilot at the base told them some courses go months without anyone being offered pilot at all. Their own course produced five from a group of around ten, which they present as unusually good. Note this is not a pass rate in the Canadian sense, it is the share of an already filtered group who clear the top band.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Odds</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Two attempts in a lifetime, and a result valid for two years.</div>
+      <div class="note2">Stated by a serving officer writing up their own path: “Remember ASP scores are valid for 2 years and you get to attempt it twice in your lifetime.” One earlier account offers a rationale sometimes given for the two attempt limit, that people do not improve enough after two. This is one attempt fewer than Canada and the UK allow, and it is the single most important structural difference for an Australian candidate: there is much less room to treat the first sitting as reconnaissance.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Attempts</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Clearing the minimum score does not get you the job. You are ranked against everyone who passed that year.</div>
+      <div class="note2">A serving officer explains the three ways people miss out: not reaching the minimum score for the role, reaching it but not being competitive enough against everyone else who passed that year, or not meeting the academic standard. They give a specific example of each, including a candidate who met the pilot minimum, was compared against the year’s other successful candidates, and was not progressed. Another was competitive on score but held back by year 12 results and had to complete a university degree with a strong grade point average first.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Scoring</span></div>
+    </div>
+    <div class="item grey">
+      <div class="stmt">Whether you receive a numerical score or a percentile is unclear, and candidates argue about it.</div>
+      <div class="note2">Several accounts describe being given “your test scores” or a breakdown by section at the debrief. Yet one commenter, challenging somebody claiming a 97th percentile result, asserts flatly that the test “doesn’t give you a score”. Both cannot be right. The likeliest reconciliation is that candidates are told how they performed by area without being handed a comparable number, but that is my inference and not something anyone states. Treat any specific MACTS score you see quoted online with suspicion.</div>
+      <div class="meta"><span class="chip c-grey"><i class="dot"></i>Unresolved</span><span class="tag">Scoring</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="prep">
+  <h2>Preparation</h2>
+  <p class="h2sub">What candidates actually used</p>
+  <p class="lead">Australian candidates are unusually specific about preparation, partly because so
+  little official material exists and they have had to assemble their own.</p>
+
+  <div class="facts">
+    <div class="item amber">
+      <div class="stmt">The skills candidates name for MACTS are speed, distance and time, multitasking, instrument comprehension, arithmetic, memory, spatial awareness and shadowing.</div>
+      <div class="note2">That list is from a 2019 candidate describing which practice modules matched what they sat, and they add a useful constraint: on the speed, distance and time questions you get about one minute each, so efficiency rather than accuracy is the thing to train. A 2022 candidate independently names angles and bearings, multitasking and hand-eye-foot coordination. The overlap between the two lists is the closest thing to a public description of the MACTS content.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Content</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Candidates say the MACTS tests come from the same family as the UK battery, and some say the same software.</div>
+      <div class="note2">One 2019 candidate points readers at a UK test description site and says it “has all 20 test and describes them”, adding the caveat: “this is for the British version and even though the RAAF use the same software there may be some differences.” Another puts it more directly: “Look at the CBAT guides as that is where the ASP MACTS tests come from.” Two candidates saying it independently is worth something, but neither is in a position to know how the software was procured, so this stays amber. What is safe to conclude is narrower and still useful: UK oriented preparation is the closest available material, and Australian candidates use it because nothing better exists.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Key point</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">Practise multitasking as multitasking, not as a set of separate skills.</div>
+      <div class="note2">The most practical suggestion in any of these accounts: “practice multitasking by listening to a podcast while doing something else, or having someone ask you questions while also remembering a string of numbers.” This matches what the tests are actually measuring. Being good at arithmetic and good at memory separately is not the same as holding both while a third task runs, which is precisely what the multitasking tests are built to break.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Preparation</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Sleep is treated as preparation, not as recovery.</div>
+      <div class="note2">Every ASP account converges on it. “Don’t worry about studying the night before, you should have already done preparation. Sleep is your best weapon.” “Go to sleep early as you are mentally fatigued and you need it (trust me).” Given a schedule that deliberately tests you tired at the end of one day and early on the next, this is more than generic advice.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Preparation</span></div>
+    </div>
+  </div>
+
+  <div class="note"><strong>On practice apps.</strong> Australian candidates recommend several, and at
+  least one was built by an Australian candidate specifically for this pipeline. None is endorsed by
+  Defence and none contains the real questions, a point the honest ones make themselves. The SkyWatch
+  games are simulations built from public descriptions in the same way, and the same caveat applies.</div>
+</section>
+
+<section id="uk">
+  <h2>Comparison</h2>
+  <p class="h2sub">Compared with the UK</p>
+
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th></th><th>Australia</th><th>United Kingdom</th></tr></thead>
+      <tbody>
+        <tr><td>Deciding test</td><td>MACTS, during the ASP</td><td>CBAT</td></tr>
+        <tr><td>Where</td><td>RAAF Base East Sale, Victoria</td><td>A single test centre</td></tr>
+        <tr><td>Length</td><td>Two testing blocks across four residential days</td><td>One day</td></tr>
+        <tr><td>Earlier gates</td><td>Two, both with their own tests</td><td>Fewer</td></tr>
+        <tr><td>Services covered</td><td>All three, screened together</td><td>Applied for separately</td></tr>
+        <tr><td>Attempts</td><td>Two</td><td>Three</td></tr>
+        <tr><td>Result validity</td><td>Two years</td><td>Not time limited in the same way</td></tr>
+        <tr><td>Outcome</td><td>Scores by area, plus offers across services</td><td>Much less feedback</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="facts">
+    <div class="item amber">
+      <div class="stmt">The biggest practical difference is not the test, it is that you get two attempts instead of three.</div>
+      <div class="note2">Everything else about the two processes rewards the same preparation. The attempt limit does not. A UK candidate can reasonably treat a first sitting as a learning experience, and one in the CBAT guide passed on his third attempt after two comprehensive failures. An Australian candidate has half that room, so arriving under-prepared at the ASP costs proportionally more.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Caution</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Do not prepare for the wrong stage. Most of the material online describes the recruiting centre tests, not MACTS.</div>
+      <div class="note2">The three stages test genuinely different things, and the candidate quoted earlier is right that MACTS is nothing like the two before it. Practice aimed at the YOU session, pattern sequences and basic reasoning, does almost nothing for the screening program. If you have limited preparation time and an ASP date, spend it on multitasking, arithmetic under time pressure and hand-eye-foot coordination, not on general aptitude questions.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Caution</span></div>
+    </div>
+  </div>
+</section>
+
+  </main>
+</div>
+
+<footer><div class="wrap">
+  <p><strong>Draft, admin preview.</strong> Not linked publicly and not indexed. Thinner than the
+  Canadian guide because the evidence base is smaller, and graded accordingly.</p>
+  <p>SkyWatch is independent and is not affiliated with, endorsed by or connected to the Australian
+  Defence Force, the Royal Australian Air Force or any other armed force. Our games are simulations
+  built from publicly available descriptions. They are not the real tests and we have no access to them.
+  Selection processes change, so confirm anything that matters with Defence Force Recruiting.</p>
+  <p><a href="/">SkyWatch Academy</a> · <a href="/cbat-guide">The UK CBAT guide</a></p>
+</div></footer>
+
+<script>
+// Same contents behaviour as the other guides. See cbat-guide-canada.html for
+// why the nav is static markup rather than built here.
+(function () {
+  var toc = document.getElementById('toc');
+  var toggle = document.getElementById('toctoggle');
+  if (toggle) toggle.addEventListener('click', function () { toc.classList.toggle('open'); });
+
+  var links = [].slice.call(document.querySelectorAll('#tocbody a[data-t]'));
+  var sections = links
+    .map(function (a) { return document.getElementById(a.getAttribute('data-t')); })
+    .filter(Boolean);
+  if (!sections.length || !('IntersectionObserver' in window)) return;
+
+  var visible = new Set();
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) visible.add(e.target); else visible.delete(e.target);
+    });
+    var top = sections.filter(function (s) { return visible.has(s); })[0];
+    if (!top) return;
+    links.forEach(function (a) {
+      a.classList.toggle('on', a.getAttribute('data-t') === top.id);
+    });
+  }, { rootMargin: '-84px 0px -60% 0px' });
+  sections.forEach(function (s) { io.observe(s); });
+})();
+</script>
+</body>
+</html>

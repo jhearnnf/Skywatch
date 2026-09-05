@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canadian Aircrew Selection (CFAST): the candidate guide</title>
+<meta name="description" content="What the Canadian Forces Aircrew Selection Test at Trenton actually involves, test by test, from candidates who have sat it.">
+
+<!--
+  ADMIN PREVIEW. This guide is not linked publicly and is deliberately kept out
+  of the index: robots noindex below, a Disallow in public/robots.txt, and no
+  sitemap entry. The Community rail shows it to admins only, via the ChatGuide
+  `adminOnly` flag. When it goes live, four things change together:
+    1. this robots tag becomes "index, follow"
+    2. the Disallow line comes out of public/robots.txt
+    3. a <url> entry goes into public/sitemap.xml
+    4. the ChatGuide row's adminOnly flag is turned off in the admin console
+  Until all four happen, treat the page as a draft that happens to be reachable.
+
+  Served at /cbat-guide-canada (vercel.json rewrite, and staticDocRoutes() in
+  vite.config.js for dev) and at /cbat-guide-canada.html directly.
+-->
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1d3f76">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/guide-assets/guide.css">
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="kicker"><a href="/">A SkyWatch Academy guide</a> · draft, admin preview</div>
+    <h1>Canadian <span>Aircrew Selection</span></h1>
+    <p class="sub">Two days at Trenton, about eight hours of testing, and one result that decides which
+    of three aircrew trades you are eligible for. This is what candidates say the days actually contain,
+    what the tests are called, and what the numbers really are.</p>
+    <div class="byline">Built the same way as the CBAT guide: from candidate write-ups, published
+    recruiting messages and years of archived discussion, rather than from any one source. Canada
+    publishes an official candidate guide and it is worth reading, but it says little about how the two
+    days feel or what the pass rate is. Where accounts disagree, and the pass rate is the one that
+    disagrees most, the grade on each point says how much weight it will carry.</div>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="toc" id="toc">
+    <button class="btn toctoggle" id="toctoggle">☰ Contents</button>
+    <div class="tocbody" id="tocbody">
+      <h4>Contents</h4>
+      <a href="#start" data-t="start">Start here</a>
+      <a href="#names" data-t="names">What everything is called</a>
+      <a href="#day" data-t="day">The two days</a>
+      <a href="#battery" data-t="battery">The tests, one by one</a>
+      <a href="#scoring" data-t="scoring">What it counts for</a>
+      <a href="#odds" data-t="odds">Pass rates and attempts</a>
+      <a href="#after" data-t="after">What happens after</a>
+      <a href="#prep" data-t="prep">Preparation</a>
+      <a href="#uk" data-t="uk">Compared with the UK</a>
+    </div>
+  </nav>
+  <main id="main">
+
+<section id="start">
+  <h2>Start here</h2>
+  <p class="h2sub">The short version</p>
+  <p class="lead">Canada runs its aircrew aptitude testing as a two day residential event at one location.
+  You are flown in, put up, tested for about eight hours across two days, and told the outcome before you
+  leave. Unlike the UK, the same sitting covers three different trades at once, and your score decides
+  which of them you are eligible for.</p>
+
+  <div class="tiles">
+    <div class="tile"><div class="n acc">2</div><div class="l">days of testing, roughly eight hours split evenly between them</div></div>
+    <div class="tile"><div class="n acc">3</div><div class="l">aircrew trades assessed in one sitting: Pilot, ACSO and AEC</div></div>
+    <div class="tile"><div class="n acc">3</div><div class="l">lifetime attempts, with twelve months between them</div></div>
+    <div class="tile"><div class="n acc">~30%</div><div class="l">the most commonly quoted pass rate for pilot</div></div>
+  </div>
+
+  <h3>How sure am I about each point?</h3>
+  <p class="lead">Every point below carries a grade rather than being presented as equally solid. Canada
+  publishes less about this test than the UK does about the CBAT, so a fair amount of what follows rests
+  on a handful of accounts. The grade says which.</p>
+  <div class="pills">
+    <span class="chip c-green"><i class="dot"></i>Well established</span>
+    <span class="chip c-amber"><i class="dot"></i>Reported, treat with care</span>
+    <span class="chip c-red"><i class="dot"></i>Probably wrong or out of date</span>
+    <span class="chip c-grey"><i class="dot"></i>Unresolved</span>
+  </div>
+  <ul class="tight">
+    <li><strong>Well established.</strong> Either published by the CAF in a recruiting message or on the
+    official site, or repeated consistently by many candidates across several years.</li>
+    <li><strong>Reported.</strong> Comes from one or a few candidate accounts. Plausible and specific,
+    but nobody has confirmed it since.</li>
+    <li><strong>Probably wrong.</strong> Still repeated in places, and contradicted by the current
+    process. These are here because you will run into them.</li>
+    <li><strong>Unresolved.</strong> Accounts genuinely conflict and I cannot say which is right.</li>
+  </ul>
+
+  <div class="note"><strong>What this is, and what it isn’t.</strong> This is a candidate guide, not an
+  official document, and the CAF changes this process more often than you would expect. Nothing here
+  comes from inside the selection centre. If a detail matters to your application, confirm it with your
+  recruiting centre rather than with this page.</div>
+</section>
+
+<section id="names">
+  <h2>Vocabulary</h2>
+  <p class="h2sub">What everything is called</p>
+  <p class="lead">Canada uses a different name for almost everything, and searching with British terms
+  finds nothing. This is the translation table.</p>
+
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Term</th><th>What it means</th></tr></thead>
+      <tbody>
+        <tr><td><strong>CFAST</strong></td><td>Canadian Forces Aircrew Selection Test. The battery itself. This is the thing people call “aircrew selection”.</td></tr>
+        <tr><td><strong>CFASC</strong></td><td>Canadian Forces Aircrew Selection Centre. The unit that runs it, at CFB Trenton in Ontario.</td></tr>
+        <tr><td><strong>ACS</strong></td><td>Aircrew Selection. Used loosely for both the test and the trip.</td></tr>
+        <tr><td><strong>CFAT</strong></td><td>Canadian Forces Aptitude Test. The general entry test everyone sits, long before CFAST. Not the same thing.</td></tr>
+        <tr><td><strong>CAPSS</strong></td><td>Canadian Automated Pilot Selection System. The old flight simulator based test. Retired. See below.</td></tr>
+        <tr><td><strong>Pilot</strong></td><td>The highest CFAST result band.</td></tr>
+        <tr><td><strong>ACSO</strong></td><td>Air Combat Systems Officer. The middle band. Closest Canadian equivalent to a weapon systems officer.</td></tr>
+        <tr><td><strong>AEC</strong></td><td>Aerospace Control Officer. The third band. Air traffic control and air battle management.</td></tr>
+        <tr><td><strong>CFEME</strong></td><td>Canadian Forces Environmental Medicine Establishment, Toronto. Where the aircrew medical is adjudicated.</td></tr>
+        <tr><td><strong>Air Factor</strong></td><td>The aircrew medical category. Separate from CFAST and assessed after it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="facts">
+    <div class="item red">
+      <div class="stmt">CAPSS, the flight simulator test, no longer exists. If a guide tells you to practise flying a simulated aircraft, it is describing a test that was retired well over a decade ago.</div>
+      <div class="note2">The change is documented by a candidate who sat the replacement in late 2013 and posted about it under the heading “NEW ACS”: the simulator was gone, and in its place were roughly 28 computer based tests spread over two days. Older forum threads, and some third party sites, still describe the simulator. One serving pilot who took part in developing the replacement summarised the difference neatly: the old selection was a simulator you flew for an hour at a time and came out of drenched in sweat, and the new one is “more mental, but it’s gruelling”.</div>
+      <div class="meta"><span class="chip c-red"><i class="dot"></i>Probably wrong</span><span class="tag">Outdated advice</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">One sitting covers three trades. You are not told simply that you passed. You are told which of Pilot, ACSO and AEC you qualified for, and Pilot is the highest bar.</div>
+      <div class="note2">This is consistent across many years of accounts and matches the recruiting messages, which route Pilot, ACSO and AEC applicants through the same centre. In practice it means the trip is worth taking even if Pilot is a long shot, because a result short of Pilot can still open two other aircrew trades. Candidates describe exactly that outcome often: “passed for AEC, so close to passing for ACSO but didn’t make it.” It also means a Pilot applicant who does not clear the top band has not necessarily wasted the attempt.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Outcome</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">The CFAT is a separate, earlier test, and it has historically been the gate that decides whether you are sent to CFAST at all.</div>
+      <div class="note2">The CFAT is a roughly 60 question general aptitude test taken at a recruiting centre, covering verbal reasoning, spatial reasoning and problem solving. It is combined with a personality inventory into a single score, and for a competitive trade like Pilot the cut-off for that score is raised. Several accounts state plainly that a weak CFAT means you never get offered a CFAST date. Graded amber because at least one 2025 account says the CFAT requirement was dropped in late 2024 for aircrew candidates, and reports a debriefing officer noticing weaker candidates arriving as a result. Confirm which applies to you.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Changing</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="day">
+  <h2>On the ground</h2>
+  <p class="h2sub">The two days</p>
+  <p class="lead">CFAST is residential and the CAF pays for it. You are booked by your recruiting centre,
+  flown to Trenton, accommodated, and flown home. Candidates are routinely reimbursed for the travel.</p>
+
+  <div class="facts">
+    <div class="item green">
+      <div class="stmt">The testing is about eight hours, split evenly across two days. It is all computer based.</div>
+      <div class="note2">The eight hours over two days figure is repeated consistently, including in a detailed 2024 account that also lists the domains: eye, hand and foot control, short term memory, multitasking, mental arithmetic and spatial reasoning. The 2013 account of the new format put it at roughly 28 separate tests. Whether it is still 28 today is unclear, but the shape of the thing, many short tests rather than a few long ones, has not changed.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Format</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">You will feel like you failed. Everyone does, and it is built in.</div>
+      <div class="note2">This is the single most repeated piece of advice about CFAST and it comes from every era of account. One candidate: “Not a single person thought they were doing well, which I think is also a part of the test design.” Another, more usefully: “many of the tests are designed to be extremely difficult or impossible. They’ll just keep getting harder as you go. Half of the exam is to see how you handle being time compressed and doing things that are difficult.” Several people who passed report that the tests they thought they had ruined turned out to be among their strongest. Treat the feeling as noise, not signal.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">What to expect</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">The first night’s sleep does real work. Day two starts early and carries a full half of the testing.</div>
+      <div class="note2">Advice from a candidate who did it right: go to bed early enough to get eight or nine hours, get up with enough time to eat breakfast without rushing, and do not spend the evening reading forum threads. “If you stay up late on reddit, wake up at the last minute, then have to rush across the base to CFASC, you are not doing yourself any favours.” This matters more in Canada than in a single day format, because a bad first night costs you half the battery rather than none of it.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Preparation</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Getting there is described as more stressful than the test. The joining instructions are widely called confusing.</div>
+      <div class="note2">One 2024 account: “the most difficult part for me was making all the travel preparations to go by myself and then going. Just getting there really sucks because the information they give you is often confusing and poorly worded and I needed to send a bunch of emails just to know what I was supposed to do.” A 2013 account adds a practical note that dates it nicely: bring an ethernet cable for the hotel internet, and the food is good. Ask your recruiting centre the boring logistical questions early rather than the night before.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Logistics</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">You get a debrief. If you fall short, you are told which areas let you down.</div>
+      <div class="note2">Candidates are taken in one by one and given their results. Someone who failed and then passed on a second attempt described the value of it directly: “If you fell short, guaranteed you got told in the debrief what to work on. Laser focus on those skills and improve your weaknesses. It’s very doable.” Their own first attempt was short on the maths for pilot, and they passed comfortably the second time. This is materially more feedback than the UK gives, and it is the main reason a second Canadian attempt is worth more than a blind one.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Debrief</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="battery">
+  <h2>The battery</h2>
+  <p class="h2sub">The tests, one by one</p>
+  <p class="lead">The fullest public description of the CFAST battery is a candidate write-up from the
+  mid 2010s that walks through every named test in the official candidate guide and suggests how to
+  practise each one. It has been reposted many times since. What follows is that list, with the caveat
+  that the battery has almost certainly been revised since.</p>
+
+  <div class="note"><strong>Read this next to the official candidate guide.</strong> The CAF publishes a
+  candidate guide that names and explains every test. Candidates who have done well consistently say the
+  same thing about it: it tells you far more than people assume, and most of them did not read it
+  properly. The write-up below was itself built by working through that guide.</div>
+
+  <div class="testhead"><span class="tn">The named tests</span><span class="ta">CFAST</span></div>
+  <div class="brief">
+    <span class="bh">Reported battery</span>
+    Airborne Numerical · Angles, Bearings and Degrees · Auditory Capacity · CLAN · Mathematical
+    Reasoning · Instrument Comprehension · Digit Recognition · Cognitive Updating · Numerical
+    Operations · Situational Awareness · Sensory Motor Apparatus · Rapid Tracking · Spatial Integration
+    · System Logic · Table Reading · Target Recognition · Trace 1 and Trace 2 · Vigilance · Visual Search
+    <span class="bsrc">Source: a candidate write-up worked up from the official candidate guide, widely reposted. Mid 2010s.</span>
+  </div>
+
+  <div class="facts">
+    <div class="item green">
+      <div class="stmt">Almost every test in that list has a direct counterpart in the UK battery, under the same name.</div>
+      <div class="note2">Airborne Numerical, Cognitive Updating, Numerical Operations, Situational Awareness, Sensory Motor Apparatus, Rapid Tracking, Spatial Integration, System Logic, Table Reading, Vigilance, and both Trace tests all appear in the UK list under identical names. Angles and Bearings, Instrument Comprehension, Target Recognition and Digit Recognition map across just as cleanly. This is not a coincidence, and the reason is in the next point.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Overlap</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">The Canadian battery was reportedly modelled on the RAF’s. A candidate who sat the new format in 2013 said so explicitly.</div>
+      <div class="note2">Their advice to the next intake: “If you need more study material, look into RAF testing as this is what the new model is based on.” Given the near identical test names, that is easy to believe, and it is the single most useful fact on this page: it means UK oriented preparation is not a rough substitute for Canadian preparation, it is close to the same thing. Graded amber because it is one candidate’s understanding rather than an official statement, and neither air force publishes the provenance of its battery.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Key point</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">CLAN is in the Canadian battery. The UK replaced its version with FLAG in 2021, so this is one place the two have genuinely diverged.</div>
+      <div class="note2">CLAN runs three tasks at once: coloured dots travelling toward colour coded zones, a letter sequence to hold and pick out of scrambled options, and rapid arithmetic against a timer. FLAG is structurally very close, so drilling one prepares you for the other, but they are not identical and the practice apps carry one or the other without always saying which. If you are preparing in Canada, do not assume a UK app’s FLAG module is your test.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Divergence</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">There is a foot control element. The Sensory Motor Apparatus test uses rudder pedals as well as a joystick.</div>
+      <div class="note2">The write-up describes it as controlling a dot with a joystick on one axis and pedals on the other, and warns that “disconnecting your hands from one axis and connecting your feet is not easy”. A 2024 summary of the battery independently lists “eye-hand-foot control” as one of the domains. This is worth knowing in advance because almost nobody has used rudder pedals before, and it is the one part of the battery where the physical setup itself is unfamiliar.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Format</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Speed, distance and time arithmetic comes up a lot, and it is the most practisable thing in the battery.</div>
+      <div class="note2">Every era of account says this. The 2013 write-up: “Study up on your time/distance/speed and fuel consumption, as there is a lot of it, a lot of math and make sure you can do it quickly.” A 2023 post recommends doing “a ton of speed distance time problems and get good at finding the shortcuts for solving them quickly”. A candidate who failed and then passed says their first attempt was short specifically on maths for pilot. If you only prepare one thing, prepare this.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Preparation</span></div>
+    </div>
+    <div class="item grey">
+      <div class="stmt">How much of this list is still accurate is genuinely unknown.</div>
+      <div class="note2">The write-up dates from the mid 2010s and the battery has been revised at least once since it was written. A pilot who applied over a decade ago and answered questions in 2026 was careful to say “I can’t speak to the new selection process as I underwent the previous aircrew selection program that is no longer in use.” Treat the list as the shape of the thing rather than a current running order, and read the official candidate guide you are sent for the version you will actually sit.</div>
+      <div class="meta"><span class="chip c-grey"><i class="dot"></i>Unresolved</span><span class="tag">Currency</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="scoring">
+  <h2>Weighting</h2>
+  <p class="h2sub">What it counts for</p>
+  <p class="lead">CFAST is not a hurdle you clear and forget. For aircrew trades it is the largest single
+  component of your competitiveness, and candidates who understand that prepare differently.</p>
+
+  <div class="facts">
+    <div class="item amber">
+      <div class="stmt">For aircrew trades, CFAST is reported to be worth about half your entire application.</div>
+      <div class="note2">The clearest statement of it: for a normal trade the split is roughly 60% aptitude test, 15% personality inventory and 25% interview and miscellaneous factors, and “if you’re applying for a trade that has a special assessment like Aircrew Selection, cut the above percentages in half and assign 50% to the special assessment”. A separate account gives the same result in different numbers for one entry plan: CFAST 50%, CFAT 30%, personality inventory about 7.5%, interview and other factors about 12.5%. A third puts it as “roughly 85% of your application for Pilot will be decided based on test results alone”. Different sources, same conclusion.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Scoring</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">Academics, flying hours and life experience matter far less than people expect.</div>
+      <div class="note2">Repeated constantly by people already in the trade. Pilot accepts essentially any bachelor’s degree, and the subject is not weighted. A private pilot’s licence is described as worth “a couple points to your interview score and very very slightly helpful for aircrew selection”, and several serving pilots warn that civilian flying habits can actively hinder military training later. One summary: “Competition for recruitment or transfer over to Pilot is based almost entirely on test scores.”</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Scoring</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">You are not aiming to pass. You are aiming to score, because the offer comes off a ranked list afterwards.</div>
+      <div class="note2">Passing CFAST puts you on a competitively ranked merit list, and offers are made from it as slots appear. One candidate had “almost perfect scores at aircrew selection” and still spent years waiting. Another passed and sat on the list for ten weeks before an offer. So the difference between scraping through and scoring well is not pass versus fail, it is how long you wait and whether an offer ever comes. As one account puts it: “you’re not looking at a pass or meeting the minimum. You’re aiming to achieve the highest score you can because you’ll be competing against others.”</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Scoring</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="odds">
+  <h2>The numbers</h2>
+  <p class="h2sub">Pass rates and attempts</p>
+  <p class="lead">Quoted pass rates vary more than any other figure, partly because people quote the rate
+  for different trades and different years as though they were the same number.</p>
+
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Year</th><th>Quoted rate</th><th>Source shape</th></tr></thead>
+      <tbody>
+        <tr><td>2013</td><td>4 of 15 on one intake, 0 of 10 the week before</td><td>Candidate, first sitting of the new format</td></tr>
+        <tr><td>2015</td><td>40 to 50%</td><td>Recruiting-adjacent explainer</td></tr>
+        <tr><td>2017</td><td>Around 30%</td><td>Serving pilot</td></tr>
+        <tr><td>2019</td><td>20 to 50%</td><td>Serving pilot, explicitly rough</td></tr>
+        <tr><td>2020</td><td>About a 70% failure rate</td><td>Serving pilot</td></tr>
+        <tr><td>2024</td><td>About 30% for pilot applicants</td><td>Detailed candidate summary</td></tr>
+        <tr><td>2025</td><td>33%</td><td>Candidate, quoting staff</td></tr>
+        <tr><td>2026</td><td>30 to 40%</td><td>Serving pilot</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="facts">
+    <div class="item green">
+      <div class="stmt">Roughly a third of pilot candidates pass. The spread of quoted figures narrows once you separate trades and eras.</div>
+      <div class="note2">The band that survives scrutiny is about 30 to 40% for Pilot specifically. The higher figures, 40 to 50%, tend to describe passing for any aircrew trade rather than for Pilot, which is a different and easier question given one sitting streams you into three bands. The very low 2013 numbers come from the first intakes of a brand new format and should not be read as current. A senior pilot’s figure of “60 to 70% don’t make it past this point” sits comfortably with the modern band.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Pass rate</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">Three attempts in a lifetime, twelve months apart.</div>
+      <div class="note2">Stated plainly in 2017: “You can attempt it again after a year, up to three times.” Restated in 2022: “If you don’t score high enough to be selected as a pilot you can re-attempt the aptitude test in 12 months. You can do the test a maximum of 3 times.” A 2026 candidate describes going for their third and final attempt after sitting it in 2022 and 2024, which fits. This is one more attempt than Australia allows and worth knowing, because it means a first attempt is genuinely a reconnaissance run rather than your only shot.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Attempts</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">A result is reported to be valid for two years, so a slow application can outlive its own test score.</div>
+      <div class="note2">One account states it directly: “Aircrew selection is only valid 2 years.” Another candidate weighing a trade change worried that a wait of “two, three or even four years” would mean redoing aircrew selection. Given that Canadian application timelines of two to four years are common in these accounts, this is a real risk rather than a theoretical one, and it is worth asking your recruiting centre about if your file stalls.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Validity</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">It is expensive to run, and places are limited. That is part of why the CFAT gate existed.</div>
+      <div class="note2">A 2025 candidate relays the reasoning from staff: with a pass rate around a third and the CAF covering airfare, hotel, food and the staff to supervise, each seat costs real money. The same account notes the debriefing officer’s complaint after the CFAT was dropped, that some candidates were now scoring zero on tests that an earlier filter would have caught. Whatever the current gate is, the underlying pressure has not changed.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Context</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="after">
+  <h2>Afterwards</h2>
+  <p class="h2sub">What happens after</p>
+  <p class="lead">Passing CFAST is one gate of several, and two of the ones that follow catch people out
+  because they have nothing to do with aptitude.</p>
+
+  <ol class="key">
+    <li><strong>Anthropometric measurements.</strong> You are measured to check you physically fit the training aircraft. This happens at the selection centre, often the same trip. One candidate at 6 feet 5 passed for helicopter and multi engine streams but was close to the limit, and notes that sitting height and thigh length matter more than overall height.</li>
+    <li><strong>The aircrew medical.</strong> Separate from the ordinary recruiting medical, with more tests, and adjudicated by CFEME in Toronto. It produces your Air Factor. Candidates commonly report this as the slowest step in the whole application, and several report doing CFAST first specifically so they are not paying for medical testing before knowing whether they qualify at all.</li>
+    <li><strong>The competition list.</strong> Passing does not produce an offer. You are ranked against everyone else and wait. Waits of weeks to years appear throughout these accounts, and some people are never selected.</li>
+    <li><strong>The offer.</strong> Made by email, and nothing is binding until enrolment. Every account is emphatic that you remain a civilian throughout, and that you should not resign a job or sell anything on the strength of a strong result.</li>
+  </ol>
+
+  <div class="note"><strong>The order is deliberate.</strong> Doing the cheap, high attrition test before
+  the expensive, slow medical is the sensible sequencing and the CAF generally follows it. If your
+  recruiting centre proposes the reverse, it is worth asking why.</div>
+</section>
+
+<section id="prep">
+  <h2>Preparation</h2>
+  <p class="h2sub">What actually helps</p>
+  <p class="lead">Opinion divides sharply on whether you can prepare for an aptitude test at all. The
+  useful version of the argument is not about raw ability, it is about not wasting attention on the
+  unfamiliar.</p>
+
+  <div class="facts">
+    <div class="item green">
+      <div class="stmt">The “you can’t prepare for it” advice is half right and gets quoted as though it were entirely right.</div>
+      <div class="note2">The best rebuttal in these accounts: “Lots of people will tell you that you can’t really prepare, but I have to say this is very bad advice. Sure, you can’t do much to improve your baseline aptitude. But you can maximize how well you’re able to approach the tests.” Knowing the format, the controls and the arithmetic in advance means the working memory you have goes on the task rather than on working out what the task is. The write-up that catalogued the battery ends on the same honest note: it may help, it may not, but going in unsurprised is worth something on its own.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Preparation</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Mental arithmetic under time pressure is the highest yield thing to drill, and it is the one thing everyone agrees on.</div>
+      <div class="note2">Speed, distance and time in particular. Candidates recommend timed arithmetic drills and speed distance time problem sets, and the recurring instruction is to find the shortcuts rather than to compute carefully. This is also the area most often named in debriefs as the reason someone fell short of Pilot.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Preparation</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Time on a joystick helps, because the stick itself should not be the new thing on the day.</div>
+      <div class="note2">Several of the tests are psychomotor, and one of them adds rudder pedals. The reasoning given by the battery write-up is the right one: “If you can get good with the stick, it’ll free up processing power to deal with the other tasks.” The gain is not better hand-eye coordination, it is not spending attention on the control. Serving members are more sceptical about video games in general, though one who passed on a second attempt makes a specific case for games that require pattern recognition and prediction rather than reflexes alone.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Preparation</span></div>
+    </div>
+    <div class="item green">
+      <div class="stmt">Read the official candidate guide properly. It names every test, and most candidates skim it.</div>
+      <div class="note2">This is the cheapest advantage available and it is repeatedly wasted. The candidate who catalogued the whole battery did it purely by reading the guide carefully and thinking about what each description implied. Note that opinions on the guide differ: a 2013 candidate called it “absolutely not helpful”, while later ones call it the best thing available. The guide has been revised since, which probably explains the disagreement.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Preparation</span></div>
+    </div>
+  </div>
+
+  <div class="note"><strong>On practice apps.</strong> Several exist, some aimed at the UK test and some
+  at the Canadian one, and candidates in these threads recommend and build them constantly. They are not
+  the real test and none of them is endorsed by the CAF. The SkyWatch games are simulations built from
+  public descriptions in exactly the same way, and the same caveat applies to them.</div>
+</section>
+
+<section id="uk">
+  <h2>Comparison</h2>
+  <p class="h2sub">Compared with the UK</p>
+  <p class="lead">If you have been reading UK material, here is what carries across and what does not.</p>
+
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th></th><th>Canada</th><th>United Kingdom</th></tr></thead>
+      <tbody>
+        <tr><td>Name</td><td>CFAST, at CFASC Trenton</td><td>CBAT</td></tr>
+        <tr><td>Length</td><td>Two days, about eight hours</td><td>One day</td></tr>
+        <tr><td>Residential</td><td>Yes, flown in and accommodated</td><td>No</td></tr>
+        <tr><td>Trades assessed</td><td>Three at once, and the result streams you</td><td>Assessed against the role you applied for</td></tr>
+        <tr><td>Attempts</td><td>Three, twelve months apart</td><td>Three</td></tr>
+        <tr><td>Result validity</td><td>Reported as two years</td><td>Not time limited in the same way</td></tr>
+        <tr><td>Feedback</td><td>A debrief naming your weak areas</td><td>Much less</td></tr>
+        <tr><td>Multitasking test</td><td>CLAN</td><td>FLAG since 2021</td></tr>
+        <tr><td>Foot controls</td><td>Yes, rudder pedals in the sensory motor test</td><td>Yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="facts">
+    <div class="item green">
+      <div class="stmt">Most UK preparation carries across directly, because the test lists are nearly the same.</div>
+      <div class="note2">Trace 1 and 2, Vigilance, Rapid Tracking, Sensory Motor Apparatus, Spatial Integration, System Logic, Table Reading, Cognitive Updating, Situational Awareness, Numerical Operations and Airborne Numerical all appear under the same names on both sides. The differences that matter are the shape of the event rather than the content of the tests: two days instead of one, three trades instead of one, and a debrief that actually tells you something.</div>
+      <div class="meta"><span class="chip c-green"><i class="dot"></i>Well established</span><span class="tag">Overlap</span></div>
+    </div>
+    <div class="item amber">
+      <div class="stmt">Do not assume UK pass marks, cut-offs or scoring bands mean anything in Canada.</div>
+      <div class="note2">The test content overlaps heavily. The scoring does not transfer at all, and no equivalent of the UK’s published pass mark circulates in Canadian accounts. Canadian candidates talk about being above or below the line for each of three trades, and about ranking on a competition list afterwards, rather than about a single number. If you see a UK score quoted as though it applies to CFAST, it does not.</div>
+      <div class="meta"><span class="chip c-amber"><i class="dot"></i>Reported</span><span class="tag">Caution</span></div>
+    </div>
+  </div>
+</section>
+
+  </main>
+</div>
+
+<footer><div class="wrap">
+  <p><strong>Draft, admin preview.</strong> Not linked publicly and not indexed. Built from candidate
+  write-ups and published recruiting messages, not from any official or internal source.</p>
+  <p>SkyWatch is independent and is not affiliated with, endorsed by or connected to the Canadian Armed
+  Forces, the Royal Canadian Air Force or any other armed force. Our games are simulations built from
+  publicly available descriptions. They are not the real tests and we have no access to them. Selection
+  processes change, so confirm anything that matters with your recruiting centre.</p>
+  <p><a href="/">SkyWatch Academy</a> · <a href="/cbat-guide">The UK CBAT guide</a></p>
+</div></footer>
+
+<script>
+// Contents behaviour, matched to the UK guide: a toggle on narrow screens and a
+// scroll spy that marks the section you are actually reading. Written against
+// the static markup above rather than building the nav, so the page is complete
+// with JavaScript switched off.
+(function () {
+  var toc = document.getElementById('toc');
+  var toggle = document.getElementById('toctoggle');
+  if (toggle) toggle.addEventListener('click', function () { toc.classList.toggle('open'); });
+
+  var links = [].slice.call(document.querySelectorAll('#tocbody a[data-t]'));
+  var sections = links
+    .map(function (a) { return document.getElementById(a.getAttribute('data-t')); })
+    .filter(Boolean);
+  if (!sections.length || !('IntersectionObserver' in window)) return;
+
+  // Nearest heading wins. Several sections are on screen at once on a tall
+  // display, so picking the topmost visible one keeps the marker from jumping
+  // to whichever crossed the threshold most recently.
+  var visible = new Set();
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) visible.add(e.target); else visible.delete(e.target);
+    });
+    var top = sections.filter(function (s) { return visible.has(s); })[0];
+    if (!top) return;
+    links.forEach(function (a) {
+      a.classList.toggle('on', a.getAttribute('data-t') === top.id);
+    });
+  }, { rootMargin: '-84px 0px -60% 0px' });
+  sections.forEach(function (s) { io.observe(s); });
+})();
+</script>
+</body>
+</html>

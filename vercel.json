@@ -9,6 +9,8 @@
   ],
   "rewrites": [
     { "source": "/cbat-guide", "destination": "/cbat-guide.html" },
+    { "source": "/cbat-guide-canada", "destination": "/cbat-guide-canada.html" },
+    { "source": "/cbat-guide-australia", "destination": "/cbat-guide-australia.html" },
     { "source": "/((?!assets/|sounds/|images/|models/|.*\\..*).*)", "destination": "/index.html" }
   ]
 }

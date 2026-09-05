@@ -145,7 +145,11 @@ function publicModelsManifest() {
 // both environments answer the clean URL identically instead of dev being the
 // only place it fails.
 function staticDocRoutes() {
-  const DOCS = { '/cbat-guide': '/cbat-guide.html' }
+  const DOCS = {
+    '/cbat-guide':           '/cbat-guide.html',
+    '/cbat-guide-canada':    '/cbat-guide-canada.html',
+    '/cbat-guide-australia': '/cbat-guide-australia.html',
+  }
   return {
     name: 'static-doc-routes',
     configureServer(server) {
@@ -190,7 +194,7 @@ export default defineConfig({
         // The guide is a standalone document, not an app route, so it has to
         // opt out of the fallback or it breaks in production only: dev has no
         // service worker, so it works right up until it is deployed.
-        navigateFallbackDenylist: [/^\/api\//, /^\/cbat-guide(\.html)?$/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/cbat-guide(-canada|-australia)?(\.html)?$/],
         runtimeCaching: [
           {
             // Aircraft cutout images live on Cloudinary — cache on first use so

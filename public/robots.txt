@@ -43,6 +43,15 @@ Disallow: /game-history
 Disallow: /cbat-game-history
 Disallow: /intel-brief-history
 
+# The Canadian and Australian guides are drafts, staged in the Community rail
+# for admins only. They carry a noindex tag as well, but the tag alone is not
+# enough here: they are reachable static files with no inbound links, and the
+# cheapest way to keep an unfinished document out of search is to not have it
+# crawled at all. Remove BOTH lines, the noindex in each file, and add sitemap
+# entries, on the day they go live. Until then all three must agree.
+Disallow: /cbat-guide-canada
+Disallow: /cbat-guide-australia
+
 # /cbat-guide.html is intentionally NOT disallowed. It serves the same document
 # as the clean /cbat-guide URL, and that document canonicalises to the clean
 # form — but a canonical tag only counts if Google is allowed to fetch the page

@@ -31,11 +31,15 @@ export const CBAT_GUIDE_HREF = isNative ? '/cbat-guide.html' : '/cbat-guide'
 // Returns the pending work so a test can await it. Nothing at a call site does:
 // the navigation this precedes must not wait on a status-bar colour, and the
 // WebView survives it either way.
-// Both spellings of the guide's own URL, and nothing else. The chat rail lists
-// guides from the database, so it can carry links to documents we do not style
-// and must not hand the status bar over for those.
+// Both spellings of every guide we publish, and nothing else. The chat rail
+// lists guides from the database, so it can carry links to documents we do not
+// style and must not hand the status bar over for those.
+//
+// The international guides share the UK guide's stylesheet, so they are the
+// same cream document and need the same handover. Adding a guide means adding
+// its slug here as well.
 export function isCbatGuideUrl(url) {
-  return /^\/cbat-guide(\.html)?$/.test(url || '')
+  return /^\/cbat-guide(-canada|-australia)?(\.html)?$/.test(url || '')
 }
 
 export function prepareGuideChrome() {
