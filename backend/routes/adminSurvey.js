@@ -500,6 +500,7 @@ router.get('/responses', async (_req, res) => {
           avgRealism:  mean(realism),
           avgHelped:   mean(helped),
           donationClicks: responses.filter(r => r.donationClicked).length,
+          playReviewClicks: responses.filter(r => r.playReviewClicked).length,
           roleCounts,
           // The free-text answers are the point of the whole exercise, so they
           // are surfaced in the summary rather than left to be dug out of rows.

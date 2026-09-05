@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { captureLoginReturn } from '../utils/loginRedirect'
 import SEO from '../components/SEO'
 import { SLIM_APP } from '../utils/appMode'
+import { PLAY_STORE_URL } from '../utils/appUpdate'
 import { ROLE_GROUPS, OTHER_ROLE_KEY, filterRoleGroups, roleLabel } from '../data/surveyRoles'
 
 /**
@@ -201,6 +202,9 @@ export default function Survey() {
         closed: false,
         optedOut: false,
         completed: false,
+        // The demo shows the Play Store ask, which a real screen only gets when
+        // the account has actually run the Android app.
+        usedAndroid: true,
         roleGroups: ROLE_GROUPS,
         response: null,
       })
@@ -565,7 +569,9 @@ export default function Survey() {
               name={meta?.name}
               API={API}
               preview={isPreview}
+              usedAndroid={!!meta?.usedAndroid}
               onDonationClick={() => save({ donationClicked: true })}
+              onPlayReviewClick={() => save({ playReviewClicked: true })}
               onComment={(text) => save({ comment: text })}
             />
           )}
@@ -798,7 +804,7 @@ function SurveyClosed({ title, body }) {
 // The closing screen: thanks, then the badge they have just earned, then the
 // ask. The order is the point — the donation follows something given, not a
 // request out of nowhere.
-function DoneCard({ badge, name, API, preview = false, onDonationClick, onComment }) {
+function DoneCard({ badge, name, API, preview = false, usedAndroid = false, onDonationClick, onPlayReviewClick, onComment }) {
   const [amount, setAmount] = useState(DONATION_PRESETS[0])
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
@@ -965,6 +971,16 @@ function DoneCard({ badge, name, API, preview = false, onDonationClick, onCommen
         </p>
       )}
 
+      {/* The other ask, and only ever the other one.
+          Two asks stacked on one screen dilute each other, so this takes the
+          place of the donation rather than sitting under it: it appears once the
+          donation has been turned down, and stands alone in the native app,
+          where a donation cannot be offered at all. Someone who gives has
+          already gone to Stripe and is never asked for anything else. */}
+      {usedAndroid && (declined || SLIM_APP) && (
+        <PlayReviewCard onClick={onPlayReviewClick} />
+      )}
+
       <CommentBox onSubmit={onComment} />
 
       <div className="text-center mt-6">
@@ -973,6 +989,46 @@ function DoneCard({ badge, name, API, preview = false, onDonationClick, onCommen
         </Link>
       </div>
     </div>
+  )
+}
+
+// The Google Play ask, shown only to people the server already knows have run
+// the Android app (User.osSeen.android, written from the app's own heartbeat).
+// Asking a web-only respondent to rate an app they have never opened wastes the
+// one thing this screen has left to spend.
+//
+// Shown to EVERY Android respondent regardless of what they answered. Routing
+// only the ones who said kind things to the store is review gating, which Play's
+// policy prohibits, so the ask is identical whether they passed or failed and
+// whether they rated us 5 or 1.
+//
+// A link rather than a button: Android hands play.google.com straight to the
+// Play app, and on a laptop it opens the web listing instead of dead-ending.
+function PlayReviewCard({ onClick }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-surface rounded-2xl border border-slate-200 p-4 sm:p-5"
+      data-testid="survey-play-review"
+    >
+      <p className="text-sm font-bold text-slate-800 mb-1">Rate the app on Google Play</p>
+      <p className="text-xs text-slate-500 leading-relaxed mb-4">
+        You have used the SkyWatch Android app. A rating on Google Play is how most people
+        preparing for these tests find it in the first place. It takes a few seconds, and it is
+        easiest on your phone.
+      </p>
+      <a
+        href={PLAY_STORE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={onClick}
+        data-testid="survey-play-review-link"
+        className="block w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm text-center no-underline transition-colors"
+      >
+        Open Google Play
+      </a>
+    </motion.div>
   )
 }
 

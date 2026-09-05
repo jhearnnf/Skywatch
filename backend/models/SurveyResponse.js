@@ -77,6 +77,11 @@ const surveyResponseSchema = new mongoose.Schema({
   // — only that the ask converted as far as Checkout.
   donationClicked: { type: Boolean, default: false },
 
+  // Set when someone who has used the Android app presses through to the Play
+  // Store listing from the closing screen. Not proof of a review — Play never
+  // tells us who left one — only that the ask converted as far as the store.
+  playReviewClicked: { type: Boolean, default: false },
+
   // Present only on the opt-out path, which is a different flow: the opt-out is
   // applied first and unconditionally, and these are answered afterwards by
   // someone who has already left. See routes/survey.js.

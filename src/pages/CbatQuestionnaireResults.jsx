@@ -284,6 +284,7 @@ function AnswersTable({ rows }) {
             {r.realismRating != null && <span>Realism {r.realismRating}/5</span>}
             {r.helpedRating  != null && <span>Helped {r.helpedRating}/5</span>}
             {r.donationClicked && <span className="text-brand-700 font-semibold">Clicked donate</span>}
+            {r.playReviewClicked && <span className="text-brand-700 font-semibold">Opened Play Store</span>}
           </div>
 
           {/* What they wrote is printed in full above, under "What we did not

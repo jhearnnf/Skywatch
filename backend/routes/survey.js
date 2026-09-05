@@ -98,7 +98,8 @@ setInterval(() => {
 
 async function loadInvite(token) {
   if (!token || typeof token !== 'string' || token.length < 16) return null;
-  return SurveyInvite.findOne({ token }).populate('userId', 'displayName agentNumber cbatPassed');
+  return SurveyInvite.findOne({ token })
+    .populate('userId', 'displayName agentNumber cbatPassed osSeen.android');
 }
 
 function nameFor(user) {
@@ -205,6 +206,15 @@ router.get('/:token', throttle, async (req, res) => {
         closed: settings.cbatSurveyEnabled === false,
         optedOut: !!invite.optedOutAt,
         completed: !!invite.completedAt,
+        // Has this account ever run the Android app? `osSeen.android` accumulates
+        // from the heartbeat the native app sends and is never cleared, so it
+        // answers "at some point", which is exactly what the closing screen's
+        // Play Store ask needs and all it needs.
+        //
+        // Deliberately not tied to any answer. Sending only the people who said
+        // kind things to the store is review gating, which Play's policy
+        // prohibits and which is the one way this could put the listing at risk.
+        usedAndroid: !!invite.userId?.osSeen?.android,
         roleGroups: surveyRoles.groups,
         // Answers so far, so a reopened link resumes rather than restarts.
         response: response ?? null,
@@ -239,6 +249,7 @@ function sanitiseAnswers(body = {}) {
   if ('comment' in body)       out.comment = text(body.comment, 2000);
   if ('helpedRating' in body)  out.helpedRating = rating(body.helpedRating);
   if ('donationClicked' in body && body.donationClicked === true) out.donationClicked = true;
+  if ('playReviewClicked' in body && body.playReviewClicked === true) out.playReviewClicked = true;
 
   return out;
 }

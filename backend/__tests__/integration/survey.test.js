@@ -10,6 +10,7 @@
  *   - A pass for a *different* role counts too
  *   - A later "no" never clears a pass already recorded
  *   - Field whitelisting and validation
+ *   - The Android flag the closing screen's Play Store ask is gated on
  *   - Completion stamps the invite
  *   - Opt-out is honoured immediately and unconditionally, before any question
  *   - Opted-out and closed questionnaires refuse further answers
@@ -74,6 +75,17 @@ describe('GET /api/survey/:token', () => {
     expect(res.status).toBe(404);
   });
 
+  it('says whether the account has ever run the Android app', async () => {
+    await User.updateOne({ _id: user._id }, { 'osSeen.android': new Date() });
+    const res = await get();
+    expect(res.body.data.usedAndroid).toBe(true);
+  });
+
+  it('says so plainly for a web-only account', async () => {
+    const res = await get();
+    expect(res.body.data.usedAndroid).toBe(false);
+  });
+
   it('records the first open only', async () => {
     await get();
     const first = (await SurveyInvite.findById(invite._id)).openedAt;
@@ -122,6 +134,12 @@ describe('PATCH /api/survey/:token — progressive saving', () => {
     const row = await SurveyResponse.findOne({ inviteId: invite._id }).lean();
     expect(row.nonsense).toBeUndefined();
     expect((await User.findById(user._id)).isAdmin).toBe(false);
+  });
+
+  it('records a press through to the Play Store listing', async () => {
+    await patch({ playReviewClicked: true });
+    const row = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(row.playReviewClicked).toBe(true);
   });
 
   it('rejects out-of-range ratings by storing null', async () => {

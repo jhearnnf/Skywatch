@@ -282,6 +282,78 @@ describe('Survey — the main path', () => {
   })
 })
 
+describe('Survey — the Google Play ask', () => {
+  // Walk to the closing screen, with the answers that matter to this ask left
+  // open: it must not depend on either of them.
+  const finish = async ({ passed = 'yes', helped = 5 } = {}) => {
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'));           await advance()
+    fireEvent.click(await screen.findByTestId('survey-role-pilot'));        await advance()
+    fireEvent.click(await screen.findByTestId(`survey-passed-${passed}`));   await advance()
+    if (passed === 'no') {
+      fireEvent.click(await screen.findByTestId('survey-any-no'));          await advance()
+    }
+    fireEvent.click(await screen.findByTestId('survey-realism-4'));         await advance()
+    fireEvent.click(await screen.findByTestId(`survey-helped-${helped}`));   await advance()
+    fireEvent.click(await screen.findByTestId('survey-gaps-submit'));       await advance()
+    return screen.findByTestId('survey-done')
+  }
+
+  it('never sits next to the donation', async () => {
+    mockApi({ usedAndroid: true })
+    renderSurvey()
+    await finish()
+    expect(screen.getByTestId('survey-donate')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-play-review')).not.toBeInTheDocument()
+  })
+
+  it('takes the place of the donation once that is turned down', async () => {
+    mockApi({ usedAndroid: true })
+    renderSurvey()
+    await finish()
+    fireEvent.click(await screen.findByText('Not this time'))
+
+    const card = await screen.findByTestId('survey-play-review')
+    expect(card).toBeInTheDocument()
+    expect(screen.getByTestId('survey-play-review-link')).toHaveAttribute(
+      'href', 'https://play.google.com/store/apps/details?id=academy.skywatch.app',
+    )
+  })
+
+  it('stays away from someone who has only ever used the website', async () => {
+    mockApi({ usedAndroid: false })
+    renderSurvey()
+    await finish()
+    fireEvent.click(await screen.findByText('Not this time'))
+
+    expect(await screen.findByTestId('survey-declined')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-play-review')).not.toBeInTheDocument()
+  })
+
+  // The one that keeps the listing safe. Showing the store link only to happy
+  // respondents is review gating, which Play prohibits.
+  it('asks the same of someone who failed and rated us 1', async () => {
+    mockApi({ usedAndroid: true })
+    renderSurvey()
+    await finish({ passed: 'no', helped: 1 })
+    fireEvent.click(await screen.findByText('Not this time'))
+
+    expect(await screen.findByTestId('survey-play-review')).toBeInTheDocument()
+  })
+
+  it('records the click through to the store', async () => {
+    mockApi({ usedAndroid: true })
+    renderSurvey()
+    await finish()
+    fireEvent.click(await screen.findByText('Not this time'))
+    fireEvent.click(await screen.findByTestId('survey-play-review-link'))
+
+    await waitFor(() => expect(patches).toContainEqual(
+      expect.objectContaining({ playReviewClicked: true }),
+    ))
+  })
+})
+
 describe('Survey — the role picker', () => {
   const toRole = async () => {
     fireEvent.click(await screen.findByTestId('survey-start'))
