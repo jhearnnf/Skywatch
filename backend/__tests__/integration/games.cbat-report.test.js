@@ -250,19 +250,118 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     expect(pilot.body.data.status).toBe('fail');
   });
 
-  it('needs three runs before a test counts', async () => {
-    // Control Officer (ATC) is 49% CUT+SAT. Two runs of each is below the floor, so nothing in
-    // Strategic Task Management scores and the domain drops out entirely.
-    await play('cut', a => a.median, FORM_MIN_RUNS - 1);
-    await play('sat', a => a.median, FORM_MIN_RUNS - 1);
+  it('counts a part-played test, held toward the middle of the scale', async () => {
+    // One strong run reads as a stanine 8, but one run is not evidence of an 8. It counts at a
+    // third of its weight and lands a third of the way from the middle of the scale to what it
+    // claims: 5 + (8 - 5) / 3 = 6. This is the whole of the thin-run rule in one assertion.
+    await play('cut', a => a.strong, 1);
+
+    const res = await request(app).get('/api/games/cbat/report/control-officer-atc').set('Cookie', cookie);
+    const cut = res.body.data.domains.find(d => d.key === 'StrgcTM').tests.find(t => t.code === 'CUT');
+
+    expect(cut.state).toBe('scored');
+    expect(cut.stanine).toBeCloseTo(6, 5);
+    expect(cut.rawStanine).toBe(8);            // what their run actually said
+    expect(cut.firm).toBe(false);
+    expect(cut.confidence).toBeCloseTo(1 / FORM_MIN_RUNS, 5);
+    expect(cut.played[0].runs).toBe(1);
+    // And it still asks for the outstanding runs, because that is what settles it.
+    expect(cut.needsRuns[0].runsNeeded).toBe(FORM_MIN_RUNS - 1);
+  });
+
+  it('buys a part-played test only its share of the weight', async () => {
+    // The load-bearing half of "thin runs cannot buy a verdict". A test played once is a third of
+    // itself, so the domain it sits in reports a third of its coverage.
+    await play('cut', a => a.median, 1);
+    await play('sat', a => a.median, 1);
 
     const res = await request(app).get('/api/games/cbat/report/control-officer-atc').set('Cookie', cookie);
     const strgc = res.body.data.domains.find(d => d.key === 'StrgcTM');
 
-    expect(strgc.stanine).toBeNull();
-    expect(strgc.coverage).toBe(0);
-    expect(strgc.tests.every(t => t.state === 'needs-runs')).toBe(true);
-    expect(strgc.tests[0].needsRuns[0].runsNeeded).toBe(1);
+    expect(strgc.stanine).not.toBeNull();
+    expect(strgc.coverage).toBe(Math.round(100 / FORM_MIN_RUNS));
+    expect(strgc.firm).toBe(false);
+  });
+
+  it('cannot reach the coverage floor on single runs alone', async () => {
+    for (const game of batteryGames('control-officer-atc')) await play(game, a => a.strong, 1);
+
+    const res = await request(app).get('/api/games/cbat/report/control-officer-atc').set('Cookie', cookie);
+
+    // Every game of the role touched, and still no verdict: the runs are a third of a window each.
+    expect(res.body.data.score).not.toBeNull();
+    expect(res.body.data.coverage).toBeLessThan(MIN_COVERAGE_FOR_VERDICT);
+    expect(res.body.data.status).toBe('provisional');
+  });
+
+  it('publishes a range that narrows with every run and closes at a full window', async () => {
+    const atRuns = async (runs) => {
+      await db.clearDatabase();
+      await createSettings();
+      user   = await createUser({ agentNumber: '1000001' });
+      cookie = authCookie(user._id);
+      for (const game of batteryGames('pilot')) await play(game, a => a.strong, runs);
+      const res = await request(app).get('/api/games/cbat/report/pilot').set('Cookie', cookie);
+      return res.body.data;
+    };
+
+    const one   = await atRuns(1);
+    const two   = await atRuns(2);
+    const three = await atRuns(3);
+
+    expect(one.scoreHigh - one.scoreLow).toBeGreaterThan(two.scoreHigh - two.scoreLow);
+    expect(two.scoreHigh - two.scoreLow).toBeGreaterThan(0);
+    expect(one.score).toBeGreaterThan(0);
+    expect(one.firm).toBe(false);
+
+    // A full window leaves no range at all, and the score is exactly what it always was: strong
+    // play across the whole roster is a stanine 8, which is 160.
+    expect(three.firm).toBe(true);
+    expect(three.scoreLow).toBe(three.score);
+    expect(three.scoreHigh).toBe(three.score);
+    expect(three.score).toBe(160);
+  });
+
+  it('counts runs banked against the runs that settle the score', async () => {
+    await play('cut', a => a.median, 2);
+    await play('sat', a => a.median, 1);
+
+    const res = await request(app).get('/api/games/cbat/report/control-officer-atc').set('Cookie', cookie);
+
+    expect(res.body.data.runsBanked).toBe(3);
+    expect(res.body.data.runsForFirmScore).toBe(batteryGames('control-officer-atc').size * FORM_MIN_RUNS);
+  });
+
+  // Pilot ISR (RPAS) is the clean demonstration: its pass mark is 100 and median play across the
+  // whole roster scores exactly 100, so the same play is a pass or a coin toss purely on how many
+  // times each game was played.
+  describe('a range that still has the pass mark inside it', () => {
+    const playAllOf = async (runsFor) => {
+      for (const game of batteryGames('pilot-isr-rpas')) await play(game, a => a.median, runsFor(game));
+    };
+    const get = () => request(app).get('/api/games/cbat/report/pilot-isr-rpas').set('Cookie', cookie);
+
+    it('is a pass once every game is settled', async () => {
+      await playAllOf(() => FORM_MIN_RUNS);
+      const res = await get();
+
+      expect(res.body.data.score).toBe(res.body.data.cutoff);
+      expect(res.body.data.firm).toBe(true);
+      expect(res.body.data.status).toBe('pass');
+    });
+
+    it('refuses to call it while one game is still part-played', async () => {
+      await playAllOf(game => (game === 'flag' ? 1 : FORM_MIN_RUNS));
+      const res = await get();
+      const { score, scoreLow, scoreHigh, cutoff, coverage, status } = res.body.data;
+
+      // Well past the coverage floor - this is the band talking, not the gaps.
+      expect(coverage).toBeGreaterThanOrEqual(MIN_COVERAGE_FOR_VERDICT);
+      expect(score).toBe(cutoff);
+      expect(scoreLow).toBeLessThan(cutoff);
+      expect(scoreHigh).toBeGreaterThanOrEqual(cutoff);
+      expect(status).toBe('provisional');
+    });
   });
 
   it('refuses to call a pass or a fail on thin coverage', async () => {
@@ -334,8 +433,9 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     expect(cut.played[0].form).toBe(STANINE_ANCHORS.cut.median);
   });
 
-  it('does not let Easier runs satisfy the three-run minimum', async () => {
-    // Two Hard runs is below the floor. Ten Easier ones must not top it up.
+  it('does not let Easier runs settle a test', async () => {
+    // Two Hard runs is short of a window. Ten Easier ones must not top it up, so the test stays
+    // part-played: still counting, still held toward the middle, still asking for one more Hard run.
     await play('cut', a => a.median, FORM_MIN_RUNS - 1);
     const easier = CBAT_GAMES['cut-easier'];
     for (let i = 0; i < 10; i++) await easier.Model.create(makeDoc(easier, user._id, 400));
@@ -343,8 +443,9 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     const res = await request(app).get('/api/games/cbat/report/control-officer-atc').set('Cookie', cookie);
     const cut = res.body.data.domains.find(d => d.key === 'StrgcTM').tests.find(t => t.code === 'CUT');
 
-    expect(cut.state).toBe('needs-runs');
-    expect(cut.stanine).toBeNull();
+    expect(cut.firm).toBe(false);
+    expect(cut.confidence).toBeCloseTo((FORM_MIN_RUNS - 1) / FORM_MIN_RUNS, 5);
+    expect(cut.played[0].runs).toBe(FORM_MIN_RUNS - 1);
     expect(cut.needsRuns[0].runsNeeded).toBe(1);
   });
 

@@ -52,7 +52,7 @@ const unscored = () => battery({ score: null, margin: null, status: 'unscored', 
 const headline = () => screen.getByTestId('aptitude-card-score')
 const action = () => screen.getByTestId('aptitude-card-action')
 
-// Two runs in, nothing counting yet: score null, coverage 0, one game nearly banked.
+// Two runs in, nothing settled yet: no test has a full window, one game nearly banked.
 const RUNS = {
   targetBattery: 'pilot',
   batteries: [unscored()],
@@ -76,16 +76,16 @@ const PROVISIONAL = {
 describe('AptitudeReportCard — below the verdict threshold', () => {
   beforeEach(() => mockUseAuth.mockReset())
 
-  it('counts runs toward a first score when nothing is measured yet', async () => {
+  it('counts runs toward a first settled game when nothing is settled yet', async () => {
     renderWith(RUNS)
     await settled()
-    expect(headline()).toHaveTextContent('2 / 3 runs to your first score')
+    expect(headline()).toHaveTextContent('2 / 3 runs to settle your first game')
   })
 
   it('names the game the user is closest to finishing', async () => {
     renderWith(RUNS)
     await settled()
-    expect(action()).toHaveTextContent('Play Cognitive Updating Test on Hard 1 more time to start your score.')
+    expect(action()).toHaveTextContent('Play Cognitive Updating Test on Hard 1 more time to settle it.')
   })
 
   // The whole point of the state. A number against a pass mark is a verdict, and there isn't one.
@@ -132,10 +132,31 @@ describe('AptitudeReportCard — below the verdict threshold', () => {
     expect(screen.getByTestId('aptitude-card-stripe').className).toContain('bg-[#1a3a5c]')
   })
 
+  // Coverage exists from the first run now, so this user has both a coverage figure and a nearly
+  // banked game. The runs fraction has to win: 8% is not a thing anyone can act on tonight, and
+  // "one more go at CUT" is. Coverage takes over the moment a test is actually settled.
+  it('leads with the runs fraction while nothing is settled, even with coverage on the board', async () => {
+    renderWith({
+      ...RUNS,
+      batteries: [battery({ score: 96, margin: -16, status: 'provisional', coverage: 8, firmTests: 0 })],
+    })
+    await settled()
+    expect(headline()).toHaveTextContent('2 / 3 runs to settle your first game')
+  })
+
+  it('hands over to coverage once a test is settled', async () => {
+    renderWith({
+      ...RUNS,
+      batteries: [battery({ score: 96, margin: -16, status: 'provisional', coverage: 31, firmTests: 1 })],
+    })
+    await settled()
+    expect(headline()).toHaveTextContent('31% of this role measured')
+  })
+
   it('counts runs the report itself set, not a number of its own', async () => {
     renderWith({ ...RUNS, nearestUnlock: { gameKey: 'cut', runs: 1, runsNeeded: 3 }, runsToCount: 4 })
     await settled()
-    expect(headline()).toHaveTextContent('1 / 4 runs to your first score')
+    expect(headline()).toHaveTextContent('1 / 4 runs to settle your first game')
   })
 })
 
@@ -145,7 +166,7 @@ describe('AptitudeReportCard — below the verdict threshold', () => {
 describe('AptitudeReportCard — no role chosen', () => {
   beforeEach(() => mockUseAuth.mockReset())
 
-  it('counts a first-timer’s runs toward their first score', async () => {
+  it('counts a first-timer’s runs toward their first settled game', async () => {
     renderWith({
       targetBattery: null,
       batteries: [unscored()],
@@ -153,8 +174,8 @@ describe('AptitudeReportCard — no role chosen', () => {
       runsToCount: 3,
     })
     await settled()
-    expect(headline()).toHaveTextContent('1 / 3 runs to your first score')
-    expect(action()).toHaveTextContent('Play Cognitive Updating Test on Hard 2 more times to start your score.')
+    expect(headline()).toHaveTextContent('1 / 3 runs to settle your first game')
+    expect(action()).toHaveTextContent('Play Cognitive Updating Test on Hard 2 more times to settle it.')
     // No role to name, so the eyebrow does not pretend there is one.
     expect(screen.getByTestId('aptitude-card-eyebrow')).toHaveTextContent(/^Aptitude Report$/)
   })
@@ -162,8 +183,8 @@ describe('AptitudeReportCard — no role chosen', () => {
   it('names the price of entry to someone who has played nothing', async () => {
     renderWith({ targetBattery: null, batteries: [unscored()], nearestUnlock: null, runsToCount: 3 })
     await settled()
-    expect(headline()).toHaveTextContent('3 runs to your first score')
-    expect(action()).toHaveTextContent('Play any CBAT game 3 times and your score starts here.')
+    expect(headline()).toHaveTextContent('3 runs to settle your first game')
+    expect(action()).toHaveTextContent('Play any CBAT game and your score starts here. 3 runs settles it.')
   })
 
   // The most persuasive true thing we can say to someone who has scores but has never looked.
@@ -217,6 +238,6 @@ describe('AptitudeReportCard — an incomplete payload', () => {
   it('still counts to three when the summary does not say how many runs count', async () => {
     renderWith({ targetBattery: null, batteries: [unscored()] })
     await settled()
-    expect(headline()).toHaveTextContent('3 runs to your first score')
+    expect(headline()).toHaveTextContent('3 runs to settle your first game')
   })
 })

@@ -120,9 +120,18 @@ function TestRow({ test }) {
 
   const tone = stanineTone(test.stanine)
   // Labelled inline wherever it appears, because an unlabelled number here reads as "the score you
-  // got" rather than the mean of your last three goes that it actually is.
+  // got" rather than the mean of your recent goes that it actually is.
+  //
+  // The label counts the runs it is actually averaging rather than saying "3" flat. A game played
+  // once now counts, and calling one run "Last 3" would be the report lying about its own
+  // evidence in the one place a user can check it.
+  const runsShown = Math.max(...test.played.map(p => p.runs))
   const last3 = test.played.map(p => `${p.label} ${p.form}`).join(' · ')
-  const last3Title = 'Your average score over your last 3 goes on Hard, not your best ever.'
+  const last3Title = `Your average score over your last ${runsShown} go${runsShown === 1 ? '' : 'es'} on Hard, not your best ever.`
+  const runsLabel = `Last ${runsShown}:`
+  // A test still short of a full window: say so on the row, because its level is being held toward
+  // the middle of the scale until the runs are in and the user is owed that explanation.
+  const need = test.firm === false ? (test.needsRuns?.[0] ?? null) : null
 
   return (
     <div className="py-1 pl-3 text-[11px] min-w-0">
@@ -131,7 +140,7 @@ function TestRow({ test }) {
         <div className="flex-1 min-w-0"><StanineBar stanine={test.stanine} compact /></div>
         <span className={`w-6 text-right font-mono font-bold ${tone.text}`}>{Math.round(test.stanine)}</span>
         <span className="hidden sm:block w-[150px] shrink-0 text-slate-600 truncate text-right" title={last3Title}>
-          <span className="text-slate-500">Last 3:</span> {last3}
+          <span className="text-slate-500">{runsLabel}</span> {last3}
         </span>
         {test.match === 'proxy' && (
           <span className="hidden md:inline text-[9px] text-slate-600 uppercase tracking-wide" title="A SkyWatch game that trains the same skill, not a simulation of this exact test">
@@ -144,8 +153,16 @@ function TestRow({ test }) {
           code, a bar and a level, none of which is the thing you opened it to see. They get their
           own line instead. */}
       <p className="sm:hidden mt-0.5 text-[10px] text-slate-600 truncate" title={last3Title}>
-        <span className="text-slate-500">Last 3:</span> {last3}
+        <span className="text-slate-500">{runsLabel}</span> {last3}
       </p>
+      {need && (
+        <p className="mt-0.5 text-[10px] text-brand-700 truncate">
+          <Link to={gamePath(need.gameKey)} className="text-brand-700 hover:text-brand-800 underline underline-offset-2">
+            Play {need.label}{onHard(need.gameKey)} {need.runsNeeded} more time{need.runsNeeded === 1 ? '' : 's'}
+          </Link>
+          {' '}to settle this level. Until then we hold it toward the middle.
+        </p>
+      )}
     </div>
   )
 }
@@ -188,16 +205,22 @@ function DomainTestChips({ tests }) {
         // Blue means "playing this moves your score right now" — either it isn't counting yet, or
         // it is counting and can still go up. Amber is the one case where runs exist but are being
         // ignored, which needs explaining rather than encouraging.
+        // A part-played test is highlighted like an unplayed one, because the call to action is the
+        // same: more runs. It is counting, but not at full weight, and blue is what says "playing
+        // this moves your score right now".
+        const thin = t.state === 'scored' && t.firm === false
         const tone = t.state === 'easier-only'
           ? 'bg-amber-500/10 border-amber-400/40 text-amber-700'
-          : t.state === 'needs-runs'
+          : (t.state === 'needs-runs' || thin)
             ? 'bg-brand-500/10 border-brand-400/40 text-brand-700'
             : 'bg-[#060e1a] border-[#1a3a5c] text-slate-700 hover:border-brand-400 hover:text-brand-700'
 
         const hint = t.state === 'needs-runs'
           ? ` Play it${onHard(t.needsRuns?.[0]?.gameKey ?? t.games[0])} ${t.needsRuns?.[0]?.runsNeeded ?? 3} more time(s) to start counting.`
           : t.state === 'easier-only' ? ' Your runs were on Easier, which do not count. Play it on Hard to start counting.'
-          : ` You are on level ${Math.round(t.stanine)}.${levelUpHint(t.games[0])}`
+          : thin
+            ? ` You are on level ${Math.round(t.stanine)} so far. Play it${onHard(t.needsRuns?.[0]?.gameKey ?? t.games[0])} ${t.needsRuns?.[0]?.runsNeeded ?? 1} more time(s) to settle it.`
+            : ` You are on level ${Math.round(t.stanine)}.${levelUpHint(t.games[0])}`
 
         return (
           <Link
@@ -709,10 +732,21 @@ export default function CbatAptitudeReport() {
                 <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
                   <div>
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide">
-                      {report.status === 'provisional' ? 'Estimated so far' : 'Your estimated score'}
+                      {report.score != null && report.firm === false ? 'Your score is somewhere in here'
+                        : report.status === 'provisional' ? 'Estimated so far'
+                        : 'Your estimated score'}
                     </p>
-                    <p className="font-mono font-extrabold text-4xl sm:text-5xl text-slate-900 leading-none">
-                      {report.score ?? '-'}
+                    {/* A range until every game behind it has a full three runs, then a single
+                        number. One run tells us something and it is not nothing, but it is not a
+                        point either, and printing a lone 120 off one evening would be a made-up
+                        precision the user would then watch move thirty points. The range only ever
+                        narrows, so it reads as progress rather than as the number changing its
+                        mind. */}
+                    <p data-testid="aptitude-report-score" className="font-mono font-extrabold text-4xl sm:text-5xl text-slate-900 leading-none">
+                      {report.score == null ? '-'
+                        : report.firm === false
+                          ? <>{report.scoreLow}<span className="text-slate-600">-</span>{report.scoreHigh}</>
+                          : report.score}
                       <span className="text-lg text-slate-600 font-bold"> / {MAX_SCORE}</span>
                     </p>
                   </div>
@@ -735,6 +769,24 @@ export default function CbatAptitudeReport() {
                     animate={{ width: `${Math.min(100, ((report.score ?? 0) / MAX_SCORE) * 100)}%` }}
                     transition={{ duration: 0.7, ease: 'easeOut' }}
                   />
+                  {/* The uncertainty, drawn where it belongs: a hatched tail running from the low
+                      end of the range to the high one. The solid fill still stops at the middle
+                      estimate, so the eye reads "about here, could be anywhere across that". It
+                      disappears of its own accord once every game has three runs behind it. */}
+                  {report.firm === false && report.scoreHigh > report.scoreLow && (
+                    <motion.div
+                      className="absolute inset-y-0"
+                      style={{
+                        left: `${(report.scoreLow / MAX_SCORE) * 100}%`,
+                        background: `repeating-linear-gradient(135deg, ${statusColour(report.status)} 0 3px, transparent 3px 6px)`,
+                        opacity: 0.75,
+                      }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${((report.scoreHigh - report.scoreLow) / MAX_SCORE) * 100}%` }}
+                      transition={{ duration: 0.7, ease: 'easeOut' }}
+                      title={`Somewhere between ${report.scoreLow} and ${report.scoreHigh}`}
+                    />
+                  )}
                   <div
                     className="absolute inset-y-0 w-[2px] bg-[#ff4d4d]"
                     style={{ left: `calc(${(report.cutoff / MAX_SCORE) * 100}% - 1px)` }}
@@ -745,6 +797,15 @@ export default function CbatAptitudeReport() {
                   <span>0</span><span>{MAX_SCORE}</span>
                 </div>
 
+                {/* The range in the unit the user can actually do something about. A percentage is
+                    abstract; "11 of 45 runs" is an evening's play, and it is the only caption that
+                    explains why the number above it is a range rather than a figure. */}
+                {report.firm === false && report.score != null && (
+                  <p className="text-[11px] text-slate-600 mt-3">
+                    Based on <span className="font-bold text-slate-700">{report.runsBanked} of {report.runsForFirmScore} runs</span>.
+                    {' '}Every run you bank narrows the range, and at {report.runsForFirmScore} it becomes a single number.
+                  </p>
+                )}
                 <p className="text-[11px] text-slate-600 mt-3">
                   {report.coverage === 100
                     ? <>We can measure <span className="font-bold text-slate-700">everything</span> this role is tested on.</>
@@ -786,7 +847,10 @@ export default function CbatAptitudeReport() {
                           {f.kind === 'unlock'
                             ? (f.easierOnly
                                 ? `Play it on Hard and it starts counting. Helps your ${f.domainLabel}.`
-                                : `Play it${onHard(game)} ${f.needsRuns?.[0]?.runsNeeded ?? 3} more time${(f.needsRuns?.[0]?.runsNeeded ?? 3) === 1 ? '' : 's'} and it starts counting. Helps your ${f.domainLabel}.`)
+                                // A test already part-played is counting; what its remaining runs
+                                // buy is certainty, not entry, so it must not be told to "start"
+                                // something it started last night.
+                                : `Play it${onHard(game)} ${f.needsRuns?.[0]?.runsNeeded ?? 3} more time${(f.needsRuns?.[0]?.runsNeeded ?? 3) === 1 ? '' : 's'} ${f.stanine == null ? 'and it starts counting' : 'to settle it and narrow your range'}. Helps your ${f.domainLabel}.`)
                             : f.nextTarget
                               ? `Average ${f.nextTarget.score}+ across 3 goes${onHard(game)} to go from level ${Math.round(f.stanine)} to ${Math.round(f.stanine) + 1}. Helps your ${f.domainLabel}.`
                               : `You're on level ${Math.round(f.stanine)}. Helps your ${f.domainLabel}.`}

@@ -25,7 +25,7 @@ import {
 //
 //   verdict   — a role chosen and enough of it measured   → score against the pass mark
 //   coverage  — a role chosen, some of it measured        → "12% of this role measured"
-//   runs      — a game started but not yet counting       → "2 / 3 runs to your first score"
+//   runs      — a game started but not settled yet        → "2 / 3 runs to settle your first game"
 //   roles     — scores but no role chosen                 → "4 / 13 roles you'd pass"
 //
 // Only the first is a result. The other three are progress, and the distinction is the point: an
@@ -146,7 +146,14 @@ function progressState(data, target, label) {
 
   if (target && (target.status === 'pass' || target.status === 'fail')) return null
 
-  if (target?.status === 'provisional') {
+  // A player who has not settled a single game yet gets the runs fraction, even though a role is
+  // chosen and a few percent of it is technically measured. Runs count from the first one now, so
+  // this user DOES have a coverage figure — but it is 6%, it moves in slivers, and it is the wrong
+  // thing to lead with when they are one go away from their first settled level. Coverage takes
+  // over the moment there is a settled test to build on, which is the state it was written for.
+  const unsettled = target && !target.firmTests && nearest
+
+  if (target?.status === 'provisional' && !unsettled) {
     return {
       label,
       headline: `${target.coverage}%`,
@@ -158,16 +165,16 @@ function progressState(data, target, label) {
     }
   }
 
-  // The state this card is really for: a game started, not yet counting, and the finish line three
-  // runs away at most. Nothing else here is as motivating as a fraction that is one go from
-  // completing, so it outranks the 0% the card would otherwise be showing.
+  // The state this card is really for: a game started, not settled, and the finish line three runs
+  // away at most. Nothing else here is as motivating as a fraction that is one go from completing,
+  // so it outranks the few percent the card would otherwise be showing.
   if (nearest) {
     const total = nearest.runs + nearest.runsNeeded
     return {
       label,
       headline: `${nearest.runs} / ${total}`,
-      unit: ' runs to your first score',
-      action: `Play ${gameTitle(nearest.gameKey)}${onHard(nearest.gameKey)} ${times(nearest.runsNeeded)} to start your score.`,
+      unit: ' runs to settle your first game',
+      action: `Play ${gameTitle(nearest.gameKey)}${onHard(nearest.gameKey)} ${times(nearest.runsNeeded)} to settle it.`,
       pct: (nearest.runs / total) * 100,
       tick: null,
     }
@@ -201,7 +208,7 @@ function progressState(data, target, label) {
   return {
     label: null,
     headline: `${runsToCount}`,
-    unit: ' runs to your first score',
+    unit: ' runs to settle your first game',
     action: firstScore(runsToCount),
     pct: 0,
     tick: null,
@@ -209,7 +216,7 @@ function progressState(data, target, label) {
 }
 
 const times = (n) => `${n} more time${n === 1 ? '' : 's'}`
-const firstScore = (n) => `Play any CBAT game ${n} times and your score starts here.`
+const firstScore = (n) => `Play any CBAT game and your score starts here. ${n} runs settles it.`
 
 // The report's own ranked next play, worded for a card with room for one line. Null when the
 // summary carried no focus row, which the caller answers with something it can always say.

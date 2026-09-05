@@ -120,15 +120,29 @@ export function stanineTone(stanine) {
 // the backend, which sets status 'provisional' at the same threshold.
 export const MIN_COVERAGE_FOR_VERDICT = batteryData.minCoverageForVerdict
 
-export function reportVerdict({ status, margin, coverage } = {}) {
+export function reportVerdict({ status, margin, coverage, scoreLow, scoreHigh, cutoff } = {}) {
   // A provisional score is real arithmetic on too little evidence. It must never be coloured or
   // worded as a pass, because the number itself looks exactly as confident as a full one.
+  //
+  // Two different things put a battery here, and they need different words. Usually it is coverage
+  // — most of the role has not been played at all. But a role can be well covered and still
+  // unjudgeable because the range around the score has the pass mark inside it, and telling that
+  // user to "play more of its games" would be useless advice: they have played them, they just
+  // have not played them enough times each.
   if (status === 'provisional') {
-    return {
-      label: 'Not enough to judge yet',
-      tone: 'muted',
-      blurb: `We've only measured ${coverage}% of this role. Play more of its games and we'll tell you if you'd pass.`,
-    }
+    const straddles = scoreLow != null && scoreHigh != null && cutoff != null
+      && scoreLow < cutoff && scoreHigh >= cutoff && scoreLow !== scoreHigh
+    return straddles
+      ? {
+          label: 'Too close to call',
+          tone: 'muted',
+          blurb: `Your range is ${scoreLow} to ${scoreHigh} and the pass mark is ${cutoff}, so it could still go either way. Bank the rest of your runs and we'll call it.`,
+        }
+      : {
+          label: 'Not enough to judge yet',
+          tone: 'muted',
+          blurb: `We've only measured ${coverage}% of this role. Play more of its games and we'll tell you if you'd pass.`,
+        }
   }
   if (margin == null)  return { label: 'Not scored yet', tone: 'muted', blurb: 'Play a few games and your score starts here.' }
   if (margin >= 15)    return { label: 'Passing',        tone: 'good',  blurb: `You are ${margin} points above the pass mark.` }

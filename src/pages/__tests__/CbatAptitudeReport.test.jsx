@@ -54,7 +54,7 @@ const report = {
       weight: 17, stanine: 5, coverage: 100,
       tests: [
         { code: 'CUT', label: 'Cognitive Updating Test', match: 'direct', games: ['cut'], mult: 3, state: 'scored', stanine: 5,
-          played: [{ gameKey: 'cut', label: 'Cognitive Updating Test', form: 380, runs: 5, stanine: 5 }],
+          played: [{ gameKey: 'cut', label: 'Cognitive Updating Test', form: 380, runs: 3, stanine: 5, confidence: 1, firm: true }],
           needsRuns: [], nextTarget: { gameKey: 'cut', stanine: 6, score: 409 } },
         { code: 'SAT', label: 'Situational Awareness Test', match: 'direct', games: ['sat'], mult: 1, state: 'needs-runs',
           stanine: null, needsRuns: [{ gameKey: 'sat', label: 'Situational Awareness Test', runs: 1, runsNeeded: 2 }] },
@@ -133,6 +133,63 @@ describe('CbatAptitudeReport', () => {
     expect(screen.getByText('Estimated so far')).toBeInTheDocument()
   })
 
+  // The range. A report resting on part-played games shows what it knows as a span rather than a
+  // point, so nobody reads a made-up precision off one evening's play.
+  describe('a score that is not settled yet', () => {
+    const banded = (over = {}) => ({
+      ...report, score: 100, scoreLow: 84, scoreHigh: 116, firm: false,
+      runsBanked: 11, runsForFirmScore: 45, coverage: 33, status: 'provisional', ...over,
+    })
+    const serve = (data) => {
+      global.fetch = vi.fn((url) => {
+        let body = { ...summary, batteries: [{ ...summary.batteries[0], ...data }] }
+        if (url.includes('/report-users')) body = { users: reportUsers }
+        else if (url.includes('/report/')) body = data
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+      })
+    }
+
+    const score = () => screen.getByTestId('aptitude-report-score')
+
+    it('shows the range in place of a single number', async () => {
+      serve(banded())
+      render(<CbatAptitudeReport />)
+
+      await screen.findByText('Your score is somewhere in here')
+      expect(score().textContent).toContain('84-116')
+    })
+
+    it('says how many runs close the range', async () => {
+      serve(banded())
+      render(<CbatAptitudeReport />)
+      await screen.findByText('Your score is somewhere in here')
+
+      expect(screen.getByText('11 of 45 runs')).toBeInTheDocument()
+      expect(screen.getByText(/becomes a single number/)).toBeInTheDocument()
+    })
+
+    // Coverage is not the problem here: the role is well measured, the games behind it just have
+    // not been played enough times each for the range to clear the pass mark.
+    it('says the pass mark is inside the range when that is what stops the verdict', async () => {
+      serve(banded({ cutoff: 100, coverage: 95, scoreLow: 94, scoreHigh: 106 }))
+      render(<CbatAptitudeReport />)
+      await screen.findByText('Too close to call')
+
+      expect(screen.getByText('Too close to call')).toBeInTheDocument()
+      expect(screen.getByText(/could still go either way/)).toBeInTheDocument()
+      expect(screen.queryByText(/only measured/)).not.toBeInTheDocument()
+    })
+
+    it('goes back to one number once every game is settled', async () => {
+      serve({ ...report, scoreLow: 100, scoreHigh: 100, firm: true, runsBanked: 45, runsForFirmScore: 45 })
+      render(<CbatAptitudeReport />)
+
+      expect(await screen.findByText('100')).toBeInTheDocument()
+      expect(screen.getByText('Your estimated score')).toBeInTheDocument()
+      expect(screen.queryByText(/becomes a single number/)).not.toBeInTheDocument()
+    })
+  })
+
   it('states the coverage the estimate rests on', async () => {
     render(<CbatAptitudeReport />)
     await screen.findByText('100')
@@ -201,7 +258,7 @@ describe('CbatAptitudeReport', () => {
         domains: [{
           ...report.domains[0],
           tests: [{ ...report.domains[0].tests[0], code: 'TRT', label: 'Target Recognition Test', games: ['target'],
-            played: [{ gameKey: 'target', label: 'Target Recognition Test', form: 80, runs: 5, stanine: 5 }] }],
+            played: [{ gameKey: 'target', label: 'Target Recognition Test', form: 80, runs: 3, stanine: 5, confidence: 1, firm: true }] }],
         }],
         focus: [],
       }
