@@ -16,7 +16,7 @@ const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../../constants/cbatGam
 const { WEEKLY_PER_PLAY } = require('../../utils/cbatFakeLeaderboard');
 const batteries = require('../../constants/cbatBatteries.json');
 const { SCORED_GAME_KEYS } = require('../../constants/cbatBatteries');
-const { FORM_MIN_RUNS } = require('../../utils/cbatAptitudeReport');
+const { FORM_MIN_RUNS, PRIOR_STANINE, confidenceFor } = require('../../utils/cbatAptitudeReport');
 
 const KEYS = ['sma', 'sma-easier'];
 
@@ -225,13 +225,48 @@ describe('SMA closes the Psychomotor gap in the Aptitude Report', () => {
     return res.body.data.domains.find(d => d.key === 'Psych').tests.find(t => t.code === 'SMA');
   };
 
-  it('asks for runs before it scores anyone', async () => {
-    await playSma('sma', 280, FORM_MIN_RUNS - 1);
+  it('asks for runs from someone who has never played it', async () => {
     const sma = await psychOf();
     expect(sma.state).toBe('needs-runs');
     expect(sma.stanine).toBeNull();
-    expect(sma.needsRuns[0].gameKey).toBe('sma');
-    expect(sma.needsRuns[0].runsNeeded).toBe(1);
+    // `needsRuns` means "part-way to a full window", so a game never started is
+    // absent from it — the never-played case rides on `state`, which is what
+    // buildGaps keys off to put SMA on the user's list of what to go and play.
+    expect(sma.needsRuns).toEqual([]);
+  });
+
+  it('scores a thin history as a shrunken range rather than refusing to answer', async () => {
+    // Below a full window SMA still scores — the report gives a VAGUE answer, not
+    // no answer, because the advice it exists to give is most valuable on the
+    // first evening. Two things follow from `confidence`, and both are checked
+    // here: the estimate is pulled toward the middle of the scale so one lucky
+    // run cannot claim a 9, and it carries a band that closes as runs are banked.
+    const runs = FORM_MIN_RUNS - 1;
+    await playSma('sma', batteries.stanineAnchors.sma.strong, runs);
+    const thin = await psychOf();
+
+    expect(thin.state).toBe('scored');
+    expect(thin.confidence).toBeCloseTo(confidenceFor(runs), 5);
+    expect(thin.firm).toBe(false);
+    // It still wants the outstanding run, and says so while scoring.
+    expect(thin.needsRuns[0].runsNeeded).toBe(1);
+
+    // Shrunk toward PRIOR_STANINE: strong runs really are worth a stanine 8, but
+    // on two of them the report may only claim part of the distance from 5.
+    expect(thin.rawStanine).toBeCloseTo(8, 1);
+    expect(thin.stanine).toBeGreaterThan(PRIOR_STANINE);
+    expect(thin.stanine).toBeLessThan(thin.rawStanine);
+    expect(thin.stanine).toBeCloseTo(
+      confidenceFor(runs) * thin.rawStanine + (1 - confidenceFor(runs)) * PRIOR_STANINE, 5);
+
+    // Banking the last run removes the shrink entirely and closes the band.
+    await playSma('sma', batteries.stanineAnchors.sma.strong, 1);
+    const firm = await psychOf();
+    expect(firm.firm).toBe(true);
+    expect(firm.confidence).toBe(1);
+    expect(firm.stanineSd).toBeCloseTo(0, 5);
+    expect(firm.stanine).toBeCloseTo(firm.rawStanine, 5);
+    expect(firm.stanine).toBeGreaterThan(thin.stanine);
   });
 
   it('scores the Psychomotor domain off real SMA runs, and a strong run higher', async () => {
