@@ -154,3 +154,45 @@ describe('scoreForStanine', () => {
     expect(scoreForStanine('nope', 5)).toBeNull();
   });
 });
+
+describe('the ceiling on a bounded game', () => {
+  const bounded = Object.entries(STANINE_ANCHORS).filter(([, a]) => Number.isFinite(a.max));
+
+  it('marks a ceiling on at least the games that have one', () => {
+    // A bare guard against the `max` keys being dropped in a future re-anchor, which would put the
+    // overshoot back without failing anything else in this file.
+    expect(bounded.length).toBeGreaterThan(0);
+    for (const [gameKey, a] of bounded) {
+      expect([gameKey, a.max > a.strong]).toEqual([gameKey, true]);
+    }
+  });
+
+  it('keeps stanine 9 reachable on every game that can be maxed out', () => {
+    // The one that matters. A real OASC sheet awards a 9 on every test, so a game whose
+    // stanine-9 threshold sits above its own maximum score is broken however good the anchors are:
+    // ANT's measured anchors (53, 77) put it at 81 on a board marked out of 80, and the report
+    // spent its life telling players to average a score the game cannot award.
+    for (const [gameKey, a] of bounded) {
+      expect([gameKey, scoreForStanine(gameKey, MAX_STANINE) <= a.max]).toEqual([gameKey, true]);
+      expect([gameKey, scoreToStanine(gameKey, a.max)]).toEqual([gameKey, MAX_STANINE]);
+    }
+  });
+
+  it('leaves a game whose line already fits its ceiling exactly as it was', () => {
+    // Compression is a guard on the overshoot, not a second scale — so only ANT should have moved.
+    expect(scoreForStanine('sat', 9)).toBe(13);
+    expect(scoreForStanine('angles', 9)).toBe(19);
+    expect(scoreForStanine('code-duplicates', 9)).toBe(14);
+    expect(scoreForStanine('trace-1', 9)).toBe(39);
+  });
+
+  it('reads ANT off the compressed top band without moving anything below it', () => {
+    expect(scoreForStanine('ant', 8)).toBe(73);   // unchanged: the plain line still owns 1-8
+    expect(scoreForStanine('ant', 9)).toBe(79);   // was 81, one point past a board marked out of 80
+    expect(scoreToStanine('ant', 72)).toBe(7);
+    expect(scoreToStanine('ant', 73)).toBe(8);
+    expect(scoreToStanine('ant', 78)).toBe(8);
+    expect(scoreToStanine('ant', 79)).toBe(9);
+    expect(scoreToStanine('ant', 80)).toBe(MAX_STANINE);
+  });
+});

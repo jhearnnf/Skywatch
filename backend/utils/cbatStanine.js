@@ -21,6 +21,20 @@
 // estimate against SkyWatch's own norms and the report page says so in as many words — it is NOT a
 // prediction of what OASC would award.
 
+// THE LINE HAS TO STAY INSIDE THE GAME'S CEILING. A game marked out of a fixed total carries a
+// `max` alongside its anchors, because a straight line fitted to two measured points knows nothing
+// about where the scale stops. ANT is the case that caught it: the measured anchors (53, 77) sit on
+// a board marked out of 80, so the line put the stanine-9 threshold at 81 and the report spent its
+// time telling players to average a score the game cannot award. A real OASC sheet awards 9s on
+// every test, so "this test tops out at 8" is never the right answer.
+//
+// Where a `max` exists AND the plain line overshoots it, the top band is compressed: `strong` still
+// reads 8, `max` reads exactly 9, and the segment between them is straight. Nothing at or below
+// `strong` moves, and a game whose line already lands inside its ceiling is left completely alone -
+// this is a guard against the overshoot, not a second scale. It applies in both directions at once,
+// which is the point: clamping only the "aim for this" number would have the report name a target
+// that still scored an 8 when you hit it.
+
 const { MAX_STANINE, STANINE_ANCHORS } = require('../constants/cbatBatteries');
 
 const MIN_STANINE = 1;
@@ -38,10 +52,27 @@ function stanineStep(gameKey) {
   return (a.strong - a.median) / (STRONG_STANINE - MEDIAN_STANINE);
 }
 
+// The compressed 8-to-9 segment for a bounded game, or null when the plain line already fits.
+// `span` is one stanine's worth of raw score across that last band; below `from` the plain line is
+// still in charge.
+function topSegment(gameKey) {
+  const a = STANINE_ANCHORS[gameKey];
+  if (!a || !Number.isFinite(a.max) || a.max <= a.strong) return null;
+  // Where the plain line first rounds up to 9. Rounding is half-up, so the band opens half a step
+  // below its centre.
+  const linearNine = a.median + (MAX_STANINE - MEDIAN_STANINE - 0.5) * stanineStep(gameKey);
+  if (linearNine <= a.max) return null;
+  return { from: a.strong, span: a.max - a.strong };
+}
+
 // The stanine a given raw score earns on a given game, or null if the game has no anchors.
 function scoreToStanine(gameKey, score) {
   const a = STANINE_ANCHORS[gameKey];
   if (!a || !Number.isFinite(score)) return null;
+  const top = topSegment(gameKey);
+  if (top && score > top.from) {
+    return clampStanine(Math.round(STRONG_STANINE + (score - top.from) / top.span));
+  }
   const step = stanineStep(gameKey);
   return clampStanine(Math.round(MEDIAN_STANINE + (score - a.median) / step));
 }
@@ -64,6 +95,10 @@ function scoreToStanine(gameKey, score) {
 function scoreForStanine(gameKey, target) {
   const a = STANINE_ANCHORS[gameKey];
   if (!a || target <= MIN_STANINE || target > MAX_STANINE) return null;
+  const top = topSegment(gameKey);
+  if (top && target > STRONG_STANINE) {
+    return Math.ceil(top.from + (target - STRONG_STANINE - 0.5) * top.span);
+  }
   const step = stanineStep(gameKey);
   return Math.ceil(a.median + (target - MEDIAN_STANINE - 0.5) * step);
 }
@@ -72,6 +107,7 @@ module.exports = {
   scoreToStanine,
   scoreForStanine,
   stanineStep,
+  topSegment,
   clampStanine,
   MIN_STANINE,
   MEDIAN_STANINE,
