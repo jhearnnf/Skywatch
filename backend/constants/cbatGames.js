@@ -41,6 +41,11 @@ const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSma
 // Single source of truth for CBAT games. Adding a new CBAT game = add one entry
 // here and it automatically flows through submission routes, leaderboards,
 // personal-best endpoints, and admin user stats.
+//
+// One thing it does NOT flow through is the guide bot, which describes games in
+// prose no registry entry can generate: add the game to
+// constants/cbatGameCatalogue.js too, or the bot will tell players it does not
+// exist. unit/cbatGameCatalogue.test.js fails until you do.
 // `modeFilter`, when present, is merged into every $match / find that targets
 // this entry's collection. It's how two registry entries can share a single
 // Model (e.g. plane-turn-2d and plane-turn-3d both read GameSessionCbatPlaneTurnResult,

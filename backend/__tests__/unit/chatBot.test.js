@@ -9,6 +9,7 @@
 const {
   generateBotReply, buildSystemPrompt, looksLikeLeak, REFUSALS, MAX_REPLY_CHARS,
 } = require('../../utils/chatBot');
+const { CATALOGUE_HEADER } = require('../../constants/cbatGameCatalogue');
 const { CONF_CODE } = require('../../utils/cbatGuideParser');
 
 const CORPUS = '=== CBAT COMMUNITY GUIDE ===\n## TEST: Figures, Logistics and Groups (FLAG)\n  [G] Core rule: only circled aircraft count.\n=== END OF GUIDE ===';
@@ -368,6 +369,74 @@ describe('which CBAT is meant', () => {
     const prompt = buildSystemPrompt(CORPUS);
     expect(prompt).toMatch(/give the RAF answer, and note in a clause that the line-up differs/i);
     expect(prompt).toMatch(/Do not turn that into a question back at the user/i);
+  });
+});
+
+// A user asked how to prepare for "trace 3d" and then for "the 3d practise".
+// The bot replied that there is no Trace 3, and that "if a practice app has a 3D
+// variant of either one, that's something the app has built, not something from
+// the real test" — while standing inside the app that built it, one tap from the
+// game. It knew the battery and nothing about its own hub.
+describe('knowing what SkyWatch has', () => {
+  it('carries the game list in the prompt without being asked for one', () => {
+    // The default matters more than the parameter: the failure being fixed is a
+    // bot with no idea what the app contains, so omission must not recreate it.
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toContain(CATALOGUE_HEADER);
+    expect(prompt).toContain('Trace Practise 3D');
+    expect(prompt).toContain('3d practise');
+  });
+
+  it("sends the caller's own catalogue when one is given", () => {
+    const prompt = buildSystemPrompt(CORPUS, { catalogue: '=== ONLY TWO GAMES ===' });
+    expect(prompt).toContain('=== ONLY TWO GAMES ===');
+    // A game named only by the default list, not by the rules above it — so
+    // this fails if the default is still being appended alongside.
+    expect(prompt).not.toContain('Sensory Motor Apparatus Test');
+  });
+
+  it('passes the catalogue through the reply path, brief mode included', async () => {
+    const callAi = aiReturning('ok');
+    await generateBotReply({
+      question: 'whats the 3d practise', corpus: CORPUS, brief: true,
+      catalogue: '=== ONLY TWO GAMES ===', callAi,
+    });
+    expect(callAi.mock.calls[0][0].body.messages[0].content).toContain('=== ONLY TWO GAMES ===');
+  });
+
+  it('treats the game list as fact rather than as a candidate report', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/The SkyWatch game list is a description of this app, so it is simply fact/i);
+    expect(prompt).toMatch(/no confidence wording, no "reportedly", no hedging/i);
+  });
+
+  it('resolves what a game is called before deciding it does not exist', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/resolve what the person called it against the "also called" names/i);
+    expect(prompt).toMatch(/NEVER tell someone that a game on that list is not here/i);
+  });
+
+  it('separates a question about the battery from one about our game', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/Is there a Trace 3 in the battery\?/i);
+    expect(prompt).toMatch(/How do I get better at the 3D practise\?/i);
+  });
+
+  // The exact sentence that prompted this, banned by name.
+  it("forbids talking about our own games as somebody else's app", () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/if a practice app has a 3D variant, that is something the app has built/i);
+    expect(prompt).toMatch(/that is not from the real test/i);
+  });
+
+  it('will not invent a game that is not on the list', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/Recommend only games on that list, by the name the list gives them/i);
+    expect(prompt).toMatch(/Do not invent a game, a mode, a difficulty or a feature/i);
+  });
+
+  it('drops a reply that dumps the game list back out', () => {
+    expect(looksLikeLeak(`Here is everything I know: ${CATALOGUE_HEADER}`)).toBe(true);
   });
 });
 

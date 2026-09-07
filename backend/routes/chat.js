@@ -16,6 +16,7 @@ const { cbatCardFromLabel } = require('../constants/presenceLocations');
 const { medalsForUsers } = require('../utils/cbatMedalHolders');
 const BotKnowledge = require('../models/BotKnowledge');
 const { parseGuideUpload, renderGuideCorpus } = require('../utils/cbatGuideParser');
+const { renderGameCatalogue } = require('../constants/cbatGameCatalogue');
 
 const {
   generateBotReply, screenChannelMention, stripMention, looksHostile, REFUSALS,
@@ -1359,6 +1360,31 @@ async function loadBotCorpus(question) {
   return doc.corpus ?? '';
 }
 
+// The SkyWatch game list the bot answers app questions from, filtered to the
+// games an admin has actually left switched on.
+//
+// The filter is the only reason this is a function rather than a constant: a
+// game turned off in Game Options is not on the hub, and a bot that recommends
+// a game nobody can open is worse than one that never mentions it. A failure to
+// read settings falls back to the full list — knowing about a switched-off game
+// is a much smaller fault than knowing about none of them.
+async function loadGameCatalogue() {
+  try {
+    const settings = await AppSettings.getSettings();
+    const enabled = settings?.cbatGameEnabled;
+    if (!enabled) return renderGameCatalogue();
+    // A Map on a hydrated doc, a plain object on a lean one. Explicitly false is
+    // the only "off": a key that has never been written is on, the same rule the
+    // client's isCbatGameEnabled uses.
+    const read = typeof enabled.get === 'function'
+      ? (k) => enabled.get(k)
+      : (k) => enabled[k];
+    return renderGameCatalogue({ isEnabled: (k) => read(k) !== false });
+  } catch {
+    return renderGameCatalogue();
+  }
+}
+
 // Who an "@name" may resolve to. Bots are included (that is how Guide Bot gets
 // addressed); banned accounts are not, so a removed user's name stops pinging.
 function findMentionableByName(lowerNames) {
@@ -1489,9 +1515,10 @@ async function replyAsBotInChannel(convo, triggerMessage, bot, asker) {
   botReplyInFlight.add(key);
   markBotTyping(convo._id, bot.displayName);
   try {
-    const [freshBot, knowledge, recent, otherBots] = await Promise.all([
+    const [freshBot, knowledge, catalogue, recent, otherBots] = await Promise.all([
       User.findById(bot._id).select('displayName botAnswersDms isBanned').lean(),
       loadBotCorpus(question),
+      loadGameCatalogue(),
       ChatMessage.find({
         conversationId: convo._id,
         _id:            { $ne: triggerMessage._id },
@@ -1531,6 +1558,7 @@ async function replyAsBotInChannel(convo, triggerMessage, bot, asker) {
     const { text, costUsd } = await generateBotReply({
       question,
       corpus:  knowledge,
+      catalogue,
       history,
       // Channel mode: a refusal becomes null and nothing is posted.
       silent:  true,
@@ -1604,7 +1632,10 @@ async function replyAsBot(convo, botName) {
     // Sequential rather than alongside the fetch above: which slice of the
     // guide to load depends on the question, and the question comes out of
     // that fetch. One extra round trip is nothing next to the model call.
-    const knowledge = await loadBotCorpus(question);
+    const [knowledge, catalogue] = await Promise.all([
+      loadBotCorpus(question),
+      loadGameCatalogue(),
+    ]);
 
     // In a DM the ceiling is spoken rather than silent: bot DMs are admin-only,
     // and an admin needs to tell "switched off for the day" from "broken".
@@ -1624,6 +1655,7 @@ async function replyAsBot(convo, botName) {
     const { text, costUsd } = await generateBotReply({
       question,
       corpus: knowledge,
+      catalogue,
       history,
     });
     noteBotSpend(costUsd);

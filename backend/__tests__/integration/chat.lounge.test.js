@@ -24,6 +24,7 @@ const seedChatBot      = require('../../seeds/seedChatBot');
 const chatStream       = require('../../utils/chatStream');
 const ChatConversation = require('../../models/ChatConversation');
 const BotKnowledge     = require('../../models/BotKnowledge');
+const AppSettings      = require('../../models/AppSettings');
 const ChatMessage      = require('../../models/ChatMessage');
 const { callOpenRouter } = require('../../utils/openRouter');
 const { BRIEF_POINTER }  = require('../../utils/chatBot');
@@ -349,6 +350,43 @@ describe('the guide bot in the lounge', () => {
     }).lean();
     expect(reply.body).toContain('Only circled aircraft count.');
     expect(reply.body).toContain(BRIEF_POINTER);
+  });
+
+  // The bot used to know the battery and nothing about the app it was standing
+  // in, and told a user asking about "the 3d practise" that a practice app must
+  // have invented it. The game list is what fixes that, so these check it
+  // actually reaches the model rather than only existing in a constants file.
+  it('tells the model what games SkyWatch has', async () => {
+    await seedCbatLounge();
+    const admin  = await createUser({ isAdmin: true, displayName: 'Control' });
+    const falcon = await createUser({ displayName: 'Falcon' });
+    await seedGuide(admin._id);
+    const convo = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
+
+    await send(falcon._id, convo._id, '@Guide Bot how do i prepare for the 3d practise');
+    await settle();
+
+    const systemPrompt = callOpenRouter.mock.calls[0][0].body.messages[0].content;
+    expect(systemPrompt).toContain('Trace Practise 3D');
+    expect(systemPrompt).toContain('3d practise');
+  });
+
+  it('leaves out a game an admin has switched off', async () => {
+    // A game off in Game Options is off the hub, so recommending it would send
+    // someone to a tile that is not there.
+    await seedCbatLounge();
+    const admin  = await createUser({ isAdmin: true, displayName: 'Control' });
+    const falcon = await createUser({ displayName: 'Falcon' });
+    await seedGuide(admin._id);
+    await AppSettings.updateOne({}, { $set: { 'cbatGameEnabled.vigilance': false } });
+    const convo = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
+
+    await send(falcon._id, convo._id, '@Guide Bot what should i play');
+    await settle();
+
+    const systemPrompt = callOpenRouter.mock.calls[0][0].body.messages[0].content;
+    expect(systemPrompt).not.toContain('the star grid');
+    expect(systemPrompt).toContain('Trace Practise 3D');
   });
 
   it('answers a normal channel at full length, with no pointer', async () => {
