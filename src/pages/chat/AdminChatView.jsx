@@ -355,6 +355,10 @@ export default function AdminChatView() {
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {c.type === 'support' && c.status === 'closed' ? 'Closed · ' : ''}
                 {c.isArchived ? 'Archived · ' : ''}
+                {/* An empty thread still carries a `lastMessageAt` — the model
+                    defaults it to the moment of creation — so without this the
+                    time reads as a message nobody ever sent. */}
+                {c.messageCount === 0 ? 'Opened, no messages · ' : ''}
                 {formatTime(c.lastMessageAt)}
               </p>
             </button>
