@@ -10,6 +10,7 @@ import UserCard from './components/UserCard'
 import ReportMessageDialog from './components/ReportMessageDialog'
 import SeenByDialog from './components/SeenByDialog'
 import ReactorsDialog from './components/ReactorsDialog'
+import EditHistoryDialog from './components/EditHistoryDialog'
 import AnnouncementDrafter from './components/AnnouncementDrafter'
 
 const POLL_MS = 5_000
@@ -55,6 +56,7 @@ export default function ChatThread({
   const [replyTo,      setReplyTo]      = useState(null)
   const [seenByMsg,    setSeenByMsg]    = useState(null)
   const [reactorsMsg,  setReactorsMsg]  = useState(null)
+  const [editsMsg,     setEditsMsg]     = useState(null)
   // Both frozen at entry. The server's answers change the moment we mark the
   // conversation read, so if these tracked the polls the "new" line would creep
   // down the screen and the mention banner would vanish while being read.
@@ -260,12 +262,22 @@ export default function ChatThread({
     }
   }
 
-  // Admin correction. The response carries the updated message, so swap it in
+  const isMine = (message) => String(message.senderUserId ?? '') === String(user?._id ?? '')
+
+  // Your own messages go to the self-service routes, anyone else's to the
+  // moderation ones. Not a permission check — the server enforces both — but it
+  // decides which record the action leaves: an admin fixing their own typo
+  // should not write an AdminAction saying a moderator acted on someone.
+  const messageActionUrl = (message) => (isMine(message)
+    ? `${API}/api/chat/messages/${message._id}`
+    : `${API}/api/chat/admin/messages/${message._id}`)
+
+  // A correction, by a moderator or the author. The response carries the updated message, so swap it in
   // place rather than refetching — the 5s poll would otherwise briefly show the
   // old text back again on a slow round trip.
   const handleEdit = async (message, body) => {
     setErr('')
-    const r = await apiFetch(`${API}/api/chat/admin/messages/${message._id}`, {
+    const r = await apiFetch(messageActionUrl(message), {
       method: 'PATCH',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -278,8 +290,10 @@ export default function ChatThread({
   }
 
   const handleDelete = async (message) => {
-    if (!window.confirm('Remove this message for everyone? Admins can still see it.')) return
-    await apiFetch(`${API}/api/chat/admin/messages/${message._id}`, {
+    if (!window.confirm(isMine(message)
+      ? 'Remove your message? Nobody else will see it, but admins still can.'
+      : 'Remove this message for everyone? Admins can still see it.')) return
+    await apiFetch(messageActionUrl(message), {
       method: 'DELETE', credentials: 'include',
     }).catch(() => {})
     const fresh = await fetchMessages()
@@ -388,12 +402,16 @@ export default function ChatThread({
           onReact={handleReact}
           onReport={m => { setReportDone(false); setReporting(m) }}
           onBlock={m => { setBlockDone(false); setCardUserId(m.senderUserId) }}
-          onDelete={user?.isAdmin ? handleDelete : undefined}
-          onEdit={user?.isAdmin ? handleEdit : undefined}
+          // Passed to everyone now. Which rows actually offer them is decided
+          // per message by the server's canEdit/canDelete, so this is no longer
+          // the gate it used to be.
+          onDelete={handleDelete}
+          onEdit={handleEdit}
           onSeenBy={setSeenByMsg}
           // Admin-only. MessageList gates the button on viewerIsAdmin too; this
           // just keeps the handler off every other viewer's rows entirely.
           onShowReactors={user?.isAdmin ? setReactorsMsg : undefined}
+          onShowEdits={user?.isAdmin ? setEditsMsg : undefined}
           dividerAfter={entryState?.lastReadAt ?? null}
           highlightId={highlightId}
           typingName={botTyping || askedBot}
@@ -490,6 +508,14 @@ export default function ChatThread({
       )}
       {seenByMsg && (
         <SeenByDialog key={seenByMsg._id} message={seenByMsg} onClose={() => setSeenByMsg(null)} />
+      )}
+      {editsMsg && (
+        <EditHistoryDialog
+          key={editsMsg._id}
+          message={editsMsg}
+          senders={senders}
+          onClose={() => setEditsMsg(null)}
+        />
       )}
       {reactorsMsg && (
         <ReactorsDialog key={reactorsMsg._id} message={reactorsMsg} onClose={() => setReactorsMsg(null)} />

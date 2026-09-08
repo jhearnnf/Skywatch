@@ -24,6 +24,10 @@ const SENDERS = {
 }
 
 let seq = 0
+// `canEdit` / `canDelete` are decided by the SERVER per viewer — an admin on
+// anything, or the author within an hour of posting — and ride along on every
+// message. The fixture defaults them the way the server would for someone
+// allowed to act, so a test that cares about being refused says so explicitly.
 const msg = (senderUserId, body, extra = {}) => ({
   _id: `m${++seq}`,
   senderUserId,
@@ -31,6 +35,8 @@ const msg = (senderUserId, body, extra = {}) => ({
   senderDisplayName: SENDERS[senderUserId]?.displayName ?? null,
   body,
   deleted: false,
+  canEdit:   !extra.deleted,
+  canDelete: !extra.deleted,
   createdAt: new Date().toISOString(),
   ...extra,
 })
@@ -302,18 +308,21 @@ describe('MessageList — edited messages', () => {
     expect(screen.queryByText('(edited)')).toBeNull()
   })
 
-  it('offers the edit control to an admin only', () => {
-    renderList([msg('u1', 'hello')], { onEdit: vi.fn(), viewerIsAdmin: true })
+  // The rule moved to the server when authors got to edit their own messages:
+  // it has a clock in it (an hour from posting), and a client comparing its own
+  // clock against createdAt would offer a button the server then refuses.
+  it('offers the edit control when the server says this viewer may edit', () => {
+    renderList([msg('u1', 'hello')], { onEdit: vi.fn() })
     expect(screen.getByTitle('Edit')).toBeTruthy()
 
     cleanup()
-    renderList([msg('u1', 'hello')], { onEdit: vi.fn() })
+    renderList([msg('u1', 'hello', { canEdit: false })], { onEdit: vi.fn(), viewerIsAdmin: true })
     expect(screen.queryByTitle('Edit')).toBeNull()
   })
 
   it('saves the corrected body', async () => {
     const onEdit = vi.fn().mockResolvedValue(undefined)
-    renderList([msg('u1', 'somethign')], { onEdit, viewerIsAdmin: true })
+    renderList([msg('u1', 'somethign')], { onEdit })
 
     fireEvent.click(screen.getByTitle('Edit'))
     const box = screen.getByLabelText('Edit message')
@@ -329,7 +338,7 @@ describe('MessageList — edited messages', () => {
 
   it('cancels without calling out', () => {
     const onEdit = vi.fn()
-    renderList([msg('u1', 'hello')], { onEdit, viewerIsAdmin: true })
+    renderList([msg('u1', 'hello')], { onEdit })
 
     fireEvent.click(screen.getByTitle('Edit'))
     fireEvent.click(screen.getByText('Cancel'))

@@ -268,7 +268,7 @@ function NewMessagesDivider() {
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine, online,
   viewerIsAdmin, onOpenUser, onReport, onBlock, onDelete, onEdit, onReply, onReact, onSeenBy,
-  onShowReactors,
+  onShowReactors, onShowEdits,
   onJump, highlighted, senders, currentUserId, datedStamps,
   // Whether this row's actions are pinned open, and how to ask for that. Held
   // by the list rather than the row so only one row can be open at a time.
@@ -286,8 +286,11 @@ function MessageRow({
   // do about a message from someone else, and a block that could only be found
   // by first tapping the person's name would be a block most people never find.
   const canBlock    = Boolean(onBlock)    && !mine && !m.deleted && Boolean(m.senderUserId)
-  const canDelete   = Boolean(onDelete)   && viewerIsAdmin && !m.deleted
-  const canEdit     = Boolean(onEdit)     && viewerIsAdmin && !m.deleted
+  // Both come from the server, which is the only thing that knows the rule:
+  // an admin on anything, or the author within an hour of posting. A client
+  // deciding this from its own clock would offer buttons the server refuses.
+  const canDelete   = Boolean(onDelete)   && Boolean(m.canDelete)
+  const canEdit     = Boolean(onEdit)     && Boolean(m.canEdit)
   const canReply    = Boolean(onReply)    && !m.deleted
   // Admins can inspect any message, including one they removed — "who saw this
   // before I took it down" is a moderation question, and the endpoint already
@@ -299,6 +302,8 @@ function MessageRow({
   // is a cheap thing to tap, and reacting is the only interaction a read-only
   // channel has. The names are kept for moderation, not for the room.
   const canReactors = Boolean(onShowReactors) && viewerIsAdmin && Boolean(m.reactions?.length)
+  // `edits` only reaches admins, so this is admin-only twice over.
+  const canSeeEdits = Boolean(onShowEdits) && viewerIsAdmin
   const hasActions  = canSeenBy || canReactors || canReply || canEdit || canReport || canBlock || canDelete
 
   // On a pointer device the bar disappears the moment you move off the row, so
@@ -306,8 +311,9 @@ function MessageRow({
   // sit over the conversation until another row was touched.
   const act = (fn) => () => { onToggleActions?.(null); fn() }
 
-  // Inline edit, admin only. Kept local to the row rather than lifted, so
-  // typing a correction does not re-render the whole thread on every keystroke.
+  // Inline edit — a moderator on anyone's message, an author on their own for
+  // an hour. Kept local to the row rather than lifted, so typing a correction
+  // does not re-render the whole thread on every keystroke.
   const [draft,  setDraft]  = useState(null)   // null = not editing
   const [saving, setSaving] = useState(false)
 
@@ -403,13 +409,34 @@ function MessageRow({
           <p className={`text-sm text-slate-800 whitespace-pre-wrap break-words ${m.deleted ? 'line-through opacity-60' : ''}`}>
             <MessageBody message={m} senders={senders} currentUserId={currentUserId} />
             {m.edited && !m.deleted && (
-              <span className="text-[10px] text-slate-400 ml-1.5" title="Edited by a moderator">(edited)</span>
+              // Everyone sees the marker; only an admin can open what it hides.
+              // The history is a moderation record, not a public diff — see the
+              // note on `edits` in models/ChatMessage.js.
+              canSeeEdits ? (
+                <button
+                  type="button"
+                  onClick={() => onShowEdits(m)}
+                  title="Show edit history"
+                  className="text-[10px] text-slate-400 hover:text-brand-600 underline underline-offset-2 ml-1.5"
+                >
+                  (edited)
+                </button>
+              ) : (
+                <span className="text-[10px] text-slate-400 ml-1.5" title="This message was edited">(edited)</span>
+              )
             )}
           </p>
         )}
-        {/* Admin-only: users never receive a removed message. */}
+        {/* Admin-only: users never receive a removed message at all. Which of
+            the two removals it was matters to a moderator — an author tidying
+            up after themselves is not an incident, and reading every withdrawn
+            message as one would bury the ones that are. */}
         {m.deleted && (
-          <p className="text-[10px] italic text-slate-400">Removed by a moderator</p>
+          <p className="text-[10px] italic text-slate-400">
+            {String(m.deletedByUserId ?? '') === String(m.senderUserId ?? '')
+              ? 'Removed by the author'
+              : 'Removed by a moderator'}
+          </p>
         )}
 
         {!m.deleted && <Reactions message={m} onReact={onReact} />}
@@ -504,6 +531,7 @@ export default function MessageList({
   onReact,
   onSeenBy,
   onShowReactors,
+  onShowEdits,
   // Runs collapse consecutive messages from one sender under a single avatar,
   // name and timestamp. That is right for a conversation and wrong for a feed:
   // in the medals channel every message is from the same bot, so grouping them
@@ -630,6 +658,7 @@ export default function MessageList({
             // admin already sees who replied, so the concern does not apply.
             onSeenBy={conversationType === 'support' && !viewerIsAdmin ? undefined : onSeenBy}
             onShowReactors={onShowReactors}
+            onShowEdits={onShowEdits}
             onJump={jumpTo}
             highlighted={String(highlightId) === String(m._id)}
             actionsOpen={openActionsId === String(m._id)}
