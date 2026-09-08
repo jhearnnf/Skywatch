@@ -9,6 +9,7 @@ import { senderName } from '../pages/chat/senderName'
 import { REACTION_EMOJI } from '../pages/chat/reactionEmoji'
 import DisplayNameGate from '../pages/chat/components/DisplayNameGate'
 import SeenByDialog from '../pages/chat/components/SeenByDialog'
+import EditHistoryDialog from '../pages/chat/components/EditHistoryDialog'
 import MentionPicker from '../pages/chat/components/MentionPicker'
 
 // The mini chat docked under Recent Scores on the CBAT hub.
@@ -166,8 +167,17 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const [replyTo,   setReplyTo]   = useState(null)
   // The message whose readership is being inspected, or null.
   const [seenByMsg, setSeenByMsg] = useState(null)
+  // The message whose edit history is open, or null. Admin-only.
+  const [editsMsg,  setEditsMsg]  = useState(null)
+  // The message being edited in the composer, or null. The widget has one
+  // input, so editing borrows it rather than growing a second one inside a
+  // 40-message list that is already only a few hundred pixels tall.
+  const [editing,   setEditing]   = useState(null)
   // The message whose emoji picker is open, if any. One at a time.
   const [picking,   setPicking]   = useState(null)
+  // The message whose action bar is showing, or null. Exactly one at a time,
+  // and held here rather than per row so opening one closes the last.
+  const [openActionsId, setOpenActionsId] = useState(null)
   // Caret offset, for spotting the "@" being typed. Tracked rather than read
   // off the input on demand because the picker re-renders from it.
   const [caret,     setCaret]     = useState(0)
@@ -326,6 +336,24 @@ export default function CbatLoungeChat({ open, onToggle }) {
     if (el) el.scrollTop = el.scrollHeight
   }, [open, messages, typingName])
 
+  // Tapping anywhere that is not the open row puts the bar away. On the document
+  // rather than the panel, because "elsewhere" includes the composer, the header
+  // and the whole page behind the widget.
+  //
+  // pointerdown, not click: it fires before the browser decides whether the
+  // gesture was a tap or a scroll, so flicking the list closed feels immediate
+  // instead of waiting for the tap to resolve. The open row is excluded so its
+  // own buttons still get their press — each action closes the bar itself.
+  useEffect(() => {
+    if (!openActionsId) return
+    const onDown = (e) => {
+      const row = e.target?.closest?.(`[data-msg-row="${openActionsId}"]`)
+      if (!row) setOpenActionsId(null)
+    }
+    document.addEventListener('pointerdown', onDown, true)
+    return () => document.removeEventListener('pointerdown', onDown, true)
+  }, [openActionsId])
+
   // ── Sending ────────────────────────────────────────────────────────────────
 
   const syncCaret = (e) => setCaret(e.target.selectionStart ?? 0)
@@ -367,6 +395,15 @@ export default function CbatLoungeChat({ open, onToggle }) {
   // counts for this viewer, so the message is swapped in place rather than
   // refetching the room; everyone else finds out through the 'refresh' the
   // server publishes.
+  // Your own messages go to the self-service routes, anyone else's to the
+  // moderation ones. The server enforces both — this only decides which record
+  // the action leaves behind.
+  const messageActionUrl = (message) => (
+    String(message.senderUserId ?? '') === String(user?._id ?? '')
+      ? `${API}/api/chat/messages/${message._id}`
+      : `${API}/api/chat/admin/messages/${message._id}`
+  )
+
   const react = async (message, emoji) => {
     setErr('')
     const r = await apiFetch(`${API}/api/chat/messages/${message._id}/reactions`, {
@@ -383,8 +420,83 @@ export default function CbatLoungeChat({ open, onToggle }) {
   }
 
   const startReply = (message) => {
+    setEditing(null)
     setReplyTo(message)
     requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  // Editing borrows the composer: the body goes into the input, Send becomes
+  // Save, and a banner above it says what is being changed. Replying and
+  // editing are mutually exclusive for the same reason — one input, one job.
+  const startEdit = (message) => {
+    setReplyTo(null)
+    setEditing(message)
+    setDraft(message.body ?? '')
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }
+
+  const cancelEdit = () => {
+    setEditing(null)
+    setDraft('')
+  }
+
+  // Save an edit. Own messages go to the self-service route, anyone else's to
+  // the moderation one — see the same split in pages/chat/ChatThread.jsx.
+  const saveEdit = async () => {
+    const text = draft.trim()
+    if (!text || busy || !editing) return
+    if (text === editing.body) { cancelEdit(); return }
+    setBusy(true); setErr('')
+    try {
+      const r = await apiFetch(messageActionUrl(editing), {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: text }),
+      })
+      const d = await r.json().catch(() => null)
+      if (!r.ok) throw new Error(d?.message || 'Could not save that edit')
+      if (d?.data?.message) {
+        setMessages(prev => prev.map(m => (
+          String(m._id) === String(d.data.message._id) ? d.data.message : m
+        )))
+      }
+      cancelEdit()
+    } catch (e) {
+      setErr(e.message || 'Could not save that edit')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Withdraw or moderate away a message. Deliberately NOT window.confirm: a
+  // native dialog inside the app's WebView blocks the whole page, and this
+  // widget is one tap from a game. The full room asks; here the action bar
+  // takes two deliberate taps to reach on touch already.
+  const removeMessage = async (message) => {
+    setErr('')
+    if (String(editing?._id ?? '') === String(message._id)) cancelEdit()
+    const r = await apiFetch(messageActionUrl(message), {
+      method: 'DELETE', credentials: 'include',
+    }).catch(() => null)
+    const d = await r?.json().catch(() => null)
+    if (!r?.ok) { setErr(d?.message || 'Could not remove that message'); return }
+    // An admin keeps the row (struck through, as the moderation record);
+    // everyone else loses it entirely, which is what the server would send on
+    // the next load anyway. Doing it here rather than waiting for the refetch
+    // stops the message sitting there for a beat after you removed it.
+    if (d?.data?.message && user?.isAdmin) {
+      setMessages(prev => prev.map(m => (
+        String(m._id) === String(d.data.message._id) ? d.data.message : m
+      )))
+    } else {
+      setMessages(prev => prev.filter(m => String(m._id) !== String(message._id)))
+    }
   }
 
   // Drop the half-typed "@fal" and put "@Falcon " in its place, caret after it
@@ -449,6 +561,12 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const canPost = lounge?.canPost && !needsName
   const viewerIsAdmin = Boolean(user?.isAdmin)
 
+  // Removed messages reach admins only — they are the moderation record, and
+  // the server withholds them from everyone else (see the query filter in GET
+  // /messages). This drops any that arrive from a cached response, so there is
+  // no window where a withdrawn message is still on a member's screen.
+  const visible = viewerIsAdmin ? messages : messages.filter(m => !m.deleted)
+
   // The "@" the caret is sitting in, if any, and whether to offer the picker
   // for it. Suppressed while a display name is still being asked for, since
   // there is no composer to complete into.
@@ -484,12 +602,12 @@ export default function CbatLoungeChat({ open, onToggle }) {
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5">
         {loading ? (
           <p className="text-xs text-slate-500 text-center py-6">Loading…</p>
-        ) : messages.length === 0 ? (
+        ) : visible.length === 0 ? (
           <p className="text-xs text-slate-500 text-center py-6">
             Nobody has said anything yet. Say hello.
           </p>
         ) : (
-          messages.map(m => {
+          visible.map(m => {
             const prof    = senders[String(m.senderUserId ?? '')]
             const name     = senderName(m.senderUserId, senders, m.senderDisplayName) || 'Unknown agent'
             const isBot   = prof
@@ -503,9 +621,35 @@ export default function CbatLoungeChat({ open, onToggle }) {
             // canPost — being unable to speak is no reason to lose sight of who
             // read what you already said.
             const canSeen = viewerIsAdmin || (mine && !m.deleted)
+            // Both decided by the server: an admin on anything, or the author
+            // within an hour of posting. The rule has a clock in it, so the
+            // client never tries to work it out — see serializeMessage.
+            const canEdit   = Boolean(m.canEdit)
+            const canDelete = Boolean(m.canDelete)
+            const hasActions  = acting || canSeen || canEdit || canDelete
+            const actionsOpen = openActionsId === String(m._id)
+            // Every action puts the bar away behind it. Where it was opened by
+            // a tap it would otherwise sit over the conversation until another
+            // row was touched; where it was opened by hover it costs nothing.
+            const act = (fn) => () => { setOpenActionsId(null); fn() }
             return (
               <div
                 key={m._id}
+                data-msg-row={String(m._id)}
+                // The message itself is the tap target. The full room can afford
+                // a dedicated "⋯" button in the corner of every row; at this
+                // size that would be a 12px target competing with the text it
+                // sits on, so the row does the job instead.
+                //
+                // Clicks that land on a button are left alone — the action bar,
+                // the reaction pills and the emoji picker all live inside this
+                // row, and toggling the bar out from under the thing you just
+                // pressed would make every one of them a fight.
+                onClick={(e) => {
+                  if (!hasActions) return
+                  if (e.target?.closest?.('button')) return
+                  setOpenActionsId(cur => (cur === String(m._id) ? null : String(m._id)))
+                }}
                 className={`group relative text-xs leading-snug break-words ${
                   mineTag ? 'bg-brand-600/10 border-l-2 border-l-brand-400 -mx-1 px-1 rounded' : ''
                 }`}
@@ -524,10 +668,38 @@ export default function CbatLoungeChat({ open, onToggle }) {
                     </span>
                   )}
                   <span className="text-slate-500">: </span>
-                  <span className="text-[#ddeaf8] whitespace-pre-wrap">
+                  <span className={`whitespace-pre-wrap ${m.deleted ? 'text-slate-500 line-through opacity-60' : 'text-[#ddeaf8]'}`}>
                     <MessageBody message={m} senders={senders} currentUserId={user?._id} />
                   </span>
+                  {m.edited && !m.deleted && (
+                    // Everyone sees the marker; only an admin can open what is
+                    // behind it. The history is a moderation record, not a
+                    // public diff — see `edits` in models/ChatMessage.js.
+                    viewerIsAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditsMsg(m)}
+                        title="Show edit history"
+                        className="text-[9px] text-slate-500 hover:text-brand-600 underline underline-offset-2 ml-1"
+                      >
+                        (edited)
+                      </button>
+                    ) : (
+                      <span className="text-[9px] text-slate-500 ml-1" title="This message was edited">(edited)</span>
+                    )
+                  )}
                 </p>
+                {/* Admin-only, because nobody else receives a removed message.
+                    Which removal it was matters to a moderator: an author
+                    tidying up after themselves is not an incident, and reading
+                    every withdrawn message as one would bury the ones that are. */}
+                {m.deleted && (
+                  <p className="text-[9px] italic text-slate-500">
+                    {String(m.deletedByUserId ?? '') === String(m.senderUserId ?? '')
+                      ? 'Removed by the author'
+                      : 'Removed by a moderator'}
+                  </p>
+                )}
 
                 <Reactions
                   message={m}
@@ -542,12 +714,15 @@ export default function CbatLoungeChat({ open, onToggle }) {
                     panel is desktop-width only, but a touch laptop still lands
                     here, hence the touch: pair. focus-within covers the
                     keyboard. */}
-                {(acting || canSeen) && (
-                  <span className="absolute top-0 right-0 flex gap-0.5 rounded-md bg-[#0a1628] border border-[#1a3a5c] px-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch:opacity-100 transition-opacity">
+                {hasActions && (
+                  <span
+                    data-testid={`lounge-actions-${m._id}`}
+                    className={`absolute top-0 right-0 ${actionsOpen ? 'flex' : 'hidden'} group-hover:flex gap-0.5 rounded-md bg-[#0a1628] border border-[#1a3a5c] px-0.5`}
+                  >
                     {canSeen && (
                       <button
                         type="button"
-                        onClick={() => setSeenByMsg(m)}
+                        onClick={act(() => setSeenByMsg(m))}
                         aria-label="Seen by"
                         title="Seen by"
                         className="px-1 text-[11px] text-slate-500 hover:text-brand-600 transition-colors"
@@ -558,7 +733,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
                     {acting && (
                       <button
                         type="button"
-                        onClick={() => setPicking(p => (p === String(m._id) ? null : String(m._id)))}
+                        onClick={act(() => setPicking(p => (p === String(m._id) ? null : String(m._id))))}
                         aria-label="Add a reaction"
                         className="px-1 text-[11px] text-slate-500 hover:text-brand-600 transition-colors"
                       >
@@ -568,11 +743,36 @@ export default function CbatLoungeChat({ open, onToggle }) {
                     {acting && (
                       <button
                         type="button"
-                        onClick={() => startReply(m)}
+                        onClick={act(() => startReply(m))}
                         aria-label="Reply"
                         className="px-1 text-[11px] text-slate-500 hover:text-brand-600 transition-colors"
                       >
                         ↰
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={act(() => startEdit(m))}
+                        aria-label="Edit"
+                        title="Edit"
+                        className="px-1 text-[11px] text-slate-500 hover:text-brand-600 transition-colors"
+                      >
+                        ✎
+                      </button>
+                    )}
+                    {/* Red, and last in the row: the one action here that
+                        cannot be undone should not sit next to Reply looking
+                        like the rest of them. */}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={act(() => removeMessage(m))}
+                        aria-label={mine ? 'Remove your message' : 'Remove this message'}
+                        title={mine ? 'Remove your message' : 'Remove this message'}
+                        className="px-1 text-[11px] text-red-400 hover:text-red-300 transition-colors"
+                      >
+                        ✕
                       </button>
                     )}
                   </span>
@@ -607,6 +807,20 @@ export default function CbatLoungeChat({ open, onToggle }) {
         </p>
       ) : (
         <div className="shrink-0 border-t border-[#1a3a5c]">
+          {editing && (
+            <div className="flex items-center gap-1.5 px-2 pt-1.5 text-[10px] min-w-0">
+              <span className="text-brand-600 font-semibold shrink-0">Editing</span>
+              <span className="text-slate-500 truncate">{editing.body}</span>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                aria-label="Cancel edit"
+                className="ml-auto shrink-0 px-1 text-slate-500 hover:text-slate-400"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           {replyTo && (
             <div className="flex items-center gap-1.5 px-2 pt-1.5 text-[10px] min-w-0">
               <span className="text-slate-500 shrink-0">Replying to</span>
@@ -657,18 +871,22 @@ export default function CbatLoungeChat({ open, onToggle }) {
                 // the mention rather than sending a half-typed name. Its own
                 // capture-phase listener runs before this.
                 if (showMentionPicker && ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) return
-                if (e.key === 'Enter') { e.preventDefault(); send() }
+                if (e.key === 'Enter') { e.preventDefault(); editing ? saveEdit() : send() }
+                // Only while editing. Escape on an empty composer would
+                // otherwise have nothing to do, and on a half-typed message it
+                // would throw the message away.
+                if (e.key === 'Escape' && editing) { e.preventDefault(); cancelEdit() }
               }}
-              placeholder="Message the lounge…"
+              placeholder={editing ? 'Edit your message…' : 'Message the lounge…'}
               className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-[#0c1829] border border-[#1a3a5c] focus:border-brand-400 outline-none text-xs text-[#ddeaf8] placeholder:text-slate-500"
             />
             <button
               type="button"
-              onClick={send}
+              onClick={editing ? saveEdit : send}
               disabled={busy || !draft.trim()}
               className="shrink-0 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition-colors"
             >
-              Send
+              {editing ? 'Save' : 'Send'}
             </button>
           </div>
         </div>
@@ -679,6 +897,14 @@ export default function CbatLoungeChat({ open, onToggle }) {
           key={seenByMsg._id}
           message={seenByMsg}
           onClose={() => setSeenByMsg(null)}
+        />
+      )}
+      {editsMsg && (
+        <EditHistoryDialog
+          key={editsMsg._id}
+          message={editsMsg}
+          senders={senders}
+          onClose={() => setEditsMsg(null)}
         />
       )}
     </div>

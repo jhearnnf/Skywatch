@@ -699,3 +699,209 @@ describe('seen by', () => {
     expect(screen.queryByTestId('seen-by')).toBeNull()
   })
 })
+
+// The widget used to have three actions — seen-by, react, reply — and no way to
+// change or remove anything. An admin's own removed message therefore came back
+// on every refetch looking exactly like a live one, forever.
+describe('editing and removing', () => {
+  const own = (extra = {}) => ({
+    _id: 'm9', senderUserId: 'u1', senderDisplayName: 'Falcon',
+    body: 'helo', createdAt: new Date().toISOString(), mentions: [],
+    canEdit: true, canDelete: true, ...extra,
+  })
+
+  it('offers edit and remove only where the server allows them', async () => {
+    stubFetch({ messages: [own()] })
+    renderOpen()
+    expect(await screen.findByTitle('Edit')).toBeTruthy()
+    expect(screen.getByTitle('Remove your message')).toBeTruthy()
+
+    cleanup()
+    // Past the hour, or someone else's: the server says no and the buttons go.
+    stubFetch({ messages: [own({ canEdit: false, canDelete: false })] })
+    renderOpen()
+    await screen.findByText('helo')
+    expect(screen.queryByTitle('Edit')).toBeNull()
+    expect(screen.queryByTitle('Remove your message')).toBeNull()
+  })
+
+  it('edits through the self-service route and swaps the message in place', async () => {
+    stubFetch({ messages: [own()] })
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { message: { ...own(), body: 'hello', edited: true } } }),
+    })
+    renderOpen()
+
+    fireEvent.click(await screen.findByTitle('Edit'))
+    const box = screen.getByPlaceholderText('Edit your message…')
+    expect(box.value).toBe('helo')
+    fireEvent.change(box, { target: { value: 'hello' } })
+    fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(() => expect(screen.getByText('hello')).toBeTruthy())
+    // Own message → the author's route, not the moderation one.
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/chat/messages/m9',
+      expect.objectContaining({ method: 'PATCH' }),
+    )
+    // Composer is handed back to sending.
+    expect(screen.getByPlaceholderText('Message the lounge…')).toBeTruthy()
+  })
+
+  it('drops a removed message from a member view entirely', async () => {
+    stubFetch({ messages: [own()] })
+    apiFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { message: { ...own(), deleted: true } } }),
+    })
+    renderOpen()
+
+    fireEvent.click(await screen.findByTitle('Remove your message'))
+    await waitFor(() => expect(screen.queryByText('helo')).toBeNull())
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/chat/messages/m9',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+  })
+
+  // The original complaint: a removed message that still reads as a live one.
+  it('keeps a removed message for an admin, struck through and attributed', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { _id: 'u1', displayName: 'Falcon', isAdmin: true }, API: '', apiFetch,
+    })
+    stubFetch({ messages: [own({ deleted: true, deletedByUserId: 'u1', canEdit: false, canDelete: false })] })
+    renderOpen()
+
+    const body = await screen.findByText('helo')
+    expect(body.className).toContain('line-through')
+    expect(screen.getByText('Removed by the author')).toBeTruthy()
+  })
+
+  it('says when a moderator was the one who removed it', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { _id: 'u9', displayName: 'Control', isAdmin: true }, API: '', apiFetch,
+    })
+    stubFetch({ messages: [own({ deleted: true, deletedByUserId: 'u9', canEdit: false, canDelete: false })] })
+    renderOpen()
+
+    await screen.findByText('helo')
+    expect(screen.getByText('Removed by a moderator')).toBeTruthy()
+  })
+
+  it('hides a removed message from everyone else, whatever the server sent', async () => {
+    // Belt to the server's braces: a cached response could still carry one.
+    stubFetch({ messages: [own({ deleted: true })] })
+    renderOpen()
+
+    await waitFor(() => expect(screen.getByText(/Nobody has said anything yet/)).toBeTruthy())
+    expect(screen.queryByText('helo')).toBeNull()
+  })
+
+  it('lets an admin open the edit history, and shows members only the marker', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { _id: 'u1', displayName: 'Falcon', isAdmin: true }, API: '', apiFetch,
+    })
+    stubFetch({ messages: [own({ edited: true, edits: [{ body: 'helo', editedAt: null }] })] })
+    renderOpen()
+
+    fireEvent.click(await screen.findByTitle('Show edit history'))
+    expect(screen.getByText('Edit history')).toBeTruthy()
+
+    cleanup()
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Falcon' }, API: '', apiFetch })
+    stubFetch({ messages: [own({ edited: true })] })
+    renderOpen()
+    expect(await screen.findByText('(edited)')).toBeTruthy()
+    expect(screen.queryByTitle('Show edit history')).toBeNull()
+  })
+})
+
+// The bar used to carry `touch:opacity-100`, which on a phone meant every row
+// showed reply/edit/delete permanently — a wall of icons over the conversation.
+describe('the action bar opens one row at a time', () => {
+  const rowFor = (id) => document.querySelector(`[data-msg-row="${id}"]`)
+  const barFor = (id) => screen.getByTestId(`lounge-actions-${id}`)
+
+  const TWO = [
+    { _id: 'a1', senderUserId: 'u1', senderDisplayName: 'Falcon', body: 'first',  createdAt: new Date().toISOString(), mentions: [], canEdit: true, canDelete: true },
+    { _id: 'a2', senderUserId: 'u1', senderDisplayName: 'Falcon', body: 'second', createdAt: new Date().toISOString(), mentions: [], canEdit: true, canDelete: true },
+  ]
+
+  it('hides every bar until a message is touched', async () => {
+    stubFetch({ messages: TWO })
+    renderOpen()
+    await screen.findByText('first')
+
+    // `hidden` is the resting state; `group-hover:flex` covers a pointer device
+    // without ever showing more than the row under the cursor.
+    expect(barFor('a1').className).toContain('hidden')
+    expect(barFor('a2').className).toContain('hidden')
+    expect(barFor('a1').className).toContain('group-hover:flex')
+  })
+
+  it('opens the touched row, and only that one', async () => {
+    stubFetch({ messages: TWO })
+    renderOpen()
+    await screen.findByText('first')
+
+    fireEvent.click(rowFor('a1'))
+    expect(barFor('a1').className).toContain('flex')
+    expect(barFor('a1').className).not.toContain('hidden')
+    expect(barFor('a2').className).toContain('hidden')
+
+    // Touching another row moves the bar rather than opening a second one.
+    fireEvent.click(rowFor('a2'))
+    expect(barFor('a1').className).toContain('hidden')
+    expect(barFor('a2').className).not.toContain('hidden')
+  })
+
+  it('closes again when the same row is touched twice', async () => {
+    stubFetch({ messages: TWO })
+    renderOpen()
+    await screen.findByText('first')
+
+    fireEvent.click(rowFor('a1'))
+    fireEvent.click(rowFor('a1'))
+    expect(barFor('a1').className).toContain('hidden')
+  })
+
+  it('closes when something outside the row is touched', async () => {
+    stubFetch({ messages: TWO })
+    renderOpen()
+    await screen.findByText('first')
+
+    fireEvent.click(rowFor('a1'))
+    expect(barFor('a1').className).not.toContain('hidden')
+
+    // The composer counts as elsewhere, and so does the page behind the widget.
+    fireEvent.pointerDown(screen.getByPlaceholderText('Message the lounge…'))
+    expect(barFor('a1').className).toContain('hidden')
+
+    fireEvent.click(rowFor('a1'))
+    fireEvent.pointerDown(document.body)
+    expect(barFor('a1').className).toContain('hidden')
+  })
+
+  it('puts the bar away behind whichever action was taken', async () => {
+    stubFetch({ messages: TWO })
+    renderOpen()
+    await screen.findByText('first')
+
+    fireEvent.click(rowFor('a1'))
+    fireEvent.click(screen.getAllByLabelText('Reply')[0])
+    expect(barFor('a1').className).toContain('hidden')
+  })
+
+  // The bar, the reaction pills and the emoji picker all live inside the row.
+  // Toggling it out from under the button just pressed would make every one of
+  // them a fight.
+  it('ignores taps that land on a button inside the row', async () => {
+    stubFetch({ messages: TWO })
+    renderOpen()
+    await screen.findByText('first')
+
+    fireEvent.click(screen.getAllByLabelText('Reply')[0])
+    expect(barFor('a1').className).toContain('hidden')
+  })
+})
