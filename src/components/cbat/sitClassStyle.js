@@ -12,7 +12,7 @@
 // side — but it takes its colours from here.
 //
 // Every class gets a distinct SHAPE as well as a distinct colour. Colour alone
-// would make the whole test a colour-matching exercise on a two-second look,
+// would make the whole test a colour-matching exercise on a three-second look,
 // and would fail anyone reading it on a poor screen.
 
 // Once the clip's ground became textured grass, two of these stopped working:
@@ -20,7 +20,7 @@
 // farm is now barn red — which is both what a barn looks like and the strongest
 // contrast available against grass — and the trees moved to a lighter, bluer
 // green than the ground they stand on. Anything added here has to survive the
-// same question: can you still pick it out of a field in two seconds?
+// same question: can you still pick it out of a field in three seconds?
 export const CLASS_STYLE = {
   hill:       { fill: '#5a4a2c', stroke: '#8a7248', shape: 'triangle' },
   farm:       { fill: '#8c3a2b', stroke: '#c86a52', shape: 'square' },

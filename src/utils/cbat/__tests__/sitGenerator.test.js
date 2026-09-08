@@ -297,8 +297,32 @@ describe('how long a run takes', () => {
 
   it('matches the arithmetic, to the second', () => {
     // Stated outright so a tuning change has to be a deliberate one.
-    expect(sitPhaseMs(SIT_TUNING.easier)).toEqual({ study: 210000, clips: 16000, answers: 160000 })
-    expect(sitPhaseMs(SIT_TUNING.hard)).toEqual({ study: 180000, clips: 10000, answers: 120000 })
+    expect(sitPhaseMs(SIT_TUNING.easier)).toEqual({ study: 210000, clips: 32000, answers: 160000 })
+    expect(sitPhaseMs(SIT_TUNING.hard)).toEqual({ study: 180000, clips: 24000, answers: 120000 })
+  })
+
+  it('counts one clip viewing per QUESTION, not per clip', () => {
+    // The clip runs again before the second question on the same ground, so a
+    // run watches SIT_ROUNDS passes across SIT_CLIPS scenes. Counting clips
+    // here would understate every run by half the watching — and this is the
+    // figure the hub tile and the intro screen are both built on.
+    for (const tuning of Object.values(SIT_TUNING)) {
+      expect([tuning.key, sitPhaseMs(tuning).clips])
+        .toEqual([tuning.key, SIT_ROUNDS * tuning.clipMs])
+      expect([tuning.key, sitPhaseMs(tuning).clips > SIT_CLIPS * tuning.clipMs])
+        .toEqual([tuning.key, true])
+    }
+  })
+
+  it('keeps every clip inside the only sourced duration for the real test', () => {
+    // "You're shown a brief 2-3 second clip of an environment" — Discord dump
+    // line 592, the single candidate account this whole test is built from. Hard
+    // sits at the top of that range because our clip is an oblique 3D pass
+    // rather than a turned plan view; Easier may exceed it, that being what an
+    // easier mode is for. Nothing may drop below it.
+    expect(SIT_TUNING.hard.clipMs).toBeGreaterThanOrEqual(2000)
+    expect(SIT_TUNING.hard.clipMs).toBeLessThanOrEqual(3000)
+    expect(SIT_TUNING.easier.clipMs).toBeGreaterThanOrEqual(SIT_TUNING.hard.clipMs)
   })
 
   it('is what the hub tile advertises', () => {

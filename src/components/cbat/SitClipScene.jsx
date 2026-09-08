@@ -46,8 +46,8 @@
 //
 // EVERY MODEL IS BUILT FROM PRIMITIVES, with no loaded assets and the grass and
 // sky drawn into canvases at mount. CBAT play is offline-capable, and a clip
-// that waits on a network fetch has already lost most of the two and a half
-// seconds it gets.
+// that waits on a network fetch has already lost most of the three seconds it
+// gets.
 
 import { useRef, useMemo, useEffect, useLayoutEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
@@ -607,10 +607,11 @@ export default function SitClipScene({ objects, grid, durationMs, onReady }) {
       camera={{ position: [0, 15, 21], fov: CAMERA.fovDeg, near: 0.1, far: 160 }}
       gl={{ antialias: true }}
       style={{ width: '100%', height: '100%', background: 'transparent' }}
-      // The clip is two and a half seconds long. If the renderer spends the
-      // first second of that coming up, the player has been shown a shorter
-      // clip than the one they were promised — and on a slow device, a much
-      // shorter one. The page holds its countdown until this fires.
+      // The clip is three seconds long, and it runs again before the second
+      // question on the same ground. If the renderer spends the first second of
+      // a viewing coming up, the player has been shown a shorter clip than the
+      // one they were promised — and on a slow device, a much shorter one. The
+      // page holds its countdown until this fires, on every viewing.
       onCreated={() => onReady?.()}
     >
       <fog attach="fog" args={[HAZE, FOG_NEAR, FOG_FAR]} />

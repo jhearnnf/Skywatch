@@ -1,13 +1,14 @@
 // CBAT "Spatial Integration Test" (SIT).
 //
 // STUDY a set of isolated LAYERS, each a plan view showing one class of thing on
-// the same ground → watch a two-second 3D CAMERA PASS over the whole scene,
-// re-oriented → answer two questions on whether named classes are in the right
-// place. The generator (utils/cbat/sitGenerator.js) carries the reasoning for
-// the layers, the rotation and the distractor rule; this file is the
-// presentation and the run loop.
+// the same ground → watch a three-second 3D CAMERA PASS over the whole scene,
+// re-oriented → answer one question on whether a named class is in the right
+// place → watch the SAME pass again → answer the second question. The generator
+// (utils/cbat/sitGenerator.js) carries the reasoning for the layers, the
+// rotation and the distractor rule; this file is the presentation and the run
+// loop.
 //
-// Three things worth restating here:
+// Four things worth restating here:
 //
 //   • No layer shows the full picture, which is what makes assembling it an
 //     integration task rather than a memory one. The hills appear on every layer
@@ -19,6 +20,10 @@
 //   • The clip is 3D — "a 3D rendered video of the scene" — while everything you
 //     studied was a plan view. Carrying a plan across to an oblique pass is most
 //     of the difficulty, and drawing the clip as a second map removed it.
+//   • Each question gets its OWN viewing of that clip, and the question is asked
+//     after the viewing. So the player still has to take in the whole frame each
+//     time — see sitDifficulty.js for why the run no longer stacks both
+//     questions onto one pass.
 
 import { useState, useCallback, useEffect, useRef, lazy, Suspense, Component } from 'react'
 import { Link } from 'react-router-dom'
@@ -88,7 +93,7 @@ function MapObject({ o, cell }) {
   }
   // Moving contacts point the way they are heading — the flight path the corpus
   // mentions, drawn as the marker's own orientation rather than as a separate
-  // line, so it survives a two-second look.
+  // line, so it survives a three-second look.
   const rot = HEADING_DEG[o.heading] ?? 0
   if (s.shape === 'arrow') {
     return (
@@ -334,8 +339,8 @@ export default function CbatSit() {
   }, [apiFetch, API, markGameCompleted, fetchBest])
 
   // Pull the clip's WebGL chunk down while the player is still studying. The
-  // study window is tens of seconds and the clip is two and a half, so this is
-  // the one moment there is room to pay for it.
+  // study window is tens of seconds and a clip viewing is three, so this is the
+  // one moment there is room to pay for it.
   useEffect(() => {
     if (phase === 'study') import('../components/cbat/SitClipScene')
   }, [phase])
@@ -356,10 +361,12 @@ export default function CbatSit() {
       return () => clearInterval(tickRef.current)
     }
     if (phase === 'clip') {
-      // Two and a half seconds is the whole clip, so it cannot start ticking
-      // while WebGL is still coming up — that would quietly hand a fast machine
-      // a longer look than a slow one at the same test. The ceiling is there
-      // because the flat fallback never reports itself ready.
+      // Three seconds is the whole viewing, so it cannot start ticking while
+      // WebGL is still coming up — that would quietly hand a fast machine a
+      // longer look than a slow one at the same test. This runs before every
+      // question, not just the first on a clip, because the scene unmounts
+      // between phases. The ceiling is there because the flat fallback never
+      // reports itself ready.
       if (!clipReady) {
         timerRef.current = setTimeout(() => setClipReady(true), 1500)
         return () => clearTimeout(timerRef.current)
@@ -427,15 +434,21 @@ export default function CbatSit() {
     setPhase('clip')
   }
 
-  // Within a clip, the next question comes straight away — no second viewing,
-  // which is the corpus's "with no replay". Only when a clip's questions are
-  // exhausted does the run move on to new ground.
+  // Every question gets its own viewing of the clip, so the next question on the
+  // same ground goes back through the camera pass rather than straight to the
+  // answer. `clipReady` is re-armed with it: the scene unmounts between phases,
+  // and starting the three-second window before WebGL is back up would quietly
+  // give a fast machine a longer look than a slow one.
+  //
+  // Only when a clip's questions are exhausted does the run move on to new
+  // ground and a fresh study phase.
   function goNext() {
     setFeedback(null)
     const nextQuestion = questionIdx + 1
     if (nextQuestion < (current?.questions?.length ?? 0)) {
       setQuestionIdx(nextQuestion)
-      setPhase('answer')
+      setClipReady(false)
+      setPhase('clip')
       return
     }
     const nextIdx = currentIdx + 1
@@ -529,7 +542,7 @@ export default function CbatSit() {
 
   return (
     <div>
-      <SEO title="Spatial Integration Test (CBAT)" description="Study the ground one plan-view layer at a time, then judge a two-second 3D camera pass over the whole scene on one detail alone." />
+      <SEO title="Spatial Integration Test (CBAT)" description="Study the ground one plan-view layer at a time, then judge a three-second 3D camera pass over the whole scene on one detail alone." />
 
       <div className="flex items-center gap-2 mb-2">
         {phase === 'intro'
@@ -587,7 +600,7 @@ export default function CbatSit() {
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-brand-600 font-bold shrink-0">3.</span>
-                  <span>Two questions per clip, and no second viewing. Answer the question you were asked, and only that one.</span>
+                  <span>Two questions on each clip. The clip plays again before the second one, but you are only told what is being asked after it has finished. Answer the question you were asked, and only that one.</span>
                 </div>
                 <div className="flex items-start gap-2 text-xs text-amber-400/80 pt-1">
                   <span className="shrink-0">⚠️</span>
@@ -601,7 +614,7 @@ export default function CbatSit() {
                   <span>
                     {SIT_CLIPS} clips of {SIT_QUESTIONS_PER_CLIP} questions ·{' '}
                     {Math.round(introTuning.studyMsPerLayer / 1000)}s per layer to study ·{' '}
-                    {(introTuning.clipMs / 1000).toFixed(1)}s clip ·{' '}
+                    {(introTuning.clipMs / 1000).toFixed(1)}s clip before each question ·{' '}
                     {Math.round(introTuning.answerMs / 1000)}s per question
                   </span>
                 </div>
@@ -740,7 +753,13 @@ export default function CbatSit() {
 
                 {phase === 'clip' && (
                   <>
-                    <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-2 text-center">Camera pass</p>
+                    {/* Says which viewing this is, so a player knows whether
+                        another one is coming. It never says what the question
+                        will be — that is still asked afterwards, which is what
+                        stops the second pass becoming a hunt for one class. */}
+                    <p className="text-[10px] text-amber-400 uppercase tracking-wide mb-2 text-center">
+                      Camera pass {questionIdx + 1} of {current.questions.length}
+                    </p>
                     {/* A 3D pass over the ground, not a second map — "a 3D
                         rendered video of the scene", which is a different thing
                         to read than the plan view you studied. The camera moves;
@@ -833,9 +852,15 @@ export default function CbatSit() {
                             data-demo-answer
                             className="w-full px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
                           >
+                            {/* The second question on a clip goes back through
+                                the camera pass, so the button has to say so —
+                                "Next Question" would have the player expecting
+                                a prompt and getting three seconds of video. */}
                             {answers.length >= SIT_ROUNDS
                               ? 'See Results'
-                              : questionIdx + 1 < current.questions.length ? 'Next Question' : 'Next Clip'}
+                              : questionIdx + 1 < current.questions.length
+                                ? 'Watch the clip again'
+                                : 'Next Clip'}
                           </button>
                         </motion.div>
                       )}

@@ -4,11 +4,25 @@ import { sitRoundPlan } from './sitGenerator'
 //
 // Both difficulties ask the SAME eight questions and therefore share a ceiling
 // of 8 — which is what keeps the two leaderboards comparable with every score
-// already on them. Those eight questions now arrive as FOUR clips of two, from
-// the corpus's "about 50 seconds of true/false questions on it, with no replay":
-// several questions off one viewing, not one. A player who knows only one
-// question is coming can watch for one thing and ignore the rest of the frame,
-// which is precisely the habit this test punishes.
+// already on them. Those eight questions arrive as FOUR clips of two: two
+// questions on the same ground, so a player who knows only one question is
+// coming cannot watch for one thing and ignore the rest of the frame.
+//
+// THE CLIP RUNS AGAIN BEFORE THE SECOND QUESTION. It used to run once per clip
+// and carry both questions, on the strength of "about 50 seconds of true/false
+// questions on it, with no replay" — but that line is guide prose with no
+// candidate account behind it. The only sourced figure for this test is
+// "a brief 2-3 second clip" (Discord dump line 592), and it reads as one
+// question per viewing. Two questions off a single 2.5s pass was therefore our
+// own stacking, on top of a clip that is materially harder to read than the one
+// that account describes: SitClipScene draws an oblique 3D pass with
+// perspective, foreshortening and occlusion, not a turned plan view.
+//
+// Re-running the same clip is not a replay in the sense the guide means. The
+// question is still asked AFTER the viewing, so the player still has to take in
+// the whole frame each time and cannot watch for one class. What it buys is the
+// looking time the 3D render costs, without inventing a duration no source
+// supports.
 //
 // What Easier changes is the load inside a clip:
 //
@@ -18,7 +32,7 @@ import { sitRoundPlan } from './sitGenerator'
 //   • the clip is rotated 180° only, never 90° or 270°. A half-turn is the one
 //     rotation you can read off without re-deriving which way is which — every
 //     cell simply moves to the opposite corner
-//   • longer on each study layer, and twice as long to look at the clip
+//   • longer on each study layer, and longer on each look at the clip
 //
 // Deliberately NOT changed: the question count, the grid, the scoring, the fact
 // that the study phase shows one isolated LAYER at a time, and the distractor
@@ -36,7 +50,8 @@ export const DEFAULT_SIT_DIFFICULTY = 'easier'
 // Matches FLAG's, CUT's and Numerical Operations' launch flash.
 export const SIT_LAUNCH_MS = 1000
 
-// Four clips of two questions. Same on both difficulties — see the note above.
+// Four clips of two questions, each question preceded by its own viewing of that
+// clip. Same on both difficulties — see the note above.
 export const SIT_CLIPS = 4
 export const SIT_QUESTIONS_PER_CLIP = 2
 export const SIT_ROUNDS = SIT_CLIPS * SIT_QUESTIONS_PER_CLIP
@@ -71,7 +86,10 @@ export const SIT_TUNING = {
     classPool: ['farm', 'truck', 'troops', 'trees', 'aircraft', 'helicopter'],
     rotations: [90, 180, 270],
     studyMsPerLayer: 10000,
-    clipMs: 2500,
+    // The top of the only sourced range — "a brief 2-3 second clip". Hard sits
+    // at the long end rather than the short one because our clip is an oblique
+    // 3D pass, which takes longer to read than whatever that account saw.
+    clipMs: 3000,
     answerMs: 15000,
 
     grades: { outstanding: 7, good: 5, needsWork: 3 },
@@ -108,7 +126,11 @@ export function sitPhaseMs(tuning) {
   }
   return {
     study,
-    clips: SIT_CLIPS * tuning.clipMs,
+    // Per QUESTION, not per clip: the clip runs again before the second question
+    // on the same ground, so a run watches SIT_ROUNDS passes across SIT_CLIPS
+    // scenes. Counting clips here would understate every run by half the
+    // watching.
+    clips: SIT_ROUNDS * tuning.clipMs,
     answers: SIT_ROUNDS * tuning.answerMs,
   }
 }

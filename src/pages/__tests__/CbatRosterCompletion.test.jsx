@@ -352,9 +352,42 @@ describe('SIT — run structure', () => {
     act(() => { vi.advanceTimersByTime(1100) })
     act(() => { press(screen.getByText(/Skip study time/)) })
 
-    // Just under the clip window (2.5s easier is 4s) — still on the clip.
+    // Just under the clip window (3s on Hard, 4s on Easier) — still on the clip.
     act(() => { vi.advanceTimersByTime(3500) })
     expect(screen.getByText(/Camera pass/)).toBeTruthy()
+  })
+
+  it('plays the clip again before the second question on it', () => {
+    // Two questions used to come off a single viewing. The only sourced figure
+    // for the real test is "a brief 2-3 second clip", and it reads as one
+    // question per viewing — so each question now gets its own pass over the
+    // same ground, with the question still asked afterwards.
+    renderPage(CbatSit)
+    act(() => { press(screen.getByText('Start')) })
+    act(() => { vi.advanceTimersByTime(1100) })
+    act(() => { press(screen.getByText(/Skip study time/)) })
+
+    // 1500ms is the ceiling the page waits for WebGL before starting the clip
+    // window; jsdom renders the flat fallback, which never reports itself ready.
+    expect(screen.getByText(/Camera pass 1 of 2/)).toBeTruthy()
+    // Two steps: the ready ceiling has to flush and re-run the phase effect
+    // before the clip window is even scheduled.
+    act(() => { vi.advanceTimersByTime(1500) })
+    act(() => { vi.advanceTimersByTime(4500) })
+
+    // First question, answered.
+    expect(screen.getByText(/Question 1 of 2 on this clip/)).toBeTruthy()
+    act(() => { press(screen.getByText('Yes')) })
+
+    // Back through the camera pass, NOT straight to the second question.
+    act(() => { press(screen.getByText(/Watch the clip again/)) })
+    expect(screen.getByText(/Camera pass 2 of 2/)).toBeTruthy()
+    expect(screen.queryByText(/Question 2 of 2 on this clip/)).toBeNull()
+
+    // And the second question only arrives once that viewing has run.
+    act(() => { vi.advanceTimersByTime(1500) })
+    act(() => { vi.advanceTimersByTime(4500) })
+    expect(screen.getByText(/Question 2 of 2 on this clip/)).toBeTruthy()
   })
 })
 
