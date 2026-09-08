@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../../context/AuthContext'
 import Overlay from '../../../components/ui/Overlay'
-import { agentLabel, formatRelative } from '../format'
+import { agentLabel, formatRelative, formatStamp } from '../format'
 
 // Who has read one of your own messages. Opened by resting the pointer on the
 // message for a moment — see the hover-intent timer in MessageList.
@@ -42,12 +42,39 @@ export default function SeenByDialog({ message, onClose }) {
   return (
     <Overlay onDismiss={onClose} className="flex items-center justify-center px-4">
       <div className="w-full max-w-xs bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+        {/* The message is the subject of this dialog, so it reads as the title
+            and the label goes down onto the list it actually labels. "Seen by"
+            sitting up here put two lines of context between a heading and the
+            names it introduced, which is a heading pointing at nothing. */}
         <div className="px-4 py-3 border-b border-slate-200">
-          <p className="text-sm font-bold text-slate-700">Seen by</p>
-          <p className="text-[11px] text-slate-400 truncate">{message.body}</p>
+          <p className="text-sm font-semibold text-slate-700 truncate">{message.body}</p>
+          {/* When it was posted, in full. "Who has read this" is a question
+              about a moment, and the answer is unreadable without one: three
+              readers means something different an hour after posting than it
+              does a week after. formatStamp rather than the list's relative
+              time, for the same reason — this is a dated record, not a line of
+              conversation, so it carries the year. */}
+          {message.createdAt && (
+            <p className="text-[11px] text-slate-400 mt-0.5" data-testid="seen-by-posted">
+              Posted {formatStamp(message.createdAt)}
+            </p>
+          )}
         </div>
 
-        <div className="max-h-64 overflow-y-auto px-4 py-2">
+        {/* Outside the scrolling box below, so the label stays put while a long
+            list of readers moves under it. The count goes here rather than only
+            in the truncation note, because "how many" is most of what this
+            dialog is opened to find out. */}
+        <div className="flex items-baseline justify-between gap-3 px-4 pt-3 pb-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Seen by</p>
+          {!loading && !err && total > 0 && (
+            <p className="text-[10px] text-slate-400" data-testid="seen-by-count">
+              {total} {total === 1 ? 'agent' : 'agents'}
+            </p>
+          )}
+        </div>
+
+        <div className="max-h-64 overflow-y-auto px-4 pb-2">
           {loading ? (
             <p className="text-sm text-slate-400 py-4 text-center">Loading…</p>
           ) : err ? (
