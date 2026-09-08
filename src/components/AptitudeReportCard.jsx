@@ -47,34 +47,37 @@ import {
 // copy it across.
 //
 // The `sm:` half of each pair is the card as it has always been on a desktop. The bare half is
-// the phone form, which is a different shape rather than a scaled one: the verdict moves up
-// beside the eyebrow, so the scored card becomes two text lines and a rail instead of three and a
-// rail, and every box loses padding. That takes it from roughly 135px to roughly 72px. The grid
-// below needs about 460px for its six rows of tiles, and a small phone only has 540-570px of
-// viewport under the app chrome, so the 60-odd pixels are most of a grid row bought back.
+// the phone form, which is a scaled-down version of the same shape rather than a different one:
+// every box loses padding and drops a size. That takes the card from roughly 135px to roughly
+// 83px. The grid below needs about 460px for its six rows of tiles, and a small phone only has
+// 540-570px of viewport under the app chrome, so the 50-odd pixels are most of a grid row bought
+// back.
 //
-// A progress card keeps its action line on a phone, where the scored card drops its verdict. It
-// cannot do the same trick, because the line it would drop is the next action, and the action is
-// the whole reason to show this card to someone with no score. That is one line — about eleven
-// pixels — and it is why the skeleton mirrors the PROGRESS shape rather than the scored one: the
-// skeleton has to be the taller of the two, so the grid below settles upward when the card lands
-// rather than being shoved down.
+// EVERY STATE IS THREE TEXT LINES AND A RAIL, AT EVERY WIDTH — skeleton, progress and scored
+// alike. The phone card used to save one more line by moving the scored verdict up beside the
+// eyebrow, on the reasoning that eleven pixels is most of a tile row. It is not worth it: a
+// progress card cannot play the same trick, because the line it would drop is the next action and
+// the action is the whole reason to show this card to someone with no score. So the skeleton has
+// to reserve three lines, and a scored card landing into it snapped the grid up by a line — the
+// same shift the skeleton exists to prevent, just in the other direction and only on the screens
+// with the least room to absorb it. One shape everywhere costs eleven pixels once and never
+// moves.
 const CARD_WRAP    = 'mb-3 sm:mb-5'
 const CARD_STRIPE  = 'w-1.5 sm:w-2 shrink-0'
 const CARD_BODY    = 'flex-1 min-w-0 p-2 sm:p-4'
 const CARD_EYEBROW = 'flex-1 min-w-0 truncate text-[9px] leading-[1.2] sm:text-[10px] sm:leading-normal uppercase tracking-wide'
 const CARD_SCORE   = 'font-mono font-extrabold text-lg sm:text-2xl leading-tight'
 const CARD_UNIT    = 'text-[11px] sm:text-sm font-bold'
-const CARD_NOTE    = 'text-[9px] leading-[1.2] font-bold'
 const CARD_ACTION  = 'text-[9px] leading-[1.2] sm:text-[11px] font-bold truncate'
 const CARD_OPEN    = 'shrink-0 text-[10px] sm:text-xs font-bold'
 const CARD_RAIL    = 'relative mt-1 h-1.5 sm:mt-3 sm:h-2 bg-[#060e1a] border border-[#1a3a5c] rounded-sm overflow-hidden'
 const CARD_SHELL   = 'block bg-surface border border-slate-200 rounded-xl sm:rounded-2xl overflow-hidden card-shadow'
 
-// The states are not all the same height — the scored card is a line shorter on a phone — so the
-// swap out of the skeleton is a size change, and a size change that lands in one frame reads as a
-// glitch. One persistent wrapper owns the outer box for every state, which is what lets
-// framer-motion's `layout` measure the before and the after and glide between them.
+// The states are built to be the same height, but "built to be" is not "guaranteed to be" — a
+// role name that wraps, a font that loads late, a future state — and a size change that lands in
+// one frame reads as a glitch. One persistent wrapper owns the outer box for every state, which is
+// what lets framer-motion's `layout` measure the before and the after and glide between them
+// instead of snapping.
 const LAYOUT_TRANSITION = { duration: 0.3, ease: 'easeOut' }
 
 const RUNS_TO_COUNT_FALLBACK = 3   // only for a payload served before runsToCount existed
@@ -306,16 +309,15 @@ function ScoredCard({ target, label }) {
           }`}
         />
         <div data-testid="aptitude-card-body" className={CARD_BODY}>
-          {/* Eyebrow row. On a phone the verdict rides up here beside the role name, which is
-              what removes a whole line from the card; from `sm` it drops back under the score,
-              where the desktop card has always had room for it. The eyebrow truncates because
+          {/* Eyebrow row. The verdict used to ride up here beside the role name on a phone, to
+              buy the card a line; it now stays under the score at every width, because the line
+              it saved was a line the skeleton had already reserved. The eyebrow still truncates:
               the longest role — "WSOP (Air Signaller, Linguist)" — is 30 characters and would
-              otherwise push the verdict off the right edge of a 360px screen. */}
+              otherwise run off the right edge of a 360px screen. */}
           <div className="flex items-baseline gap-2">
             <p data-testid="aptitude-card-eyebrow" className={`${CARD_EYEBROW} text-slate-500`}>
               Aptitude Report &middot; {label}
             </p>
-            <span className={`sm:hidden shrink-0 ${CARD_NOTE} ${TONE_TEXT[verdict.tone]}`}>{verdict.label}</span>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
@@ -331,10 +333,12 @@ function ScoredCard({ target, label }) {
                   three pixels taller than the box held for it. Three pixels over the layout
                   animation's 300ms is below the rate the eye reads as motion, so it landed as a
                   twitch rather than a glide. Take the geometry from the constant and it cannot
-                  drift again. */}
+                  drift again. It is shown at every width for the same reason: gated `hidden
+                  sm:block`, it left the phone card a line short of the space held for it, so the
+                  grid below jumped up the moment the summary landed. */}
               <p
                 data-testid="aptitude-card-verdict"
-                className={`hidden sm:block ${CARD_ACTION} ${TONE_TEXT[verdict.tone]}`}
+                className={`${CARD_ACTION} ${TONE_TEXT[verdict.tone]}`}
               >{verdict.label}</p>
             </div>
             <span className={`${CARD_OPEN} text-brand-700`}>Open &rarr;</span>
@@ -365,10 +369,12 @@ function ScoredCard({ target, label }) {
 // construction rather than by a hard-coded pixel value that would drift the first time the card
 // changes.
 //
-// It mirrors the PROGRESS shape, which is the taller of the two and the one most users who see a
-// skeleton at all are about to get: anyone whose card is worth waiting for is by definition not
-// yet a returning player with a settled score. A scored card landing instead settles the grid
-// UPWARD by a line, which hides nothing; the reverse would shove the games down.
+// It mirrors the shape every state now shares: three text lines and a rail, at every width. It
+// used to mirror the progress card specifically, on the grounds that it was the taller of the two
+// and a scored card landing into it would only settle the grid UPWARD. That reasoning was wrong on
+// a phone, which is where the two shapes differed: an upward jump is still a jump, and it landed
+// on the screens with the least room to absorb it. The scored card keeps its verdict line at every
+// width now, so there is no taller and shorter shape left to choose between.
 //
 // It shows no number at all. An earlier version rolled a random figure through the score slot to
 // look like arithmetic; it read as a fault, because the one number this card exists to report was

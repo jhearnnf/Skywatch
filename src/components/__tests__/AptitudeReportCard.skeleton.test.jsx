@@ -122,12 +122,13 @@ describe('AptitudeReportCard — loading skeleton', () => {
   // Rendering both and comparing them asserts exactly that, and keeps holding
   // whatever the classes become.
   //
-  // The comparison is against the PROGRESS card, not the scored one. That is the
-  // taller shape (it keeps its action line on a phone, where the scored card
-  // drops its verdict) and the one almost everyone who sees a skeleton at all is
-  // about to get: a user whose card is worth waiting for is by definition not yet
-  // a returning player with a settled score. A scored card landing instead
-  // settles the grid UPWARD by a line, which hides nothing.
+  // Both real shapes are compared, because both have to match. The skeleton used to
+  // mirror the progress card only, on the grounds that it was the taller of the two
+  // and a scored card landing into it would merely settle the grid upward — but an
+  // upward jump is still a jump, and it only happened on a phone, the width with the
+  // least room to absorb it. The scored card carries its verdict line at every width
+  // now, so the two shapes are the same everywhere. It labels that line `verdict`
+  // rather than `action`, so it is compared under its own testid below.
   const HEIGHT_BOXES = ['stripe', 'body', 'eyebrow', 'score', 'action', 'rail']
   const SCORED_BOXES = HEIGHT_BOXES.filter(box => box !== 'action')
 
@@ -176,9 +177,8 @@ describe('AptitudeReportCard — loading skeleton', () => {
     }
   })
 
-  // The scored card has no action line, so it is a line shorter on a phone. Every
-  // box it does share with the skeleton still has to match, or the shrink would be
-  // a jump rather than the one line the layout animation is there to cover.
+  // Every box the scored card shares a testid with has to match; the line it labels
+  // `verdict` instead of `action` is checked in the test after this one.
   it('shares every box it has with the scored card too', async () => {
     const d = deferred()
     const loadingRender = renderWith(vi.fn().mockReturnValue(d.promise))
@@ -194,15 +194,15 @@ describe('AptitudeReportCard — loading skeleton', () => {
     }
   })
 
-  // The one box the two shapes do NOT share a testid for, and the one that drifted.
-  // The scored card's verdict sits where the skeleton's action line sits and is the
-  // last thing above the rail, so its line box has to be the same to the pixel. It
-  // is gated `hidden sm:block` — that is the phone trick, not geometry — so the gate
-  // and the colour come off before the comparison and everything else must match.
+  // The one box the two shapes do NOT share a testid for, and the one that drifted
+  // twice. The scored card's verdict sits where the skeleton's action line sits and
+  // is the last thing above the rail, so its line box has to be the same to the
+  // pixel — colour aside, which is the only thing allowed to differ.
   //
-  // Worth a test of its own because the failure is invisible by eye at rest: three
-  // pixels only shows up as a twitch at the moment the skeleton comes down, which is
-  // the one moment nobody is looking at this card on purpose.
+  // Worth a test of its own because both failures were invisible by eye at rest:
+  // once as three pixels of leading, once as a `hidden sm:block` gate that took the
+  // line away below `sm` entirely. Each showed only at the moment the skeleton came
+  // down, which is the one moment nobody is looking at this card on purpose.
   it('gives the scored verdict line the skeleton action line box', async () => {
     const d = deferred()
     const loading = renderWith(vi.fn().mockReturnValue(d.promise))
@@ -215,8 +215,7 @@ describe('AptitudeReportCard — loading skeleton', () => {
     const verdictLine = scored.container
       .querySelector('[data-testid="aptitude-card-verdict"]').className
 
-    const ungate = c => c.replace(/(?:^|\s)(?:hidden|sm:block)(?=\s|$)/g, '').replace(/\s+/g, ' ').trim()
-    expect(geometry(ungate(verdictLine))).toBe(geometry(skeletonAction))
+    expect(geometry(verdictLine)).toBe(geometry(skeletonAction))
   })
 
   // One wrapper owns the outer spacing for every state, which is what lets the
@@ -241,26 +240,21 @@ describe('AptitudeReportCard — loading skeleton', () => {
     expect(container.querySelector('.stat-skeleton-sweep')).toBeInTheDocument()
   })
 
-  // The scored card only fits on a phone because the verdict moves out of its own
-  // line and up beside the role name: one copy shown below `sm`, one from `sm` up,
-  // each hidden at the other's width. That is what makes it a line shorter there,
-  // and it is the only state that plays the trick.
-  it('keeps the scored phone shape to two text lines', async () => {
-    const scored = renderWith(vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: {
-        targetBattery: 'pilot',
-        batteries: [{ key: 'pilot', score: 72, cutoff: 85, status: 'fail' }],
-      } }),
-    }))
+  // No state may hide a line at one width and show it at another: the skeleton
+  // reserves one box, so a card that renders a different number of lines below `sm`
+  // than above it cannot land in that box at both widths. The scored card used to
+  // carry two copies of its verdict — one `sm:hidden` up beside the eyebrow, one
+  // `hidden sm:block` under the score — and that shrink is what this pins against
+  // coming back.
+  it('renders the same number of text lines at every width', async () => {
+    const scored = renderWith(vi.fn().mockResolvedValue(summary()))
     await waitFor(() => expect(skeleton()).toBeNull())
-    expect(scored.container.querySelector('.sm\\:hidden')).toBeInTheDocument()
-    expect(scored.container.querySelector('.hidden.sm\\:block')).toBeInTheDocument()
+    expect(scored.container.querySelector('.sm\\:hidden')).toBeNull()
+    expect(scored.container.querySelector('.hidden')).toBeNull()
   })
 
-  // The skeleton does not, because it is holding space for a progress card, whose
-  // action line is shown at every width. A hidden-on-mobile line in the skeleton
-  // would hold a shorter box than the card that replaces it.
+  // The skeleton has never played the trick, and must not start: a hidden-on-mobile
+  // line here would hold a shorter box than the card that replaces it.
   it('shows the skeleton action line at every width', () => {
     const d = deferred()
     const { container } = renderWith(vi.fn().mockReturnValue(d.promise))
