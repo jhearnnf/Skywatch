@@ -33,7 +33,24 @@ vi.mock('framer-motion', () => ({
       <span className={className} style={style} data-x={animate?.x} {...dataOnly(rest)}>{children}</span>
     ),
   },
+  useScroll:    () => ({ scrollY: 0 }),
+  useTransform: () => 0,
 }))
+
+// jsdom has no matchMedia, and the hub asks it which of the two homes the
+// lounge chat is mounted in. Answering "no" puts it in the panel under the
+// grid, which is the phone layout every test here renders at. `setWideViewport`
+// below flips it for the one case that needs the desktop side column.
+let matchMediaResult = false
+window.matchMedia = (query) => ({
+  media: query,
+  matches: matchMediaResult,
+  addEventListener() {},
+  removeEventListener() {},
+  addListener() {},
+  removeListener() {},
+})
+function setWideViewport(wide) { matchMediaResult = wide }
 
 // Motion props (initial/animate/transition/exit) are objects React would warn
 // about on a DOM node, so only the data-* attributes are forwarded.
@@ -261,9 +278,15 @@ describe('Cbat page — dense mobile grid', () => {
 
   // The report link sits on the bottom edge of the page rather than trailing the
   // last row of tiles, which on a phone leaves it stranded mid-screen.
+  // The pin lives on the wrapper rather than the strip itself: below `lg` the
+  // CBAT LOUNGE landmark sits under the strip and the two have to move as one.
+  // Two siblings both asking for `mt-auto` would split the slack between them
+  // and strand the landmark in the middle of the gap.
   it('pushes the report link to the bottom of the page', () => {
     renderWithUser()
-    expect(screen.getByTestId('cbat-footer-report').className).toContain('mt-auto')
+    const bottom = screen.getByTestId('cbat-page-bottom')
+    expect(bottom.className).toContain('mt-auto')
+    expect(bottom).toContainElement(screen.getByTestId('cbat-footer-report'))
   })
 
   // The strip is a sibling of the two-column row, not a child of its left
@@ -736,5 +759,88 @@ describe('Cbat page — who is in which game (admin only)', () => {
       .map(n => n.dataset.cbatCard)
 
     expect(marked).toEqual(CBAT_GAMES.filter(g => !g.hidden).map(g => g.key))
+  })
+})
+
+// A phone has nowhere to dock the permanent chat panel the desktop side column
+// gives it, so the lounge gets announced on the bottom edge of the hub and lives
+// one swipe below the fold — the same gesture the NEWS landmark uses on Home.
+describe('CBAT hub — the CBAT LOUNGE landmark', () => {
+  beforeEach(() => {
+    mockUseAuth.mockReset()
+    localStorage.clear()
+    setWideViewport(false)
+  })
+
+  it('announces the room under the report strip, below lg only', () => {
+    renderWithUser()
+    const landmark = screen.getByTestId('cbat-lounge-landmark')
+    expect(landmark).toHaveTextContent('CBAT LOUNGE')
+    expect(landmark.className).toContain('lg:hidden')
+  })
+
+  // jsdom's matchMedia always reports false, so these render at the phone width
+  // the landmark exists for. Which is the point of the gate being a query rather
+  // than `hidden lg:block`: a CSS-hidden copy is still mounted, and two mounted
+  // copies mean two EventSources on one channel, two read receipts and two
+  // answers to the typing indicator.
+  it('mounts exactly one copy of the chat, in the panel and not the column', () => {
+    renderWithUser()
+    const panel = screen.getByTestId('cbat-lounge-panel')
+    // The widget's own header/tab label, which is the one thing only it renders.
+    const headers = screen.getAllByText('🛩️ CBAT Lounge')
+    expect(headers).toHaveLength(1)
+    expect(panel).toContainElement(headers[0])
+  })
+
+  // The other way round from lg up: the column keeps the chat and the panel
+  // under the grid is not rendered at all, so there is still only ever one.
+  it('hands the chat back to the side column at lg and up', () => {
+    setWideViewport(true)
+    renderWithUser()
+    expect(screen.queryByTestId('cbat-lounge-panel')).toBeNull()
+    expect(screen.getAllByText('🛩️ CBAT Lounge')).toHaveLength(1)
+  })
+
+  // Below the strip, not above it: the landmark is the last thing on the first
+  // screen, so the swipe it is asking for goes past everything else on the page.
+  it('sits below the report strip inside the pinned bottom block', () => {
+    renderWithUser()
+    const bottom = screen.getByTestId('cbat-page-bottom')
+    const kids = Array.from(bottom.children)
+    expect(kids.indexOf(screen.getByTestId('cbat-footer-report')))
+      .toBeLessThan(kids.indexOf(screen.getByTestId('cbat-lounge-landmark')))
+  })
+
+  // The chat is ~60dvh tall. Inside `.cbat-page` — the box sized to end exactly
+  // at the fold — that height would eat the slack `mt-auto` needs and drag the
+  // footer and landmark up under the last row of tiles.
+  it('keeps the chat panel outside the first screen', () => {
+    renderWithUser()
+    const page  = document.querySelector('.cbat-page')
+    const panel = screen.getByTestId('cbat-lounge-panel')
+    expect(page.contains(panel)).toBe(false)
+  })
+
+  // CbatLoungeChat's message list is `flex-1 min-h-0 overflow-y-auto`, which
+  // collapses to nothing in an auto-height parent — but only while it is open.
+  // Collapsed it is a tab, and 60dvh of empty space under a tab is a hole.
+  it('gives the open panel a height and the collapsed one none', () => {
+    renderWithUser()
+    expect(screen.getByTestId('cbat-lounge-panel').className).toContain('h-[60dvh]')
+
+    cleanup()
+    localStorage.setItem('skywatch.cbatLounge.open', 'closed')
+    renderWithUser()
+    expect(screen.getByTestId('cbat-lounge-panel').className).not.toContain('h-[60dvh]')
+  })
+
+  // Nothing to talk in and nothing to sign in as: the widget itself renders null
+  // in both cases, and a landmark pointing at an empty page is worse than none.
+  it('is absent when signed out', () => {
+    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: vi.fn() })
+    render(<Cbat />)
+    expect(screen.queryByTestId('cbat-lounge-landmark')).toBeNull()
+    expect(screen.queryByTestId('cbat-lounge-panel')).toBeNull()
   })
 })

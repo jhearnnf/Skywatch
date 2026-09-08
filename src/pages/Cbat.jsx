@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, useScroll, useTransform } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
@@ -387,6 +387,50 @@ export default function Cbat() {
     return () => document.body.classList.remove('cbat-recent-wide')
   }, [user])
 
+  // The lounge landmark + chat section under the grid. Below `lg` only: from
+  // there up the chat already has a permanent home in the side column, and a
+  // second copy of the same room on one page would be two live EventSources on
+  // one conversation. Gated on the same two things the widget itself is — a
+  // session and the chatEnabled flag — so the landmark never advertises a room
+  // that renders as nothing underneath it.
+  const showLoungeLanding = Boolean(user) && settings?.chatEnabled !== false
+  const loungeRef = useRef(null)
+
+  // Which of the two homes the chat is mounted in. A media query rather than
+  // `hidden lg:block` / `lg:hidden`, because those hide a component that has
+  // still mounted: both copies would open an EventSource on the same channel,
+  // both would mark it read, and both would answer the typing indicator. Only
+  // one CbatLoungeChat exists on this page at any width.
+  const [loungeInColumn, setLoungeInColumn] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const onChange = (e) => setLoungeInColumn(e.matches)
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
+
+  // Scroll-driven reveal for that landmark, mirroring the NEWS landmark on
+  // Home: the word starts as a ghost at the bottom edge of the first screen and
+  // lights up as the chat scrolls into view, and the chevron — a "swipe down"
+  // cue — fades out once you have taken the hint.
+  //
+  // Absolute px thresholds, and shorter ones than Home's. Home has a long news
+  // list under its landmark, so it has hundreds of pixels of scroll to play
+  // with; here the only thing below the fold is the chat panel, so the whole
+  // page scrolls by about its own height — 60dvh, which is 360px on a small
+  // phone. Everything therefore has to be fully lit by ~220px, or a short
+  // screen would reach the bottom of the page with the panel still fading in.
+  const { scrollY } = useScroll()
+  const loungeHeadingColor  = useTransform(scrollY, [40, 220], ['rgba(91,170,255,0.16)', 'rgba(91,170,255,0.55)'])
+  const loungeHeadingShadow = useTransform(scrollY, [40, 220], ['0 0 60px rgba(91,170,255,0.15)', '0 0 80px rgba(91,170,255,0.45)'])
+  const loungeEyebrowOpacity = useTransform(scrollY, [40, 220], [0.55, 1])
+  const loungeChevronOpacity = useTransform(scrollY, [60, 180], [1, 0])
+  const loungePanelOpacity   = useTransform(scrollY, [40, 200], [0, 1])
+  const loungePanelY         = useTransform(scrollY, [40, 200], [24, 0])
+
   // Phone-height relief for the hub. /cbat/* game routes already get their top
   // padding cut by `.cbat-route`, but the hub deliberately does not carry that
   // class, so it still pays .app-shell-content's full py-6 — 48px spent above a
@@ -428,6 +472,13 @@ export default function Cbat() {
     // py-6) + 5 BottomNav = 10rem. sm and up: the full py-6 is paid, so 11.5rem —
     // .app-shell-main's 5rem is unlayered and beats its own md:pb-6, so the
     // BottomNav's reservation is held at desktop width too.
+    //
+    // The outer div is not decoration. `.cbat-page` below is the first screen —
+    // a box exactly as tall as the viewport — and the lounge chat has to sit
+    // OUTSIDE it, or its ~70dvh would count as content inside the box, leave no
+    // slack for `mt-auto` to take, and drag the footer and the CBAT LOUNGE
+    // landmark up under the last row of tiles instead of onto the bottom edge.
+    <div className="relative">
     <div className="cbat-page flex flex-col min-h-[calc(100dvh-10rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:min-h-[calc(100dvh-11.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
       <SEO
         title="CBAT Practice Tests"
@@ -716,10 +767,10 @@ export default function Cbat() {
                   <CbatAdminViewToggle />
                 </div>
               )}
-              <div className={`${loungeOpen ? 'flex-[3]' : 'flex-1'} min-h-0`}>
+              <div className={`${loungeOpen && loungeInColumn ? 'flex-[3]' : 'flex-1'} min-h-0`}>
                 <RecentCbatScores fill />
               </div>
-              <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} />
+              {loungeInColumn && <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} />}
             </div>
           </aside>
         )}
@@ -766,9 +817,15 @@ export default function Cbat() {
           340px column + gap-6 (24px) = 364px, and only when there is a column
           to miss — it renders for signed-in users at lg only, which is exactly
           when the margin applies. */}
+      {/* The bottom of the first screen, and the thing `mt-auto` now applies to.
+          It holds the footer strip and, below `lg`, the CBAT LOUNGE landmark —
+          they have to be pinned as one unit, because two siblings both asking
+          for `mt-auto` would split the slack between them and leave the
+          landmark floating in the middle of a gap instead of on the edge. */}
+      <div data-testid="cbat-page-bottom" className="mt-auto">
       <div
         data-testid="cbat-footer-report"
-        className={`mt-auto pt-1 sm:pt-6 sm:border-t sm:border-slate-200${reportInGrid ? ' hidden sm:block' : ''}${user ? ' lg:mr-[364px]' : ''}`}
+        className={`pt-1 sm:pt-6 sm:border-t sm:border-slate-200${reportInGrid ? ' hidden sm:block' : ''}${user ? ' lg:mr-[364px]' : ''}`}
       >
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-center text-[10px] sm:text-xs text-slate-500">
           {!SLIM_APP && (
@@ -800,6 +857,147 @@ export default function Cbat() {
           </p>
         </div>
       </div>
+
+      {/* CBAT LOUNGE landmark — the bottom edge of the first screen, below `lg`
+          only. It is the mobile answer to the side column: a phone has nowhere
+          to dock a permanent chat panel, so the room gets announced here and
+          lives one swipe below the fold.
+
+          Lifted straight from the NEWS landmark on Home, and deliberately so —
+          it is the same gesture (a word on the bottom edge, a swaying chevron,
+          a section that fades in as you scroll into it) and someone who has
+          used one already knows what this one does. What changes is the colour:
+          NEWS is amber because it points at intel briefs; this is brand blue,
+          because everything on this page is.
+
+          Smaller than Home's, though. Home's landmark sits under a short hero
+          with slack to spare; this one is under 22 tiles that are tuned to end
+          at the fold, so the whole block is about 110px — enough to read as a
+          landmark, little enough that it does not push the last row of games
+          off a 667px phone.
+
+          A button, not just a heading: the chevron says "swipe down", but a tap
+          is the more obvious gesture and it should not be a dead one. */}
+      {showLoungeLanding && (
+        <button
+          type="button"
+          data-testid="cbat-lounge-landmark"
+          onClick={() => loungeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="lg:hidden relative w-full py-3 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
+          aria-label="CBAT Lounge — go to the chat"
+        >
+          {/* Ambient blue radial glow for depth — matches the radar tint below */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            aria-hidden="true"
+            style={{
+              background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(91,170,255,0.10) 0%, rgba(91,170,255,0.04) 40%, transparent 75%)',
+            }}
+          />
+          {/* Radar scan — static rings + slow-rotating conic sweep, behind the
+              word. Opacities stay in the 0.04-0.09 band so it reads as backdrop
+              rather than competing with the (semi-transparent) letters. */}
+          <div
+            className="absolute inset-0 pointer-events-none flex items-center justify-center"
+            aria-hidden="true"
+            style={{ zIndex: 0 }}
+          >
+            <div
+              className="relative"
+              style={{
+                width: 'min(60vh, 520px)',
+                aspectRatio: '1',
+                WebkitMaskImage: 'radial-gradient(circle, black 20%, rgba(0,0,0,0.6) 45%, transparent 75%)',
+                maskImage: 'radial-gradient(circle, black 20%, rgba(0,0,0,0.6) 45%, transparent 75%)',
+              }}
+            >
+              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 200 200">
+                <g fill="none" stroke="rgba(91,170,255,0.07)" strokeWidth="0.4">
+                  <circle cx="100" cy="100" r="95" />
+                  <circle cx="100" cy="100" r="72" />
+                  <circle cx="100" cy="100" r="48" />
+                  <circle cx="100" cy="100" r="24" />
+                  <line x1="5"  y1="100" x2="195" y2="100" />
+                  <line x1="100" y1="5" x2="100" y2="195" />
+                </g>
+                <g stroke="rgba(91,170,255,0.04)" strokeWidth="0.3">
+                  <line x1="33" y1="33"  x2="167" y2="167" />
+                  <line x1="33" y1="167" x2="167" y2="33"  />
+                </g>
+              </svg>
+              <div
+                className="absolute inset-0 rounded-full home-radar-sweep"
+                style={{
+                  background: 'conic-gradient(from 0deg, transparent 0deg, rgba(91,170,255,0.09) 22deg, rgba(91,170,255,0.03) 60deg, transparent 95deg, transparent 360deg)',
+                }}
+              />
+            </div>
+          </div>
+          {/* Top hairline accent */}
+          <div
+            className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-28"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(91,170,255,0.35), transparent)' }}
+          />
+          <motion.span
+            className="relative block font-black leading-none tracking-[0.15em] text-[1.75rem] sm:text-[3rem]"
+            style={{
+              color:      loungeHeadingColor,
+              textShadow: loungeHeadingShadow,
+              zIndex:     1,
+            }}
+          >
+            CBAT LOUNGE
+          </motion.span>
+          <motion.span
+            className="relative flex items-center gap-3 mt-1.5"
+            style={{ zIndex: 1, opacity: loungeEyebrowOpacity }}
+          >
+            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
+            <span
+              className="text-[10px] font-bold uppercase tracking-[0.35em]"
+              style={{ color: 'rgba(91,170,255,0.6)' }}
+            >
+              Talk to other agents
+            </span>
+            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
+          </motion.span>
+          <motion.span
+            className="relative block mt-2"
+            aria-hidden="true"
+            style={{ color: 'rgba(91,170,255,0.55)', zIndex: 1, opacity: loungeChevronOpacity }}
+          >
+            <span className="home-chevron-sway block">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </motion.span>
+        </button>
+      )}
+      </div>
+
+      {/* End of the first screen — close `.cbat-page` */}
+      </div>
+
+      {/* The room itself, one swipe below the fold. Outside `.cbat-page` for the
+          reason given at the top of this return, and gone entirely — not just
+          hidden — once the side column has it instead. See `loungeInColumn`.
+
+          The fixed height is what makes the panel work at all: CbatLoungeChat's
+          message list is `flex-1 min-h-0 overflow-y-auto`, which collapses to
+          nothing inside an auto-height parent. Only while it is open, though —
+          collapsed it is a tab, and 60dvh of empty space under a tab is just a
+          hole in the page. */}
+      {showLoungeLanding && !loungeInColumn && (
+        <motion.div
+          ref={loungeRef}
+          data-testid="cbat-lounge-panel"
+          className={`flex flex-col ${loungeOpen ? 'h-[60dvh] min-h-[360px]' : ''}`}
+          style={{ opacity: loungePanelOpacity, y: loungePanelY }}
+        >
+          <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} />
+        </motion.div>
+      )}
 
       {pcNoteOpen && <PlayOnPcNote onClose={() => setPcNoteOpen(false)} />}
     </div>
