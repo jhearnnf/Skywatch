@@ -58,18 +58,40 @@ const chatMessageSchema = new mongoose.Schema({
   // already been announced rather than offering it again.
   announcedCommitShas: { type: [String], default: undefined },
 
-  // Admin edit. `editedAt` is what renders the "(edited)" marker to everyone —
-  // a moderator silently rewriting what someone said would be worse than
-  // leaving it up. `originalBody` is captured on the FIRST edit only, so the
-  // moderation record still holds what was actually posted no matter how many
-  // times the text is subsequently tidied.
+  // Edits, by a moderator or by the author. `editedAt` is what renders the
+  // "(edited)" marker to everyone — someone silently rewriting what they said
+  // after it was answered would be worse than leaving it up. `originalBody` is
+  // captured on the FIRST edit only, so the record still holds what was
+  // actually posted no matter how many times the text is subsequently tidied.
   editedAt:       { type: Date, default: null },
   editedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   originalBody:   { type: String, default: null },
 
-  // Soft delete. The body is preserved so admins can still read what was said
-  // — a moderation record that erases the evidence is useless. Non-admin
-  // readers get a "Message removed by a moderator" placeholder instead.
+  // Every superseded revision, oldest first — `originalBody` widened to the
+  // full history once authors could edit their own messages too. Each entry is
+  // the body as it stood BEFORE that edit, so `edits[0].body` is what was
+  // posted and the live `body` is the current text; a message edited N times
+  // has N entries.
+  //
+  // Admin-only on read (see serializeMessage). A visible history would turn
+  // every correction into a permanent public record of the mistake, which is
+  // the opposite of what letting people fix a typo is for — but a moderator
+  // still needs to see what a message said before its author changed it.
+  //
+  // `originalBody` is still written alongside, because messages edited before
+  // this field existed have nothing else to fall back on.
+  edits: [{
+    _id:            false,
+    body:           { type: String, required: true },
+    editedAt:       { type: Date, required: true },
+    editedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  }],
+
+  // Soft delete, by a moderator or by the author. The body is preserved so
+  // admins can still read what was said — a moderation record that erases the
+  // evidence is useless. Everyone else never receives the message at all.
+  // `deletedByUserId` is what separates the two cases on an admin's screen:
+  // equal to `senderUserId` means the author withdrew it themselves.
   deletedAt:        { type: Date, default: null },
   deletedByUserId:  { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 });

@@ -39,6 +39,25 @@ const REACTION_EMOJI = ['👍', '🎉', '🔥', '👏', '😮', '❤️'];
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
+// How long an author may edit or withdraw their own message.
+//
+// A window rather than forever, because a conversation is a shared record: an
+// hour covers what people actually want this for — a typo, a wrong number, a
+// real name they did not mean to post — while stopping someone quietly rewriting
+// a thread other people have already replied to. Both edits keep a record
+// anyway (see `edits` on the model and the "(edited)" marker), so the window is
+// about the READER's experience, not about hiding evidence.
+//
+// Admins are exempt: moderation has no deadline, and an admin's own old message
+// is theirs to fix too.
+const SELF_ACTION_WINDOW_MS = 60 * 60 * 1000;
+
+function withinSelfWindow(m) {
+  const at = m?.createdAt ? new Date(m.createdAt).getTime() : NaN;
+  if (Number.isNaN(at)) return false;
+  return Date.now() - at < SELF_ACTION_WINDOW_MS;
+}
+
 // ── Feature-flag gate ────────────────────────────────────────────────────────
 async function chatGate(req, res, next) {
   try {
@@ -423,6 +442,15 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
   const deleted = Boolean(m.deletedAt);
   const hideBody = deleted && !viewerIsAdmin;
 
+  // Whether THIS viewer may edit or remove THIS message, decided here rather
+  // than in the client. The rule has a clock in it, and a client comparing its
+  // own clock against a createdAt would offer a button the server then refuses
+  // — worse than not offering it. Both surfaces (the full room and the CBAT
+  // lounge widget) read these two booleans and neither knows the rule.
+  const isMine    = Boolean(viewerId) && String(m.senderUserId ?? '') === String(viewerId);
+  const actionable = !deleted && m.senderRole !== 'system';
+  const canAct    = actionable && (viewerIsAdmin || (isMine && withinSelfWindow(m)));
+
   // Support threads present all admin replies as one support identity.
   const label = conversationType === 'support' && m.senderRole === 'admin' && !viewerIsAdmin
     ? SUPPORT_LABEL
@@ -442,7 +470,29 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
     // The pre-edit text goes only to admins — it is the moderation record.
     edited:            Boolean(m.editedAt),
     editedAt:          m.editedAt ?? null,
-    ...(viewerIsAdmin ? { originalBody: m.originalBody ?? null } : {}),
+    ...(viewerIsAdmin ? {
+      originalBody: m.originalBody ?? null,
+      // The full revision history, oldest first. Admin-only: see the note on
+      // `edits` in models/ChatMessage.js. Falls back to the single
+      // `originalBody` for messages edited before the array existed, so an old
+      // moderation record still opens rather than showing an empty dialog.
+      edits: (m.edits ?? []).length
+        ? m.edits.map(e => ({
+          body:           e.body,
+          editedAt:       e.editedAt,
+          editedByUserId: e.editedByUserId ?? null,
+        }))
+        : (m.originalBody
+          ? [{ body: m.originalBody, editedAt: m.editedAt ?? null, editedByUserId: m.editedByUserId ?? null }]
+          : []),
+      // Who removed it. Equal to senderUserId means the author withdrew it;
+      // anyone else means a moderator did. The client says which.
+      deletedByUserId: m.deletedByUserId ?? null,
+    } : {}),
+    // What this viewer is allowed to do with it. Always present, always the
+    // server's answer.
+    canEdit:           canAct,
+    canDelete:         canAct,
     createdAt:         m.createdAt,
     // Ids only. The client already has every sender's profile in `senders`, and
     // the highlight is driven by matching the literal "@Name" text in the body,
@@ -2133,6 +2183,126 @@ router.post('/messages/:id/report', async (req, res) => {
   }
 });
 
+// ── Your own messages ────────────────────────────────────────────────────────
+//
+// The author's half of the two moderation routes further down. Same soft
+// delete, same "(edited)" marker, same preserved history — the only differences
+// are who may call them, the one-hour window (SELF_ACTION_WINDOW_MS), and that
+// they write no AdminAction, because withdrawing your own typo is not a
+// moderation event.
+//
+// Deliberately NOT merged into the admin routes with a permission branch. The
+// admin ones log to AdminAction and answer "a moderator acted on someone"; a
+// single route doing both would make that record ambiguous exactly where it
+// needs to be clear.
+
+// Finds a message this user is allowed to act on, or the reason they are not.
+// Returns { message } or { status, body }.
+async function loadOwnMessage(id, user) {
+  if (!isValidId(id)) return { status: 404, body: { message: 'Message not found' } };
+
+  const message = await ChatMessage.findById(id);
+  if (!message) return { status: 404, body: { message: 'Message not found' } };
+  if (message.senderRole === 'system') {
+    return { status: 400, body: { message: 'System messages cannot be changed.' } };
+  }
+  if (String(message.senderUserId ?? '') !== String(user._id)) {
+    // 404 rather than 403: whether a message exists is not something a stranger
+    // needs confirmed, and every other id-guessing route here answers the same.
+    return { status: 404, body: { message: 'Message not found' } };
+  }
+  if (message.deletedAt) {
+    return { status: 400, body: { message: 'That message has already been removed.' } };
+  }
+  if (!user.isAdmin && !withinSelfWindow(message)) {
+    return { status: 403, body: {
+      message: 'Messages can only be changed for an hour after posting.',
+      reason:  'window',
+    } };
+  }
+  return { message };
+}
+
+// PATCH /api/chat/messages/:id { body } — edit your own message.
+router.patch('/messages/:id', async (req, res) => {
+  try {
+    const body = (req.body?.body ?? '').toString().trim();
+    if (!body) return res.status(400).json({ message: 'Message body is required' });
+    if (body.length > 4000) return res.status(400).json({ message: 'Message too long (max 4000 chars)' });
+
+    const found = await loadOwnMessage(req.params.id, req.user);
+    if (!found.message) return res.status(found.status).json(found.body);
+    const message = found.message;
+
+    const convo = await ChatConversation.findById(message.conversationId).select('type').lean();
+    const asSent = (m) => serializeMessage(m, {
+      viewerIsAdmin: Boolean(req.user.isAdmin), conversationType: convo?.type, viewerId: req.user._id,
+    });
+
+    // Re-saving the same text is a no-op, not an edit: it must not stamp an
+    // "(edited)" marker on a message nobody changed.
+    if (body === message.body) {
+      return res.json({ status: 'success', data: { message: asSent(message.toObject()) } });
+    }
+
+    const now = new Date();
+    const updated = await ChatMessage.findByIdAndUpdate(
+      message._id,
+      {
+        $set: {
+          body,
+          editedAt:       now,
+          editedByUserId: req.user._id,
+          ...(message.originalBody ? {} : { originalBody: message.body }),
+        },
+        $push: { edits: { body: message.body, editedAt: now, editedByUserId: req.user._id } },
+      },
+      { returnDocument: 'after' },
+    );
+
+    // Mentions are resolved at send time and never re-parsed (see the note on
+    // `mentions` in the model), so an edit deliberately does not re-resolve
+    // them: editing a message must not be a way to ping someone who was not
+    // pinged when it was posted.
+    chatStream.publish(message.conversationId, 'refresh', { reason: 'edited' });
+
+    res.json({ status: 'success', data: { message: asSent(updated.toObject()) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/chat/messages/:id — withdraw your own message.
+//
+// Soft, exactly like the admin delete: everyone else stops receiving it at all
+// (the query filter in GET /messages), while an admin still sees it struck
+// through. `deletedByUserId` is the author here, which is how the admin view
+// knows to say "removed by the author" rather than blaming a moderator.
+router.delete('/messages/:id', async (req, res) => {
+  try {
+    const found = await loadOwnMessage(req.params.id, req.user);
+    if (!found.message) return res.status(found.status).json(found.body);
+    const message = found.message;
+
+    const updated = await ChatMessage.findByIdAndUpdate(
+      message._id,
+      { $set: { deletedAt: new Date(), deletedByUserId: req.user._id } },
+      { returnDocument: 'after' },
+    );
+
+    chatStream.publish(message.conversationId, 'refresh', { reason: 'withdrawn' });
+
+    const convo = await ChatConversation.findById(message.conversationId).select('type').lean();
+    res.json({ status: 'success', data: {
+      message: serializeMessage(updated.toObject(), {
+        viewerIsAdmin: Boolean(req.user.isAdmin), conversationType: convo?.type, viewerId: req.user._id,
+      }),
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/chat/conversations/:id/close — user-initiated close (support only)
 router.post('/conversations/:id/close', async (req, res) => {
   try {
@@ -3155,6 +3325,9 @@ router.patch('/admin/messages/:id', adminOnly, async (req, res) => {
           editedByUserId: req.user._id,
           ...(message.originalBody ? {} : { originalBody: message.body }),
         },
+        // The superseded text, appended to the history the admin edit-history
+        // dialog reads. `originalBody` above only ever holds the first one.
+        $push: { edits: { body: message.body, editedAt: new Date(), editedByUserId: req.user._id } },
       },
       { returnDocument: 'after' },
     );
