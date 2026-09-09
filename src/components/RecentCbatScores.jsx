@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_BY_KEY } from '../data/cbatGames'
 import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
@@ -43,6 +43,7 @@ const TOP_RANK_CUTOFF = 20
 export default function RecentCbatScores({ fill = false }) {
   const { apiFetch, API, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   // Agent view is the hub toggle asking for the board a player would get, so it
   // drops the admin affordances here too — emails, and the click-through into
   // that user's CBAT history.
@@ -157,11 +158,15 @@ export default function RecentCbatScores({ fill = false }) {
             const rankBadge = r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : `#${r.rank}`
             const isMe = user && r.userId && r.userId === user._id
             const agentLabel = r.displayName || r.email || `Agent ${r.agentNumber || '???'}`
-            // Admins get a distinct username click target into that user's CBAT history
-            // (the admin-only /cbat-game-history page, which reads the user off nav state).
+            // Admins get a distinct username click target: the read-only agent
+            // profile, which is the whole picture of the account (medals, badges,
+            // CBAT record) and carries a button onward to their history. Landing
+            // straight on the history answered one question about a name; the
+            // profile answers "who is this" first, which is what a name in a feed
+            // actually prompts.
             // The button sits above the stretched row link, so a normal click on the
-            // name opens the history while a click anywhere else opens the leaderboard.
-            const canOpenHistory = isAdmin && r.userId
+            // name opens the profile while a click anywhere else opens the leaderboard.
+            const canOpenProfile = isAdmin && r.userId
             return (
               <div
                 key={r._id}
@@ -176,13 +181,18 @@ export default function RecentCbatScores({ fill = false }) {
                   aria-label={`${title}${difficulty ? ` ${difficulty}` : ''} all-time leaderboard`}
                   className="absolute inset-0 z-0"
                 />
-                {canOpenHistory ? (
+                {canOpenProfile ? (
                   <button
                     type="button"
-                    onClick={() => navigate('/cbat-game-history', {
-                      state: { adminUserId: r.userId, adminUserName: agentLabel },
+                    onClick={() => navigate(`/admin/agent/${r.userId}`, {
+                      // Back returns to the hub this was opened from, filter and
+                      // all, rather than to the admin panel nobody was in.
+                      state: {
+                        backTo: `${location.pathname}${location.search}`,
+                        backLabel: 'Back to CBAT',
+                      },
                     })}
-                    title={`View ${agentLabel}'s CBAT history`}
+                    title={`View ${agentLabel}'s profile`}
                     className={`relative z-10 justify-self-start text-left truncate hover:underline ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}
                   >
                     {agentLabel}{isMe ? ' (you)' : ''}

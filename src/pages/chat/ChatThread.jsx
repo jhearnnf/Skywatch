@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
 import { getCachedThread, setCachedThread } from '../../utils/chatCache'
@@ -27,6 +27,7 @@ export default function ChatThread({
   const { user, API, apiFetch } = useAuth()
   const { refresh: refreshUnread } = useChatUnread()
   const navigate = useNavigate()
+  const location = useLocation()
 
   // Whatever this thread last looked like, so switching back to a channel you
   // have already opened paints instantly instead of blanking. ChatShell keys
@@ -495,6 +496,15 @@ export default function ChatThread({
           userId={cardUserId}
           onClose={() => setCardUserId(null)}
           onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`); onChanged?.() }}
+          // Admin only. Carries the thread it was opened from so the profile's
+          // Back button returns to this conversation rather than to the admin
+          // panel, which is not where the admin was.
+          onViewProfile={(id) => {
+            setCardUserId(null)
+            navigate(`/admin/agent/${id}`, {
+              state: { backTo: location.pathname, backLabel: 'Back to Community' },
+            })
+          }}
           // Their messages have just left (or rejoined) this thread server-side,
           // so refetch rather than waiting up to 5s for the poll to notice.
           onBlockChanged={(blocked) => {

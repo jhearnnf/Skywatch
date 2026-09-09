@@ -9,6 +9,9 @@ const mockNavigate = vi.hoisted(() => vi.fn())
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, className, ...rest }) => <a href={to} className={className} {...rest}>{children}</a>,
   useNavigate: () => mockNavigate,
+  // The admin username button sends the current route as the profile's Back
+  // target, so the component reads its own location.
+  useLocation: () => ({ pathname: '/cbat', search: '' }),
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
@@ -85,10 +88,12 @@ describe('RecentCbatScores — row links to the all-time leaderboard', () => {
   })
 })
 
-describe('RecentCbatScores — admin username → CBAT history', () => {
+describe('RecentCbatScores — admin username → agent profile', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('renders the username as a button that opens the admin history for that user', async () => {
+  // A name in a feed prompts "who is this", so the click lands on the profile —
+  // which carries a button onward to the CBAT history it used to open directly.
+  it('renders the username as a button that opens the profile for that agent', async () => {
     setupAuth({
       userId: 'admin',
       isAdmin: true,
@@ -99,9 +104,23 @@ describe('RecentCbatScores — admin username → CBAT history', () => {
     render(<RecentCbatScores />)
     const btn = await screen.findByRole('button', { name: /Maverick/ })
     await userEvent.click(btn)
-    expect(mockNavigate).toHaveBeenCalledWith('/cbat-game-history', {
-      state: { adminUserId: 'other', adminUserName: 'Maverick' },
+    // Back returns to the hub the click came from, not to the admin panel.
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/agent/other', {
+      state: { backTo: '/cbat', backLabel: 'Back to CBAT' },
     })
+  })
+
+  it('opens the profile from an email row too, which is all a new account has', async () => {
+    setupAuth({
+      userId: 'admin',
+      isAdmin: true,
+      apiFetch: mockFetch([
+        { _id: 'r1', userId: 'other', gameKey: 'angles', gameLabel: 'Angles', rank: 2, agentNumber: 'A999', email: 'nobody@test.com', achievedAt: new Date().toISOString() },
+      ]),
+    })
+    render(<RecentCbatScores />)
+    await userEvent.click(await screen.findByRole('button', { name: /nobody@test.com/ }))
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/agent/other', expect.anything())
   })
 
   it('does not expose a username button to non-admins', async () => {
