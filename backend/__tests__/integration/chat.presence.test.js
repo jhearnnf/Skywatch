@@ -3,7 +3,8 @@
  *
  * Covers:
  *   GET /api/chat/presence  — admin-only, the lastSeen window, exclusions,
- *                             and the true count behind a capped list
+ *                             the true count behind a capped list, and the
+ *                             online/away split of that count
  */
 process.env.JWT_SECRET = 'test_secret';
 
@@ -84,7 +85,7 @@ describe('GET /api/chat/presence', () => {
     const { online } = (await presence(authCookie(admin._id))).body.data;
     for (const u of online) {
       expect(Object.keys(u).sort())
-        .toEqual(['_id', 'agentNumber', 'cbatCard', 'displayName', 'isAdmin', 'isSelf', 'lastSeen', 'location']);
+        .toEqual(['_id', 'agentNumber', 'cbatCard', 'displayName', 'isAdmin', 'isSelf', 'lastSeen', 'location', 'status']);
     }
   });
 
@@ -92,6 +93,69 @@ describe('GET /api/chat/presence', () => {
     const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
 
     expect((await presence(authCookie(admin._id))).body.data.windowMs).toBe(PRESENCE_WINDOW_MS);
+  });
+});
+
+describe('online versus away', () => {
+  const find = (res, name) => res.body.data.online.find(u => u.displayName === name);
+
+  it('calls a beat inside the short window online, and an older one away', async () => {
+    // The client only beats while the tab is visible and has seen input in the
+    // last five minutes, so a three-minute gap means they went idle, hid the
+    // tab or left. That is a different answer to "will they reply".
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({ displayName: 'AtDesk',  lastSeen: agoMs(30_000) });
+    await createUser({ displayName: 'SteppedOut', lastSeen: agoMs(PRESENCE_HERE_WINDOW_MS + 60_000) });
+
+    const res = await presence(authCookie(admin._id));
+    expect(find(res, 'AtDesk').status).toBe('online');
+    expect(find(res, 'SteppedOut').status).toBe('away');
+    // Away is still around — the row stays in the list either way.
+    expect(names(res).sort()).toEqual(['AtDesk', 'Control', 'SteppedOut']);
+  });
+
+  it('splits the count, and the halves always sum to the total', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({ displayName: 'AtDesk', lastSeen: agoMs(30_000) });
+    await createUser({ displayName: 'Away1',  lastSeen: agoMs(PRESENCE_HERE_WINDOW_MS + 60_000) });
+    await createUser({ displayName: 'Away2',  lastSeen: agoMs(PRESENCE_WINDOW_MS - 60_000) });
+
+    const { count, onlineCount, awayCount } = (await presence(authCookie(admin._id))).body.data;
+    expect(onlineCount).toBe(2);
+    expect(awayCount).toBe(2);
+    // The dashboard tile counts the same window; a breakdown that did not add
+    // up to it would look like a bug in whichever number the admin read second.
+    expect(onlineCount + awayCount).toBe(count);
+  });
+
+  it('draws the line at the same place the hub dots do', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    await createUser({ displayName: 'Inside',  lastSeen: agoMs(PRESENCE_HERE_WINDOW_MS - 30_000) });
+    await createUser({ displayName: 'Outside', lastSeen: agoMs(PRESENCE_HERE_WINDOW_MS + 30_000) });
+
+    const res = await presence(authCookie(admin._id));
+    expect(find(res, 'Inside').status).toBe('online');
+    expect(find(res, 'Outside').status).toBe('away');
+  });
+
+  it('counts over the whole window, not over the capped list', async () => {
+    // The list is sorted by recency and capped, so the rows it drops are away
+    // ones. Deriving the breakdown from the rows on screen would under-report
+    // exactly the half this split exists to surface.
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    const away = 5;
+    for (let i = 0; i < PRESENCE_LIST_LIMIT - 1; i++) {
+      await createUser({ displayName: `Agent ${i}`, lastSeen: agoMs(i * 1_000) });
+    }
+    for (let i = 0; i < away; i++) {
+      await createUser({ displayName: `Old ${i}`, lastSeen: agoMs(PRESENCE_WINDOW_MS - 60_000 - i * 1_000) });
+    }
+
+    const { data } = (await presence(authCookie(admin._id))).body;
+    expect(data.online).toHaveLength(PRESENCE_LIST_LIMIT);
+    expect(data.online.every(u => u.status === 'online')).toBe(true);
+    expect(data.awayCount).toBe(away);
+    expect(data.onlineCount).toBe(PRESENCE_LIST_LIMIT);
   });
 });
 

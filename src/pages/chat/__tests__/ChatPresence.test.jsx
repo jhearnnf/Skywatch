@@ -110,7 +110,7 @@ describe('community presence', () => {
       ] } })
       render(<ChatShell />)
 
-      await userEvent.click(await screen.findByRole('button', { name: /Online/ }))
+      await userEvent.click(await screen.findByRole('button', { name: /online/i }))
 
       expect(screen.getByText('Viper')).toBeTruthy()
       expect(screen.getByText('Control')).toBeTruthy()
@@ -133,7 +133,7 @@ describe('community presence', () => {
         ] } })
         render(<ChatShell />)
 
-        await userEvent.click(await screen.findByRole('button', { name: /Online/ }))
+        await userEvent.click(await screen.findByRole('button', { name: /online/i }))
         expect(screen.getByText('CBAT · ACT')).toBeTruthy()
         expect(screen.getByText('Reading a brief')).toBeTruthy()
       })
@@ -147,7 +147,7 @@ describe('community presence', () => {
         ] } })
         render(<ChatShell />)
 
-        await userEvent.click(await screen.findByRole('button', { name: /Online/ }))
+        await userEvent.click(await screen.findByRole('button', { name: /online/i }))
         expect(screen.getByText('You')).toBeTruthy()
         expect(screen.getByText('Profile')).toBeTruthy()
         // "You" replaces "Staff" rather than sitting next to it.
@@ -160,7 +160,7 @@ describe('community presence', () => {
         routes({ presence: { count: 1, online: [online({ location: null })] } })
         render(<ChatShell />)
 
-        await userEvent.click(await screen.findByRole('button', { name: /Online/ }))
+        await userEvent.click(await screen.findByRole('button', { name: /online/i }))
         expect(screen.getByText('Viper')).toBeTruthy()
         expect(screen.queryByText(/Somewhere|Unknown|Elsewhere/)).toBeNull()
       })
@@ -170,7 +170,7 @@ describe('community presence', () => {
       routes({ presence: { count: 1, online: [{ _id: 'a', displayName: null, agentNumber: '900900900', lastSeen: new Date().toISOString() }] } })
       render(<ChatShell />)
 
-      await userEvent.click(await screen.findByRole('button', { name: /Online/ }))
+      await userEvent.click(await screen.findByRole('button', { name: /online/i }))
       expect(screen.getByText('Agent #900900900')).toBeTruthy()
     })
 
@@ -178,7 +178,7 @@ describe('community presence', () => {
       routes({ presence: { count: 62, online: [{ _id: 'a', displayName: 'Viper', lastSeen: new Date().toISOString() }] } })
       render(<ChatShell />)
 
-      await userEvent.click(await screen.findByRole('button', { name: /Online/ }))
+      await userEvent.click(await screen.findByRole('button', { name: /online/i }))
       // Otherwise an admin counts the rows and finds 61 people missing.
       expect(screen.getByText('and 61 more')).toBeTruthy()
     })
@@ -190,7 +190,7 @@ describe('community presence', () => {
       await waitFor(() => expect(screen.getByText('Online')).toBeTruthy())
       expect(screen.getByText('0')).toBeTruthy()
 
-      await userEvent.click(screen.getByRole('button', { name: /Online/ }))
+      await userEvent.click(screen.getByRole('button', { name: /online/i }))
       expect(screen.getByText(/Nobody has been active in the last 10 minutes/)).toBeTruthy()
     })
 
@@ -207,6 +207,130 @@ describe('community presence', () => {
       const dotted = screen.getByTitle('Online now').closest('a')
       expect(dotted.textContent).toContain('Viper')
       expect(dotted.textContent).not.toContain('Falcon')
+    })
+
+    describe('online versus away', () => {
+      // What the server sends: every row carries a status, and the two counts
+      // are taken over the whole window rather than over the listed rows.
+      const split = () => ({
+        count: 3, onlineCount: 1, awayCount: 2,
+        online: [
+          { _id: 'a', displayName: 'Viper',  status: 'online', lastSeen: new Date().toISOString() },
+          { _id: 'b', displayName: 'Falcon', status: 'away',   lastSeen: new Date(Date.now() - 240_000).toISOString() },
+          { _id: 'c', displayName: 'Hawk',   status: 'away',   lastSeen: new Date(Date.now() - 540_000).toISOString() },
+        ],
+      })
+
+      it('shows both counts in the collapsed header', async () => {
+        routes({ presence: split() })
+        render(<ChatShell />)
+
+        await waitFor(() => expect(screen.getByText('Online')).toBeTruthy())
+        expect(screen.getByText('Away')).toBeTruthy()
+        expect(screen.getByText('1')).toBeTruthy()
+        expect(screen.getByText('2')).toBeTruthy()
+      })
+
+      it('says both counts to a screen reader, which cannot see the dots', async () => {
+        routes({ presence: split() })
+        render(<ChatShell />)
+
+        const toggle = await screen.findByRole('button', { name: /who is around/i })
+        expect(toggle.getAttribute('aria-label')).toBe('Who is around: 1 online, 2 away')
+      })
+
+      it('groups the expanded list under Online and Away', async () => {
+        routes({ presence: split() })
+        render(<ChatShell />)
+
+        await userEvent.click(await screen.findByRole('button', { name: /online/i }))
+
+        // Both headings, and everyone still listed — away is around, not gone.
+        expect(screen.getAllByText('Online').length).toBeGreaterThan(1)
+        expect(screen.getAllByText('Away').length).toBeGreaterThan(1)
+        expect(screen.getByText('Viper')).toBeTruthy()
+        expect(screen.getByText('Falcon')).toBeTruthy()
+        expect(screen.getByText('Hawk')).toBeTruthy()
+      })
+
+      it('puts the away rows after the online ones', async () => {
+        routes({ presence: split() })
+        render(<ChatShell />)
+
+        await userEvent.click(await screen.findByRole('button', { name: /online/i }))
+
+        const [first, second, third] = ['Viper', 'Falcon', 'Hawk'].map(n => screen.getByText(n))
+        // Whoever would answer right now reads first, whatever order the server
+        // sent the rows in.
+        expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(second.compareDocumentPosition(third) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      })
+
+      it('drops the away half of the header when nobody is away', async () => {
+        routes({ presence: { count: 1, onlineCount: 1, awayCount: 0, online: [
+          { _id: 'a', displayName: 'Viper', status: 'online', lastSeen: new Date().toISOString() },
+        ] } })
+        render(<ChatShell />)
+
+        await waitFor(() => expect(screen.getByText('Online')).toBeTruthy())
+        // "0 Away" is a line about nobody; a quiet rail stays one short line.
+        expect(screen.queryByText('Away')).toBeNull()
+      })
+
+      it('drops the headings when everyone is on the same side of the line', async () => {
+        routes({ presence: { count: 1, onlineCount: 1, awayCount: 0, online: [
+          { _id: 'a', displayName: 'Viper', status: 'online', lastSeen: new Date().toISOString() },
+        ] } })
+        render(<ChatShell />)
+
+        await userEvent.click(await screen.findByRole('button', { name: /online/i }))
+        // The header already says "1 Online"; a heading repeating it directly
+        // under the same button is a line spent twice.
+        expect(screen.getAllByText('Online')).toHaveLength(1)
+      })
+
+      it('counts the ones the capped list is not showing per group', async () => {
+        routes({ presence: { count: 62, onlineCount: 40, awayCount: 22, online: [
+          { _id: 'a', displayName: 'Viper',  status: 'online', lastSeen: new Date().toISOString() },
+          { _id: 'b', displayName: 'Falcon', status: 'away',   lastSeen: new Date(Date.now() - 240_000).toISOString() },
+        ] } })
+        render(<ChatShell />)
+
+        await userEvent.click(await screen.findByRole('button', { name: /online/i }))
+        expect(screen.getByText('and 39 more')).toBeTruthy()
+        expect(screen.getByText('and 21 more away')).toBeTruthy()
+      })
+
+      it('marks a DM row amber when the other party has stepped away', async () => {
+        routes({
+          overview: { dms: [DM('d1', 'here', 'Viper'), DM('d2', 'idle', 'Falcon')] },
+          presence: { count: 2, onlineCount: 1, awayCount: 1, online: [
+            { _id: 'here', displayName: 'Viper',  status: 'online', lastSeen: new Date().toISOString() },
+            { _id: 'idle', displayName: 'Falcon', status: 'away',   lastSeen: new Date(Date.now() - 240_000).toISOString() },
+          ] },
+        })
+        render(<ChatShell />)
+
+        await waitFor(() => expect(screen.getAllByTitle('Online now')).toHaveLength(1))
+        // The whole point of the split, read from the rail: one of these two
+        // will see the message land and the other will find it later.
+        expect(screen.getByTitle('Online now').closest('a').textContent).toContain('Viper')
+        expect(screen.getByTitle('Away').closest('a').textContent).toContain('Falcon')
+      })
+
+      it('treats a row with no status as online, for a backend without the split', async () => {
+        routes({
+          overview: { dms: [DM('d1', 'here', 'Viper')] },
+          presence: { count: 1, online: [{ _id: 'here', displayName: 'Viper', lastSeen: new Date().toISOString() }] },
+        })
+        render(<ChatShell />)
+
+        // Reads exactly as it did before the split shipped, rather than turning
+        // the whole rail amber against an older API.
+        await waitFor(() => expect(screen.getAllByTitle('Online now')).toHaveLength(1))
+        expect(screen.getByText('1')).toBeTruthy()
+        expect(screen.queryByText('Away')).toBeNull()
+      })
     })
 
     it('keeps the last answer when a presence poll fails', async () => {

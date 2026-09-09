@@ -21,8 +21,9 @@ const POLL_MS = 5_000
 export default function ChatThread({
   conversationId, title, displayNameRequired, onChanged,
   // Admin-only presence, owned and polled by ChatShell so the rail and the
-  // thread mark the same people online off one request.
-  onlineIds = null,
+  // thread mark the same people online off one request. A map of id →
+  // 'online' | 'away', or null for everyone who is not an admin.
+  presenceById = null,
 }) {
   const { user, API, apiFetch } = useAuth()
   const { refresh: refreshUnread } = useChatUnread()
@@ -397,7 +398,7 @@ export default function ChatThread({
           conversationType={type}
           viewerIsAdmin={Boolean(user?.isAdmin)}
           senders={senders}
-          onlineIds={onlineIds}
+          presenceById={presenceById}
           onOpenUser={setCardUserId}
           onReply={canPost ? setReplyTo : undefined}
           onReact={handleReact}

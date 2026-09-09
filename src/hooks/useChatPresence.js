@@ -8,8 +8,8 @@ import { useAuth } from '../context/AuthContext'
 const POLL_MS = 30_000
 
 // One shared object, so the disabled case returns a stable identity and does not
-// rebuild `onlineIds` on every render of every non-admin's rail.
-const EMPTY = { online: [], count: 0 }
+// rebuild `presenceById` on every render of every non-admin's rail.
+const EMPTY = { online: [], count: 0, onlineCount: 0, awayCount: 0 }
 
 // Who is online, for the community rail. Admin only — see GET /api/chat/presence
 // for why.
@@ -32,13 +32,24 @@ export default function useChatPresence(enabled, pollMs = POLL_MS) {
   // with one fewer render, and it cannot go wrong: a viewer who stops being an
   // admin mid-session has no way to keep a stale list on screen, because the
   // list was never what was being rendered.
-  const { online, count } = enabled ? fetched : EMPTY
+  const { online, count, onlineCount, awayCount } = enabled ? fetched : EMPTY
 
   const load = useCallback(async () => {
     const r = await apiFetch(`${API}/api/chat/presence`, { credentials: 'include' })
     if (!r.ok) throw new Error('presence unavailable')
     const d = await r.json()
-    return { online: d?.data?.online ?? [], count: d?.data?.count ?? 0 }
+    const online = d?.data?.online ?? []
+    const count  = d?.data?.count ?? 0
+    // Both halves come from the server, which counts them over the whole window
+    // rather than the capped list. Defaulted off `count` so a backend that has
+    // not shipped the split yet reports everyone as online rather than as a
+    // rail full of away dots.
+    return {
+      online,
+      count,
+      onlineCount: d?.data?.onlineCount ?? count,
+      awayCount:   d?.data?.awayCount ?? 0,
+    }
   }, [API, apiFetch])
 
   useEffect(() => {
@@ -63,13 +74,18 @@ export default function useChatPresence(enabled, pollMs = POLL_MS) {
     return () => { cancelled = true; clearInterval(id) }
   }, [enabled, load, pollMs])
 
-  // Set of ids for the callers that only ask "is this one person online" —
+  // id → 'online' | 'away', for the callers that only ask about one person —
   // the DM rows and the message avatars, both of which would otherwise scan the
-  // whole list per row.
-  const onlineIds = useMemo(
-    () => new Set(online.map(u => String(u._id))),
+  // whole list per row. A map rather than two sets because every one of those
+  // call sites wants the answer as one value it can render a dot from, and
+  // asking two sets in sequence is how the two dots end up disagreeing.
+  //
+  // Anyone missing from it is outside the window entirely, which is neither
+  // state and draws no dot.
+  const presenceById = useMemo(
+    () => new Map(online.map(u => [String(u._id), u.status === 'away' ? 'away' : 'online'])),
     [online],
   )
 
-  return { online, count, onlineIds, enabled: Boolean(enabled) }
+  return { online, count, onlineCount, awayCount, presenceById, enabled: Boolean(enabled) }
 }

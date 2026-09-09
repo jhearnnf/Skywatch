@@ -167,7 +167,7 @@ export default function ChatShell() {
             conversationId={conversationId}
             title={activeTitle}
             displayNameRequired={Boolean(data?.viewer?.displayNameRequired)}
-            onlineIds={presence.onlineIds}
+            presenceById={presence.presenceById}
             onChanged={refreshOverview}
           />
         ) : (

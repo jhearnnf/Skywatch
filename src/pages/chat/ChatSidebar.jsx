@@ -2,14 +2,17 @@ import { Link } from 'react-router-dom'
 import { isCbatGuideUrl, prepareGuideChrome } from '../../utils/guideHref'
 import BotBadge from '../../components/BotBadge'
 import AdminDmSearch from './components/AdminDmSearch'
-import PresenceStrip, { OnlineDot } from './components/PresenceStrip'
+import PresenceStrip, { PresenceDot } from './components/PresenceStrip'
 import { formatRelative, SUPPORT_LABEL } from './format'
 import { badgeLabel, supportQueueLabel } from '../../utils/chatBadge'
 import CountBadge from '../../components/ui/CountBadge'
 
 function Row({
   to, icon, title, subtitle, preview, unread, timestamp, active,
-  online = false, personalUnread = 0,
+  // 'online' | 'away' | null — the other party's presence, for DM rows. Amber
+  // is the useful half here: it is the difference between someone who will see
+  // a message land and someone who will find it later.
+  presence = null, personalUnread = 0,
 }) {
   return (
     <Link
@@ -22,7 +25,7 @@ function Row({
           cannot be mistaken for the red unread dot that lives there. */}
       <div className="text-lg leading-none pt-0.5 shrink-0 relative">
         {icon}
-        {online && <OnlineDot className="absolute -right-0.5 -bottom-0.5 w-2 h-2 ring-1 ring-surface" />}
+        <PresenceDot status={presence} className="absolute -right-0.5 -bottom-0.5 w-2 h-2 ring-1 ring-surface" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -77,12 +80,12 @@ function ResourceCard({ as: As = 'div', tone = 'slate', active = false, children
 }
 
 // The tile is what separates a card's icon from a row's bare emoji at a glance.
-function CardIcon({ children, online = false }) {
+function CardIcon({ children, presence = null }) {
   return (
     <div className="w-8 h-8 rounded-lg bg-surface border border-slate-200 shrink-0
       flex items-center justify-center text-base leading-none relative">
       {children}
-      {online && <OnlineDot className="absolute -right-0.5 -bottom-0.5 w-2 h-2 ring-1 ring-surface" />}
+      <PresenceDot status={presence} className="absolute -right-0.5 -bottom-0.5 w-2 h-2 ring-1 ring-surface" />
     </div>
   )
 }
@@ -205,7 +208,12 @@ export default function ChatSidebar({
           that changes minute to minute, so it stays put rather than scrolling
           away behind a long channel list. */}
       {presence?.enabled && (
-        <PresenceStrip online={presence.online} count={presence.count} />
+        <PresenceStrip
+          online={presence.online}
+          count={presence.count}
+          onlineCount={presence.onlineCount}
+          awayCount={presence.awayCount}
+        />
       )}
 
       <div className="flex-1 overflow-y-auto">
@@ -367,7 +375,7 @@ export default function ChatSidebar({
             personalUnread={d.personalUnread}
             timestamp={d.lastMessageAt}
             active={String(activeId) === String(d._id)}
-            online={Boolean(d.otherUser && presence?.onlineIds?.has(String(d.otherUser._id)))}
+            presence={(d.otherUser && presence?.presenceById?.get(String(d.otherUser._id))) || null}
           />
         ))}
       </div>

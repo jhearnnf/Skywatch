@@ -5,7 +5,7 @@ import { nameColour } from '../nameColour'
 import { REACTION_EMOJI } from '../reactionEmoji'
 import { splitMentions, mentionsMe } from '../mentions'
 import { senderName } from '../senderName'
-import { OnlineDot } from './PresenceStrip'
+import { PresenceDot } from './PresenceStrip'
 import CbatPassedBadge from '../../../components/CbatPassedBadge'
 
 // Discord-style rows rather than chat bubbles. Bubbles alternate sides and
@@ -137,7 +137,7 @@ function MedalBar({ medals = [] }) {
   )
 }
 
-function Avatar({ profile, show, support, online = false }) {
+function Avatar({ profile, show, support, presence = null }) {
   if (!show) {
     // Reserved gutter, not a conditional render: without it every message after
     // the first in a run slides left under the avatar.
@@ -178,9 +178,7 @@ function Avatar({ profile, show, support, online = false }) {
       <MedalBar medals={profile?.medals} />
       {/* Top-right, because the medal bar already owns the bottom of the circle
           and the two would overlap on anyone who has placed. */}
-      {online && (
-        <OnlineDot className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 ring-2 ring-surface" />
-      )}
+      <PresenceDot status={presence} className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 ring-2 ring-surface" />
     </span>
   )
 }
@@ -266,7 +264,7 @@ function NewMessagesDivider() {
 // Module scope, not nested — a component defined inside another's render
 // remounts its whole subtree on every parent render.
 function MessageRow({
-  message, startsRun, profile, isSupportIdentity, mine, online,
+  message, startsRun, profile, isSupportIdentity, mine, presence,
   viewerIsAdmin, onOpenUser, onReport, onBlock, onDelete, onEdit, onReply, onReact, onSeenBy,
   onShowReactors, onShowEdits,
   onJump, highlighted, senders, currentUserId, datedStamps,
@@ -340,7 +338,7 @@ function MessageRow({
           : mentionsMe(m, currentUserId) ? 'bg-amber-100/40 hover:bg-amber-100/60'
             : 'hover:bg-slate-100/60'}`}
     >
-      <Avatar profile={profile} show={startsRun} support={isSupportIdentity} online={online} />
+      <Avatar profile={profile} show={startsRun} support={isSupportIdentity} presence={presence} />
 
       <div className="min-w-0 flex-1 py-0.5">
         {m.replyTo && <ReplyQuote replyTo={m.replyTo} senders={senders} onJump={onJump} />}
@@ -519,9 +517,9 @@ export default function MessageList({
   conversationType = 'support',
   viewerIsAdmin = false,
   senders = {},
-  // Set of user ids currently online, or null. Admin-only and supplied by
+  // Map of user id → 'online' | 'away', or null. Admin-only and supplied by
   // ChatShell; every other caller passes nothing and gets no dots.
-  onlineIds = null,
+  presenceById = null,
   onOpenUser,
   onReport,
   onBlock,
@@ -631,12 +629,13 @@ export default function MessageList({
             // is noise on every run you post. Not in a collapsed support
             // identity either: that avatar is the team's face, and a dot on it
             // would say which staff member is at their desk.
-            online={Boolean(
-              onlineIds
+            presence={
+              presenceById
               && !(collapseAdmins && m.senderRole === 'admin')
               && String(m.senderUserId) !== String(currentUserId)
-              && onlineIds.has(String(m.senderUserId)),
-            )}
+                ? (presenceById.get(String(m.senderUserId)) ?? null)
+                : null
+            }
             profile={senders[String(m.senderUserId)]}
             senders={senders}
             currentUserId={currentUserId}

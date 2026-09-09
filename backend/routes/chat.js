@@ -2510,8 +2510,16 @@ router.get('/admin/users/:userId/messages', adminOnly, async (req, res) => {
 // appear-offline setting to opt out with, this stays behind adminOnly.
 //
 // `count` is the true total even when `online` has been capped, so a busy day
-// reports "62 online" and lists the 50 most recent rather than quietly claiming
-// there are 50.
+// reports "62 around" and lists the 50 most recent rather than quietly claiming
+// there are 50. `onlineCount` and `awayCount` split that same total and always
+// sum to it, so the strip can never show a breakdown that disagrees with the
+// dashboard tile counting the same window.
+//
+// The split is the PRESENCE_HERE_WINDOW_MS line. A beat inside it means someone
+// is at the keyboard now — the client only beats while the tab is visible and
+// has seen input in the last five minutes, so a gap longer than three minutes
+// means they went idle, hid the tab or left. That is "away", and it is worth
+// separating: an admin picking who to message cares about who would answer.
 //
 // `cbatCard` is the same signal read at a shorter range, for the presence dots
 // on the CBAT hub. It only carries the last few minutes (PRESENCE_HERE_WINDOW_MS)
@@ -2532,13 +2540,18 @@ router.get('/presence', adminOnly, async (req, res) => {
     // dot next to one would invite a conversation the ban already ended.
     const filter = { lastSeen: { $gte: since }, isBot: { $ne: true }, isBanned: { $ne: true } };
 
-    const [users, count] = await Promise.all([
+    // The online half is counted rather than derived from `users`, because the
+    // list is capped: on a busy day a breakdown of the 50 listed rows would say
+    // nothing about the other twelve. Sorted by recency, a capped list drops
+    // away rows first, so counting is the only way `awayCount` can be right.
+    const [users, count, onlineCount] = await Promise.all([
       User.find(filter)
         .select('displayName agentNumber isAdmin lastSeen lastLocation lastCbatCard')
         .sort({ lastSeen: -1 })
         .limit(PRESENCE_LIST_LIMIT)
         .lean(),
       User.countDocuments(filter),
+      User.countDocuments({ ...filter, lastSeen: { $gte: new Date(hereSince) } }),
     ]);
 
     res.json({ status: 'success', data: {
@@ -2551,7 +2564,7 @@ router.get('/presence', adminOnly, async (req, res) => {
         // enough for a dot to be honest about it. Nulled rather than dropped
         // from the row: the strip still wants to list someone whose dot has
         // gone out.
-        const here = u.lastSeen && new Date(u.lastSeen).getTime() >= hereSince;
+        const here = Boolean(u.lastSeen && new Date(u.lastSeen).getTime() >= hereSince);
         return {
           _id:         u._id,
           displayName: u.displayName ?? null,
@@ -2559,6 +2572,11 @@ router.get('/presence', adminOnly, async (req, res) => {
           isAdmin:     Boolean(u.isAdmin),
           isSelf,
           lastSeen:    u.lastSeen ?? null,
+          // The same `here` the hub's dots are drawn from, said out loud for the
+          // strip. A word rather than a boolean because a third state is
+          // plausible later (an explicit "do not disturb", say), and by then
+          // `isOnline: false` would have to mean two different things.
+          status:      here ? 'online' : 'away',
           location:    isSelf ? null : (u.lastLocation ?? null),
           // Unlike `location`, kept for the viewer's own row. An admin reading
           // the hub is by definition on /cbat, which is no card at all, so
@@ -2572,6 +2590,10 @@ router.get('/presence', adminOnly, async (req, res) => {
         };
       }),
       count,
+      onlineCount,
+      // Derived, so the two halves are guaranteed to sum to the total even if a
+      // beat lands between the two counts above.
+      awayCount:    Math.max(0, count - onlineCount),
       windowMs:     PRESENCE_WINDOW_MS,
       hereWindowMs: PRESENCE_HERE_WINDOW_MS,
     } });
