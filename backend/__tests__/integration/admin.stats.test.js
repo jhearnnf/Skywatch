@@ -135,6 +135,28 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.onlineUsers).toBe(2);
   });
 
+  // The tile's sub line divides that same total into who is at the keyboard and
+  // who has stepped away, on the three-minute line the community presence strip
+  // and the CBAT hub dots already use.
+  it('counts the at-the-keyboard half of those online separately', async () => {
+    const admin  = await createAdminUser({ lastSeen: new Date() });        // now — active
+    await createUser({ lastSeen: new Date(Date.now() - 60 * 1000) });      // 1 min — active
+    await createUser({ lastSeen: new Date(Date.now() - 5 * 60 * 1000) });  // 5 min — away
+    await createUser({ lastSeen: new Date(Date.now() - 8 * 60 * 1000) });  // 8 min — away
+    await createUser({ lastSeen: new Date(Date.now() - 15 * 60 * 1000) }); // 15 min — offline
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    const { onlineUsers, activeUsers } = res.body.data.users;
+    expect(onlineUsers).toBe(4);
+    expect(activeUsers).toBe(2);
+    // Away is derived on the client from these two, so it can never be negative
+    // and the halves can never fail to sum to the headline.
+    expect(onlineUsers - activeUsers).toBe(2);
+  });
+
   // "Any version" is the whole question: the tile answers how many people ever
   // got the app onto a phone, not how many are on the current release.
   it('counts accounts that have ever reported an Android app build, whatever the version', async () => {

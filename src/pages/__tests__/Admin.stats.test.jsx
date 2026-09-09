@@ -62,7 +62,7 @@ vi.mock('framer-motion', () => ({
 
 const MOCK_STATS = {
   users: {
-    totalUsers: 10, onlineUsers: 3, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
+    totalUsers: 10, onlineUsers: 3, activeUsers: 1, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     androidAppUsers: 4,
     emailsSent: 42, emailsFailed: 7,
@@ -581,5 +581,70 @@ describe('Admin — Stats tab: collapsible sections', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Email Logs' })).toBeInTheDocument())
     const statusSelect = screen.getByDisplayValue('Failed')
     expect(statusSelect.value).toBe('failed')
+  })
+})
+
+describe('Admin — Stats tab: Users Online', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const withUsers = (over) => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({
+          status: 'success',
+          data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, ...over } },
+        }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+  }
+
+  // The headline is everyone seen in the last ten minutes, which is what the
+  // label means and what the Users list below it puts a dot beside.
+  it('leads with everyone around, over the total', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    expect(screen.getByText('3 / 10')).toBeInTheDocument()
+  })
+
+  it('splits that number into at-the-keyboard and away', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    // Ten minutes is long enough to include someone who shut the lid eight
+    // minutes ago; an admin about to message all three wants to know that.
+    expect(screen.getByText(/1 active/)).toBeInTheDocument()
+    expect(screen.getByText(/2 away/)).toBeInTheDocument()
+  })
+
+  it('reports nobody away when everyone around is at the keyboard', async () => {
+    withUsers({ onlineUsers: 3, activeUsers: 3 })
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    expect(screen.getByText(/3 active/)).toBeInTheDocument()
+    expect(screen.getByText(/0 away/)).toBeInTheDocument()
+  })
+
+  it('says nothing at all when nobody is around', async () => {
+    withUsers({ onlineUsers: 0, activeUsers: 0 })
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    // "0 active · 0 away" under a "0 / 10" is three ways of saying zero.
+    expect(screen.queryByText(/away/)).not.toBeInTheDocument()
+  })
+
+  it('leaves the card as it was against a backend without the split', async () => {
+    withUsers({ onlineUsers: 3, activeUsers: undefined })
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
+    expect(screen.getByText('3 / 10')).toBeInTheDocument()
+    // Better to show no breakdown than to derive one and claim all three are
+    // away because the count is missing.
+    expect(screen.queryByText(/away/)).not.toBeInTheDocument()
   })
 })

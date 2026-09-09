@@ -65,7 +65,7 @@ const DonationPageVisit        = require('../models/DonationPageVisit');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
 const { fetchRssHeadlines }    = require('../utils/rssFetcher');
-const { PRESENCE_WINDOW_MS }   = require('../constants/presence');
+const { PRESENCE_WINDOW_MS, PRESENCE_HERE_WINDOW_MS } = require('../constants/presence');
 
 // ── Shared quiz prompt fragments ──────────────────────────────────────────────
 // Single source of truth for answer format rules and core question rules,
@@ -449,7 +449,7 @@ router.get('/stats', async (_req, res) => {
     const passThresholdMedium = settings.passThresholdMedium ?? 60;
 
     const [
-      totalUsers, onlineUsers, freeUsers, trialUsers, silverUsers, goldUsers,
+      totalUsers, onlineUsers, activeUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
       androidAppUsers,
       totalBrifsRead, totalBrifsOpened, readTimeAgg,
@@ -476,6 +476,11 @@ router.get('/stats', async (_req, res) => {
       // Same window as GET /api/chat/presence, from one constant — this tile and
       // the community rail's presence strip must never report different numbers.
       User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - PRESENCE_WINDOW_MS) } }),
+      // The at-the-keyboard half of that same total, on the same three-minute
+      // line the presence strip and the hub dots use. Sent as the smaller number
+      // rather than as "away" so the tile can never show a negative: away is
+      // `onlineUsers - activeUsers`, and both are counted off one `lastSeen`.
+      User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - PRESENCE_HERE_WINDOW_MS) } }),
       User.countDocuments({ subscriptionTier: 'free' }),
       User.countDocuments({ subscriptionTier: 'trial' }),
       // Silver/gold counts are restricted to real Stripe payers — excludes
@@ -648,7 +653,7 @@ router.get('/stats', async (_req, res) => {
       status: 'success',
       data: {
         users: {
-          totalUsers, onlineUsers, freeUsers, trialUsers,
+          totalUsers, onlineUsers, activeUsers, freeUsers, trialUsers,
           subscribedUsers: silverUsers + goldUsers,
           easyPlayers, mediumPlayers,
           androidAppUsers,

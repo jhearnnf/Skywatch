@@ -271,6 +271,48 @@ function EnvelopeGlyph({ color }) {
   )
 }
 
+// The sub line under Users Online: how that number divides into people at the
+// keyboard and people who have stepped away.
+//
+// The card's headline is everyone seen in the last ten minutes, which is the
+// right number to lead with — it is what the label has always meant, and it is
+// how many rows the Users list underneath has a dot beside. But ten minutes is
+// long enough to include someone who shut the lid eight minutes ago, and an
+// admin reading "4" and deciding to message all four wants to know that only one
+// of them is actually there. The split says so without needing a second card.
+//
+// `active` is the server's count over the same three-minute window the community
+// presence strip splits on, so the two surfaces always agree. Away is derived
+// from it rather than sent, which is what stops the two halves ever summing to
+// something other than the headline.
+//
+// Green and amber match the dots in Community and beside each name on the Users
+// list. They sit inside the sub line's own opacity, so the lighter end of each
+// scale is used — a dot at the dark end washes out to nothing here.
+function PresenceSplit({ online, active }) {
+  // An older backend sends no split. Rendering nothing leaves the card exactly
+  // as it was rather than claiming everyone is away.
+  if (!Number.isFinite(active)) return null
+  // Nobody is around: "0 active · 0 away" is three ways of saying zero.
+  if (!online) return null
+
+  const away = Math.max(0, online - active)
+
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1">
+        <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+        {fmtNum(Math.min(active, online))} active
+      </span>
+      <span aria-hidden="true" className="opacity-60">·</span>
+      <span className="inline-flex items-center gap-1">
+        <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-amber-700 shrink-0" />
+        {fmtNum(away)} away
+      </span>
+    </span>
+  )
+}
+
 function StatCard({ label, value, sub, color = 'slate', disabled = false, delta, deltaGood = true, icon }) {
   const colors = {
     slate:  'bg-slate-50  border-slate-200  text-slate-700',
@@ -678,7 +720,16 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             onClick={() => onViewUsers?.()}
             className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-brand-300 rounded-2xl [&>div]:flex-1"
           >
-            <StatCard label="Users Online"      value={`${fmtNum(users.onlineUsers ?? 0)} / ${fmtNum(users.totalUsers)}`} color="brand" />
+            <StatCard
+              label="Users Online"
+              value={`${fmtNum(users.onlineUsers ?? 0)} / ${fmtNum(users.totalUsers)}`}
+              color="brand"
+              // The headline stays the ten-minute total, which is what the label
+              // has always meant and what the Users list below it shows dots
+              // for. The split goes on the sub line the card already reserves
+              // room for, so the tile is the same size it was.
+              sub={<PresenceSplit online={users.onlineUsers ?? 0} active={users.activeUsers} />}
+            />
           </button>
           {/* Beside Users Online because they answer the same question — who is actually
               here, and on what. Neither is greyed in slim mode: the app IS the slim
@@ -3937,11 +3988,21 @@ function SubscriptionTierRow({ u, action }) {
   )
 }
 
+// Where "at the keyboard" stops and "stepped away" starts, in the admin's view
+// of everyone. Three minutes, matching PRESENCE_HERE_WINDOW_MS on the server —
+// the same line the community presence strip and the CBAT hub dots are drawn
+// from, so the dot beside a name here, the strip in Community and the Users
+// Online tile can never disagree about who is which.
+//
+// It was 90 seconds, which is three of the client's 30s heartbeats: one dropped
+// beat on a phone connection turned a live agent amber. Three minutes is six.
+const LIVE_WINDOW_MS = 3 * 60_000
+
 function onlineStatus(lastSeen) {
   if (!lastSeen) return null
   const diff = Date.now() - new Date(lastSeen).getTime()
-  if (diff < 90_000)       return 'live'
-  if (diff < 10 * 60_000)  return 'away'
+  if (diff < LIVE_WINDOW_MS) return 'live'
+  if (diff < 10 * 60_000)    return 'away'
   return null
 }
 
