@@ -437,6 +437,9 @@ router.get('/responses', async (_req, res) => {
     const optedOut = optOutInvites.map(inv => {
       const answer = byInvite.get(String(inv._id));
       return {
+        // The account behind the row, so the results page can open their agent
+        // profile. Null when the invite outlived the user it was sent to.
+        userId:      inv.userId?._id ? String(inv.userId._id) : null,
         agentNumber: inv.userId?.agentNumber ?? null,
         displayName: inv.userId?.displayName ?? null,
         email:       inv.sentToEmail ?? inv.userId?.email ?? null,
@@ -466,6 +469,7 @@ router.get('/responses', async (_req, res) => {
     const deferred = deferredInvites.map(inv => {
       const answer = byInvite.get(String(inv._id));
       return {
+        userId:      inv.userId?._id ? String(inv.userId._id) : null,
         agentNumber: inv.userId?.agentNumber ?? null,
         displayName: inv.userId?.displayName ?? null,
         email:       inv.sentToEmail ?? inv.userId?.email ?? null,
@@ -510,6 +514,7 @@ router.get('/responses', async (_req, res) => {
           gaps: responses.filter(r => r.gaps?.trim()).map(r => ({
             gaps: r.gaps,
             role: r.role,
+            userId: r.userId?._id ? String(r.userId._id) : null,
             agentNumber: r.userId?.agentNumber ?? null,
             displayName: r.userId?.displayName ?? null,
           })),
@@ -520,6 +525,7 @@ router.get('/responses', async (_req, res) => {
             comment: r.comment,
             role: r.role,
             passedForRole: r.passedForRole ?? null,
+            userId: r.userId?._id ? String(r.userId._id) : null,
             agentNumber: r.userId?.agentNumber ?? null,
             displayName: r.userId?.displayName ?? null,
           })),

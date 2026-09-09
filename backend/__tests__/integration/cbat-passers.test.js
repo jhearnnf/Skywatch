@@ -756,6 +756,41 @@ describe('comments on the results endpoint', () => {
     }));
   });
 
+  // Every group on the results page names a person, and a name there is the
+  // start of a question the agent profile answers. That page can only open it
+  // if the id comes with the row: an agent number is not one, and looking it up
+  // afterwards would be a second round trip per name on a page full of names.
+  it('carries the account id on every row, so a name can open their profile', async () => {
+    const u = await candidate();
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    const invite = await SurveyInvite.findOne({ userId: u._id });
+
+    await request(app).patch(`/api/survey/${invite.token}`).send({
+      satTest: true, role: 'pilot', passedForRole: 'yes',
+      gaps: 'A test we had not seen.', comment: 'Genuinely helped, thank you.',
+    });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    const id = String(u._id);
+    expect(String(res.body.data.responses[0].userId._id)).toBe(id);
+    expect(res.body.data.summary.gaps[0].userId).toBe(id);
+    expect(res.body.data.summary.comments[0].userId).toBe(id);
+  });
+
+  it('carries it on the waiting and unsubscribed rows too', async () => {
+    const waiting = await candidate();
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    const invite = await SurveyInvite.findOne({ userId: waiting._id });
+    await request(app).patch(`/api/survey/${invite.token}`).send({ satTest: false });
+
+    let res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.deferred[0].userId).toBe(String(waiting._id));
+
+    await request(app).post(`/api/survey/${invite.token}/opt-out`);
+    res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.optedOut[0].userId).toBe(String(waiting._id));
+  });
+
   it('leaves comments empty when nobody wrote one', async () => {
     const u = await candidate();
     await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});

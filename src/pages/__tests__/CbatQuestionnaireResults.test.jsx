@@ -181,7 +181,76 @@ describe('CbatQuestionnaireResults — comments', () => {
     } }))
 
     expect(await screen.findByText('A test we had not seen.')).toBeInTheDocument()
-    expect(screen.getByText('Kestrel · Royal Air Force — Pilot · Agent 777')).toBeInTheDocument()
+    // Split across elements now that the name and the agent number are their own
+    // click targets, so the line is read off the paragraph that holds them.
+    expect(screen.getByText('Kestrel').closest('p'))
+      .toHaveTextContent('Kestrel · Royal Air Force — Pilot · Agent 777')
+  })
+})
+
+// A name on this page is somebody an admin has just read an opinion from, and
+// the next question is always "who is this". It has a page already, so every
+// name and every address opens it.
+describe('CbatQuestionnaireResults — opening a profile', () => {
+  const ProfileProbe = () => {
+    const { pathname, state } = useLocation()
+    return <div data-testid="profile-probe">{pathname} · {state?.backLabel}</div>
+  }
+
+  const mountRouted = (data) => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ data }) }))
+    return render(
+      <MemoryRouter initialEntries={['/admin/cbat-questionnaire']}>
+        <Routes>
+          <Route path="/admin/cbat-questionnaire" element={<CbatQuestionnaireResults />} />
+          <Route path="/admin/agent/:id" element={<ProfileProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('opens the profile from an answer row, and comes back here', async () => {
+    mountRouted(payload({ responses: [{
+      _id: 'r1', userId: { _id: 'u1', agentNumber: '777', email: 'a@example.com' },
+      satTest: true, passedForRole: 'yes',
+    }] }))
+
+    fireEvent.click(await screen.findByText('Agent 777'))
+    expect((await screen.findByTestId('profile-probe')).textContent)
+      .toBe('/admin/agent/u1 · Back to results')
+  })
+
+  it('opens it from the email too, because that is the half an admin may recognise', async () => {
+    mountRouted(payload({ responses: [{
+      _id: 'r1', userId: { _id: 'u1', agentNumber: '777', email: 'a@example.com' },
+      satTest: true, passedForRole: 'yes',
+    }] }))
+
+    fireEvent.click(await screen.findByText('a@example.com'))
+    expect((await screen.findByTestId('profile-probe')).textContent)
+      .toBe('/admin/agent/u1 · Back to results')
+  })
+
+  it('opens it from the name under a piece of free text', async () => {
+    mountRouted(payload({ summary: {
+      gaps: [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '777', userId: 'u7' }],
+    } }))
+
+    fireEvent.click(await screen.findByText('Agent 777'))
+    expect((await screen.findByTestId('profile-probe')).textContent)
+      .toBe('/admin/agent/u7 · Back to results')
+  })
+
+  it('leaves the name as plain text when the account behind it is gone', async () => {
+    mountRouted(payload({ optedOut: [{
+      userId: null, agentNumber: '1234567', email: 'gone@example.com',
+      optedOutAt: '2026-09-01T00:00:00.000Z', reason: 'too_many_emails',
+    }] }))
+
+    fireEvent.click(await screen.findByTestId('results-tab-optouts'))
+    const name = screen.getByText('Agent 1234567')
+    expect(name.tagName).toBe('SPAN')
+    expect(screen.queryByTestId('profile-probe')).toBeNull()
   })
 })
 

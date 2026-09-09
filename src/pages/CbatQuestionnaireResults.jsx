@@ -38,15 +38,52 @@ const OPT_OUT_REASON_LABELS = {
 
 const PASS_LABELS = { yes: 'Passed', no: 'Did not pass', waiting: 'Waiting' }
 
+// A name or an email that opens that agent's read-only profile.
+//
+// Every person on this page is one an admin has just read an opinion from, and
+// the opinion is only half the answer — "who is this" is the other half, and it
+// already has a page. Falls back to plain text when there is no account behind
+// the row, which happens when an invite outlives the user it was sent to.
+//
+// Back returns here rather than to the admin panel nobody was in, the same way
+// Community and the score feed send the page they were opened from.
+function AgentLink({ userId, name, className = '', children }) {
+  const navigate = useNavigate()
+  if (!userId) return <span className={className}>{children}</span>
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(`/admin/agent/${userId}`, {
+        state: { backTo: '/admin/cbat-questionnaire', backLabel: 'Back to results' },
+      })}
+      title={name ? `View ${name}'s profile` : 'View their profile'}
+      className={`${className} text-left hover:underline hover:text-brand-600 transition-colors`}
+    >
+      {children}
+    </button>
+  )
+}
+
 // Who wrote a piece of free text. The blocks above the tables are the only
 // place the text itself appears, so they have to carry enough to find the
 // person in the rows below: their name if they gave one, their agent number
-// either way.
-const writer = (x) => [
-  x.displayName?.trim() || (x.agentNumber ? `Agent ${x.agentNumber}` : null),
-  roleLabel(x.role) || 'Role not given',
-  x.displayName?.trim() && x.agentNumber ? `Agent ${x.agentNumber}` : null,
-].filter(Boolean).join(' · ')
+// either way. Both of those are the person, so both open their profile; the
+// role between them is not, so it stays plain.
+function Writer({ x, suffix = '' }) {
+  const name     = x.displayName?.trim() || (x.agentNumber ? `Agent ${x.agentNumber}` : null)
+  const agentTag = x.displayName?.trim() && x.agentNumber ? `Agent ${x.agentNumber}` : null
+  const parts = [
+    name && <AgentLink userId={x.userId} name={name}>{name}</AgentLink>,
+    <span>{roleLabel(x.role) || 'Role not given'}</span>,
+    agentTag && <AgentLink userId={x.userId} name={name}>{agentTag}</AgentLink>,
+  ].filter(Boolean)
+  return (
+    <>
+      {parts.map((part, i) => <span key={i}>{i > 0 ? ' · ' : ''}{part}</span>)}
+      {suffix}
+    </>
+  )
+}
 
 const TABS = [
   { id: 'answers', label: 'Answers' },
@@ -165,7 +202,7 @@ export default function CbatQuestionnaireResults() {
                 {s.gaps.map((g, i) => (
                   <div key={i} className="rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2">
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{g.gaps}</p>
-                    <p className="text-[10px] text-slate-500 mt-1">{writer(g)}</p>
+                    <p className="text-[10px] text-slate-500 mt-1"><Writer x={g} /></p>
                   </div>
                 ))}
               </div>
@@ -185,7 +222,7 @@ export default function CbatQuestionnaireResults() {
                   <div key={i} className="rounded-xl border border-slate-200 bg-surface px-3 py-2">
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.comment}</p>
                     <p className="text-[10px] text-slate-500 mt-1">
-                      {writer(c)}{c.passedForRole === 'yes' ? ' · Passed' : ''}
+                      <Writer x={c} suffix={c.passedForRole === 'yes' ? ' · Passed' : ''} />
                     </p>
                   </div>
                 ))}
@@ -232,13 +269,22 @@ function Stat({ label, value, hint }) {
   )
 }
 
+// The name and the email are the same person, so both open the same profile.
+// Two targets rather than one because which of them an admin recognises depends
+// entirely on where they last saw this person — a display name in Community, an
+// address in the send list.
 function Who({ row }) {
+  const name = row.displayName?.trim() || (row.agentNumber ? `Agent ${row.agentNumber}` : 'Unknown')
   return (
     <div className="min-w-0">
-      <p className="text-sm font-semibold text-slate-800 truncate">
-        {row.displayName?.trim() || (row.agentNumber ? `Agent ${row.agentNumber}` : 'Unknown')}
-      </p>
-      {row.email && <p className="text-[10px] text-slate-500 truncate">{row.email}</p>}
+      <AgentLink userId={row.userId} name={name} className="block max-w-full text-sm font-semibold text-slate-800 truncate">
+        {name}
+      </AgentLink>
+      {row.email && (
+        <AgentLink userId={row.userId} name={name} className="block max-w-full text-[10px] text-slate-500 truncate">
+          {row.email}
+        </AgentLink>
+      )}
     </div>
   )
 }
@@ -260,7 +306,7 @@ function AnswersTable({ rows }) {
       {rows.map(r => (
         <div key={r._id} className="px-4 py-3">
           <div className="flex items-start justify-between gap-3">
-            <Who row={{ ...r.userId, email: r.userId?.email }} />
+            <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email }} />
             <div className="shrink-0 text-right">
               {r.satTest === false
                 ? <span className="text-[10px] font-semibold text-sky-700">Not sat yet</span>
