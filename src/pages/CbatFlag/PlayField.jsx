@@ -5,7 +5,7 @@ import * as THREE from 'three'
 import { playFlagBleep } from '../../utils/sound'
 import { useCbatDemoCanvas } from '../../utils/cbat/demoMode'
 import {
-  nextCallsign, isContactVisible,
+  scaledAircraftCap, nextCallsign, isContactVisible,
   callsignLabelPos, leavingBoxPos,
 } from './fieldRules'
 
@@ -703,7 +703,7 @@ function PlayFieldImpl({
       // so the field can clear before the timer ends.
       if (gameTime < 55) {
         const { max, spawn } = stageConfig(gameTime)
-        const effMax = maxAircraft != null ? maxAircraft : max
+        const effMax = maxAircraft != null ? maxAircraft : scaledAircraftCap(max, w, h)
         spawnTimerRef.current -= dt
         if (spawnTimerRef.current <= 0 && aircraftRef.current.length < effMax) {
           const ac = spawnAircraft(w, h, circleChance)

@@ -8,6 +8,26 @@ import { generateUniqueSymbols } from './symbols'
 
 export function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi) }
 
+// ── Traffic density ──────────────────────────────────────────────────────────
+// Traffic is tuned for the desktop field, which main.css caps at 56rem × 30rem
+// (.cbat-flag-field max-width and the .cbat-flag-columns max-height). A smaller
+// field carries proportionally fewer contacts so a phone isn't scored on a
+// denser sky than a monitor. Square-rooted and floored, so mobile plays a little
+// easier rather than becoming a different game — the full challenge stays on
+// desktop, which is where we point people for the real run.
+export const REF_FIELD_AREA = 896 * 480
+export const MIN_DENSITY_SCALE = 0.7
+
+export function densityScale(w, h) {
+  if (!w || !h) return 1
+  return clamp(Math.sqrt((w * h) / REF_FIELD_AREA), MIN_DENSITY_SCALE, 1)
+}
+
+// Never below 2 — a field with one contact on it isn't the game.
+export function scaledAircraftCap(max, w, h) {
+  return Math.max(2, Math.round(max * densityScale(w, h)))
+}
+
 // ── Callsign issue ───────────────────────────────────────────────────────────
 // A callsign is never reused inside a run: two aircraft sharing one would make
 // "is XX on screen right now" ambiguous, with no right answer to score. Walk the

@@ -1,11 +1,37 @@
 import { describe, it, expect } from 'vitest'
 import {
-  nextCallsign, isContactVisible, callsignLabelPos, leavingBoxPos,
+  densityScale, scaledAircraftCap, nextCallsign, isContactVisible,
+  callsignLabelPos, leavingBoxPos, REF_FIELD_AREA, MIN_DENSITY_SCALE,
 } from '../fieldRules'
 
 // Matches AIRCRAFT_RADIUS in PlayField.
 const R = 25
 const DESKTOP = { w: 896, h: 480 }
+const PHONE = { w: 360, h: 420 }
+
+describe('FLAG traffic density', () => {
+  it('runs the full desktop traffic at the reference field size and never above it', () => {
+    expect(densityScale(DESKTOP.w, DESKTOP.h)).toBe(1)
+    // A window bigger than the CSS cap can't make the sky busier than designed.
+    expect(densityScale(2560, 1440)).toBe(1)
+    expect(REF_FIELD_AREA).toBe(DESKTOP.w * DESKTOP.h)
+  })
+
+  it('thins the traffic on a phone, but only a little', () => {
+    const phone = densityScale(PHONE.w, PHONE.h)
+    expect(phone).toBeLessThan(1)
+    expect(phone).toBeGreaterThanOrEqual(MIN_DENSITY_SCALE)
+    // The busiest stage is 14 contacts on desktop. Mobile stays a recognisably
+    // similar game — the point is that the full challenge lives on desktop.
+    expect(scaledAircraftCap(14, DESKTOP.w, DESKTOP.h)).toBe(14)
+    expect(scaledAircraftCap(14, PHONE.w, PHONE.h)).toBe(10)
+  })
+
+  it('never thins a stage below two contacts, and no-ops before the field is measured', () => {
+    expect(scaledAircraftCap(4, 120, 120)).toBeGreaterThanOrEqual(2)
+    expect(densityScale(0, 0)).toBe(1)
+  })
+})
 
 describe('FLAG callsign issue', () => {
   it('walks the pool in order', () => {
