@@ -11242,6 +11242,10 @@ export default function Admin() {
   const [tab, setTab] = useState(() => {
     if (location.state?.openLeads || location.state?.editBriefId) return 'briefs'
     if (location.state?.openPassers) return 'content'
+    // Every "Back to Admin" button on an admin sub-page sends the tab it came
+    // from. Honoured here so returning from a user history page lands back on
+    // Users rather than dumping the admin on Stats to find their place again.
+    if (location.state?.tab) return location.state.tab
     return 'stats'
   })
   const [leadsInitialSearch, setLeadsInitialSearch] = useState(() => location.state?.leadsSearch ?? '')

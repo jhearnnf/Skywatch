@@ -132,6 +132,12 @@ export default function CbatGameHistory() {
   const adminUserId   = location.state?.adminUserId   ?? null
   const adminUserName = location.state?.adminUserName ?? null
   const isAdminView   = !!(adminUserId && user?.isAdmin)
+  // Whoever opened this page says where Back goes. Defaults to Admin > Users,
+  // which is where these links came from before the agent profile page also
+  // started opening them.
+  const backTo     = location.state?.backTo     ?? '/admin'
+  const backLabel  = location.state?.backLabel  ?? 'Back to Admin'
+  const backState  = location.state?.backState  ?? (backTo === '/admin' ? { tab: 'users' } : undefined)
 
   const [sessions,     setSessions]     = useState([])
   const [counts,       setCounts]       = useState({ total: 0, finished: 0, abandoned: 0 })
@@ -186,10 +192,10 @@ export default function CbatGameHistory() {
       {/* Header */}
       <div className="mb-4">
         <button
-          onClick={() => navigate('/admin', { state: { tab: 'users' } })}
+          onClick={() => navigate(backTo, { state: backState })}
           className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1"
         >
-          ← Back to Admin
+          ← {backLabel}
         </button>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">Admin View</span>
