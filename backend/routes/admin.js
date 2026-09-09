@@ -24,6 +24,8 @@ const GameCaseFile                        = require('../models/GameCaseFile');
 const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
+const { resolveSelectedBadge } = require('../utils/selectedBadge');
+const { boardPositionFor } = require('../utils/cbatBoardRank');
 const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
 const { deleteUserAndData } = require('../services/deleteUserData');
 const Rank  = require('../models/Rank');
@@ -2134,6 +2136,180 @@ router.get('/users/:id/cbat-progress', protect, adminOnly, async (req, res) => {
         ...progress,
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/users/:id/profile — everything the admin agent profile page shows.
+//
+// Opened from the user card in Community, which is where an admin actually meets
+// an agent: a name in a thread, and no way to find out who they are. This is the
+// one read that answers that — identity, standing, the aircraft badges they have
+// collected, and how much CBAT they have actually done.
+//
+// Deliberately its own endpoint rather than a reuse of enrichUsersWithStats():
+// that one is built to enrich a whole page of users at once and pulls a
+// latest-release comparison across the entire population with it. For one user
+// that is a lot of work for data this page does not show.
+router.get('/users/:id/profile', protect, adminOnly, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const target = await User.findById(req.params.id).populate('rank');
+    if (!target) return res.status(404).json({ message: 'User not found' });
+
+    const uid = target._id;
+
+    // Every published Aircraft brief that has a cutout is a collectable badge.
+    // Same rule as GET /api/users/me/badge-options, minus the slim-mode unlock:
+    // this is a report on what the agent has actually earned, and slim mode is a
+    // property of the *viewer's* client, so honouring it here would show the
+    // admin's own app mode as the agent's collection.
+    const aircraftBriefs = await IntelligenceBrief.find({
+      category: 'Aircrafts',
+      status:   'published',
+    }).select('title media').populate('media').sort({ title: 1 }).lean();
+
+    const cbatEntries = Object.entries(CBAT_GAMES);
+
+    const [
+      briefsRead, aircraftReads, quizAgg, booAgg, wtaCount, whereCount, flashCount,
+      cbatStartAgg, selectedBadge, ...cbatPerGame
+    ] = await Promise.all([
+      IntelligenceBriefRead.countDocuments({ userId: uid, completed: true }),
+      IntelligenceBriefRead.find({
+        userId: uid, completed: true,
+        intelBriefId: { $in: aircraftBriefs.map(b => b._id) },
+      }).select('intelBriefId').lean(),
+      GameSessionQuizAttempt.aggregate([
+        { $match: { userId: uid } },
+        { $group: { _id: null,
+          total:     { $sum: 1 },
+          completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+        } },
+      ]),
+      GameSessionOrderOfBattleResult.aggregate([
+        { $match: { userId: uid } },
+        { $group: { _id: null, total: { $sum: 1 }, won: { $sum: { $cond: ['$won', 1, 0] } } } },
+      ]),
+      GameSessionWheresThatAircraftResult.countDocuments({ userId: uid }),
+      GameSessionWhereAircraftResult.countDocuments({ userId: uid }),
+      GameSessionFlashcardRecallResult.countDocuments({ userId: uid }),
+      GameSessionCbatStart.aggregate([
+        { $match: { userId: uid } },
+        { $group: { _id: null, count: { $sum: 1 }, lastAt: { $max: '$startedAt' } } },
+      ]),
+      resolveSelectedBadge(target.selectedBadgeBriefId),
+      // Attempts, personal best and last play per registry entry. One $group per
+      // entry rather than per Model: two entries can share a collection and each
+      // needs its own modeFilter (see CBAT_GAMES).
+      ...cbatEntries.map(async ([gameKey, cfg]) => {
+        const [row] = await cfg.Model.aggregate([
+          { $match: { ...(cfg.modeFilter ?? {}), userId: uid } },
+          { $group: {
+            _id: null,
+            attempts:     { $sum: 1 },
+            best:         { [cfg.bestOp]: `$${cfg.primaryField}` },
+            lastPlayedAt: { $max: '$createdAt' },
+          } },
+        ]);
+        if (!row?.attempts) return null;
+        return {
+          gameKey,
+          label:        cbatLabelWithDifficulty(gameKey),
+          attempts:     row.attempts,
+          best:         row.best ?? null,
+          lastPlayedAt: row.lastPlayedAt ?? null,
+        };
+      }),
+    ]);
+
+    const readSet = new Set(aircraftReads.map(r => String(r.intelBriefId)));
+    // 'earned'  — read the brief, and the brief has a cutout to show for it.
+    // 'locked'  — a cutout exists, they have not read the brief.
+    // 'pending' — they read it but no cutout has been made yet, so there is
+    //             nothing to draw. Counted separately so the "12 of 30" total
+    //             only ever counts badges that can actually be obtained.
+    const badges = { earned: [], locked: [], pendingCount: 0 };
+    for (const b of aircraftBriefs) {
+      const cutout = (b.media || []).find(m => m.cutoutUrl);
+      const hasRead = readSet.has(String(b._id));
+      if (!cutout) { if (hasRead) badges.pendingCount += 1; continue; }
+      const entry = { briefId: b._id, title: b.title, cutoutUrl: cutout.cutoutUrl };
+      (hasRead ? badges.earned : badges.locked).push(entry);
+    }
+
+    const cbatGames = cbatPerGame.filter(Boolean)
+      .sort((a, b) => b.attempts - a.attempts);
+    const cbatFinished = cbatGames.reduce((sum, g) => sum + g.attempts, 0);
+
+    // Where they currently stand on each of those all-time boards, ranked
+    // against the SAME padded board a player sees — best-per-user, with the
+    // demo agents padLeaderboard injects into thin games counted as the places
+    // they visibly occupy. Telling an admin someone is 2nd while the board
+    // shows them 5th would make the page worse than silent.
+    //
+    // Only for games they have actually finished: an unplayed board has no
+    // position to report and each one costs an aggregation.
+    await Promise.all(cbatGames.map(async (g) => {
+      try {
+        g.boardRank = await boardPositionFor(g.gameKey, CBAT_GAMES[g.gameKey], uid);
+      } catch {
+        // One unrankable board must not cost the page every other number on it.
+        g.boardRank = null;
+      }
+    }));
+
+    // The podium places, best first — the same medals chat hangs off their
+    // avatar. Derived from the boards just ranked rather than read from the
+    // medal cache, so the page is never up to five minutes behind itself.
+    const medals = cbatGames
+      .filter(g => g.boardRank && g.boardRank <= 3)
+      .map(g => ({ gameKey: g.gameKey, gameLabel: g.label, rank: g.boardRank }))
+      .sort((a, b) => a.rank - b.rank);
+
+    res.json({ status: 'success', data: {
+      user: {
+        _id:               target._id,
+        displayName:       target.displayName ?? null,
+        agentNumber:       target.agentNumber ?? null,
+        email:             target.email ?? null,
+        isAdmin:           Boolean(target.isAdmin),
+        isBot:             Boolean(target.isBot),
+        botKey:            target.botKey ?? null,
+        isBanned:          Boolean(target.isBanned),
+        isTester:          Boolean(target.isTester),
+        cbatPassed:        Boolean(target.cbatPassed),
+        chatBannedAt:      target.chatBannedAt ?? null,
+        createdAt:         target.createdAt,
+        lastSeen:          target.lastSeen ?? null,
+        loginStreak:       target.loginStreak ?? 0,
+        totalAirstars:     target.totalAirstars ?? 0,
+        cycleAirstars:     target.cycleAirstars ?? 0,
+        difficultySetting: target.difficultySetting ?? 'easy',
+        subscriptionTier:  effectiveTier(target),
+        rank:              target.rank ?? null,
+        selectedBadge,
+      },
+      stats: {
+        briefsRead,
+        quizzesPlayed:    quizAgg[0]?.total     ?? 0,
+        quizzesCompleted: quizAgg[0]?.completed ?? 0,
+        booPlayed:        booAgg[0]?.total      ?? 0,
+        booWon:           booAgg[0]?.won        ?? 0,
+        wtaPlayed:        wtaCount,
+        wherePlayed:      whereCount,
+        flashcardsPlayed: flashCount,
+        cbatFinished,
+        cbatStarted:      cbatStartAgg[0]?.count  ?? 0,
+        lastCbatAt:       cbatStartAgg[0]?.lastAt ?? cbatGames[0]?.lastPlayedAt ?? null,
+      },
+      badges,
+      medals,
+      cbatGames,
+    } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

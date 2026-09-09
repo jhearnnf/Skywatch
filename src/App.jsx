@@ -103,6 +103,7 @@ import NotFound       from './pages/NotFound'
 
 // v2 admin
 import Admin          from './pages/Admin'
+import AdminAgentProfile from './pages/AdminAgentProfile'
 import CbatAwardPreview from './pages/CbatAwardPreview'
 import OpenRouterUsage from './pages/OpenRouterUsage'
 import Clipper        from './pages/Clipper'
@@ -391,6 +392,10 @@ function AppRoutes() {
           {/* Clipper — admin-only short-form video tool. The page itself checks
               isAdmin; every /api/clipper route is adminOnly server-side too. */}
           <Route path="/clipper"           element={<RequireAuth><PageWrapper><Clipper /></PageWrapper></RequireAuth>} />
+          {/* Read-only view of one agent, opened from the user card in Community.
+              Admin-only: the page checks isAdmin and the endpoint behind it is
+              adminOnly. Under /admin so it inherits the slim-mode allowlist. */}
+          <Route path="/admin/agent/:id"   element={<RequireAuth><PageWrapper><AdminAgentProfile /></PageWrapper></RequireAuth>} />
           <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />
           <Route path="/admin/cbat-questionnaire" element={<RequireAuth><PageWrapper><CbatQuestionnaireResults /></PageWrapper></RequireAuth>} />
           {/* Admin-only preview of the post-game progress-award flow. Under /admin so it inherits
