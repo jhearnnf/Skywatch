@@ -42,6 +42,13 @@ const AC_QUESTION_COOLDOWN = 3
 const AC_QUESTION_DURATION = 4
 const AC_QUESTION_FIRST = 5
 
+// Callsigns for one run, split into two pools that never overlap. The field pool
+// is sized well past the most ringed contacts a 60s run can produce (~30 at the
+// busiest difficulty) so it is never exhausted and never has to repeat a
+// callsign; the decoy pool supplies question subjects that are on no aircraft.
+const FIELD_SYMBOL_POOL = 72
+const DECOY_SYMBOL_POOL = 24
+
 // Maths questions start at 3s and are spread across the full run.
 const buildMathSchedule = (tuning) => buildQuestionSchedule(tuning.mathCount, 3, GAME_DURATION)
 
@@ -274,7 +281,12 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
   // is pinned to the easy stage so aircraft spawn at a gentle, learnable cadence.
   const playFieldRef = useRef(null)
   const tutGameTimeRef = useRef(8)
-  const [symbols] = useState(() => generateUniqueSymbols(40))
+  // Same two-pool split as the live game: field callsigns are never repeated,
+  // and the decoys are never flown, so a NO the tutorial teaches stays a NO.
+  const [{ field: symbols, decoys: decoySymbols }] = useState(() => {
+    const field = generateUniqueSymbols(40)
+    return { field, decoys: generateUniqueSymbols(12, new Set(field)) }
+  })
   const [palette] = useState(() => generatePalette())
   // Re-entering the targets step remounts the field so its focus mechanic resets.
   const [fieldKey, setFieldKey] = useState(0)
@@ -361,7 +373,9 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
   // when aircraft are up. Correctness is judged live against what's on the field
   // at answer time, exactly as the real game does.
   const presentAcQuestion = useCallback(() => {
-    const onScreen = [...onScreenSymsRef.current]
+    // Only callsigns the learner has actually been shown are eligible, same as
+    // the live game — asking about one that hasn't surfaced teaches nothing.
+    const onScreen = [...onScreenSymsRef.current].filter(s => seenSymsRef.current.has(s))
     let sym
     if (onScreen.length > 0 && Math.random() < 0.6) {
       sym = onScreen[Math.floor(Math.random() * onScreen.length)]
@@ -369,7 +383,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
       const gone = [...seenSymsRef.current].filter(s => !onScreenSymsRef.current.has(s))
       sym = gone.length
         ? gone[Math.floor(Math.random() * gone.length)]
-        : generateUniqueSymbols(1, onScreenSymsRef.current)[0]
+        : decoySymbols[Math.floor(Math.random() * decoySymbols.length)]
     }
     setAcQuestion({ sym })
     setAcDisabled(false)
@@ -384,7 +398,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
       setAcHighlightSym(sym)
       setAcHighlightOnScreen(onScreenSymsRef.current.has(sym))
     }, 4000)
-  }, [])
+  }, [decoySymbols])
 
   const onAcAnswer = useCallback((choice) => {
     if (acDisabled || !acQuestion) return
@@ -520,6 +534,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
           ref={playFieldRef}
           modelUrl={modelUrl}
           symbols={symbols}
+          reservedSymbols={decoySymbols}
           palette={palette}
           gameTimeRef={tutGameTimeRef}
           onScoreEvent={onTargetScore}
@@ -693,10 +708,14 @@ export default function CbatFlag() {
   const acDisabledRef = useRef(false)
   const [acDisabled, setAcDisabled] = useState(false)
 
-  // Symbol tracking
+  // Symbol tracking. seenPool is cumulative — every callsign whose label has
+  // actually been drawn on the field. onScreen is live — the contacts currently
+  // in the player's view. decoyPool is held back from the field entirely, so a
+  // question drawn from it is a NO that stays a NO for its whole window.
   const seenPoolRef = useRef(new Set())
   const onScreenRef = useRef(new Set())
-  const allSymbolsRef = useRef(new Set())
+  const decoyPoolRef = useRef(new Set())
+  const [decoySymbols, setDecoySymbols] = useState([])
 
   useEffect(() => {
     // Hide the nav chrome during the live game and the practice tutorial.
@@ -810,16 +829,20 @@ export default function CbatFlag() {
     if (gameTime - acLastQuestionRef.current < AC_QUESTION_COOLDOWN) return false
     if (gameTime < AC_QUESTION_FIRST) return false
 
+    // Only ever ask about a callsign the player has been shown. seenPool is
+    // filled when a label is actually drawn, so a contact still in its pre-flash
+    // window is never the subject — it would be a YES the player had no way to
+    // know. The rest of the time we ask about a reserved decoy, which is on no
+    // aircraft and so is always a NO.
     const roll = Math.random()
     let sym
     const seenArr = [...seenPoolRef.current]
-    const allArr = [...allSymbolsRef.current]
-    const neverSeen = allArr.filter(s => !seenPoolRef.current.has(s))
+    const decoyArr = [...decoyPoolRef.current]
 
     if (roll < 0.8 && seenArr.length > 0) {
       sym = seenArr[Math.floor(Math.random() * seenArr.length)]
-    } else if (neverSeen.length > 0) {
-      sym = neverSeen[Math.floor(Math.random() * neverSeen.length)]
+    } else if (decoyArr.length > 0) {
+      sym = decoyArr[Math.floor(Math.random() * decoyArr.length)]
     } else if (seenArr.length > 0) {
       sym = seenArr[Math.floor(Math.random() * seenArr.length)]
     } else {
@@ -1050,11 +1073,16 @@ export default function CbatFlag() {
 
   const startGame = useCallback(() => {
     if (aircraftList.length === 0) return
-    const syms = generateUniqueSymbols(40)
-    syms.forEach(s => allSymbolsRef.current.add(s))
+    // Two disjoint pools. The field pool is walked in order and never wraps, so
+    // no two aircraft in a run can carry the same callsign. The decoy pool is
+    // never handed to an aircraft at all — it exists purely to supply questions
+    // whose honest answer is NO.
+    const syms = generateUniqueSymbols(FIELD_SYMBOL_POOL)
+    const decoys = generateUniqueSymbols(DECOY_SYMBOL_POOL, new Set(syms))
     setSymbols(syms)
+    setDecoySymbols(decoys)
     setPalette(generatePalette())
-    allSymbolsRef.current = new Set(syms)
+    decoyPoolRef.current = new Set(decoys)
     seenPoolRef.current = new Set()
     onScreenRef.current = new Set()
     mathScheduleRef.current = buildMathSchedule(runTuningRef.current)
@@ -1192,6 +1220,7 @@ export default function CbatFlag() {
                       ref={playFieldRef}
                       modelUrl={modelUrl}
                       symbols={symbols}
+                      reservedSymbols={decoySymbols}
                       palette={palette}
                       gameTimeRef={gameTimeRef}
                       onScoreEvent={handleScoreEvent}

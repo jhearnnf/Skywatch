@@ -4,6 +4,10 @@ import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { playFlagBleep } from '../../utils/sound'
 import { useCbatDemoCanvas } from '../../utils/cbat/demoMode'
+import {
+  nextCallsign, isContactVisible,
+  callsignLabelPos, leavingBoxPos,
+} from './fieldRules'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const AIRCRAFT_SPEED = 20          // px/s
@@ -525,11 +529,15 @@ function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlig
         else if (highlighted) { showSymbol = !!ac.symbol; pulseSymbol = true }
         else if (blinkSymbols) { showSymbol = !!ac.symbol && blinkShow; pulseSymbol = blinkShow }
         else { showSymbol = ac.symbol && now / 1000 < ac.symbolFlashEnd; pulseSymbol = false }
-        // Red callsign box geometry — sized to the (2-letter) label, centred over
-        // the aircraft just above its ring.
-        const boxW = leaving ? ac.symbol.length * 9 + 12 : 0
-        const boxH = 17
-        const boxTop = ac.y - AIRCRAFT_RADIUS - 22
+        // Both label forms are placed by fieldRules, which keeps them inside the
+        // field — a callsign flashed outside the clip counts as shown to the game
+        // and is invisible to the player, which is exactly the unfair question.
+        const fontSize = highlighted ? 13 : 11
+        const geo = { x: ac.x, y: ac.y, symbol: ac.symbol, radius: AIRCRAFT_RADIUS, fieldW, fieldH }
+        const { x: labelX, y: labelY } = callsignLabelPos({ ...geo, fontSize })
+        const { x: boxX, y: boxTop, width: boxW, height: boxH } = leaving
+          ? leavingBoxPos(geo)
+          : { x: 0, y: 0, width: 0, height: 17 }
         return (
           <g key={ac.id} opacity={ac.greyed ? 0.35 : 1}>
             {showCircle && (
@@ -541,13 +549,13 @@ function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlig
             {leaving && (
               <g className="cbat-flag-callsign-leaving">
                 <rect
-                  x={ac.x - boxW / 2} y={boxTop}
+                  x={boxX} y={boxTop}
                   width={boxW} height={boxH} rx={3}
                   fill="#7f1d1d" fillOpacity={0.92}
                   stroke="#f87171" strokeWidth="1.5"
                 />
                 <text
-                  x={ac.x} y={boxTop + boxH / 2 + 0.5}
+                  x={boxX + boxW / 2} y={boxTop + boxH / 2 + 0.5}
                   textAnchor="middle" dominantBaseline="central"
                   fontSize={11} fontWeight="bold" fontFamily="monospace"
                   fill="#fecaca"
@@ -558,9 +566,9 @@ function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlig
             )}
             {showSymbol && (
               <text
-                x={ac.x} y={ac.y - AIRCRAFT_RADIUS - 6}
+                x={labelX} y={labelY}
                 textAnchor="middle"
-                fontSize={highlighted ? 13 : 11}
+                fontSize={fontSize}
                 fontWeight="bold"
                 fontFamily="monospace"
                 fill={highlighted ? '#5baaff' : '#ddeaf8'}
@@ -598,6 +606,9 @@ function EyesOverlay({ aircraft }) {
 function PlayFieldImpl({
   modelUrl,
   symbols,
+  // Callsigns held back as guaranteed "not on the field" question decoys. Never
+  // handed to an aircraft, so a NO answer stays right for the whole question.
+  reservedSymbols = null,
   palette,
   gameTimeRef,
   onScoreEvent,
@@ -637,6 +648,7 @@ function PlayFieldImpl({
   const lastTimeRef = useRef(null)
   const symbolsRef = useRef(symbols)
   const symbolIdxRef = useRef(0)
+  const issuedSymbolsRef = useRef(new Set())  // every callsign handed out this run
   const spawnTimerRef = useRef(randRange(1.5, 3.5))
   const firstAcIdRef = useRef(null)     // tutorial: id of the first aircraft to spawn
   const [firstAcId, setFirstAcId] = useState(null) // render-safe mirror of the above
@@ -711,10 +723,20 @@ function PlayFieldImpl({
           // are never tracked, and never appear in a question. A fresh circled
           // contact also fires the enter bleep during live play.
           if (ac.hasCircle) {
-            const sym = symbolsRef.current[symbolIdxRef.current % symbolsRef.current.length]
+            const sym = nextCallsign(
+              symbolsRef.current,
+              symbolIdxRef.current,
+              issuedSymbolsRef.current,
+              reservedSymbols,
+            )
             symbolIdxRef.current++
+            issuedSymbolsRef.current.add(sym)
             ac.symbol = sym
-            ac.symbolFlashAt = randRange(0, 14)
+            // The label shows for a 5s flash starting at this age. Kept well
+            // inside the 20s lifetime so a contact isn't anonymous — and so
+            // ineligible to be asked about — for most of its time on the field.
+            ac.symbolFlashAt = randRange(0, 8)
+            ac.tracked = true
             onAircraftSpawn?.(sym)
             if (gameCues) playFlagBleep('enter')
           }
@@ -824,13 +846,27 @@ function PlayFieldImpl({
         next.x += Math.cos(next.heading) * AIRCRAFT_SPEED * dt
         next.y += Math.sin(next.heading) * AIRCRAFT_SPEED * dt
 
+        // "On screen" for scoring has to mean what the player can actually see.
+        // The cull margin below is 60px so the model flies clear of the edge
+        // smoothly, but the contact stops counting the moment its ring leaves the
+        // visible field — otherwise YES stays the graded answer for ~3s after it
+        // has vanished behind the clip.
+        if (next.tracked && !pinFocus && !isContactVisible(next.x, next.y, w, h, AIRCRAFT_RADIUS)) {
+          next.tracked = false
+          onAircraftDespawn?.(next.symbol)
+          if (gameCues) playFlagBleep('exit')
+        }
+
         // Despawn if off screen or too old — but never the pinned focus aircraft,
         // which stays until the player's first strike releases it.
         const margin = 60
         const offScreen = next.x < -margin || next.x > w + margin || next.y < -margin || next.y > h + margin
         if ((offScreen || next.age >= acLifetime) && !pinFocus) {
-          // Only circled aircraft are tracked / bleep — uncircled ones leave silently.
-          if (next.symbol) {
+          // Only circled aircraft are tracked / bleep — uncircled ones leave
+          // silently. A contact culled while still inside the field (lifetime
+          // expiry) reports here; one that flew out already reported above.
+          if (next.symbol && next.tracked) {
+            next.tracked = false
             onAircraftDespawn?.(next.symbol)
             if (gameCues) playFlagBleep('exit')
           }
@@ -976,7 +1012,7 @@ function PlayFieldImpl({
 
     rafRef.current = requestAnimationFrame(tick)
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent, tutorialHints, onHotColorsChange, keepAircraftLonger, maxAircraft, blinkSymbols, gameCues, circleChance])
+  }, [active, fieldSize, gameTimeRef, onAircraftSpawn, onAircraftDespawn, onAircraftSeen, onScoreEvent, tutorialHints, onHotColorsChange, keepAircraftLonger, maxAircraft, blinkSymbols, gameCues, circleChance, reservedSymbols])
 
   const flashShape = (shapeId, kind) => {
     const field = kind === 'green' ? 'flashGreen' : 'flashRed'
