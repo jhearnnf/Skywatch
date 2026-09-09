@@ -55,6 +55,34 @@ async function cbatPaddedFakes(gameKey, cfg, isAdmin) {
   return paddedFakesFrom(await bestPerUserTop20(cfg), gameKey, isAdmin);
 }
 
+// One game's visible all-time board, ranked: the real best-per-user rows and the
+// demo rows interleaved exactly as a player sees them, trimmed to the top 20.
+//
+// The single place that assembles a board, so "you hold a gold" and "you are 4th"
+// can never be computed two different ways and disagree. A row's `isFake` says
+// whether it is a demo agent; real rows carry the owning `userId`.
+function paddedBoardFrom(real, gameKey, cfg, isAdmin = false) {
+  const fakes = paddedFakesFrom(real, gameKey, isAdmin);
+  return [...real, ...fakes]
+    .sort((a, b) => (isBetterScore(cfg, a.bestScore, a.bestTime, b.bestScore, b.bestTime) ? -1 : 1))
+    .slice(0, 20)
+    .map((row, i) => ({ ...row, rank: i + 1 }));
+}
+
+// As above, fetching the real rows for you. One aggregation per call, so a caller
+// asking about several games should run them concurrently.
+async function paddedBoard(gameKey, cfg, { isAdmin = false } = {}) {
+  return paddedBoardFrom(await bestPerUserTop20(cfg), gameKey, cfg, isAdmin);
+}
+
+// Where one user sits on that board, or null when they are outside the top 20
+// (or have never finished a run of it).
+async function boardPositionFor(gameKey, cfg, userId) {
+  const board = await paddedBoard(gameKey, cfg);
+  const row = board.find(e => !e.isFake && String(e.userId) === String(userId));
+  return row?.rank ?? null;
+}
+
 // The board's comparator, as a plain predicate: is `score`/`time` strictly better
 // than `otherScore`/`otherTime`? Ties on the primary field always break on lower
 // totalTime, whichever direction the primary field sorts.
@@ -114,4 +142,5 @@ async function rankOnPaddedBoard(gameKey, cfg, { score, time, excludeUserId = nu
 
 module.exports = {
   cbatPaddedFakes, bestPerUserTop20, paddedFakesFrom, rankOnPaddedBoard, isBetterScore,
+  paddedBoardFrom, paddedBoard, boardPositionFor,
 };

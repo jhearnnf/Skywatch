@@ -22,7 +22,7 @@
  */
 
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
-const { bestPerUserTop20, paddedFakesFrom, isBetterScore } = require('./cbatBoardRank');
+const { bestPerUserTop20, paddedBoardFrom } = require('./cbatBoardRank');
 
 const CACHE_MS = 5 * 60 * 1000;
 const PODIUM = 3;
@@ -46,17 +46,14 @@ async function podiumFor(gameKey, cfg) {
   // One query, used for both halves of the board. The demo rows are a pure
   // function of the real ones, so asking the database for them separately —
   // as this used to — ran the identical aggregation a second time per game.
-  const real  = await bestPerUserTop20(cfg);
-  const fakes = paddedFakesFrom(real, gameKey, false);
-
-  const board = [
-    ...real.map(r => ({ userId: r.userId, bestScore: r.bestScore, bestTime: r.bestTime })),
-    ...fakes.map(f => ({ userId: null, bestScore: f.bestScore, bestTime: f.bestTime })),
-  ].sort((a, b) => (isBetterScore(cfg, a.bestScore, a.bestTime, b.bestScore, b.bestTime) ? -1 : 1));
+  //
+  // Assembled by the shared paddedBoardFrom() so a medal here and a board
+  // position quoted anywhere else are the same number by construction.
+  const board = paddedBoardFrom(await bestPerUserTop20(cfg), gameKey, cfg, false);
 
   return board.slice(0, PODIUM)
-    .map((row, i) => ({ userId: row.userId, rank: i + 1 }))
-    .filter(row => row.userId);
+    .filter(row => !row.isFake && row.userId)
+    .map(row => ({ userId: row.userId, rank: row.rank }));
 }
 
 // One pass over every game. The podiums are independent, so they are gathered
