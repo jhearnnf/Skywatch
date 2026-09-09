@@ -6,6 +6,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { getLevelInfo } from '../utils/levelUtils'
 import { CBAT_LEADERBOARD_CONFIG, cbatTitleWithDifficulty } from '../data/cbatGames'
 import UserCbatProgressModal from '../components/admin/UserCbatProgressModal'
+import AptitudeReportCard from '../components/AptitudeReportCard'
 import ProfileBadge from '../components/ProfileBadge'
 import CbatPassedBadge from '../components/CbatPassedBadge'
 import SEO from '../components/SEO'
@@ -451,6 +452,22 @@ export default function AdminAgentProfile() {
                 badge to award for {data.badges.pendingCount === 1 ? 'it' : 'them'}.
               </p>
             )}
+          </div>
+
+          {/* Aptitude Report. The record below says how much CBAT they have sat; this says what it
+              would be worth, which is the question an admin reading a support thread actually has.
+              It is the same card the agent sees on /cbat, fetched for them and pointing at the
+              report page's admin view of them, so what an admin reads here and what the agent
+              reads on their own hub cannot drift apart. The wording switches to the third person:
+              every line on the player's own card names a game for them to go and play, and an
+              admin cannot play it for them. */}
+          <div className="mb-4">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Aptitude report</p>
+            <p className="text-[11px] text-slate-400 mb-2">
+              What their practice would score against the role they are aiming for. Opens the full
+              report as them.
+            </p>
+            <AptitudeReportCard userId={id} />
           </div>
 
           {/* CBAT record — the personal best on every game they have finished. */}

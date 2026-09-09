@@ -240,3 +240,39 @@ describe('AdminAgentProfile — routes onward', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/admin', { state: { tab: 'users' } })
   })
 })
+
+// The CBAT record below says how much of the battery they have sat. This says
+// what it would be worth, which is the question an admin opening a support
+// thread actually has. It is the agent's own card, fetched for them: the one
+// thing it must never do is show the reading admin their own numbers under
+// somebody else's name.
+describe('AdminAgentProfile — the aptitude report', () => {
+  const REPORT = {
+    targetBattery: 'pilot',
+    batteries: [{ key: 'pilot', label: 'Pilot', cutoff: 112, score: 128, margin: 16, status: 'pass', coverage: 74 }],
+    targetFocus: null,
+    nearestUnlock: null,
+    runsToCount: 3,
+  }
+
+  const routed = () => {
+    mockApiFetch.mockImplementation((url) => Promise.resolve(
+      url.includes('/api/games/cbat/report') ? ok({ data: REPORT }) : ok(payload()),
+    ))
+    return renderPage()
+  }
+
+  it('asks for that agent’s report and shows their estimate', async () => {
+    routed()
+    await screen.findByText('Viper')
+    await waitFor(() => expect(screen.getByTestId('aptitude-card-score')).toHaveTextContent('128 / pass mark 112'))
+    expect(mockApiFetch).toHaveBeenCalledWith('/api/games/cbat/report?userId=u2')
+  })
+
+  it('opens the full report as them', async () => {
+    routed()
+    await screen.findByText('Viper')
+    await waitFor(() => expect(screen.getByTestId('aptitude-card-score')).toBeInTheDocument())
+    expect(screen.getByRole('link', { name: /Aptitude Report/ })).toHaveAttribute('href', '/cbat/report?as=u2')
+  })
+})

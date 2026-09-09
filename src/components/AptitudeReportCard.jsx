@@ -40,6 +40,39 @@ import {
 // third game and one more go turns nothing into something. It counts that game's runs, names it,
 // and says how many are left.
 
+// ── Whose report this is ───────────────────────────────────────────────
+// Normally a player reading their own estimate, so every line is addressed to them and most of
+// them name something to go and do tonight. An admin opening the same card on an agent's profile
+// is reading ABOUT a player: "your first game" belongs to nobody on that page, and "Play Target
+// twice" is an instruction the reader cannot carry out. Same figures either way — only the person
+// changes, so the wording lives in one table rather than in a scatter of ternaries.
+const VOICES = {
+  own: {
+    settleUnit:      ' runs to settle your first game',
+    startScoreGoal:  'to start your score',
+    measureMore:     'Play more of this role’s games to measure more of it.',
+    firstScore:      (n) => `Play any CBAT game and your score starts here. ${n} runs settles it.`,
+    pickRole:        'Pick the role you’re aiming for and we’ll track it here.',
+    rolesPassedUnit: ' roles you’d pass',
+    play:            (title, n, goal) => `Play ${title} ${times(n)} ${goal}.`,
+    easierOnly:      (title) => `Play ${title}. Easier runs do not count.`,
+    keepPlaying:     (title) => `Keep playing ${title}.`,
+    checking:        'Checking your recent runs',
+  },
+  other: {
+    settleUnit:      ' runs to settle their first game',
+    startScoreGoal:  'to start their score',
+    measureMore:     'More of this role’s games would measure more of it.',
+    firstScore:      (n) => `No settled game yet. ${n} runs on any CBAT game settles one.`,
+    pickRole:        'They have not picked a role they are aiming for.',
+    rolesPassedUnit: ' roles they’d pass',
+    play:            (title, n, goal) => `Needs ${title} ${times(n)} ${goal}.`,
+    easierOnly:      (title) => `Only the Hard half of ${title} counts.`,
+    keepPlaying:     (title) => `Their next play is ${title}.`,
+    checking:        'Checking their recent runs',
+  },
+}
+
 // ── Shared geometry ──────────────────────────────────────────────────────────
 // The boxes that set the card's height, defined once and used by every state INCLUDING the
 // skeleton. Height parity is the skeleton's entire job, so the two cannot be allowed to drift: a
@@ -82,8 +115,13 @@ const LAYOUT_TRANSITION = { duration: 0.3, ease: 'easeOut' }
 
 const RUNS_TO_COUNT_FALLBACK = 3   // only for a payload served before runsToCount existed
 
-export default function AptitudeReportCard() {
+// `userId` is the admin case: the same card, reporting on somebody else, fetched with the
+// admin-only ?userId= the report endpoints already accept and linked to the report page's own
+// ?as= view of that player. Absent, this is the signed-in user's own card, unchanged.
+export default function AptitudeReportCard({ userId = null }) {
   const { API, apiFetch, user } = useAuth()
+  const voice = userId ? VOICES.other : VOICES.own
+  const to = userId ? `/cbat/report?as=${encodeURIComponent(userId)}` : '/cbat/report'
   const [data, setData] = useState(null)
   // Starts true so the very first paint reserves the space, rather than showing
   // nothing for a frame and then swapping in the skeleton.
@@ -97,14 +135,14 @@ export default function AptitudeReportCard() {
     setLoading(true)
     ;(async () => {
       try {
-        const res = await apiFetch(`${API}/api/games/cbat/report`)
+        const res = await apiFetch(`${API}/api/games/cbat/report${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`)
         const json = await res.json()
         if (!cancelled && res.ok) setData(json.data)
       } catch { /* the card is an extra; the games below are the page */ }
       finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [user, API, apiFetch])
+  }, [user, API, apiFetch, userId])
 
   // Guards the SHAPE, not just the absence. `data` is whatever the endpoint returned, and every
   // branch below walks `batteries` — so a response that came back without it (an error body, an
@@ -121,18 +159,20 @@ export default function AptitudeReportCard() {
       transition={LAYOUT_TRANSITION}
       className={CARD_WRAP}
     >
-      {loading ? <ReportSkeleton /> : <ReportCard data={data} />}
+      {loading ? <ReportSkeleton voice={voice} /> : <ReportCard data={data} voice={voice} to={to} />}
     </motion.div>
   )
 }
 
-function ReportCard({ data }) {
+function ReportCard({ data, voice = VOICES.own, to = '/cbat/report' }) {
   const targetKey = data.targetBattery
   const target = targetKey ? data.batteries.find(b => b.key === targetKey) : null
   const label = target ? (BATTERY_BY_KEY[targetKey]?.label ?? targetKey) : null
 
-  const progress = progressState(data, target, label)
-  return progress ? <ProgressCard {...progress} /> : <ScoredCard target={target} label={label} />
+  const progress = progressState(data, target, label, voice)
+  return progress
+    ? <ProgressCard {...progress} to={to} />
+    : <ScoredCard target={target} label={label} to={to} />
 }
 
 // ── What to lead with ────────────────────────────────────────────────────────
@@ -143,7 +183,7 @@ function ReportCard({ data }) {
 // come next, and beat everything below them, because a run is the smallest unit of progress this
 // report has and the one a user can act on tonight — "one more go at Target" is a thing someone
 // does; "raise your spatial reasoning" is not.
-function progressState(data, target, label) {
+function progressState(data, target, label, voice = VOICES.own) {
   const runsToCount = data.runsToCount ?? RUNS_TO_COUNT_FALLBACK
   const nearest = data.nearestUnlock
 
@@ -161,8 +201,8 @@ function progressState(data, target, label) {
       label,
       headline: `${target.coverage}%`,
       unit: ' of this role measured',
-      action: focusAction(data.targetFocus, 'to measure more of it', runsToCount)
-        ?? 'Play more of this role’s games to measure more of it.',
+      action: focusAction(data.targetFocus, 'to measure more of it', runsToCount, voice)
+        ?? voice.measureMore,
       pct: Math.min(100, target.coverage),
       tick: MIN_COVERAGE_FOR_VERDICT,
     }
@@ -176,8 +216,8 @@ function progressState(data, target, label) {
     return {
       label,
       headline: `${nearest.runs} / ${total}`,
-      unit: ' runs to settle your first game',
-      action: `Play ${gameTitle(nearest.gameKey)}${onHard(nearest.gameKey)} ${times(nearest.runsNeeded)} to settle it.`,
+      unit: voice.settleUnit,
+      action: voice.play(`${gameTitle(nearest.gameKey)}${onHard(nearest.gameKey)}`, nearest.runsNeeded, 'to settle it'),
       pct: (nearest.runs / total) * 100,
       tick: null,
     }
@@ -188,7 +228,7 @@ function progressState(data, target, label) {
       label,
       headline: '0%',
       unit: ' of this role measured',
-      action: focusAction(data.targetFocus, 'to start your score', runsToCount) ?? firstScore(runsToCount),
+      action: focusAction(data.targetFocus, voice.startScoreGoal, runsToCount, voice) ?? voice.firstScore(runsToCount),
       pct: 0,
       tick: MIN_COVERAGE_FOR_VERDICT,
     }
@@ -202,8 +242,8 @@ function progressState(data, target, label) {
     return {
       label: null,
       headline: passing ? `${passing} / ${scored}` : `${scored}`,
-      unit: passing ? ' roles you’d pass' : ' roles scored',
-      action: 'Pick the role you’re aiming for and we’ll track it here.',
+      unit: passing ? voice.rolesPassedUnit : ' roles scored',
+      action: voice.pickRole,
       pct: (passing / scored) * 100,
       tick: null,
     }
@@ -211,24 +251,23 @@ function progressState(data, target, label) {
   return {
     label: null,
     headline: `${runsToCount}`,
-    unit: ' runs to settle your first game',
-    action: firstScore(runsToCount),
+    unit: voice.settleUnit,
+    action: voice.firstScore(runsToCount),
     pct: 0,
     tick: null,
   }
 }
 
 const times = (n) => `${n} more time${n === 1 ? '' : 's'}`
-const firstScore = (n) => `Play any CBAT game and your score starts here. ${n} runs settles it.`
 
 // The report's own ranked next play, worded for a card with room for one line. Null when the
 // summary carried no focus row, which the caller answers with something it can always say.
-function focusAction(focus, goal, runsToCount) {
+function focusAction(focus, goal, runsToCount, voice = VOICES.own) {
   if (!focus?.gameKey) return null
   const title = `${gameTitle(focus.gameKey)}${onHard(focus.gameKey)}`
-  if (focus.easierOnly) return `Play ${title}. Easier runs do not count.`
-  if (focus.kind === 'unlock') return `Play ${title} ${times(focus.needsRuns?.[0]?.runsNeeded ?? runsToCount)} ${goal}.`
-  return `Keep playing ${title}.`
+  if (focus.easierOnly) return voice.easierOnly(title)
+  if (focus.kind === 'unlock') return voice.play(title, focus.needsRuns?.[0]?.runsNeeded ?? runsToCount, goal)
+  return voice.keepPlaying(title)
 }
 
 // ── The cards ────────────────────────────────────────────────────────────────
@@ -236,10 +275,10 @@ function focusAction(focus, goal, runsToCount) {
 // Everything short of a verdict. Deliberately one dumb presentational component rather than one
 // per state: the states differ only in their words and their fill, and giving each its own markup
 // is how three cards quietly drift into three heights.
-function ProgressCard({ label, headline, unit, action, pct, tick }) {
+function ProgressCard({ label, headline, unit, action, pct, tick, to = '/cbat/report' }) {
   return (
     <Link
-      to="/cbat/report"
+      to={to}
       className={`${CARD_SHELL} no-underline hover:border-brand-300 transition-colors`}
       title={action}
     >
@@ -292,13 +331,13 @@ function ProgressCard({ label, headline, unit, action, pct, tick }) {
 
 // A role chosen and enough of it measured to call: the score against the pass mark, which is what
 // the whole report is for.
-function ScoredCard({ target, label }) {
+function ScoredCard({ target, label, to = '/cbat/report' }) {
   const verdict = reportVerdict(target)
   const pct = Math.min(100, ((target.score ?? 0) / MAX_SCORE) * 100)
 
   return (
     <Link
-      to="/cbat/report"
+      to={to}
       className={`${CARD_SHELL} no-underline hover:border-brand-300 transition-colors`}
     >
       <div className="flex">
@@ -383,7 +422,7 @@ function ScoredCard({ target, label }) {
 // slot holds dashes, the stripe stays the neutral "no status yet" blue, and the only motion is
 // the shared shimmer, the dots, and one indeterminate pass across the rail — none of which claims
 // to know anything.
-function ReportSkeleton() {
+function ReportSkeleton({ voice = VOICES.own }) {
   const dots = (
     <span aria-hidden="true">
       <span className="aptitude-dot">.</span>
@@ -431,7 +470,7 @@ function ReportSkeleton() {
               and only one of them is a recommendation. Reading the recent runs is the one thing
               that is true of every load, so it is the only thing safe to say before one arrives. */}
           <p data-testid="aptitude-card-action" className={`${CARD_ACTION} text-brand-700`}>
-            Checking your recent runs{dots}
+            {voice.checking}{dots}
           </p>
 
           {/* An indeterminate pass across an empty rail. It never rests at a width,
