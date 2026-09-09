@@ -110,6 +110,7 @@ import AptitudeSync   from './pages/AptitudeSync'
 import World3DRoute  from './components/world3d/World3DRoute'
 
 import { playSound } from './utils/sound'
+import { recordPath } from './utils/routeTrail'
 import useHeartbeat from './hooks/useHeartbeat'
 
 // ── Page transition wrapper ────────────────────────────────────────────────
@@ -222,6 +223,12 @@ function AppRoutes() {
     }
     prevLocationRef.current = location
   }, [location])
+
+  // Keep the last few pages visited, so a problem report can say where the
+  // person actually was. Recorded here rather than in the report form because
+  // by the time that page mounts the pages worth naming are already behind it.
+  // See src/utils/routeTrail.js.
+  useEffect(() => { recordPath(location.pathname) }, [location.pathname])
 
   // Android hardware back button — navigate back or exit on home
   useEffect(() => {

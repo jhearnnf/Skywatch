@@ -104,7 +104,14 @@ describe('Admin ▸ Intel ▸ Reports — reporter byline', () => {
 
   it('leads with the display name and keeps the agent number', async () => {
     await openReport([makeProblem({ _id: 'u1', displayName: 'Falcon', email: 'falcon@test.com', agentNumber: '1234567' })])
-    expect(await screen.findByText(/Falcon · Agent 1234567/)).toBeDefined()
+    expect(await screen.findByText(/Falcon .* Agent 1234567/)).toBeDefined()
+  })
+
+  // A report whose body quotes an email address reads as being about someone
+  // else entirely when the byline shows only a display name.
+  it('shows the email alongside the display name', async () => {
+    await openReport([makeProblem({ _id: 'u1', displayName: 'Falcon', email: 'falcon@test.com', agentNumber: '1234567' })])
+    expect(await screen.findByText(/Falcon · falcon@test\.com · Agent 1234567/)).toBeDefined()
   })
 
   it('falls back to the email when the account has no display name', async () => {
@@ -133,7 +140,7 @@ describe('Admin ▸ Intel ▸ Reports — reporter byline', () => {
         isUserVisible: false,
       }] },
     )])
-    expect(await screen.findByText(/Hawkeye · Agent 7654321/)).toBeDefined()
+    expect(await screen.findByText(/Hawkeye · admin@test\.com · Agent 7654321/)).toBeDefined()
   })
 })
 

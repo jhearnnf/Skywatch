@@ -569,11 +569,35 @@ router.delete('/me/game-unlocks/:key/unlock', protect, async (req, res) => {
   }
 });
 
+// How many pages of context a report may carry. The client sends five; this is
+// the cap on what an arbitrary caller can make us store.
+const ROUTE_TRAIL_MAX = 5;
+
 // POST /api/users/report-problem
+//
+// Both `pageReported` and `routeTrail` arrive as raw pathnames and are stored as
+// labels, never verbatim: locationLabel() drops the query string and maps
+// /brief/:id and friends to a description of the page, so a report cannot
+// quietly become a record of which brief someone was reading. An unrecognised
+// path yields null and is dropped rather than falling back to the raw string —
+// the same gap-closing rule the heartbeat follows.
+//
+// It also handles the clients that have not caught up. Bundles built before the
+// route trail existed send document.referrer here, which is either empty or an
+// external URL; neither starts with "/", so both land on 'unknown' exactly as
+// they did before rather than storing a stray referrer.
 router.post('/report-problem', protect, async (req, res) => {
   try {
-    const { pageReported, description, briefId } = req.body;
+    const { pageReported, description, briefId, routeTrail, client } = req.body;
     if (!description) return res.status(400).json({ message: 'Description required' });
+
+    const trail = Array.isArray(routeTrail)
+      ? routeTrail.slice(-ROUTE_TRAIL_MAX).map(locationLabel).filter(Boolean)
+      : [];
+
+    // Best-effort, like the heartbeat's: a client that cannot name its build
+    // must still be able to file a report.
+    const clientInfo = sanitiseClientInfo(client);
 
     let intelligenceBrief = null;
     if (briefId) {
@@ -584,9 +608,15 @@ router.post('/report-problem', protect, async (req, res) => {
 
     const report = await ProblemReport.create({
       userId: req.user._id,
-      pageReported: pageReported || 'unknown',
+      pageReported: locationLabel(pageReported) || 'unknown',
       description,
       intelligenceBrief,
+      routeTrail: trail,
+      ...(clientInfo ? {
+        clientPlatform: clientInfo.platform,
+        clientVersion:  clientInfo.version,
+        clientBuild:    clientInfo.build,
+      } : {}),
     });
 
     // Auto-raise the editor flag so admins see the issue in the briefs list.

@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
 import { usePhoneTight } from '../hooks/usePhoneTight'
+import { getRouteTrail } from '../utils/routeTrail'
+import { getClientInfo, peekClientInfo } from '../utils/appVersion'
 
 // ── Fitting the phone viewport ───────────────────────────────────────────────
 // This page is reached from a link in the last row of the CBAT grid, which is
@@ -36,6 +38,23 @@ const PHONE_FIT =
   'max-sm:flex max-sm:flex-col ' +
   'max-sm:h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] max-sm:min-h-[23rem]'
 
+// ── What counts as a report ──────────────────────────────────────────────────
+// A real report came in reading, in full, "jameshearn1995@hotmail.co.uk". The
+// box asks what happened and someone answered it with who they were, which is
+// information we already have from the account they are signed in as, and which
+// left nothing at all to act on.
+//
+// Both guards live on the client only. The point is to catch the person while
+// they are still looking at the form and can fix it in one line; the server
+// keeps accepting anything non-empty, because a stale cached bundle submitting
+// a short report should still reach us rather than fail on a rule its copy of
+// this file has never heard of.
+const EMAIL_ONLY = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// Short enough that a real terse report ("the sound never plays") clears it,
+// long enough that a single word or a pasted address does not.
+const MIN_DESCRIPTION = 15
+
 export default function ReportProblem() {
   const { user, API, apiFetch } = useAuth()
   const navigate = useNavigate()
@@ -50,6 +69,12 @@ export default function ReportProblem() {
   const [busy,        setBusy]        = useState(false)
   const [brief,       setBrief]       = useState(null)
   const [chatBusy,    setChatBusy]    = useState(false)
+
+  // Native reads its version over the Capacitor bridge, so it is asked for on
+  // mount and read synchronously at submit time — the same order useHeartbeat
+  // uses. Submitting must never wait on the bridge: a report that arrives
+  // without a version is worth far more than one that hangs behind it.
+  useEffect(() => { getClientInfo() }, [])
 
   const startChat = async () => {
     if (!user || chatBusy) return
@@ -88,15 +113,38 @@ export default function ReportProblem() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!description.trim()) { setError('Please describe the problem.'); return }
+    const trimmed = description.trim()
+    if (!trimmed) { setError('Please describe the problem.'); return }
+    if (EMAIL_ONLY.test(trimmed)) {
+      setError('That is just an email address. Tell us what went wrong instead. We can already see which account you are reporting from.')
+      return
+    }
+    if (trimmed.length < MIN_DESCRIPTION) {
+      setError('Please add a bit more detail. What happened, and what were you doing at the time?')
+      return
+    }
     setBusy(true); setError('')
+
+    // Where they were, oldest first. The form's own page is dropped: it is the
+    // one page we already know they were on, and it would otherwise be the last
+    // entry of every report ever filed.
+    const trail = getRouteTrail().filter(p => !/^\/report\/?$/.test(p))
+
     try {
       const res = await apiFetch(`${API}/api/users/report-problem`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           description,
-          pageReported: briefId ? `/brief/${briefId}` : (document.referrer || 'unknown'),
+          // The page they came from, not document.referrer. The referrer is
+          // where the *browser* was before it loaded the site: it is empty on
+          // every app launch and on every direct visit, which is why every
+          // report from the Android app used to record "unknown".
+          pageReported: briefId ? `/brief/${briefId}` : (trail[trail.length - 1] || 'unknown'),
+          ...(trail.length ? { routeTrail: trail } : {}),
+          // Optional and best-effort, exactly as on the heartbeat — null on a
+          // native client whose bridge has not answered yet.
+          ...(peekClientInfo() ? { client: peekClientInfo() } : {}),
           ...(briefId ? { briefId } : {}),
         }),
       })

@@ -34,6 +34,23 @@ const problemReportSchema = new mongoose.Schema({
   chatMessageId:      { type: mongoose.Schema.Types.ObjectId, ref: 'ChatMessage', default: null },
   chatConversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', default: null },
   reportedUserId:     { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
+  // What the reporter's client said it was running, from the same
+  // { platform, version, build } the heartbeat reports. Without it a report
+  // from the app cannot be read against a store release, and "is this fixed in
+  // the current build?" has no answer. No enum here: the only writer runs the
+  // payload through sanitiseClientInfo(), which allows nothing else through.
+  // Null on reports filed before this was captured, and on any client that
+  // could not say.
+  clientPlatform: { type: String, default: null },
+  clientVersion:  { type: String, default: null },
+  clientBuild:    { type: String, default: null },
+
+  // The last few pages before the form, oldest first, as labels rather than
+  // paths — the raw pathnames carry record ids, and the report queue is no more
+  // the place to keep those than the presence strip is. Same table does both:
+  // backend/constants/presenceLocations.js. Empty on older reports.
+  routeTrail: { type: [String], default: [] },
 });
 
 problemReportSchema.index({ solved: 1, time: -1 });

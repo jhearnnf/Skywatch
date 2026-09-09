@@ -112,7 +112,7 @@ describe('ReportProblem — briefId prefill', () => {
     render(<ReportProblem />)
 
     fireEvent.change(screen.getByPlaceholderText(/what happened/i), {
-      target: { value: 'General bug' },
+      target: { value: 'A general bug somewhere' },
     })
     fireEvent.click(screen.getByRole('button', { name: /submit report/i }))
 

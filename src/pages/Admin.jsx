@@ -5446,12 +5446,24 @@ function UsersTab({ API, onViewEmailHistory }) {
 // "Unknown agent" whenever it was absent, which hid the display name and email
 // the API already sends. `unknown` is only reached when the populate returned
 // nothing at all (a since-deleted account).
+// Who filed this, by every name we have for them. The display name and the
+// email are both shown rather than one standing in for the other: the name is
+// how they appear in Community, the address is who to reply to, and when a
+// report quotes an email address the two read as different people if only the
+// name is on the card.
 function reportUserLabel(u, unknown = 'Unknown agent') {
   if (!u) return unknown
-  const name = u.displayName || u.email
-  const agent = u.agentNumber ? `Agent ${u.agentNumber}` : null
-  if (name && agent) return `${name} · ${agent}`
-  return name || agent || unknown
+  const parts = [u.displayName, u.email, u.agentNumber ? `Agent ${u.agentNumber}` : null]
+  return parts.filter(Boolean).join(' · ') || unknown
+}
+
+// "Android 1.2.34 (39)" — what the reporter's client said it was running when
+// they sent it. Null on reports filed before the form captured this, and on any
+// client that could not name its build; the line is then simply absent.
+function reportClientLabel(p) {
+  if (!p?.clientPlatform) return null
+  const os = { android: 'Android', ios: 'iOS', web: 'Web' }[p.clientPlatform] ?? p.clientPlatform
+  return [os, p.clientVersion, p.clientBuild ? `(${p.clientBuild})` : null].filter(Boolean).join(' ')
 }
 
 // Which channels an update actually went out on. `notificationSent` is absent on
@@ -5762,7 +5774,15 @@ function ProblemsTab({ API, onOpenBrief }) {
                   <p className="mt-1 text-slate-600">
                     {reportUserLabel(p.userId)}
                     {' · '}{new Date(p.time || p.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                    {reportClientLabel(p) && <>{' · '}{reportClientLabel(p)}</>}
                   </p>
+                  {/* Where they had just been. Oldest first, so the last entry
+                      is the page they left to come and report the problem. */}
+                  {p.routeTrail?.length > 0 && (
+                    <p className="mt-1 text-slate-600">
+                      <span className="font-semibold">Came from:</span> {p.routeTrail.join(' → ')}
+                    </p>
+                  )}
                 </div>
 
                 {/* Update history */}

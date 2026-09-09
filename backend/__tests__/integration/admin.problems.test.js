@@ -142,7 +142,8 @@ describe('GET /api/admin/problems', () => {
     const problems = res.body.data.problems;
     expect(problems.length).toBe(1);
     expect(problems[0].description).toBe('Login broken');
-    expect(problems[0].pageReported).toBe('/login');
+    // Stored as the page's label, not the path it was submitted as.
+    expect(problems[0].pageReported).toBe('Login');
     expect(Array.isArray(problems[0].updates)).toBe(true);
     expect(problems[0].userId).toBeDefined(); // populated
   });
