@@ -95,6 +95,18 @@ export default function Privacy() {
             necessary to run your account.
           </p>
           <p>
+            <span className="text-slate-700 font-medium">Consent</span> &mdash; at the end of that
+            questionnaire we ask whether you would like to send us a photo of your real score
+            sheet. This is entirely optional, nothing else depends on it, and we only hold one if
+            you chose to send it. We use it for a single purpose: checking our practice tests and
+            our score estimates against the real thing, so the estimates we show future candidates
+            are more accurate. It is never published, never shown to other members and never put on
+            a leaderboard. You are welcome to cover your name and candidate number before you
+            photograph it, since we only need the scores. You can remove it yourself on the same
+            screen, or ask us to delete it at any time using the contact details below, and we will
+            do so without asking you for a reason.
+          </p>
+          <p>
             We do not sell your personal data to third parties and we do not use it for advertising.
           </p>
         </Section>
@@ -209,6 +221,7 @@ export default function Privacy() {
             <li><span className="text-slate-700 font-medium">Vercel</span> — hosts the frontend application.</li>
             <li><span className="text-slate-700 font-medium">Railway</span> — hosts the backend API.</li>
             <li><span className="text-slate-700 font-medium">MongoDB Atlas</span> — stores your account and usage data.</li>
+            <li><span className="text-slate-700 font-medium">Cloudinary</span> — stores images used by the service, including any score sheet you choose to send us. Score sheets are stored so that they cannot be viewed without a link we generate ourselves.</li>
           </ul>
         </Section>
 
@@ -233,6 +246,13 @@ export default function Privacy() {
             We retain your personal data for as long as your account is active. If you request
             deletion of your account, we will remove your personal data within 30 days, except where
             we are required to retain it for legal or compliance purposes.
+          </p>
+          <p>
+            If you sent us a photo of your score sheet, we keep it for as long as your account is
+            open, because it stays useful for checking our practice tests against the real thing
+            long after you have finished with us. You can remove it yourself from the questionnaire
+            screen, or ask us to delete it at any point, and it is deleted along with your account
+            if you close it.
           </p>
           <p>
             If you delete your account, your support threads and direct messages are deleted with

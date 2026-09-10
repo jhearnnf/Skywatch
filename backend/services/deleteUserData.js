@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const User = require('../models/User');
+const { destroyAsset } = require('../utils/cloudinary');
 
 // Resolve by requiring the model file rather than mongoose.model(name): requiring
 // registers the schema as a side effect, so this works even when no route has
@@ -201,6 +202,25 @@ async function deleteUserAndData(userId, context = {}) {
   //    moment later there is nowhere left to read it from.
   const res = await User.findByIdAndDelete(id);
   deleted.User = res ? 1 : 0;
+
+  // 6b. Score sheets live on Cloudinary, not in Mongo, so deleting the account
+  //     document only removes the reference. The bytes are somebody's exam
+  //     paper with their name on it, handed over under a promise on the
+  //     questionnaire screen and restated in the privacy policy, so they have to
+  //     go with the account rather than sit on unreferenced.
+  //
+  //     Non-fatal, for the same reason as the register write below: the erasure
+  //     from our own systems is the obligation and it has already succeeded. A
+  //     Cloudinary outage must not turn a completed deletion into a 500 the
+  //     caller retries.
+  for (const image of res?.cbatResultImages ?? []) {
+    if (!image.publicId) continue;
+    await destroyAsset(image.publicId, {
+      // Questionnaire uploads are authenticated assets and do not exist at the
+      // default delivery type; naming the wrong one is a silent no-op.
+      type: image.source === 'questionnaire' ? 'authenticated' : 'upload',
+    }).catch(() => {});
+  }
 
   // 7. Record that this happened. Only when there was actually an account to
   //    erase — a repeat call against a missing id must not mint a second row.
