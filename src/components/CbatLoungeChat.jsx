@@ -29,6 +29,10 @@ const MESSAGE_LIMIT = 40
 // Only used when the stream is down. Deliberately slower than the main thread's
 // 5s: this is a degraded mode on a page whose real job is the games.
 const FALLBACK_POLL_MS = 10_000
+
+// How long a just-sent message is held over a load that has not caught up with
+// it. See applyJustSent below.
+const PENDING_MS = 30_000
 // The activity counters are a 7-day and a same-day figure, so they barely move
 // within a session. Slow on purpose.
 const ACTIVITY_REFRESH_MS = 5 * 60_000
@@ -213,6 +217,43 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const sendersRef = useRef(senders)
   sendersRef.current = senders
 
+  // Messages this client appended straight from its own POST, held until a load
+  // confirms the server has them.
+  //
+  // Every wholesale refresh in this widget — the stream's `refresh` event, the
+  // mention refetch, the fallback poll — can have been issued a moment BEFORE
+  // you hit Send, in which case it answers from before your message existed.
+  // Applied as it stands it takes the message you just watched appear straight
+  // back off the screen until the next refresh puts it back. Same guard, and
+  // same reasoning, as pages/chat/ChatThread.jsx.
+  const justSentRef = useRef(new Map())
+
+  const applyJustSent = useCallback((serverMessages) => {
+    const pending = justSentRef.current
+    if (!pending.size) return serverMessages
+    const now = Date.now()
+    const ids = new Set(serverMessages.map(m => String(m._id)))
+    const held = []
+    for (const [id, entry] of pending) {
+      // In the snapshot, or old enough that the server has plainly decided
+      // otherwise. Either way stop holding it.
+      if (ids.has(id) || now - entry.at > PENDING_MS) { pending.delete(id); continue }
+      held.push(entry.message)
+    }
+    // They are by definition the newest, so they go on the end.
+    return held.length ? [...serverMessages, ...held] : serverMessages
+  }, [])
+
+  // A held copy is a snapshot of the message as it was sent, so an edit or a
+  // reaction in the meantime has to reach it too — otherwise a late refresh
+  // could put the pre-edit text back for a moment. A removal drops it outright:
+  // nothing should be able to bring back a message you have just withdrawn.
+  const refreshJustSent = (message) => {
+    const entry = justSentRef.current.get(String(message._id))
+    if (entry) entry.message = message
+  }
+  const forgetJustSent = (message) => justSentRef.current.delete(String(message._id))
+
   const conversationId = lounge?.conversationId ?? null
   const enabled = Boolean(user) && settings?.chatEnabled !== false
 
@@ -260,11 +301,11 @@ export default function CbatLoungeChat({ open, onToggle }) {
     if (!conversationId) return
     const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}`)
     if (!ok || !data) return
-    setMessages(data.messages ?? [])
+    setMessages(applyJustSent(data.messages ?? []))
     setSenders(data.senders ?? {})
     setTypingName(data.botTyping ?? null)
     setLoading(false)
-  }, [conversationId, get])
+  }, [applyJustSent, conversationId, get])
 
   useEffect(() => {
     if (!conversationId) return
@@ -471,6 +512,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
       setMentionDismissed(null)
       if (d?.data?.botReplyingName) setTypingName(d.data.botReplyingName)
       if (d?.data?.message) {
+        justSentRef.current.set(String(d.data.message._id), {
+          message: d.data.message,
+          at:      Date.now(),
+        })
         setMessages(prev => (
           prev.some(m => String(m._id) === String(d.data.message._id)) ? prev : [...prev, d.data.message]
         ))
@@ -505,6 +550,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
     }).catch(() => null)
     const d = await r?.json().catch(() => null)
     if (!r?.ok) { setErr(d?.message || 'Could not add that reaction'); return }
+    refreshJustSent(d.data.message)
     setMessages(prev => prev.map(m => (
       String(m._id) === String(d.data.message._id) ? d.data.message : m
     )))
@@ -553,6 +599,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
       const d = await r.json().catch(() => null)
       if (!r.ok) throw new Error(d?.message || 'Could not save that edit')
       if (d?.data?.message) {
+        refreshJustSent(d.data.message)
         setMessages(prev => prev.map(m => (
           String(m._id) === String(d.data.message._id) ? d.data.message : m
         )))
@@ -577,6 +624,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
     }).catch(() => null)
     const d = await r?.json().catch(() => null)
     if (!r?.ok) { setErr(d?.message || 'Could not remove that message'); return }
+    forgetJustSent(message)
     // An admin keeps the row (struck through, as the moderation record);
     // everyone else loses it entirely, which is what the server would send on
     // the next load anyway. Doing it here rather than waiting for the refetch

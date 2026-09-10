@@ -1047,3 +1047,108 @@ describe('what counts as reading the room', () => {
     expect(readCalls(fetchMock)).toHaveLength(0)
   })
 })
+
+// The send/refresh race.
+//
+// The widget appends the message its POST hands back rather than re-downloading
+// the room, and separately refreshes wholesale — on the stream's `refresh`
+// event, on a mention it cannot name, and on the fallback poll when the stream
+// is down. A refresh issued a moment BEFORE you hit Send answers from a server
+// that did not have your message yet, and applying it as it stands takes the
+// message you just watched appear straight back off the screen. Same guard as
+// pages/chat/ChatThread.jsx, which had the same bug.
+describe('a send that races a refresh', () => {
+  const other = (id, body) => ({
+    _id: id, senderUserId: 'u2', senderDisplayName: 'Viper', body,
+    createdAt: new Date().toISOString(), mentions: [],
+  })
+  const mine = (body) => ({
+    _id: 'm2', senderUserId: 'u1', senderDisplayName: 'Falcon', body,
+    createdAt: new Date().toISOString(), mentions: [], canEdit: true, canDelete: true,
+  })
+
+  // Like stubFetch, but the room GET can be held open — so a send can land
+  // while the server's answer to an earlier request is still on the wire — and
+  // its answer is whatever the server holds at the moment it was ASKED.
+  const stubHeldFetch = () => {
+    const state = { messages: [other('m1', 'anyone about?')], hold: null, release: null }
+    const json = (data) => Promise.resolve({
+      ok: true, status: 200, json: async () => ({ status: 'success', data }),
+    })
+    state.holdNext = () => {
+      state.hold = new Promise(resolve => { state.release = () => { state.hold = null; resolve() } })
+    }
+    global.fetch = vi.fn((url) => {
+      if (String(url).includes('/api/chat/lounge')) return json(LOUNGE)
+      if (String(url).includes('/messages')) {
+        const frozen = [...state.messages]
+        const answer = () => json({ messages: frozen, senders: {}, botTyping: null })
+        return state.hold ? state.hold.then(answer) : answer()
+      }
+      return json({})
+    })
+    return state
+  }
+
+  const send = async (text) => {
+    fireEvent.change(screen.getByPlaceholderText('Message the lounge…'), { target: { value: text } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })) })
+  }
+
+  it('keeps the message you just sent when a refresh answers from before it', async () => {
+    const state = stubHeldFetch()
+    apiFetch.mockResolvedValue({ ok: true, json: async () => ({ data: { message: mine('my message') } }) })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    await waitFor(() => expect(FakeEventSource.last).not.toBeNull())
+
+    // A refresh goes out and is held open. The send happens while it is still
+    // on the wire, so the answer cannot know about it.
+    state.holdNext()
+    act(() => { FakeEventSource.last.emit('refresh', {}) })
+    await send('my message')
+    expect(screen.getByText('my message')).toBeTruthy()
+
+    await act(async () => { state.release(); await Promise.resolve() })
+    expect(screen.getByText('anyone about?')).toBeTruthy()
+    expect(screen.getByText('my message')).toBeTruthy()
+  })
+
+  it('shows it once, not twice, once the server has caught up', async () => {
+    const state = stubHeldFetch()
+    apiFetch.mockResolvedValue({ ok: true, json: async () => ({ data: { message: mine('my message') } }) })
+    renderOpen()
+    await screen.findByText('anyone about?')
+    await send('my message')
+
+    // The room now has it, so the held copy is dropped rather than added
+    // alongside the server's.
+    state.messages = [...state.messages, mine('my message'), other('m3', 'back again')]
+    act(() => { FakeEventSource.last.emit('refresh', {}) })
+
+    await screen.findByText('back again')
+    expect(screen.getAllByText('my message')).toHaveLength(1)
+  })
+
+  it('does not bring back a message you removed moments after sending it', async () => {
+    const state = stubHeldFetch()
+    apiFetch.mockImplementation((url, opts) => Promise.resolve({
+      ok: true,
+      json: async () => ({ data: { message: opts?.method === 'DELETE' ? { ...mine('my message'), deleted: true } : mine('my message') } }),
+    }))
+    renderOpen()
+    await screen.findByText('anyone about?')
+    await send('my message')
+
+    await act(async () => { fireEvent.click(await screen.findByTitle('Remove your message')) })
+    await waitFor(() => expect(screen.queryByText('my message')).toBeNull())
+
+    // The room answers without it, because it is gone. Nothing should put it
+    // back on the strength of having been sent a moment ago.
+    state.messages = [...state.messages, other('m3', 'back again')]
+    act(() => { FakeEventSource.last.emit('refresh', {}) })
+
+    await screen.findByText('back again')
+    expect(screen.queryByText('my message')).toBeNull()
+  })
+})

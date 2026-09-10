@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
@@ -14,6 +14,11 @@ import EditHistoryDialog from './components/EditHistoryDialog'
 import AnnouncementDrafter from './components/AnnouncementDrafter'
 
 const POLL_MS = 5_000
+
+// How long a just-sent message is held over a poll that has not caught up with
+// it. Comfortably more than a poll interval, and short enough that a message
+// the server really did drop cannot linger on screen.
+const PENDING_MS = 30_000
 
 // The right-hand pane. Owns its own messages and polling; everything it knows
 // about the wider chat (its title, whether the viewer still needs a display
@@ -91,6 +96,53 @@ export default function ChatThread({
     return data
   }, [API, apiFetch, conversationId])
 
+  // Messages this client appended from its own POST, until a poll confirms the
+  // server has them. Keyed by id, holding the message and when it was sent.
+  const justSentRef = useRef(new Map())
+
+  // A poll issued a moment before you hit Send comes back from before the
+  // server had your message. Applied as it stands it takes the message you just
+  // watched appear straight back off the screen, and leaves it missing until
+  // the next tick five seconds later puts it back — send often enough and you
+  // will see it. So a snapshot that has not caught up keeps your message.
+  const applyJustSent = useCallback((data) => {
+    const pending = justSentRef.current
+    if (!pending.size) return data.messages
+    const now = Date.now()
+    const ids = new Set(data.messages.map(m => String(m._id)))
+    const held = []
+    for (const [id, entry] of pending) {
+      // In the snapshot, or old enough that the server has plainly decided
+      // otherwise — a moderator removed it, the write did not stick. Either
+      // way stop holding it and let the server's answer stand.
+      if (ids.has(id) || now - entry.at > PENDING_MS) { pending.delete(id); continue }
+      held.push(entry.message)
+    }
+    if (!held.length) return data.messages
+    // They are by definition the newest, so they go on the end.
+    const merged = [...data.messages, ...held]
+    // fetchMessages has already cached the snapshot as it arrived; cache the
+    // merged list over it so leaving the thread and coming back does not lose
+    // the message the same way.
+    setCachedThread(conversationId, {
+      messages:     merged,
+      senders:      data.senders ?? {},
+      conversation: data.conversation,
+    })
+    return merged
+  }, [conversationId])
+
+  // A held copy is the message as it was sent, so an edit or a reaction in the
+  // meantime has to reach it too — otherwise a late poll could put the pre-edit
+  // text back for a moment. A removal drops it outright: nothing should be able
+  // to bring back a message you have just withdrawn, and the author's own copy
+  // leaves the snapshot entirely when they remove it.
+  const refreshJustSent = (message) => {
+    const entry = justSentRef.current.get(String(message._id))
+    if (entry) entry.message = message
+  }
+  const forgetJustSent = (message) => justSentRef.current.delete(String(message._id))
+
   const markRead = useCallback(() => {
     apiFetch(`${API}/api/chat/conversations/${conversationId}/read`, {
       method: 'POST', credentials: 'include',
@@ -131,7 +183,8 @@ export default function ChatThread({
       if (document.hidden) return
       try {
         const d = await fetchMessages()
-        setMessages(prev => (signature(prev) === signature(d.messages) ? prev : d.messages))
+        const next = applyJustSent(d)
+        setMessages(prev => (signature(prev) === signature(next) ? prev : next))
         setSenders(d.senders ?? {})
         setBotTyping(d.botTyping ?? null)
         // The server is now authoritative again, so drop the optimistic flag.
@@ -144,7 +197,7 @@ export default function ChatThread({
     }
     const id = setInterval(tick, POLL_MS)
     return () => clearInterval(id)
-  }, [fetchMessages, markRead, user])
+  }, [applyJustSent, fetchMessages, markRead, user])
 
   // Backstop for the optimistic flag. Normally the next poll takes it down;
   // this covers a run of failed polls, so the indicator can never be left
@@ -177,6 +230,10 @@ export default function ChatThread({
       setReplyTo(null)
       if (d?.data?.botReplyingName) setAskedBot(d.data.botReplyingName)
       if (d?.data?.message) {
+        justSentRef.current.set(String(d.data.message._id), {
+          message: d.data.message,
+          at:      Date.now(),
+        })
         setMessages(prev => [...prev, d.data.message])
         // Your first message in a thread wouldn't be in the sender map yet, so
         // your avatar would pop in a poll later. Seed it from the live user.
@@ -228,6 +285,7 @@ export default function ChatThread({
     }).catch(() => null)
     const d = await r?.json().catch(() => null)
     if (!r?.ok) { setErr(d?.message || 'Could not add that reaction'); return }
+    refreshJustSent(d.data.message)
     setMessages(prev => prev.map(m => (m._id === d.data.message._id ? d.data.message : m)))
   }
 
@@ -287,6 +345,7 @@ export default function ChatThread({
     }).catch(() => null)
     const d = await r?.json().catch(() => null)
     if (!r?.ok) { setErr(d?.message || 'Could not edit that message'); return }
+    refreshJustSent(d.data.message)
     setMessages(prev => prev.map(m => (m._id === d.data.message._id ? d.data.message : m)))
     onChanged?.()
   }
@@ -298,6 +357,7 @@ export default function ChatThread({
     await apiFetch(messageActionUrl(message), {
       method: 'DELETE', credentials: 'include',
     }).catch(() => {})
+    forgetJustSent(message)
     const fresh = await fetchMessages()
     setMessages(fresh.messages)
     setSenders(fresh.senders ?? {})
