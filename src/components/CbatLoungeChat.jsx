@@ -32,6 +32,10 @@ const FALLBACK_POLL_MS = 10_000
 // The activity counters are a 7-day and a same-day figure, so they barely move
 // within a session. Slow on purpose.
 const ACTIVITY_REFRESH_MS = 5 * 60_000
+// How far off the bottom still counts as "parked at the bottom". A couple of
+// pixels of slack, because sub-pixel row heights mean the scroll maths rarely
+// lands on exactly zero.
+const BOTTOM_SLACK_PX = 4
 
 // How busy the site has been, under the lounge header.
 //
@@ -187,6 +191,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
 
   const scrollRef = useRef(null)
   const inputRef  = useRef(null)
+  // Whether the list is parked at the bottom, updated as it scrolls. Read by
+  // the picker effect below, which needs to know where you were BEFORE the
+  // palette changed the list's height.
+  const atBottomRef = useRef(true)
   // Read by the stream handler, which is set up once and would otherwise close
   // over the open state as it was when the connection opened.
   const openRef   = useRef(open)
@@ -335,6 +343,20 @@ export default function CbatLoungeChat({ open, onToggle }) {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [open, messages, typingName])
+
+  // The reaction picker opens INLINE (see Reactions), so on the last message it
+  // makes that row taller. If you were parked at the bottom — which is exactly
+  // where the message you just reached for lives — the palette is added below
+  // the fold and looks like nothing happened. Re-pin to the bottom once it has
+  // rendered.
+  //
+  // Only when you were already at the bottom: opening a picker on an older
+  // message must not yank you down to the newest one.
+  useLayoutEffect(() => {
+    if (!open || !picking || !atBottomRef.current) return
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [open, picking])
 
   // Tapping anywhere that is not the open row puts the bar away. On the document
   // rather than the panel, because "elsewhere" includes the composer, the header
@@ -599,7 +621,14 @@ export default function CbatLoungeChat({ open, onToggle }) {
 
       <ActivityStrip activity={activity} />
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5">
+      <div
+        ref={scrollRef}
+        onScroll={e => {
+          const el = e.currentTarget
+          atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX
+        }}
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5"
+      >
         {loading ? (
           <p className="text-xs text-slate-500 text-center py-6">Loading…</p>
         ) : visible.length === 0 ? (

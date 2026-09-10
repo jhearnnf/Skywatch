@@ -516,6 +516,38 @@ describe('reactions', () => {
     for (const emoji of REACTION_EMOJI) expect(screen.getByText(emoji)).toBeTruthy()
   })
 
+  // The inline palette makes the last row taller, so a list parked at the very
+  // bottom would push the emoji you just asked for below the fold.
+  it('re-pins to the bottom when the picker opens on the last message', async () => {
+    stubFetch()
+    const { container } = renderOpen()
+    await screen.findByText('anyone about?')
+
+    const list = container.querySelector('.overflow-y-auto')
+    Object.defineProperty(list, 'scrollHeight', { value: 500, configurable: true })
+    Object.defineProperty(list, 'clientHeight', { value: 200, configurable: true })
+    list.scrollTop = 300
+    fireEvent.scroll(list)
+
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    expect(list.scrollTop).toBe(500)
+  })
+
+  it('leaves the scroll alone when the picker opens on an older message', async () => {
+    stubFetch()
+    const { container } = renderOpen()
+    await screen.findByText('anyone about?')
+
+    const list = container.querySelector('.overflow-y-auto')
+    Object.defineProperty(list, 'scrollHeight', { value: 500, configurable: true })
+    Object.defineProperty(list, 'clientHeight', { value: 200, configurable: true })
+    list.scrollTop = 100
+    fireEvent.scroll(list)
+
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    expect(list.scrollTop).toBe(100)
+  })
+
   it('reacts with a picked emoji and closes the picker', async () => {
     stubFetch()
     apiFetch.mockResolvedValue({
