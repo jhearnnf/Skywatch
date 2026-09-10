@@ -1,8 +1,10 @@
 /**
  * Admin — Users list tests
  *
- * Covers GET /api/admin/users and GET /api/admin/users/search:
+ * Covers GET /api/admin/users, GET /api/admin/users/stats and
+ * GET /api/admin/users/search:
  *   auth guards
+ *   the list is deliberately unenriched — counted stats come from /users/stats
  *   profileStats.brifsRead — counts only completed: true reads, isolated per user
  */
 process.env.JWT_SECRET = 'test_secret';
@@ -36,6 +38,15 @@ function seedCbatDoc(cfg, userId) {
     roundsPlayed: 1,
     score: 0, // required by GameSessionCbatTrace1Result; stripped by others
   });
+}
+
+// The counted half of a Users row, asked for the way the list asks for it when
+// an admin expands one — see GET /api/admin/users/stats.
+async function statsFor(admin, users) {
+  const ids = [].concat(users).map(u => u._id.toString()).join(',');
+  return request(app)
+    .get(`/api/admin/users/stats?ids=${ids}`)
+    .set('Cookie', authCookie(admin._id));
 }
 
 // ── lifecycle ────────────────────────────────────────────────────────────────
@@ -136,18 +147,130 @@ describe('GET /api/admin/users — sort order', () => {
   });
 });
 
-// ── profileStats.brifsRead ────────────────────────────────────────────────────
+// ── the list is deliberately unenriched ──────────────────────────────────────
+// Enriching every account cost eight aggregations plus one per registered CBAT
+// game, all to fill panels that were still collapsed. The list now answers on
+// identity and status alone; /users/stats fills a row in when it is opened.
 
-describe('GET /api/admin/users — profileStats.brifsRead', () => {
-  it('returns 0 when the user has no brief reads', async () => {
+describe('GET /api/admin/users — deferred stats', () => {
+  it('omits the counted stats and says so on every row', async () => {
     const admin = await createAdminUser();
     const user  = await createUser();
+    await IntelligenceBriefRead.create({
+      userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true,
+    });
 
     const res = await request(app)
       .get('/api/admin/users')
       .set('Cookie', authCookie(admin._id));
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    const row = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(row.statsLoaded).toBe(false);
+    expect(row.profileStats).toBeUndefined();
+    expect(row.emailsSent).toBeUndefined();
+  });
+
+  it('still carries what a collapsed row renders', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ email: 'row@test.com', totalAirstars: 120, loginStreak: 3 });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const row = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    expect(row.email).toBe('row@test.com');
+    expect(row.totalAirstars).toBe(120);
+    expect(row.loginStreak).toBe(3);
+    expect(row.subscriptionTier).toBeDefined();
+    expect(row).toHaveProperty('lastTestAppOpenAt');
+    expect(res.body.data.latestClients).toBeDefined();
+  });
+});
+
+// ── GET /users/stats ─────────────────────────────────────────────────────────
+
+describe('GET /api/admin/users/stats — request shape', () => {
+  it('returns 403 for a non-admin user', async () => {
+    const actor = await createUser();
+    const res   = await request(app)
+      .get(`/api/admin/users/stats?ids=${actor._id}`)
+      .set('Cookie', authCookie(actor._id));
+    expect(res.status).toBe(403);
+  });
+
+  it('answers for several accounts in one request', async () => {
+    const admin = await createAdminUser();
+    const userA = await createUser();
+    const userB = await createUser();
+
+    await IntelligenceBriefRead.create([
+      { userId: userA._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true },
+      { userId: userA._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true },
+      { userId: userB._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true },
+    ]);
+
+    const res = await statsFor(admin, [userA, userB]);
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body.data.stats)).toHaveLength(2);
+    expect(res.body.data.stats[userA._id.toString()].profileStats.brifsRead).toBe(2);
+    expect(res.body.data.stats[userB._id.toString()].profileStats.brifsRead).toBe(1);
+  });
+
+  it('carries the email count a row badges', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await statsFor(admin, user);
+    expect(res.body.data.stats[user._id.toString()].emailsSent).toBe(0);
+  });
+
+  it('returns an empty map when asked for nothing', async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .get('/api/admin/users/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.stats).toEqual({});
+  });
+
+  it('ignores ids that are not valid object ids rather than failing the request', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await request(app)
+      .get(`/api/admin/users/stats?ids=not-an-id,${user._id}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body.data.stats)).toEqual([user._id.toString()]);
+  });
+
+  it('omits ids that match no account', async () => {
+    const admin   = await createAdminUser();
+    const missing = new mongoose.Types.ObjectId();
+
+    const res = await request(app)
+      .get(`/api/admin/users/stats?ids=${missing}`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.stats).toEqual({});
+  });
+});
+
+// ── profileStats.brifsRead ────────────────────────────────────────────────────
+
+describe('GET /api/admin/users/stats — profileStats.brifsRead', () => {
+  it('returns 0 when the user has no brief reads', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await statsFor(admin, user);
+
+    const u = res.body.data.stats[user._id.toString()];
     expect(u.profileStats.brifsRead).toBe(0);
   });
 
@@ -161,11 +284,9 @@ describe('GET /api/admin/users — profileStats.brifsRead', () => {
       { userId: user._id, intelBriefId: new mongoose.Types.ObjectId(), completed: false }, // opened only
     ]);
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, user);
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    const u = res.body.data.stats[user._id.toString()];
     expect(u.profileStats.brifsRead).toBe(2);
   });
 
@@ -180,12 +301,10 @@ describe('GET /api/admin/users — profileStats.brifsRead', () => {
       { userId: userB._id, intelBriefId: new mongoose.Types.ObjectId(), completed: true },
     ]);
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, [userA, userB]);
 
-    const aRow = res.body.data.users.find(x => x._id.toString() === userA._id.toString());
-    const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
+    const aRow = res.body.data.stats[userA._id.toString()];
+    const bRow = res.body.data.stats[userB._id.toString()];
 
     expect(aRow.profileStats.brifsRead).toBe(2);
     expect(bRow.profileStats.brifsRead).toBe(1);
@@ -194,16 +313,14 @@ describe('GET /api/admin/users — profileStats.brifsRead', () => {
 
 // ── profileStats.cbatPlayed ──────────────────────────────────────────────────
 
-describe('GET /api/admin/users — profileStats.cbatPlayed', () => {
+describe('GET /api/admin/users/stats — profileStats.cbatPlayed', () => {
   it('returns 0 when the user has no CBAT submissions', async () => {
     const admin = await createAdminUser();
     const user  = await createUser();
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, user);
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    const u = res.body.data.stats[user._id.toString()];
     expect(u.profileStats.cbatPlayed).toBe(0);
   });
 
@@ -216,11 +333,9 @@ describe('GET /api/admin/users — profileStats.cbatPlayed', () => {
 
     await Promise.all(Object.values(CBAT_GAMES).map(cfg => seedCbatDoc(cfg, user._id)));
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, user);
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    const u = res.body.data.stats[user._id.toString()];
     expect(u.profileStats.cbatPlayed).toBe(Object.keys(CBAT_GAMES).length);
   });
 
@@ -234,12 +349,10 @@ describe('GET /api/admin/users — profileStats.cbatPlayed', () => {
     await seedCbatDoc(firstGame, userA._id);
     await seedCbatDoc(firstGame, userB._id);
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, [userA, userB]);
 
-    const aRow = res.body.data.users.find(x => x._id.toString() === userA._id.toString());
-    const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
+    const aRow = res.body.data.stats[userA._id.toString()];
+    const bRow = res.body.data.stats[userB._id.toString()];
 
     expect(aRow.profileStats.cbatPlayed).toBe(2);
     expect(bRow.profileStats.cbatPlayed).toBe(1);
@@ -248,16 +361,14 @@ describe('GET /api/admin/users — profileStats.cbatPlayed', () => {
 
 // ── profileStats.cbatStarted ─────────────────────────────────────────────────
 
-describe('GET /api/admin/users — profileStats.cbatStarted', () => {
+describe('GET /api/admin/users/stats — profileStats.cbatStarted', () => {
   it('returns 0 when the user has no CBAT start docs', async () => {
     const admin = await createAdminUser();
     const user  = await createUser();
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, user);
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    const u = res.body.data.stats[user._id.toString()];
     expect(u.profileStats.cbatStarted).toBe(0);
   });
 
@@ -268,11 +379,9 @@ describe('GET /api/admin/users — profileStats.cbatStarted', () => {
 
     await Promise.all(gameKeys.map(k => GameSessionCbatStart.create({ userId: user._id, gameKey: k })));
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, user);
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    const u = res.body.data.stats[user._id.toString()];
     expect(u.profileStats.cbatStarted).toBe(gameKeys.length);
   });
 
@@ -283,11 +392,9 @@ describe('GET /api/admin/users — profileStats.cbatStarted', () => {
     await GameSessionCbatStart.create({ userId: user._id, gameKey: 'target' });
     await GameSessionCbatStart.create({ userId: user._id, gameKey: 'angles' });
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, user);
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
+    const u = res.body.data.stats[user._id.toString()];
     expect(u.profileStats.cbatStarted).toBe(2);
     expect(u.profileStats.cbatPlayed).toBe(0);
   });
@@ -301,35 +408,37 @@ describe('GET /api/admin/users — profileStats.cbatStarted', () => {
     await GameSessionCbatStart.create({ userId: userA._id, gameKey: 'target' });
     await GameSessionCbatStart.create({ userId: userB._id, gameKey: 'symbols' });
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, [userA, userB]);
 
-    const aRow = res.body.data.users.find(x => x._id.toString() === userA._id.toString());
-    const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
+    const aRow = res.body.data.stats[userA._id.toString()];
+    const bRow = res.body.data.stats[userB._id.toString()];
     expect(aRow.profileStats.cbatStarted).toBe(2);
     expect(bRow.profileStats.cbatStarted).toBe(1);
   });
 });
 
 // ── lastTestGameAt (idle-tester flag) ────────────────────────────────────────
+// The one counted value the *collapsed* list still needs, because an idle tester
+// is bordered and sorted differently. It is answered from the session-start log
+// alone and only for flagged testers — see GET /users for why that is enough.
 
 describe('GET /api/admin/users — lastTestGameAt', () => {
-  it('is null when the user has no CBAT activity', async () => {
+  const rowFor = (res, user) => res.body.data.users.find(x => x._id.toString() === user._id.toString());
+
+  it('is null when a tester has no CBAT activity', async () => {
     const admin = await createAdminUser();
-    const user  = await createUser();
+    const user  = await createUser({ isTester: true });
 
     const res = await request(app)
       .get('/api/admin/users')
       .set('Cookie', authCookie(admin._id));
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
-    expect(u.lastTestGameAt).toBeNull();
+    expect(rowFor(res, user).lastTestGameAt).toBeNull();
   });
 
-  it('reflects the most recent CBAT start time', async () => {
+  it('reflects the most recent CBAT start time for a tester', async () => {
     const admin = await createAdminUser();
-    const user  = await createUser();
+    const user  = await createUser({ isTester: true });
 
     const older  = new Date('2026-07-16T09:00:00Z');
     const newer  = new Date('2026-07-17T14:30:00Z');
@@ -340,14 +449,13 @@ describe('GET /api/admin/users — lastTestGameAt', () => {
       .get('/api/admin/users')
       .set('Cookie', authCookie(admin._id));
 
-    const u = res.body.data.users.find(x => x._id.toString() === user._id.toString());
-    expect(new Date(u.lastTestGameAt).getTime()).toBe(newer.getTime());
+    expect(new Date(rowFor(res, user).lastTestGameAt).getTime()).toBe(newer.getTime());
   });
 
-  it('isolates lastTestGameAt per user', async () => {
+  it('isolates lastTestGameAt per tester', async () => {
     const admin = await createAdminUser();
-    const userA = await createUser();
-    const userB = await createUser();
+    const userA = await createUser({ isTester: true });
+    const userB = await createUser({ isTester: true });
 
     const tA = new Date('2026-07-17T08:00:00Z');
     await GameSessionCbatStart.create({ userId: userA._id, gameKey: 'target', startedAt: tA });
@@ -356,10 +464,55 @@ describe('GET /api/admin/users — lastTestGameAt', () => {
       .get('/api/admin/users')
       .set('Cookie', authCookie(admin._id));
 
-    const aRow = res.body.data.users.find(x => x._id.toString() === userA._id.toString());
-    const bRow = res.body.data.users.find(x => x._id.toString() === userB._id.toString());
-    expect(new Date(aRow.lastTestGameAt).getTime()).toBe(tA.getTime());
-    expect(bRow.lastTestGameAt).toBeNull();
+    expect(new Date(rowFor(res, userA).lastTestGameAt).getTime()).toBe(tA.getTime());
+    expect(rowFor(res, userB).lastTestGameAt).toBeNull();
+  });
+
+  it('leaves it null for accounts that are not flagged as testers', async () => {
+    // Nobody is asking the question of them, and answering it for all 400
+    // accounts is what made this list slow in the first place.
+    const admin = await createAdminUser();
+    const user  = await createUser({ isTester: false });
+    await GameSessionCbatStart.create({ userId: user._id, gameKey: 'target', startedAt: new Date() });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(rowFor(res, user).lastTestGameAt).toBeNull();
+  });
+
+  it('still reports the field when no account is flagged as a tester', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const row = rowFor(res, user);
+    expect(row).toHaveProperty('lastTestGameAt');
+    expect(row.lastTestGameAt).toBeNull();
+  });
+
+  // The gap this rule accepts, written down: an offline run syncs a finish with
+  // no start record. That is a native session by definition, so lastClients has
+  // already reported the app open and the row still reads as tested today.
+  it('an offline tester with no start record is still covered by their app open', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser({ isTester: true });
+    const seen  = new Date();
+    await User.findByIdAndUpdate(user._id, {
+      'lastClients.android': { version: '1.2.3', build: '7', buildNumber: 7, lastSeenAt: seen },
+    });
+
+    const res = await request(app)
+      .get('/api/admin/users')
+      .set('Cookie', authCookie(admin._id));
+
+    const row = rowFor(res, user);
+    expect(row.lastTestGameAt).toBeNull();
+    expect(new Date(row.lastTestAppOpenAt).getTime()).toBe(seen.getTime());
   });
 });
 
@@ -696,7 +849,7 @@ describe('PATCH /api/admin/users/:id/subscription — tier change', () => {
 
 // ── emailsSent ────────────────────────────────────────────────────────────────
 
-describe('GET /api/admin/users — emailsSent', () => {
+describe('GET /api/admin/users/stats — emailsSent', () => {
   const EmailLog = require('../../models/EmailLog');
   const logFor = (user, props = {}) => EmailLog.create({
     type: 'welcome', status: 'sent',
@@ -713,15 +866,13 @@ describe('GET /api/admin/users — emailsSent', () => {
     await logFor(a, { status: 'failed', error: 'bounced' }); // failures count too
     await logFor(b);
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await statsFor(admin, [a, b, admin]);
 
     expect(res.status).toBe(200);
-    const byId = Object.fromEntries(res.body.data.users.map(u => [u._id, u.emailsSent]));
-    expect(byId[a._id.toString()]).toBe(3);
-    expect(byId[b._id.toString()]).toBe(1);
-    expect(byId[admin._id.toString()]).toBe(0);
+    const byId = res.body.data.stats;
+    expect(byId[a._id.toString()].emailsSent).toBe(3);
+    expect(byId[b._id.toString()].emailsSent).toBe(1);
+    expect(byId[admin._id.toString()].emailsSent).toBe(0);
   });
 
   it('is included in search results too', async () => {

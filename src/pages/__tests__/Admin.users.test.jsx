@@ -78,8 +78,18 @@ function setupFetch(users = [MOCK_USER]) {
     if (url.includes('/api/admin/settings')) {
       return Promise.resolve({ ok: true, json: async () => ({ data: { settings: {} } }) })
     }
+    // The real list endpoint is deliberately unenriched — per-user counts are
+    // fetched per opened row — so the mock splits the fixtures the same way.
+    if (url.includes('/api/admin/users/stats')) {
+      const wanted = new URL(url, 'http://x').searchParams.get('ids')?.split(',') ?? []
+      const stats = Object.fromEntries(users
+        .filter(u => wanted.includes(u._id))
+        .map(u => [u._id, { profileStats: u.profileStats, emailsSent: u.emailsSent ?? 0, lastTestGameAt: u.lastTestGameAt ?? null }]))
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { stats } }) })
+    }
     if (url.includes('/api/admin/users')) {
-      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users } }) })
+      const light = users.map(({ profileStats, emailsSent, ...rest }) => ({ ...rest, statsLoaded: false }))
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: light } }) })
     }
     return Promise.resolve({ ok: true, json: async () => ({}) })
   })

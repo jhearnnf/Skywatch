@@ -1308,7 +1308,34 @@ router.put('/tutorials/:tutorialId', requireReason, async (req, res) => {
   }
 });
 
-// Helper — attach profileStats to a list of User documents
+// The last time this account had the *app* open, on any native platform.
+// Opening the app is itself a test, so the Users list treats it as evidence of
+// the day's testing exactly as a played game is. Read off lastClients rather
+// than the AppOpen log because only "was it today?" is asked here, and
+// lastClients already carries that with no extra query.
+function lastNativeAppOpen(plain) {
+  const at = NATIVE_PLATFORMS
+    .map(p => plain.lastClients?.[p]?.lastSeenAt)
+    .filter(Boolean)
+    .reduce((max, ts) => (max && new Date(max) >= new Date(ts) ? max : ts), null);
+  return at ? new Date(at).toISOString() : null;
+}
+
+// Everything a Users-list row needs that costs no query at all. Kept apart from
+// enrichUsersWithStats() below because that one is expensive enough to be worth
+// deferring — see GET /users.
+function decorateUser(u) {
+  const plain = u.toObject({ virtuals: true });
+  return { ...plain, lastTestAppOpenAt: lastNativeAppOpen(plain), statsLoaded: false };
+}
+
+// Helper — attach profileStats to a list of User documents.
+//
+// Costs eight fixed aggregations plus one per registered CBAT game (40 and
+// counting), each grouping across a whole gameplay collection. That is several
+// seconds over the full population, so the Users list no longer runs it for
+// every account on load; it is reserved for search hits (capped at 20) and for
+// GET /users/stats, which fills a row in as the admin expands it.
 async function enrichUsersWithStats(users) {
   if (!users.length) return [];
   const userIds = users.map(u => u._id);
@@ -1396,19 +1423,11 @@ async function enrichUsersWithStats(users) {
   return users.map(u => {
     const plain = u.toObject({ virtuals: true });
     const uid   = plain._id.toString();
-    // Last time this account had the *app* open, on any native platform. Opening
-    // the app is itself a test, so the Users list treats it as evidence of the
-    // day's testing exactly as a played game is. Read off lastClients rather than
-    // the AppOpen log because only "was it today?" is asked here, and lastClients
-    // already carries that with no extra query.
-    const lastAppOpen = NATIVE_PLATFORMS
-      .map(p => plain.lastClients?.[p]?.lastSeenAt)
-      .filter(Boolean)
-      .reduce((max, ts) => (max && new Date(max) >= new Date(ts) ? max : ts), null);
     return {
       ...plain,
+      statsLoaded: true,
       lastTestGameAt: uid in lastGameMap ? new Date(lastGameMap[uid]).toISOString() : null,
-      lastTestAppOpenAt: lastAppOpen ? new Date(lastAppOpen).toISOString() : null,
+      lastTestAppOpenAt: lastNativeAppOpen(plain),
       emailsSent: emailMap[uid] ?? 0,
       profileStats: {
         brifsRead:        briefMap[uid]          ?? 0,
@@ -1441,11 +1460,66 @@ router.get('/users', async (req, res) => {
   try {
     await sweepStaleStreaks();
     const users = await User.find().populate('rank').sort({ isAdmin: -1, createdAt: 1 });
-    const [enriched, latestClients] = await Promise.all([
-      enrichUsersWithStats(users),
-      latestNativeReleases(),
-    ]);
-    res.json({ status: 'success', data: { users: enriched, latestClients } });
+
+    // Deliberately unenriched. Every per-user stat this list used to carry is
+    // read from inside an expanded row, and enriching the whole population to
+    // fill panels nobody has opened cost seconds — long enough that a search
+    // fired meanwhile used to be answered first and then overwritten. Rows
+    // arrive on their identity and status alone; GET /users/stats fills one in
+    // when it is expanded.
+    const decorated = users.map(decorateUser);
+
+    // The one aggregate the *collapsed* list genuinely needs: an idle tester is
+    // bordered and sorted differently, and that hangs on whether they have
+    // tested today. Scoped to flagged testers (a couple of dozen, not 400) and
+    // answered from the session-start log alone rather than all 40 per-game
+    // collections — a start record is written for finished and abandoned
+    // sessions alike, and the one case it misses, an offline finish that synced
+    // without a start, is by definition a native session, which lastClients has
+    // already reported as an app open today.
+    const testerIds = users.filter(u => u.isTester).map(u => u._id);
+    const starts = testerIds.length
+      ? await GameSessionCbatStart.aggregate([
+        { $match: { userId: { $in: testerIds } } },
+        { $group: { _id: '$userId', lastAt: { $max: '$startedAt' } } },
+      ])
+      : [];
+    const lastByUser = Object.fromEntries(
+      starts.filter(r => r.lastAt).map(r => [r._id.toString(), new Date(r.lastAt).toISOString()]),
+    );
+    // Set on every row, tester or not, so the field's shape never depends on who
+    // happens to be flagged — a non-tester simply reports null.
+    decorated.forEach(u => { u.lastTestGameAt = lastByUser[u._id.toString()] ?? null; });
+
+    const latestClients = await latestNativeReleases();
+    res.json({ status: 'success', data: { users: decorated, latestClients } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/users/stats?ids=a,b,c — the expensive half of a Users row,
+// fetched only for the rows an admin actually opens. Capped because the cost is
+// linear in the number of aggregation $match sets, not in the ids themselves.
+router.get('/users/stats', async (req, res) => {
+  try {
+    const ids = (req.query.ids ?? '')
+      .toString()
+      .split(',')
+      .map(id => id.trim())
+      .filter(id => mongoose.Types.ObjectId.isValid(id))
+      .slice(0, 50);
+    if (!ids.length) return res.json({ status: 'success', data: { stats: {} } });
+
+    const users = await User.find({ _id: { $in: ids } });
+    const enriched = await enrichUsersWithStats(users);
+
+    const stats = Object.fromEntries(enriched.map(u => [u._id.toString(), {
+      profileStats:   u.profileStats,
+      emailsSent:     u.emailsSent,
+      lastTestGameAt: u.lastTestGameAt,
+    }]));
+    res.json({ status: 'success', data: { stats } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -1289,6 +1289,24 @@ const writeTesterFx = (on) => {
   try { localStorage.setItem(TESTER_FX_KEY, on ? '1' : '0') } catch { /* private mode */ }
 }
 
+// How many rows the users list had last time, remembered per browser so the
+// skeleton can stand the page up at its real height before the fetch answers.
+// Without it the list would grow under a scroll already in progress and drop the
+// admin somewhere in the middle of it.
+const USERS_COUNT_KEY = 'admin:users:lastCount'
+const SKELETON_ROWS_FALLBACK = 12
+
+const readUsersCount = () => {
+  try {
+    const n = parseInt(localStorage.getItem(USERS_COUNT_KEY), 10)
+    return Number.isFinite(n) && n > 0 ? n : SKELETON_ROWS_FALLBACK
+  } catch { return SKELETON_ROWS_FALLBACK }
+}
+
+const writeUsersCount = (n) => {
+  try { localStorage.setItem(USERS_COUNT_KEY, String(n)) } catch { /* private mode */ }
+}
+
 function ReportsTab({ API }) {
   const { apiFetch } = useAuth()
   const { settings: appSettings } = useAppSettings() ?? {}
@@ -4753,6 +4771,8 @@ function UsersTab({ API, onViewEmailHistory }) {
   const [redditPanel,  setRedditPanel]  = useState(null) // user._id of open Reddit panel
   const [resultsPanel, setResultsPanel] = useState(null) // user._id of open CBAT results panel
   const [expanded,    setExpanded]    = useState(() => new Set()) // user._ids expanded
+  const [statsFailed, setStatsFailed] = useState(() => new Set()) // user._ids whose stats fetch failed
+  const [skeletonRows, setSkeletonRows] = useState(readUsersCount) // page height before the first answer
   const [latestClients, setLatestClients] = useState({}) // newest native release per platform
   // Tester wash + pulse + sort priority. Switched in Settings › Beta Testing;
   // read once here because only one admin tab is mounted at a time.
@@ -4768,14 +4788,50 @@ function UsersTab({ API, onViewEmailHistory }) {
     return me?.platform === 'web' ? me : null
   }, [])
 
+  // Whichever list request was fired last owns the list. The full-population
+  // fetch enriches every account with per-game aggregates, so it can take several
+  // seconds; a search fired while it is still in flight used to be silently
+  // overwritten when it finally landed — the query stayed in the box, the results
+  // reverted to everyone. Responses that are no longer the newest are dropped.
+  const listSeq = useRef(0)
+
+  // Per-user stats already fetched this visit, kept across list reloads so an
+  // action that refreshes the list does not blank out the panel the admin is
+  // reading. Cleared whenever an action might have changed the numbers.
+  const statsCache  = useRef({})
+  const statsInFlight = useRef(new Set())
+
+  const withCachedStats = useCallback(rows => rows.map(u => {
+    const cached = statsCache.current[u._id]
+    return cached ? { ...u, ...cached, statsLoaded: true } : u
+  }), [])
+
+  const rememberStats = useCallback(rows => {
+    rows.forEach(u => {
+      if (!u.statsLoaded) return
+      statsCache.current[u._id] = {
+        profileStats:   u.profileStats,
+        emailsSent:     u.emailsSent,
+        lastTestGameAt: u.lastTestGameAt,
+      }
+    })
+  }, [])
+
   const loadAll = useCallback(async () => {
-    setLoading(true); setSearch(false)
+    const seq = ++listSeq.current
+    setLoading(true)
     const res  = await apiFetch(`${API}/api/admin/users`, { credentials: 'include' })
     const data = await res.json()
-    setUsers(data.data?.users ?? [])
+    if (seq !== listSeq.current) return
+    const rows = data.data?.users ?? []
+    setSearch(false)
+    setUsers(withCachedStats(rows))
     setLatestClients(data.data?.latestClients ?? {})
     setLoading(false)
-  }, [API])
+    // Next visit's skeleton stands the page up at this height.
+    setSkeletonRows(rows.length || SKELETON_ROWS_FALLBACK)
+    if (rows.length) writeUsersCount(rows.length)
+  }, [API, withCachedStats])
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -4796,6 +4852,10 @@ function UsersTab({ API, onViewEmailHistory }) {
 
   const toggleExpanded = (id) => {
     const isOpen = expanded.has(id)
+    // Re-opening a row is the retry gesture for stats that failed to load.
+    if (!isOpen && statsFailed.has(id)) {
+      setStatsFailed(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
     if (isOpen) {
       if (tierPanel === id)    setTierPanel(null)
       if (awardPanel === id)   setAwardPanel(null)
@@ -4812,13 +4872,68 @@ function UsersTab({ API, onViewEmailHistory }) {
 
   const runSearch = async () => {
     if (!q.trim()) { loadAll(); return }
-    setLoading(true); setSearch(true)
+    const seq = ++listSeq.current
+    setLoading(true)
     const res  = await apiFetch(`${API}/api/admin/users/search?q=${encodeURIComponent(q.trim())}`, { credentials: 'include' })
     const data = await res.json()
-    setUsers(data.data?.users ?? [])
+    if (seq !== listSeq.current) return
+    // Search hits arrive fully enriched — the endpoint caps them at 20, which is
+    // cheap to stat — so every hit opens with its numbers already in place.
+    const rows = data.data?.users ?? []
+    rememberStats(rows)
+    setSearch(true)
+    setUsers(rows)
     setLatestClients(data.data?.latestClients ?? {})
     setLoading(false)
   }
+
+  // Fill in the expensive half of any row that is open without it. Driven off
+  // the rendered state rather than the click handler so it covers every way a
+  // row can end up expanded: clicked open, auto-expanded by a search, or still
+  // open across the list reload that follows an admin action.
+  useEffect(() => {
+    const missing = users
+      .filter(u => expanded.has(u._id) && !u.statsLoaded
+        && !statsInFlight.current.has(u._id) && !statsFailed.has(u._id))
+      .map(u => u._id)
+    if (!missing.length) return
+
+    missing.forEach(id => statsInFlight.current.add(id))
+    // No abort on cleanup: the answer is keyed by user id and merged by id, so
+    // it stays correct however the list has moved on by the time it lands.
+    ;(async () => {
+      try {
+        const res = await apiFetch(
+          `${API}/api/admin/users/stats?ids=${missing.join(',')}`,
+          { credentials: 'include' },
+        )
+        if (!res.ok) throw new Error('request failed')
+        const data  = await res.json()
+        const stats = data.data?.stats ?? {}
+        Object.entries(stats).forEach(([id, s]) => { statsCache.current[id] = s })
+        setUsers(prev => prev.map(u => (stats[u._id] ? { ...u, ...stats[u._id], statsLoaded: true } : u)))
+        // An id that came back unanswered — a row deleted from under us, say —
+        // is marked rather than left unloaded: the merge above hands the effect
+        // a fresh array, and without this it would ask again on every pass.
+        const unanswered = missing.filter(id => !stats[id])
+        if (unanswered.length) {
+          setStatsFailed(prev => {
+            const next = new Set(prev)
+            unanswered.forEach(id => next.add(id))
+            return next
+          })
+        }
+      } catch {
+        setStatsFailed(prev => {
+          const next = new Set(prev)
+          missing.forEach(id => next.add(id))
+          return next
+        })
+      } finally {
+        missing.forEach(id => statsInFlight.current.delete(id))
+      }
+    })()
+  }, [users, expanded, statsFailed, API])
 
   const sortedUsers = useMemo(() => {
     // A tester who has not tested today is the row worth chasing, so they lead
@@ -4894,6 +5009,10 @@ function UsersTab({ API, onViewEmailHistory }) {
       return
     }
     setToast('Action completed')
+    // Awards, resets and deletions all move the numbers behind the cached stats,
+    // so the next reload re-fetches them for whichever rows are still open.
+    statsCache.current = {}
+    setStatsFailed(new Set())
     search ? runSearch() : loadAll()
     refreshUser()
   }
@@ -4943,7 +5062,24 @@ function UsersTab({ API, onViewEmailHistory }) {
         )}
       </form>
 
-      {loading && <div className="text-center py-8 text-slate-400 text-sm animate-pulse">Loading users…</div>}
+      {/* Skeleton rows, not a spinner, and as many of them as the list had last
+          time. The page therefore reaches its real height immediately, so the
+          scrollbar is honest and an admin who flings straight to the bottom
+          stays at the bottom instead of being dropped into the middle when the
+          rows arrive. Only for a cold list — a search reload keeps the rows it
+          already has (dimmed below) rather than collapsing the page. */}
+      {loading && users.length === 0 && (
+        <div className="space-y-3 pr-16">
+          <p className="sr-only" role="status">Loading users…</p>
+          {Array.from({ length: skeletonRows }).map((_, i) => (
+            <div key={i} className="rounded-2xl border border-slate-200 bg-surface px-4 py-3">
+              <div className="h-2 rounded skeleton-shimmer mb-1.5" style={{ width: '84px' }} />
+              <div className="h-3.5 rounded skeleton-shimmer mb-1" style={{ width: `${38 + (i * 17) % 34}%` }} />
+              <div className="h-3 rounded skeleton-shimmer" style={{ width: `${28 + (i * 11) % 22}%` }} />
+            </div>
+          ))}
+        </div>
+      )}
       {!loading && users.length === 0 && (
         <div className="text-center py-12 text-slate-400">
           <div className="text-3xl mb-2">👤</div>
@@ -4954,7 +5090,8 @@ function UsersTab({ API, onViewEmailHistory }) {
 
       {/* pr gutter reserves room on the right for the OS tabs that peek out from
           under each card, so they never push the page into horizontal scroll. */}
-      <div className="space-y-3 pr-16">
+      <div className={`space-y-3 pr-16 transition-opacity ${loading && users.length > 0 ? 'opacity-40' : ''}`}
+        aria-busy={loading || undefined}>
         {sortedUsers.map(u => {
           const isExpanded = expanded.has(u._id)
           // Neither online nor away → the row fades back so the live and recently
@@ -5112,31 +5249,47 @@ function UsersTab({ API, onViewEmailHistory }) {
 
             {isExpanded && (
             <>
-            {/* Stats row */}
+            {/* Stats row. The three counted values arrive after the row does —
+                they are aggregated across every gameplay collection, so they are
+                fetched per opened row rather than for all 400 accounts up front.
+                Each shows a shimmer of the same line height meanwhile, so the
+                panel never resizes under whatever the admin clicks next. */}
+            {(() => {
+            const pending = !u.statsLoaded
+            const failed  = statsFailed.has(u._id)
+            return (
             <div className="grid grid-cols-4 sm:grid-cols-7">
               {[
-                ['Coins', (u.totalAirstars ?? 0).toLocaleString(), null],
-                ['Streak', u.loginStreak ?? 0, null],
+                ['Coins', (u.totalAirstars ?? 0).toLocaleString(), null, false],
+                ['Streak', u.loginStreak ?? 0, null, false],
                 ['Briefs Read', u.profileStats?.brifsRead ?? 0,
-                  () => navigate('/intel-brief-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
+                  () => navigate('/intel-brief-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } }), true],
                 ['Games', (u.profileStats?.quizzesPlayed ?? 0) + (u.profileStats?.booPlayed ?? 0) + (u.profileStats?.wtaPlayed ?? 0) + (u.profileStats?.wherePlayed ?? 0) + (u.profileStats?.flashcardsPlayed ?? 0),
-                  () => navigate('/game-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
+                  () => navigate('/game-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } }), true],
                 ['CBAT Games Finished', `${u.profileStats?.cbatPlayed ?? 0}/${u.profileStats?.cbatStarted ?? 0}`,
-                  () => navigate('/cbat-game-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } })],
-                ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1), null],
-                ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), null],
-              ].map(([l, v, onClick]) => onClick ? (
-                <button key={l} onClick={onClick} className="flex flex-col items-center justify-center px-3 py-2 text-center cursor-pointer">
-                  <p className="text-xs font-bold text-slate-700">{v}</p>
-                  <p className="text-[10px] text-slate-400">{l}</p>
-                </button>
-              ) : (
-                <div key={l} className="flex flex-col items-center justify-center px-3 py-2 text-center">
-                  <p className="text-xs font-bold text-slate-700">{v}</p>
-                  <p className="text-[10px] text-slate-400">{l}</p>
-                </div>
-              ))}
+                  () => navigate('/cbat-game-history', { state: { adminUserId: u._id, adminUserName: u.displayName || u.email } }), true],
+                ['Difficulty', (u.difficultySetting ?? 'easy').charAt(0).toUpperCase() + (u.difficultySetting ?? 'easy').slice(1), null, false],
+                ['Joined', new Date(u.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), null, false],
+              ].map(([l, v, onClick, counted]) => {
+                const value = !counted ? v
+                  : failed  ? <span title="Could not load this number — collapse and re-open the row to try again">—</span>
+                  : pending ? <span className="inline-block h-3 w-8 rounded skeleton-shimmer align-middle" />
+                  : v
+                return onClick ? (
+                  <button key={l} onClick={onClick}
+                    className="flex flex-col items-center justify-center px-3 py-2 text-center cursor-pointer">
+                    <p className="text-xs font-bold text-slate-700">{value}</p>
+                    <p className="text-[10px] text-slate-400">{l}</p>
+                  </button>
+                ) : (
+                  <div key={l} className="flex flex-col items-center justify-center px-3 py-2 text-center">
+                    <p className="text-xs font-bold text-slate-700">{value}</p>
+                    <p className="text-[10px] text-slate-400">{l}</p>
+                  </div>
+                )
+              })}
             </div>
+            )})()}
 
             {/* Client / build detail — what they were on, per platform, and when */}
             <div className="px-4 py-3 border-b border-slate-100 border-t">
@@ -5266,8 +5419,8 @@ function UsersTab({ API, onViewEmailHistory }) {
                   brand = sends something, slate = just looks. */}
               {u.email && (
                 <button onClick={() => onViewEmailHistory?.(u)}
-                  title={`View email history (${u.emailsSent ?? 0} sent)`}
-                  aria-label={`View email history — ${u.emailsSent ?? 0} sent`}
+                  title={u.emailsSent == null ? 'View email history' : `View email history (${u.emailsSent} sent)`}
+                  aria-label={u.emailsSent == null ? 'View email history' : `View email history — ${u.emailsSent} sent`}
                   className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M22 12.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7.5" />
