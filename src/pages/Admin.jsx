@@ -1152,13 +1152,20 @@ function CurrentOnlyChip() {
 // comparison; `tag` renders a chip beside the title (e.g. the "current only" mark).
 // `window` marks the card as driven by the Time window picker (compact chip);
 // `loading` shows a reload bar while that window's data refetches.
+// `disabled` greys a card whose subject the site isn't running right now (see
+// the slim-mode cards) — the same opacity-50 grayscale treatment StatCard uses,
+// so "frozen" looks the same wherever it appears. It kills pointer events too,
+// which takes the chart's tooltip with it: a hover reading exact numbers off a
+// chart that is greyed for being meaningless would undo the greying.
 // `className` is for grid placement only (col-span at wide breakpoints) — the
 // card's own look is fixed.
-function ChartCard({ title, sub, tag, window, loading = false, dim = false, className = '', children }) {
+function ChartCard({ title, sub, tag, window, loading = false, dim = false, disabled = false, className = '', children }) {
   return (
     <div
-      className={`relative rounded-2xl border border-slate-200 bg-surface p-4 transition-opacity ${dim ? 'opacity-60' : ''} ${className}`}
+      className={`relative rounded-2xl border border-slate-200 bg-surface p-4 transition-opacity
+        ${dim ? 'opacity-60' : ''} ${disabled ? 'opacity-50 grayscale pointer-events-none' : ''} ${className}`}
       aria-busy={loading || undefined}
+      aria-disabled={disabled || undefined}
     >
       <ChartLoadingBar active={loading} />
       <div className="mb-3">
@@ -1284,6 +1291,20 @@ const writeTesterFx = (on) => {
 
 function ReportsTab({ API }) {
   const { apiFetch } = useAuth()
+  const { settings: appSettings } = useAppSettings() ?? {}
+
+  // Slim (CBAT-only) mode takes the subscription tiers off the site, so that
+  // card can only sit frozen at whatever the split was when the flag went on.
+  // Greying it says "this can't move right now" rather than letting a stale
+  // donut read as the current state of the business — the same treatment, and
+  // the same wording, the Stats page gives its tier-gated cards.
+  //
+  // Deliberately the site-wide AppSettings flag rather than useSlimMode(): the
+  // hook also returns true simply because the admin is reading this inside the
+  // native app, which is always slim, and that says nothing about whether the
+  // website is still selling tiers.
+  const slimMode = appSettings?.slimModeEnabled === true
+  const subTiersSub = slimMode ? 'not used in CBAT-only mode' : 'current snapshot'
   const [window, setWindow] = useState('7d')
   const [compare, setCompare] = useState(false)
   const [snapshot, setSnapshot] = useState(null)
@@ -1459,8 +1480,8 @@ function ReportsTab({ API }) {
               {dauCard}
               {testerFx && <ChartCard title="Test Usage" sub="last 7 days"><ChartSkeleton height={200} /></ChartCard>}
               <ChartCard title="Signup Source" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
-              <ChartCard title="Subscription Tiers" sub="current snapshot"><ChartSkeleton height={200} /></ChartCard>
               <ChartCard title="Operating Systems" sub="all-time"><ChartSkeleton height={200} /></ChartCard>
+              <ChartCard title="Subscription Tiers" sub={subTiersSub}><ChartSkeleton height={200} /></ChartCard>
             </div>
           </div>
         ) : (
@@ -1508,23 +1529,6 @@ function ReportsTab({ API }) {
                 />
               </ChartCard>
 
-              <ChartCard title="Subscription Tiers" sub="current snapshot">
-                <ReportChart
-                  type="donut"
-                  data={[
-                    { tier: 'Free',   count: snapshot.subscription.free   },
-                    { tier: 'Trial',  count: snapshot.subscription.trial  },
-                    { tier: 'Silver', count: snapshot.subscription.silver },
-                    { tier: 'Gold',   count: snapshot.subscription.gold   },
-                  ]}
-                  xKey="tier"
-                  keys={['count']}
-                  colors={['#8ba0c0', '#f59e0b', '#aec0d8', '#fbbf24']}
-                  height={200}
-                  showLegend
-                />
-              </ChartCard>
-
               <ChartCard title="Operating Systems" sub="accounts ever seen per OS · all-time">
                 <ReportChart
                   type="bar"
@@ -1541,6 +1545,23 @@ function ReportsTab({ API }) {
                   colors={['#5baaff']}
                   slantX
                   height={200}
+                />
+              </ChartCard>
+
+              <ChartCard title="Subscription Tiers" sub={subTiersSub} disabled={slimMode}>
+                <ReportChart
+                  type="donut"
+                  data={[
+                    { tier: 'Free',   count: snapshot.subscription.free   },
+                    { tier: 'Trial',  count: snapshot.subscription.trial  },
+                    { tier: 'Silver', count: snapshot.subscription.silver },
+                    { tier: 'Gold',   count: snapshot.subscription.gold   },
+                  ]}
+                  xKey="tier"
+                  keys={['count']}
+                  colors={['#8ba0c0', '#f59e0b', '#aec0d8', '#fbbf24']}
+                  height={200}
+                  showLegend
                 />
               </ChartCard>
             </div>

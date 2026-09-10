@@ -24,9 +24,14 @@ vi.mock('../../context/UnsolvedReportsContext', () => ({
   useUnsolvedReports: () => ({ unsolvedCount: 0, unresolvedSystemLogs: 0, refresh: vi.fn() }),
 }))
 
+// AppSettings is mutable per test — the Reports tab reads slimModeEnabled off it
+// to grey the cards slim mode freezes. Hoisted so the mock factory can close
+// over it; reset in beforeEach so a test that turns slim mode on can't leak.
+const { mockSettings } = vi.hoisted(() => ({ mockSettings: { current: {} } }))
+
 vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({
-    settings: {}, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
+    settings: mockSettings.current, levels: [], levelThresholds: [], loading: false, refreshSettings: vi.fn(),
   }),
 }))
 
@@ -239,7 +244,7 @@ async function openReportsTab() {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('Admin — Reports tab', () => {
-  beforeEach(() => { global.fetch = setupFetch() })
+  beforeEach(() => { global.fetch = setupFetch(); mockSettings.current = {} })
   afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
 
   it('renders Snapshot headline cards (window-independent)', async () => {
@@ -288,6 +293,39 @@ describe('Admin — Reports tab', () => {
       expect.stringContaining('window=90'),
       expect.anything(),
     )
+  })
+
+  it('renders Subscription Tiers after Operating Systems', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Subscription Tiers')).toBeInTheDocument())
+    // Card order within the snapshot grid, read off the DOM rather than assumed:
+    // Subscription Tiers sits last, after the OS breakdown.
+    const os   = screen.getByText('Operating Systems')
+    const tiers = screen.getByText('Subscription Tiers')
+    expect(os.compareDocumentPosition(tiers) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('greys out Subscription Tiers when slim mode is on', async () => {
+    mockSettings.current = { slimModeEnabled: true }
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Subscription Tiers')).toBeInTheDocument())
+
+    const card = screen.getByText('Subscription Tiers').closest('[aria-disabled="true"]')
+    expect(card).not.toBeNull()
+    expect(card.className).toContain('grayscale')
+    // The sub line says why, so a greyed card doesn't read as broken.
+    expect(screen.getByText('not used in CBAT-only mode')).toBeInTheDocument()
+    // Only that card — the rest of the snapshot still measures things slim mode
+    // hasn't taken away.
+    expect(screen.getByText('Operating Systems').closest('[aria-disabled="true"]')).toBeNull()
+  })
+
+  it('leaves Subscription Tiers live when slim mode is off', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Subscription Tiers')).toBeInTheDocument())
+
+    expect(screen.getByText('Subscription Tiers').closest('[aria-disabled="true"]')).toBeNull()
+    expect(screen.getByText('current snapshot')).toBeInTheDocument()
   })
 
   it('renders the Test Usage snapshot card', async () => {
