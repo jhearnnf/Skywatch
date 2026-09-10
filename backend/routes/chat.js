@@ -35,7 +35,7 @@ const POST_POLICIES = ['everyone', 'admin', 'bot'];
 // Fixed reaction set. Deliberately small: a picker people can scan beats an
 // emoji keyboard, and a whitelist keeps arbitrary text out of a channel whose
 // whole point is that users cannot post text into it.
-const REACTION_EMOJI = ['👍', '🎉', '🔥', '👏', '😮', '❤️'];
+const REACTION_EMOJI = ['👍', '🎉', '🔥', '😂', '👏', '😮', '❤️'];
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
