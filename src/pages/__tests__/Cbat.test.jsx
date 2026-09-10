@@ -13,6 +13,8 @@ vi.mock('react-router-dom', () => ({
   // Spread the rest so contextmenu/touch/click handlers reach the anchor.
   Link: ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
   useNavigate: () => mockNavigate,
+  // RecentCbatScores reads it to build the "back to" it hands the CBAT history.
+  useLocation: () => ({ pathname: '/cbat', search: '' }),
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))

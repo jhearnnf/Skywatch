@@ -16,6 +16,8 @@ const mockNavigate = vi.hoisted(() => vi.fn())
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
   useNavigate: () => mockNavigate,
+  // RecentCbatScores reads it to build the "back to" it hands the CBAT history.
+  useLocation: () => ({ pathname: '/cbat', search: '' }),
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
@@ -28,7 +30,23 @@ vi.mock('framer-motion', () => ({
   motion: new Proxy({}, {
     get: () => ({ children, ...rest }) => <div {...rest}>{children}</div>,
   }),
+  // The hub fades the lounge heading in on scroll; these tests only care that
+  // the page renders, so the scroll values are constants.
+  useScroll:    () => ({ scrollY: 0 }),
+  useTransform: () => 0,
 }))
+
+// jsdom has no matchMedia, and the hub asks it which of the two homes the
+// lounge chat is mounted in. "No" is the phone layout, which is the one these
+// tests are about.
+window.matchMedia = (query) => ({
+  media: query,
+  matches: false,
+  addEventListener() {},
+  removeEventListener() {},
+  addListener() {},
+  removeListener() {},
+})
 
 function renderNative() {
   const apiFetch = vi.fn().mockResolvedValue({
