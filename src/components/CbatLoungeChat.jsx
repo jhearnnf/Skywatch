@@ -36,6 +36,11 @@ const ACTIVITY_REFRESH_MS = 5 * 60_000
 // pixels of slack, because sub-pixel row heights mean the scroll maths rarely
 // lands on exactly zero.
 const BOTTOM_SLACK_PX = 4
+// How much of the viewport the panel has to reach into before it counts as
+// being read. A band down the middle rather than a fraction of the panel:
+// the panel is 60dvh on a phone but can be taller than the window in the
+// desktop side column, and a ratio threshold is unreachable in that case.
+const READ_BAND_MARGIN = '-20% 0px -20% 0px'
 
 // How busy the site has been, under the lounge header.
 //
@@ -191,16 +196,20 @@ export default function CbatLoungeChat({ open, onToggle }) {
 
   const scrollRef = useRef(null)
   const inputRef  = useRef(null)
+  // The panel element, held in state rather than a ref so the observer below
+  // re-attaches when the collapsed tab is swapped for the open panel.
+  const [panelEl,    setPanelEl]    = useState(null)
+  const [onScreen,   setOnScreen]   = useState(false)
+  const [tabVisible, setTabVisible] = useState(
+    () => typeof document === 'undefined' || document.visibilityState !== 'hidden'
+  )
   // Whether the list is parked at the bottom, updated as it scrolls. Read by
   // the picker effect below, which needs to know where you were BEFORE the
   // palette changed the list's height.
   const atBottomRef = useRef(true)
-  // Read by the stream handler, which is set up once and would otherwise close
-  // over the open state as it was when the connection opened.
-  const openRef   = useRef(open)
-  openRef.current = open
-  // Same reason as openRef: the stream handler is installed once and would
-  // otherwise close over the sender map as it was when the connection opened.
+  // The stream handler is installed once and would otherwise close over the
+  // sender map as it was when the connection opened. Same reason as readingRef
+  // further down.
   const sendersRef = useRef(senders)
   sendersRef.current = senders
 
@@ -296,7 +305,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
       ))
       const mine = String(incoming.senderUserId ?? '') === String(user?._id)
       if (mine) return
-      if (openRef.current) markRead()
+      if (readingRef.current) markRead()
       else setHasNew(true)
     }
 
@@ -329,12 +338,50 @@ export default function CbatLoungeChat({ open, onToggle }) {
 
   // ── Reading and scrolling ──────────────────────────────────────────────────
 
-  // Opening the panel is what counts as reading it.
+  // Whether the panel is genuinely in front of the user.
+  //
+  // "Open" is not enough. The panel defaults to open and, on a phone, is
+  // mounted a swipe below the fold on /cbat — so loading the page used to mark
+  // the room read for someone who never scrolled to it. That is not just a
+  // wrong unread dot: seen-by is derived from the read marker
+  // (GET /messages/:id/seen-by), so a sender was told their message had been
+  // seen by people who had never laid eyes on it.
   useEffect(() => {
-    if (!open || !conversationId) return
+    if (!panelEl) { setOnScreen(false); return }
+    // No observer (jsdom, and browsers old enough not to matter): fall back to
+    // the old behaviour. Over-reporting a read is bad; never clearing an unread
+    // dot at all is worse.
+    if (typeof IntersectionObserver === 'undefined') { setOnScreen(true); return }
+    const io = new IntersectionObserver(
+      entries => setOnScreen(entries[entries.length - 1].isIntersecting),
+      { rootMargin: READ_BAND_MARGIN },
+    )
+    io.observe(panelEl)
+    return () => io.disconnect()
+  }, [panelEl])
+
+  // A backgrounded tab is not being read either, and the panel stays
+  // "intersecting" the whole time it is in one.
+  useEffect(() => {
+    const onChange = () => setTabVisible(document.visibilityState !== 'hidden')
+    document.addEventListener('visibilitychange', onChange)
+    return () => document.removeEventListener('visibilitychange', onChange)
+  }, [])
+
+  const reading = open && onScreen && tabVisible
+  // Read by the stream handler, which is installed once and would otherwise
+  // close over whatever this was when the connection opened.
+  const readingRef = useRef(reading)
+  readingRef.current = reading
+
+  // Having the panel in front of you is what counts as reading it. This fires
+  // again when you scroll it into view or come back to the tab, so a room read
+  // late still clears.
+  useEffect(() => {
+    if (!reading || !conversationId) return
     setHasNew(false)
     markRead()
-  }, [open, conversationId, markRead])
+  }, [reading, conversationId, markRead])
 
   // Stick to the bottom, which is where a chat lives. useLayoutEffect so the
   // jump happens before paint rather than as a visible scroll.
@@ -618,7 +665,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const showMentionPicker = Boolean(mention) && mention.start !== mentionDismissed
 
   return (
-    <div className="flex-[2] min-h-0 mt-3 flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
+    <div ref={setPanelEl} className="flex-[2] min-h-0 mt-3 flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
       <div className="shrink-0 px-4 py-3 border-b border-[#1a3a5c] flex items-center gap-2">
         <p className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">
           {lounge?.title ?? '🛩️ CBAT Lounge'}

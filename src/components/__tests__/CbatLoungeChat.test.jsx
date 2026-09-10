@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatLoungeChat from '../CbatLoungeChat'
 import { REACTION_EMOJI } from '../../pages/chat/reactionEmoji'
@@ -968,5 +968,82 @@ describe('the action bar opens one row at a time', () => {
 
     fireEvent.click(screen.getAllByLabelText('Reply')[0])
     expect(barFor('a1').className).toContain('hidden')
+  })
+})
+
+// The panel defaults to open and, on a phone, is mounted a swipe below the fold
+// on /cbat. "Open" therefore says nothing about whether anyone has seen it —
+// and seen-by is derived from the read marker, so a wrong one tells a sender
+// their message was read by people who never scrolled to it.
+describe('what counts as reading the room', () => {
+  class FakeObserver {
+    static last = null
+    constructor(cb) { this.cb = cb; this.disconnected = false; FakeObserver.last = this }
+    observe(el) { this.el = el }
+    disconnect() { this.disconnected = true }
+    // Push an intersection the way the browser would.
+    send(isIntersecting) {
+      act(() => { this.cb([{ isIntersecting, target: this.el }], this) })
+    }
+  }
+
+  const readCalls = fetchMock =>
+    fetchMock.mock.calls.filter(([url]) => String(url).includes('/read'))
+
+  beforeEach(() => {
+    FakeObserver.last = null
+    global.IntersectionObserver = FakeObserver
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+  })
+  afterEach(() => { delete global.IntersectionObserver })
+
+  it('does not mark the room read while the panel is below the fold', async () => {
+    const fetchMock = stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+
+    expect(FakeObserver.last?.el).toBeTruthy()
+    expect(readCalls(fetchMock)).toHaveLength(0)
+  })
+
+  it('marks it read once the panel is scrolled into view', async () => {
+    const fetchMock = stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+
+    FakeObserver.last.send(true)
+    await waitFor(() => expect(readCalls(fetchMock)).toHaveLength(1))
+    expect(readCalls(fetchMock)[0][1].method).toBe('POST')
+  })
+
+  it('does not count a panel sitting in a backgrounded tab', async () => {
+    const fetchMock = stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    fireEvent(document, new Event('visibilitychange'))
+    FakeObserver.last.send(true)
+    expect(readCalls(fetchMock)).toHaveLength(0)
+
+    // ...and picks it up again when they come back to it.
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+    fireEvent(document, new Event('visibilitychange'))
+    await waitFor(() => expect(readCalls(fetchMock)).toHaveLength(1))
+  })
+
+  it('leaves a message that arrives off screen unread', async () => {
+    const fetchMock = stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+
+    act(() => {
+      FakeEventSource.last.emit('message', {
+        _id: 'm2', senderUserId: 'u2', senderDisplayName: 'Viper',
+        body: 'still there?', createdAt: new Date().toISOString(), mentions: [],
+      })
+    })
+    await screen.findByText('still there?')
+    expect(readCalls(fetchMock)).toHaveLength(0)
   })
 })
