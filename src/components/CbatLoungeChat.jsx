@@ -376,6 +376,28 @@ export default function CbatLoungeChat({ open, onToggle }) {
     return () => document.removeEventListener('pointerdown', onDown, true)
   }, [openActionsId])
 
+  // Same for the reaction palette, which otherwise sat there until you picked
+  // an emoji or opened another message's picker.
+  //
+  // Scoped to the row rather than to the palette itself, because the ☺+ toggle
+  // lives in that row's action bar: closing on any press outside the palette
+  // would tear it down on pointerdown and the click would immediately put it
+  // back, so the button would never appear to close anything.
+  useEffect(() => {
+    if (!picking) return
+    const onDown = (e) => {
+      const row = e.target?.closest?.(`[data-msg-row="${picking}"]`)
+      if (!row) setPicking(null)
+    }
+    const onKey = (e) => { if (e.key === 'Escape') setPicking(null) }
+    document.addEventListener('pointerdown', onDown, true)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [picking])
+
   // ── Sending ────────────────────────────────────────────────────────────────
 
   const syncCaret = (e) => setCaret(e.target.selectionStart ?? 0)

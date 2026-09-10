@@ -533,6 +533,39 @@ describe('reactions', () => {
     expect(list.scrollTop).toBe(500)
   })
 
+  it('puts the palette away when you press elsewhere', async () => {
+    stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    expect(screen.getByText('🔥')).toBeTruthy()
+
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByText('🔥')).toBeNull()
+  })
+
+  it('puts the palette away on Escape', async () => {
+    stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByText('🔥')).toBeNull()
+  })
+
+  // The toggle sits in the same row's action bar, so a dismiss scoped to the
+  // palette alone would close it on pointerdown and the click would reopen it.
+  it('still closes on a second press of the picker button', async () => {
+    stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+    const button = screen.getByLabelText('Add a reaction')
+    fireEvent.click(button)
+    fireEvent.pointerDown(button)
+    fireEvent.click(button)
+    expect(screen.queryByText('🔥')).toBeNull()
+  })
+
   it('leaves the scroll alone when the picker opens on an older message', async () => {
     stubFetch()
     const { container } = renderOpen()
