@@ -144,7 +144,7 @@ describe('CbatQuestionnaireResults — answers', () => {
 
   it('badges a respondent who sent in a score sheet', async () => {
     mount(payload({ responses: [{
-      _id: 'r3', userId: { agentNumber: '555' },
+      _id: 'r3', userId: { _id: 'u3', agentNumber: '555' },
       satTest: true, passedForRole: 'yes', resultImagesUploaded: 2,
     }] }))
 
@@ -159,6 +159,80 @@ describe('CbatQuestionnaireResults — answers', () => {
 
     const table = within(await screen.findByTestId('results-answers'))
     expect(table.queryByTestId('results-sheet-badge')).toBeNull()
+  })
+
+  // Orphaned rows (the account behind them is gone) have no id to fetch images
+  // by, so there is nothing for the badge to open.
+  it('does not badge an uploaded sheet whose account is gone', async () => {
+    mount(payload({ responses: [{
+      _id: 'r4b', userId: null, satTest: true, passedForRole: 'yes', resultImagesUploaded: 1,
+    }] }))
+
+    const table = within(await screen.findByTestId('results-answers'))
+    expect(table.queryByTestId('results-sheet-badge')).toBeNull()
+  })
+})
+
+describe('CbatQuestionnaireResults — viewing a score sheet', () => {
+  it('opens a modal with the images and steps between them', async () => {
+    global.fetch = vi.fn(async (url) => {
+      if (url.includes('/cbat-results')) {
+        return {
+          ok: true,
+          json: async () => ({ data: { images: [
+            { _id: 'i1', url: 'https://example.com/1.png', caption: 'sheet1', uploadedAt: '2026-09-01T00:00:00.000Z' },
+            { _id: 'i2', url: 'https://example.com/2.png', caption: 'sheet2', uploadedAt: '2026-09-02T00:00:00.000Z' },
+          ] } }),
+        }
+      }
+      return {
+        ok: true,
+        json: async () => ({ data: payload({ responses: [{
+          _id: 'r10', userId: { _id: 'u10', agentNumber: '555' },
+          satTest: true, passedForRole: 'yes', resultImagesUploaded: 2,
+        }] }) }),
+      }
+    })
+
+    render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByTestId('results-sheet-badge'))
+
+    const modal = within(await screen.findByTestId('sheets-modal'))
+    expect(await modal.findByText('1 / 2')).toBeInTheDocument()
+    expect(modal.getByAltText('sheet1')).toHaveAttribute('src', 'https://example.com/1.png')
+
+    fireEvent.click(modal.getByLabelText('Next image'))
+    expect(await modal.findByText('2 / 2')).toBeInTheDocument()
+    expect(modal.getByAltText('sheet2')).toHaveAttribute('src', 'https://example.com/2.png')
+
+    // Wraps back round rather than stopping at the last image.
+    fireEvent.click(modal.getByLabelText('Next image'))
+    expect(await modal.findByText('1 / 2')).toBeInTheDocument()
+
+    fireEvent.click(modal.getByText('Close'))
+    expect(screen.queryByTestId('sheets-modal')).toBeNull()
+  })
+
+  it('reports a load failure inside the modal instead of a blank one', async () => {
+    global.fetch = vi.fn(async (url) => {
+      if (url.includes('/cbat-results')) {
+        return { ok: false, json: async () => ({ message: 'Could not load the score sheet' }) }
+      }
+      return {
+        ok: true,
+        json: async () => ({ data: payload({ responses: [{
+          _id: 'r11', userId: { _id: 'u11', agentNumber: '556' },
+          satTest: true, passedForRole: 'yes', resultImagesUploaded: 1,
+        }] }) }),
+      }
+    })
+
+    render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)
+    fireEvent.click(await screen.findByTestId('results-sheet-badge'))
+
+    const modal = within(await screen.findByTestId('sheets-modal'))
+    expect(await modal.findByText('Could not load the score sheet')).toBeInTheDocument()
   })
 })
 

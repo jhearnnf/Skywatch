@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
+import Overlay from '../components/ui/Overlay'
 import { roleLabel } from '../data/surveyRoles'
 
 /**
@@ -100,6 +101,7 @@ export default function CbatQuestionnaireResults() {
   const [error, setError]     = useState('')
   const [tab, setTab]         = useState('answers')
   const [highlightUserId, setHighlightUserId] = useState(null)
+  const [sheetsModal, setSheetsModal] = useState(null) // { userId, name } of the agent whose sheets are open
 
   // Jump to the row a free-text "gap" statement came from. Switching tabs and
   // scrolling both need the Answers rows to already be in the DOM, so this
@@ -309,10 +311,26 @@ export default function CbatQuestionnaireResults() {
             ))}
           </div>
 
-          {tab === 'answers'  && <AnswersTable rows={data.responses} highlightUserId={highlightUserId} />}
+          {tab === 'answers'  && (
+            <AnswersTable
+              rows={data.responses}
+              highlightUserId={highlightUserId}
+              onOpenSheets={setSheetsModal}
+            />
+          )}
           {tab === 'deferred' && <DeferredTable rows={data.deferred} />}
           {tab === 'optouts'  && <OptOutTable rows={data.optedOut} />}
         </>
+      )}
+
+      {sheetsModal && (
+        <SheetsModal
+          userId={sheetsModal.userId}
+          name={sheetsModal.name}
+          API={API}
+          apiFetch={apiFetch}
+          onClose={() => setSheetsModal(null)}
+        />
       )}
     </motion.div>
   )
@@ -361,12 +379,13 @@ function Empty({ children }) {
 
 // One row per respondent, including the ones who stopped halfway — a partial
 // answer is the normal case, not an error, and usually carries the pass answer.
-function AnswersTable({ rows, highlightUserId }) {
+function AnswersTable({ rows, highlightUserId, onOpenSheets }) {
   if (!rows?.length) return <Empty>Nobody has answered yet.</Empty>
   return (
     <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100" data-testid="results-answers">
       {rows.map(r => {
         const rowUserId = r.userId?._id ? String(r.userId._id) : null
+        const rowName = r.userId?.displayName?.trim() || (r.userId?.agentNumber ? `Agent ${r.userId.agentNumber}` : 'Unknown')
         return (
         <div
           key={r._id}
@@ -376,14 +395,16 @@ function AnswersTable({ rows, highlightUserId }) {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email }} />
-              {r.resultImagesUploaded > 0 && (
-                <span
-                  className="inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-200/60 text-emerald-800"
-                  title="Sent in a score sheet — open their profile to view it under CBAT results"
+              {r.resultImagesUploaded > 0 && rowUserId && (
+                <button
+                  type="button"
+                  onClick={() => onOpenSheets({ userId: rowUserId, name: rowName })}
+                  className="inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-200/60 text-emerald-800 hover:bg-emerald-200 transition-colors"
+                  title="View the score sheet they sent in"
                   data-testid="results-sheet-badge"
                 >
                   Sheet{r.resultImagesUploaded > 1 ? ` ×${r.resultImagesUploaded}` : ''}
-                </span>
+                </button>
               )}
             </div>
             <div className="shrink-0 text-right">
@@ -451,6 +472,104 @@ function DeferredTable({ rows }) {
         </div>
       ))}
     </div>
+  )
+}
+
+// The score sheets a respondent sent in, opened from the "Sheet ×N" badge on
+// their row. Fetched by userId alone — this page never loads a full user
+// document, only the count the summary already carries — and browsable with
+// the arrow keys because a sheet is normally several photos of one form.
+function SheetsModal({ userId, name, API, apiFetch, onClose }) {
+  const [images, setImages] = useState(null)
+  const [error, setError]   = useState('')
+  const [index, setIndex]   = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`${API}/api/admin/users/${userId}/cbat-results`, { credentials: 'include' })
+      .then(async res => {
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(body.message || 'Could not load the score sheet')
+        return body
+      })
+      .then(body => { if (!cancelled) setImages(body.data?.images ?? []) })
+      .catch(err => { if (!cancelled) setError(err.message) })
+    return () => { cancelled = true }
+  }, [API, apiFetch, userId])
+
+  const count = images?.length ?? 0
+  const goPrev = useCallback(() => setIndex(i => (i - 1 + count) % count), [count])
+  const goNext = useCallback(() => setIndex(i => (i + 1) % count), [count])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowLeft'  && count > 1) goPrev()
+      else if (e.key === 'ArrowRight' && count > 1) goNext()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, goPrev, goNext, count])
+
+  const current = images?.[index]
+
+  return (
+    <Overlay zIndex={60} backdrop="rgba(8,14,30,0.92)" onDismiss={onClose} className="flex items-center justify-center p-4">
+      <div className="max-w-4xl w-full" data-testid="sheets-modal">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <p className="text-sm font-semibold text-white truncate">{name}'s score sheet</p>
+          <button
+            onClick={onClose}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-colors shrink-0 bg-surface"
+          >
+            Close
+          </button>
+        </div>
+
+        {error && <p className="text-sm text-rose-300 text-center py-12">{error}</p>}
+        {!error && images === null && <p className="text-sm text-slate-300 text-center py-12">Loading…</p>}
+        {!error && images?.length === 0 && <p className="text-sm text-slate-300 text-center py-12">No images found.</p>}
+
+        {current && (
+          <div className="relative">
+            <img
+              src={current.url}
+              alt={current.caption || `Score sheet ${index + 1} of ${count}`}
+              className="w-full max-h-[80vh] object-contain rounded-xl bg-black/20"
+            />
+            {count > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  aria-label="Previous image"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 text-white text-lg font-bold flex items-center justify-center transition-colors"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  aria-label="Next image"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 text-white text-lg font-bold flex items-center justify-center transition-colors"
+                >
+                  ›
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {current && (
+          <div className="flex items-center justify-between gap-3 mt-2">
+            <p className="text-xs text-slate-300 truncate">
+              {current.caption || 'Score sheet'} · {fmt(current.uploadedAt)}
+            </p>
+            {count > 1 && <p className="text-xs text-slate-400 shrink-0">{index + 1} / {count}</p>}
+          </div>
+        )}
+      </div>
+    </Overlay>
   )
 }
 

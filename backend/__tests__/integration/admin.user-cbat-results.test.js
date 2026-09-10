@@ -13,6 +13,8 @@
  *   - Deletes an entry and its Cloudinary asset
  *   - A Cloudinary delete failure still removes the entry
  *   - 404s for unknown user / unknown image
+ *   - GET fetches a user's images by id alone, for a viewer that never loaded
+ *     the rest of the user document (the questionnaire results page)
  */
 
 process.env.JWT_SECRET = 'test_secret';
@@ -203,6 +205,61 @@ describe('DELETE /api/admin/users/:id/cbat-results/:imageId', () => {
     const admin = await createAdminUser();
     const res = await request(app)
       .delete('/api/admin/users/507f1f77bcf86cd799439011/cbat-results/507f1f77bcf86cd799439012')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('GET /api/admin/users/:id/cbat-results', () => {
+  beforeEach(async () => { await createRank(); });
+
+  it('returns 401 with no auth cookie', async () => {
+    const target = await createUser();
+    const res = await request(app).get(`/api/admin/users/${target._id}/cbat-results`);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 403 for a non-admin user', async () => {
+    const caller = await createUser();
+    const target = await createUser();
+    const res = await request(app)
+      .get(`/api/admin/users/${target._id}/cbat-results`)
+      .set('Cookie', authCookie(caller._id));
+    expect(res.status).toBe(403);
+  });
+
+  it("returns the user's images by id alone", async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser();
+    const cookie = authCookie(admin._id);
+    await upload(cookie, target._id, { dataUrl: PNG, caption: 'sheet.png' });
+
+    const res = await request(app)
+      .get(`/api/admin/users/${target._id}/cbat-results`)
+      .set('Cookie', cookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.images).toHaveLength(1);
+    expect(res.body.data.images[0].caption).toBe('sheet.png');
+  });
+
+  it('returns an empty list for a user with no sheets', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser();
+
+    const res = await request(app)
+      .get(`/api/admin/users/${target._id}/cbat-results`)
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.images).toHaveLength(0);
+  });
+
+  it('returns 404 for an unknown user id', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app)
+      .get('/api/admin/users/507f1f77bcf86cd799439011/cbat-results')
       .set('Cookie', authCookie(admin._id));
 
     expect(res.status).toBe(404);

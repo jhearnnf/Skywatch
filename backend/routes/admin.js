@@ -1792,6 +1792,20 @@ router.patch('/users/:id/reddit', async (req, res) => {
   }
 });
 
+// GET /api/admin/users/:id/cbat-results — the images themselves, for a viewer
+// that only knows the userId (the questionnaire results page, which lists a
+// sheet count per respondent but never fetches their whole user document).
+router.get('/users/:id/cbat-results', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('cbatResultImages');
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    res.json({ status: 'success', data: { images: user.cbatResultImages } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/admin/users/:id/cbat-results — attach a screenshot of the user's real
 // CBAT score sheet. Takes a base64 data URL in the JSON body exactly as the
 // update-notification uploader does (see that route for why: the 10MB
