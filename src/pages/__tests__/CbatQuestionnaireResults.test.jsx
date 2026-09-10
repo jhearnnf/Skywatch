@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatQuestionnaireResults from '../CbatQuestionnaireResults'
@@ -26,7 +26,11 @@ const mount = (data) => {
   return render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)
 }
 
-beforeEach(() => { global.fetch = vi.fn() })
+beforeEach(() => {
+  global.fetch = vi.fn()
+  // jsdom stubs scrollIntoView on HTMLElement.prototype, shadowing Element.prototype.
+  window.HTMLElement.prototype.scrollIntoView = vi.fn()
+})
 afterEach(() => { vi.restoreAllMocks() })
 
 describe('CbatQuestionnaireResults — the funnel', () => {
@@ -136,6 +140,59 @@ describe('CbatQuestionnaireResults — answers', () => {
     global.fetch = vi.fn(async () => ({ ok: false, json: async () => ({ message: 'nope' }) }))
     render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)
     expect(await screen.findByText('nope')).toBeInTheDocument()
+  })
+
+  it('badges a respondent who sent in a score sheet', async () => {
+    mount(payload({ responses: [{
+      _id: 'r3', userId: { agentNumber: '555' },
+      satTest: true, passedForRole: 'yes', resultImagesUploaded: 2,
+    }] }))
+
+    const table = within(await screen.findByTestId('results-answers'))
+    expect(table.getByTestId('results-sheet-badge')).toHaveTextContent('Sheet ×2')
+  })
+
+  it('does not badge a respondent who sent nothing in', async () => {
+    mount(payload({ responses: [{
+      _id: 'r4', userId: { agentNumber: '666' }, satTest: true, passedForRole: 'yes',
+    }] }))
+
+    const table = within(await screen.findByTestId('results-answers'))
+    expect(table.queryByTestId('results-sheet-badge')).toBeNull()
+  })
+})
+
+describe('CbatQuestionnaireResults — locating a respondent from their gap statement', () => {
+  it('switches to the Answers tab and flashes that row', async () => {
+    mount(payload({
+      responses: [{
+        _id: 'r5', userId: { _id: 'u5', agentNumber: '888' },
+        satTest: true, passedForRole: 'yes', gaps: 'A test we had not seen.',
+      }],
+      summary: {
+        gaps: [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '888', userId: 'u5' }],
+      },
+    }))
+
+    fireEvent.click(await screen.findByText('A test we had not seen.'))
+
+    const table = within(await screen.findByTestId('results-answers'))
+    expect(table.getByText('Agent 888')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.getElementById('answer-user-u5')).toHaveClass('admin-row-locate-flash')
+    })
+    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled()
+  })
+
+  it('is not clickable when the account behind the gap statement is gone', async () => {
+    mount(payload({
+      summary: { gaps: [{ gaps: 'Orphaned answer.', role: 'pilot', agentNumber: '999', userId: null }] },
+    }))
+
+    const block = (await screen.findByText('Orphaned answer.')).closest('div')
+    expect(block).not.toHaveAttribute('title')
+    expect(() => fireEvent.click(block)).not.toThrow()
+    expect(document.querySelector('.admin-row-locate-flash')).toBeNull()
   })
 })
 

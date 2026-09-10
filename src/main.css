@@ -1012,6 +1012,19 @@ body.community-selectable .app-shell-content * {
   animation: admin-tester-idle-pulse 1.1s ease-in-out infinite;
 }
 
+/* Admin › CBAT Questionnaire results — clicking a free-text "gap" statement
+   jumps to that respondent's row in the Answers table below and flashes it
+   twice so it's obvious which row the text came from. One-shot (finite
+   iteration count), unlike the infinite tutorial pulses above. */
+@keyframes admin-row-locate {
+  0%, 100%  { background-color: transparent; }
+  15%, 45%  { background-color: rgba(245, 158, 11, 0.35); }
+}
+.admin-row-locate-flash {
+  animation: admin-row-locate 1.8s ease-in-out 2;
+  border-radius: 8px;
+}
+
 /* DPT — yellow pulse used for edge-warning highlights and aircraft halos
    whenever a player aircraft enters the edge buffer (auto-turn zone). */
 @keyframes dpt-edge-pulse {

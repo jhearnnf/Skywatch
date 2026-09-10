@@ -99,6 +99,26 @@ export default function CbatQuestionnaireResults() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [tab, setTab]         = useState('answers')
+  const [highlightUserId, setHighlightUserId] = useState(null)
+
+  // Jump to the row a free-text "gap" statement came from. Switching tabs and
+  // scrolling both need the Answers rows to already be in the DOM, so this
+  // runs after render rather than in the click handler itself.
+  useEffect(() => {
+    if (!highlightUserId || tab !== 'answers') return
+    const el = document.getElementById(`answer-user-${highlightUserId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => setHighlightUserId(null), 3600)
+    return () => clearTimeout(t)
+  }, [highlightUserId, tab])
+
+  const locateInAnswers = (userId) => {
+    if (!userId) return
+    setTab('answers')
+    // Re-trigger the flash even if the same row was just located.
+    setHighlightUserId(null)
+    requestAnimationFrame(() => setHighlightUserId(userId))
+  }
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -235,7 +255,14 @@ export default function CbatQuestionnaireResults() {
               </h2>
               <div className="space-y-2">
                 {s.gaps.map((g, i) => (
-                  <div key={i} className="rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2">
+                  <div
+                    key={i}
+                    onClick={g.userId ? () => locateInAnswers(g.userId) : undefined}
+                    title={g.userId ? "Jump to this agent's row below" : undefined}
+                    className={`rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2 ${
+                      g.userId ? 'cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors' : ''
+                    }`}
+                  >
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{g.gaps}</p>
                     <p className="text-[10px] text-slate-500 mt-1"><Writer x={g} /></p>
                   </div>
@@ -282,7 +309,7 @@ export default function CbatQuestionnaireResults() {
             ))}
           </div>
 
-          {tab === 'answers'  && <AnswersTable rows={data.responses} />}
+          {tab === 'answers'  && <AnswersTable rows={data.responses} highlightUserId={highlightUserId} />}
           {tab === 'deferred' && <DeferredTable rows={data.deferred} />}
           {tab === 'optouts'  && <OptOutTable rows={data.optedOut} />}
         </>
@@ -334,14 +361,31 @@ function Empty({ children }) {
 
 // One row per respondent, including the ones who stopped halfway — a partial
 // answer is the normal case, not an error, and usually carries the pass answer.
-function AnswersTable({ rows }) {
+function AnswersTable({ rows, highlightUserId }) {
   if (!rows?.length) return <Empty>Nobody has answered yet.</Empty>
   return (
     <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100" data-testid="results-answers">
-      {rows.map(r => (
-        <div key={r._id} className="px-4 py-3">
+      {rows.map(r => {
+        const rowUserId = r.userId?._id ? String(r.userId._id) : null
+        return (
+        <div
+          key={r._id}
+          id={rowUserId ? `answer-user-${rowUserId}` : undefined}
+          className={`px-4 py-3 ${highlightUserId && rowUserId === highlightUserId ? 'admin-row-locate-flash' : ''}`}
+        >
           <div className="flex items-start justify-between gap-3">
-            <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email }} />
+            <div className="min-w-0">
+              <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email }} />
+              {r.resultImagesUploaded > 0 && (
+                <span
+                  className="inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-200/60 text-emerald-800"
+                  title="Sent in a score sheet — open their profile to view it under CBAT results"
+                  data-testid="results-sheet-badge"
+                >
+                  Sheet{r.resultImagesUploaded > 1 ? ` ×${r.resultImagesUploaded}` : ''}
+                </span>
+              )}
+            </div>
             <div className="shrink-0 text-right">
               {r.satTest === false
                 ? <span className="text-[10px] font-semibold text-sky-700">Not sat yet</span>
@@ -379,7 +423,8 @@ function AnswersTable({ rows }) {
             </p>
           )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
