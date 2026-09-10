@@ -4994,6 +4994,26 @@ function UsersTab({ API, onViewEmailHistory }) {
     }
   }
 
+  // Keep this account off the Potential CBAT Passers questionnaire, or put it
+  // back on. The value the row carries is already resolved server-side (the
+  // stored field is three-state, and a null there means "use the list baked
+  // into constants/survey.js"), so ticking or unticking always writes an
+  // explicit boolean — that is how someone comes off the baked-in list.
+  const toggleResearchExcluded = async (id, next) => {
+    setUsers(prev => prev.map(u => u._id === id ? { ...u, researchEmailExcluded: next } : u))
+    try {
+      const res = await apiFetch(`${API}/api/admin/users/${id}/research-excluded`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ researchEmailExcluded: next }),
+      })
+      if (!res.ok) throw new Error('request failed')
+    } catch {
+      setUsers(prev => prev.map(u => u._id === id ? { ...u, researchEmailExcluded: !next } : u))
+      setToast('Could not update the do-not-contact list')
+    }
+  }
+
   const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
 
   const confirmAction = async (reason) => {
@@ -5206,10 +5226,25 @@ function UsersTab({ API, onViewEmailHistory }) {
                       passed CBAT
                     </label>
                   )}
+                  {isExpanded && (
+                    <label
+                      className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 cursor-pointer select-none"
+                      title="Keep this account out of the Potential CBAT Passers questionnaire emails"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!u.researchEmailExcluded}
+                        onChange={e => toggleResearchExcluded(u._id, e.target.checked)}
+                        className="accent-red-500"
+                      />
+                      do not contact
+                    </label>
+                  )}
                 </p>
-                <p className="text-xs text-slate-400">{u.email}</p>
+                <p className="text-xs text-slate-400 truncate">{u.email}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {isExpanded && (
                   <button onClick={e => { e.stopPropagation(); setTierPanel(tierPanel === u._id ? null : u._id) }}
                     title="Change subscription tier"

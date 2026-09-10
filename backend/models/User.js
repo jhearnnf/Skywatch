@@ -190,6 +190,19 @@ const userSchema = new mongoose.Schema(
       campaign: { type: String, default: null },
     },
 
+    // OUR decision not to contact them, as opposed to theirs above: the
+    // do-not-contact list for the CBAT questionnaire, set from the checkbox in
+    // Admin › Users. People we know personally, accounts that are really ours,
+    // anyone who has asked us in person — the reasons are off-system, which is
+    // why this is a flag an admin sets rather than something derived.
+    //
+    // Three states, and null is not the same as false. Null means "no admin has
+    // ruled on this account", so constants/survey.js falls back to the static
+    // list it ships with; true and false are an explicit override of that list
+    // in either direction, which is what lets the checkbox take someone OFF the
+    // shipped list without editing code and redeploying.
+    researchEmailExcluded: { type: Boolean, default: null },
+
     // Opt-OUT of the public progress wall on the landing page (see
     // utils/cbatShowcase.js). Stored as the objection rather than as consent so
     // the default — included, anonymised behind an agent number — needs no

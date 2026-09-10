@@ -84,6 +84,11 @@ const MAX_BOOKING_MONTHS_AHEAD = 36;
 // and anyone who has opted out are excluded by the query itself and are NOT
 // listed here — this is only for real accounts we know personally.
 //
+// These two lists are the STARTING POINT, not the whole list: the checkbox in
+// Admin › Users writes User.researchEmailExcluded, which overrides them per
+// account in either direction (see isManuallyExcluded). New exclusions belong
+// there rather than here — a name added below only takes effect on a deploy.
+//
 // Testers are deliberately NOT excluded: several people who tested the Android
 // app were genuine CBAT candidates, and they are exactly who this asks about.
 
@@ -114,16 +119,33 @@ const EXCLUDED_DISPLAY_NAMES = [
 const excludedEmailSet = new Set(EXCLUDED_EMAILS.map(e => e.toLowerCase()));
 const excludedNameSet  = new Set(EXCLUDED_DISPLAY_NAMES.map(n => n.toLowerCase()));
 
+// The do-not-contact list as an admin sees it: the checkbox in Admin › Users if
+// one has been ticked or cleared on this account, and otherwise the two static
+// lists above.
+//
+// `User.researchEmailExcluded` is a three-state field on purpose. Null means no
+// admin has ruled on the account and the shipped lists decide; an explicit
+// false is how the checkbox takes someone off a list that is baked into this
+// file, which a boolean defaulting to false could not express.
+//
+// This is only the by-hand half of the rule — admins, bots, banned accounts and
+// people who opted out themselves are handled by isExcludedAccount below and
+// cannot be un-excluded from the admin panel.
+function isManuallyExcluded(user) {
+  if (!user) return false;
+  if (typeof user.researchEmailExcluded === 'boolean') return user.researchEmailExcluded;
+  if (user.email && excludedEmailSet.has(String(user.email).toLowerCase())) return true;
+  const name = user.displayName ? String(user.displayName).trim().toLowerCase() : '';
+  return !!(name && excludedNameSet.has(name));
+}
+
 // `user` may be a lean object or a hydrated doc — only reads plain fields.
 function isExcludedAccount(user) {
   if (!user) return true;
   if (user.isAdmin || user.isBot || user.isBanned) return true;
   if (user.researchEmailOptOut?.at) return true;
   if (!user.email) return true;
-  if (excludedEmailSet.has(String(user.email).toLowerCase())) return true;
-  const name = user.displayName ? String(user.displayName).trim().toLowerCase() : '';
-  if (name && excludedNameSet.has(name)) return true;
-  return false;
+  return isManuallyExcluded(user);
 }
 
 // ── Answer vocabularies ──────────────────────────────────────────────────────
@@ -188,6 +210,7 @@ module.exports = {
   EXCLUDED_EMAILS,
   EXCLUDED_DISPLAY_NAMES,
   isExcludedAccount,
+  isManuallyExcluded,
   PASS_ANSWERS,
   RATING_MIN,
   RATING_MAX,

@@ -51,7 +51,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Everything the search and the hand-picked send need to judge an account:
 // identity, the flags that block a send, and the heartbeat that dates it.
 const SEARCH_FIELDS =
-  'agentNumber email displayName isTester cbatPassed isAdmin isBot isBanned researchEmailOptOut lastSeen';
+  'agentNumber email displayName isTester cbatPassed isAdmin isBot isBanned researchEmailOptOut researchEmailExcluded lastSeen';
 
 /**
  * Per-user CBAT activity for an arbitrary set of accounts.
@@ -181,7 +181,7 @@ async function buildCbatPasserCohort({
       isBanned: { $ne: true },
       'researchEmailOptOut.at': null,
     },
-    'agentNumber email displayName isTester cbatPassed cbatPassedAt lastSeen createdAt subscriptionTier',
+    'agentNumber email displayName isTester cbatPassed cbatPassedAt researchEmailExcluded lastSeen createdAt subscriptionTier',
   ).lean();
 
   const candidates = users.filter(u => !isExcludedAccount(u));

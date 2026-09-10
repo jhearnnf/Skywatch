@@ -60,7 +60,7 @@ const SystemLog                = require('../models/SystemLog');
 const AptitudeSyncUsage        = require('../models/AptitudeSyncUsage');
 const SurveyResponse           = require('../models/SurveyResponse');
 const SurveyInvite             = require('../models/SurveyInvite');
-const { SURVEY_CAMPAIGN }      = require('../constants/survey');
+const { SURVEY_CAMPAIGN, isManuallyExcluded } = require('../constants/survey');
 const DonationPageVisit        = require('../models/DonationPageVisit');
 const { enrichSourceDates }    = require('../utils/scrapeArticleDate');
 const { callOpenRouter, featureMiddleware, setBrief } = require('../utils/openRouter');
@@ -1326,7 +1326,16 @@ function lastNativeAppOpen(plain) {
 // deferring — see GET /users.
 function decorateUser(u) {
   const plain = u.toObject({ virtuals: true });
-  return { ...plain, lastTestAppOpenAt: lastNativeAppOpen(plain), statsLoaded: false };
+  return {
+    ...plain,
+    lastTestAppOpenAt: lastNativeAppOpen(plain),
+    // Resolved rather than raw. The stored field is three-state (null = "no
+    // ruling, use the static list in constants/survey.js"), and the panel has
+    // no way to evaluate that list, so it is told the answer instead of the
+    // input. Ticking the box writes back an explicit true/false either way.
+    researchEmailExcluded: isManuallyExcluded(plain),
+    statsLoaded: false,
+  };
 }
 
 // Helper — attach profileStats to a list of User documents.
@@ -1428,6 +1437,9 @@ async function enrichUsersWithStats(users) {
       statsLoaded: true,
       lastTestGameAt: uid in lastGameMap ? new Date(lastGameMap[uid]).toISOString() : null,
       lastTestAppOpenAt: lastNativeAppOpen(plain),
+      // Resolved the same way decorateUser resolves it — a search hit and a
+      // list row must not disagree about whether someone is on the list.
+      researchEmailExcluded: isManuallyExcluded(plain),
       emailsSent: emailMap[uid] ?? 0,
       profileStats: {
         brifsRead:        briefMap[uid]          ?? 0,
@@ -1632,6 +1644,28 @@ router.patch('/users/:id/cbat-passed', async (req, res) => {
     );
     if (!updated) return res.status(404).json({ message: 'User not found.' });
     res.json({ status: 'success', data: { cbatPassed, cbatPassedAt: updated.cbatPassedAt } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/users/:id/research-excluded — the do-not-contact list for the
+// Potential CBAT Passers questionnaire, ticked from the expanded row in Admin ›
+// Users. Same lightweight shape as the tester and cbat-passed toggles: no
+// reason, no AdminAction entry.
+//
+// Always stores an explicit boolean, never null. Unticking has to be able to
+// override the static list in constants/survey.js as well as a previous tick,
+// and only a stored `false` says that — clearing the field back to null would
+// hand the account straight back to the shipped list.
+router.patch('/users/:id/research-excluded', async (req, res) => {
+  try {
+    const researchEmailExcluded = !!req.body.researchEmailExcluded;
+    const updated = await User.findByIdAndUpdate(
+      req.params.id, { researchEmailExcluded }, { returnDocument: 'after' }
+    );
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+    res.json({ status: 'success', data: { researchEmailExcluded } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
