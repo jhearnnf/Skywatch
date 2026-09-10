@@ -26,7 +26,31 @@ const AVATAR_PX = 30
 // reacted to yet.
 function Reactions({ message, onReact }) {
   const [picking, setPicking] = useState(false)
+  const pickerRef = useRef(null)
   const list = message.reactions ?? []
+
+  // The palette floats over the message above it, so leaving it open until you
+  // pick something means a message you can no longer read. Clicking anywhere
+  // else, or Escape, puts it away.
+  //
+  // pointerdown rather than click: it fires before the browser decides whether
+  // the gesture was a tap or the start of a scroll, so flicking the thread
+  // closes the palette immediately instead of waiting for the tap to resolve.
+  // The picker's own subtree is excluded so choosing an emoji still lands.
+  useEffect(() => {
+    if (!picking) return
+    const away = e => {
+      if (!pickerRef.current?.contains(e.target)) setPicking(false)
+    }
+    const key = e => { if (e.key === 'Escape') setPicking(false) }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', key)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', key)
+    }
+  }, [picking])
+
   if (!onReact && !list.length) return null
 
   return (
@@ -50,7 +74,7 @@ function Reactions({ message, onReact }) {
       ))}
 
       {onReact && (
-        <span className="relative">
+        <span className="relative" ref={pickerRef}>
           <button
             type="button"
             onClick={() => setPicking(p => !p)}

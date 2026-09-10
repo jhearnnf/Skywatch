@@ -698,6 +698,35 @@ describe('MessageList — reaching the actions without a hover', () => {
     fireEvent.click(screen.getByText('🔥'))
     expect(onReact).toHaveBeenCalledWith(expect.objectContaining({ _id: m._id }), '🔥')
   })
+
+  // The palette floats over the message above it, so one left open is a message
+  // you cannot read.
+  it('puts the palette away when you click elsewhere', () => {
+    renderList([msg('u1', 'hello')], { onReact: vi.fn() })
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    expect(screen.getByText('🔥')).toBeTruthy()
+
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByText('🔥')).toBeNull()
+  })
+
+  it('puts the palette away on Escape', () => {
+    renderList([msg('u1', 'hello')], { onReact: vi.fn() })
+    fireEvent.click(screen.getByLabelText('Add a reaction'))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByText('🔥')).toBeNull()
+  })
+
+  // The toggle sits inside the picker, so the dismiss handler must not swallow
+  // the gesture that closes it.
+  it('still closes on a second click of the picker button', () => {
+    renderList([msg('u1', 'hello')], { onReact: vi.fn() })
+    const button = screen.getByLabelText('Add a reaction')
+    fireEvent.click(button)
+    fireEvent.pointerDown(button)
+    fireEvent.click(button)
+    expect(screen.queryByText('🔥')).toBeNull()
+  })
 })
 
 // Reactions are anonymous to the room and named only to staff. Members see a
