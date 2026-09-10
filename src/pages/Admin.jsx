@@ -1289,23 +1289,18 @@ const writeTesterFx = (on) => {
   try { localStorage.setItem(TESTER_FX_KEY, on ? '1' : '0') } catch { /* private mode */ }
 }
 
-// How many rows the users list had last time, remembered per browser so the
-// skeleton can stand the page up at its real height before the fetch answers.
-// Without it the list would grow under a scroll already in progress and drop the
-// admin somewhere in the middle of it.
-const USERS_COUNT_KEY = 'admin:users:lastCount'
-const SKELETON_ROWS_FALLBACK = 12
+// How many accounts the users list asks for at a time. Also the height of the
+// loading skeleton, which is why it is worth having as one number: a page is a
+// known size before it arrives, so the page stands up at its real height and a
+// scroll already in progress is never dropped into the middle of a list that
+// grew underneath it. Matches the other paged admin lists.
+const USERS_PAGE_SIZE = 20
 
-const readUsersCount = () => {
-  try {
-    const n = parseInt(localStorage.getItem(USERS_COUNT_KEY), 10)
-    return Number.isFinite(n) && n > 0 ? n : SKELETON_ROWS_FALLBACK
-  } catch { return SKELETON_ROWS_FALLBACK }
-}
-
-const writeUsersCount = (n) => {
-  try { localStorage.setItem(USERS_COUNT_KEY, String(n)) } catch { /* private mode */ }
-}
+// Every collapsed row in the users list is this tall, no exceptions: two rows of
+// the same page must never differ because one of them has a version verdict to
+// show and the other doesn't, and the skeleton must stand at exactly the height
+// the row replacing it will take. Border-box, so this is the whole card.
+const USERS_ROW_H = 'h-[76px]'
 
 function ReportsTab({ API }) {
   const { apiFetch } = useAuth()
@@ -4772,7 +4767,11 @@ function UsersTab({ API, onViewEmailHistory }) {
   const [resultsPanel, setResultsPanel] = useState(null) // user._id of open CBAT results panel
   const [expanded,    setExpanded]    = useState(() => new Set()) // user._ids expanded
   const [statsFailed, setStatsFailed] = useState(() => new Set()) // user._ids whose stats fetch failed
-  const [skeletonRows, setSkeletonRows] = useState(readUsersCount) // page height before the first answer
+  const [page,      setPage]      = useState(1)
+  const [total,     setTotal]     = useState(0)   // accounts in the whole population
+  const [pageCount, setPageCount] = useState(1)
+  const [reloadTick, setReloadTick] = useState(0) // bumped to re-read the page in place
+  const listTop = useRef(null)
   const [latestClients, setLatestClients] = useState({}) // newest native release per platform
   // Tester wash + pulse + sort priority. Switched in Settings › Beta Testing;
   // read once here because only one admin tab is mounted at a time.
@@ -4801,6 +4800,10 @@ function UsersTab({ API, onViewEmailHistory }) {
   const statsCache  = useRef({})
   const statsInFlight = useRef(new Set())
 
+  // Which page the rows on screen belong to, so a load can tell a page turn
+  // (replace, skeleton) from a re-read of what is already there (keep, dim).
+  const renderedPage = useRef(null)
+
   const withCachedStats = useCallback(rows => rows.map(u => {
     const cached = statsCache.current[u._id]
     return cached ? { ...u, ...cached, statsLoaded: true } : u
@@ -4817,23 +4820,46 @@ function UsersTab({ API, onViewEmailHistory }) {
     })
   }, [])
 
-  const loadAll = useCallback(async () => {
+  // One ordered page. The order is the server's, because a page has to be cut
+  // from the ordered whole — see orderUsersForList in backend/routes/admin.js,
+  // which mirrors the comparator below and must be changed with it. The tester
+  // highlight switch is part of that order, so it travels with the request.
+  const loadPage = useCallback(async (wanted) => {
     const seq = ++listSeq.current
     setLoading(true)
-    const res  = await apiFetch(`${API}/api/admin/users`, { credentials: 'include' })
+    // A page turn replaces the rows wholesale, so it stands the skeleton up just
+    // as the first load does. The exception is an in-place re-read after an
+    // admin action: those are the same rows, and flashing away the one that was
+    // just acted on reads as the panel breaking rather than as work happening.
+    if (renderedPage.current !== wanted) setUsers([])
+    const res = await apiFetch(
+      `${API}/api/admin/users?page=${wanted}&limit=${USERS_PAGE_SIZE}&testerFx=${testerFx ? '1' : '0'}`,
+      { credentials: 'include' },
+    )
     const data = await res.json()
     if (seq !== listSeq.current) return
     const rows = data.data?.users ?? []
     setSearch(false)
     setUsers(withCachedStats(rows))
     setLatestClients(data.data?.latestClients ?? {})
+    setTotal(data.data?.total ?? rows.length)
+    setPageCount(data.data?.pageCount ?? 1)
+    // The server clamps a page that no longer exists — deleting the last account
+    // on the last page, say — so the pager follows what it actually served.
+    if (data.data?.page && data.data.page !== wanted) setPage(data.data.page)
+    renderedPage.current = data.data?.page ?? wanted
     setLoading(false)
-    // Next visit's skeleton stands the page up at this height.
-    setSkeletonRows(rows.length || SKELETON_ROWS_FALLBACK)
-    if (rows.length) writeUsersCount(rows.length)
-  }, [API, withCachedStats])
+  }, [API, testerFx, withCachedStats])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { loadPage(page) }, [loadPage, page, reloadTick])
+
+  // Re-read the page that is on screen, for when an action has changed it.
+  const reload = useCallback(() => setReloadTick(t => t + 1), [])
+
+  // Back to the top of the list — what Clear and a fresh browse both mean.
+  const loadAll = useCallback(() => {
+    if (page === 1) reload(); else setPage(1)
+  }, [page, reload])
 
   // Default expansion: all rows collapsed when browsing; all rows when in search mode.
   //
@@ -4881,6 +4907,9 @@ function UsersTab({ API, onViewEmailHistory }) {
     // cheap to stat — so every hit opens with its numbers already in place.
     const rows = data.data?.users ?? []
     rememberStats(rows)
+    // Search results are not a page of the list, so whatever comes next is a
+    // fresh set of rows and gets the skeleton.
+    renderedPage.current = null
     setSearch(true)
     setUsers(rows)
     setLatestClients(data.data?.latestClients ?? {})
@@ -4934,6 +4963,28 @@ function UsersTab({ API, onViewEmailHistory }) {
       }
     })()
   }, [users, expanded, statsFailed, API])
+
+  // The page about to arrive is a known size before it lands: a full page, or
+  // whatever is left over on the last one.
+  const skeletonRows = useMemo(() => {
+    if (!total) return USERS_PAGE_SIZE
+    return Math.max(1, Math.min(USERS_PAGE_SIZE, total - (page - 1) * USERS_PAGE_SIZE))
+  }, [total, page])
+
+  // Turning a page puts you at the top of it, not at the pager you just clicked.
+  // Opening the tab is not a page turn, so the browser keeps its own position.
+  //
+  // Keyed on the page it last scrolled for rather than a spent-once flag:
+  // StrictMode runs this effect twice on mount, which spends a flag on the first
+  // pass and scrolls on the second — and at that moment the row container is
+  // still empty and sitting under a full page of skeleton, so the jump landed at
+  // the bottom of the list.
+  const scrolledFor = useRef(page)
+  useEffect(() => {
+    if (scrolledFor.current === page) return
+    scrolledFor.current = page
+    listTop.current?.scrollIntoView?.({ block: 'start' })
+  }, [page])
 
   const sortedUsers = useMemo(() => {
     // A tester who has not tested today is the row worth chasing, so they lead
@@ -5033,7 +5084,7 @@ function UsersTab({ API, onViewEmailHistory }) {
     // so the next reload re-fetches them for whichever rows are still open.
     statsCache.current = {}
     setStatsFailed(new Set())
-    search ? runSearch() : loadAll()
+    search ? runSearch() : reload()
     refreshUser()
   }
 
@@ -5082,17 +5133,18 @@ function UsersTab({ API, onViewEmailHistory }) {
         )}
       </form>
 
-      {/* Skeleton rows, not a spinner, and as many of them as the list had last
-          time. The page therefore reaches its real height immediately, so the
+      {/* Skeleton rows, not a spinner, and exactly as many as the page is about
+          to hold. The page therefore reaches its real height immediately, so the
           scrollbar is honest and an admin who flings straight to the bottom
           stays at the bottom instead of being dropped into the middle when the
-          rows arrive. Only for a cold list — a search reload keeps the rows it
-          already has (dimmed below) rather than collapsing the page. */}
+          rows arrive. Only for a cold list — turning a page or running a search
+          keeps the rows already on screen (dimmed below) rather than collapsing
+          the page under whoever is reading it. */}
       {loading && users.length === 0 && (
         <div className="space-y-3 pr-16">
           <p className="sr-only" role="status">Loading users…</p>
           {Array.from({ length: skeletonRows }).map((_, i) => (
-            <div key={i} className="rounded-2xl border border-slate-200 bg-surface px-4 py-3">
+            <div key={i} className={`rounded-2xl border border-slate-200 bg-surface px-4 flex flex-col justify-center ${USERS_ROW_H}`}>
               <div className="h-2 rounded skeleton-shimmer mb-1.5" style={{ width: '84px' }} />
               <div className="h-3.5 rounded skeleton-shimmer mb-1" style={{ width: `${38 + (i * 17) % 34}%` }} />
               <div className="h-3 rounded skeleton-shimmer" style={{ width: `${28 + (i * 11) % 22}%` }} />
@@ -5110,7 +5162,8 @@ function UsersTab({ API, onViewEmailHistory }) {
 
       {/* pr gutter reserves room on the right for the OS tabs that peek out from
           under each card, so they never push the page into horizontal scroll. */}
-      <div className={`space-y-3 pr-16 transition-opacity ${loading && users.length > 0 ? 'opacity-40' : ''}`}
+      <div ref={listTop}
+        className={`space-y-3 pr-16 transition-opacity ${loading && users.length > 0 ? 'opacity-40' : ''}`}
         aria-busy={loading || undefined}>
         {sortedUsers.map(u => {
           const isExpanded = expanded.has(u._id)
@@ -5145,6 +5198,8 @@ function UsersTab({ API, onViewEmailHistory }) {
             })}
           </div>
           <div className={`relative z-10 rounded-2xl border overflow-hidden ${
+            isExpanded ? '' : USERS_ROW_H
+          } ${
             testerFx && u.isTester
               ? `admin-tester-row ${testedToday(u) ? 'border-amber-700/60' : 'admin-tester-idle'}`
             : u._id === currentUser?._id ? 'bg-red-950/40 border-red-900/50'
@@ -5159,7 +5214,7 @@ function UsersTab({ API, onViewEmailHistory }) {
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(u._id) } }}
               className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-surface-raised/40 transition-colors"
             >
-              <div>
+              <div className="min-w-0 flex-1">
                 {(() => {
                   // At-a-glance version verdict, above the name. Deliberately
                   // just a verdict — the specifics (platform, version, build,
@@ -5168,7 +5223,9 @@ function UsersTab({ API, onViewEmailHistory }) {
                   // rather than a row of "unknown" noise on legacy accounts.
                   const client = latestUsedClient(u.lastClients)
                   const status = versionStatus(client, latestClients, webReference)
-                  if (!status) return null
+                  // Kept in the layout when there is no verdict — an account with
+                  // nothing to report must not sit shorter than its neighbours.
+                  if (!status) return <p className="text-[8px] mb-0.5 invisible" aria-hidden="true">—</p>
                   return (
                     <p
                       title={`${PLATFORM_LABELS[client.platform] ?? client.platform} ${fmtBuild(client)} · last used ${fmtDateTime(client.lastSeenAt)}`}
@@ -5180,7 +5237,7 @@ function UsersTab({ API, onViewEmailHistory }) {
                     </p>
                   )
                 })()}
-                <p className="font-bold text-slate-800 text-sm flex items-center">
+                <p className="font-bold text-slate-800 text-sm flex items-center min-w-0">
                   {(() => {
                     const s = onlineStatus(u.lastSeen)
                     if (!s) return null
@@ -5191,8 +5248,8 @@ function UsersTab({ API, onViewEmailHistory }) {
                       />
                     )
                   })()}
-                  {u.displayName || `Agent ${u.agentNumber}`}
-                  {u.isAdmin && <span className="ml-2 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
+                  <span className="truncate">{u.displayName || `Agent ${u.agentNumber}`}</span>
+                  {u.isAdmin && <span className="ml-2 shrink-0 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
                   {u.isBanned && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">BANNED</span>}
                   {isExpanded && (
                     <label
@@ -5727,6 +5784,28 @@ function UsersTab({ API, onViewEmailHistory }) {
           )
         })}
       </div>
+
+      {/* Pagination. Hidden while searching: those results are their own short,
+          complete list rather than a window onto the population. */}
+      {!search && pageCount > 1 && (
+        <div className="flex items-center justify-between mt-5 pr-16">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1 || loading}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+          >
+            ← Prev
+          </button>
+          <span className="text-xs text-slate-400">Page {page} of {pageCount} ({total} total)</span>
+          <button
+            onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+            disabled={page === pageCount || loading}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   )
 }

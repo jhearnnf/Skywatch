@@ -281,47 +281,23 @@ describe('Admin — Users tab: an opened row while its stats are in flight', () 
 })
 
 describe('Admin — Users tab: the skeleton holds the page height', () => {
-  afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
+  afterEach(() => { vi.restoreAllMocks() })
 
-  it('renders one skeleton row per remembered user while the list loads', async () => {
-    localStorage.setItem('admin:users:lastCount', '25')
+  it('renders one skeleton row per row the page is about to hold', async () => {
     const s = setupFetch({ holdList: true })
     global.fetch = s.fetchMock
 
     render(<Admin />)
     fireEvent.click(screen.getByText('Users'))
 
-    // Three bars per skeleton row — version verdict, name, email.
-    await waitFor(() => expect(shimmerCount()).toBe(25 * 3))
+    // A page is 20 rows, and three shimmer bars stand in for each one's version
+    // verdict, name and email — so the page is its real height before it lands.
+    await waitFor(() => expect(shimmerCount()).toBe(20 * 3))
     expect(screen.queryByText('Agent 002')).not.toBeInTheDocument()
 
     await act(async () => { s.releaseList() })
 
     await waitFor(() => expect(screen.getByText('Agent 002')).toBeInTheDocument())
     expect(shimmerCount()).toBe(0)
-  })
-
-  it('falls back to a default row count on the first ever visit', async () => {
-    localStorage.clear()
-    const s = setupFetch({ holdList: true })
-    global.fetch = s.fetchMock
-
-    render(<Admin />)
-    fireEvent.click(screen.getByText('Users'))
-
-    await waitFor(() => expect(shimmerCount()).toBe(12 * 3))
-
-    await act(async () => { s.releaseList() })
-    await waitFor(() => expect(screen.getByText('Agent 002')).toBeInTheDocument())
-  })
-
-  it('remembers how many rows this admin actually has, for next time', async () => {
-    localStorage.setItem('admin:users:lastCount', '25')
-    const s = setupFetch()
-    global.fetch = s.fetchMock
-
-    await openUsersTab()
-
-    expect(localStorage.getItem('admin:users:lastCount')).toBe('3')
   })
 })

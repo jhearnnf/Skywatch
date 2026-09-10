@@ -4,6 +4,7 @@
  * Covers GET /api/admin/users, GET /api/admin/users/stats and
  * GET /api/admin/users/search:
  *   auth guards
+ *   one ordered page at a time, ordered the way the list is read
  *   the list is deliberately unenriched — counted stats come from /users/stats
  *   profileStats.brifsRead — counts only completed: true reads, isolated per user
  */
@@ -99,9 +100,16 @@ describe('GET /api/admin/users — stale streak sweep', () => {
   });
 });
 
-// ── sort order ────────────────────────────────────────────────────────────────
+// ── order and paging ─────────────────────────────────────────────────────────
+// The list is served one page at a time, so the order has to be applied to the
+// whole population before the page is cut from it — a page sorted after the
+// fact would only shuffle the rows the server had already chosen.
 
 describe('GET /api/admin/users — sort order', () => {
+  const listFor = (admin, query = '') => request(app)
+    .get(`/api/admin/users${query}`)
+    .set('Cookie', authCookie(admin._id));
+
   it('places admins before non-admins regardless of registration date', async () => {
     // Seed three non-admins with old createdAt and one admin with new createdAt;
     // admin must still appear ahead of all of them.
@@ -113,9 +121,7 @@ describe('GET /api/admin/users — sort order', () => {
     const oldUser3 = await createUser({ createdAt: oldDate });
     const newAdmin = await createAdminUser({ createdAt: newDate });
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(newAdmin._id));
+    const res = await listFor(newAdmin);
 
     expect(res.status).toBe(200);
     const ids = res.body.data.users.map(u => u._id.toString());
@@ -133,9 +139,7 @@ describe('GET /api/admin/users — sort order', () => {
     const userMid = await createUser({ createdAt: new Date('2022-01-01') });
     const userNew = await createUser({ createdAt: new Date('2023-01-01') });
 
-    const res = await request(app)
-      .get('/api/admin/users')
-      .set('Cookie', authCookie(admin._id));
+    const res = await listFor(admin);
 
     expect(res.status).toBe(200);
     const ids = res.body.data.users.map(u => u._id.toString());
@@ -144,6 +148,155 @@ describe('GET /api/admin/users — sort order', () => {
       .toBeLessThan(ids.indexOf(userMid._id.toString()));
     expect(ids.indexOf(userMid._id.toString()))
       .toBeLessThan(ids.indexOf(userNew._id.toString()));
+  });
+
+  it('lifts someone seen moments ago above everyone offline', async () => {
+    const admin   = await createAdminUser();
+    const offline = await createUser({ createdAt: new Date('2021-01-01') });
+    const online  = await createUser({ createdAt: new Date('2024-01-01'), lastSeen: new Date() });
+
+    const ids = (await listFor(admin)).body.data.users.map(u => u._id.toString());
+    expect(ids.indexOf(online._id.toString())).toBeLessThan(ids.indexOf(offline._id.toString()));
+  });
+
+  it('splits online from recently active', async () => {
+    const admin  = await createAdminUser();
+    const away   = await createUser({ lastSeen: new Date(Date.now() - 5 * 60_000) });
+    const live   = await createUser({ lastSeen: new Date(Date.now() - 30_000) });
+    const gone   = await createUser({ lastSeen: new Date(Date.now() - 60 * 60_000) });
+
+    const ids = (await listFor(admin)).body.data.users.map(u => u._id.toString());
+    expect(ids.indexOf(live._id.toString())).toBeLessThan(ids.indexOf(away._id.toString()));
+    expect(ids.indexOf(away._id.toString())).toBeLessThan(ids.indexOf(gone._id.toString()));
+  });
+
+  it('leads the offline group with a tester who still owes a test today', async () => {
+    const admin    = await createAdminUser();
+    const plain    = await createUser({ createdAt: new Date('2021-01-01') });
+    const tested   = await createUser({ createdAt: new Date('2021-02-01'), isTester: true });
+    const owes     = await createUser({ createdAt: new Date('2021-03-01'), isTester: true });
+    await GameSessionCbatStart.create({ userId: tested._id, gameKey: 'target', startedAt: new Date() });
+
+    const ids = (await listFor(admin)).body.data.users.map(u => u._id.toString());
+    expect(ids.indexOf(owes._id.toString())).toBeLessThan(ids.indexOf(tested._id.toString()));
+    expect(ids.indexOf(tested._id.toString())).toBeLessThan(ids.indexOf(plain._id.toString()));
+  });
+
+  it('drops the tester terms when the highlights are switched off', async () => {
+    // ?testerFx=0 is the list's own highlight switch; with it off the order is
+    // admin and online status alone, so registration date decides again.
+    const admin  = await createAdminUser();
+    const plain  = await createUser({ createdAt: new Date('2021-01-01') });
+    const tester = await createUser({ createdAt: new Date('2022-01-01'), isTester: true });
+
+    const ids = (await listFor(admin, '?testerFx=0')).body.data.users.map(u => u._id.toString());
+    expect(ids.indexOf(plain._id.toString())).toBeLessThan(ids.indexOf(tester._id.toString()));
+  });
+
+  it('keeps online status above tester urgency', async () => {
+    const admin      = await createAdminUser();
+    const liveNormal = await createUser({ lastSeen: new Date() });
+    const idleTester = await createUser({ isTester: true });
+
+    const ids = (await listFor(admin)).body.data.users.map(u => u._id.toString());
+    expect(ids.indexOf(liveNormal._id.toString())).toBeLessThan(ids.indexOf(idleTester._id.toString()));
+  });
+});
+
+describe('GET /api/admin/users — paging', () => {
+  const listFor = (admin, query = '') => request(app)
+    .get(`/api/admin/users${query}`)
+    .set('Cookie', authCookie(admin._id));
+
+  // 1 admin + 24 others = 25 accounts, so the default page of 20 leaves 5 over.
+  const seedPopulation = async () => {
+    const admin = await createAdminUser({ createdAt: new Date('2020-01-01') });
+    for (let i = 0; i < 24; i += 1) {
+      await createUser({ createdAt: new Date(2021, 0, i + 1) });
+    }
+    return admin;
+  };
+
+  it('returns one page and says how big the population is', async () => {
+    const admin = await seedPopulation();
+
+    const res = await listFor(admin);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.users).toHaveLength(20);
+    expect(res.body.data.total).toBe(25);
+    expect(res.body.data.page).toBe(1);
+    expect(res.body.data.limit).toBe(20);
+    expect(res.body.data.pageCount).toBe(2);
+  });
+
+  it('serves the remainder on the last page, without overlap', async () => {
+    const admin = await seedPopulation();
+
+    const first  = await listFor(admin, '?page=1');
+    const second = await listFor(admin, '?page=2');
+
+    expect(second.body.data.users).toHaveLength(5);
+    expect(second.body.data.page).toBe(2);
+
+    const firstIds  = first.body.data.users.map(u => u._id.toString());
+    const secondIds = second.body.data.users.map(u => u._id.toString());
+    expect(firstIds.filter(id => secondIds.includes(id))).toEqual([]);
+    expect(new Set([...firstIds, ...secondIds]).size).toBe(25);
+  });
+
+  it('honours a caller-chosen page size', async () => {
+    const admin = await seedPopulation();
+
+    const res = await listFor(admin, '?limit=5&page=3');
+
+    expect(res.body.data.users).toHaveLength(5);
+    expect(res.body.data.limit).toBe(5);
+    expect(res.body.data.pageCount).toBe(5);
+    expect(res.body.data.page).toBe(3);
+  });
+
+  it('caps the page size rather than letting one request ask for everything', async () => {
+    const admin = await seedPopulation();
+
+    const res = await listFor(admin, '?limit=5000');
+    expect(res.body.data.limit).toBe(100);
+  });
+
+  it('clamps a page beyond the end to the last one that exists', async () => {
+    // The page an admin is on can outlive the accounts on it — deleting the last
+    // row of the last page, say — and they should land on real rows, not an
+    // empty list.
+    const admin = await seedPopulation();
+
+    const res = await listFor(admin, '?page=99');
+
+    expect(res.body.data.page).toBe(2);
+    expect(res.body.data.users).toHaveLength(5);
+  });
+
+  it('ignores a nonsense page or limit rather than failing the request', async () => {
+    const admin = await seedPopulation();
+
+    const res = await listFor(admin, '?page=nope&limit=nope');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.page).toBe(1);
+    expect(res.body.data.limit).toBe(20);
+  });
+
+  it('pages the ordered list, not the raw collection', async () => {
+    // An account seen moments ago belongs on page 1 however late it registered.
+    const admin = await createAdminUser({ createdAt: new Date('2020-01-01') });
+    for (let i = 0; i < 24; i += 1) {
+      await createUser({ createdAt: new Date(2021, 0, i + 1) });
+    }
+    const latecomer = await createUser({ createdAt: new Date('2026-09-01'), lastSeen: new Date() });
+
+    const first = await listFor(admin, '?limit=3');
+    const ids   = first.body.data.users.map(u => u._id.toString());
+
+    expect(ids).toContain(latecomer._id.toString());
   });
 });
 

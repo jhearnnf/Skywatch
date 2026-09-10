@@ -1467,29 +1467,82 @@ async function enrichUsersWithStats(users) {
 // The admin's own browser answers the same question for web, since it is by
 // definition running the currently deployed bundle (see Admin › Users).
 
-// GET /api/admin/users — admins first, then oldest registration first
+// How many accounts the Users list asks for at a time. Matches the other paged
+// admin lists (Briefs, Email Logs).
+const USERS_PAGE_SIZE = 20;
+
+// Was this timestamp today? Mirrors sameDayAsToday() in the Users list, which
+// asks the same question of the same values when it styles a row.
+function isToday(ts) {
+  if (!ts) return false;
+  const d = new Date(ts), now = new Date();
+  return d.getFullYear() === now.getFullYear()
+      && d.getMonth()    === now.getMonth()
+      && d.getDate()     === now.getDate();
+}
+
+// The order the Users list is read in, applied here because a page has to be cut
+// from the ordered whole — sorting the 20 rows the server already chose would
+// only shuffle them among themselves.
+//
+// It mirrors the comparator in UsersTab (src/pages/Admin.jsx, `sortedUsers`)
+// exactly, and the two must be changed together: admins lead, then whoever is
+// online now, then recently active, and inside the offline group a flagged
+// tester who still owes today's test leads one who has already done it. The
+// client keeps its copy so a row re-sorts the moment a tester box is ticked;
+// this one decides who is on the page at all.
+//
+// Deliberately computed in JS over a projection of the whole collection rather
+// than as a Mongo sort: every term depends on the moment of the request — how
+// long ago someone was last seen, whether a start record landed today — so no
+// index could serve it. At a few hundred accounts that projection is a handful
+// of small fields each; if the population grows by an order of magnitude, this
+// is the thing to revisit.
+function orderUsersForList({ users, owesTest, testerHighlights }) {
+  const owes = u => testerHighlights && u.isTester && owesTest.has(u._id.toString());
+  const priority = (u) => {
+    if (u.isAdmin) return 3;
+    const since = u.lastSeen ? Date.now() - new Date(u.lastSeen).getTime() : Infinity;
+    if (since < PRESENCE_HERE_WINDOW_MS) return 2;
+    if (since < PRESENCE_WINDOW_MS)      return 1;
+    if (!testerHighlights || !u.isTester) return 0; // offline testers sit atop the offline group
+    return owes(u) ? 0.75 : 0.5;
+  };
+  return [...users].sort((a, b) =>
+    priority(b) - priority(a)
+    || (owes(b) ? 1 : 0) - (owes(a) ? 1 : 0)
+    // The base order the list has always had, kept as the tiebreak so equal-
+    // priority rows stay put: admins first, then oldest registration first.
+    || (b.isAdmin ? 1 : 0) - (a.isAdmin ? 1 : 0)
+    || new Date(a.createdAt) - new Date(b.createdAt));
+}
+
+// GET /api/admin/users — one ordered page: admins first, then whoever is online,
+// then oldest registration first. ?page, ?limit, and ?testerFx=0 to drop the
+// tester terms from the order (the list's own highlight switch).
 router.get('/users', async (req, res) => {
   try {
     await sweepStaleStreaks();
-    const users = await User.find().populate('rank').sort({ isAdmin: -1, createdAt: 1 });
 
-    // Deliberately unenriched. Every per-user stat this list used to carry is
-    // read from inside an expanded row, and enriching the whole population to
-    // fill panels nobody has opened cost seconds — long enough that a search
-    // fired meanwhile used to be answered first and then overwritten. Rows
-    // arrive on their identity and status alone; GET /users/stats fills one in
-    // when it is expanded.
-    const decorated = users.map(decorateUser);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || USERS_PAGE_SIZE, 1), 100);
+    const testerHighlights = req.query.testerFx !== '0';
 
-    // The one aggregate the *collapsed* list genuinely needs: an idle tester is
-    // bordered and sorted differently, and that hangs on whether they have
-    // tested today. Scoped to flagged testers (a couple of dozen, not 400) and
-    // answered from the session-start log alone rather than all 40 per-game
-    // collections — a start record is written for finished and abandoned
-    // sessions alike, and the one case it misses, an offline finish that synced
-    // without a start, is by definition a native session, which lastClients has
-    // already reported as an app open today.
-    const testerIds = users.filter(u => u.isTester).map(u => u._id);
+    // Ordering inputs for the whole population and nothing else — five small
+    // fields an account, rather than the megabyte that fetching every full
+    // document used to cost.
+    const ordering  = await User.find({}, '_id isAdmin isTester lastSeen createdAt lastClients').lean();
+    const total     = ordering.length;
+    const pageCount = Math.max(1, Math.ceil(total / limit));
+    const page      = Math.min(Math.max(parseInt(req.query.page, 10) || 1, 1), pageCount);
+
+    // Which flagged testers still owe today's test. Answered from the
+    // session-start log alone rather than all 40 per-game collections — a start
+    // record is written for finished and abandoned sessions alike, and the one
+    // case it misses, an offline finish that synced without a start, is by
+    // definition a native session, which lastClients has already reported as an
+    // app open today. Skipped entirely when the highlights are switched off,
+    // because nothing then reads it.
+    const testerIds = testerHighlights ? ordering.filter(u => u.isTester).map(u => u._id) : [];
     const starts = testerIds.length
       ? await GameSessionCbatStart.aggregate([
         { $match: { userId: { $in: testerIds } } },
@@ -1499,12 +1552,39 @@ router.get('/users', async (req, res) => {
     const lastByUser = Object.fromEntries(
       starts.filter(r => r.lastAt).map(r => [r._id.toString(), new Date(r.lastAt).toISOString()]),
     );
-    // Set on every row, tester or not, so the field's shape never depends on who
-    // happens to be flagged — a non-tester simply reports null.
-    decorated.forEach(u => { u.lastTestGameAt = lastByUser[u._id.toString()] ?? null; });
+    const owesTest = new Set(
+      ordering
+        .filter(u => u.isTester
+          && !isToday(lastByUser[u._id.toString()])
+          && !isToday(lastNativeAppOpen(u)))
+        .map(u => u._id.toString()),
+    );
 
-    const latestClients = await latestNativeReleases();
-    res.json({ status: 'success', data: { users: decorated, latestClients } });
+    const pageIds = orderUsersForList({ users: ordering, owesTest, testerHighlights })
+      .slice((page - 1) * limit, page * limit)
+      .map(u => u._id);
+
+    // Only now are whole documents read, and only the page's worth of them.
+    // Deliberately unenriched even then: every counted stat is read from inside
+    // an expanded row, so GET /users/stats fills one in when it is opened.
+    const [rows, latestClients] = await Promise.all([
+      User.find({ _id: { $in: pageIds } }).populate('rank'),
+      latestNativeReleases(),
+    ]);
+
+    const byId = new Map(rows.map(u => [u._id.toString(), u]));
+    const users = pageIds
+      .map(id => byId.get(id.toString()))
+      .filter(Boolean)
+      .map(u => {
+        const decorated = decorateUser(u);
+        // Set on every row, tester or not, so the field's shape never depends on
+        // who happens to be flagged — a non-tester simply reports null.
+        decorated.lastTestGameAt = lastByUser[u._id.toString()] ?? null;
+        return decorated;
+      });
+
+    res.json({ status: 'success', data: { users, latestClients, total, page, limit, pageCount } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
