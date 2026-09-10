@@ -503,6 +503,12 @@ router.get('/responses', async (_req, res) => {
           waiting:     waiting.length,
           avgRealism:  mean(realism),
           avgHelped:   mean(helped),
+          // Score sheets. Counted two ways because they answer different
+          // questions: how many people were willing to send one (the ask's
+          // conversion) and how many sheets that actually produced (what the
+          // Aptitude Report calibration gets to work with).
+          scoreSheetSenders: responses.filter(r => (r.resultImagesUploaded ?? 0) > 0).length,
+          scoreSheets:       responses.reduce((n, r) => n + (r.resultImagesUploaded ?? 0), 0),
           donationClicks: responses.filter(r => r.donationClicked).length,
           playReviewClicks: responses.filter(r => r.playReviewClicked).length,
           roleCounts,
@@ -518,6 +524,24 @@ router.get('/responses', async (_req, res) => {
             agentNumber: r.userId?.agentNumber ?? null,
             displayName: r.userId?.displayName ?? null,
           })),
+          // Who sent one, so a sheet can be opened from the results page rather
+          // than hunted for account by account in Admin > Users. The images
+          // themselves are not inlined here: they are the most sensitive thing
+          // the campaign holds, and a summary endpoint that returned every
+          // score sheet URL in one payload would be the wrong place to keep
+          // them. This is a pointer to the account, and the existing panel
+          // there is the viewer.
+          sheets: responses
+            .filter(r => (r.resultImagesUploaded ?? 0) > 0)
+            .map(r => ({
+              count: r.resultImagesUploaded,
+              role: r.role,
+              passedForRole: r.passedForRole ?? null,
+              consentAt: r.resultImagesConsentAt ?? null,
+              userId: r.userId?._id ? String(r.userId._id) : null,
+              agentNumber: r.userId?.agentNumber ?? null,
+              displayName: r.userId?.displayName ?? null,
+            })),
           // Kept separate from `gaps` because they answer different questions.
           // One is a defect report about the training, the other is whatever
           // the person wanted to say — and they want reading differently.

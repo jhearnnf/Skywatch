@@ -4657,7 +4657,8 @@ function UserCbatResultsPanel({ u, API, apiFetch, onChange, onToast }) {
 
       {images.length === 0 ? (
         <p className="text-[10px] text-slate-400 mt-1.5">
-          Screenshots of their real score sheet. Nothing uploaded yet.
+          Screenshots of their real score sheet, uploaded here or sent in by the user at the end
+          of the questionnaire. Nothing here yet.
         </p>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mt-3">
@@ -4688,6 +4689,23 @@ function UserCbatResultsPanel({ u, API, apiFetch, onChange, onToast }) {
               <p className="text-[9px] text-slate-400 mt-1 truncate" title={img.caption ?? ''}>
                 {fmtDateTime(img.uploadedAt)}
               </p>
+              {/* Where it came from, because the two sources are not
+                  interchangeable. A `questionnaire` sheet was handed over by
+                  the person under a stated promise about what we would do with
+                  it, and it is theirs to withdraw; an `admin` one is our own
+                  record. A test entry is a dry run of the questionnaire and is
+                  not anybody's real score sheet at all. */}
+              {img.source === 'questionnaire' && (
+                <p
+                  className={`text-[9px] font-bold truncate ${img.isTest ? 'text-amber-600' : 'text-emerald-600'}`}
+                  data-testid={`cbat-result-source-${img._id}`}
+                  title={img.isTest
+                    ? 'Uploaded during a dry run of the questionnaire. Not a real score sheet.'
+                    : 'Sent in by the user at the end of the questionnaire.'}
+                >
+                  {img.isTest ? 'Test upload' : 'From questionnaire'}
+                </p>
+              )}
             </div>
           ))}
         </div>

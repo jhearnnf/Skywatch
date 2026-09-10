@@ -184,6 +184,41 @@ export default function CbatQuestionnaireResults() {
             <Stat label="Helped"      value={avg(s.avgHelped)}  hint="of 5" />
           </div>
 
+          {/* Score sheets, which are the one output of this campaign that feeds
+              straight back into the product rather than into a decision about
+              it. Counted by people rather than by files, with the file total as
+              the hint, because the number that matters for the ask's wording is
+              how many were willing at all. */}
+          {s.sheets?.length > 0 && (
+            <div className="mb-6" data-testid="survey-sheets">
+              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                Score sheets sent in
+              </h2>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 px-3 py-2.5">
+                <p className="text-sm text-slate-700 mb-2">
+                  <span className="font-extrabold">{s.scoreSheetSenders}</span>
+                  {s.scoreSheetSenders === 1 ? ' person has ' : ' people have '}
+                  sent us {s.scoreSheets === 1 ? 'a sheet' : `${s.scoreSheets} sheets`}.
+                  {' '}Open an agent to view them under CBAT results.
+                </p>
+                <ul className="space-y-1">
+                  {s.sheets.map((row, i) => (
+                    <li key={i} className="text-[11px] text-slate-500">
+                      <Writer
+                        x={row}
+                        suffix={`${row.count > 1 ? ` · ${row.count} images` : ''}${
+                          row.passedForRole === 'yes' ? ' · Passed'
+                            : row.passedForRole === 'no' ? ' · Did not pass'
+                            : ''
+                        }`}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
           {/* The free text is the point of the exercise, so it sits above the
               tables rather than inside a tab someone has to think to open.
 

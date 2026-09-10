@@ -6,6 +6,7 @@ const AppSettings    = require('../models/AppSettings');
 const SurveyInvite   = require('../models/SurveyInvite');
 const SurveyResponse = require('../models/SurveyResponse');
 const surveyRoles    = require('../constants/surveyRoles.json');
+const { uploadBuffer, destroyAsset, signedUrl } = require('../utils/cloudinary');
 const {
   SURVEY_CAMPAIGN,
   SURVEY_TEST_CAMPAIGN,
@@ -16,6 +17,8 @@ const {
   BOOKED_GRACE_DAYS,
   DEFAULT_DEFER_DAYS,
   MAX_BOOKING_MONTHS_AHEAD,
+  MAX_RESULT_IMAGES,
+  MAX_RESULT_IMAGE_BYTES,
 } = require('../constants/survey');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -99,12 +102,207 @@ setInterval(() => {
 async function loadInvite(token) {
   if (!token || typeof token !== 'string' || token.length < 16) return null;
   return SurveyInvite.findOne({ token })
-    .populate('userId', 'displayName agentNumber cbatPassed osSeen.android');
+    .populate('userId', 'displayName agentNumber cbatPassed osSeen.android cbatResultImages');
 }
 
 function nameFor(user) {
   return user?.displayName?.trim() || (user?.agentNumber ? `Agent ${user.agentNumber}` : 'there');
 }
+
+// -- Score sheets ------------------------------------------------------------
+
+// What a respondent is allowed to see of their own sheets: the ones THEY sent.
+//
+// Admin-uploaded sheets on the same account are deliberately withheld. They are
+// this person's own data, so showing them would not leak anything, but the
+// questionnaire promised to look after what they hand over, and a file they
+// never uploaded appearing in a list captioned "what you sent" reads as us
+// having taken something. What they can see here is exactly what they can
+// delete here, which is the pairing that makes the promise legible.
+function ownSheets(user) {
+  return (user?.cbatResultImages ?? [])
+    .filter(img => img.source === 'questionnaire')
+    .map(img => ({
+      _id:        String(img._id),
+      url:        img.url,
+      uploadedAt: img.uploadedAt,
+    }));
+}
+
+// Is this actually an image?
+//
+// The admin uploader trusts the `data:image/` prefix, which is fine for a file
+// an admin picked themselves. This endpoint is public, so the declared type is
+// just a string the caller chose and the bytes are checked instead. Cloudinary
+// would reject a non-image anyway; catching it here means a hostile or broken
+// client gets a clear 400 rather than a 500 out of an upload that never had a
+// chance, and nothing unexamined is handed to a third party.
+function sniffImage(buffer) {
+  if (buffer.length < 12) return null;
+  const hex = buffer.subarray(0, 12).toString('hex').toLowerCase();
+  if (hex.startsWith('ffd8ff'))           return 'image/jpeg';
+  if (hex.startsWith('89504e470d0a1a0a')) return 'image/png';
+  if (hex.startsWith('474946383'))        return 'image/gif';
+  // RIFF....WEBP
+  if (hex.startsWith('52494646') && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+    return 'image/webp';
+  }
+  // ISO base media (HEIC/HEIF straight off an iPhone): ....ftyp<brand>
+  if (buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buffer.subarray(8, 12).toString('ascii');
+    if (/^(heic|heix|hevc|heim|heis|hevm|hevs|mif1|msf1)/.test(brand)) return 'image/heic';
+  }
+  return null;
+}
+
+/**
+ * POST /api/survey/:token/cbat-result - the respondent hands over a score sheet.
+ *
+ * The one thing this campaign asks for that is a real document rather than an
+ * opinion, and the reason the endpoint is stricter than the admin twin it
+ * mirrors (routes/admin.js): that one is reached by an authenticated admin
+ * picking their own file, this one by anybody holding a link.
+ *
+ * Stored as an AUTHENTICATED Cloudinary asset, not an ordinary upload. An
+ * ordinary upload has an unguessable URL that is nonetheless permanently public
+ * to anyone who ever obtains it; an authenticated one cannot be fetched at all
+ * without a signature we mint. For a page that has just promised to look after
+ * someone's exam paper, obscurity is not the promise we made.
+ *
+ * A dry run uploads FOR REAL, unlike the badge and the opt-out, which a test
+ * invite deliberately skips. The difference is what a skip would cost: not
+ * writing a badge still leaves the closing screen reviewable, but not writing an
+ * image leaves the whole round trip - downscale, upload, thumbnail, delete -
+ * untestable without spending a live invitation on it. The entry is flagged
+ * `isTest` instead, which keeps it out of every count.
+ */
+router.post('/:token/cbat-result', throttle, async (req, res) => {
+  try {
+    const invite = await loadInvite(req.params.token);
+    if (!invite) return res.status(404).json({ message: 'This questionnaire link is not valid.' });
+    if (invite.optedOutAt) return res.status(410).json({ message: 'This questionnaire is closed.' });
+
+    const settings = await AppSettings.getSettings();
+    if (settings.cbatSurveyEnabled === false) {
+      return res.status(410).json({ message: 'This questionnaire has closed.' });
+    }
+
+    const dataUrl = (req.body?.dataUrl ?? '').toString();
+    if (!dataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ message: 'That file does not look like an image.' });
+    }
+    const comma  = dataUrl.indexOf(',');
+    const buffer = Buffer.from(comma >= 0 ? dataUrl.slice(comma + 1) : '', 'base64');
+    if (!buffer.length) return res.status(400).json({ message: 'That file appears to be empty.' });
+    if (buffer.length > MAX_RESULT_IMAGE_BYTES) {
+      return res.status(413).json({ message: 'That image is too large. Please try a smaller photo.' });
+    }
+    if (!sniffImage(buffer)) {
+      return res.status(400).json({ message: 'That file does not look like an image.' });
+    }
+
+    const user = await User.findById(invite.userId?._id ?? invite.userId);
+    if (!user) return res.status(404).json({ message: 'This questionnaire link is not valid.' });
+
+    // Counted over what they can see and remove, so deleting one frees a slot
+    // rather than spending it permanently.
+    if (ownSheets(user).length >= MAX_RESULT_IMAGES) {
+      return res.status(409).json({
+        message: `You can add up to ${MAX_RESULT_IMAGES} images. Remove one first if you need to.`,
+      });
+    }
+
+    const uploaded = await uploadBuffer(buffer, {
+      folder: 'cbat-results',
+      type: 'authenticated',
+    });
+
+    const now = new Date();
+    user.cbatResultImages.push({
+      url:       signedUrl(uploaded.public_id) || uploaded.secure_url,
+      publicId:  uploaded.public_id,
+      caption:   null,
+      source:    'questionnaire',
+      consentAt: now,
+      isTest:    !!invite.isTest,
+    });
+    await user.save();
+
+    // Mirrored onto the response so the funnel can count sheets without walking
+    // every account. `$inc` rather than a recount: this row is the campaign's
+    // record of what this person did, and an admin deleting a file later should
+    // not quietly rewrite the fact that they sent one.
+    await SurveyResponse.findOneAndUpdate(
+      { inviteId: invite._id },
+      {
+        $inc: { resultImagesUploaded: 1 },
+        $setOnInsert: {
+          inviteId: invite._id,
+          userId: user._id,
+          campaign: invite.campaign,
+          startedAt: now,
+          resultImagesConsentAt: now,
+        },
+      },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+    // Stamped once, on the first sheet: the consent is to the ask, not to each
+    // file. A second write because the `$setOnInsert` above only covers the row
+    // that did not exist yet, and this covers the far commoner case of one that
+    // already did.
+    await SurveyResponse.updateOne(
+      { inviteId: invite._id, resultImagesConsentAt: null },
+      { $set: { resultImagesConsentAt: now } },
+    );
+
+    res.json({ status: 'success', data: { images: ownSheets(user) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// DELETE /api/survey/:token/cbat-result/:imageId - take it back.
+//
+// The practical form of withdrawing consent, and the reason the ask can be made
+// as plainly as it is: someone who can undo it in one tap on the same screen is
+// being asked for far less than someone who has to email us to get a file
+// removed.
+//
+// Scoped to sheets THEY uploaded. A token cannot delete an admin-uploaded sheet
+// on the same account: that is our own record, and a link that can be forwarded
+// should not be able to destroy the evidence behind a badge.
+router.delete('/:token/cbat-result/:imageId', throttle, async (req, res) => {
+  try {
+    const invite = await loadInvite(req.params.token);
+    if (!invite) return res.status(404).json({ message: 'This questionnaire link is not valid.' });
+
+    const user = await User.findById(invite.userId?._id ?? invite.userId);
+    if (!user) return res.status(404).json({ message: 'This questionnaire link is not valid.' });
+
+    const image = user.cbatResultImages.id(req.params.imageId);
+    if (!image || image.source !== 'questionnaire') {
+      return res.status(404).json({ message: 'That image is not there.' });
+    }
+
+    // Authenticated assets do not exist at the default delivery type, so the
+    // type has to be named or the destroy silently succeeds against nothing.
+    // Swallowed either way: a missing asset must not strand the entry.
+    if (image.publicId) {
+      await destroyAsset(image.publicId, { type: 'authenticated' }).catch(() => {});
+    }
+    image.deleteOne();
+    await user.save();
+
+    await SurveyResponse.updateOne(
+      { inviteId: invite._id, resultImagesUploaded: { $gt: 0 } },
+      { $inc: { resultImagesUploaded: -1 } },
+    );
+
+    res.json({ status: 'success', data: { images: ownSheets(user) } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 /**
  * POST /api/survey/self — the signed-in shortcut.
@@ -216,6 +414,9 @@ router.get('/:token', throttle, async (req, res) => {
         // prohibits and which is the one way this could put the listing at risk.
         usedAndroid: !!invite.userId?.osSeen?.android,
         roleGroups: surveyRoles.groups,
+        // Score sheets this person has already sent, so a reopened link shows
+        // them back rather than asking again for something we already have.
+        resultImages: ownSheets(invite.userId),
         // Answers so far, so a reopened link resumes rather than restarts.
         response: response ?? null,
       },

@@ -18,9 +18,24 @@
  *     invite is held until it passes, and the run is never marked complete
  *   - The signed-in shortcut (POST /self): one invite per account, joined to an
  *     invitation they were already sent, admins kept out of the real campaign
+ *   - Score sheets: consented upload, byte-level image validation, the per-invite
+ *     cap, deletion scoped to what the respondent themselves sent, and a dry run
+ *     that stores a real but flagged file
  */
 
 process.env.JWT_SECRET = 'test_secret';
+
+// Uploads are stubbed. The route's own job is validating what it was given and
+// recording the consent alongside it; whether Cloudinary accepts the bytes is
+// Cloudinary's job and not something an integration test can assert.
+jest.mock('../../utils/cloudinary', () => ({
+  uploadBuffer: jest.fn().mockResolvedValue({
+    secure_url: 'https://res.cloudinary.com/test/image/authenticated/sheet.jpg',
+    public_id:  'cbat-results/sheet',
+  }),
+  destroyAsset: jest.fn().mockResolvedValue({ result: 'ok' }),
+  signedUrl: jest.fn(id => `https://res.cloudinary.com/test/image/authenticated/s--sig--/${id}.jpg`),
+}));
 
 const request = require('supertest');
 const app     = require('../../app');
@@ -31,6 +46,7 @@ const SurveyInvite   = require('../../models/SurveyInvite');
 const SurveyResponse = require('../../models/SurveyResponse');
 const User           = require('../../models/User');
 const AppSettings    = require('../../models/AppSettings');
+const { MAX_RESULT_IMAGES } = require('../../constants/survey');
 
 let user, invite, token;
 
@@ -471,5 +487,168 @@ describe('POST /api/survey/self — the signed-in shortcut', () => {
     const res = await self(fresh._id);
     expect(res.status).toBe(410);
     expect(await SurveyInvite.countDocuments({ userId: fresh._id })).toBe(0);
+  });
+});
+
+// ── Score sheets ─────────────────────────────────────────────────────────────
+
+// A one-pixel JPEG. The route sniffs magic bytes rather than trusting the
+// declared MIME type, so the fixtures have to be real files, not labelled junk.
+const JPEG = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0a' +
+  'HBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAA' +
+  'AAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==',
+  'base64',
+);
+const jpegDataUrl = `data:image/jpeg;base64,${JPEG.toString('base64')}`;
+
+const postSheet = (body) => request(app).post(`/api/survey/${token}/cbat-result`).send(body);
+
+describe('POST /api/survey/:token/cbat-result', () => {
+  it('stores the sheet against the account, tagged with its provenance and consent', async () => {
+    const res = await postSheet({ dataUrl: jpegDataUrl });
+    expect(res.status).toBe(200);
+    expect(res.body.data.images).toHaveLength(1);
+
+    const saved = await User.findById(user._id);
+    expect(saved.cbatResultImages).toHaveLength(1);
+    const img = saved.cbatResultImages[0];
+    expect(img.source).toBe('questionnaire');
+    expect(img.consentAt).toBeTruthy();
+    expect(img.isTest).toBe(false);
+    // Stored behind a signed URL rather than an ordinary public one.
+    expect(img.url).toContain('/authenticated/');
+  });
+
+  it('mirrors the count and the consent moment onto the response row', async () => {
+    await postSheet({ dataUrl: jpegDataUrl });
+    await postSheet({ dataUrl: jpegDataUrl });
+
+    const answer = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(answer.resultImagesUploaded).toBe(2);
+    expect(answer.resultImagesConsentAt).toBeTruthy();
+  });
+
+  it('stamps the consent once, on the first sheet', async () => {
+    await postSheet({ dataUrl: jpegDataUrl });
+    const first = await SurveyResponse.findOne({ inviteId: invite._id });
+    await postSheet({ dataUrl: jpegDataUrl });
+    const second = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(second.resultImagesConsentAt.getTime()).toBe(first.resultImagesConsentAt.getTime());
+  });
+
+  it('keeps a run that had already answered questions', async () => {
+    await patch({ satTest: true, role: 'pilot' });
+    await postSheet({ dataUrl: jpegDataUrl });
+    const answer = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(answer.role).toBe('pilot');
+    expect(answer.resultImagesUploaded).toBe(1);
+  });
+
+  it('rejects a file that is not really an image, whatever it claims to be', async () => {
+    const res = await postSheet({
+      dataUrl: `data:image/jpeg;base64,${Buffer.from('<?php echo 1; ?>  padding').toString('base64')}`,
+    });
+    expect(res.status).toBe(400);
+    expect(await User.findById(user._id).then(u => u.cbatResultImages)).toHaveLength(0);
+  });
+
+  it('rejects something that is not a data URL at all', async () => {
+    expect((await postSheet({ dataUrl: 'https://example.com/sheet.jpg' })).status).toBe(400);
+    expect((await postSheet({})).status).toBe(400);
+  });
+
+  it('rejects an empty payload', async () => {
+    expect((await postSheet({ dataUrl: 'data:image/jpeg;base64,' })).status).toBe(400);
+  });
+
+  it('refuses beyond the cap, and lets a deletion free the slot back up', async () => {
+    for (let i = 0; i < MAX_RESULT_IMAGES; i++) {
+      expect((await postSheet({ dataUrl: jpegDataUrl })).status).toBe(200);
+    }
+    const over = await postSheet({ dataUrl: jpegDataUrl });
+    expect(over.status).toBe(409);
+
+    const images = (await User.findById(user._id)).cbatResultImages;
+    await request(app).delete(`/api/survey/${token}/cbat-result/${images[0]._id}`);
+    expect((await postSheet({ dataUrl: jpegDataUrl })).status).toBe(200);
+  });
+
+  it('404s on an unknown token', async () => {
+    const res = await request(app)
+      .post(`/api/survey/${SurveyInvite.newToken()}/cbat-result`)
+      .send({ dataUrl: jpegDataUrl });
+    expect(res.status).toBe(404);
+  });
+
+  it('refuses once they have opted out', async () => {
+    await request(app).post(`/api/survey/${token}/opt-out`);
+    expect((await postSheet({ dataUrl: jpegDataUrl })).status).toBe(410);
+  });
+
+  it('refuses once the questionnaire has been turned off', async () => {
+    await AppSettings.updateOne({}, { cbatSurveyEnabled: false });
+    expect((await postSheet({ dataUrl: jpegDataUrl })).status).toBe(410);
+  });
+
+  // The one place a dry run deliberately behaves differently from the badge and
+  // the opt-out, which write nothing at all: an upload that wrote nothing would
+  // leave the whole round trip untestable.
+  it('stores a dry run for real, but flags it', async () => {
+    const tester = await createUser();
+    const t2 = SurveyInvite.newToken();
+    await SurveyInvite.create({ userId: tester._id, token: t2, isTest: true, campaign: 'cbat_outcome_test' });
+
+    const res = await request(app).post(`/api/survey/${t2}/cbat-result`).send({ dataUrl: jpegDataUrl });
+    expect(res.status).toBe(200);
+    expect((await User.findById(tester._id)).cbatResultImages[0].isTest).toBe(true);
+  });
+
+  it('shows the sheets back on the next load, so a reopened link does not ask twice', async () => {
+    await postSheet({ dataUrl: jpegDataUrl });
+    const res = await get();
+    expect(res.body.data.resultImages).toHaveLength(1);
+    expect(res.body.data.resultImages[0].url).toContain('/authenticated/');
+  });
+
+  it('hides sheets an admin uploaded, which are not theirs to see here or remove', async () => {
+    await User.updateOne({ _id: user._id }, {
+      $push: { cbatResultImages: { url: 'https://cdn/admin.jpg', publicId: 'x', source: 'admin' } },
+    });
+    const res = await get();
+    expect(res.body.data.resultImages).toHaveLength(0);
+  });
+});
+
+describe('DELETE /api/survey/:token/cbat-result/:imageId', () => {
+  it('removes what they sent and decrements the count', async () => {
+    await postSheet({ dataUrl: jpegDataUrl });
+    const img = (await User.findById(user._id)).cbatResultImages[0];
+
+    const res = await request(app).delete(`/api/survey/${token}/cbat-result/${img._id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.images).toHaveLength(0);
+    expect((await User.findById(user._id)).cbatResultImages).toHaveLength(0);
+    expect((await SurveyResponse.findOne({ inviteId: invite._id })).resultImagesUploaded).toBe(0);
+  });
+
+  // A forwardable link must not be able to destroy the evidence behind a badge.
+  it('refuses to delete an admin-uploaded sheet', async () => {
+    await User.updateOne({ _id: user._id }, {
+      $push: { cbatResultImages: { url: 'https://cdn/admin.jpg', publicId: 'x', source: 'admin' } },
+    });
+    const img = (await User.findById(user._id)).cbatResultImages[0];
+
+    const res = await request(app).delete(`/api/survey/${token}/cbat-result/${img._id}`);
+    expect(res.status).toBe(404);
+    expect((await User.findById(user._id)).cbatResultImages).toHaveLength(1);
+  });
+
+  it('never drives the count below zero', async () => {
+    await postSheet({ dataUrl: jpegDataUrl });
+    const img = (await User.findById(user._id)).cbatResultImages[0];
+    await request(app).delete(`/api/survey/${token}/cbat-result/${img._id}`);
+    await request(app).delete(`/api/survey/${token}/cbat-result/${img._id}`);
+    expect((await SurveyResponse.findOne({ inviteId: invite._id })).resultImagesUploaded).toBe(0);
   });
 });

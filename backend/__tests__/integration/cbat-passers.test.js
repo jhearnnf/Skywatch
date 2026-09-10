@@ -39,6 +39,7 @@ const {
 const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetResult');
 const GameSessionCbatStart        = require('../../models/GameSessionCbatStart');
 const SurveyInvite                = require('../../models/SurveyInvite');
+const SurveyResponse              = require('../../models/SurveyResponse');
 const { SURVEY_CAMPAIGN }         = require('../../constants/survey');
 const { SURVEY_DEFAULTS } = require('../../utils/surveyEmail');
 const User                        = require('../../models/User');
@@ -662,6 +663,39 @@ describe('GET /api/admin/cbat-passers/responses — the results page', () => {
       reason: 'too_many_emails',
       passedForRole: 'yes',
     }));
+  });
+
+  // Score sheets are the one thing the campaign produces that feeds straight
+  // back into the product, so the results page has to surface them. Counted two
+  // ways because they answer different questions: how many people were willing
+  // (the ask's conversion) and how many files that produced (what the Aptitude
+  // Report calibration gets to work with).
+  it('counts score sheets by sender and by file, and names who sent them', async () => {
+    const { user, invite } = await invited();
+    await answer(invite.token, { satTest: true, role: 'pilot', passedForRole: 'yes' });
+    await SurveyResponse.updateOne({ inviteId: invite._id }, {
+      resultImagesUploaded: 2, resultImagesConsentAt: new Date(),
+    });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.summary.scoreSheetSenders).toBe(1);
+    expect(res.body.data.summary.scoreSheets).toBe(2);
+    expect(res.body.data.summary.sheets).toHaveLength(1);
+    expect(res.body.data.summary.sheets[0]).toEqual(expect.objectContaining({
+      count: 2,
+      agentNumber: user.agentNumber,
+      passedForRole: 'yes',
+    }));
+  });
+
+  it('leaves someone who sent nothing out of the score sheet list', async () => {
+    const { invite } = await invited();
+    await answer(invite.token, { satTest: true, passedForRole: 'yes' });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    expect(res.body.data.summary.scoreSheetSenders).toBe(0);
+    expect(res.body.data.summary.scoreSheets).toBe(0);
+    expect(res.body.data.summary.sheets).toHaveLength(0);
   });
 
   it('records an unsubscribe with no reason as exactly that', async () => {

@@ -72,6 +72,23 @@ const surveyResponseSchema = new mongoose.Schema({
   // them, which is worth having and worth reading.
   comment: { type: String, trim: true, maxlength: 2000, default: null },
 
+  // The score sheet step, which sits AFTER the six questions and outside the
+  // progress bar. Deliberately not a seventh question: it is the only ask in
+  // the campaign that wants a real document rather than an opinion, it is the
+  // highest-friction thing on the screen, and putting it in the run would cost
+  // completions on the answers that already work.
+  //
+  // The images themselves live on the User (`cbatResultImages`), where the
+  // admin panel and the Aptitude Report calibration already read them. These
+  // two fields are a mirror, so the campaign funnel can report "how many people
+  // sent a sheet" without joining every response to an account.
+  //
+  // `resultImagesConsentAt` is the one that matters legally: it is the moment
+  // this person agreed to hand over a document with their name on it, and it is
+  // stamped from the first successful upload rather than from viewing the ask.
+  resultImagesUploaded:  { type: Number, default: 0, min: 0 },
+  resultImagesConsentAt: { type: Date, default: null },
+
   // Set when they reach the donation screen and press through to Stripe. Not
   // proof of a completed payment — the webhook owns that, on User.donationPrompt
   // — only that the ask converted as far as Checkout.

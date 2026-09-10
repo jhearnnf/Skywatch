@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { DIFFICULTY_LEVELS } = require('../constants/difficulty');
 const { SUBSCRIPTION_TIERS } = require('../constants/subscriptionTiers');
 const { TUTORIAL_STATUS } = require('../constants/tutorialStatus');
+const { RESULT_IMAGE_SOURCES } = require('../constants/survey');
 
 const loginSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
@@ -145,18 +146,34 @@ const userSchema = new mongoose.Schema(
     // Admin-facing only: never rendered on a public profile or leaderboard.
     redditUsername: { type: String, trim: true, default: null },
 
-    // Screenshots of the user's real CBAT score sheet, uploaded by an admin from
-    // the same panel. These are the evidence behind `cbatPassed` — a sheet shows
-    // the actual battery scores, which nothing in the app can otherwise know and
-    // which is what the Aptitude Report is calibrated against.
+    // Screenshots of the user's real CBAT score sheet. These are the evidence
+    // behind `cbatPassed` — a sheet shows the actual battery scores, which
+    // nothing in the app can otherwise know and which is what the Aptitude
+    // Report is calibrated against.
     //
     // Cloudinary holds the bytes; `publicId` is kept so deleting an entry can
     // delete the asset too rather than orphaning it.
+    //
+    // TWO SOURCES, AND THE DIFFERENCE MATTERS. `admin` entries were uploaded by
+    // us from Admin › Users. `questionnaire` entries were handed over by the
+    // person themselves at the end of the outcome questionnaire, under a stated
+    // promise about what happens to them — so those carry `consentAt` (when
+    // they agreed) and are deletable by the respondent from their own survey
+    // link, not only by an admin. Recording which is which is what makes that
+    // promise checkable later; a bare image with no provenance is not.
     cbatResultImages: [{
       url:        { type: String, required: true, trim: true },
       publicId:   { type: String, trim: true, default: null },
       caption:    { type: String, trim: true, default: null },
       uploadedAt: { type: Date, default: Date.now },
+      source:     { type: String, enum: RESULT_IMAGE_SOURCES, default: 'admin' },
+      // Null on an admin upload: there is no consent to record for a file we
+      // put there ourselves. Always set on a questionnaire upload.
+      consentAt:  { type: Date, default: null },
+      // A dry run of the questionnaire. Uploads for real (otherwise the flow
+      // could not be tested end to end) but is flagged so it is never mistaken
+      // for a genuine sheet in the admin panel or any count.
+      isTest:     { type: Boolean, default: false },
     }],
 
     // Opted out of research/questionnaire email. Set from the one-click link in

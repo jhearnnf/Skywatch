@@ -118,6 +118,18 @@ function gapsVariantFor(rating) {
 // link below, which is a better home for that than a text field on this card.
 const DONATION_PRESETS = [3, 5, 10]
 
+// Who gets asked for a score sheet.
+//
+// Only someone who has sat the test AND has the result: a pass or a fail both
+// carry the numbers we want, and a failed sheet is arguably the more useful of
+// the two because it is the only thing that shows where the line actually sits.
+// Everyone else is skipped, because the ask would be for a document they cannot
+// produce.
+function wantsSheetAsk(answers = {}) {
+  return answers.satTest === true
+    && (answers.passedForRole === 'yes' || answers.passedForRole === 'no')
+}
+
 // The demo. `/survey/preview` walks the whole questionnaire with nothing behind
 // it: no invite is looked up, no answer is saved, no donation session is opened
 // and no account is touched. It exists so the flow can be checked (and shown to
@@ -132,6 +144,20 @@ const PREVIEW_TOKEN = 'preview'
 const DAY_MS = 24 * 60 * 60 * 1000
 const BOOKED_GRACE_DAYS = 7
 const DEFAULT_DEFER_DAYS = 60
+
+// The score sheet step. Mirrors backend/constants/survey.js.
+const MAX_SHEETS = 4
+
+// Photos are downscaled in the browser before they are sent.
+//
+// Not an optimisation. A phone photo of a score sheet is 3 to 5MB, which
+// base64-encodes to more than the 10MB body limit and is rejected before any
+// server code runs, so the raw file is not a thing that can be uploaded at all.
+// 1600px on the long edge takes the same photo to a few hundred KB with the
+// printed figures still perfectly readable, and it uploads in a moment on the
+// mobile data most of these will arrive over.
+const SHEET_MAX_EDGE = 1600
+const SHEET_QUALITY  = 0.82
 
 export default function Survey() {
   const { token: routeToken } = useParams()
@@ -153,6 +179,9 @@ export default function Survey() {
   const [history, setHistory]   = useState([])
   const [badge,   setBadge]     = useState(false)
   const [saving,  setSaving]    = useState(false)
+  // Score sheets this person has sent. Server-owned in a real run, local-only
+  // in the demo.
+  const [sheets,  setSheets]    = useState([])
   // When we have promised not to contact them again, echoed back by the server
   // so the page states the same date the deferral actually enforces.
   const [deferredUntil, setDeferredUntil] = useState(null)
@@ -206,6 +235,7 @@ export default function Survey() {
         // the account has actually run the Android app.
         usedAndroid: true,
         roleGroups: ROLE_GROUPS,
+        resultImages: [],
         response: null,
       })
       setLoading(false)
@@ -219,6 +249,7 @@ export default function Survey() {
         if (cancelled) return
         if (!res.ok) throw new Error(data.message || 'This questionnaire link is not valid.')
         setMeta(data.data)
+        setSheets(data.data.resultImages ?? [])
         if (data.data.response) {
           setAnswers(data.data.response)
           if (data.data.response.passedForRole === 'yes' || data.data.response.passedAnyRole === 'yes') {
@@ -296,14 +327,23 @@ export default function Survey() {
       case 'passedAny': return 'realism'
       case 'realism': return 'helped'
       case 'helped':  return 'gaps'
-      case 'gaps':    return 'done'
+      // The score sheet ask, shown only to someone who actually has one. A
+      // "waiting" answer means the result has not come back yet, and asking
+      // them for a document they do not have is a dead screen between the last
+      // question and the thank-you.
+      case 'gaps':    return wantsSheetAsk(answers) ? 'upload' : 'done'
+      case 'upload':  return 'done'
       default:        return 'done'
     }
-  }, [])
+  }, [answers])
 
   const answerAndAdvance = useCallback((from, patch, value) => {
     const next = advanceFrom(from, value)
-    save(patch, { complete: next === 'done' })
+    // Completion is marked when the last QUESTION is answered, not when the
+    // last screen is reached. The score sheet step sits after the six
+    // questions and is optional, so gating `complete` on landing on 'done'
+    // would make everyone who declined to upload look like an abandoned run.
+    save(patch, { complete: next === 'done' || next === 'upload' })
     // A short beat so the chosen answer is visibly registered before the card
     // slides away. Without it the selection reads as a mis-tap.
     setTimeout(() => goTo(next), 220)
@@ -384,8 +424,8 @@ export default function Survey() {
         >
           <p className="text-[11px] font-bold text-amber-800 uppercase tracking-widest">Preview</p>
           <p className="text-xs text-slate-600 leading-relaxed mt-0.5">
-            This is the demo. Nothing is saved, no account is changed and the donation button
-            does not take a payment.
+            This is the demo. Nothing is saved, no account is changed, the donation button does
+            not take a payment, and any score sheet you choose stays in your browser.
           </p>
         </div>
       )}
@@ -563,6 +603,17 @@ export default function Survey() {
             />
           )}
 
+          {step === 'upload' && (
+            <SheetUploadCard
+              API={API}
+              token={token}
+              preview={isPreview}
+              sheets={sheets}
+              onSheets={setSheets}
+              onDone={() => goTo('done')}
+            />
+          )}
+
           {step === 'done' && (
             <DoneCard
               badge={badge}
@@ -570,6 +621,7 @@ export default function Survey() {
               API={API}
               preview={isPreview}
               usedAndroid={!!meta?.usedAndroid}
+              awaitingResult={answers.passedForRole === 'waiting'}
               onDonationClick={() => save({ donationClicked: true })}
               onPlayReviewClick={() => save({ playReviewClicked: true })}
               onComment={(text) => save({ comment: text })}
@@ -804,7 +856,209 @@ function SurveyClosed({ title, body }) {
 // The closing screen: thanks, then the badge they have just earned, then the
 // ask. The order is the point — the donation follows something given, not a
 // request out of nowhere.
-function DoneCard({ badge, name, API, preview = false, usedAndroid = false, onDonationClick, onPlayReviewClick, onComment }) {
+/**
+ * The score sheet ask.
+ *
+ * Deliberately NOT one of the six questions, and deliberately not on the
+ * closing screen either.
+ *
+ * Not a question, because it is the only thing in the run that wants a file
+ * rather than a tap. Putting a file picker in the middle of a
+ * one-question-per-screen flow is the surest way to lose the people who would
+ * have answered the rest, and the rest is the data the campaign was built for.
+ *
+ * Not on the closing screen, because that screen already carries the donation
+ * ask, and DoneCard is written around only ever making one ask at a time. This
+ * sits between the last answer and the thank-you, where the goodwill is highest
+ * and nothing is competing with it.
+ *
+ * The run is already saved and marked complete before this renders. Skipping
+ * costs nothing, which is why the skip is a plain visible button rather than
+ * something to hunt for.
+ */
+function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, onDone }) {
+  const [busy,  setBusy]  = useState(false)
+  const [error, setError] = useState('')
+  const fileRef = useRef(null)
+  const full = sheets.length >= MAX_SHEETS
+
+  async function pick(fileList) {
+    const files = Array.from(fileList ?? []).slice(0, MAX_SHEETS - sheets.length)
+    if (!files.length) return
+    setBusy(true); setError('')
+    // Accumulated locally rather than read back off the prop each time: the
+    // prop is a render behind, so picking two files at once would keep only the
+    // second. The real path has no such problem because the server hands back
+    // the whole list every time.
+    let local = sheets
+    try {
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) throw new Error('That file is not an image.')
+        const dataUrl = await prepareSheet(file)
+
+        // The demo never sends anything. It keeps the downscaled image in
+        // memory so the thumbnail, the count and the remove button all behave
+        // exactly as they would, and says plainly that nothing left the page.
+        if (preview) {
+          local = [...local, { _id: `preview-${Date.now()}-${local.length}`, url: dataUrl, uploadedAt: new Date().toISOString() }]
+          onSheets(local)
+          continue
+        }
+
+        const res = await fetch(`${API}/api/survey/${token}/cbat-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.message || 'That did not upload. Please try again.')
+        local = data.data?.images ?? []
+        onSheets(local)
+      }
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function remove(id) {
+    setError('')
+    if (preview) {
+      onSheets(sheets.filter(x => x._id !== id))
+      return
+    }
+    try {
+      const res = await fetch(`${API}/api/survey/${token}/cbat-result/${id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.message || 'Could not remove that.')
+      onSheets(data.data?.images ?? [])
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  return (
+    <div data-testid="survey-upload">
+      <div className="text-center mb-5">
+        <div className="text-4xl mb-3">📄</div>
+        <h1 className="text-xl font-extrabold text-slate-900 mb-2">
+          One last thing, and it is optional
+        </h1>
+        <p className="text-sm text-slate-500 leading-relaxed">
+          Would you send a photo of your score sheet?
+        </p>
+      </div>
+
+      {/* The specific reason, not a general one.
+          "Helps us improve" is what every form says and it persuades nobody.
+          What is actually true here is narrower and much more convincing: the
+          score estimates on this site were worked out by hand from real score
+          sheets, so one more sheet measurably improves the number the next
+          person is shown. Saying the true thing is also the only honest way to
+          ask for a document with someone's name on it. */}
+      <div className="bg-surface rounded-2xl border border-slate-200 p-4 sm:p-5 mb-4">
+        <p className="text-sm text-slate-700 leading-relaxed mb-3">
+          Our practice tests and score estimates are built from real score sheets, worked out by
+          hand from the ones people have sent us. There is no other way to get those numbers, and
+          every extra sheet makes the estimate the next person sees more accurate.
+        </p>
+        <p className="text-sm text-slate-700 leading-relaxed mb-3">
+          A sheet is just as useful whether you passed or not. Knowing where the line actually
+          falls is the part we cannot work out on our own.
+        </p>
+
+        {/* Said before the button, not after it, and said plainly. This is the
+            only thing the questionnaire asks for that is a real document with
+            a real name on it, so the terms belong where the decision is made. */}
+        <ul className="text-xs text-slate-600 leading-relaxed space-y-1.5 mb-4 list-disc pl-4">
+          <li>It is never published, never shown to other members and never put on a leaderboard.</li>
+          <li>It is only used to check our practice tests and score estimates against the real thing.</li>
+          <li>
+            Cover your name and candidate number first if you would rather. We only need the
+            scores, and a sheet with the personal details blacked out is just as useful.
+          </li>
+          <li>You can remove it again on this screen, or ask us to delete it at any time.</li>
+        </ul>
+
+        {sheets.length > 0 && (
+          <div className="grid grid-cols-3 gap-2 mb-4" data-testid="survey-upload-list">
+            {sheets.map(img => (
+              <div key={img._id} className="relative rounded-xl overflow-hidden border border-slate-200">
+                <img
+                  src={img.url}
+                  alt="Score sheet you sent"
+                  className="w-full h-24 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => remove(img._id)}
+                  data-testid={`survey-upload-remove-${img._id}`}
+                  aria-label="Remove this image"
+                  className="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-50/90 text-slate-700 hover:bg-rose-100 hover:text-rose-700 text-xs font-bold leading-none transition-colors"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          data-testid="survey-upload-file"
+          onChange={e => pick(e.target.files)}
+        />
+
+        {error && <p className="text-xs text-rose-600 mb-2" data-testid="survey-upload-error">{error}</p>}
+        {preview && sheets.length > 0 && (
+          <p className="text-xs text-amber-700 mb-2" data-testid="survey-upload-preview-note">
+            Preview: this image stayed in your browser and was not uploaded.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy || full}
+          data-testid="survey-upload-choose"
+          className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm transition-colors disabled:opacity-50"
+        >
+          {busy ? 'Sending…'
+            : full ? `That is the maximum of ${MAX_SHEETS}`
+            : sheets.length ? 'Add another photo'
+            : 'Choose a photo'}
+        </button>
+
+        <p className="text-[11px] text-slate-500 leading-relaxed mt-2 text-center">
+          Sending one means you are happy for us to store it for the purpose above. See our{' '}
+          <Link to="/privacy" className="font-semibold text-slate-600 hover:text-slate-700">
+            privacy policy
+          </Link>.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={onDone}
+        data-testid="survey-upload-skip"
+        className="w-full py-2.5 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+      >
+        {/* Not "Skip this": the question before this one already offers exactly
+            that, and two consecutive screens with an identically worded decline
+            read as the same screen failing to advance. */}
+        {sheets.length ? 'Done' : 'No thanks'}
+      </button>
+    </div>
+  )
+}
+
+function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awaitingResult = false, onDonationClick, onPlayReviewClick, onComment }) {
   const [amount, setAmount] = useState(DONATION_PRESETS[0])
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
@@ -979,6 +1233,18 @@ function DoneCard({ badge, name, API, preview = false, usedAndroid = false, onDo
           already gone to Stripe and is never asked for anything else. */}
       {usedAndroid && (declined || SLIM_APP) && (
         <PlayReviewCard onClick={onPlayReviewClick} />
+      )}
+
+      {/* The score sheet step is skipped for anyone still waiting on a result,
+          since asking for a document they do not have would be a dead screen.
+          They are the people most likely to have one soon, though, so the
+          invitation is made here instead. Their link keeps working, and coming
+          back to it lands on this same screen with the upload available. */}
+      {awaitingResult && (
+        <p className="text-center text-xs text-slate-500 leading-relaxed mt-5" data-testid="survey-sheet-later">
+          When your result comes through, we would love a photo of your score sheet. It is what
+          our score estimates are built from. Just open this same link again.
+        </p>
       )}
 
       <CommentBox onSubmit={onComment} />
@@ -1197,6 +1463,49 @@ function RoleCombobox({ value, other, onSelect, onOtherSubmit }) {
       )}
     </div>
   )
+}
+
+// Read a File, shrink it, hand back a JPEG data URL.
+//
+// The shrink is what makes the upload possible at all, not merely faster: see
+// SHEET_MAX_EDGE. Everything here is deliberately forgiving, because the input
+// is a photo taken on an unknown phone and the worst outcome is refusing a
+// sheet someone was willing to give us.
+//
+// The canvas path is skipped when there is no canvas to draw on (jsdom, and any
+// browser where the decode fails, which is what an unconverted HEIC does on a
+// desktop). In that case the original bytes are sent as they are and the
+// server's own size limit is the backstop.
+async function prepareSheet(file) {
+  const original = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload  = () => resolve(reader.result)
+    reader.onerror = () => reject(new Error('Could not read that file.'))
+    reader.readAsDataURL(file)
+  })
+
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image()
+      el.onload  = () => resolve(el)
+      el.onerror = () => reject(new Error('decode failed'))
+      el.src = original
+    })
+
+    const scale = Math.min(1, SHEET_MAX_EDGE / Math.max(img.width, img.height))
+    const canvas = document.createElement('canvas')
+    canvas.width  = Math.round(img.width  * scale)
+    canvas.height = Math.round(img.height * scale)
+    const ctx = canvas.getContext?.('2d')
+    if (!ctx || !canvas.width || !canvas.height) return original
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    const out = canvas.toDataURL('image/jpeg', SHEET_QUALITY)
+    // A canvas that cannot encode returns a stub; never send that in place of
+    // the photo someone actually chose.
+    return out && out.startsWith('data:image/jpeg') ? out : original
+  } catch {
+    return original
+  }
 }
 
 export { CORE_STEPS, RATINGS, ROLE_GROUPS }

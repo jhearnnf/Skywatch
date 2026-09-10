@@ -135,6 +135,34 @@ const PASS_ANSWERS = ['yes', 'no', 'waiting'];
 const RATING_MIN = 1;
 const RATING_MAX = 5;
 
+// ── Score sheet uploads ──────────────────────────────────────────────────────
+//
+// The questionnaire's last step asks for a photo of the real score sheet. That
+// document is the only place the actual battery numbers exist, and the Aptitude
+// Report is calibrated against sheets collected by hand — so one more sheet
+// measurably improves the score estimate the next person is given.
+//
+// It is also the only thing the campaign asks for that is a REAL DOCUMENT with
+// the respondent's name on it, which is why it is consented to explicitly,
+// stored under its own provenance, and deletable by the person who sent it.
+
+// Sheets per invite. A battery runs to two or three pages at most; the cap is
+// there so a public endpoint cannot be used as free image hosting.
+const MAX_RESULT_IMAGES = 4;
+
+// Ceiling on the decoded image, applied server-side.
+//
+// 6MB, not 8: base64 inflates a payload by a third, so an 8MB file arrives as a
+// ~10.7MB body and is rejected by the 10mb express.json limit before any of
+// this code runs. The client downscales to well under this anyway (see
+// Survey.jsx) — this is the backstop for a client that did not.
+const MAX_RESULT_IMAGE_BYTES = 6 * 1024 * 1024;
+
+// Where an uploaded sheet comes from. Stored on the image itself because the
+// two sources carry different permissions: one we uploaded ourselves, the other
+// a person handed us under a promise about what we would do with it.
+const RESULT_IMAGE_SOURCES = ['admin', 'questionnaire'];
+
 const OPT_OUT_REASONS = [
   'too_many_emails',
   'not_relevant',
@@ -160,4 +188,7 @@ module.exports = {
   RATING_MIN,
   RATING_MAX,
   OPT_OUT_REASONS,
+  MAX_RESULT_IMAGES,
+  MAX_RESULT_IMAGE_BYTES,
+  RESULT_IMAGE_SOURCES,
 };

@@ -25,14 +25,29 @@ const meta = (over = {}) => ({
     { service: 'Something else', roles: [{ key: 'other', label: "My role isn't listed" }] },
   ],
   response: null,
+  resultImages: [],
   ...over,
 })
 
 let patches
 
+// Sheets the fake server is holding for this run. Module level so a test can
+// assert what the upload and delete calls actually did to it.
+let sheets
+
 function mockApi(over = {}) {
   patches = []
+  sheets  = []
   global.fetch = vi.fn(async (url, opts = {}) => {
+    if (String(url).includes('/cbat-result')) {
+      if (opts.method === 'DELETE') {
+        const id = String(url).split('/').pop()
+        sheets = sheets.filter(x => x._id !== id)
+      } else {
+        sheets = [...sheets, { _id: `s${sheets.length + 1}`, url: 'https://cdn/sheet.jpg' }]
+      }
+      return { ok: true, json: async () => ({ data: { images: sheets } }) }
+    }
     if (opts.method === 'PATCH') {
       const body = JSON.parse(opts.body)
       patches.push(body)
@@ -65,6 +80,27 @@ const renderPreview = () => renderAt('/survey/preview')
 // delay being waited on here is a fifth of a second.
 const advance = async () => {
   await act(async () => { await new Promise(r => setTimeout(r, 320)) })
+}
+
+// Step over the score sheet ask, which sits between the last question and the
+// thank-you for anyone who has a result. It has its own describe block below;
+// every other walk in this file is about what happens on either side of it, so
+// they pass through rather than exercise it. A no-op when the step was skipped
+// for this run (a "waiting" answer), which is what keeps one helper usable in
+// walks that take different branches.
+// Waits rather than looks. AnimatePresence runs in "wait" mode, so the outgoing
+// card has to finish exiting before this one mounts, which lands past the 320ms
+// `advance` allows. A bare query would find nothing, skip nothing, and strand
+// the walk on this screen.
+const skipSheet = async () => {
+  let skip
+  try {
+    skip = await screen.findByTestId('survey-upload-skip', {}, { timeout: 1500 })
+  } catch {
+    return // this branch was never offered the ask
+  }
+  fireEvent.click(skip)
+  await advance()
 }
 
 beforeEach(() => { mockApi() })
@@ -221,6 +257,7 @@ describe('Survey — the main path', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));      await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));       await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));    await advance()
+    await skipSheet()
 
     expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
     await waitFor(() => expect(patches.at(-1)).toEqual(expect.objectContaining({ complete: true })))
@@ -234,6 +271,7 @@ describe('Survey — the main path', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit')); await advance()
+    await skipSheet()
 
     const badge = await screen.findByTestId('survey-badge')
     const donate = screen.getByTestId('survey-donate')
@@ -250,6 +288,7 @@ describe('Survey — the main path', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-2'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-3'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit')); await advance()
+    await skipSheet()
 
     expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
     expect(screen.queryByTestId('survey-badge')).not.toBeInTheDocument()
@@ -265,6 +304,7 @@ describe('Survey — the main path', () => {
 
     fireEvent.click(await screen.findByText('Skip this'))
     await advance()
+    await skipSheet()
     expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
   })
 
@@ -276,6 +316,7 @@ describe('Survey — the main path', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit')); await advance()
+    await skipSheet()
 
     fireEvent.click(await screen.findByText('Not this time'))
     expect(await screen.findByTestId('survey-declined')).toBeInTheDocument()
@@ -296,6 +337,7 @@ describe('Survey — the Google Play ask', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));         await advance()
     fireEvent.click(await screen.findByTestId(`survey-helped-${helped}`));   await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));       await advance()
+    await skipSheet()
     return screen.findByTestId('survey-done')
   }
 
@@ -438,6 +480,7 @@ describe('Survey — the /survey/preview demo', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));     await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
+    await skipSheet()
 
     expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
     expect(patches).toHaveLength(0)
@@ -453,6 +496,7 @@ describe('Survey — the /survey/preview demo', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));     await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
+    await skipSheet()
 
     expect(await screen.findByTestId('survey-badge')).toBeInTheDocument()
   })
@@ -479,6 +523,7 @@ describe('Survey — the /survey/preview demo', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));     await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
+    await skipSheet()
 
     fireEvent.click(await screen.findByTestId('survey-donate-submit'))
 
@@ -554,6 +599,7 @@ describe('Survey — the donation ladder', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));     await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
+    await skipSheet()
     return screen.findByTestId('survey-done')
   }
 
@@ -589,6 +635,7 @@ describe('Survey — the closing comment box', () => {
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));     await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
+    await skipSheet()
     return screen.findByTestId('survey-done')
   }
 
@@ -630,5 +677,149 @@ describe('Survey — the closing comment box', () => {
     fireEvent.click(screen.getByText('Not this time'))
     expect(await screen.findByTestId('survey-declined')).toBeInTheDocument()
     expect(screen.getByTestId('survey-comment-open')).toBeInTheDocument()
+  })
+})
+
+describe('Survey — the score sheet ask', () => {
+  // Walk to the last question and answer it, which is where the ask appears.
+  const reachAsk = async ({ passed = 'yes' } = {}) => {
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'));            await advance()
+    fireEvent.click(await screen.findByTestId('survey-role-pilot'));         await advance()
+    fireEvent.click(await screen.findByTestId(`survey-passed-${passed}`));   await advance()
+    if (passed === 'no') {
+      fireEvent.click(await screen.findByTestId('survey-any-no'));           await advance()
+    }
+    fireEvent.click(await screen.findByTestId('survey-realism-4'));          await advance()
+    fireEvent.click(await screen.findByTestId('survey-helped-5'));           await advance()
+    fireEvent.click(await screen.findByTestId('survey-gaps-submit'));        await advance()
+  }
+
+  // jsdom never loads an <img> and never fails one either, so the component's
+  // decode step would wait on a promise that can never settle. This stands in a
+  // decoder that succeeds, which puts the test on the same path a real browser
+  // takes; the canvas jsdom does not implement then returns the original bytes,
+  // which is the documented fallback and what actually gets sent here.
+  class FakeImage {
+    width = 2000
+    height = 1000
+    set src(_value) { setTimeout(() => this.onload?.(), 0) }
+  }
+
+  // A real File, so the component's own FileReader does the work rather than a
+  // stub standing in for the only interesting part of the flow.
+  const choose = async () => {
+    vi.stubGlobal('Image', FakeImage)
+    const file = new File(['sheet-bytes'], 'sheet.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('survey-upload-file'), { target: { files: [file] } })
+    await advance()
+  }
+
+  it('comes after the last question, not before it', async () => {
+    await reachAsk()
+    expect(await screen.findByTestId('survey-upload')).toBeInTheDocument()
+    // The donation lives on the next screen; the two asks must never share one.
+    expect(screen.queryByTestId('survey-donate')).not.toBeInTheDocument()
+  })
+
+  // The run is data as soon as the sixth question is answered. Making the sheet
+  // step decide whether the response counts would turn every polite decline
+  // into an abandoned run.
+  it('marks the run complete before the ask, not after it', async () => {
+    await reachAsk()
+    await waitFor(() => expect(patches).toContainEqual(expect.objectContaining({ complete: true })))
+  })
+
+  it('is offered to someone who did not pass, whose sheet is just as useful', async () => {
+    await reachAsk({ passed: 'no' })
+    expect(await screen.findByTestId('survey-upload')).toBeInTheDocument()
+  })
+
+  // Nothing to photograph yet, so the screen would be a dead end.
+  it('is skipped for someone still waiting on their result', async () => {
+    await reachAsk({ passed: 'waiting' })
+    expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-upload')).not.toBeInTheDocument()
+    // They are the likeliest future sender, so the offer is made here instead.
+    expect(screen.getByTestId('survey-sheet-later')).toBeInTheDocument()
+  })
+
+  it('states the terms before the button, where the decision is made', async () => {
+    await reachAsk()
+    await screen.findByTestId('survey-upload')
+    expect(screen.getByText(/never published/i)).toBeInTheDocument()
+    expect(screen.getByText(/Cover your name and candidate number/i)).toBeInTheDocument()
+    expect(screen.getByText(/remove it again on this screen/i)).toBeInTheDocument()
+  })
+
+  it('skipping costs nothing and goes straight to the thank-you', async () => {
+    await reachAsk()
+    fireEvent.click(await screen.findByTestId('survey-upload-skip'))
+    await advance()
+    expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
+  })
+
+  it('uploads a chosen photo and shows it back', async () => {
+    await reachAsk()
+    await screen.findByTestId('survey-upload')
+    await choose()
+
+    await waitFor(() => expect(screen.getByTestId('survey-upload-list')).toBeInTheDocument())
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/cbat-result'),
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('lets them take it back again', async () => {
+    await reachAsk()
+    await screen.findByTestId('survey-upload')
+    await choose()
+    await waitFor(() => expect(screen.getByTestId('survey-upload-list')).toBeInTheDocument())
+
+    await act(async () => { fireEvent.click(screen.getByTestId('survey-upload-remove-s1')) })
+    await waitFor(() => expect(screen.queryByTestId('survey-upload-list')).not.toBeInTheDocument())
+    expect(sheets).toHaveLength(0)
+  })
+
+  it('surfaces a refusal rather than pretending it worked', async () => {
+    await reachAsk()
+    await screen.findByTestId('survey-upload')
+    const passthrough = global.fetch
+    global.fetch = vi.fn(async (url, opts) => {
+      if (String(url).includes('/cbat-result')) {
+        return { ok: false, json: async () => ({ message: 'That image is too large.' }) }
+      }
+      return passthrough(url, opts)
+    })
+    await choose()
+    expect(await screen.findByTestId('survey-upload-error')).toHaveTextContent('too large')
+  })
+
+  it('shows sheets already sent, so a reopened link does not ask twice', async () => {
+    mockApi({ resultImages: [{ _id: 'old1', url: 'https://cdn/old.jpg' }] })
+    await reachAsk()
+    expect(await screen.findByTestId('survey-upload-list')).toBeInTheDocument()
+    expect(screen.getByText(/Add another photo/)).toBeInTheDocument()
+  })
+
+  it('keeps the demo entirely in the browser', async () => {
+    renderPreview()
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
+    fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
+    fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
+    fireEvent.click(await screen.findByTestId('survey-helped-5'));     await advance()
+    fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
+
+    await screen.findByTestId('survey-upload')
+    await choose()
+
+    // The thumbnail, the count and the remove button all behave, and it says so.
+    await waitFor(() => expect(screen.getByTestId('survey-upload-list')).toBeInTheDocument())
+    expect(screen.getByTestId('survey-upload-preview-note')).toBeInTheDocument()
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })
