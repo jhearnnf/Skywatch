@@ -1420,7 +1420,16 @@ function ReportsTab({ API }) {
       className={testerFx ? 'xl:col-span-2' : 'xl:col-span-3'}
     >
       {dau
-        ? <ReportChart type="line" data={dau.dailyDau} xKey="date" keys={['count']} height={200} />
+        ? <ReportChart
+            type="line"
+            data={dau.dailyDau}
+            xKey="date"
+            keys={['count', 'messages']}
+            labels={{ count: 'Active users', messages: 'Community messages' }}
+            colors={['#5baaff', '#f59e0b']}
+            showLegend
+            height={200}
+          />
         : <ChartSkeleton height={200} />}
     </ChartCard>
   )

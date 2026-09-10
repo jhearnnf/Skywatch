@@ -64,6 +64,21 @@ vi.mock('recharts', async () => {
   }
 })
 
+// Charts render nothing measurable in jsdom, so stand ReportChart in for a stub
+// that exposes the series it was asked to plot. Which keys and labels a card
+// hands the chart is the wiring these tests care about; how recharts draws them
+// is ReportChart's own business.
+vi.mock('../../components/admin/ReportChart', () => ({
+  default: ({ keys = [], labels }) => (
+    <div
+      data-testid="report-chart"
+      data-keys={keys.join(',')}
+      data-labels={keys.map(k => labels?.[k] ?? k).join(',')}
+    />
+  ),
+  ChartSkeleton: () => <div data-testid="chart-skeleton" />,
+}))
+
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
 const MOCK_SNAPSHOT = {
@@ -88,6 +103,7 @@ const mockDau = (days) => ({
     dailyDau: Array.from({ length: days }, (_, i) => ({
       date: new Date(Date.UTC(2026, 3, 1) + i * 86400000).toISOString().slice(0, 10),
       count: i % 5,
+      messages: i % 3,
     })),
   },
 })
@@ -242,6 +258,17 @@ describe('Admin — Reports tab', () => {
       expect.stringContaining('/api/admin/reports/dau?days=30'),
       expect.anything(),
     )
+  })
+
+  it('plots community messages alongside active users on the DAU chart', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Daily Active Users')).toBeInTheDocument())
+    // Two named series on one chart — a second unlabelled line would be
+    // unreadable next to the one the card is titled after.
+    const chart = screen.getAllByTestId('report-chart')
+      .find(c => c.dataset.keys === 'count,messages')
+    expect(chart).toBeDefined()
+    expect(chart.dataset.labels).toBe('Active users,Community messages')
   })
 
   it('refetches Daily Active Users when its timeframe changes', async () => {

@@ -10,6 +10,8 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const AppOpen = require('../models/AppOpen');
+const ChatConversation = require('../models/ChatConversation');
+const ChatMessage = require('../models/ChatMessage');
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { OS_KEYS } = require('../constants/clientPlatforms');
 
@@ -481,6 +483,37 @@ router.get('/snapshot', async (_req, res) => {
   }
 });
 
+// Community messages posted per day — the second series on the Daily Active
+// Users chart.
+//
+// "Community" means the channels a member can actually write in
+// (postPolicy 'everyone', e.g. General and the CBAT Lounge). Announcements and
+// the Medals feed are excluded because nobody but the team or a bot can post
+// there, so their volume says nothing about community activity; DMs and support
+// threads are excluded because they are private conversations, not the
+// community. Archived channels still count — the messages were posted, and
+// dropping them would make an old day's total shrink retroactively.
+//
+// Also excluded: system messages, soft-deleted messages (so a moderated spam
+// burst can't leave a permanent spike), and anything a bot wrote — the Guide
+// Bot answering in the Lounge is not a member talking.
+async function dailyCommunityMessages(since, until = null) {
+  const [channels, bots] = await Promise.all([
+    ChatConversation.find({ type: 'channel', 'channel.postPolicy': 'everyone' }).select('_id').lean(),
+    User.find({ isBot: true }).select('_id').lean(),
+  ]);
+  if (!channels.length) return new Map();
+
+  const match = {
+    conversationId: { $in: channels.map(c => c._id) },
+    senderRole:     { $ne: 'system' },
+    deletedAt:      null,
+  };
+  if (bots.length) match.senderUserId = { $nin: bots.map(b => b._id) };
+
+  return dailyCount(ChatMessage, 'createdAt', since, match, until);
+}
+
 // ── GET /api/admin/reports/dau?days=7|30|90|365 ───────────────────────────────────
 // The Daily Active Users series on its own timeframe. Split out of /snapshot so
 // changing the DAU range doesn't re-run the (much heavier) whole-snapshot query
@@ -501,10 +534,17 @@ router.get('/dau', async (req, res) => {
     const now = new Date();
     const start = new Date(now.getTime() - (days - 1) * DAY_MS); // inclusive of today
 
-    const dailyMap = mergeDailyDistinctUsers(await activityStreams(start));
+    const [streams, messagesByDay] = await Promise.all([
+      activityStreams(start),
+      dailyCommunityMessages(start),
+    ]);
+    const dailyMap = mergeDailyDistinctUsers(streams);
+    // One row per day carrying both series, so the chart plots them on a shared
+    // x-axis without the frontend having to zip two arrays together.
     const dailyDau = emptyDailyBuckets(start, now).map(b => ({
       date: b.date,
       count: dailyMap.get(b.date)?.size ?? 0,
+      messages: messagesByDay.get(b.date) ?? 0,
     }));
 
     res.json({ status: 'success', data: { days, dailyDau } });
