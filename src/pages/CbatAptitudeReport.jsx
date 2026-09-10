@@ -944,8 +944,8 @@ export default function CbatAptitudeReport() {
                 and 6, and 7 or above puts you in the top quarter.
                 {report.score != null && (
                   <> Yours averages out at about {Math.round((report.score / MAX_SCORE) * MAX_STANINE * 10) / 10},
-                  which puts you ahead of roughly {stanineBeatsPct((report.score / MAX_SCORE) * MAX_STANINE)}% of
-                  other SkyWatch players.</>
+                  which would put you ahead of roughly {stanineBeatsPct((report.score / MAX_SCORE) * MAX_STANINE)}% of
+                  candidates if our estimate is right.</>
                 )}
               </li>
               <li>
@@ -975,8 +975,10 @@ export default function CbatAptitudeReport() {
             <p className={`text-[11px] text-slate-600 ${showHelp ? 'mt-3 pt-3 border-t border-[#12293f]' : 'mt-3'}`}>
               <span className="block text-slate-700 font-bold mb-0.5">This is a practice estimate, not a real result</span>
               Our games are our own versions of the CBAT tests, not the RAF&apos;s. The role weightings and pass marks come
-              from real score sheets, but your levels are worked out by comparing you to other SkyWatch players, not to
-              real RAF candidates. Treat it as a guide to what to practise, not a prediction.
+              from real score sheets, but your levels start by comparing you to other SkyWatch players, then get nudged
+              up to allow for the fact that people here practise and some of our games are harder than the real ones.
+              That nudge is based on very few people who have told us what they went on to score, so it is a rough
+              correction, not a measured one. Treat all of this as a guide to what to practise, not a prediction.
             </p>
           </div>
         </>

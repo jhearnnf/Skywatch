@@ -13,13 +13,13 @@
 //   median → 5   (the middle of the field)
 //   strong → 8   (a clearly good run)
 //
-// so one stanine step = (strong - median) / 3, and
+// so one stanine step = (strong - median) / 3, and, with the cohort shift described below,
 //
-//   stanine = clamp(round(5 + (score - median) / step), 1, 9)
+//   stanine = clamp(round(cohortShift(5 + (score - median) / step)), 1, 9)
 //
 // The line is deliberately simple and deliberately visible in the data file. It is a calibrated
-// estimate against SkyWatch's own norms and the report page says so in as many words — it is NOT a
-// prediction of what OASC would award.
+// estimate, anchored on SkyWatch's own norms and nudged toward OASC's by a single measured pair,
+// and the report page says so in as many words — it is NOT a prediction of what OASC would award.
 
 // THE LINE HAS TO STAY INSIDE THE GAME'S CEILING. A game marked out of a fixed total carries a
 // `max` alongside its anchors, because a straight line fitted to two measured points knows nothing
@@ -35,13 +35,56 @@
 // which is the point: clamping only the "aim for this" number would have the report name a target
 // that still scored an 8 when you hit it.
 
-const { MAX_STANINE, STANINE_ANCHORS } = require('../constants/cbatBatteries');
+// THE LINE IS THEN SHIFTED UP BY `cohortShift`. The two anchors describe where a score sits among
+// SkyWatch players; the report is asked where it would sit on an OASC sheet, and those are not the
+// same field. Everyone here chose to practise, and several of our games are harder than the tests
+// they stand in for, so the same person reads lower here than on the day — measured at 1.5 to 2.9
+// stanines on the one candidate we have a real sheet's worth of numbers for. cohortShift carries
+// half of that, and cbatBatteries.json's `_cohortShiftComment` carries the evidence and the reason
+// it is deliberately only half.
+//
+// It belongs here rather than in the anchors because the anchors are MEASURED — scripts/
+// calibrateStanineAnchors.js overwrites them wholesale — and a correction hidden inside a median
+// would be silently deleted by the next honest re-run. Keep the two apart.
+//
+// THE SHIFT TAPERS ABOVE THE MEDIAN, and it has to. A flat shift saturates the top of the scale:
+// test stanines are rounded before they are averaged, so any flat shift of half a stanine or more
+// rounds the `strong` anchor itself up to 9, every test a strong player has reads 9, and the
+// report hands them 180 out of 180 with nothing left to aim at on any game. That is both a claim
+// we must never make and the exact moment the page stops being useful. A flat shift below half a
+// stanine is the opposite failure — it rounds away to nothing and moves nobody.
+//
+// So the shift is applied whole at and below the median, where the evidence sits (our one measured
+// candidate read 5.1-6.5 against a real 8.0, i.e. near the middle of OUR field), and fades linearly
+// to nothing at 9. A 9 is the top of the scale on anyone's sheet, so it is the one point that needs
+// no translating.
+
+const { MAX_STANINE, STANINE_ANCHORS, COHORT_SHIFT } = require('../constants/cbatBatteries');
 
 const MIN_STANINE = 1;
 const MEDIAN_STANINE = 5;   // anchor: middle of the field
 const STRONG_STANINE = 8;   // anchor: a clearly good run
 
 const clampStanine = (n) => Math.min(MAX_STANINE, Math.max(MIN_STANINE, n));
+
+// The shift, tapered. Straight addition at or below the median, fading to zero at MAX_STANINE.
+// Continuous at the median (both branches give median + shift) and monotonic in `s` for any shift
+// smaller than MAX_STANINE - MEDIAN_STANINE, which the unit tests assert.
+function applyCohortShift(s) {
+  if (!COHORT_SHIFT) return s;
+  if (s <= MEDIAN_STANINE) return s + COHORT_SHIFT;
+  return s + COHORT_SHIFT * ((MAX_STANINE - s) / (MAX_STANINE - MEDIAN_STANINE));
+}
+
+// Its exact inverse: the point on the unshifted line that applyCohortShift maps to `t`. Above the
+// median the shift is s -> s(1 - k) + MAX*k for k = shift / (MAX - MEDIAN), so undoing it is the
+// same algebra rearranged.
+function removeCohortShift(t) {
+  if (!COHORT_SHIFT) return t;
+  if (t <= MEDIAN_STANINE + COHORT_SHIFT) return t - COHORT_SHIFT;
+  const k = COHORT_SHIFT / (MAX_STANINE - MEDIAN_STANINE);
+  return (t - MAX_STANINE * k) / (1 - k);
+}
 
 // One stanine's worth of raw score for a game. Anchors are authored strong > median for every
 // game (higher is always better among the games a battery draws on — asserted in the unit tests),
@@ -66,15 +109,19 @@ function topSegment(gameKey) {
 }
 
 // The stanine a given raw score earns on a given game, or null if the game has no anchors.
+//
+// The cohort shift goes on before the rounding and the clamp, so it moves the scale rather than
+// the printed number: a score that would have read 5.4 among SkyWatch players reads 6.4 — and
+// therefore 6 — as an OASC estimate.
 function scoreToStanine(gameKey, score) {
   const a = STANINE_ANCHORS[gameKey];
   if (!a || !Number.isFinite(score)) return null;
   const top = topSegment(gameKey);
   if (top && score > top.from) {
-    return clampStanine(Math.round(STRONG_STANINE + (score - top.from) / top.span));
+    return clampStanine(Math.round(applyCohortShift(STRONG_STANINE + (score - top.from) / top.span)));
   }
   const step = stanineStep(gameKey);
-  return clampStanine(Math.round(MEDIAN_STANINE + (score - a.median) / step));
+  return clampStanine(Math.round(applyCohortShift(MEDIAN_STANINE + (score - a.median) / step)));
 }
 
 // The lowest whole score that reaches AT LEAST `target`. Powers the report's "you're on a 5;
@@ -92,15 +139,21 @@ function scoreToStanine(gameKey, score) {
 //
 // Returns null at the ends of the scale, where there is nothing left to aim for (9) or nothing
 // below (1).
+//
+// COHORT_SHIFT has to come back off here, or the two halves disagree and the report starts naming
+// scores that do not produce the stanine it promised. `base` is the point on the unshifted line
+// that scoreToStanine will read back as `target` — including which side of a bounded game's
+// compressed top segment it falls on, which is a fact about the line and not about the shift.
 function scoreForStanine(gameKey, target) {
   const a = STANINE_ANCHORS[gameKey];
   if (!a || target <= MIN_STANINE || target > MAX_STANINE) return null;
+  const base = removeCohortShift(target);
   const top = topSegment(gameKey);
-  if (top && target > STRONG_STANINE) {
-    return Math.ceil(top.from + (target - STRONG_STANINE - 0.5) * top.span);
+  if (top && base > STRONG_STANINE) {
+    return Math.ceil(top.from + (base - STRONG_STANINE - 0.5) * top.span);
   }
   const step = stanineStep(gameKey);
-  return Math.ceil(a.median + (target - MEDIAN_STANINE - 0.5) * step);
+  return Math.ceil(a.median + (base - MEDIAN_STANINE - 0.5) * step);
 }
 
 module.exports = {
@@ -109,6 +162,9 @@ module.exports = {
   stanineStep,
   topSegment,
   clampStanine,
+  COHORT_SHIFT,
+  applyCohortShift,
+  removeCohortShift,
   MIN_STANINE,
   MEDIAN_STANINE,
   STRONG_STANINE,

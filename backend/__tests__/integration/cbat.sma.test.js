@@ -16,6 +16,7 @@ const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../../constants/cbatGam
 const { WEEKLY_PER_PLAY } = require('../../utils/cbatFakeLeaderboard');
 const batteries = require('../../constants/cbatBatteries.json');
 const { SCORED_GAME_KEYS } = require('../../constants/cbatBatteries');
+const { COHORT_SHIFT } = require('../../utils/cbatStanine');
 const { FORM_MIN_RUNS, PRIOR_STANINE, confidenceFor } = require('../../utils/cbatAptitudeReport');
 
 const KEYS = ['sma', 'sma-easier'];
@@ -273,8 +274,9 @@ describe('SMA closes the Psychomotor gap in the Aptitude Report', () => {
     await playSma('sma', batteries.stanineAnchors.sma.median);
     const middling = await psychOf();
     expect(middling.state).toBe('scored');
-    // The median anchor is stanine 5 by definition of the scale.
-    expect(middling.stanine).toBeCloseTo(5, 1);
+    // The median anchor is stanine 5 on the raw line, plus the cohort shift that translates a
+    // SkyWatch standing into an OASC estimate - a whole stanine at the median. See cbatStanine.js.
+    expect(middling.stanine).toBeCloseTo(5 + COHORT_SHIFT, 1);
 
     await CBAT_GAMES['sma'].Model.deleteMany({});
     await playSma('sma', batteries.stanineAnchors.sma.strong);

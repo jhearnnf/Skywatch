@@ -42,6 +42,14 @@
  * and the 80% coverage floor are independent of where the anchors sit and all
  * still apply on top of whatever this proposes.
  *
+ * And nothing about `cohortShift`. These anchors answer "where does this score
+ * sit among SKYWATCH players", which is a question about our own field and the
+ * only one this script has the data to answer. Translating that into "where would
+ * it sit on an OASC sheet" is a separate correction living in cbatBatteries.json
+ * next to these values - keep it there. Folding it into a median would make the
+ * anchors wrong about the thing they measure AND delete the correction the next
+ * time this script is run, which is the one failure mode worth naming here.
+ *
  * It also writes nothing. It prints a diff and a paste-ready JSON block; moving
  * the numbers into cbatBatteries.json is a deliberate human step.
  *

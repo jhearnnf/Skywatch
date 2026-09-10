@@ -7,7 +7,8 @@
 const data = require('./cbatBatteries.json');
 
 const { maxScore: MAX_SCORE, maxStanine: MAX_STANINE, minCoverageForVerdict: MIN_COVERAGE_FOR_VERDICT,
-        domains: DOMAINS, tests: TESTS, stanineAnchors: STANINE_ANCHORS, batteries: BATTERIES } = data;
+        domains: DOMAINS, tests: TESTS, stanineAnchors: STANINE_ANCHORS, cohortShift: COHORT_SHIFT,
+        batteries: BATTERIES } = data;
 
 const BATTERY_BY_KEY = Object.fromEntries(BATTERIES.map(b => [b.key, b]));
 
@@ -22,6 +23,7 @@ module.exports = {
   DOMAINS,
   TESTS,
   STANINE_ANCHORS,
+  COHORT_SHIFT,
   BATTERIES,
   BATTERY_BY_KEY,
   SCORED_GAME_KEYS,

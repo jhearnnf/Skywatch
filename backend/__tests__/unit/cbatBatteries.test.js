@@ -1,6 +1,6 @@
 const { BATTERIES, BATTERY_BY_KEY, DOMAINS, TESTS, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MAX_STANINE } = require('../../constants/cbatBatteries');
 const { CBAT_GAMES } = require('../../constants/cbatGames');
-const { scoreToStanine, scoreForStanine, MEDIAN_STANINE, STRONG_STANINE } = require('../../utils/cbatStanine');
+const { scoreToStanine, scoreForStanine, stanineStep, topSegment, removeCohortShift, applyCohortShift, clampStanine, COHORT_SHIFT, MEDIAN_STANINE, STRONG_STANINE } = require('../../utils/cbatStanine');
 
 // The battery definitions are transcribed by hand from photographed OASC score sheets, so these
 // assertions are the transcription's proof-reader: a slipped digit in a weight or a mistyped test
@@ -92,10 +92,46 @@ describe('test → game mapping', () => {
 });
 
 describe('scoreToStanine', () => {
-  it('puts the median anchor at 5 and the strong anchor at 8', () => {
+  it('reads the median and strong anchors off the shifted line', () => {
+    // The anchors place a score against SKYWATCH's field; the cohort shift then translates that
+    // into an OASC estimate, so a middling SkyWatch player does not read 5 on the sheet. The shift
+    // is whole at the median and tapered above it, which is why `strong` is not simply 8 + shift.
     for (const [gameKey, a] of Object.entries(STANINE_ANCHORS)) {
-      expect([gameKey, scoreToStanine(gameKey, a.median)]).toEqual([gameKey, MEDIAN_STANINE]);
-      expect([gameKey, scoreToStanine(gameKey, a.strong)]).toEqual([gameKey, STRONG_STANINE]);
+      expect([gameKey, scoreToStanine(gameKey, a.median)])
+        .toEqual([gameKey, clampStanine(Math.round(applyCohortShift(MEDIAN_STANINE)))]);
+      expect([gameKey, scoreToStanine(gameKey, a.strong)])
+        .toEqual([gameKey, clampStanine(Math.round(applyCohortShift(STRONG_STANINE)))]);
+    }
+  });
+
+  it('taper: shifts the median a whole stanine and leaves the top of the scale alone', () => {
+    // The property the taper exists for. A flat shift would round `strong` up to a 9, give every
+    // strong player 180 of 180, and leave them no next target on any game.
+    expect(applyCohortShift(MEDIAN_STANINE)).toBe(MEDIAN_STANINE + COHORT_SHIFT);
+    expect(applyCohortShift(MAX_STANINE)).toBe(MAX_STANINE);
+    expect(Math.round(applyCohortShift(STRONG_STANINE))).toBe(STRONG_STANINE);
+
+    // Monotonic and invertible across the whole scale, including the join at the median.
+    let prev = -Infinity;
+    for (let s = 1; s <= MAX_STANINE; s += 0.25) {
+      const shifted = applyCohortShift(s);
+      expect(shifted).toBeGreaterThan(prev);
+      expect(removeCohortShift(shifted)).toBeCloseTo(s, 10);
+      prev = shifted;
+    }
+  });
+
+  it('reads every score at least as high as the unshifted line would', () => {
+    // The shift exists because we were reading real candidates LOW — a change that moved any score
+    // down would be the opposite of the thing it was added to fix.
+    for (const [gameKey, a] of Object.entries(STANINE_ANCHORS)) {
+      const step = stanineStep(gameKey);
+      for (let n = -4; n <= 6; n++) {
+        const score = a.median + n * step;
+        const unshifted = Math.min(MAX_STANINE, Math.max(1, Math.round(MEDIAN_STANINE + n)));
+        expect([gameKey, score, scoreToStanine(gameKey, score) >= unshifted])
+          .toEqual([gameKey, score, true]);
+      }
     }
   });
 
@@ -178,21 +214,41 @@ describe('the ceiling on a bounded game', () => {
     }
   });
 
-  it('leaves a game whose line already fits its ceiling exactly as it was', () => {
-    // Compression is a guard on the overshoot, not a second scale — so only ANT should have moved.
-    expect(scoreForStanine('sat', 9)).toBe(13);
-    expect(scoreForStanine('angles', 9)).toBe(19);
-    expect(scoreForStanine('code-duplicates', 9)).toBe(14);
-    expect(scoreForStanine('trace-1', 9)).toBe(39);
+  it('leaves a game whose line already fits its ceiling on the plain line', () => {
+    // Compression is a guard on the overshoot, not a second scale, so a game that never overshot
+    // reads straight off its anchors. Stated as the line rather than as four frozen raw scores,
+    // because those move whenever the anchors or the cohort shift move and the claim here is
+    // neither of those things.
+    for (const gameKey of ['sat', 'angles', 'code-duplicates', 'trace-1']) {
+      expect([gameKey, topSegment(gameKey)]).toEqual([gameKey, null]);
+      const a = STANINE_ANCHORS[gameKey];
+      const plain = Math.ceil(
+        a.median + (removeCohortShift(MAX_STANINE) - MEDIAN_STANINE - 0.5) * stanineStep(gameKey),
+      );
+      expect([gameKey, scoreForStanine(gameKey, MAX_STANINE)]).toEqual([gameKey, plain]);
+    }
   });
 
-  it('reads ANT off the compressed top band without moving anything below it', () => {
-    expect(scoreForStanine('ant', 8)).toBe(73);   // unchanged: the plain line still owns 1-8
-    expect(scoreForStanine('ant', 9)).toBe(79);   // was 81, one point past a board marked out of 80
-    expect(scoreToStanine('ant', 72)).toBe(7);
-    expect(scoreToStanine('ant', 73)).toBe(8);
-    expect(scoreToStanine('ant', 78)).toBe(8);
-    expect(scoreToStanine('ant', 79)).toBe(9);
-    expect(scoreToStanine('ant', 80)).toBe(MAX_STANINE);
+  it('keeps ANT inside its board, whether or not the compressed band is in use', () => {
+    // ANT is the game compression was written for: measured anchors of 53 and 77 put the plain
+    // stanine-9 threshold at 81 on a board marked out of 80.
+    //
+    // The cohort shift pulls that threshold well below the ceiling on its own, so the compressed
+    // band is currently DORMANT rather than gone — with a shift of 1 the top branch needs a target
+    // above 9, which cannot be asked for. It stays because it is the guard that holds if the shift
+    // returns to 0 or a re-anchor spreads ANT out again, and because nothing about it is wrong.
+    // What matters either way is the property below, which is what the guard existed to protect.
+    const a = STANINE_ANCHORS.ant;
+    expect(topSegment('ant')).not.toBeNull();
+    expect(scoreForStanine('ant', MAX_STANINE)).toBeLessThanOrEqual(a.max);
+    expect(scoreToStanine('ant', a.max)).toBe(MAX_STANINE);
+
+    // Monotonic right across the join between the plain line and the compressed band.
+    let prev = 0;
+    for (let s = 40; s <= a.max; s++) {
+      const v = scoreToStanine('ant', s);
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
+    }
   });
 });

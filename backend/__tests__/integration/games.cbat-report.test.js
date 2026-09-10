@@ -42,6 +42,15 @@ async function play(gameKey, pick, runs = FORM_MIN_RUNS) {
 
 const playAll = (pick, runs) => Promise.all(SCORED_GAME_KEYS.map(k => play(k, pick, runs)));
 
+// A raw score `n` stanines from the median anchor on the UNSHIFTED line, so `stanines(0)` is the
+// median anchor itself. The report puts the cohort shift on top of whatever this returns, which is
+// why median play now reads 6 rather than 5 — see cbatBatteries.json's `_cohortShiftComment`. A
+// fixture that needs a test to read exactly 5 therefore plays one stanine below the median.
+//
+// Fractional scores are deliberate: they keep every game landing on the intended stanine exactly,
+// where rounding would tip the coarse ones (Trace 2's whole scale is 0-8) into the band above.
+const stanines = (n) => (a) => a.median + n * ((a.strong - a.median) / 3);
+
 // Distinct playable games from a battery, read out of the data rather than named, so a
 // re-transcribed role can't strand these tests on a test code that moved.
 function playableGames(batteryKey, count) {
@@ -217,14 +226,18 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     }
   });
 
-  it('scores median play at exactly 100 and strong play at 160', async () => {
-    // 5/9 and 8/9 of 180. This is the whole scoring chain — anchors → test stanine → domain mean →
-    // weighted battery score — pinned to two numbers that can be checked by hand.
+  it('scores median play at exactly 120 and strong play at 160', async () => {
+    // 6/9 and 8/9 of 180. This is the whole scoring chain — anchors → cohort shift → test stanine →
+    // domain mean → weighted battery score — pinned to two numbers that can be checked by hand.
+    //
+    // The two numbers are one stanine apart rather than three because the cohort shift is tapered:
+    // whole at the median, fading to nothing at 9. Median play moves 100 → 120; strong play does
+    // not move at all, which is the property the taper exists to protect. See cbatStanine.js.
     await playAll(a => a.median);
     let res = await request(app).get('/api/games/cbat/report/pilot').set('Cookie', cookie);
-    expect(res.body.data.score).toBe(100);
-    expect(res.body.data.status).toBe('fail');           // Pilot's cutoff is 112
-    expect(res.body.data.margin).toBe(100 - 112);
+    expect(res.body.data.score).toBe(120);
+    expect(res.body.data.status).toBe('pass');           // Pilot's cutoff is 112
+    expect(res.body.data.margin).toBe(120 - 112);
 
     await db.clearDatabase();
     await createSettings();
@@ -240,8 +253,9 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
 
   it('passes the same play on a low cutoff and fails it on a high one', async () => {
     // The point of the role picker: identical practice clears NCO Control (ATC) at 80 and misses
-    // Pilot at 112.
-    await playAll(a => a.median);
+    // Pilot at 112. Played one stanine below the median, which the cohort shift reads back as a
+    // straight 5 and therefore 100 — between the two cutoffs, which is all this test needs.
+    await playAll(stanines(-1));
 
     const nco = await request(app).get('/api/games/cbat/report/nco-control-atc').set('Cookie', cookie);
     const pilot = await request(app).get('/api/games/cbat/report/pilot').set('Cookie', cookie);
@@ -336,8 +350,10 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
   // whole roster scores exactly 100, so the same play is a pass or a coin toss purely on how many
   // times each game was played.
   describe('a range that still has the pass mark inside it', () => {
+    // One stanine below the median, which the cohort shift reads back as a straight 5 — landing
+    // this battery exactly on its cutoff of 100, which is the whole setup for a straddling band.
     const playAllOf = async (runsFor) => {
-      for (const game of batteryGames('pilot-isr-rpas')) await play(game, a => a.median, runsFor(game));
+      for (const game of batteryGames('pilot-isr-rpas')) await play(game, stanines(-1), runsFor(game));
     };
     const get = () => request(app).get('/api/games/cbat/report/pilot-isr-rpas').set('Cookie', cookie);
 
@@ -365,7 +381,7 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
   });
 
   it('refuses to call a pass or a fail on thin coverage', async () => {
-    // CUT and SAT alone are 49% of Control Officer (ATC). Renormalised, that scores 100 against a
+    // CUT and SAT alone are 49% of Control Officer (ATC). Renormalised, that scores 120 against a
     // pass mark of 90 — a confident PASS off half the evidence. The floor is what stops the page
     // telling someone they are through on that.
     await play('cut', a => a.median);
@@ -376,7 +392,7 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     expect(res.body.data.coverage).toBeLessThan(MIN_COVERAGE_FOR_VERDICT);
     expect(res.body.data.status).toBe('provisional');
     // The arithmetic is still returned; it just isn't a verdict.
-    expect(res.body.data.score).toBe(100);
+    expect(res.body.data.score).toBe(120);
     expect(res.body.data.score).toBeGreaterThan(res.body.data.cutoff);
   });
 
@@ -402,22 +418,22 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
 
   it('renormalises the score over the weight it actually measured', async () => {
     // Only CUT and SAT played — that's all of Strategic Task Management and nothing else. The
-    // score must report what that domain implies (median → 100), not a total dragged toward zero
+    // score must report what that domain implies (median → 120), not a total dragged toward zero
     // by five unmeasured domains.
     await play('cut', a => a.median);
     await play('sat', a => a.median);
 
     const res = await request(app).get('/api/games/cbat/report/control-officer-atc').set('Cookie', cookie);
 
-    expect(res.body.data.score).toBe(100);
+    expect(res.body.data.score).toBe(120);
     // 49 of 100 weight measured — the caveat the UI leads the score with.
     expect(res.body.data.coverage).toBe(49);
   });
 
   it('scores a mixed Hard and Easier history on the Hard runs alone', async () => {
     // The case a real player is actually in: some runs on each difficulty. The Easier ones are set
-    // to a score that would clamp the stanine to 9 if they leaked in, so a stanine of exactly 5
-    // proves only the Hard runs were read.
+    // to a score that would clamp the stanine to 9 if they leaked in, so a stanine of exactly 6 —
+    // the median anchor plus the cohort shift — proves only the Hard runs were read.
     await play('cut', a => a.median);                    // 3 Hard runs at the median
     const easier = CBAT_GAMES['cut-easier'];
     for (let i = 0; i < 10; i++) {
@@ -428,7 +444,7 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     const cut = res.body.data.domains.find(d => d.key === 'StrgcTM').tests.find(t => t.code === 'CUT');
 
     expect(cut.state).toBe('scored');
-    expect(cut.stanine).toBe(5);
+    expect(cut.stanine).toBe(6);
     expect(cut.played[0].runs).toBe(3);                  // the 10 Easier runs are not in the window
     expect(cut.played[0].form).toBe(STANINE_ANCHORS.cut.median);
   });
@@ -572,8 +588,8 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     const cut = res.body.data.domains.find(d => d.key === 'StrgcTM').tests.find(t => t.code === 'CUT');
 
     expect(cut.state).toBe('scored');
-    expect(cut.stanine).toBe(5);
-    expect(cut.nextTarget.stanine).toBe(6);
+    expect(cut.stanine).toBe(6);                         // median anchor, plus the cohort shift
+    expect(cut.nextTarget.stanine).toBe(7);
     // Strictly above the median they're currently averaging, or it isn't a target.
     expect(cut.nextTarget.score).toBeGreaterThan(STANINE_ANCHORS.cut.median);
   });
@@ -637,7 +653,7 @@ describe('admin: reading another player\'s report', () => {
       .set('Cookie', adminCookie);
 
     expect(mine.body.data.score).toBeNull();
-    expect(theirs.body.data.score).toBe(100);
+    expect(theirs.body.data.score).toBe(120);
     expect(theirs.body.data.viewingAs.agentNumber).toBe('1000009');
   });
 
@@ -766,14 +782,17 @@ describe('GET /api/games/cbat/report-users', () => {
   });
 
   it('counts how many roles each listed player clears', async () => {
-    // Median play across every scorable game scores 100 — which clears the ten roles with a cutoff
-    // of 80/90/95/100 and misses Pilot (112). The exact split matters less than the two facts the
-    // pill relies on: it is non-zero for a capable player, and it is not simply "all roles".
+    // One stanine below the median, which the cohort shift reads back as a straight 5 and so
+    // scores 100 — clearing the ten roles with a cutoff of 80/90/95/100 and missing Pilot (112).
+    // The exact split matters less than the two facts the pill relies on: it is non-zero for a
+    // capable player, and it is not simply "all roles". Median play itself now scores 120 and
+    // would clear every role, which tests nothing.
     const capable = await createUser({ agentNumber: '6000001' });
     for (const gameKey of SCORED_GAME_KEYS) {
       const cfg = CBAT_GAMES[gameKey];
+      const score = stanines(-1)(STANINE_ANCHORS[gameKey]);
       for (let i = 0; i < FORM_MIN_RUNS; i++) {
-        await cfg.Model.create(makeDoc(cfg, capable._id, STANINE_ANCHORS[gameKey].median));
+        await cfg.Model.create(makeDoc(cfg, capable._id, score));
       }
     }
 
