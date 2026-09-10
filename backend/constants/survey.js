@@ -146,9 +146,13 @@ const RATING_MAX = 5;
 // the respondent's name on it, which is why it is consented to explicitly,
 // stored under its own provenance, and deletable by the person who sent it.
 
-// Sheets per invite. A battery runs to two or three pages at most; the cap is
-// there so a public endpoint cannot be used as free image hosting.
-const MAX_RESULT_IMAGES = 4;
+// Sheets per invite.
+//
+// A real score sheet is usually more than one page: the samples we collected by
+// hand come in pairs, photographed seconds apart. Six leaves room for a
+// three-page battery shot twice, or a covering letter alongside it, while still
+// being low enough that a public endpoint cannot be used as free image hosting.
+const MAX_RESULT_IMAGES = 6;
 
 // Ceiling on the decoded image, applied server-side.
 //

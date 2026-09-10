@@ -146,7 +146,7 @@ const BOOKED_GRACE_DAYS = 7
 const DEFAULT_DEFER_DAYS = 60
 
 // The score sheet step. Mirrors backend/constants/survey.js.
-const MAX_SHEETS = 4
+const MAX_SHEETS = 6
 
 // Photos are downscaled in the browser before they are sent.
 //
@@ -891,32 +891,39 @@ function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, o
     // second. The real path has no such problem because the server hands back
     // the whole list every time.
     let local = sheets
+    // One bad page must not throw away the good ones. Someone sending a
+    // three-page sheet in one go should end up with the two that worked and a
+    // line about the third, not an empty list and an error.
+    const failed = []
     try {
       for (const file of files) {
-        if (!file.type.startsWith('image/')) throw new Error('That file is not an image.')
-        const dataUrl = await prepareSheet(file)
+        try {
+          if (!file.type.startsWith('image/')) throw new Error(`${file.name} is not an image.`)
+          const dataUrl = await prepareSheet(file)
 
-        // The demo never sends anything. It keeps the downscaled image in
-        // memory so the thumbnail, the count and the remove button all behave
-        // exactly as they would, and says plainly that nothing left the page.
-        if (preview) {
-          local = [...local, { _id: `preview-${Date.now()}-${local.length}`, url: dataUrl, uploadedAt: new Date().toISOString() }]
+          // The demo never sends anything. It keeps the downscaled image in
+          // memory so the thumbnail, the count and the remove button all behave
+          // exactly as they would, and says plainly that nothing left the page.
+          if (preview) {
+            local = [...local, { _id: `preview-${Date.now()}-${local.length}`, url: dataUrl, uploadedAt: new Date().toISOString() }]
+            onSheets(local)
+            continue
+          }
+
+          const res = await fetch(`${API}/api/survey/${token}/cbat-result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUrl }),
+          })
+          const data = await res.json().catch(() => ({}))
+          if (!res.ok) throw new Error(data.message || 'That did not upload. Please try again.')
+          local = data.data?.images ?? []
           onSheets(local)
-          continue
+        } catch (err) {
+          failed.push(err.message)
         }
-
-        const res = await fetch(`${API}/api/survey/${token}/cbat-result`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataUrl }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.message || 'That did not upload. Please try again.')
-        local = data.data?.images ?? []
-        onSheets(local)
       }
-    } catch (err) {
-      setError(err.message)
+      if (failed.length) setError(failed.join(' '))
     } finally {
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -947,7 +954,7 @@ function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, o
           One last thing, and it is optional
         </h1>
         <p className="text-sm text-slate-500 leading-relaxed">
-          Would you send a photo of your score sheet?
+          Would you send us photos of your score sheet?
         </p>
       </div>
 
@@ -967,6 +974,12 @@ function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, o
         <p className="text-sm text-slate-700 leading-relaxed mb-3">
           A sheet is just as useful whether you passed or not. Knowing where the line actually
           falls is the part we cannot work out on our own.
+        </p>
+        {/* Said early and plainly, because a score sheet usually runs to more
+            than one page and the singular ask gets one page sent. */}
+        <p className="text-sm text-slate-700 leading-relaxed mb-3">
+          If yours runs to more than one page, please send every page. You can choose several
+          photos at once, up to {MAX_SHEETS}.
         </p>
 
         {/* Said before the button, not after it, and said plainly. This is the
@@ -1031,12 +1044,12 @@ function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, o
         >
           {busy ? 'Sending…'
             : full ? `That is the maximum of ${MAX_SHEETS}`
-            : sheets.length ? 'Add another photo'
-            : 'Choose a photo'}
+            : sheets.length ? 'Add another page'
+            : 'Choose photos'}
         </button>
 
         <p className="text-[11px] text-slate-500 leading-relaxed mt-2 text-center">
-          Sending one means you are happy for us to store it for the purpose above. See our{' '}
+          Sending them means you are happy for us to store them for the purpose above. See our{' '}
           <Link to="/privacy" className="font-semibold text-slate-600 hover:text-slate-700">
             privacy policy
           </Link>.

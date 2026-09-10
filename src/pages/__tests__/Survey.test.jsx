@@ -783,6 +783,53 @@ describe('Survey — the score sheet ask', () => {
     expect(sheets).toHaveLength(0)
   })
 
+  // A real score sheet usually runs to more than one page, so sending several
+  // at once is the normal case rather than an edge one.
+  it('takes several pages in one go', async () => {
+    await reachAsk()
+    await screen.findByTestId('survey-upload')
+
+    vi.stubGlobal('Image', FakeImage)
+    const pages = [
+      new File(['page-one'], 'page1.jpg', { type: 'image/jpeg' }),
+      new File(['page-two'], 'page2.jpg', { type: 'image/jpeg' }),
+    ]
+    fireEvent.change(screen.getByTestId('survey-upload-file'), { target: { files: pages } })
+    await advance()
+
+    await waitFor(() => expect(sheets).toHaveLength(2))
+    expect(screen.getByTestId('survey-upload-list').children).toHaveLength(2)
+    expect(screen.getByText(/Add another page/)).toBeInTheDocument()
+  })
+
+  // Losing the pages that worked because a later one did not is the one failure
+  // that would actually cost us a sheet.
+  it('keeps the pages that worked when one of them fails', async () => {
+    await reachAsk()
+    await screen.findByTestId('survey-upload')
+
+    vi.stubGlobal('Image', FakeImage)
+    let seen = 0
+    const passthrough = global.fetch
+    global.fetch = vi.fn(async (url, opts) => {
+      if (String(url).includes('/cbat-result') && opts?.method === 'POST' && ++seen === 2) {
+        return { ok: false, json: async () => ({ message: 'page2.jpg was too large.' }) }
+      }
+      return passthrough(url, opts)
+    })
+
+    fireEvent.change(screen.getByTestId('survey-upload-file'), {
+      target: { files: [
+        new File(['ok'],  'page1.jpg', { type: 'image/jpeg' }),
+        new File(['bad'], 'page2.jpg', { type: 'image/jpeg' }),
+      ] },
+    })
+    await advance()
+
+    expect(await screen.findByTestId('survey-upload-error')).toHaveTextContent('page2.jpg')
+    expect(screen.getByTestId('survey-upload-list').children).toHaveLength(1)
+  })
+
   it('surfaces a refusal rather than pretending it worked', async () => {
     await reachAsk()
     await screen.findByTestId('survey-upload')
@@ -801,7 +848,7 @@ describe('Survey — the score sheet ask', () => {
     mockApi({ resultImages: [{ _id: 'old1', url: 'https://cdn/old.jpg' }] })
     await reachAsk()
     expect(await screen.findByTestId('survey-upload-list')).toBeInTheDocument()
-    expect(screen.getByText(/Add another photo/)).toBeInTheDocument()
+    expect(screen.getByText(/Add another page/)).toBeInTheDocument()
   })
 
   it('keeps the demo entirely in the browser', async () => {
