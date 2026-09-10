@@ -23,6 +23,10 @@ const UpdateNotification = require('../../models/UpdateNotification');
 const SystemLog          = require('../../models/SystemLog');
 const AdminAction        = require('../../models/AdminAction');
 const EmailLog           = require('../../models/EmailLog');
+const SurveyInvite       = require('../../models/SurveyInvite');
+const SurveyResponse     = require('../../models/SurveyResponse');
+const DonationPageVisit  = require('../../models/DonationPageVisit');
+const ClipperScript      = require('../../models/ClipperScript');
 
 beforeAll(async () => {
   await db.connect();
@@ -244,6 +248,83 @@ describe('DELETE /api/admin/users/:id', () => {
   });
 });
 
+describe('the dispositions the guard rail cannot check', () => {
+  // The questionnaire is deleted, not kept for the research. The invite holds
+  // the address we mailed and the response is free text about someone's own
+  // application, neither of which survives de-identification by dropping a
+  // column.
+  it('takes the outcome questionnaire with the account', async () => {
+    const user = await createUser();
+    const invite = await SurveyInvite.create({
+      userId: user._id,
+      token: SurveyInvite.newToken(),
+      sentToEmail: user.email,
+    });
+    await SurveyResponse.create({
+      inviteId: invite._id,
+      userId: user._id,
+      campaign: 'cbat_outcome_2026',
+      gaps: 'The SLT was nothing like the practice one.',
+    });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    expect(await SurveyInvite.countDocuments({ userId: user._id })).toBe(0);
+    expect(await SurveyResponse.countDocuments({ userId: user._id })).toBe(0);
+  });
+
+  // Someone who was asked for a donation was still asked after they leave, so
+  // the row stays and the person goes. Both columns have to be rewritten: for a
+  // signed-in visit the unique key is the account id itself.
+  it('keeps a donation visit but unlinks it, key included', async () => {
+    const user = await createUser();
+    await DonationPageVisit.create({ visitKey: String(user._id), userId: user._id });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    expect(await DonationPageVisit.countDocuments({})).toBe(1);
+    const row = await DonationPageVisit.findOne({});
+    expect(row.userId).toBeNull();
+    expect(row.visitKey).not.toBe(String(user._id));
+    expect(row.visitKey).not.toContain(String(user._id));
+  });
+
+  // Two accounts erased in turn must not collide on the unique key.
+  it('gives each erased visit its own key', async () => {
+    const a = await createUser();
+    const b = await createUser();
+    await DonationPageVisit.create({ visitKey: String(a._id), userId: a._id });
+    await DonationPageVisit.create({ visitKey: String(b._id), userId: b._id });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(a._id));
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(b._id));
+
+    const keys = (await DonationPageVisit.find({}).lean()).map(r => r.visitKey);
+    expect(keys).toHaveLength(2);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  // Clipper is admin tooling: the script is app content that outlives whoever
+  // queued it, so only the byline goes.
+  // Removed by another admin, not by themselves: an admin cannot self-delete,
+  // deliberately, or the app could be left with no way back in.
+  it('keeps an admin Clipper script and drops its byline', async () => {
+    const remover = await createAdminUser();
+    const leaving = await createAdminUser();
+    const script  = await ClipperScript.create({ createdBy: leaving._id });
+
+    const res = await request(app)
+      .delete(`/api/admin/users/${leaving._id}`)
+      .set('Cookie', authCookie(remover._id))
+      .send({ reason: 'left the team' });
+    expect(res.status).toBe(200);
+
+    const after = await ClipperScript.findById(script._id);
+    expect(after).not.toBeNull();
+    expect(after.createdBy).toBeNull();
+  });
+});
+
 // Guard rail: a new model with a `userId` ref to User is invisible to the
 // cascade unless it's listed. This fails the moment someone adds one without
 // deciding whether it should be deleted or anonymised.
@@ -261,6 +342,10 @@ describe('cascade coverage', () => {
       // Handled explicitly in the service, not via the tables above.
       'User', 'ChatConversation', 'ChatMessage', 'ChatRead', 'UpdateNotification',
       'SystemLog', 'AdminAction', 'EmailLog',
+      // Anonymised in place rather than deleted or null-ed: for a signed-in
+      // visit the unique `visitKey` IS the account id, so the row needs both
+      // columns rewritten and cannot be expressed as an authorship ref.
+      'DonationPageVisit',
     ]);
 
     const unhandled = referencing.filter((m) => !handled.has(m));

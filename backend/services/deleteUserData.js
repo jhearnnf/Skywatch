@@ -36,6 +36,8 @@ const OWNED_BY_USER = [
   'GameSessionCbatFlagResult',
   'GameSessionCbatFlagEasierResult',
   'GameSessionCbatInstrumentsResult',
+  'GameSessionCbatMatfResult',
+  'GameSessionCbatMatfEasierResult',
   'GameSessionCbatNumericalOpsResult',
   'GameSessionCbatNumericalOpsEasierResult',
   'GameSessionCbatPlaneTurnResult',
@@ -43,14 +45,23 @@ const OWNED_BY_USER = [
   'GameSessionCbatRttEasierResult',
   'GameSessionCbatSatResult',
   'GameSessionCbatSatEasierResult',
+  'GameSessionCbatSitResult',
+  'GameSessionCbatSitEasierResult',
+  'GameSessionCbatSltResult',
+  'GameSessionCbatSltEasierResult',
+  'GameSessionCbatSmaResult',
+  'GameSessionCbatSmaEasierResult',
   'GameSessionCbatStart',
   'GameSessionCbatSymbolsResult',
   'GameSessionCbatTargetResult',
   'GameSessionCbatTrace1Result',
   'GameSessionCbatTrace2Result',
   'GameSessionCbatTutorial',
+  'GameSessionCbatVigilanceResult',
   'GameSessionCbatVisualisation2DResult',
   'GameSessionCbatVisualisation3DResult',
+  'GameSessionCbatVltResult',
+  'GameSessionCbatVltEasierResult',
   'GameSessionFlashcardRecallResult',
   'GameSessionOrderOfBattleResult',
   'GameSessionQuizAttempt',
@@ -59,6 +70,18 @@ const OWNED_BY_USER = [
   'GameSessionWheresThatAircraftResult',
   'IntelligenceBriefRead',
   'ProblemReport',
+  // The outcome questionnaire, both halves.
+  //
+  // Deleted rather than kept for the research, which is a real loss: these
+  // answers are scarce and the campaign exists to gather them. But the invite
+  // stores the address we actually mailed, and the response is free text
+  // somebody wrote about their own application and their own result, which is
+  // not something that can be safely de-identified by dropping a column.
+  //
+  // Deleting the invite is also what stops the account being re-mailed, though
+  // by this point there is no account left to mail.
+  'SurveyInvite',
+  'SurveyResponse',
   'UserNotification',
 ];
 
@@ -73,6 +96,10 @@ const AUTHORSHIP_REFS = [
   // The bot's guide is app content that outlives whoever uploaded it.
   ['BotKnowledge',       ['uploadedByUserId']],
   ['BriefReel',          ['generatedBy', 'publishedBy']],
+  // Clipper is admin tooling: a script and its source footage are app content
+  // that outlive whichever admin queued them.
+  ['ClipperScript',      ['createdBy']],
+  ['ClipperSource',      ['ingestedBy']],
   ['ChatConversation',   ['closedByUserId', 'archivedByUserId']],
   ['ChatMessage',        ['deletedByUserId']],
   // reportedUserId: a chat report outlives the account that was reported — the
@@ -196,6 +223,28 @@ async function deleteUserAndData(userId, context = {}) {
       await model(modelName).updateMany({ [field]: id }, { $set: { [field]: null } });
     }
   }
+
+  // 5b. The donation funnel keeps its shape, and loses the person.
+  //
+  //     Deleting the row would be simpler but would quietly rewrite history:
+  //     the page counts PEOPLE ASKED, and somebody who was asked was still
+  //     asked after they close their account. Nulling `userId` alone is not
+  //     enough either — for a signed-in visit `visitKey` IS the account id, so
+  //     the identifier would survive in the column the row is keyed on.
+  //
+  //     So both go, and the row becomes exactly what an anonymous visit already
+  //     looks like in this collection. Nothing reads `visitKey` back to anyone;
+  //     it exists only to fold repeat visits into one row, and a fresh random
+  //     value keeps doing that job for a row that will never be visited again.
+  const visits = await model('DonationPageVisit')
+    .find({ userId: id }).select('_id').lean();
+  for (const visit of visits) {
+    await model('DonationPageVisit').updateOne(
+      { _id: visit._id },
+      { $set: { userId: null, visitKey: `erased:${new mongoose.Types.ObjectId()}` } },
+    );
+  }
+  deleted.DonationPageVisit = visits.length;
 
   // 6. The account itself, last. The returned doc is the only chance to read
   //    the email — it's needed to derive the register's pseudonymous ref, and a
