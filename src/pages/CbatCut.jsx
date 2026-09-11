@@ -19,10 +19,10 @@ import {
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import {
   GAME_MS, TICK_MS, SYSTEMS, SYSTEM_LABELS, SCORE, grade, award,
-  makeSim, advanceSim, scheduleNextLoad, pushMessage, randRange, fmtWall, fmtClock,
+  makeSim, advanceSim, computeWarnings, scheduleNextLoad, pushMessage, rand, randRange, code3, fmtWall, fmtClock,
   FUEL_MAX_SPREAD, SPEED_TOL, SPEED_STEP, SENSOR_ARM_WINDOW,
   AIR_INTERVAL, GROUND_INTERVAL, LOAD_RELEASE_WINDOW, LOAD_POINTS, stationName,
-  PRESS_LOW, PRESS_HIGH, CODE_SUBMIT_WINDOW,
+  PRESS_LOW, PRESS_HIGH, CODE_WINDOW, CODE_SUBMIT_WINDOW,
 } from '../utils/cbat/cutSim'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatDemo } from '../utils/cbat/demoMode'
@@ -35,7 +35,9 @@ function Panel({ title, accent = '#5baaff', children, pad = true }) {
         style={{ color: accent }}>
         {title}
       </div>
-      <div className={`flex-1 min-h-0 overflow-auto ${pad ? 'p-2' : ''}`}>{children}</div>
+      {/* `cbat-panel-body` is a hook for the tutorial, which lets these overflow
+          so a guide arrow hanging above a top-row control is not clipped. */}
+      <div className={`cbat-panel-body flex-1 min-h-0 overflow-auto ${pad ? 'p-2' : ''}`}>{children}</div>
     </div>
   )
 }
@@ -45,7 +47,22 @@ function Panel({ title, accent = '#5baaff', children, pad = true }) {
 // is the in-game Clock (HH:MM:SS) at the moment it arrived. `mt-auto` keeps the
 // list pinned to the bottom (so a short list fills from the bottom rather than
 // leaving a gap), and we auto-scroll to the newest whenever one lands.
-function MessagePanel({ messages }) {
+//
+// `litId` / `arrowId` / `emphasis` are tutorial-only: the line to light up, the
+// line to point at, and which token of the lit line to call out — 'time' for
+// its HH:MM:SS, 'station' for its "Station N". All default off, so a run
+// renders exactly as before.
+const EMPHASIS_RE = { time: /(\d{2}:\d{2}:\d{2})/, station: /(Station \d)/, code: /(\b\d{3}\b)/ }
+
+function emphasise(text, emphasis) {
+  const re = EMPHASIS_RE[emphasis]
+  if (!re) return text
+  // split on a capturing group keeps the token as its own part.
+  return text.split(re).map((part, i) =>
+    re.test(part) ? <strong key={i} className="cbat-tutorial-emph">{part}</strong> : part)
+}
+
+function MessagePanel({ messages, litId = null, arrowId = null, emphasis = null }) {
   const scrollRef = useRef(null)
   const lastId = messages.length ? messages[messages.length - 1].id : null
   useEffect(() => {
@@ -60,9 +77,12 @@ function MessagePanel({ messages }) {
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
         <ul className="mt-auto space-y-1">
           {messages.map(m => (
-            <li key={m.id} className="text-[11px] leading-snug text-[#ddeaf8] flex gap-2">
+            <li key={m.id} className="text-[11px] leading-snug text-[#ddeaf8] flex gap-2 items-baseline">
+              {m.id === arrowId && <GuideArrow dir="right" inline />}
               <span className="text-slate-500 font-mono shrink-0">{m.wall}</span>
-              <span>{m.text}</span>
+              <span className={m.id === litId ? 'cbat-word-lit font-bold' : ''}>
+                {m.id === litId ? emphasise(m.text, emphasis) : m.text}
+              </span>
             </li>
           ))}
         </ul>
@@ -71,7 +91,8 @@ function MessagePanel({ messages }) {
   )
 }
 
-function EnginePanel({ fuel, onToggle }) {
+// `arrowTank` / `arrowUrgent` are tutorial-only and default off.
+function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false }) {
   const levels = fuel.map(f => f.level)
   const maxLevel = Math.max(...levels)
   const spread = maxLevel - Math.min(...levels)
@@ -99,10 +120,11 @@ function EnginePanel({ fuel, onToggle }) {
               <button
                 onClick={() => onToggle(i)}
                 data-demo-answer
-                className={`mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
+                className={`relative mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
                   f.on ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
                 }`}
               >
+                {i === arrowTank && <GuideArrow dir="right" urgent={arrowUrgent} />}
                 {f.on ? 'ON' : 'OFF'}
               </button>
             </div>
@@ -116,7 +138,9 @@ function EnginePanel({ fuel, onToggle }) {
   )
 }
 
-function NavigationPanel({ speed, requiredSpeed, onAdjust }) {
+// `arrowPlus` / `arrowMinus` / `holdOk` / `arrowUrgent` are tutorial-only and
+// default off. `holdOk` is the "you are on the number, leave it" mark.
+function NavigationPanel({ speed, requiredSpeed, onAdjust, arrowPlus = false, arrowMinus = false, holdOk = false, arrowUrgent = false }) {
   const diff = speed - requiredSpeed
   const ok = Math.abs(diff) <= SPEED_TOL
   return (
@@ -125,7 +149,10 @@ function NavigationPanel({ speed, requiredSpeed, onAdjust }) {
         <div className="flex gap-6 items-end">
           <div className="text-center">
             <p className="text-[9px] uppercase tracking-wide text-slate-500">Current</p>
-            <p className={`text-3xl font-mono font-bold ${ok ? 'text-green-400' : 'text-red-400'}`}>{Math.round(speed)}</p>
+            <p className={`text-3xl font-mono font-bold flex items-center justify-center ${ok ? 'text-green-400' : 'text-red-400'}`}>
+              {holdOk && <GuideOk />}
+              {Math.round(speed)}
+            </p>
           </div>
           <div className="text-center">
             <p className="text-[9px] uppercase tracking-wide text-slate-500">Required</p>
@@ -134,8 +161,14 @@ function NavigationPanel({ speed, requiredSpeed, onAdjust }) {
         </div>
         <p className="text-[10px] text-slate-400">Hold within ±{SPEED_TOL} kts (aim for required + {SPEED_TOL})</p>
         <div className="flex gap-3">
-          <button onClick={() => onAdjust(-SPEED_STEP)} className="px-4 py-2 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-lg font-bold rounded cursor-pointer">−</button>
-          <button onClick={() => onAdjust(SPEED_STEP)} className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold rounded cursor-pointer">+</button>
+          <button onClick={() => onAdjust(-SPEED_STEP)} className="relative px-4 py-2 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-lg font-bold rounded cursor-pointer">
+            {arrowMinus && <GuideArrow dir="up" urgent={arrowUrgent} />}
+            −
+          </button>
+          <button onClick={() => onAdjust(SPEED_STEP)} className="relative px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold rounded cursor-pointer">
+            {arrowPlus && <GuideArrow dir="up" urgent={arrowUrgent} />}
+            +
+          </button>
         </div>
       </div>
     </Panel>
@@ -144,7 +177,8 @@ function NavigationPanel({ speed, requiredSpeed, onAdjust }) {
 
 // Hoisted (never define a component inside another's render — it remounts the
 // subtree each render; see the numpad regression in project memory).
-function SensorRow({ label, rem, kind, onActivate }) {
+// `arrow` / `urgent` are tutorial-only and default off.
+function SensorRow({ label, rem, kind, onActivate, arrow = false, urgent = false }) {
   const overdue = rem < 0
   const armed = rem <= SENSOR_ARM_WINDOW / 1000
   return (
@@ -154,16 +188,18 @@ function SensorRow({ label, rem, kind, onActivate }) {
         {overdue ? 'OVERDUE' : `${Math.ceil(rem)}s`}
       </span>
       <button onClick={() => onActivate(kind)} data-demo-answer
-        className={`px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+        className={`relative px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
           armed || overdue ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
         }`}>
+        {arrow && <GuideArrow dir="down" urgent={urgent} />}
         Activate
       </button>
     </div>
   )
 }
 
-function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt, onCamera, onActivate }) {
+// `arrowCamera` / `arrowSensor` / `arrowUrgent` are tutorial-only and default off.
+function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt, onCamera, onActivate, arrowCamera = null, arrowSensor = null, arrowUrgent = false }) {
   const airRem = (airDueAt - elapsedMs) / 1000
   const groundRem = (groundDueAt - elapsedMs) / 1000
   return (
@@ -174,22 +210,26 @@ function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt,
           <div className="flex gap-2">
             {['Alpha', 'Bravo'].map(c => (
               <button key={c} onClick={() => onCamera(c)} data-demo-answer
-                className={`flex-1 px-2 py-1.5 text-[11px] font-bold rounded cursor-pointer transition-colors ${
+                className={`relative flex-1 px-2 py-1.5 text-[11px] font-bold rounded cursor-pointer transition-colors ${
                   camera === c ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
                 }`}>
+                {c === arrowCamera && <GuideArrow dir="down" urgent={arrowUrgent} />}
                 {c}
               </button>
             ))}
           </div>
         </div>
-        <SensorRow label="Air sensor (every 45s)" rem={airRem} kind="air" onActivate={onActivate} />
-        <SensorRow label="Ground sensor (every 90s)" rem={groundRem} kind="ground" onActivate={onActivate} />
+        <SensorRow label="Air sensor (every 45s)" rem={airRem} kind="air" onActivate={onActivate} arrow={arrowSensor === 'air'} urgent={arrowUrgent} />
+        <SensorRow label="Ground sensor (every 90s)" rem={groundRem} kind="ground" onActivate={onActivate} arrow={arrowSensor === 'ground'} urgent={arrowUrgent} />
       </div>
     </Panel>
   )
 }
 
-function MissionPanel({ onRelease }) {
+// `litStation` / `arrowStation` are tutorial-only and default off. A run must
+// never light a station — the panel giving nothing away is the whole task, and
+// CbatCut.mission.test.jsx holds it to that.
+function MissionPanel({ onRelease, litStation = null, arrowStation = null }) {
   return (
     <Panel title="Mission">
       <div className="flex flex-col items-center justify-center gap-3 h-full">
@@ -200,9 +240,13 @@ function MissionPanel({ onRelease }) {
             the station and its time live only in Message, so the release is a
             pure memory-updating task with no cue on the panel itself. */}
         <div className="flex gap-2">
+          {/* No wrapper element: a run's panel must contain the three buttons and
+              nothing else, and the mission test counts. The arrow, when there is
+              one, lives inside the button it points at. */}
           {Array.from({ length: LOAD_POINTS }, (_, i) => (
             <button key={i} onClick={() => onRelease(i)} data-demo-answer
-              className="px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]">
+              className={`relative px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]${i === litStation ? ' cbat-triple-pulse' : ''}`}>
+              {i === arrowStation && <GuideArrow dir="down" urgent />}
               {stationName(i)}
             </button>
           ))}
@@ -212,7 +256,14 @@ function MissionPanel({ onRelease }) {
   )
 }
 
-function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode }) {
+// `arrowPump` / `arrowKey` / `holdOk` / `arrowUrgent` are tutorial-only and
+// default off. `arrowKey` is a digit, 'CLR' or 'OK'; the key also pulses, since
+// an arrow hanging above a keypad key overlaps the key above it and the pulse
+// is what says which one is meant. `holdOk` marks pressure as fine where it is.
+// `waitHint` is the moment between the last digit and OK going live: the arrow
+// moves to the countdown and it says so in words, or a disabled OK looks broken.
+function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode, arrowPump = false, arrowKey = null, holdOk = false, waitHint = false, arrowUrgent = false }) {
+  const keyCls = (k) => (arrowKey === k ? ' cbat-triple-pulse' : '')
   const zone = pressure < PRESS_LOW ? 'LOW' : pressure > PRESS_HIGH ? 'HIGH' : 'CORRECT'
   const zoneCol = zone === 'CORRECT' ? 'text-green-400' : 'text-red-400'
   // Gauge fill 60–140 mapped to 0–100%.
@@ -239,13 +290,17 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
             <div className="absolute left-0 right-0 h-px bg-green-200" style={{ bottom: `${gaugePct(PRESS_LOW)}%` }} />
             <div className="absolute left-0 right-0 h-px bg-green-200" style={{ bottom: `${gaugePct(PRESS_HIGH)}%` }} />
           </div>
-          <p className={`text-base font-mono font-bold ${zoneCol}`}>{Math.round(pressure)}</p>
+          <p className={`text-base font-mono font-bold flex items-center ${zoneCol}`}>
+            {holdOk && <GuideOk />}
+            {Math.round(pressure)}
+          </p>
           <p className="text-[10px] font-mono text-slate-500">{PRESS_LOW}–{PRESS_HIGH}</p>
           <p className={`text-[9px] font-bold ${zoneCol}`}>{zone}</p>
           <button onClick={onPump} data-demo-answer
-            className={`mt-1 px-3 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+            className={`relative mt-1 px-3 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
               pump ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
             }`}>
+            {arrowPump && <GuideArrow dir="down" urgent={arrowUrgent} />}
             Pump {pump ? 'ON' : 'OFF'}
           </button>
         </div>
@@ -257,7 +312,12 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
             {code
               ? submitOpen
                 ? <span className={`text-[10px] font-mono ${codeRem <= 5 ? 'text-red-400' : 'text-amber-400'}`}>{codeRem}s</span>
-                : <span className="text-[10px] font-mono text-slate-400">submit in {armRem}s</span>
+                : waitHint
+                  ? <span className="flex items-center text-[10px] font-mono text-amber-400 font-bold" data-guide-wait>
+                      <GuideArrow dir="right" inline />
+                      wait, OK in {armRem}s
+                    </span>
+                  : <span className="text-[10px] font-mono text-slate-400">submit in {armRem}s</span>
               : <span className="text-[10px] text-slate-600">no code</span>}
           </div>
           {/* Keypad is inert until a code is actually issued. */}
@@ -265,11 +325,23 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
               flat keypad. The keys are never stretched to fill the panel. */}
           <div className={`grid grid-cols-3 gap-1 ${code ? '' : 'opacity-40 pointer-events-none'}`} aria-disabled={!code}>
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
-              <button key={d} onClick={() => onDigit(d)} disabled={!code} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed">{d}</button>
+              <button key={d} onClick={() => onDigit(d)} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
+                {arrowKey === d && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                {d}
+              </button>
             ))}
-            <button onClick={onClearCode} disabled={!code} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed">CLR</button>
-            <button onClick={() => onDigit('0')} disabled={!code} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed">0</button>
-            <button onClick={onSubmitCode} disabled={!submitOpen} className="aspect-[4/3] sm:aspect-auto sm:py-1 bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">OK</button>
+            <button onClick={onClearCode} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
+              {arrowKey === 'CLR' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+              CLR
+            </button>
+            <button onClick={() => onDigit('0')} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
+              {arrowKey === '0' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+              0
+            </button>
+            <button onClick={onSubmitCode} disabled={!submitOpen} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40${keyCls('OK')}`}>
+              {arrowKey === 'OK' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+              OK
+            </button>
           </div>
         </div>
       </div>
@@ -280,18 +352,25 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
 // Six-button multifunction index for one display stack. A label too wide for its
 // key is clipped at the right edge rather than wrapped or shrunk — half of
 // "NAVIGATION" still reads as Navigation, and every key stays the same size.
-function NavButtons({ active, onSelect }) {
+//
+// `arrowActive` is tutorial-only and defaults off: hang a guide arrow under the
+// selected key, pointing up at it. Buttons are overflow-hidden to clip their
+// labels, so the arrow lives in a wrapper around each one instead of inside it.
+function NavButtons({ active, onSelect, arrowActive = false }) {
   return (
     <div className="w-full h-full flex gap-1">
       {SYSTEMS.map(k => (
         // Swapping displays is the game — a demo card that never presses these
         // shows the same two panels for its whole run.
-        <button key={k} onClick={() => onSelect(k)} data-demo-answer
-          className={`flex-1 min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
-            active === k ? 'bg-green-600 text-white' : 'bg-[#0f2240] text-[#ddeaf8] hover:bg-[#163055] hover:text-white'
-          }`}>
-          {SYSTEM_LABELS[k]}
-        </button>
+        <span key={k} className="relative flex-1 min-w-0 flex">
+          {arrowActive && active === k && <GuideArrow dir="up" />}
+          <button onClick={() => onSelect(k)} data-demo-answer
+            className={`w-full min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
+              active === k ? 'bg-green-600 text-white' : 'bg-[#0f2240] text-[#ddeaf8] hover:bg-[#163055] hover:text-white'
+            }`}>
+            {SYSTEM_LABELS[k]}
+          </button>
+        </span>
       ))}
     </div>
   )
@@ -372,18 +451,76 @@ function ResultsScreen({ stats, tuning }) {
 }
 
 // ── Tutorial ─────────────────────────────────────────────────────────────────
-// A walkthrough of a FROZEN board. CUT has the steepest learning curve of any
-// game on the roster (measured across players with 5+ runs, mean score by run
-// number runs 298, 403, 460, 552, 623, 645, 708 against a population median of
-// 604), and almost all of that climb is learning where things are rather than
-// getting better at the underlying task. This exists to take that first slice
-// off, so an early score says something about the player instead of about how
-// many times they have seen the layout.
+// A small pointer that walks the eye through a step with more than one part to
+// it. 'down' hangs above its anchor, which must be position:relative; 'right'
+// sits inline just before it. Same arrow Target's practice mode uses.
 //
-// It costs almost nothing to run because `advanceSim(sim, dt)` is a pure
-// function of an explicit dt: not calling it IS the pause. So these are the
-// real panels reading a real sim state, not mock-ups that can drift away from
-// the game they are teaching.
+// Positioned variants hang off the element they point at, which must be
+// position:relative: 'down' sits above it, 'up' below it, 'right' to its left
+// and 'left' to its right. `inline` instead puts the arrow in normal flow just
+// before its anchor, for a line of text or a readout.
+const ARROW_CLASS = {
+  down: 'cbat-tutorial-arrow',
+  up: 'cbat-tutorial-arrow-up',
+  right: 'cbat-tutorial-arrow-right',
+  left: 'cbat-tutorial-arrow-left',
+}
+const ARROW_ROTATE = { down: 0, up: 180, right: -90, left: 90 }
+
+// The opposite of an arrow: "this is right, leave it". Sits inline before the
+// value it approves of.
+function GuideOk() {
+  return (
+    <span className="cbat-tutorial-ok" data-guide-ok aria-hidden>{'\u{1F44D}'}</span>
+  )
+}
+
+function GuideArrow({ dir = 'down', inline = false, urgent = false }) {
+  const base = inline ? 'cbat-tutorial-arrow-inline' : ARROW_CLASS[dir]
+  const sideways = dir === 'right' || dir === 'left'
+  const w = sideways ? (urgent ? 30 : 24) : (urgent ? 40 : 32)
+  const h = sideways ? (urgent ? 30 : 24) : (urgent ? 46 : 37)
+  return (
+    <span
+      className={`${base} cbat-tutorial-arrow-bright${urgent ? ' cbat-tutorial-arrow-urgent' : ''}`}
+      style={!inline && dir === 'down' ? { left: '50%', top: 0 } : undefined}
+      data-guide-arrow={dir}
+      data-guide-urgent={urgent || undefined}
+      aria-hidden
+    >
+      {/* Big, white-edged and glowing: it has to read from across the board,
+          not just up close. */}
+      <svg
+        width={w}
+        height={h}
+        viewBox="0 0 24 28"
+        style={{ display: 'block', transform: ARROW_ROTATE[dir] ? `rotate(${ARROW_ROTATE[dir]}deg)` : undefined }}
+      >
+        <path d="M12 27 L3 15 H9 V2 H15 V15 H21 Z" fill="#5baaff" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />
+      </svg>
+    </span>
+  )
+}
+
+// A walkthrough of the real board, one display at a time. CUT has the steepest
+// learning curve of any game on the roster (measured across players with 5+
+// runs, mean score by run number runs 298, 403, 460, 552, 623, 645, 708 against
+// a population median of 604), and almost all of that climb is learning where
+// things are rather than getting better at the underlying task. This exists to
+// take that first slice off, so an early score says something about the player
+// instead of about how many times they have seen the layout.
+//
+// These are the real panels reading a real sim state, not mock-ups that can
+// drift away from the game they are teaching. But the sim is not driven by
+// `advanceSim`: that moves everything at once, and a board that has been
+// decaying for the three minutes someone spends reading eight cards is a mess
+// by the end, with warnings from displays they have not reached yet. Instead
+// `tickTutorial` moves ONLY the display the current step is about — fuel drains
+// on the Engine step, airspeed drifts on Navigation, pressure on System — and
+// `resetForStep` puts everything back in tolerance on every step change. The
+// clock always runs. So each step shows exactly one thing happening, it is the
+// thing the card is describing, and ignoring it long enough produces the same
+// warning it would in a run, which is the lesson.
 //
 // Per-playthrough id for tutorial usage tracking. Stamped once per mount; the
 // backend dedupes/upserts on it so repeated progress reports for the same
@@ -395,33 +532,169 @@ function makeTutorialRunId() {
   return `tut_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-// A fresh sim, plus the two states a board frozen at t=0 would never show on its
-// own: a standing camera order, and a live comms code with its OK already armed.
-// Without them the Sensor and System steps would be teaching greyed-out controls.
+// On the Sensor step the two countdowns start short, so the user sees one arm
+// (amber) and can press Activate within the time it takes to read the card,
+// rather than staring at "45s" for a step that lasts fifteen.
+const TUTORIAL_AIR_DUE_MS = 8_000
+const TUTORIAL_GROUND_DUE_MS = 20_000
+// On the Mission step a drop is ordered this far out: long enough to read the
+// card and find the clock, short enough that the moment actually arrives.
+const TUTORIAL_LOAD_DUE_MS = 15_000
+// The Mission step walks the eye through the order in three moves: the arrow
+// sits on the Message line for this long, then moves to the clock until the
+// drop is due, then jumps to the ordered station and gets urgent.
+const TUTORIAL_READ_MS = 5_000
+
+// On the System step the first comms code arrives this long after entry, so the
+// pump has the board to itself for a moment before the second job starts.
+const TUTORIAL_CODE_AT_MS = 6_000
+// Pressure is seeded this close to the bottom of the band with the pump off, so
+// the first thing the step asks for is the pump, within seconds.
+const TUTORIAL_PRESSURE_START = 93
+// A calm pump prompt this far inside the band, in the direction pressure is
+// moving: "it is about to go, toggle now" rather than waiting for the warning.
+const TUTORIAL_PRESSURE_MARGIN = 3
+
+const tutorialClockAt = (sim, ms) => fmtWall(sim.clockStartSec + ms / 1000)
+
+// Issue a comms code the way a run does: through Message, with a full window,
+// so the keypad is live at once but OK is not until the final 15 seconds. The
+// line's id is kept so the step can point at it and call out the digits.
+function issueTutorialCode(sim) {
+  sim.code = { digits: code3(), dueAt: sim.elapsedMs + CODE_WINDOW }
+  sim.codeEntry = ''
+  sim.codeOrderedAt = sim.elapsedMs
+  pushMessage(sim, `COMMS: code ${sim.code.digits}. Enter it in System`)
+  sim.codeMessageId = sim.messages[sim.messages.length - 1].id
+}
+
+// Order a drop for the Mission step, through Message, the way a run would. The
+// step's whole point is that the order lives in Message and nowhere else, so
+// the demonstration has to put it there rather than describe it.
+function scheduleTutorialLoad(sim) {
+  sim.loadOrderedAt = sim.elapsedMs
+  sim.loadDueAt = sim.elapsedMs + TUTORIAL_LOAD_DUE_MS
+  sim.loadTarget = rand(LOAD_POINTS)
+  sim.loadArmed = true
+  sim.loadReady = false
+  pushMessage(sim, `MISSION: drop ${stationName(sim.loadTarget)} at ${tutorialClockAt(sim, sim.loadDueAt)}`)
+  // So the Mission step can light this exact line and point at it.
+  sim.loadMessageId = sim.messages[sim.messages.length - 1].id
+}
+
+// Put every display back in tolerance, then arm the one this step teaches.
+//
+// Called on every step change, which is what keeps the steps independent: fuel
+// that drained on the Engine step does not carry an ENGINE warning into the
+// Message step, and a step can be revisited and looks the same each time. Two
+// states are seeded that a board at rest would never show — a standing camera
+// order, and a live comms code with its OK already armed — because without them
+// the Sensor and System steps would be teaching greyed-out controls.
+function resetForStep(sim, focus) {
+  // Lets a step sequence its own guidance ("point here first, then there").
+  sim.stepEnteredAt = sim.elapsedMs
+  // On the Engine step the feed starts on the LOWEST tank, still inside the
+  // spread, so the first thing the step asks for is the switch itself — the
+  // habit being taught is "always feed from the fullest", and arriving with
+  // that already true would show a board with nothing to do.
+  sim.fuel = focus === 'engine'
+    ? [
+      { level: 380, on: true },
+      { level: 420, on: false },
+      { level: 400, on: false },
+    ]
+    : [
+      { level: 420, on: true },
+      { level: 400, on: false },
+      { level: 385, on: false },
+    ]
+  sim.speed = sim.requiredSpeed + SPEED_TOL
+  sim.pressure = focus === 'system' ? TUTORIAL_PRESSURE_START : 100
+  sim.pump = false
+  sim.camera = 'Alpha'
+  sim.requiredCamera = 'Bravo'
+  sim.airDueAt = sim.elapsedMs + (focus === 'sensor' ? TUTORIAL_AIR_DUE_MS : AIR_INTERVAL)
+  sim.groundDueAt = sim.elapsedMs + (focus === 'sensor' ? TUTORIAL_GROUND_DUE_MS : GROUND_INTERVAL)
+  // No code until the System step issues one through Message. Seeding a live
+  // code silently left the keypad pointing at digits nobody had been told.
+  sim.code = null
+  sim.codeEntry = ''
+  sim.nextCodeAt = sim.elapsedMs + TUTORIAL_CODE_AT_MS
+  sim.warnings = []
+  // A drop is only ever live on the Mission step. The one makeSim scheduled is
+  // discarded: its time was fixed at t=0 and may already have passed by the time
+  // the user gets here, which would leave a step that asks for a press nothing
+  // can ever answer.
+  sim.loadArmed = false
+  sim.loadReady = false
+  if (focus === 'mission') scheduleTutorialLoad(sim)
+}
+
 function makeTutorialSim() {
   const sim = makeSim('easier')
-  sim.requiredCamera = 'Bravo'
-  // dueAt exactly one submit window out, so `elapsedMs >= dueAt - CODE_SUBMIT_WINDOW`
-  // is true at t=0 and the keypad shows its live state rather than "submit in Ns".
-  sim.code = { digits: '472', dueAt: CODE_SUBMIT_WINDOW }
+  resetForStep(sim, CUT_TUTORIAL_STEPS[0].focus)
   return sim
+}
+
+// One tick of the tutorial board. The clock always runs; beyond that only the
+// display `focus` names is allowed to move, at the same rates a run would use.
+// Nothing here scores, schedules new orders or expires anything — the sim is a
+// demonstration, and a card that reads "the pump raises pressure" should have a
+// gauge in front of it that does exactly that and nothing else.
+function tickTutorial(sim, dt, focus) {
+  const secs = dt / 1000
+  const t = sim.tuning
+  sim.elapsedMs += dt
+
+  if (focus === 'engine') {
+    const feed = sim.fuel.find(f => f.on)
+    if (feed) feed.level = Math.max(0, feed.level - t.fuelDrainPerSec * secs)
+  }
+  if (focus === 'navigation') {
+    sim.speed = Math.max(0, sim.speed - t.speedDriftPerSec * secs)
+  }
+  if (focus === 'system') {
+    sim.pressure += (sim.pump ? t.pressRisePerSec : -t.pressDropPerSec) * secs
+    sim.pressure = Math.max(60, Math.min(140, sim.pressure))
+    if (!sim.code && sim.elapsedMs >= sim.nextCodeAt) issueTutorialCode(sim)
+    // Let it lapse and a run would penalise it; here it says so and issues
+    // another, so the keypad never sits dead for the rest of the step.
+    if (sim.code && sim.elapsedMs > sim.code.dueAt) {
+      pushMessage(sim, 'COMMS: code window missed. A new code is on its way')
+      issueTutorialCode(sim)
+    }
+  }
+  if (focus === 'mission' && sim.loadArmed) {
+    sim.loadReady = sim.elapsedMs >= sim.loadDueAt
+    // Missed it: say so in Message, where a run would, and order another so
+    // the step keeps offering the moment rather than going quiet.
+    if (sim.elapsedMs > sim.loadDueAt + LOAD_RELEASE_WINDOW) {
+      pushMessage(sim, `MISSION: ${stationName(sim.loadTarget)} drop at ${tutorialClockAt(sim, sim.loadDueAt)} missed. New drop ordered`)
+      scheduleTutorialLoad(sim)
+    }
+  }
+  // The Sensor countdowns read elapsedMs directly, so they tick on their own.
+
+  // Real warnings from the real rule, so ignoring the taught display long
+  // enough shows the same strip a run would.
+  sim.warnings = computeWarnings(sim)
 }
 
 const CUT_TUTORIAL_STEPS = [
   {
     focus: 'nav',
     title: 'Two windows, six displays',
-    body: 'Six displays run at once but you only get two windows to show them in. These six buttons above each window choose what that window shows. Swapping between them is the whole game, so get used to reaching for them.',
+    body: 'Six displays run at once but you only get two windows to show them in. These six buttons above each window choose what that window shows. You will be pressing these constantly, because a display you are not looking at is one you cannot fix.',
   },
   {
     focus: 'strip',
     title: 'Warnings and the clock',
-    body: 'Anything left out of tolerance is listed on the left, and your score drops for every second a warning sits there. Keeping this strip clear is the main job. On the right is the time inside the aircraft, not the time you have left. One task is scheduled against that clock.',
+    body: 'Any system that is out of tolerance is listed on the left, and you lose points for every second a warning is showing. Keeping this strip empty is the main job. On the right is the aircraft clock. It is not a countdown, it is the time of day, and the Mission drop is scheduled to it.',
   },
   {
     focus: 'message',
     title: 'Message',
-    body: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. The drop order matters most, because it is said once and never repeated.',
+    body: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. The one to watch for is the drop order, which gives you a station and a time. The Mission display never shows it, so this log is the only place you can check it.',
   },
   {
     focus: 'engine',
@@ -431,22 +704,22 @@ const CUT_TUTORIAL_STEPS = [
   {
     focus: 'navigation',
     title: 'Navigation',
-    body: 'Airspeed bleeds away on its own the whole time. The minus and plus buttons move it 2 knots a tap, and you need to stay within 10 knots of Required. A new Required speed comes through on Message every so often.',
+    body: 'Airspeed drops on its own the whole time. The minus and plus buttons move it 2 knots a tap, and you need to stay within 10 knots of Required. A new Required speed comes through on Message every so often.',
   },
   {
     focus: 'sensor',
     title: 'Sensor',
-    body: 'Three jobs on one display. A camera order tells you to switch to Alpha or Bravo. The air sensor needs re-activating every 45 seconds and the ground sensor every 90. Both count down in front of you.',
+    body: 'Three jobs on one display. A camera order tells you to switch to Alpha or Bravo. The air sensor needs re-activating every 45 seconds and the ground sensor every 90. Each one shows a countdown to when it is next due.',
   },
   {
     focus: 'mission',
     title: 'Mission',
-    body: 'This is the memory one. The panel never tells you which station to drop or when, because that came through on Message and you have to hold it in your head. Watch the clock and press the right station when its time arrives.',
+    body: 'The panel never says which station or when. A drop order has just arrived in Message, open in your other window, giving a station and a time. Watch the clock and press that station when the time comes. In a run you will usually have to remember it, because that window is needed elsewhere.',
   },
   {
     focus: 'system',
     title: 'System',
-    body: 'Two jobs again. The pump holds hydraulic pressure between 90 and 110, on to raise it and off to let it fall. The keypad takes 3 digit comms codes, and OK only wakes up for the last 15 seconds of a code, so enter the digits early and wait.',
+    body: 'Two jobs again. The pump holds hydraulic pressure between 90 and 110: on to raise it, off to let it fall. Comms codes arrive in Message. Type the 3 digits on the keypad as soon as you see one, then press OK when it lights up, which is only in the last 15 seconds.',
   },
 ]
 
@@ -462,7 +735,7 @@ function TutorialComplete({ onExit }) {
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
-      <p className="text-sm text-slate-400 mb-6">That is every display. The real thing runs for 3 minutes and nothing waits for you.</p>
+      <p className="text-sm text-slate-400 mb-6">That is every display. A full run lasts 3 minutes, and all six displays keep changing at the same time.</p>
       <button
         onClick={onExit}
         className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
@@ -479,7 +752,7 @@ function CutTutorial({ onExit, onProgress }) {
   const [runId] = useState(makeTutorialRunId)
 
   // Same simRef + snapshot split the live game uses, minus the tick loop. The
-  // sim only ever changes when the user presses something.
+  // tick loop is `tickTutorial` rather than `advanceSim` — see the header.
   const [initialSim] = useState(makeTutorialSim)
   const simRef = useRef(initialSim)
   const [view, setView] = useState(initialSim)
@@ -488,16 +761,44 @@ function CutTutorial({ onExit, onProgress }) {
   const step = CUT_TUTORIAL_STEPS[stepIdx]
   const focusIsPanel = SYSTEMS.includes(step.focus)
 
+  // Fixed dt rather than performance.now() deltas: a tutorial has no tab-blur
+  // catch-up to worry about, and a constant step keeps it deterministic.
+  useEffect(() => {
+    if (done) return
+    const focus = CUT_TUTORIAL_STEPS[stepIdx].focus
+    const id = setInterval(() => {
+      tickTutorial(simRef.current, TICK_MS, focus)
+      sync()
+    }, TICK_MS)
+    return () => clearInterval(id)
+  }, [stepIdx, done, sync])
+
+  // Every step change goes through here so the board is reset BEFORE the new
+  // card is shown, in the same handler — not in an effect chasing the index.
+  const goToStep = (idx) => {
+    resetForStep(simRef.current, CUT_TUTORIAL_STEPS[idx].focus)
+    sync()
+    setStepIdx(idx)
+  }
+
   // A step about one display puts it in the left window, so the thing being
   // described is the thing on screen. The user can still swap either window,
   // and that choice is stamped with the step it was made on so it clears itself
   // when the step moves — derived, rather than a state resync in an effect.
   const [pick1, setPick1] = useState(null)
-  const [sel2, setSel2] = useState('engine')
+  const [pick2, setPick2] = useState(null)
   const sel1 = pick1?.step === stepIdx ? pick1.key
     : focusIsPanel ? step.focus
     : 'message'
+  // Steps that answer back do so through Message, the way a run would, so on
+  // those the other window shows Message and stays readable. On the Mission
+  // step that is also where the order itself lives.
+  const feedbackStep = step.focus === 'sensor' || step.focus === 'mission' || step.focus === 'system'
+  const sel2 = pick2?.step === stepIdx ? pick2.key
+    : feedbackStep ? 'message'
+    : 'engine'
   const setSel1 = (key) => setPick1({ step: stepIdx, key })
+  const setSel2 = (key) => setPick2({ step: stepIdx, key })
 
   useEffect(() => {
     onProgress?.({ clientRunId: runId, furthestStep: stepIdx, totalSteps: CUT_TUTORIAL_STEPS.length, completed: false })
@@ -512,25 +813,150 @@ function CutTutorial({ onExit, onProgress }) {
   const onToggleTank = (i) => act(sim => sim.fuel.forEach((f, j) => { f.on = j === i }))
   const onAdjustSpeed = (d) => act(sim => { sim.speed = Math.max(0, sim.speed + d) })
   const onPump = () => act(sim => { sim.pump = !sim.pump })
-  const onCamera = (c) => act(sim => { sim.camera = c })
-  const onActivate = (kind) => act(sim => {
-    sim[kind === 'air' ? 'airDueAt' : 'groundDueAt'] =
-      sim.elapsedMs + (kind === 'air' ? AIR_INTERVAL : GROUND_INTERVAL)
+  const onCamera = (c) => act(sim => {
+    sim.camera = c
+    if (sim.requiredCamera === c) {
+      sim.requiredCamera = null
+      pushMessage(sim, `SENSOR: camera ${c} selected. Well done`)
+    }
   })
-  const onRelease = () => {}
+  // Re-armed on the short tutorial intervals, so the moment comes round again
+  // while the step is still on screen.
+  const onActivate = (kind) => act(sim => {
+    const dueKey = kind === 'air' ? 'airDueAt' : 'groundDueAt'
+    const onTime = sim[dueKey] - sim.elapsedMs <= SENSOR_ARM_WINDOW
+    if (onTime) pushMessage(sim, `SENSOR: ${kind} sensor activated on time. Well done`)
+    sim[dueKey] = sim.elapsedMs + (kind === 'air' ? TUTORIAL_AIR_DUE_MS : TUTORIAL_GROUND_DUE_MS)
+  })
+  // The one tutorial handler that answers back. Nothing scores, but the result
+  // goes to Message so the user sees whether they read the order right, in the
+  // place a run would tell them.
+  const onRelease = (station) => act(sim => {
+    if (!sim.loadArmed) return
+    if (sim.loadReady && sim.elapsedMs <= sim.loadDueAt + LOAD_RELEASE_WINDOW) {
+      if (station === sim.loadTarget) {
+        pushMessage(sim, `MISSION: ${stationName(station)} dropped on time. Well done`)
+      } else {
+        pushMessage(sim, `MISSION: wrong station. ${stationName(sim.loadTarget)} was ordered`)
+      }
+      scheduleTutorialLoad(sim)
+    } else {
+      pushMessage(sim, `MISSION: too early. ${stationName(sim.loadTarget)} is due at ${tutorialClockAt(sim, sim.loadDueAt)}`)
+    }
+  })
   const onDigit = (d) => act(sim => { if (sim.codeEntry.length < 3) sim.codeEntry += d })
   const onClearCode = () => act(sim => { sim.codeEntry = '' })
-  const onSubmitCode = () => act(sim => { sim.codeEntry = '' })
+  const onSubmitCode = () => act(sim => {
+    if (!sim.code) return
+    if (sim.codeEntry === sim.code.digits) {
+      pushMessage(sim, `COMMS: code ${sim.code.digits} accepted. Well done`)
+      issueTutorialCode(sim)
+      return
+    } else {
+      pushMessage(sim, 'COMMS: wrong code. Check Message and try again')
+    }
+    sim.codeEntry = ''
+  })
+
+  // Where this step wants the eye RIGHT NOW, read off the sim so it moves as
+  // the board does. Each step points at one concrete thing to look at or press;
+  // `urgent` marks a press that will not wait. `lit` names the region whose
+  // window carries the highlight, which follows the guide rather than the step:
+  // on the Mission step that is Message while the order is being read, the
+  // strip while the clock is being watched, and Mission only when it is time.
+  const guide = (() => {
+    const v = view
+    const since = v.elapsedMs - (v.stepEnteredAt ?? 0)
+    switch (step.focus) {
+      case 'nav':
+        return { lit: 'nav', nav: true }
+      case 'strip':
+        return since < TUTORIAL_READ_MS
+          ? { lit: 'strip', warning: true }
+          : { lit: 'strip', clock: true }
+      case 'message': {
+        // The latest drop order in the log — the line the card says to watch for.
+        const order = [...v.messages].reverse().find(m => m.text.startsWith('MISSION: drop'))
+        return { lit: 'panel1', messageId: order?.id ?? null }
+      }
+      case 'engine': {
+        // The fullest tank. If it is not the one feeding, that is the switch to make.
+        let fullest = 0
+        v.fuel.forEach((f, i) => { if (f.level > v.fuel[fullest].level) fullest = i })
+        return { lit: 'panel1', tank: fullest, urgent: !v.fuel[fullest].on }
+      }
+      case 'navigation': {
+        // Whichever button closes the gap. Above tolerance is possible too —
+        // the user can overshoot with plus — and pointing at plus then is
+        // telling them to make it worse.
+        // Aim for the number itself. Over it by a step or more: minus. Under by
+        // a step or more: plus. Urgent once outside the band. On the number:
+        // nothing to press, hold and watch it. The panel's own "aim for
+        // Required + 10" is a strategy note for a run; the step arrives 10 over
+        // precisely so the first thing it teaches is bringing it back down.
+        const diff = v.speed - v.requiredSpeed
+        if (diff > SPEED_TOL) return { lit: 'panel1', minus: true, urgent: true }
+        if (diff < -SPEED_TOL) return { lit: 'panel1', plus: true, urgent: true }
+        if (diff >= SPEED_STEP) return { lit: 'panel1', minus: true }
+        if (diff <= -SPEED_STEP) return { lit: 'panel1', plus: true }
+        return { lit: 'panel1', ok: true }
+      }
+      case 'sensor': {
+        if (v.requiredCamera) return { lit: 'panel1', camera: v.requiredCamera }
+        const airRem = v.airDueAt - v.elapsedMs
+        const groundRem = v.groundDueAt - v.elapsedMs
+        const soonest = airRem <= groundRem ? 'air' : 'ground'
+        const rem = Math.min(airRem, groundRem)
+        // Its Activate once it is armed; until then the one due next, to watch.
+        return { lit: 'panel1', sensor: soonest, urgent: rem <= SENSOR_ARM_WINDOW }
+      }
+      case 'mission': {
+        if (!v.loadArmed) return { lit: 'panel1' }
+        // The token called out in the order line follows the phase: the time
+        // while the clock is being watched, the station once it is time to press.
+        if (v.loadReady && v.elapsedMs <= v.loadDueAt + LOAD_RELEASE_WINDOW) {
+          return { lit: 'panel1', mission: 'press', messageLit: v.loadMessageId, messageEmph: 'station' }
+        }
+        if (v.elapsedMs < v.loadOrderedAt + TUTORIAL_READ_MS) {
+          return { lit: 'panel2', mission: 'read', messageLit: v.loadMessageId, messageId: v.loadMessageId }
+        }
+        return { lit: 'strip', mission: 'watch', messageLit: v.loadMessageId, clock: true, messageEmph: 'time' }
+      }
+      case 'system': {
+        // Pressure outranks everything: out of band is a warning bleeding score.
+        const out = v.pressure < PRESS_LOW || v.pressure > PRESS_HIGH
+        if (out) return { lit: 'panel1', pump: true, urgent: true }
+        // About to leave the band in the direction it is moving: toggle now.
+        const nearEdge = (!v.pump && v.pressure <= PRESS_LOW + TUTORIAL_PRESSURE_MARGIN)
+          || (v.pump && v.pressure >= PRESS_HIGH - TUTORIAL_PRESSURE_MARGIN)
+        if (!v.code) return nearEdge ? { lit: 'panel1', pump: true } : { lit: 'panel1', pressureOk: true }
+        // A code has arrived. Read it first: the line in Message, digits called out.
+        const codeLine = { messageLit: v.codeMessageId, messageEmph: 'code' }
+        if (v.elapsedMs < v.codeOrderedAt + TUTORIAL_READ_MS) {
+          return { lit: 'panel2', messageId: v.codeMessageId, ...codeLine }
+        }
+        if (nearEdge) return { lit: 'panel1', pump: true, ...codeLine }
+        // Then the keys, one at a time, then OK — urgent only once OK is live.
+        const next = v.codeEntry.length < 3 ? v.code.digits[v.codeEntry.length] : 'OK'
+        const submitOpen = v.elapsedMs >= v.code.dueAt - CODE_SUBMIT_WINDOW
+        // Digits in, OK not yet live: nothing to press. Say "wait" at the countdown.
+        if (next === 'OK' && !submitOpen) return { lit: 'panel1', wait: true, ...codeLine }
+        return { lit: 'panel1', key: next, urgent: next === 'OK', ...codeLine }
+      }
+      default:
+        return { lit: 'panel1' }
+    }
+  })()
 
   const renderPanel = (key) => {
     const sim = view
     switch (key) {
-      case 'message':    return <MessagePanel messages={sim.messages} />
-      case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} />
-      case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
-      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} />
-      case 'mission':    return <MissionPanel onRelease={onRelease} />
-      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} />
+      case 'message':    return <MessagePanel messages={sim.messages} litId={guide.messageLit ?? guide.messageId ?? null} arrowId={guide.messageId ?? null} emphasis={guide.messageEmph ?? null} />
+      case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} arrowTank={guide.tank ?? null} arrowUrgent={!!guide.urgent} />
+      case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} arrowPlus={!!guide.plus} arrowMinus={!!guide.minus} holdOk={!!guide.ok} arrowUrgent={!!guide.urgent} />
+      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} arrowCamera={guide.camera ?? null} arrowSensor={guide.sensor ?? null} arrowUrgent={!!guide.urgent} />
+      case 'mission':    return <MissionPanel onRelease={onRelease} litStation={guide.mission === 'press' ? sim.loadTarget : null} arrowStation={guide.mission === 'press' ? sim.loadTarget : null} />
+      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
       default:           return null
     }
   }
@@ -546,12 +972,16 @@ function CutTutorial({ onExit, onProgress }) {
   }
 
   const sim = view
-  // Lit or dimmed. `.cbat-tutorial-dim` also blocks pointer events, so only the
-  // part being taught is reachable — which is the point of a spotlight.
-  const cls = (lit) => (lit ? ' cbat-tutorial-pulse' : ' cbat-tutorial-dim')
+  // One region carries the pulse — the one the guide is pointing into. Regions
+  // the step still needs readable (Message and the strip on the Mission step)
+  // stay plain; the rest dim. `.cbat-tutorial-dim` also blocks pointer events,
+  // so only the part being taught is reachable — which is the point.
+  const missionStep = step.focus === 'mission'
+  const cls = (region, keepPlain = false) =>
+    guide.lit === region ? ' cbat-tutorial-pulse' : keepPlain ? '' : ' cbat-tutorial-dim'
   const advance = () => {
     if (stepIdx === CUT_TUTORIAL_STEPS.length - 1) setDone(true)
-    else setStepIdx(i => i + 1)
+    else goToStep(stepIdx + 1)
   }
 
   return (
@@ -561,7 +991,7 @@ function CutTutorial({ onExit, onProgress }) {
           <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Tutorial</span>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setStepIdx(i => Math.max(0, i - 1))}
+              onClick={() => goToStep(Math.max(0, stepIdx - 1))}
               disabled={stepIdx === 0}
               aria-label="Previous section"
               className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
@@ -606,15 +1036,19 @@ function CutTutorial({ onExit, onProgress }) {
         </div>
       </div>
 
-      {/* The live arena, frozen. Same structure as the playing branch so what is
-          taught here is laid out exactly where it will be during a run. */}
-      <div className="flex flex-col gap-1.5" style={TUTORIAL_ARENA_STYLE}>
-        <div className={`flex gap-1.5${cls(step.focus === 'strip')}`} style={{ flex: '10 1 0', minHeight: 0 }}>
+      {/* The live arena. Same structure as the playing branch so what is taught
+          here is laid out exactly where it will be during a run. */}
+      <div className="cbat-tutorial-arena flex flex-col gap-1.5" style={TUTORIAL_ARENA_STYLE}>
+        <div className={`flex gap-1.5${cls('strip', missionStep)}`} style={{ flex: '10 1 0', minHeight: 0 }}>
           <div style={{ width: '80%' }}>
-            <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
+            <div className="w-full h-full flex flex-col bg-[#0a1628] border rounded-lg overflow-hidden"
+              style={{ borderColor: sim.warnings.length ? '#ef4444' : '#1a3a5c' }}>
               <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-red-400">Warning</div>
               <div className="flex-1 min-h-0 overflow-auto px-2 py-0.5 sm:py-1 flex flex-wrap items-start sm:items-center content-start sm:content-center gap-x-3 sm:gap-y-0.5">
-                <span className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
+                {guide.warning && <GuideArrow dir="right" inline />}
+                {sim.warnings.length === 0
+                  ? <span className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
+                  : sim.warnings.map(w => <span key={w} className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-red-400 font-bold">⚠ {w}</span>)}
               </div>
             </div>
           </div>
@@ -622,7 +1056,8 @@ function CutTutorial({ onExit, onProgress }) {
             <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
               <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-brand-500">Clock</div>
               <div className="flex-1 min-h-0 flex items-center justify-center px-1 overflow-hidden">
-                <span className="font-mono font-bold leading-none text-[#ddeaf8] tabular-nums whitespace-nowrap" style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
+                {guide.clock && <GuideArrow dir="right" inline />}
+                <span className={`font-mono font-bold leading-none text-[#ddeaf8] tabular-nums whitespace-nowrap${guide.clock || guide.mission === 'press' ? ' cbat-word-lit' : ''}`} style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
                   {fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}
                 </span>
               </div>
@@ -632,13 +1067,17 @@ function CutTutorial({ onExit, onProgress }) {
 
         <div className="flex flex-col lg:flex-row gap-1.5" style={{ flex: '90 1 0', minHeight: 0 }}>
           <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
-            <div className={cls(step.focus === 'nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel1} onSelect={setSel1} /></div>
-            <div className={cls(focusIsPanel).trim()} style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel1)}</div>
+            <div className={cls('nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}>
+              <NavButtons active={sel1} onSelect={setSel1} arrowActive={!!guide.nav} />
+            </div>
+            <div className={cls('panel1', missionStep).trim()} style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel1)}</div>
           </div>
 
           <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
-            <div className={cls(step.focus === 'nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel2} onSelect={setSel2} /></div>
-            <div className="cbat-tutorial-dim" style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel2)}</div>
+            <div className={cls('nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}>
+              <NavButtons active={sel2} onSelect={setSel2} arrowActive={!!guide.nav} />
+            </div>
+            <div className={cls('panel2', feedbackStep).trim()} style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel2)}</div>
           </div>
         </div>
       </div>

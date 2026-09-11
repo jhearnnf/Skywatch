@@ -444,8 +444,14 @@ router.get('/airstars/history', protect, async (req, res) => {
 // ⚠ Keep in sync with the tutorials sub-schema in backend/models/User.js
 const VALID_TUTORIAL_IDS = [
   'welcome', 'intel_brief', 'user', 'load_up',
-  'home', 'learn', 'briefReader', 'quiz', 'play', 'profile', 'rankings', 'wheres_aircraft',
+  // 'learn' was here but is not a path on the User schema and names no tutorial
+  // in AppTutorialContext or tutorialDefaults.js, so a PATCH for it answered 200
+  // and stored nothing. Removed rather than added to the model: there is nothing
+  // to remember. The test below keeps this list and the schema in step.
+  'home', 'briefReader', 'quiz', 'play', 'profile', 'rankings', 'wheres_aircraft',
   'learn_priority', 'pathway_swipe', 'stat_mnemonic',
+  // CBAT game walkthroughs — "has this player been offered it", nothing more.
+  'cbat_cut',
 ];
 const TUTORIAL_PRIORITY  = { unseen: 0, skipped: 1, viewed: 2 };
 
@@ -919,3 +925,7 @@ router.post('/diagnostics/unreachable', protect, async (req, res) => {
 });
 
 module.exports = router;
+// Exported so a test can hold the two lists together. Mongoose drops an unknown
+// path silently, so an id accepted here but missing from the User schema answers
+// 200 and stores nothing — see __tests__/integration/users.tutorials.test.js.
+module.exports.VALID_TUTORIAL_IDS = VALID_TUTORIAL_IDS;

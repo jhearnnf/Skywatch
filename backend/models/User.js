@@ -269,6 +269,11 @@ const userSchema = new mongoose.Schema(
       caseFile_phaseReveal:         { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
       caseFile_mapLive:             { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
       caseFile_debrief:             { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
+      // CBAT game walkthroughs. These are NOT AppTutorialContext tutorials — the
+      // walkthrough itself lives in the game's own page component. All this field
+      // does is remember that the player has been offered it once, so the
+      // auto-open on a first visit never fires twice.
+      cbat_cut:                     { type: String, enum: TUTORIAL_STATUS, default: 'unseen' },
     },
     tutorialsResetAt: { type: Date, default: null }, // admin-triggered; frontend clears localStorage tutorial keys when newer than last clear
 

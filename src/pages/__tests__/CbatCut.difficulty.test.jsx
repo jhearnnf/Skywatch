@@ -24,7 +24,11 @@ const LAUNCH_MS = 1000
 
 function setup() {
   const apiFetch = vi.fn(async () => ({ ok: true, json: async () => ({ data: null }) }))
-  mockUseAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch })
+  // Already offered the tutorial, so the intro renders rather than the
+  // first-visit walkthrough — these tests are about the difficulty picker.
+  mockUseAuth.mockReturnValue({
+    user: { _id: 'u1', tutorials: { cbat_cut: 'viewed' } }, API: '', apiFetch, setUser: vi.fn(),
+  })
   return apiFetch
 }
 
