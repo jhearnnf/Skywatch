@@ -12,6 +12,7 @@ import SeenByDialog from './components/SeenByDialog'
 import ReactorsDialog from './components/ReactorsDialog'
 import EditHistoryDialog from './components/EditHistoryDialog'
 import AnnouncementDrafter from './components/AnnouncementDrafter'
+import { formatLastOnline, isOnlineNow } from './format'
 
 const POLL_MS = 5_000
 
@@ -403,6 +404,18 @@ export default function ChatThread({
                     : type === 'channel' ? 'Everyone can see this channel'
                       : type === 'dm' ? 'Direct message'
                         : 'Usually replies within a few hours'}
+              {/* When the other party was last on the site. The server only
+                  sends this to admins, so its presence is the gate: no
+                  client-side isAdmin check needed, and a non-admin never has
+                  anything to render. Refreshes with the 5s poll. */}
+              {type === 'dm' && 'otherLastSeen' in (conversation ?? {}) && (
+                <span
+                  data-testid="dm-last-online"
+                  className={`ml-1.5 ${isOnlineNow(conversation.otherLastSeen) ? 'text-emerald-600' : 'text-slate-400'}`}
+                >
+                  · {formatLastOnline(conversation.otherLastSeen)}
+                </span>
+              )}
             </p>
           </div>
         </div>

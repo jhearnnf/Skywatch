@@ -1196,21 +1196,30 @@ router.get('/conversations/:id/messages', async (req, res) => {
       deletedAt:      null,
       ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
     };
-    const [firstMention, unreadMentions, dmTitle] = await Promise.all([
+    const [firstMention, unreadMentions, dmOther] = await Promise.all([
       ChatMessage.findOne(mentionFilter).sort({ createdAt: 1 }).select('_id createdAt').lean(),
       ChatMessage.countDocuments(mentionFilter),
       // Name the other person, because the rail cannot always do it: the
       // overview hides DMs with no messages, so a thread opened from the admin
       // search would sit under a header reading "Chat" until the first reply.
+      //
+      // Also carries when they were last on the site, for the admin's header
+      // line. Admin-only: `lastSeen` is the same field the presence strip and
+      // Users list read, and it never reaches a non-admin (see the privacy
+      // note on the public surfaces) — a user must not be able to tell from a
+      // DM whether the person they wrote to has been around since.
       (async () => {
         if (convo.type !== 'dm') return null;
         const otherId = (convo.participantIds ?? [])
           .find(id => String(id) !== String(req.user._id));
         if (!otherId) return null;
-        const other = await User.findById(otherId).select('displayName agentNumber').lean();
+        const other = await User.findById(otherId).select('displayName agentNumber lastSeen').lean();
         if (!other) return null;
-        return other.displayName
-          || (other.agentNumber ? `Agent #${other.agentNumber}` : null);
+        return {
+          title: other.displayName
+            || (other.agentNumber ? `Agent #${other.agentNumber}` : null),
+          lastSeen: req.user.isAdmin ? (other.lastSeen ?? null) : undefined,
+        };
       })(),
     ]);
 
@@ -1241,7 +1250,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
         isArchived: convo.isArchived,
         postPolicy: convo.channel?.postPolicy ?? 'everyone',
         adminOnly:  (convo.channel?.postPolicy ?? 'everyone') !== 'everyone',
-        title:      convo.type === 'channel' ? channelTitle(convo) : dmTitle,
+        title:      convo.type === 'channel' ? channelTitle(convo) : (dmOther?.title ?? null),
+        // Admin-only, DM-only; the key is absent for everyone else rather than
+        // null, so a client cannot distinguish "never seen" from "not for you".
+        ...(dmOther?.lastSeen !== undefined ? { otherLastSeen: dmOther.lastSeen } : {}),
       },
     } });
   } catch (err) {

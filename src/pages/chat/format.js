@@ -34,6 +34,31 @@ export function formatRelative(ts) {
   return formatTime(ts)
 }
 
+// "Online now" / "Last online 12m ago" / "Last online 11 Sept, 17:45", for the
+// admin's DM header. The three-minute cut matches the server's "here" presence
+// window (PRESENCE_HERE_WINDOW_MS): heartbeats land every 30s while the tab is
+// active, so anyone seen inside it is on the site as you read this.
+export const ONLINE_NOW_MS = 3 * 60 * 1000
+
+export function isOnlineNow(ts) {
+  if (!ts) return false
+  const then = new Date(ts).getTime()
+  return !Number.isNaN(then) && Date.now() - then < ONLINE_NOW_MS
+}
+
+export function formatLastOnline(ts) {
+  if (!ts) return 'Not been online yet'
+  const then = new Date(ts).getTime()
+  if (Number.isNaN(then)) return ''
+  if (isOnlineNow(ts)) return 'Online now'
+  const ms = Math.max(0, Date.now() - then)
+  const secs = Math.round(ms / 1000)
+  if (secs < 3600)   return `Last online ${Math.floor(secs / 60)}m ago`
+  if (secs < 86400)  return `Last online ${Math.floor(secs / 3600)}h ago`
+  if (secs < 604800) return `Last online ${Math.floor(secs / 86400)}d ago`
+  return `Last online ${formatTime(ts)}`
+}
+
 // How to name a user in chat. Display names are required to post, so the agent
 // number fallback only shows for accounts that have never posted (and for the
 // odd historic message sent before the requirement existed).
