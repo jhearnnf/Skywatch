@@ -17,9 +17,10 @@
 // centred. Either way the track is reserved, so a game growing a right-hand
 // panel never shifts the card sideways.
 //
-// The centre column is `minmax(0, 28rem)`, so on a window that cannot afford
-// all three tracks the card gives up width rather than the layout overflowing.
-// The outer columns never shrink, so neither panel is clipped.
+// The centre column is `minmax(0, 42rem)` — matching the card's own `lg:max-w-2xl`
+// ceiling — so on a window that cannot afford all three tracks the card gives up
+// width rather than the layout overflowing. The outer columns never shrink, so
+// neither panel is clipped.
 //
 // BELOW `lg` NEITHER SIDE COLUMN IS RENDERED. A gamepad is a desktop thing, and
 // on a narrow screen these panels would be back to pushing the card around,
@@ -33,7 +34,7 @@
 
 export default function CbatStickLayout({ stick, aside = null, children }) {
   return (
-    <div className="w-full flex flex-col items-center lg:grid lg:grid-cols-[19rem_minmax(0,28rem)_19rem] lg:justify-center lg:items-start lg:gap-5">
+    <div className="w-full flex flex-col items-center lg:grid lg:grid-cols-[19rem_minmax(0,42rem)_19rem] lg:justify-center lg:items-start lg:gap-5">
       <aside className="hidden lg:block" aria-label="Joystick setup">
         {stick}
       </aside>

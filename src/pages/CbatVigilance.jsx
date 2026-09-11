@@ -501,51 +501,51 @@ export default function CbatVigilance() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className="text-4xl mb-3">⭐</p>
-              <p className="text-xl font-extrabold text-white mb-2">Vigilance Test</p>
-              <p className="text-sm text-slate-400 mb-5">
+              <p className="text-4xl lg:text-5xl mb-3">⭐</p>
+              <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Vigilance Test</p>
+              <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
                 Stars appear on a 9 by 9 grid. Clear each one by keying its coordinates: the row number first, then the column. It is the simplest thing on the battery, and it runs for three minutes, which is the point of it.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]">
-                <div className="flex items-start gap-2">
-                  <span className="text-brand-600 font-bold shrink-0">★</span>
-                  <span>A star is worth {STAR_POINTS} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
+              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3">
+                  <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'★'}</span>
+                  <span className="pt-0.5">A star is worth {STAR_POINTS} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-amber-300 font-bold shrink-0">◆</span>
-                  <span>A priority task is worth {PRIORITY_BASE_POINTS} and up to {PRIORITY_BASE_POINTS + 30} if you break off for it straight away. Deal with it the moment it appears.</span>
+                <div className="flex items-start gap-3">
+                  <span className="shrink-0 w-8 text-center text-amber-300 lg:text-lg" aria-hidden>{'◆'}</span>
+                  <span className="pt-0.5">A priority task is worth {PRIORITY_BASE_POINTS} and up to {PRIORITY_BASE_POINTS + 30} if you break off for it straight away. Deal with it the moment it appears.</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-red-400 font-bold shrink-0">−</span>
-                  <span>A coordinate with no star on it costs {MISKEY_PENALTY} points, so guessing is worse than looking.</span>
+                <div className="flex items-start gap-3">
+                  <span className="shrink-0 w-8 text-center text-red-400 lg:text-lg" aria-hidden>{'−'}</span>
+                  <span className="pt-0.5">A coordinate with no star on it costs {MISKEY_PENALTY} points, so guessing is worse than looking.</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1">
-                  <span className="shrink-0">⌨</span>
-                  <span>Use the number row. The bottleneck is the keying, not the finding. Backspace clears a half-entered coordinate.</span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                  <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⌨'}</span>
+                  <span className="pt-0.5">Use the number row. The bottleneck is the keying, not the finding. Backspace clears a half-entered coordinate.</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
-                  <span className="shrink-0">💡</span>
-                  <span>Work along a row in sequence, 2 then 1, 2 then 2, 2 then 3, rather than jumping about. You re-key only the second digit that way. Clear the edges first as well, because they sit right next to their labels.</span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                  <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'💡'}</span>
+                  <span className="pt-0.5">Work along a row in sequence, 2 then 1, 2 then 2, 2 then 3, rather than jumping about. You re-key only the second digit that way. Clear the edges first as well, because they sit right next to their labels.</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
-                  <span className="shrink-0">⏱</span>
-                  <span>{VIGILANCE_DURATION_MS / 1000} seconds. One difficulty, because a shorter version would not be testing the same thing.</span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                  <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span>
+                  <span className="pt-0.5">{VIGILANCE_DURATION_MS / 1000} seconds. One difficulty, because a shorter version would not be testing the same thing.</span>
                 </div>
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4 text-center">
+                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+                  <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
+                  <p className="text-[10px] lg:text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                 </div>
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/vigilance/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                <Link to="/cbat/vigilance/leaderboard" className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -553,7 +553,7 @@ export default function CbatVigilance() {
               <button
                 onClick={startGame}
                 data-demo-start
-                className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
+                className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
               >
                 Start
               </button>

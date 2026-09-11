@@ -10,6 +10,7 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import RttScene from '../components/RttScene'
+import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
@@ -413,10 +414,10 @@ export default function CbatRtt() {
             >
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+                className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
               >
-                <p className={`text-4xl mb-3${dim}`}>📷</p>
-                <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Rapid Tracking Test</p>
+                <p className={`text-4xl lg:text-5xl mb-3${dim}`}>📷</p>
+                <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Rapid Tracking Test</p>
                 <CbatModeRow
                   modes={RTT_DIFFICULTIES}
                   value={difficulty}
@@ -425,20 +426,20 @@ export default function CbatRtt() {
                 />
                 <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
-                <p className={`text-sm text-slate-400 mb-5${dim}`}>
+                <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
                   You are looking through a sensor camera slung under an aircraft. Slew it onto each target and
                   capture <span className="text-[#ddeaf8]">three frames</span> with the target in the centre of
                   the reticle before the pass ends.
                 </p>
 
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Slew</span><span>the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Shoot</span><span>click, or press Space, with the target inside the reticle — dead centre is worth double</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Targets</span><span>{tuning.targets} passes: {tuning.kinds.map(k => RTT_KINDS[k].label.toLowerCase()).join(', ')}</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Cover</span><span>targets pass behind cloud and terrain — predict where they come out and pick the track back up</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Drift</span><span>the aircraft never sits still — the picture wanders on its own and you have to keep trimming it back</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Cue</span><span>an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
-                  <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1"><span className="shrink-0">⏱</span><span>the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
+                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Slew</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Shoot</CbatIntroLabel><span className="pt-0.5">click, or press Space, with the target inside the reticle — dead centre is worth double</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Targets</CbatIntroLabel><span className="pt-0.5">{tuning.targets} passes: {tuning.kinds.map(k => RTT_KINDS[k].label.toLowerCase()).join(', ')}</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Cover</CbatIntroLabel><span className="pt-0.5">targets pass behind cloud and terrain — predict where they come out and pick the track back up</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Drift</CbatIntroLabel><span className="pt-0.5">the aircraft never sits still — the picture wanders on its own and you have to keep trimming it back</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Cue</CbatIntroLabel><span className="pt-0.5">an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
                 </div>
 
                 {/* On the card only while there is no stick. With one plugged
@@ -454,14 +455,14 @@ export default function CbatRtt() {
                 </CbatPersonalBest>
 
                 <div className={`text-center mb-4${dim}`}>
-                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
+                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
                 </div>
 
                 <button
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
-                  className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}
+                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
                 >
                   Start
                 </button>

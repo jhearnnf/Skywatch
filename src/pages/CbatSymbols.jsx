@@ -10,6 +10,7 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
+import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
@@ -587,48 +588,48 @@ export default function CbatSymbols() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className="text-4xl mb-3">{'\u{1F523}'}</p>
-              <p className="text-xl font-extrabold text-white mb-2">Symbol Recognition</p>
-              <p className="text-sm text-slate-400 mb-5">
+              <p className="text-4xl lg:text-5xl mb-3">{'\u{1F523}'}</p>
+              <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Symbol Recognition</p>
+              <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
                 Spot the target symbol in the grid as fast as you can. 15 rounds of
                 increasing difficulty.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2">
-                <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-600 font-bold shrink-0">T1</span>
-                  <span>{'Rounds 1\u20135 \u00b7 grid of 12\u201315 symbols'}</span>
+              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                  <CbatIntroLabel>T1</CbatIntroLabel>
+                  <span className="pt-0.5">{'Rounds 1\u20135 \u00b7 grid of 12\u201315 symbols'}</span>
                 </div>
-                <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-600 font-bold shrink-0">T2</span>
-                  <span>{'Rounds 6\u201310 \u00b7 grid of 15\u201320 symbols'}</span>
+                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                  <CbatIntroLabel>T2</CbatIntroLabel>
+                  <span className="pt-0.5">{'Rounds 6\u201310 \u00b7 grid of 15\u201320 symbols'}</span>
                 </div>
-                <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-600 font-bold shrink-0">T3</span>
-                  <span>{'Rounds 11\u201315 \u00b7 grid of 18\u201325 symbols'}</span>
+                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                  <CbatIntroLabel>T3</CbatIntroLabel>
+                  <span className="pt-0.5">{'Rounds 11\u201315 \u00b7 grid of 18\u201325 symbols'}</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
-                  <span className="shrink-0">{'\u26A0\uFE0F'}</span>
-                  <span>{'A wrong click counts as missed \u2014 round skips automatically'}</span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                  <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'\u26A0\uFE0F'}</span>
+                  <span className="pt-0.5">{'A wrong click counts as missed \u2014 round skips automatically'}</span>
                 </div>
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg font-mono font-bold text-brand-600">
+                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4 text-center">
+                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
+                  <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
                     <span className="text-slate-500 mx-1">{'\u00b7'}</span>
                     {personalBest.bestTime.toFixed(2)}s
                   </p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+                  <p className="text-[10px] lg:text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
                 </div>
               )}
 
               <div className="text-center mb-4">
-                <Link to="/cbat/symbols/leaderboard" className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                <Link to="/cbat/symbols/leaderboard" className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   {'View Leaderboard \u2192'}
                 </Link>
               </div>
@@ -636,7 +637,7 @@ export default function CbatSymbols() {
               <button
                 onClick={startGame}
                 data-demo-start
-                className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
+                className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
               >
                 Start
               </button>

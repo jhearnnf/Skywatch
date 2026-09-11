@@ -53,7 +53,7 @@ describe('CbatStickLayout', () => {
       <CbatStickLayout stick={<p>stick panel</p>}><p>card</p></CbatStickLayout>,
     )
     const row = container.firstChild
-    expect(row.className).toContain('lg:grid-cols-[19rem_minmax(0,28rem)_19rem]')
+    expect(row.className).toContain('lg:grid-cols-[19rem_minmax(0,42rem)_19rem]')
 
     // Three tracks: rail, card, and the spacer that balances the rail.
     expect(row.children).toHaveLength(3)

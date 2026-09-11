@@ -42,6 +42,7 @@ import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { generateSitRounds, GRID, COL_LABELS, CLASS_LABEL, MOVING_CLASSES } from '../utils/cbat/sitGenerator'
 import { CLASS_STYLE, HEADING_DEG } from '../components/cbat/sitClassStyle'
+import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import {
   SIT_DIFFICULTIES, SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP, SIT_LAUNCH_MS,
   sitTuning, computeSitGrade, sitPhaseMs, sitRunEstimateMs,
@@ -569,14 +570,14 @@ export default function CbatSit() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className={`text-4xl mb-3${dim}`}>🛰️</p>
+              <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🛰️</p>
 
               {/* SIT_DIFFICULTIES is ordered [easier, hard], so the easier option
                   lands left and hard lands right. The pair sits under the title,
                   matching FLAG, CUT, Numerical Operations, SAT and RTT. */}
-              <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Spatial Integration Test</p>
+              <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Spatial Integration Test</p>
               <CbatModeRow
                 modes={SIT_DIFFICULTIES}
                 value={difficulty}
@@ -585,42 +586,42 @@ export default function CbatSit() {
               />
               <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{introTuning.blurb}</p>
 
-              <p className={`text-sm text-slate-400 mb-5${dim}`}>
+              <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
                 Study the ground one layer at a time, from above. No layer shows the whole picture, so putting it together is on you. A camera then flies over the same ground in 3D, and not from the direction you studied it.
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
-                <div className="flex items-start gap-2">
-                  <span className="text-brand-600 font-bold shrink-0">1.</span>
-                  <span>Study the layers. Each one holds a single kind of thing, and you move between them as you like. Only the hills appear on every layer.</span>
+              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+                <div className="flex items-start gap-3">
+                  <CbatIntroLabel>1.</CbatIntroLabel>
+                  <span className="pt-0.5">Study the layers. Each one holds a single kind of thing, and you move between them as you like. Only the hills appear on every layer.</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-brand-600 font-bold shrink-0">2.</span>
-                  <span>The clip is a <span className="text-brand-600">3D pass</span> showing all of it at once, from a different direction. The hills never move, so use them to work out which way round you are looking.</span>
+                <div className="flex items-start gap-3">
+                  <CbatIntroLabel>2.</CbatIntroLabel>
+                  <span className="pt-0.5">The clip is a <span className="text-brand-600">3D pass</span> showing all of it at once, from a different direction. The hills never move, so use them to work out which way round you are looking.</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-brand-600 font-bold shrink-0">3.</span>
-                  <span>Two questions on each clip. The clip plays again before the second one, but you are only told what is being asked after it has finished. Answer the question you were asked, and only that one.</span>
+                <div className="flex items-start gap-3">
+                  <CbatIntroLabel>3.</CbatIntroLabel>
+                  <span className="pt-0.5">Two questions on each clip. The clip plays again before the second one, but you are only told what is being asked after it has finished. Answer the question you were asked, and only that one.</span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-amber-400/80 pt-1">
-                  <span className="shrink-0">⚠️</span>
-                  <span>Other things in the frame will be wrong. That never counts against the answer. Checking them costs you the question.</span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-amber-400/80 border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                  <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
+                  <span className="pt-0.5">Other things in the frame will be wrong. That never counts against the answer. Checking them costs you the question.</span>
                 </div>
                 {/* All THREE phases, and the total. Studying is where most of a
                     run goes on this test — quoting only the clip length, as this
                     line used to, made it look like a two-minute game. */}
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1">
-                  <span className="shrink-0">⏱</span>
-                  <span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] pt-1">
+                  <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
+                  <span className="pt-0.5">
                     {SIT_CLIPS} clips of {SIT_QUESTIONS_PER_CLIP} questions ·{' '}
                     {Math.round(introTuning.studyMsPerLayer / 1000)}s per layer to study ·{' '}
                     {(introTuning.clipMs / 1000).toFixed(1)}s clip before each question ·{' '}
                     {Math.round(introTuning.answerMs / 1000)}s per question
                   </span>
                 </div>
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
-                  <span className="shrink-0">🕐</span>
-                  <span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                  <span className="shrink-0 w-8 text-center" aria-hidden>{'🕐'}</span>
+                  <span className="pt-0.5">
                     About {Math.round(sitRunEstimateMs(introTuning) / 60000)} minutes if you use
                     every clock, of which {Math.round(sitPhaseMs(introTuning).study / 60000 * 10) / 10} is
                     studying. You can hand back the rest of any study window.
@@ -639,7 +640,7 @@ export default function CbatSit() {
               </CbatPersonalBest>
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -648,7 +649,7 @@ export default function CbatSit() {
                 onClick={beginLaunch}
                 disabled={phase === 'launching'}
                 data-demo-start
-                className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-lg transition-colors text-sm"
+                className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
               >
                 Start
               </button>

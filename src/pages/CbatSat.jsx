@@ -14,6 +14,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import {
   SAT_DIFFICULTIES, SAT_LAUNCH_MS, satTuning, satTotalQuestions, computeGrade,
   readStoredSatDifficulty, storeSatDifficulty,
@@ -959,15 +960,15 @@ export default function CbatSat() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className={`text-4xl mb-3${dim}`}>🗺️</p>
+              <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🗺️</p>
 
               {/* SAT_DIFFICULTIES is ordered [easier, hard], so the easier option
                   lands left of the title and hard lands right of it. The title is
                   too long to sit between them on a phone, so it goes above and
                   the pair sits under it. */}
-              <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Situational Awareness Test</p>
+              <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Situational Awareness Test</p>
               <CbatModeRow
                 modes={SAT_DIFFICULTIES}
                 value={difficulty}
@@ -976,26 +977,29 @@ export default function CbatSat() {
               />
               <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
-              <p className={`text-base text-slate-400 mb-5${dim}`}>
+              {/* This file's baseline runs one size up from the shared template
+                  (text-base body / text-sm muted instead of text-sm / text-xs),
+                  so the lg bump follows the same one-step-up proportion. */}
+              <p className={`text-base lg:text-lg text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
                 Build and hold a mental picture of a changing battlefield. Each situation feeds you one piece of information at a time — a contact on the grid, one field of a controller aircraft, or a call over the <span className="text-brand-600">radio</span>. Each one vanishes before the next arrives, then you answer from memory.
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-base text-[#ddeaf8]${dim}`}>
-                <div className="flex items-start gap-2">
-                  <span className="text-brand-600 font-bold shrink-0">1.</span>
-                  <span>Observe — contacts (type, count, allegiance, heading), aircraft data, and radio calls, one at a time.</span>
+              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-base lg:text-lg text-[#ddeaf8]${dim}`}>
+                <div className="flex items-start gap-3">
+                  <CbatIntroLabel>1.</CbatIntroLabel>
+                  <span className="pt-0.5">Observe — contacts (type, count, allegiance, heading), aircraft data, and radio calls, one at a time.</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-brand-600 font-bold shrink-0">2.</span>
-                  <span>Each one holds for {tuning.cardMs / 1000}s, then it's gone for good. Answer multiple-choice recall questions.</span>
+                <div className="flex items-start gap-3">
+                  <CbatIntroLabel>2.</CbatIntroLabel>
+                  <span className="pt-0.5">Each one holds for {tuning.cardMs / 1000}s, then it's gone for good. Answer multiple-choice recall questions.</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="text-brand-600 font-bold shrink-0">3.</span>
-                  <span>{tuning.situations} situations · {satTotalQuestions(tuning)} questions total.</span>
+                <div className="flex items-start gap-3">
+                  <CbatIntroLabel>3.</CbatIntroLabel>
+                  <span className="pt-0.5">{tuning.situations} situations · {satTotalQuestions(tuning)} questions total.</span>
                 </div>
-                <div className="flex items-start gap-2 text-sm text-[#8a9bb5] pt-1">
-                  <span className="shrink-0">⏱</span>
-                  <span>{PER_QUESTION_MS / 1000}s per question — running out counts as wrong. 🔊 Turn your sound on for the radio calls.</span>
+                <div className="flex items-start gap-3 text-sm lg:text-base text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                  <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
+                  <span className="pt-0.5">{PER_QUESTION_MS / 1000}s per question — running out counts as wrong. 🔊 Turn your sound on for the radio calls.</span>
                 </div>
               </div>
 
@@ -1010,24 +1014,24 @@ export default function CbatSat() {
               </CbatPersonalBest>
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-sm text-brand-600 hover:text-brand-700 transition-colors">
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-sm lg:text-base text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
 
-              <div className="flex items-center justify-center gap-3">
+              <div className="flex items-center justify-center gap-3 lg:gap-4">
                 <button
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
-                  className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}
+                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
                 >
                   Start
                 </button>
                 <button
                   onClick={() => { primeSpeech(); setPhase('tutorial') }}
                   disabled={launching}
-                  className={`px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm${dim}`}
+                  className={`px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base${dim}`}
                 >
                   Tutorial
                 </button>

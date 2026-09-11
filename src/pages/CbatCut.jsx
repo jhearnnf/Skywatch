@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
@@ -10,6 +10,7 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
+import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import {
   CUT_DIFFICULTIES, CUT_LAUNCH_MS, cutTuning,
@@ -370,18 +371,319 @@ function ResultsScreen({ stats, tuning }) {
   )
 }
 
+// ── Tutorial ─────────────────────────────────────────────────────────────────
+// A walkthrough of a FROZEN board. CUT has the steepest learning curve of any
+// game on the roster (measured across players with 5+ runs, mean score by run
+// number runs 298, 403, 460, 552, 623, 645, 708 against a population median of
+// 604), and almost all of that climb is learning where things are rather than
+// getting better at the underlying task. This exists to take that first slice
+// off, so an early score says something about the player instead of about how
+// many times they have seen the layout.
+//
+// It costs almost nothing to run because `advanceSim(sim, dt)` is a pure
+// function of an explicit dt: not calling it IS the pause. So these are the
+// real panels reading a real sim state, not mock-ups that can drift away from
+// the game they are teaching.
+//
+// Per-playthrough id for tutorial usage tracking. Stamped once per mount; the
+// backend dedupes/upserts on it so repeated progress reports for the same
+// playthrough never create a second row.
+function makeTutorialRunId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  } catch { /* fall through */ }
+  return `tut_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+// A fresh sim, plus the two states a board frozen at t=0 would never show on its
+// own: a standing camera order, and a live comms code with its OK already armed.
+// Without them the Sensor and System steps would be teaching greyed-out controls.
+function makeTutorialSim() {
+  const sim = makeSim('easier')
+  sim.requiredCamera = 'Bravo'
+  // dueAt exactly one submit window out, so `elapsedMs >= dueAt - CODE_SUBMIT_WINDOW`
+  // is true at t=0 and the keypad shows its live state rather than "submit in Ns".
+  sim.code = { digits: '472', dueAt: CODE_SUBMIT_WINDOW }
+  return sim
+}
+
+const CUT_TUTORIAL_STEPS = [
+  {
+    focus: 'nav',
+    title: 'Two windows, six displays',
+    body: 'Six displays run at once but you only get two windows to show them in. These six buttons above each window choose what that window shows. Swapping between them is the whole game, so get used to reaching for them.',
+  },
+  {
+    focus: 'strip',
+    title: 'Warnings and the clock',
+    body: 'Anything left out of tolerance is listed on the left, and your score drops for every second a warning sits there. Keeping this strip clear is the main job. On the right is the time inside the aircraft, not the time you have left. One task is scheduled against that clock.',
+  },
+  {
+    focus: 'message',
+    title: 'Message',
+    body: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. The drop order matters most, because it is said once and never repeated.',
+  },
+  {
+    focus: 'engine',
+    title: 'Engine',
+    body: 'Three fuel tanks, and only the one switched ON is draining. Keep all three within 50 litres of each other by switching the feed to whichever tank is fullest. Try tapping a tank button now.',
+  },
+  {
+    focus: 'navigation',
+    title: 'Navigation',
+    body: 'Airspeed bleeds away on its own the whole time. The minus and plus buttons move it 2 knots a tap, and you need to stay within 10 knots of Required. A new Required speed comes through on Message every so often.',
+  },
+  {
+    focus: 'sensor',
+    title: 'Sensor',
+    body: 'Three jobs on one display. A camera order tells you to switch to Alpha or Bravo. The air sensor needs re-activating every 45 seconds and the ground sensor every 90. Both count down in front of you.',
+  },
+  {
+    focus: 'mission',
+    title: 'Mission',
+    body: 'This is the memory one. The panel never tells you which station to drop or when, because that came through on Message and you have to hold it in your head. Watch the clock and press the right station when its time arrives.',
+  },
+  {
+    focus: 'system',
+    title: 'System',
+    body: 'Two jobs again. The pump holds hydraulic pressure between 90 and 110, on to raise it and off to let it fall. The keypad takes 3 digit comms codes, and OK only wakes up for the last 15 seconds of a code, so enter the digits early and wait.',
+  },
+]
+
+// Shorter than the live arena because the coach card sits above it.
+const TUTORIAL_ARENA_STYLE = { height: '62vh', minHeight: 400 }
+
+function TutorialComplete({ onExit }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+    >
+      <p className="text-5xl mb-3">✅</p>
+      <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
+      <p className="text-sm text-slate-400 mb-6">That is every display. The real thing runs for 3 minutes and nothing waits for you.</p>
+      <button
+        onClick={onExit}
+        className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+      >
+        Back to Briefing
+      </button>
+    </motion.div>
+  )
+}
+
+function CutTutorial({ onExit, onProgress }) {
+  const [stepIdx, setStepIdx] = useState(0)
+  const [done, setDone] = useState(false)
+  const [runId] = useState(makeTutorialRunId)
+
+  // Same simRef + snapshot split the live game uses, minus the tick loop. The
+  // sim only ever changes when the user presses something.
+  const [initialSim] = useState(makeTutorialSim)
+  const simRef = useRef(initialSim)
+  const [view, setView] = useState(initialSim)
+  const sync = useCallback(() => setView({ ...simRef.current }), [])
+
+  const step = CUT_TUTORIAL_STEPS[stepIdx]
+  const focusIsPanel = SYSTEMS.includes(step.focus)
+
+  // A step about one display puts it in the left window, so the thing being
+  // described is the thing on screen. The user can still swap either window,
+  // and that choice is stamped with the step it was made on so it clears itself
+  // when the step moves — derived, rather than a state resync in an effect.
+  const [pick1, setPick1] = useState(null)
+  const [sel2, setSel2] = useState('engine')
+  const sel1 = pick1?.step === stepIdx ? pick1.key
+    : focusIsPanel ? step.focus
+    : 'message'
+  const setSel1 = (key) => setPick1({ step: stepIdx, key })
+
+  useEffect(() => {
+    onProgress?.({ clientRunId: runId, furthestStep: stepIdx, totalSteps: CUT_TUTORIAL_STEPS.length, completed: false })
+  }, [stepIdx, runId, onProgress])
+  useEffect(() => {
+    if (done) onProgress?.({ clientRunId: runId, furthestStep: CUT_TUTORIAL_STEPS.length - 1, totalSteps: CUT_TUTORIAL_STEPS.length, completed: true })
+  }, [done, runId, onProgress])
+
+  // Deliberately non-scoring copies of the live handlers: pressing things should
+  // show what the control does, not bank points on a board nobody is timing.
+  const act = (fn) => { fn(simRef.current); sync() }
+  const onToggleTank = (i) => act(sim => sim.fuel.forEach((f, j) => { f.on = j === i }))
+  const onAdjustSpeed = (d) => act(sim => { sim.speed = Math.max(0, sim.speed + d) })
+  const onPump = () => act(sim => { sim.pump = !sim.pump })
+  const onCamera = (c) => act(sim => { sim.camera = c })
+  const onActivate = (kind) => act(sim => {
+    sim[kind === 'air' ? 'airDueAt' : 'groundDueAt'] =
+      sim.elapsedMs + (kind === 'air' ? AIR_INTERVAL : GROUND_INTERVAL)
+  })
+  const onRelease = () => {}
+  const onDigit = (d) => act(sim => { if (sim.codeEntry.length < 3) sim.codeEntry += d })
+  const onClearCode = () => act(sim => { sim.codeEntry = '' })
+  const onSubmitCode = () => act(sim => { sim.codeEntry = '' })
+
+  const renderPanel = (key) => {
+    const sim = view
+    switch (key) {
+      case 'message':    return <MessagePanel messages={sim.messages} />
+      case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} />
+      case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
+      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} />
+      case 'mission':    return <MissionPanel onRelease={onRelease} />
+      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} />
+      default:           return null
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center">
+        {/* 'viewed' vs the Skip button's 'skipped'. Both stop the auto-open, but
+            the difference is the only record of whether it landed. */}
+        <TutorialComplete onExit={() => onExit('viewed')} />
+      </div>
+    )
+  }
+
+  const sim = view
+  // Lit or dimmed. `.cbat-tutorial-dim` also blocks pointer events, so only the
+  // part being taught is reachable — which is the point of a spotlight.
+  const cls = (lit) => (lit ? ' cbat-tutorial-pulse' : ' cbat-tutorial-dim')
+  const advance = () => {
+    if (stepIdx === CUT_TUTORIAL_STEPS.length - 1) setDone(true)
+    else setStepIdx(i => i + 1)
+  }
+
+  return (
+    <div>
+      <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Tutorial</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setStepIdx(i => Math.max(0, i - 1))}
+              disabled={stepIdx === 0}
+              aria-label="Previous section"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+            >
+              {'‹'}
+            </button>
+            <span className="text-[10px] text-slate-500 tabular-nums">{stepIdx + 1} / {CUT_TUTORIAL_STEPS.length}</span>
+            <button
+              onClick={advance}
+              aria-label="Next section"
+              className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 bg-transparent border-0 cursor-pointer"
+            >
+              {'›'}
+            </button>
+          </div>
+        </div>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={stepIdx}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+          >
+            <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
+            <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+          </motion.div>
+        </AnimatePresence>
+        <div className="flex items-center gap-3 mt-4">
+          <button
+            onClick={() => onExit('skipped')}
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-0 cursor-pointer"
+          >
+            Skip tutorial
+          </button>
+          <button
+            onClick={advance}
+            className="ml-auto px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-xs cursor-pointer"
+          >
+            {stepIdx === CUT_TUTORIAL_STEPS.length - 1 ? 'Finish' : 'Next'}
+          </button>
+        </div>
+      </div>
+
+      {/* The live arena, frozen. Same structure as the playing branch so what is
+          taught here is laid out exactly where it will be during a run. */}
+      <div className="flex flex-col gap-1.5" style={TUTORIAL_ARENA_STYLE}>
+        <div className={`flex gap-1.5${cls(step.focus === 'strip')}`} style={{ flex: '10 1 0', minHeight: 0 }}>
+          <div style={{ width: '80%' }}>
+            <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
+              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-red-400">Warning</div>
+              <div className="flex-1 min-h-0 overflow-auto px-2 py-0.5 sm:py-1 flex flex-wrap items-start sm:items-center content-start sm:content-center gap-x-3 sm:gap-y-0.5">
+                <span className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ width: '20%' }}>
+            <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
+              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-brand-500">Clock</div>
+              <div className="flex-1 min-h-0 flex items-center justify-center px-1 overflow-hidden">
+                <span className="font-mono font-bold leading-none text-[#ddeaf8] tabular-nums whitespace-nowrap" style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
+                  {fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-1.5" style={{ flex: '90 1 0', minHeight: 0 }}>
+          <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
+            <div className={cls(step.focus === 'nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel1} onSelect={setSel1} /></div>
+            <div className={cls(focusIsPanel).trim()} style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel1)}</div>
+          </div>
+
+          <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
+            <div className={cls(step.focus === 'nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel2} onSelect={setSel2} /></div>
+            <div className="cbat-tutorial-dim" style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel2)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function CbatCut() {
-  const { user, apiFetch, API } = useAuth()
+  const { user, setUser, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const { enterImmersive, exitImmersive } = useGameChrome()
   const isDemo = !!useCbatDemo()
 
-  const [phase, setPhase] = useState('intro') // intro | launching | playing | results
+  const [phaseState, setPhase] = useState('intro') // intro | launching | playing | tutorial | results
   // Defaults to 'easier'; a user who switches gets their most recent choice
   // back on the next visit.
   const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredCutDifficulty))
   const tuning = cutTuning(difficulty)
+
+  // Keyed by board, so flipping mode never shows one board's score under
+  // another's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: fetchPB } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
+
+  // The tutorial opens itself the first time someone lands on CUT, because the
+  // players it is for are exactly the ones who would never go looking for it.
+  // Gated on never having been offered it AND having no score on this board, so
+  // it cannot interrupt somebody already partway through learning the game.
+  //
+  // DERIVED rather than pushed into state from an effect, because a personal
+  // best arrives asynchronously and an effect would be racing it.
+  //
+  // `tutorialDismissed` is the local half and it is load-bearing, not a
+  // belt-and-braces extra. Closing the tutorial also patches `user.tutorials`,
+  // but that patch can fail or be swallowed, and if the only thing suppressing
+  // this were the patched user then a failed write would put the player back in
+  // a walkthrough they had just closed, with no way out. Getting out has to work
+  // whether or not the network does.
+  const [tutorialDismissed, setTutorialDismissed] = useState(false)
+  const autoOfferTutorial = !tutorialDismissed
+    && !isDemo && !!user && phaseState === 'intro'
+    && !bestLoading && !personalBest
+    && (user.tutorials?.cbat_cut ?? 'unseen') === 'unseen'
+  const phase = autoOfferTutorial ? 'tutorial' : phaseState
   // The difficulty the run on screen is being played at. Pinned at launch so a
   // mid-results switch can't relabel or misfile a finished run. Held twice on
   // purpose: the ref is what the tick loop and handlers read, the state is what
@@ -422,19 +724,46 @@ export default function CbatCut() {
   const sync = useCallback(() => setView({ ...simRef.current }), [])
 
   useEffect(() => {
-    if (phase === 'playing') enterImmersive()
+    // Hide the nav chrome during the live game and the tutorial alike — the
+    // tutorial lays the board out exactly where the run will put it.
+    if (phase === 'playing' || phase === 'tutorial') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
 
+  // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
+  // Online-only by design — a learning aid, not a score, so no offline outbox.
+  const reportTutorialProgress = useCallback((body) => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/cut/tutorial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }, [user, apiFetch, API])
+
+  // Remember that this player has been offered the tutorial, so the auto-open
+  // below fires once and never again. Patched locally as well as on the server
+  // because the effect reads the in-memory user, not a refetch.
+  const markTutorialSeen = useCallback((status) => {
+    setUser?.(u => (u ? { ...u, tutorials: { ...(u.tutorials ?? {}), cbat_cut: status } } : u))
+    apiFetch(`${API}/api/users/me/tutorials`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tutorialId: 'cbat_cut', status }),
+    }).catch(() => {})
+  }, [setUser, apiFetch, API])
+
+  const openTutorial = useCallback(() => setPhase('tutorial'), [])
+  const closeTutorial = useCallback((status) => {
+    setTutorialDismissed(true)
+    markTutorialSeen(status)
+    setPhase('intro')
+  }, [markTutorialSeen])
+
   // While playing, widen the app-shell content on lg+ so the commentary column
   // has room beside the arena (mirrors the cbat-recent-wide pattern on the hub).
   useGameBodyClass('cbat-cut-wide', phase === 'playing')
-
-  // Keyed by board, so flipping mode never shows one board's score under
-  // another's name and never blanks the panel while the new one loads.
-  const { best: personalBest, loading: bestLoading, refresh: fetchPB } =
-    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
 
   const doFinish = useCallback(() => {
     const sim = simRef.current
@@ -643,7 +972,13 @@ export default function CbatCut() {
           <div className={`flex items-center gap-2 mb-2${phase === 'launching' ? ' cbat-launch-dim' : ''}`}>
             {phase === 'intro' || phase === 'launching'
               ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-              : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
+              : <CbatQuitButton
+                  // Backing out of the tutorial counts as having been offered it,
+                  // same as the Skip button — otherwise it would reopen by itself
+                  // on the next visit.
+                  onConfirm={phase === 'tutorial' ? () => closeTutorial('skipped') : goToIntro}
+                  confirmNeeded={phase === 'playing'}
+                />
             }
             <h1 className="text-sm font-extrabold text-slate-900">Cognitive Updating Test</h1>
             {phase === 'playing' && <ModeMarker mode={runTuning} />}
@@ -660,15 +995,15 @@ export default function CbatCut() {
             <div className="flex flex-col items-center">
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+                className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
               >
-                <p className={`text-4xl mb-3${dim}`}>🖥️</p>
+                <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🖥️</p>
 
                 {/* CUT_DIFFICULTIES is ordered [easier, hard], so the easier
                     option lands left of the title and hard lands right of it.
                     The title is too long to sit between them on a phone, so it
                     goes above and the pair sits under it. */}
-                <p className={`text-xl font-extrabold text-white mb-2${dim}`}>Cognitive Updating Test</p>
+                <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Cognitive Updating Test</p>
                 <CbatModeRow
                   modes={CUT_DIFFICULTIES}
                   value={difficulty}
@@ -677,19 +1012,19 @@ export default function CbatCut() {
                 />
                 <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
-                <p className={`text-sm text-slate-400 mb-5${dim}`}>
+                <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
                   Six aircraft displays run at once, but you can only view two at a time. Keep every system in
                   tolerance and react to scheduled tasks — the goal is to keep the <span className="text-red-400">Warning panel</span> empty.
                 </p>
 
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Engine</span><span>keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Nav</span><span>hold airspeed within ±{SPEED_TOL} kts of required</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Sensor</span><span>re-activate Air &amp; Ground sensors on time; select the ordered camera</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">Mission</span><span>drop the ordered station at its scheduled Clock time (from Message)</span></div>
-                  <div className="flex items-start gap-2"><span className="text-brand-600 font-bold shrink-0">System</span><span>keep hydraulic pressure 90–110; enter comms codes in 15s</span></div>
-                  <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1"><span className="shrink-0">🕑</span><span>The Clock shows in-game time — some tasks are scheduled to it</span></div>
-                  <div className="flex items-start gap-2 text-xs text-[#8a9bb5]"><span className="shrink-0">⏱</span><span>3 minutes — the Message display feeds every task</span></div>
+                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Engine</CbatIntroLabel><span className="pt-0.5">keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Nav</CbatIntroLabel><span className="pt-0.5">hold airspeed within ±{SPEED_TOL} kts of required</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Sensor</CbatIntroLabel><span className="pt-0.5">re-activate Air &amp; Ground sensors on time; select the ordered camera</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Mission</CbatIntroLabel><span className="pt-0.5">drop the ordered station at its scheduled Clock time (from Message)</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">keep hydraulic pressure 90–110; enter comms codes in 15s</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'🕑'}</span><span className="pt-0.5">The Clock shows in-game time — some tasks are scheduled to it</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">3 minutes — the Message display feeds every task</span></div>
                 </div>
 
                 <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
@@ -697,10 +1032,13 @@ export default function CbatCut() {
                 </CbatPersonalBest>
 
                 <div className={`text-center mb-4${dim}`}>
-                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
+                  <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">View Leaderboard →</Link>
                 </div>
 
-                <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
+                <div className="flex flex-wrap gap-3 justify-center">
+                  <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
+                  <button onClick={openTutorial} disabled={launching} className={`px-6 py-3 lg:px-8 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] disabled:text-slate-500 text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Tutorial</button>
+                </div>
               </motion.div>
             </div>
           )}
@@ -761,6 +1099,13 @@ export default function CbatCut() {
               {/* Running score commentary — desktop only, collapsible */}
               <CommentaryPanel log={sim.log} open={commentaryOpen} onToggle={toggleCommentary} />
             </div>
+          )}
+
+          {/* Tutorial — a frozen board, walked through one display at a time.
+              Always exits back to the briefing rather than straight into a run,
+              so starting a scored game is still a deliberate press. */}
+          {phase === 'tutorial' && (
+            <CutTutorial onExit={closeTutorial} onProgress={reportTutorialProgress} />
           )}
 
           {/* Results */}

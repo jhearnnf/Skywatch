@@ -910,7 +910,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
       {/* DPT_DIFFICULTIES is ordered [easier, hard], so the easier option lands
           left and hard lands right. The pair sits UNDER the title, matching
           FLAG, CUT and every other split game. */}
-      <h2 className="text-lg font-bold text-text text-center mb-2">Dynamic Projection Test</h2>
+      <h2 className="text-lg lg:text-xl font-bold text-text text-center mb-2">Dynamic Projection Test</h2>
       <CbatModeRow
         modes={DPT_DIFFICULTIES}
         value={difficulty}
@@ -918,12 +918,12 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
       />
       <p className="text-[11px] text-brand-600 text-center mb-3">{tuning.blurb}</p>
 
-      <p className="text-xs text-slate-400 text-center mb-3">
+      <p className="text-xs lg:text-sm text-slate-400 text-center mb-3 lg:mb-4 lg:max-w-lg lg:mx-auto">
         Vector multiple aircraft through gates and intercept enemy contacts.
       </p>
 
       {/* Instructions */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
+      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-[#ddeaf8] space-y-1.5 lg:space-y-2">
         <div className="flex items-start gap-2">
           <span className="text-brand-600 shrink-0">🎯</span>
           <span>Vector aircraft through gates using compass bearings</span>
@@ -968,8 +968,8 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
           enemy squadron arrive at ladder round 6) and no danger zones (they
           start at ladder round 5), so it lists only the rule it can actually
           break: CA-A and CA-N closing on each other once both are up. */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
-        <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">
+      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 text-sm lg:text-base text-[#ddeaf8] space-y-1.5 lg:space-y-2">
+        <p className="text-[10px] lg:text-xs uppercase tracking-wide text-slate-500 mb-1">
           {difficulty === 'easier' ? 'Separation rule' : 'Intercept rules'}
         </p>
         {difficulty !== 'easier' && (
@@ -996,7 +996,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
         )}
       </div>
 
-      <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className="max-w-md mx-auto">
+      <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className="max-w-md lg:max-w-2xl mx-auto">
         {best => (
           <>
             {best.bestScore} pts
@@ -1011,7 +1011,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
       </CbatPersonalBest>
 
       <div className="text-center mb-4">
-        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
           View Leaderboard →
         </Link>
       </div>
@@ -1033,11 +1033,11 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
 
       {!loading && aircraft.length > 0 && (
         <>
-          <h3 className="text-lg font-bold text-text text-center mb-1">Choose Your Aircraft</h3>
-          <p className="text-xs text-slate-400 text-center mb-3">
+          <h3 className="text-lg lg:text-xl font-bold text-text text-center mb-1">Choose Your Aircraft</h3>
+          <p className="text-xs lg:text-sm text-slate-400 text-center mb-3 lg:mb-4">
             Used as the visual for CA-A and CA-N — Fighter is randomly assigned per round 6+.
           </p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-w-md mx-auto">
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-w-md lg:max-w-2xl mx-auto">
           {aircraft.map((a, i) => (
             <motion.button
               key={a.briefId}
@@ -2060,7 +2060,7 @@ export default function CbatDpt() {
 
           {/* Aircraft selection */}
           {phase === 'select' && (
-            <div className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5">
+            <div className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 lg:p-8">
               <AircraftSelect
                 aircraft={aircraft}
                 onSelect={handleSelect}

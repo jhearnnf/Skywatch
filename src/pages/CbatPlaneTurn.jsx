@@ -119,14 +119,14 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-slate-800 text-center mb-1">{heading}</h2>
+      <h2 className="text-lg lg:text-xl font-bold text-slate-800 text-center mb-1">{heading}</h2>
       {traceModeSelector && <div className="mb-2">{traceModeSelector}</div>}
-      <p className="text-xs text-slate-400 text-center mb-3">{subheading}</p>
+      <p className="text-xs lg:text-sm text-slate-400 text-center mb-3 lg:mb-4">{subheading}</p>
 
       {/* Mode banner */}
       {!gameModeTrace2 && (
         <div
-          className={`max-w-md mx-auto mb-3 rounded-lg border-2 p-3 text-sm ${
+          className={`max-w-md lg:max-w-2xl mx-auto mb-3 lg:mb-4 rounded-lg border-2 p-3 lg:p-4 text-sm lg:text-base ${
             gameModeTrace1
               ? 'border-emerald-700 bg-emerald-100 text-emerald-800'
               : gameMode3D
@@ -155,7 +155,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
 
       {/* Instructions */}
       {!gameModeTrace2 && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
+        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-[#ddeaf8] space-y-1.5 lg:space-y-2">
           {gameModeTrace1 ? (
             <>
               <div className="flex items-start gap-2">
@@ -206,22 +206,22 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
       )}
 
       {gameModeTrace2 && (
-        <div className="max-w-md mx-auto mb-6 bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-6 text-center">
-          <p className="text-3xl mb-2">🛠️</p>
-          <p className="text-base font-bold text-slate-700 mb-1">Trace 2 — Coming Soon</p>
-          <p className="text-xs text-slate-500">Pick Trace 1 or a Practise mode above.</p>
+        <div className="max-w-md lg:max-w-2xl mx-auto mb-6 bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-6 lg:p-9 text-center">
+          <p className="text-3xl lg:text-4xl mb-2">🛠️</p>
+          <p className="text-base lg:text-lg font-bold text-slate-700 mb-1">Trace 2 — Coming Soon</p>
+          <p className="text-xs lg:text-sm text-slate-500">Pick Trace 1 or a Practise mode above.</p>
         </div>
       )}
 
       {!gameModeTrace2 && (
-        <CbatPersonalBest best={personalBest} loading={bestLoading} className="max-w-md mx-auto">
+        <CbatPersonalBest best={personalBest} loading={bestLoading} className="max-w-md lg:max-w-2xl mx-auto">
           {() => pbLine}
         </CbatPersonalBest>
       )}
 
       {!gameModeTrace2 && (
         <div className="text-center mb-4">
-          <Link to={leaderboardPath} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+          <Link to={leaderboardPath} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
             View Leaderboard →
           </Link>
         </div>
@@ -232,8 +232,8 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
           one — it gets a Start button, the same as Trace 2. */}
       {gameModeTrace2 || gameModeTrace1 ? null : (
         <>
-          <h2 className="text-lg font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
-          <p className="text-xs text-slate-400 text-center mb-3">
+          <h2 className="text-lg lg:text-xl font-bold text-slate-800 text-center mb-1">Choose Your Aircraft</h2>
+          <p className="text-xs lg:text-sm text-slate-400 text-center mb-3 lg:mb-4">
             Select an aircraft, then navigate through {MAX_LEVEL} levels.
           </p>
         </>
@@ -269,7 +269,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
           <button
             onClick={() => onSelect(aircraft[0])}
             data-demo-start
-            className="px-8 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+            className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
           >
             Start
           </button>
@@ -277,7 +277,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
       )}
 
       {!gameModeTrace2 && !gameModeTrace1 && !loading && aircraft.length > 0 && (
-        <div className="grid gap-3 max-w-md mx-auto grid-cols-3 sm:grid-cols-4">
+        <div className="grid gap-3 max-w-md lg:max-w-2xl mx-auto grid-cols-3 sm:grid-cols-4">
           {aircraft.map((a, i) => (
             <motion.button
               key={a.briefId}
@@ -1312,7 +1312,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
           {/* Aircraft selection */}
           {phase === 'select' && (
-            <div className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5">
+            <div className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 lg:p-8">
               <AircraftSelect
                 aircraft={displayAircraft}
                 onSelect={handleSelect}

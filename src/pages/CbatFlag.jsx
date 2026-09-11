@@ -112,13 +112,13 @@ function IntroScreen({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
     >
-      <p className={`text-4xl mb-3${dim}`}>🚩</p>
+      <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🚩</p>
 
       {/* FLAG_DIFFICULTIES is ordered [easier, hard], so the easier option lands
           left and hard lands right. The pair sits under the title, matching CUT. */}
-      <p className={`text-xl font-extrabold text-white mb-2${dim}`}>FLAG</p>
+      <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>FLAG</p>
       <CbatModeRow
         modes={FLAG_DIFFICULTIES}
         value={difficulty}
@@ -127,30 +127,30 @@ function IntroScreen({
       />
       <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
-      <p className={`text-sm text-slate-400 mb-5${dim}`}>
+      <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
         Track aircraft, solve maths under pressure, and strike target shapes. All at once.
       </p>
 
-      <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2${dim}`}>
-        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-600 font-bold shrink-0">⏱</span>
-          <span>60-second mission</span>
+      <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
+        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+          <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
+          <span className="pt-0.5">60-second mission</span>
         </div>
-        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-600 font-bold shrink-0">🎯</span>
-          <span>Click shapes when an aircraft circle overlaps them</span>
+        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+          <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🎯'}</span>
+          <span className="pt-0.5">Click shapes when an aircraft circle overlaps them</span>
         </div>
-        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-600 font-bold shrink-0">✈️</span>
-          <span>Only ringed aircraft carry a callsign — press YES/NO on whether that callsign is currently on screen</span>
+        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+          <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'✈️'}</span>
+          <span className="pt-0.5">Only ringed aircraft carry a callsign — press YES/NO on whether that callsign is currently on screen</span>
         </div>
-        <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-          <span className="text-brand-600 font-bold shrink-0">🔢</span>
-          <span>Solve maths questions on the numpad before they time out</span>
+        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+          <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🔢'}</span>
+          <span className="pt-0.5">Solve maths questions on the numpad before they time out</span>
         </div>
-        <div className="flex items-start gap-2 text-xs text-[#8a9bb5]">
-          <span className="shrink-0">⚠️</span>
-          <span>Wrong answers lose points. Score can go negative.</span>
+        <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+          <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
+          <span className="pt-0.5">Wrong answers lose points. Score can go negative.</span>
         </div>
       </div>
 
@@ -161,15 +161,15 @@ function IntroScreen({
       </CbatPersonalBest>
 
       <div className={`text-center mb-4${dim}`}>
-        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+        <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
           View Leaderboard →
         </Link>
       </div>
 
-      <div className={`flex flex-wrap gap-3 justify-center${dim}`}>
+      <div className={`flex flex-wrap gap-3 lg:gap-4 justify-center${dim}`}>
         <button
           onClick={onTutorial}
-          className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
+          className="px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
         </button>
@@ -177,7 +177,7 @@ function IntroScreen({
           onClick={onStart}
           disabled={disabled || launching}
           data-demo-start
-          className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
+          className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
         >
           {aircraftLoading ? 'Loading aircraft…' : aircraftList.length === 0 ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
         </button>

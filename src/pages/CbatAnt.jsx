@@ -1147,15 +1147,15 @@ export default function CbatAnt() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+              className="w-full max-w-xl lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className={`text-4xl mb-3${introDim}`}>{'\u{1F4E1}'}</p>
+              <p className={`text-4xl lg:text-5xl mb-3${introDim}`}>{'\u{1F4E1}'}</p>
 
               {/* Ordered [easier, hard, practise]. The row sits UNDER the title,
                   matching every other CBAT game, and it is the only place a
                   board is chosen — which is why there is one leaderboard link
                   below rather than one per board. */}
-              <p className={`text-xl font-extrabold text-white mb-1${introDim}`}>ANT</p>
+              <p className={`text-xl lg:text-2xl font-extrabold text-white mb-1${introDim}`}>ANT</p>
               <p className={`text-xs text-slate-500 uppercase tracking-wide mb-2${introDim}`}>Airborne Numerical Test</p>
               <CbatModeRow
                 modes={modes}
@@ -1165,7 +1165,7 @@ export default function CbatAnt() {
               />
               <p className={`text-[11px] text-brand-600 mb-3${introDim}`}>{tuning.blurb}</p>
 
-              <p className={`text-sm text-slate-400 mb-5${introDim}`}>
+              <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${introDim}`}>
                 {isPractise
                   ? 'The arithmetic on its own. Eight plain questions on one page with every figure written out, so you can drill the four calculations in any order without reading a map or a table.'
                   : isHard
@@ -1173,10 +1173,10 @@ export default function CbatAnt() {
                   : 'Speed, distance and time under pressure. Deliver a parcel across an eight-node network — each round one value is missing (Arrival Time, Total Distance, Fuel, or Speed). Calculate it from the data shown.'}
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4 text-left space-y-2${introDim}`}>
-                <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                  <span className="text-brand-600 font-bold shrink-0">{'⏱'}</span>
-                  <span>
+              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-4 lg:mb-7 text-left space-y-2 lg:space-y-3${introDim}`}>
+                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                  <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
+                  <span className="pt-0.5">
                     {isPractise
                       ? `${tuning.rounds} questions on one page, untimed — work them in any order`
                       : `${tuning.rounds} rounds, ${tuning.roundTime} seconds each — the clock pauses while you review`}
@@ -1184,44 +1184,44 @@ export default function CbatAnt() {
                 </div>
                 {isPractise ? (
                   <>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
-                      <span>Every figure is written out for you. No map, no tables, no hunting.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9EE}'}</span>
+                      <span className="pt-0.5">Every figure is written out for you. No map, no tables, no hunting.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
-                      <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}, on its own leaderboard.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
+                      <span className="pt-0.5">Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}, on its own leaderboard.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4A1}'}</span>
-                      <span>Get these automatic before you take Hard on. On that board the reading is what costs you, not the arithmetic.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4A1}'}</span>
+                      <span className="pt-0.5">Get these automatic before you take Hard on. On that board the reading is what costs you, not the arithmetic.</span>
                     </div>
                   </>
                 ) : isHard ? (
                   <>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4C4}'}</span>
-                      <span>Read the last line of the objective box first. It tells you what is being asked.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4C4}'}</span>
+                      <span className="pt-0.5">Read the last line of the objective box first. It tells you what is being asked.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
-                      <span>Weight gives you speed on the Load chart. Speed gives you miles per gallon on the Fuel chart.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9EE}'}</span>
+                      <span className="pt-0.5">Weight gives you speed on the Load chart. Speed gives you miles per gallon on the Fuel chart.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u26C8'}</span>
-                      <span>A weather leg has its revised speed given to you in the flight data. One of them makes you faster.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u26C8'}</span>
+                      <span className="pt-0.5">A weather leg has its revised speed given to you in the flight data. One of them makes you faster.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u2708'}</span>
-                      <span>The last three rounds fly two aircraft with a chart each. Check you are reading the right one.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2708'}</span>
+                      <span className="pt-0.5">The last three rounds fly two aircraft with a chart each. Check you are reading the right one.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
-                      <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
+                      <span className="pt-0.5">Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4CF}'}</span>
-                      <span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4CF}'}</span>
+                      <span className="pt-0.5">
                         Every answer is a whole number. Close counts as within 3 minutes, 5 miles, 10 mph or
                         1 gallon. Times entered as HHMM (e.g. 1430).
                       </span>
@@ -1229,17 +1229,17 @@ export default function CbatAnt() {
                   </>
                 ) : (
                   <>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F9EE}'}</span>
-                      <span>Speed = Distance / Time. Parcel weight sets miles/min and gal/hr.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9EE}'}</span>
+                      <span className="pt-0.5">Speed = Distance / Time. Parcel weight sets miles/min and gal/hr.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F3AF}'}</span>
-                      <span>Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
+                      <span className="pt-0.5">Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
                     </div>
-                    <div className="flex items-start gap-2 text-sm text-[#ddeaf8]">
-                      <span className="text-brand-600 font-bold shrink-0">{'\u{1F4CF}'}</span>
-                      <span>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                      <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4CF}'}</span>
+                      <span className="pt-0.5">
                         Every answer is a whole number. Close counts as within 5 miles, 10 mph or 2 minutes —
                         fuel must be exact. Times entered as HHMM (e.g. 1430).
                       </span>
@@ -1269,18 +1269,18 @@ export default function CbatAnt() {
               <div className={`text-center mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1${introDim}`}>
                 {/* One link. Each mode is its own board, and the row above already
                     says which one you are looking at. */}
-                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   {'View Leaderboard →'}
                 </Link>
               </div>
 
-              <div className={`flex flex-wrap gap-3 justify-center${introDim}`}>
+              <div className={`flex flex-wrap gap-3 lg:gap-4 justify-center${introDim}`}>
                 {/* Tutorial always sits beside Start, on every CBAT game that
                     has one. Modes are chosen in the row at the top; nothing
                     that switches board belongs down here. */}
                 <button
                   onClick={() => setPhase('tutorial')}
-                  className="px-6 py-3 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm cursor-pointer"
+                  className="px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
                 >
                   Tutorial
                 </button>
@@ -1288,7 +1288,7 @@ export default function CbatAnt() {
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
-                  className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
+                  className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
                 >
                   Start
                 </button>

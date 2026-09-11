@@ -39,6 +39,7 @@ import CbatQuitButton from '../CbatQuitButton'
 import CbatGameOver from '../CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../CbatModeSelector'
 import CbatPersonalBest from '../CbatPersonalBest'
+import CbatIntroLabel from './CbatIntroLabel'
 import { useCbatPersonalBest } from '../../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 
@@ -480,14 +481,14 @@ export default function CbatTabbedReasoning({
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className={`text-4xl mb-3${dim}`}>{emoji}</p>
+              <p className={`text-4xl lg:text-5xl mb-3${dim}`}>{emoji}</p>
 
               {/* `difficulties` is ordered [easier, hard], so the easier option
                   lands left and hard lands right. The pair sits under the title,
                   matching FLAG, CUT, Numerical Operations, SAT and RTT. */}
-              <p className={`text-xl font-extrabold text-white mb-2${dim}`}>{gameName}</p>
+              <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>{gameName}</p>
               <CbatModeRow
                 modes={difficulties}
                 value={difficulty}
@@ -496,18 +497,25 @@ export default function CbatTabbedReasoning({
               />
               <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{introTuning.blurb}</p>
 
-              <p className={`text-sm text-slate-400 mb-5${dim}`}>{introLead}</p>
+              <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>{introLead}</p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-5 text-left space-y-2 text-sm text-[#ddeaf8]${dim}`}>
+              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
                 {introBullets.map((b, i) => (
-                  <div key={i} className={`flex items-start gap-2 ${b.muted ? 'text-xs text-[#8a9bb5]' : ''}`}>
-                    <span className="text-brand-600 font-bold shrink-0">{b.icon}</span>
-                    <span>{b.text}</span>
-                  </div>
+                  b.muted ? (
+                    <div key={i} className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                      <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{b.icon}</span>
+                      <span className="pt-0.5">{b.text}</span>
+                    </div>
+                  ) : (
+                    <div key={i} className="flex items-start gap-3">
+                      <CbatIntroLabel>{b.icon}</CbatIntroLabel>
+                      <span className="pt-0.5">{b.text}</span>
+                    </div>
+                  )
                 ))}
-                <div className="flex items-start gap-2 text-xs text-[#8a9bb5] pt-1">
-                  <span className="shrink-0">⏱</span>
-                  <span>
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                  <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
+                  <span className="pt-0.5">
                     {Math.round(introTuning.readMs / 1000)}s to read · {totalQuestions} questions ·{' '}
                     {Math.round(introTuning.perQuestionMs / 1000)}s each. Running out counts as wrong
                   </span>
@@ -525,7 +533,7 @@ export default function CbatTabbedReasoning({
               </CbatPersonalBest>
 
               <div className={`text-center mb-4${dim}`}>
-                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                <Link to={`/cbat/${introTuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
@@ -534,7 +542,7 @@ export default function CbatTabbedReasoning({
                 onClick={beginLaunch}
                 disabled={phase === 'launching'}
                 data-demo-start
-                className="px-8 py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-lg transition-colors text-sm"
+                className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
               >
                 Start
               </button>
