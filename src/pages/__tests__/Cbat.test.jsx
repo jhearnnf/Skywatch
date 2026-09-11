@@ -488,18 +488,14 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('points at ANT, which has gained a Hard board', () => {
-    // ANT now ships an Easier/Hard pair, and Hard is a different game rather
-    // than the same one turned up: written objectives, weather, two-lookup fuel
-    // and two aircraft, on its own leaderboard from zero. Nothing about the tile
-    // would otherwise tell a returning player it is there. Drop this once it has
-    // been true long enough to stop being news.
-    //
-    // One badge at a time, or the slot stops meaning "look here" — the Practise
-    // drill had the slot before this and gave it up for it.
+  it('no longer flags ANT\'s Hard board — it has stopped being news', () => {
+    // ANT's Easier/Hard pair (written objectives, weather, two-lookup fuel and
+    // two aircraft, its own leaderboard from zero) has had the "New Hard Mode"
+    // badge long enough that it was just crowding the tile, same as the
+    // difficulty-modes badge above.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['ant'])
-    expect(screen.getByText('New Hard Mode')).toBeTruthy()
+    expect(CBAT_GAMES.filter(g => g.badge)).toEqual([])
+    expect(screen.queryByText('New Hard Mode')).toBeNull()
     expect(screen.queryByText('New Practise Mode')).toBeNull()
   })
 
