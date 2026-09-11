@@ -48,6 +48,33 @@
 // clear no more of the coverage floor than three games played three times, and a band still
 // straddling the cutoff reports 'provisional' rather than picking the side it happens to sit on.
 // Nobody gets a PASS they can screenshot off one good evening.
+//
+// THE WINDOW AND THE BAR ARE TWO DIFFERENT NUMBERS, and since 2026-09-11 they are allowed to
+// differ. FORM_WINDOW is how many runs we AVERAGE; minRunsFor() is how many we need before we
+// BELIEVE the average. They started out equal at 3 and still are for almost every game.
+//
+// CUT is the exception, at 6, because its learning curve is unlike anything else on the roster.
+// Measured across players with 5+ runs, mean score by run number goes
+// 298, 403, 460, 552, 623, 645, 708 — against a population median of 604. It takes about five runs
+// just to reach average and the curve is still climbing at run seven, where SAT is flat from run
+// one and RTT has settled by run three. A 3-run CUT score therefore measures how many times
+// someone has played CUT, not how good they are: both candidates we hold real score sheets for
+// read stanine 4 on it, one of them off a single run of 270 against a first-run population mean of
+// 298. Raising the bar does not change their average, it changes how much we claim to know from
+// it — the estimate shrinks toward the middle and carries a wider band until the runs are there.
+//
+// The WINDOW deliberately stays at 3 for CUT. Widening it to 6 would drag a learner's early runs
+// into their own mean, which is the exact bias being corrected — a six-run player's last three
+// runs are their settled ones, and those are the ones worth averaging.
+//
+// Knock-on, and intended: CUT is mult 3 inside a 49-weight domain, so it is around 36% of Control
+// Officer (ATC) on its own. Halving a 3-run player's confidence drops their coverage on that
+// battery by roughly 18 points and turns some scores that used to read PASS into 'provisional'.
+// That is the honest reading of thin evidence, not a regression, and buildFocus already puts
+// "bank more CUT runs" at the top of the list whenever coverage sits under the floor.
+//
+// scripts/calibrateStanineAnchors.js keeps its own FORM_WINDOW = 3 literal. That tracks the
+// WINDOW, which has not moved, so it is still correct — do not "fix" it to match this bar.
 
 const mongoose = require('mongoose');
 const { CBAT_GAMES } = require('../constants/cbatGames');
@@ -58,10 +85,15 @@ const { scoreToStanine, scoreForStanine, MEDIAN_STANINE } = require('./cbatStani
 // one bad run shouldn't tank the estimate, and a lifetime average would permanently drag in a
 // user's worst early runs — punishing the very improvement the report exists to show.
 const FORM_WINDOW = 3;
-// A full window. Reaching it is what makes a test FIRM: no shrink, no band, and its whole weight
-// counted toward the coverage a verdict needs. Below it a test still scores — see the header — but
-// as a range. It is equal to FORM_WINDOW, so a firm test is always averaging a full window.
+// How many runs make a test FIRM: no shrink, no band, and its whole weight counted toward the
+// coverage a verdict needs. Below it a test still scores — see the header — but as a range.
 const FORM_MIN_RUNS = 3;
+// Games that need more than the default before their average is worth believing. Keyed by the
+// registry key the report scores (Hard keys only — Easier never counts). See the header for why
+// CUT is here and why nothing else is yet: a game earns an entry by having a learning curve still
+// climbing at the default, which is a thing to measure, not to guess at.
+const MIN_RUNS_BY_GAME = { cut: 6 };
+const minRunsFor = gameKey => MIN_RUNS_BY_GAME[gameKey] ?? FORM_MIN_RUNS;
 
 // The prior a thin test is shrunk toward, and the width of the band around it. Both are the
 // stanine scale's own definition rather than anything we invented: a normal curve cut into nine
@@ -74,8 +106,12 @@ const PRIOR_SD = 2;
 const BAND_Z = 1.645;
 
 // How much of a test's estimate the user's own runs supply, 0 to 1. Everything the thin-run path
-// does is a function of this one number.
-const confidenceFor = runs => Math.min(runs, FORM_MIN_RUNS) / FORM_MIN_RUNS;
+// does is a function of this one number. `gameKey` is optional so existing callers and tests that
+// ask the default question still get the default answer.
+const confidenceFor = (runs, gameKey) => {
+  const bar = minRunsFor(gameKey);
+  return Math.min(runs, bar) / bar;
+};
 
 // Only Hard counts. The real CBAT has one difficulty, so folding an Easier run into the estimate
 // would inflate it — and Easier collections are separate registry keys anyway (`cut-easier` et al),
@@ -84,8 +120,16 @@ const confidenceFor = runs => Math.min(runs, FORM_MIN_RUNS) / FORM_MIN_RUNS;
 const EASIER_SUFFIX = '-easier';
 
 // ── Form ─────────────────────────────────────────────────────────────────────────────────────
-// One query per scorable game, run in parallel: the user's most recent FORM_WINDOW finished runs.
-// Every result model carries the { userId: 1, createdAt: -1 } index this sorts on.
+// One query per scorable game, run in parallel. Every result model carries the
+// { userId: 1, createdAt: -1 } index this sorts on.
+//
+// Two different numbers come out of one query, and the limit has to satisfy the larger of them:
+//
+//   form  the mean of the most recent FORM_WINDOW runs — what we average
+//   runs  how many runs are banked, up to that game's bar — what decides how much we believe it
+//
+// They were the same number while every bar was 3. CUT's bar of 6 makes them differ, so fetching
+// only FORM_WINDOW docs would cap `runs` at 3 and leave CUT permanently unable to read as firm.
 async function loadForm(userId, gameKeys = SCORED_GAME_KEYS) {
   const entries = await Promise.all(gameKeys.map(async (gameKey) => {
     const cfg = CBAT_GAMES[gameKey];
@@ -95,7 +139,7 @@ async function loadForm(userId, gameKeys = SCORED_GAME_KEYS) {
     const recent = await cfg.Model.find(query)
       .select(`${cfg.primaryField} createdAt`)
       .sort({ createdAt: -1 })
-      .limit(FORM_WINDOW)
+      .limit(Math.max(FORM_WINDOW, minRunsFor(gameKey)))
       .lean();
 
     if (!recent.length) {
@@ -109,9 +153,13 @@ async function loadForm(userId, gameKeys = SCORED_GAME_KEYS) {
     }
 
     const scores = recent.map(r => r[cfg.primaryField]).filter(Number.isFinite);
+    // Averaged over the WINDOW only. A player six runs into CUT is measured on their last three,
+    // which are their settled ones — widening the mean to six would pull their own early
+    // learning runs back in, which is the bias the bar exists to correct.
+    const window = scores.slice(0, FORM_WINDOW);
     return [gameKey, {
       runs: scores.length,
-      form: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+      form: window.length ? window.reduce((a, b) => a + b, 0) / window.length : null,
       easierOnly: false,
       lastPlayedAt: recent[0].createdAt,
     }];
@@ -139,19 +187,22 @@ async function loadFormForUsers(userIds, gameKeys = SCORED_GAME_KEYS) {
     const cfg = CBAT_GAMES[gameKey];
     if (!cfg) return;
 
+    // Sliced to the larger of the window and this game's bar, for the same reason loadForm is —
+    // `runs` has to be able to reach the bar, while `form` still averages the window alone.
     const rows = await cfg.Model.aggregate([
       { $match: { ...(cfg.modeFilter ?? {}), userId: { $in: userIds } } },
       { $sort: { userId: 1, createdAt: -1 } },
       { $group: { _id: '$userId', scores: { $push: `$${cfg.primaryField}` } } },
-      { $project: { recent: { $slice: ['$scores', FORM_WINDOW] } } },
+      { $project: { recent: { $slice: ['$scores', Math.max(FORM_WINDOW, minRunsFor(gameKey))] } } },
     ]);
 
     for (const row of rows) {
       const scores = row.recent.filter(Number.isFinite);
       if (!byUser[String(row._id)]) continue;
+      const window = scores.slice(0, FORM_WINDOW);
       byUser[String(row._id)][gameKey] = {
         runs: scores.length,
-        form: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+        form: window.length ? window.reduce((a, b) => a + b, 0) / window.length : null,
         easierOnly: false,
         lastPlayedAt: null,
       };
@@ -200,7 +251,10 @@ function scoreTest(code, form) {
     if (f.easierOnly) easierOnly = true;
     if (!f.runs) continue;
 
-    const confidence = confidenceFor(f.runs);
+    // Per game, not per test: two games of one test can carry different bars, and the shrink on
+    // each is a statement about that game's own evidence.
+    const bar = minRunsFor(gameKey);
+    const confidence = confidenceFor(f.runs, gameKey);
     played.push({
       gameKey,
       label: CBAT_GAMES[gameKey]?.label ?? gameKey,
@@ -212,16 +266,16 @@ function scoreTest(code, form) {
       // belongs to the battery total rather than to the game.
       stanine: scoreToStanine(gameKey, f.form),
       confidence,
-      firm: f.runs >= FORM_MIN_RUNS,
+      firm: f.runs >= bar,
       lastPlayedAt: f.lastPlayedAt,
     });
 
-    if (f.runs < FORM_MIN_RUNS) {
+    if (f.runs < bar) {
       needsRuns.push({
         gameKey,
         label: CBAT_GAMES[gameKey]?.label ?? gameKey,
         runs: f.runs,
-        runsNeeded: FORM_MIN_RUNS - f.runs,
+        runsNeeded: bar - f.runs,
       });
     }
   }
@@ -352,9 +406,16 @@ function buildBatteryReport(battery, form) {
   // runs"). Counted over the games this role is actually tested on, and capped per game at a full
   // window, so the denominator is a finish line the user can reach rather than a total that grows
   // every time they play.
+  // Capped at each game's OWN bar, so a role containing CUT reports a bigger finish line than one
+  // without — which is the truth about what it costs to make that role firm.
   const gameKeys = batteryGameKeys(battery);
   let runsBanked = 0;
-  for (const key of gameKeys) runsBanked += Math.min(form[key]?.runs ?? 0, FORM_MIN_RUNS);
+  let runsForFirmScore = 0;
+  for (const key of gameKeys) {
+    const bar = minRunsFor(key);
+    runsBanked += Math.min(form[key]?.runs ?? 0, bar);
+    runsForFirmScore += bar;
+  }
 
   return {
     key: battery.key,
@@ -374,7 +435,7 @@ function buildBatteryReport(battery, form) {
     // Runs banked toward a firm score, and the number that gets there. The honest caption under a
     // range: it says how far off the single number is in the only unit the user can act in.
     runsBanked,
-    runsForFirmScore: gameKeys.size * FORM_MIN_RUNS,
+    runsForFirmScore,
     // How many of this role's tests are settled, and how many are contributing at all. The /cbat
     // card needs the first to tell "has never finished a window" apart from "part way through a
     // well-covered role" — two states that both report a band, and want opposite headlines.
@@ -595,6 +656,12 @@ async function buildAllBatteryScores(userId, targetKey = null) {
   // runsToCount travels with the data rather than being mirrored in the frontend. The card counts
   // runs toward it in its own copy ("2 / 3", "play it once more"), and a client guessing at three
   // while the report moved to four would be wrong in the one place a new user is watching.
+  //
+  // It stays the DEFAULT bar on purpose, even now that CUT wants six. The question it answers is
+  // "how many runs before I have any score at all", and the answer is three because any of the
+  // other games will do it. A game's own bar reaches the card through `nearestUnlock.runsNeeded`
+  // and each focus row's `needsRuns`, both of which are per-game and already win where the card
+  // has a specific game to name.
   return {
     batteries,
     targetFocus,
@@ -638,14 +705,15 @@ function nearestUnlock(form, battery = null) {
   let best = null;
 
   for (const [gameKey, f] of Object.entries(form)) {
-    if (!f || !f.runs || f.runs >= FORM_MIN_RUNS) continue;
+    const bar = minRunsFor(gameKey);
+    if (!f || !f.runs || f.runs >= bar) continue;
     if (allowed && !allowed.has(gameKey)) continue;
 
     const row = {
       gameKey,
       label: CBAT_GAMES[gameKey]?.label ?? gameKey,
       runs: f.runs,
-      runsNeeded: FORM_MIN_RUNS - f.runs,
+      runsNeeded: bar - f.runs,
       lastPlayedAt: f.lastPlayedAt ?? null,
     };
     const better = !best
@@ -779,6 +847,7 @@ module.exports = {
   scoreTest,
   FORM_WINDOW,
   FORM_MIN_RUNS,
+  minRunsFor,
   FOCUS_LIMIT,
   PRIOR_STANINE,
   PRIOR_SD,
