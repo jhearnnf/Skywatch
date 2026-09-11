@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { getAircraftRoster } from '../lib/offlineRoster'
+import { isOnline } from '../lib/net'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import {
@@ -12,7 +13,7 @@ import {
 } from '../utils/cbat/targetSymbols'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
-import { getModelUrl, has3DModel } from '../data/aircraftModels'
+import { getModelUrl, hasWorkingCloseupModel, titleToSlug } from '../data/aircraftModels'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
@@ -32,6 +33,35 @@ const SCAN_FIRST_APPEAR_MS = 10_000
 // When the scan panel rotates, roughly this fraction of the time it'll show
 // the current scan target so players can actually rack up ID points.
 const SCAN_PANEL_MATCH_CHANCE = 0.35
+// The scan panel reveals the aircraft through a thin vertical strip that
+// slides left to right and then resets to the left edge, mirroring the real
+// test's scan line — full height, only a sliver of width, no back-and-forth.
+// It's a DOM-level clip-path (see .cbat-scan-letterbox in main.css) sliding
+// over a camera that's zoomed out just far enough to fit the whole aircraft,
+// so the strip is always cutting into the model rather than blank margin.
+const SCAN_SWEEP_PERIOD_MS = 6000
+// Which of the aircraft models the Scan panel draws from, by title slug (the
+// same slug that names the GLB in public/models/). Deliberately a short list
+// of distinct shapes rather than the whole fleet: the real test's scan set
+// was one fighter silhouette and one airliner-type, alongside ground vehicles
+// (van, tank) that will join this set as models arrive. Both 737-derived
+// types we have are "the Boeing"; the P-8A is the cleaner outline (the E-7A
+// carries its radar fin). The admin allowlist still applies on top of this —
+// it can narrow the set, not widen it.
+const SCAN_SET_SLUGS = new Set(['eurofighter typhoon fgr4', 'p-8a poseidon mra1'])
+// The ground vehicles in the scan set. Not briefs — no cutout, no admin
+// allowlist, no roster endpoint; the GLB in public/models/ is the whole asset —
+// so they're appended to whatever the aircraft fetch returned. Shown side-on,
+// the way the real test presents them, while aircraft stay top-down. The
+// briefIds are synthetic and only ever compared against each other.
+//
+// Online only: these aren't in the offline precache (see offlineAircraft.js),
+// and a scan entry whose model can't load is a blank panel with no answer.
+const SCAN_VEHICLES = [
+  { briefId: 'vehicle-van',     title: 'Van',           modelUrl: '/models/van.glb',     view: 'side' },
+  { briefId: 'vehicle-flatbed', title: 'Flatbed lorry', modelUrl: '/models/flatbed.glb', view: 'side' },
+  { briefId: 'vehicle-tank',    title: 'Tank',          modelUrl: '/models/tank.glb',    view: 'side' },
+]
 const SECOND_SYS_TARGET_MS = 60_000
 const SYS_SCROLL_MS = 1_000        // ms per row of system-panel scroll
 const SYS_GREEN_FADE_MS = 1_500
@@ -84,15 +114,28 @@ function randomCode() {
   return out
 }
 
-// Build a scan-panel aircraft entry with a random framing so only a slice of
-// the model sits in view. Seed lets React remount the Canvas for fresh framing.
+// Build a scan-panel aircraft entry. The seed is unique per showing so React
+// remounts the letterbox wrapper and its CSS animation restarts from 0% —
+// which is what makes every aircraft's sweep begin at the far left edge and
+// run to the far right, even when the same aircraft is shown twice in a row.
 function scanFrame(aircraft) {
   return {
     ...aircraft,
     seed: `${aircraft.briefId}-${Math.random().toString(36).slice(2, 8)}`,
-    offsetX: (Math.random() - 0.5) * 4,   // ±2 world units
-    offsetZ: (Math.random() - 0.5) * 4,
   }
+}
+
+// Pick an aircraft for the scan panel: the current target with probability
+// SCAN_PANEL_MATCH_CHANCE, otherwise one of the OTHER aircraft. The fallback
+// deliberately excludes the target — drawing from the whole roster let the
+// target sneak back in on the "miss" branch too, which with a small allowlist
+// (four working models) pushed the real match rate past 50% and made the
+// panel feel like it was handing out the answer. Falls back to the target
+// only when there is nothing else to show.
+export function pickScanPanelAircraft(aircraftList, target, rng = Math.random) {
+  if (target && rng() < SCAN_PANEL_MATCH_CHANCE) return target
+  const others = target ? aircraftList.filter(a => a.briefId !== target.briefId) : aircraftList
+  return others.length > 0 ? others[Math.floor(rng() * others.length)] : target
 }
 
 // Plan target labels and pre-generate all scene shapes + their spawn times.
@@ -483,57 +526,78 @@ function LightTargetPanel({ pattern }) {
 }
 
 // ── Scan panels ──────────────────────────────────────────────────────────────
-// Standalone radar overlay so the sweep keeps animating even when no aircraft
-// is showing in the scan panel (pre-first-spawn and during post-match cooldown).
-function ScanRadar() {
+// Grid backdrop for the Scan panel. Always rendered, aircraft or not, and
+// unclipped by the letterbox sweep below it — only the aircraft render itself
+// is meant to disappear outside the strip, not the panel's own theming.
+function ScanGrid() {
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 8, background: '#020a18' }}>
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
-            'radial-gradient(circle at center, transparent 40%, rgba(6,16,30,0.55) 100%), ' +
-            'repeating-linear-gradient(0deg, rgba(91,170,255,0.08) 0 1px, transparent 1px 6px), ' +
-            'repeating-linear-gradient(90deg, rgba(91,170,255,0.08) 0 1px, transparent 1px 6px)',
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        aria-hidden
-        className="radar-sweep"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
-            'conic-gradient(from 0deg, rgba(91,170,255,0.35) 0deg, rgba(91,170,255,0) 40deg, rgba(91,170,255,0) 360deg)',
-          mixBlendMode: 'screen',
-          pointerEvents: 'none',
-          animation: 'radar-sweep 2.6s linear infinite',
-          borderRadius: '50%',
-        }}
-      />
-    </div>
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background:
+          'radial-gradient(circle at center, transparent 40%, rgba(6,16,30,0.55) 100%), ' +
+          'repeating-linear-gradient(0deg, rgba(91,170,255,0.08) 0 1px, transparent 1px 6px), ' +
+          'repeating-linear-gradient(90deg, rgba(91,170,255,0.08) 0 1px, transparent 1px 6px)',
+        pointerEvents: 'none',
+      }}
+    />
   )
 }
 
+// Tracks the largest centred square that fits inside `ref`'s box. The Scan
+// panel's own shape varies a lot (a squat wide bar in some layouts, a tall
+// sliver in others), but the aircraft render and its letterbox band are only
+// meaningful square-on — a percentage-width clip band means something
+// different, and much too wide, on a panel where "fit" has shrunk the
+// aircraft down to a slice of the panel's actual width.
+function useContainSquare(ref) {
+  const [size, setSize] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      setSize(Math.max(0, Math.min(width, height)))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ref])
+  return size
+}
+
+// flash — 'hit' (green) or 'miss' (red) for the beat after an ID press, else null.
+const SCAN_FLASH_CLASS = {
+  hit:  'border-green-400 bg-green-500/15',
+  miss: 'border-red-500 bg-red-500/15',
+}
+
 function ScanPanel({ aircraft, onPress, flash, idPulse = false }) {
+  const boxRef = useRef(null)
+  const square = useContainSquare(boxRef)
   return (
-    <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-1 flex items-center gap-1 transition-colors ${flash ? 'border-green-400 bg-green-500/15' : 'border-[#1a3a5c]'}`}>
-      <div className="flex-1 h-full relative">
-        {aircraft ? (
-          <Suspense fallback={<div className="w-full h-full bg-[#020a18] rounded" />}>
-            <AircraftTopDown
+    <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-1 flex items-center gap-1 transition-colors ${SCAN_FLASH_CLASS[flash] ?? 'border-[#1a3a5c]'}`}>
+      <div ref={boxRef} className="flex-1 h-full relative rounded-lg overflow-hidden bg-[#020a18] flex items-center justify-center">
+        <ScanGrid />
+        {aircraft && square > 0 && (
+          <Suspense fallback={null}>
+            {/* Keyed on the wrapper, not the canvas: the sweep is this div's
+                CSS animation, and only a remount restarts it from the left
+                edge. Keying the canvas alone left the wrapper (and its
+                half-finished sweep) in place when the aircraft changed. */}
+            <div
               key={aircraft.seed}
-              modelUrl={aircraft.modelUrl}
-              partial
-              offsetX={aircraft.offsetX}
-              offsetZ={aircraft.offsetZ}
-            />
+              className="cbat-scan-letterbox"
+              style={{
+                position: 'relative', width: square, height: square,
+                animationDuration: `${SCAN_SWEEP_PERIOD_MS}ms`,
+              }}
+            >
+              <AircraftTopDown modelUrl={aircraft.modelUrl} view={aircraft.view} fit transparent silhouette />
+              <div className="cbat-scan-letterbox-edge" style={{ animationDuration: `${SCAN_SWEEP_PERIOD_MS}ms` }} aria-hidden />
+            </div>
           </Suspense>
-        ) : (
-          <ScanRadar />
         )}
       </div>
       <button
@@ -553,7 +617,7 @@ function ScanTargetPanel({ aircraft }) {
       <div className="flex-1 w-full relative max-[900px]:h-full">
         {aircraft ? (
           <Suspense fallback={<div className="w-full h-full bg-[#020a18] rounded" />}>
-            <AircraftTopDown modelUrl={aircraft.modelUrl} clear />
+            <AircraftTopDown modelUrl={aircraft.modelUrl} view={aircraft.view} fit silhouette />
           </Suspense>
         ) : (
           <div className="w-full h-full bg-[#020a18] rounded flex items-center justify-center text-[9px] text-slate-600">waiting…</div>
@@ -1116,7 +1180,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   // Section 4 (Scan) state. The target is the first available aircraft; the
   // scan panel cycles aircraft and periodically shows the target.
   const [scanPanelAc, setScanPanelAc] = useState(null)
-  const [scanFlash, setScanFlash] = useState(false)
+  const [scanFlash, setScanFlash] = useState(null)  // 'hit' | 'miss' | null
   const scanTargetAc = aircraftList[0] || null
 
   // Section 5 (System) state. Target code is injected below the visible fold so
@@ -1367,11 +1431,11 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
   }
 
   const onScanPress = () => {
-    if (scanActive && scanPanelAc && scanTargetAc && scanPanelAc.briefId === scanTargetAc.briefId) {
-      setScanFlash(true)
-      setTimeout(() => setScanFlash(false), 300)
-      advance()
-    }
+    if (!scanActive) return
+    const hit = scanPanelAc && scanTargetAc && scanPanelAc.briefId === scanTargetAc.briefId
+    setScanFlash(hit ? 'hit' : 'miss')
+    setTimeout(() => setScanFlash(null), 300)
+    if (hit) advance()
   }
 
   const onSysCodeClick = (ci, row, code) => {
@@ -1638,7 +1702,7 @@ export default function CbatTarget() {
   const [lightPattern, setLightPattern] = useState(randomLightPattern)
   const [lightTarget, setLightTarget] = useState(randomLightPattern)
   const [lightFlash, setLightFlash] = useState(false)
-  const [scanFlash, setScanFlash] = useState(false)
+  const [scanFlash, setScanFlash] = useState(null)  // 'hit' | 'miss' | null
   const lightLastChangeRef = useRef(0)
   const lightChangeCountRef = useRef(0)
   const lightForceMatchAtRef = useRef(randRange(3, 6))
@@ -1678,12 +1742,23 @@ export default function CbatTarget() {
       .then(d => {
         const allowlist = new Set((settings?.cbatTargetAircraftBriefIds ?? []).map(String))
         const list = (d.data || [])
-          .filter(a => has3DModel(a.briefId, a.title))
+          // Excludes the Chinook too: the Scan panel's close, sweeping crop is
+          // exactly the range its broken GLB rotor shows up in (see ACT).
+          .filter(a => hasWorkingCloseupModel(a.briefId, a.title))
           // See CbatFlag: a demo mount's synthetic roster can't match the
-          // admin's brief-id allowlist, so skip it there.
-          .filter(a => demo || allowlist.has(String(a.briefId)))
+          // admin's brief-id allowlist, so skip it there. Same for the scan
+          // set — the demo only bundles two models, and one of them is the
+          // Hawk.
+          .filter(a => demo || (allowlist.has(String(a.briefId)) && SCAN_SET_SLUGS.has(titleToSlug(a.title))))
           .map(a => ({ ...a, modelUrl: getModelUrl(a.briefId, a.title) }))
+        if (!demo && isOnline()) list.push(...SCAN_VEHICLES)
         setAircraftList(list)
+        // Same chunk the lazy <AircraftTopDown> resolves to, so this costs no
+        // extra download — it just starts the GLB fetches before the first
+        // scan needs them.
+        import('../components/AircraftTopDown')
+          .then(m => list.forEach(a => m.preloadModel?.(a.modelUrl)))
+          .catch(() => {})
       })
       .catch(() => {})
   }, [user, settings?.cbatTargetAircraftBriefIds])  // eslint-disable-line react-hooks/exhaustive-deps
@@ -1773,14 +1848,6 @@ export default function CbatTarget() {
     }
   }, [elapsedMs, phase, lightTarget, lightPattern])
 
-  // Pick an aircraft for the scan panel, biased toward the current scan target
-  // so players can score ID points regularly rather than waiting on a pure
-  // random-draw coincidence.
-  const pickScanPanelAircraft = useCallback((target) => {
-    if (target && Math.random() < SCAN_PANEL_MATCH_CHANCE) return target
-    return pick(aircraftList)
-  }, [aircraftList])
-
   // ── Scan panel / target schedules ──────────────────────────────────────────
   useEffect(() => {
     if (phase !== 'playing' || aircraftList.length === 0) return
@@ -1791,13 +1858,13 @@ export default function CbatTarget() {
       setScanTargetAc(nextTarget)
       scanTargetLastChangeRef.current = elapsedMs
       if (!scanPanelAc && !cooldownActive) {
-        setScanPanelAc(scanFrame(pickScanPanelAircraft(nextTarget)))
+        setScanPanelAc(scanFrame(pickScanPanelAircraft(aircraftList, nextTarget)))
         scanLastChangeRef.current = elapsedMs
       }
       return
     }
     if (!scanPanelAc && !cooldownActive && elapsedMs >= SCAN_FIRST_APPEAR_MS) {
-      setScanPanelAc(scanFrame(pickScanPanelAircraft(scanTargetAc)))
+      setScanPanelAc(scanFrame(pickScanPanelAircraft(aircraftList, scanTargetAc)))
       scanLastChangeRef.current = elapsedMs
     }
     // Rotate scan target (SCAN_TARGET_CHANGE_MS)
@@ -1807,10 +1874,10 @@ export default function CbatTarget() {
     }
     // Rotate scan panel (SCAN_PANEL_CHANGE_MS) — biased to current target
     if (scanPanelAc && elapsedMs - scanLastChangeRef.current >= SCAN_PANEL_CHANGE_MS) {
-      setScanPanelAc(scanFrame(pickScanPanelAircraft(scanTargetAc)))
+      setScanPanelAc(scanFrame(pickScanPanelAircraft(aircraftList, scanTargetAc)))
       scanLastChangeRef.current = elapsedMs
     }
-  }, [elapsedMs, phase, aircraftList, scanPanelAc, scanTargetAc, pickScanPanelAircraft])
+  }, [elapsedMs, phase, aircraftList, scanPanelAc, scanTargetAc])
 
   // ── Scene-target activation schedule ───────────────────────────────────────
   useEffect(() => {
@@ -2023,11 +2090,19 @@ export default function CbatTarget() {
       setScanPanelAc(null)
       scanCooldownUntilRef.current = elapsedMs + SCAN_PANEL_MATCH_COOLDOWN_MS
       scanLastChangeRef.current = elapsedMs
-      setScanFlash(true)
-      setTimeout(() => setScanFlash(false), 350)
+      // A found target is done with: move on to a different one straight
+      // away rather than waiting out the 45s rotation, so the next thing the
+      // player sees in the panel has to be identified afresh.
+      const others = aircraftList.filter(a => a.briefId !== scanTargetAc.briefId)
+      if (others.length > 0) setScanTargetAc(pick(others))
+      scanTargetLastChangeRef.current = elapsedMs
+      setScanFlash('hit')
+      setTimeout(() => setScanFlash(null), 350)
     } else {
       bumpCounter('scanMisclicks')
       addScore(SCORE.scanMiss, 'scan')
+      setScanFlash('miss')
+      setTimeout(() => setScanFlash(null), 350)
     }
   }
 

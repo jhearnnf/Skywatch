@@ -128,7 +128,6 @@ export default function CbatPlaneTurnScene({ runKey }) {
               <Suspense fallback={null}>
                 <AircraftTopDown
                   modelUrl={HAWK_T2_URL}
-                  clear
                   transparent
                   yawDeg={HAWK_T2_NOSE_YAW}
                 />

@@ -9,7 +9,7 @@ import CbatTarget from '../CbatTarget'
 // the viewport. Row count now tracks the column's share of the device height.
 
 const mockUseAuth        = vi.hoisted(() => vi.fn())
-const mockHas3DModel     = vi.hoisted(() => vi.fn(() => true))
+const mockHasWorkingCloseup = vi.hoisted(() => vi.fn(() => true))
 const mockGetModelUrl    = vi.hoisted(() => vi.fn(() => null))
 const mockUseAppSettings = vi.hoisted(() => vi.fn())
 
@@ -22,9 +22,11 @@ vi.mock('../../context/GameChromeContext', () => ({
   useGameChrome: () => ({ enterImmersive: vi.fn(), exitImmersive: vi.fn() }),
 }))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
+vi.mock('../../components/AircraftTopDown', () => ({ default: () => null, preloadModel: () => {} }))
 vi.mock('../../data/aircraftModels', () => ({
   getModelUrl: mockGetModelUrl,
-  has3DModel:  mockHas3DModel,
+  hasWorkingCloseupModel: mockHasWorkingCloseup,
+  titleToSlug: (t) => t.toLowerCase().replace(/[^a-z0-9-]+/g, ' ').trim(),
 }))
 vi.mock('framer-motion', () => ({
   motion: {
@@ -37,7 +39,7 @@ vi.mock('framer-motion', () => ({
 }))
 
 const BRIEF_ID = 'b1'
-const MOCK_AIRCRAFT = [{ briefId: BRIEF_ID, title: 'F-35', cutoutUrl: 'http://example.com/f35.png' }]
+const MOCK_AIRCRAFT = [{ briefId: BRIEF_ID, title: 'Eurofighter Typhoon FGR4', cutoutUrl: 'http://example.com/typhoon.png' }]
 
 function setupUser() {
   const apiFetch = vi.fn().mockImplementation((url) => {

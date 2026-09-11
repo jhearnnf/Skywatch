@@ -140,6 +140,42 @@ header.fixed {
   animation: stat-skeleton-sweep 1.8s ease-in-out infinite;
 }
 
+/* Target's Scan panel: reveals the aircraft through a thin vertical strip —
+   full height, narrow width — that slides left to right then resets to the
+   left edge, mirroring the real CBAT scan line rather than a static crop. A
+   clip-path inset keeps the band width constant (15%) while both edges slide
+   together; `infinite` with no `alternate` gives the left-to-right-then-reset
+   motion instead of a back-and-forth wipe. */
+@keyframes cbat-scan-letterbox {
+  0%   { clip-path: inset(0 85% 0 0);  -webkit-clip-path: inset(0 85% 0 0); }
+  100% { clip-path: inset(0 0 0 85%);  -webkit-clip-path: inset(0 0 0 85%); }
+}
+.cbat-scan-letterbox {
+  animation-name: cbat-scan-letterbox;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+/* The strip's leading edge: a neon line that rides the front of the band. A
+   child of the clipped element, so it inherits the clip — it just has to track
+   the band's right edge, which runs 15% → 100% over the same duration. Both
+   animations start on the same mount, so they stay in step. */
+@keyframes cbat-scan-letterbox-edge {
+  0%   { left: calc(15% - 2px); }
+  100% { left: calc(100% - 2px); }
+}
+.cbat-scan-letterbox-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(125,188,255,0.9);
+  box-shadow: 0 0 3px rgba(91,170,255,0.6), 0 0 8px rgba(59,140,235,0.4);
+  pointer-events: none;
+  animation-name: cbat-scan-letterbox-edge;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
 /* Indeterminate reload bar — sweeps across the top edge of a window-driven
    Reports chart/table while its data refetches. */
 @keyframes report-loading-bar {
