@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { isCbatGuideUrl, prepareGuideChrome } from '../../utils/guideHref'
 import BotBadge from '../../components/BotBadge'
@@ -174,6 +175,35 @@ function SectionLabel({ children, className = 'px-3 pt-3 pb-1.5' }) {
   )
 }
 
+// Which DMs are lifted above the channels as "New direct messages".
+//
+// The navbar badge already treats a DM as the most important thing in here —
+// it puts a number on DMs and only a dot on channel chatter — but the rail used
+// to list DMs last, so someone landing with a "1" had to scroll past every
+// channel to find what the badge was counting. Unread DMs now sit at the top,
+// and fall back to Direct messages once read.
+//
+// Except the one you are reading. Opening it marks it read on the spot, and if
+// it dropped to the bottom of the rail at that moment the row would move out
+// from under your cursor and the rail would reshuffle while you were still on
+// it. So the active DM stays put until you go somewhere else.
+function useWaitingDms(dms, activeId) {
+  const [pinned, setPinned] = useState(null)
+  const activeDm = dms.find(d => String(d._id) === String(activeId))
+  const nextPinned = activeDm?.unread
+    ? activeDm._id
+    : (pinned != null && String(pinned) === String(activeId) ? pinned : null)
+  // Derived from props, so it is adjusted during render rather than in an
+  // effect — an effect would paint one frame with the row in the wrong place.
+  if (nextPinned !== pinned) setPinned(nextPinned)
+
+  const isWaiting = d => d.unread || (nextPinned != null && String(d._id) === String(nextPinned))
+  return {
+    waiting: dms.filter(isWaiting),
+    rest:    dms.filter(d => !isWaiting(d)),
+  }
+}
+
 // The persistent left rail: support, channels and DMs in one scrolling column.
 //
 // Purely presentational — ChatShell owns the data and the polling, so the rail
@@ -191,6 +221,26 @@ export default function ChatSidebar({
   // anything has been fetched, the shell renders the last copy while it
   // refreshes rather than emptying the sections out.
   const placeholder = 'text-[11px] text-slate-400 px-3 pb-3'
+
+  const { waiting: waitingDms, rest: otherDms } = useWaitingDms(dms, activeId)
+  const dmRow = (d) => (
+    <Row
+      key={d._id}
+      to={`/chat/${d._id}`}
+      icon="✉️"
+      title={d.title}
+      preview={d.preview}
+      unread={d.unread}
+      personalUnread={d.personalUnread}
+      timestamp={d.lastMessageAt}
+      active={String(activeId) === String(d._id)}
+      presence={(d.otherUser && presence?.presenceById?.get(String(d.otherUser._id))) || null}
+    />
+  )
+  // A member whose every DM is waiting up top would otherwise see a "Direct
+  // messages" heading with nothing under it. Admins keep the section for the
+  // search box that lives there.
+  const showDmSection = isAdmin || otherDms.length > 0 || waitingDms.length === 0
 
   return (
     <div className="flex-1 flex flex-col bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
@@ -287,6 +337,13 @@ export default function ChatSidebar({
         {/* The rule between reading and talking. */}
         <div className="border-b-2 border-slate-200" />
 
+        {waitingDms.length > 0 && (
+          <section aria-label="New direct messages">
+            <SectionLabel>New direct messages</SectionLabel>
+            {waitingDms.map(dmRow)}
+          </section>
+        )}
+
         <SectionLabel>Channels</SectionLabel>
         {channels.length === 0 ? (
           <p className={placeholder}>
@@ -352,32 +409,23 @@ export default function ChatSidebar({
           </>
         )}
 
-        <SectionLabel>Direct messages</SectionLabel>
+        {showDmSection && (
+          <section aria-label="Direct messages">
+            <SectionLabel>Direct messages</SectionLabel>
 
-        {/* Admins can start a thread with anyone, not just people who have
-            posted somewhere they can tap a name. */}
-        {isAdmin && <AdminDmSearch onOpenDm={onOpenDm} />}
+            {/* Admins can start a thread with anyone, not just people who have
+                posted somewhere they can tap a name. */}
+            {isAdmin && <AdminDmSearch onOpenDm={onOpenDm} />}
 
-        {dms.length === 0 ? (
-          <p className={placeholder}>
-            {loading
-              ? 'Loading…'
-              : <>No direct messages. Tap someone&rsquo;s name in a channel to message them.</>}
-          </p>
-        ) : dms.map(d => (
-          <Row
-            key={d._id}
-            to={`/chat/${d._id}`}
-            icon="✉️"
-            title={d.title}
-            preview={d.preview}
-            unread={d.unread}
-            personalUnread={d.personalUnread}
-            timestamp={d.lastMessageAt}
-            active={String(activeId) === String(d._id)}
-            presence={(d.otherUser && presence?.presenceById?.get(String(d.otherUser._id))) || null}
-          />
-        ))}
+            {dms.length === 0 ? (
+              <p className={placeholder}>
+                {loading
+                  ? 'Loading…'
+                  : <>No direct messages. Tap someone&rsquo;s name in a channel to message them.</>}
+              </p>
+            ) : otherDms.map(dmRow)}
+          </section>
+        )}
       </div>
 
       {isAdmin && (
