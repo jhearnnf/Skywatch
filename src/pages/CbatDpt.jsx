@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -23,6 +23,15 @@ import {
   readStoredDptDifficulty, storeDptDifficulty,
 } from '../utils/cbat/dptDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
+import {
+  SCOPE_SIZE, SCOPE_HALF, ARENA_HALF, EDGE_BUFFER, ALT_MIN, ALT_MAX,
+  normalizeDeg, bearingToVec, bearingToCenter, segmentsIntersect, moveAircraft,
+} from '../utils/cbat/dptPhysics'
+import {
+  DPT_PRACTICE_DRILLS, buildDrillAircraft, buildDrillGates, judgeCommand,
+  headingSettled, gateCrossing, bearingSector, sweepExtent, onTrackForGate, pad3,
+} from '../utils/cbat/dptPractice'
+import GuideArrow from '../components/cbat/GuideArrow'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // The full ladder. A run no longer plays all eight: Easier serves rounds 1-4
@@ -31,19 +40,9 @@ import { initialDifficulty } from '../utils/cbat/difficultyParam'
 // startRound() indexes — not the length of a run.
 const TOTAL_ROUNDS = 8
 
-// Arena uses an internal SVG viewBox of 1000×1000. Aircraft, gates and danger
-// zones in later chunks position themselves in this coordinate space, then
-// scale to whatever pixel size the panel renders at.
-const SCOPE_SIZE  = 1000
-const SCOPE_HALF  = SCOPE_SIZE / 2          // 500 — centre of the scope
-const ARENA_HALF  = 480                     // half-size of playable square
+// The arena's coordinate space (a 1000×1000 SVG viewBox) and the flight model
+// live in utils/cbat/dptPhysics.js, shared with the practice mode.
 const LABEL_INSET = 22                      // how far labels sit inside the boundary
-
-// Compass bearing → unit vector (SVG y is inverted, so north = (0, -1))
-function bearingToVec(bearing) {
-  const rad = (bearing * Math.PI) / 180
-  return { dx: Math.sin(rad), dy: -Math.cos(rad) }
-}
 
 // Ray from centre to the bounding square at the given bearing
 function squareBoundaryT(bearing, halfSize) {
@@ -61,33 +60,7 @@ const MINOR_TICKS = Array.from({ length: 36 }, (_, i) => i * 10)
   .filter(b => b % 45 !== 0 && b !== 0)
 
 // ── Aircraft motion ─────────────────────────────────────────────────────────
-const AIRCRAFT_SPEED = 18    // scope units per second (cross-arena ≈ 53s)
-const TURN_RATE      = 35    // degrees per second
 const AIRCRAFT_ICON  = 40    // visual icon size in scope units (label offset)
-const ALT_RATE       = 500   // ft per second climb/descent
-const ALT_MIN        = 1000  // ft — lowest commandable altitude
-const ALT_MAX        = 10000 // ft — highest commandable altitude
-const EDGE_BUFFER    = 90    // scope units inside boundary that triggers auto-turn
-
-function normalizeDeg(d) {
-  let x = d % 360
-  if (x < 0) x += 360
-  return x
-}
-
-// Distance the heading must travel to reach `target` going `direction`.
-// Result is in [0, 360).
-function turnDistance(heading, target, direction) {
-  if (direction === 'L') return normalizeDeg(heading - target)
-  return normalizeDeg(target - heading)
-}
-
-// Compass bearing from (x, y) toward arena centre.
-function bearingToCenter(x, y) {
-  const dx = SCOPE_HALF - x
-  const dy = SCOPE_HALF - y
-  return normalizeDeg((Math.atan2(dx, -dy) * 180) / Math.PI)
-}
 
 // ── Gates / rounds ──────────────────────────────────────────────────────────
 // Rounds 1–3: 105s (1m 45s) — basic CA-A flow.
@@ -165,18 +138,6 @@ const DZ_SEP_REQUIRED     = 1000   // ft — aircraft must stay this far above/b
 
 // ── Round completion bonus ───────────────────────────────────────────────────
 const ROUND_BONUS_PER_ROUND = 50   // × roundNum awarded when all gates hit
-
-// Segment-segment intersection test using cross-product orientation.
-function cross(ax, ay, bx, by) { return ax * by - ay * bx }
-function segmentsIntersect(p1, p2, q1, q2) {
-  const d1 = cross(q2.x - q1.x, q2.y - q1.y, p1.x - q1.x, p1.y - q1.y)
-  const d2 = cross(q2.x - q1.x, q2.y - q1.y, p2.x - q1.x, p2.y - q1.y)
-  const d3 = cross(p2.x - p1.x, p2.y - p1.y, q1.x - p1.x, q1.y - p1.y)
-  const d4 = cross(p2.x - p1.x, p2.y - p1.y, q2.x - p1.x, q2.y - p1.y)
-  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
-      ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true
-  return false
-}
 
 // Generate `count` gates of the given kind ('letter' | 'number'), each at a
 // random position within the spawn annulus and with a random orientation.
@@ -697,7 +658,9 @@ const AIRCRAFT_ACCENT = {
 //    -mt-2 + z-index 0 so it appears to emerge from beneath the arena
 //    (which has z-10). Reduced height vs the original DptControls strip
 //    so mobile screens fit everything without scrolling. ─────────────────
-function AircraftButtons({ aircraftList, activeId, onSelectActive }) {
+// `guideId` is practice-only and defaults off: hang a guide arrow under that
+// button, for the drill that teaches selecting an aircraft before commanding it.
+function AircraftButtons({ aircraftList, activeId, onSelectActive, guideId = null }) {
   const has = (id) => aircraftList.some(a => a.id === id)
   return (
     <div className="relative z-0 -mt-2 flex gap-1.5 px-1">
@@ -714,9 +677,9 @@ function AircraftButtons({ aircraftList, activeId, onSelectActive }) {
             type="button"
             disabled={!exists}
             onClick={() => exists && onSelectActive(id)}
-            className={`flex-1 pt-3 pb-1.5 rounded-b-lg font-mono font-bold text-sm border transition-colors ${
+            className={`relative flex-1 pt-3 pb-1.5 rounded-b-lg font-mono font-bold text-sm border transition-colors ${
               isActive ? '' : inactiveCls
-            }`}
+            }${guideId === id ? ' cbat-triple-pulse' : ''}`}
             style={
               isActive
                 ? { background: acc.bg, borderColor: acc.border, color: acc.textActive }
@@ -724,7 +687,10 @@ function AircraftButtons({ aircraftList, activeId, onSelectActive }) {
                   ? { color: acc.textInactive }
                   : undefined
             }
-          >{id}</button>
+          >
+            {id}
+            {guideId === id && <GuideArrow dir="up" />}
+          </button>
         )
       })}
     </div>
@@ -735,10 +701,15 @@ function AircraftButtons({ aircraftList, activeId, onSelectActive }) {
 // Memo'd so the 30fps game-loop renders of the parent don't re-reconcile
 // the numpad subtree — that competed with click handling on mobile and
 // caused taps to be dropped in later, busier rounds.
+//
+// `guideDir` / `guideDigit` / `guideMode` are practice-only and default off:
+// the L or R button, the numpad key, or the BRG/ALT toggle the current drill
+// wants pressed next gets a guide arrow.
 const DptControls = memo(function DptControls({
   turnDir, onTurnDir,
   inputMode, onInputMode,
   bearingInput, onDigit,
+  guideDir = null, guideDigit = null, guideMode = null,
 }) {
   const display = bearingInput.padEnd(3, '_')
   // Track the most recent pointerdown fire so the synthesized click that
@@ -769,13 +740,16 @@ const DptControls = memo(function DptControls({
         disabled={dirDisabled}
         onClick={() => !dirDisabled && onTurnDir(d)}
         data-demo-answer
-        className={`w-full h-full py-3 rounded-lg font-mono font-extrabold text-lg border transition-colors ${
+        className={`relative w-full h-full py-3 rounded-lg font-mono font-extrabold text-lg border transition-colors ${
           dirDisabled ? disabledCls : isActive ? 'text-white' : inactiveCls
-        }`}
+        }${guideDir === d ? ' cbat-triple-pulse' : ''}`}
         style={isActive
           ? { background: accent.solid, borderColor: accent.border, touchAction: 'manipulation' }
           : { touchAction: 'manipulation' }}
-      >{label}</button>
+      >
+        {label}
+        {guideDir === d && <GuideArrow dir="up" />}
+      </button>
     )
   }
 
@@ -791,15 +765,18 @@ const DptControls = memo(function DptControls({
       <button
         type="button"
         onClick={() => onInputMode(mode)}
-        className={`flex-1 pt-1.5 pb-3 rounded-t-lg font-mono font-bold text-xs border transition-colors ${
+        className={`relative flex-1 pt-1.5 pb-3 rounded-t-lg font-mono font-bold text-xs border transition-colors ${
           isActive
             ? (useAltAccent ? 'text-white' : 'bg-brand-600 border-brand-400 text-white')
             : 'bg-[#0a1628] border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240]'
-        }`}
+        }${guideMode === mode ? ' cbat-triple-pulse' : ''}`}
         style={useAltAccent
           ? { background: accent.solid, borderColor: accent.border, touchAction: 'manipulation' }
           : { touchAction: 'manipulation' }}
-      >{label}</button>
+      >
+        {label}
+        {guideMode === mode && <GuideArrow dir="down" />}
+      </button>
     )
   }
 
@@ -823,9 +800,12 @@ const DptControls = memo(function DptControls({
         if (r.label === label && Date.now() - r.t < 500) return
         fire()
       }}
-      className="aspect-square rounded-lg font-mono font-bold text-xl bg-[#0a1628] border border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240] active:bg-[#163055] transition-colors select-none"
+      className={`relative aspect-square rounded-lg font-mono font-bold text-xl bg-[#0a1628] border border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240] active:bg-[#163055] transition-colors select-none${guideDigit === label ? ' cbat-triple-pulse' : ''}`}
       style={{ touchAction: 'manipulation' }}
-    >{label}</button>
+    >
+      {label}
+      {guideDigit === label && <GuideArrow dir="down" />}
+    </button>
   )
 
   return (
@@ -903,7 +883,7 @@ const DptControls = memo(function DptControls({
 // title here the way it does on every other split game. There is no launch flash:
 // picking an aircraft IS the Start button, and the logo intro that follows
 // already marks the moment the run begins.
-function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading, difficulty, onDifficulty }) {
+function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading, difficulty, onDifficulty, onPractice }) {
   const tuning = dptTuning(difficulty)
   return (
     <div>
@@ -1016,6 +996,21 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
         </Link>
       </div>
 
+      {/* Practice sits apart from the aircraft grid because picking an aircraft
+          IS the Start button: it must not read as one more way to begin a run. */}
+      <div className="flex flex-col items-center mb-5">
+        <button
+          type="button"
+          onClick={onPractice}
+          className="px-6 py-3 lg:px-8 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
+        >
+          Tutorial
+        </button>
+        <p className="text-[11px] text-slate-500 mt-2 text-center">
+          Nine short drills on turning. No score, no timer.
+        </p>
+      </div>
+
       {loading && (
         <div className="flex flex-col items-center justify-center py-10">
           <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mb-4" />
@@ -1068,6 +1063,739 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
   )
 }
 
+// ── Practice mode ───────────────────────────────────────────────────────────
+// Nine drills on the real arena with the real numpad, teaching the one idea
+// DPT never explains on screen: the three digits are an absolute compass
+// bearing, and the L/R press before them decides which way round the aircraft
+// turns to reach it. The drills themselves (poses, gates, goals, the judging of
+// a command) live in utils/cbat/dptPractice.js; this component owns the loop,
+// the input and the rendering, and it flies the same `moveAircraft` a run does.
+//
+// A wrong command is not blocked. The aircraft does what it was told, the
+// command line and arc draw as they would in a run, the card says what went
+// wrong, and the drill snaps back to its start once that has had time to
+// register. Seeing a long-way-round arc is the lesson.
+
+// How long a wrong command plays out before the drill resets — the command
+// visualisation's own lifetime, so the arc is seen in full.
+const PRACTICE_RESET_MS   = COMMAND_VIZ_DURATION_MS
+// A settled heading or a cleared gate holds for this long before the next
+// drill loads, so the aircraft is seen flying straight on the new heading.
+const PRACTICE_ADVANCE_MS = 900
+const PRACTICE_NO_DONE    = new Set()
+// Header tag while practising, in the slot the difficulty marker uses in a run.
+const PRACTICE_MODE_MARKER = { key: 'practice', label: 'Tutorial' }
+
+// Per-playthrough id for practice usage tracking. Stamped once per mount; the
+// admin Reports funnel keys on it.
+function makePracticeRunId() {
+  try {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  } catch { /* fall through */ }
+  return `prac_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+// ── Mini compass ────────────────────────────────────────────────────────────
+// A north-up compass ring drawn around the selected aircraft, travelling with
+// it. It makes the one thing the numpad never shows visible where the eye is:
+// the three digits are a place on this ring, and each digit narrows down where.
+//   nothing typed   ring, ticks every 10 degrees, the four cardinals, and a
+//                   white tick at the aircraft's current heading
+//   one digit       a 100 degree band lit, with a label every 10 degrees
+//   two digits      a 10 degree band, labelled at both edges
+//   committed       the bearing blinks at its angle until the turn settles
+// And while no turn is in progress, an arrow sweeps round the outside of the
+// ring from the aircraft's nose in the direction L/R would take it, in the
+// colour that button wears on the numpad. It is the answer to "which way is
+// L", shown before the digits go in rather than after.
+//
+// Sizes are in scope units at desktop size, where the arena renders at about
+// 700px. `scale` (from the arena's rendered width, see DptPractice) grows them
+// on a phone, where the same units come out at half the pixels and 12-unit
+// text is unreadable: text scales fully so it keeps its desktop pixel size,
+// radii by 70% of that so the ring does not swallow the arena.
+const MC_RING_R  = 112   // ring radius, outside the aircraft's own blue ring
+const MC_BAND    = 14    // lit band thickness, outward from the ring
+const MC_SWEEP_R = 134   // the turn-direction arrow's track, outside the band
+const MC_LABEL_R = 156   // label radius
+const MC_LABEL_STAGGER = 22   // every other band label sits this much further out
+const MC_FONT_CARDINAL = 15
+const MC_FONT_LABEL    = 15
+const MC_FONT_TARGET   = 19
+const MC_DESKTOP_ARENA_PX = 700
+const MC_MAX_SCALE = 2.2
+const MC_SWEEP_COLOR = { L: '#6fd28a', R: '#ffd84a' }
+
+// How much to grow the mini compass for an arena rendered `arenaPx` wide.
+function miniCompassScale(arenaPx) {
+  if (!arenaPx || arenaPx <= 0) return 1
+  return Math.min(MC_MAX_SCALE, Math.max(1, MC_DESKTOP_ARENA_PX / arenaPx))
+}
+const MC_TICKS   = Array.from({ length: 36 }, (_, i) => i * 10)
+const MC_CARDINALS = [360, 90, 180, 270]
+
+function mcPolar(deg, r) {
+  const rad = (deg * Math.PI) / 180
+  return { x: Math.sin(rad) * r, y: -Math.cos(rad) * r }
+}
+// Annular sector between two radii, clockwise from startDeg to endDeg. The
+// degrees may run past 360 (a first digit of 3 lights 300 to 400); sin/cos
+// wrap on their own and the sweep is never 180 or more.
+function mcSector(startDeg, endDeg, r1, r2) {
+  const a = mcPolar(startDeg, r1), b = mcPolar(endDeg, r1)
+  const c = mcPolar(endDeg, r2),   d = mcPolar(startDeg, r2)
+  return `M ${a.x} ${a.y} A ${r1} ${r1} 0 0 1 ${b.x} ${b.y} L ${c.x} ${c.y} A ${r2} ${r2} 0 0 0 ${d.x} ${d.y} Z`
+}
+const MC_FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+
+function MiniCompass({ aircraft, sector, turnDir = null, scale = 1 }) {
+  const { position, headingDeg, targetHeadingDeg } = aircraft
+  const tx = Math.round(position.x * 10) / 10
+  const ty = Math.round(position.y * 10) / 10
+  const committed = targetHeadingDeg != null ? targetHeadingDeg : null
+  const quiet = !sector && committed == null
+  const kf = scale                      // text and strokes
+  const kr = 1 + (scale - 1) * 0.7      // radii
+  const ringR  = MC_RING_R * kr
+  const band   = MC_BAND * kr
+  const sweepR = MC_SWEEP_R * kr
+  const labelR = MC_LABEL_R * kr
+  const h1 = mcPolar(headingDeg, ringR - 12 * kr)
+  const h2 = mcPolar(headingDeg, ringR)
+  const sweep  = committed == null && (turnDir === 'L' || turnDir === 'R') ? turnDir : null
+  const extent = sweep ? sweepExtent(headingDeg, sweep, sector) : null
+  return (
+    <g transform={`translate(${tx}, ${ty})`} pointerEvents="none" data-mini-compass
+       data-compass-scale={scale.toFixed(2)}
+       data-compass-sector={sector ? `${sector.start}-${sector.end}` : undefined}
+       data-compass-commit={committed != null ? pad3(committed) : undefined}
+       data-compass-sweep={sweep && extent ? sweep : undefined}
+       data-compass-sweep-rotation={extent ? Math.round(extent.rotation) : undefined}>
+      <circle r={ringR} fill="none" stroke="#5baaff" strokeWidth={1 * kf} opacity={0.4} />
+      {MC_TICKS.map(b => {
+        const major = b % 30 === 0
+        const p1 = mcPolar(b, ringR)
+        const p2 = mcPolar(b, ringR + (major ? 7 : 4) * kr)
+        return <line key={b} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#5baaff" strokeWidth={(major ? 1.4 : 1) * kf} opacity={major ? 0.7 : 0.4} />
+      })}
+      {/* Current heading: where the aircraft is pointing now. */}
+      <line x1={h1.x} y1={h1.y} x2={h2.x} y2={h2.y} stroke="#ffffff" strokeWidth={2.5 * kf} strokeLinecap="round" opacity={0.9} />
+      {/* Turn-direction sweep. The outer g points "up" at the nose; the inner
+          g carries the CSS rotation, which spins it about the compass centre
+          (the group's origin) the way the chosen direction would. */}
+      {sweep && extent && (() => {
+        const r = sweepR
+        const s = sweep === 'R' ? 1 : -1
+        const LEAD = extent.lead
+        // The arrow's tail starts AT the nose and its head sits LEAD degrees
+        // ahead in the direction of travel, so nothing is ever drawn behind
+        // the nose: the aircraft turns forward from where it is pointing, and
+        // the arrow only ever occupies ground it would cover. The rotation is
+        // capped by sweepExtent so the head stops short of a lit band, and
+        // the run time scales with it so a short sweep does not crawl.
+        const tail = mcPolar(0, r)
+        const head = mcPolar(s * LEAD, r)
+        const sweepStyle = {
+          '--sweep': `${s * extent.rotation}deg`,
+          '--sweep-dur': `${(0.45 + (extent.rotation / 140) * 1.05).toFixed(2)}s`,
+        }
+        return (
+          <g transform={`rotate(${headingDeg})`}>
+            <g className={sweep === 'R' ? 'dpt-compass-sweep-r' : 'dpt-compass-sweep-l'} style={sweepStyle}>
+              <path d={`M ${tail.x} ${tail.y} A ${r} ${r} 0 0 ${s === 1 ? 1 : 0} ${head.x} ${head.y}`}
+                    fill="none" stroke={MC_SWEEP_COLOR[sweep]} strokeWidth={3 * kf} strokeLinecap="round" opacity={0.7} />
+              {/* Chevron at the head, pointing along the tangent there. */}
+              <g transform={`rotate(${s * LEAD})`}>
+                <polygon points={`${s * 12 * kf},${-r} 0,${-r - 8 * kf} 0,${-r + 8 * kf}`} fill={MC_SWEEP_COLOR[sweep]} />
+              </g>
+            </g>
+          </g>
+        )
+      })()}
+      {quiet && MC_CARDINALS.map(b => {
+        const p = mcPolar(b, ringR + 26 * kr)
+        return (
+          <text key={b} x={p.x} y={p.y} fill="#5baaff" fontSize={MC_FONT_CARDINAL * kf} fontFamily={MC_FONT} fontWeight={700}
+                textAnchor="middle" dominantBaseline="middle" opacity={0.6}>{pad3(b)}</text>
+        )
+      })}
+      {sector && (
+        <g data-compass-band>
+          <path d={mcSector(sector.start, sector.end, ringR, ringR + band)} fill="#5baaff" opacity={0.4} />
+          {sector.labels.map((v, i) => {
+            // Ten labels 10 degrees apart do not fit on one radius at this
+            // size, so they alternate between two, the way tick labels on a
+            // crowded axis are staggered.
+            const stagger = sector.labels.length > 2 && i % 2 === 1 ? MC_LABEL_STAGGER * kr : 0
+            const p = mcPolar(v, labelR + stagger)
+            return (
+              <text key={v} x={p.x} y={p.y} fill="#9ed5ff" fontSize={MC_FONT_LABEL * kf} fontFamily={MC_FONT} fontWeight={700}
+                    textAnchor="middle" dominantBaseline="middle" data-compass-label>{pad3(normalizeDeg(v))}</text>
+            )
+          })}
+        </g>
+      )}
+      {committed != null && (() => {
+        const l1 = mcPolar(committed, ringR + band)
+        const l2 = mcPolar(committed, labelR - 13 * kf)
+        const p  = mcPolar(committed, labelR)
+        return (
+          <g className="dpt-compass-flash" data-compass-target>
+            <path d={mcSector(committed - 2, committed + 2, ringR, ringR + band)} fill="#ffffff" />
+            <line x1={l1.x} y1={l1.y} x2={l2.x} y2={l2.y} stroke="#ffffff" strokeWidth={1.5 * kf} />
+            <text x={p.x} y={p.y} fill="#ffffff" fontSize={MC_FONT_TARGET * kf} fontFamily={MC_FONT} fontWeight={800}
+                  textAnchor="middle" dominantBaseline="middle">{pad3(committed)}</text>
+          </g>
+        )
+      })()}
+    </g>
+  )
+}
+
+function PracticeComplete({ onExit }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+    >
+      <p className="text-5xl mb-3">✅</p>
+      <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
+      <p className="text-sm text-slate-400 mb-2">
+        Those are the turns. Altitude works the same way: press ALT, then type the height in hundreds of feet, so 0 5 0 is 5,000ft.
+      </p>
+      <p className="text-sm text-slate-400 mb-6">
+        Pick an aircraft on the briefing to start a run.
+      </p>
+      <button
+        onClick={onExit}
+        className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+      >
+        Back to Briefing
+      </button>
+    </motion.div>
+  )
+}
+
+function DptPractice({ modelUrl, onExit, onProgress }) {
+  const [stepIdx, setStepIdx] = useState(0)
+  const [done, setDone]       = useState(false)
+  const [runId]               = useState(makePracticeRunId)
+  const drill    = DPT_PRACTICE_DRILLS[stepIdx]
+  const drillRef = useRef(drill)
+  const stepRef  = useRef(stepIdx)
+  useEffect(() => { drillRef.current = drill; stepRef.current = stepIdx }, [drill, stepIdx])
+
+  // Same state + ref split the live game uses: the loop reads refs, the
+  // render tree reads state. Refs are written directly wherever a change must
+  // be visible to the next frame before React has committed it.
+  const [aircraftList, setAircraftList] = useState(() => buildDrillAircraft(drill, null))
+  const [gateList, setGateList]         = useState(() => buildDrillGates(drill))
+  const aircraftRef = useRef(aircraftList)
+  const gatesRef    = useRef(gateList)
+  useEffect(() => { aircraftRef.current = aircraftList }, [aircraftList])
+  useEffect(() => { gatesRef.current    = gateList },     [gateList])
+
+  // The roster can still be loading when practice opens, so the model is not
+  // baked into the aircraft: it is stamped on at render, and the GLB layer
+  // picks it up the frame it arrives.
+  const aircraftWithModel = useMemo(
+    () => aircraftList.map(a => ({ ...a, modelUrl })),
+    [aircraftList, modelUrl],
+  )
+
+  const [activeId, setActiveId]         = useState('CA-A')
+  const [turnDir, setTurnDir]           = useState('R')
+  // The sides pressed since the drill loaded, for the L/R drill. R is selected
+  // to begin with but has not been PRESSED, so it counts only once it is.
+  const [dirsPressed, setDirsPressed]   = useState([])
+  const dirsPressedRef                  = useRef([])
+  const [inputMode, setInputMode]       = useState('BRG')
+  const [bearingInput, setBearingInput] = useState('')
+  const bearingInputRef                 = useRef('')
+  const [commandViz, setCommandViz]     = useState({})
+  const [brgPulseKey, setBrgPulseKey]   = useState(0)
+  const [altPulseKey, setAltPulseKey]   = useState(0)
+  // { tone: 'ok' | 'bad', text } shown under the drill card.
+  const [feedback, setFeedback]         = useState(null)
+  // A correct command is in and the drill is waiting for the aircraft to
+  // settle on it. Held twice: the ref is what the loop reads, the state is
+  // what takes the guide arrows down.
+  const armedRef                        = useRef(false)
+  const [armed, setArmed]               = useState(false)
+  // A reset or an advance is queued; the loop stops judging outcomes until it
+  // has fired, so a miss cannot be reported twice.
+  const pendingRef                      = useRef(null)
+  const activeIdRef                     = useRef('CA-A')
+  useEffect(() => { activeIdRef.current = activeId }, [activeId])
+  // The arena's rendered width, for sizing the mini compass: its text is in
+  // scope units, and a phone renders those at half the pixels a desktop does.
+  const arenaRef                        = useRef(null)
+  const [arenaPx, setArenaPx]           = useState(0)
+  useEffect(() => {
+    const el = arenaRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect?.width
+      if (w) setArenaPx(w)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Put the aircraft and gates back where the drill starts them, and nothing
+  // else: the numpad, the chosen side and any digits typed so far are kept.
+  // This is what the boundary triggers while the player is still reading —
+  // the aircraft has flown out of room, not the player out of turn.
+  const resetFlight = useCallback((idx) => {
+    const d  = DPT_PRACTICE_DRILLS[idx]
+    const ac = buildDrillAircraft(d, null)
+    const gs = buildDrillGates(d)
+    aircraftRef.current = ac
+    gatesRef.current    = gs
+    setAircraftList(ac)
+    setGateList(gs)
+    setCommandViz({})
+    armedRef.current = false
+    setArmed(false)
+  }, [])
+
+  // Rebuild the drill's whole pose, input included. `keepFeedback` leaves the
+  // card's verdict up on a reset, so what went wrong stays readable after the
+  // aircraft has snapped back to its start.
+  const loadPose = useCallback((idx, { keepFeedback = false } = {}) => {
+    clearTimeout(pendingRef.current)
+    pendingRef.current = null
+    resetFlight(idx)
+    setActiveId('CA-A')
+    activeIdRef.current = 'CA-A'
+    setTurnDir('R')
+    dirsPressedRef.current = []
+    setDirsPressed([])
+    setInputMode('BRG')
+    bearingInputRef.current = ''
+    setBearingInput('')
+    if (!keepFeedback) setFeedback(null)
+  }, [resetFlight])
+
+  // Every step change goes through here so the pose is rebuilt in the same
+  // handler as the index change, not in an effect chasing it.
+  const goToStep = useCallback((idx) => {
+    loadPose(idx)
+    setStepIdx(idx)
+  }, [loadPose])
+
+  const advance = useCallback(() => {
+    const idx = stepRef.current
+    if (idx >= DPT_PRACTICE_DRILLS.length - 1) {
+      clearTimeout(pendingRef.current)
+      pendingRef.current = null
+      setDone(true)
+      return
+    }
+    goToStep(idx + 1)
+  }, [goToStep])
+
+  const scheduleReset = useCallback((text, delay) => {
+    if (pendingRef.current) return
+    setFeedback(text ? { tone: 'bad', text } : null)
+    pendingRef.current = setTimeout(() => {
+      pendingRef.current = null
+      loadPose(stepRef.current, { keepFeedback: true })
+    }, delay)
+  }, [loadPose])
+
+  const scheduleAdvance = useCallback((text) => {
+    if (pendingRef.current) return
+    setFeedback({ tone: 'ok', text })
+    pendingRef.current = setTimeout(() => {
+      pendingRef.current = null
+      advance()
+    }, PRACTICE_ADVANCE_MS)
+  }, [advance])
+
+  useEffect(() => () => clearTimeout(pendingRef.current), [])
+
+  // Choosing a side. On the L/R drill this IS the task: each press is named,
+  // and once both sides have been seen the drill moves on.
+  const handleTurnDir = useCallback((d) => {
+    setTurnDir(d)
+    if (!dirsPressedRef.current.includes(d)) {
+      dirsPressedRef.current = [...dirsPressedRef.current, d]
+      setDirsPressed(dirsPressedRef.current)
+    }
+    if (drillRef.current.goal.type !== 'direction' || pendingRef.current) return
+    if (dirsPressedRef.current.length === 2) {
+      scheduleAdvance('Both sides seen. Now to use one.')
+    } else {
+      setFeedback({ tone: 'ok', text: `${d}: the arrow now sweeps ${d === 'L' ? 'anticlockwise' : 'clockwise'}. Now press ${d === 'L' ? 'R' : 'L'}.` })
+    }
+  }, [scheduleAdvance])
+
+  useEffect(() => {
+    onProgress?.({ clientRunId: runId, furthestStep: stepIdx, totalSteps: DPT_PRACTICE_DRILLS.length, completed: false })
+  }, [stepIdx, runId, onProgress])
+  useEffect(() => {
+    if (done) onProgress?.({ clientRunId: runId, furthestStep: DPT_PRACTICE_DRILLS.length - 1, totalSteps: DPT_PRACTICE_DRILLS.length, completed: true })
+  }, [done, runId, onProgress])
+
+  // Show a command's line + arc for its lifetime, exactly as a run does.
+  const showViz = useCallback((id, snapshot) => {
+    setCommandViz(prev => ({ ...prev, [id]: snapshot }))
+    setTimeout(() => {
+      setCommandViz(prev => {
+        if (prev[id] !== snapshot) return prev
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    }, COMMAND_VIZ_DURATION_MS + 100)
+  }, [])
+
+  // ── Movement loop ──────────────────────────────────────────────────────────
+  // The live loop's cadence and the live flight model. On top of that, only
+  // what a drill needs: gate crossings for the next gate in order, and the
+  // three ways a drill ends — the edge took the aircraft, a gate was missed,
+  // or the goal was met.
+  useEffect(() => {
+    if (done) return
+    let raf
+    let last  = performance.now()
+    let accum = 0
+    const STEP_INTERVAL = 1 / 30
+
+    function step(now) {
+      raf = requestAnimationFrame(step)
+      const realDt = (now - last) / 1000
+      last = now
+      accum += realDt
+      if (accum < STEP_INTERVAL) return
+      const dt = Math.min(0.05, accum)
+      accum = 0
+
+      const d    = drillRef.current
+      const prev = aircraftRef.current
+      if (prev.length === 0) return
+      let   gates        = gatesRef.current
+      let   gatesChanged = false
+      let   missed       = null
+      let   edgeTook     = false
+      const vizs         = []
+
+      const moved = prev.map(a => {
+        const { aircraft: m, edgeAuto } = moveAircraft(a, dt)
+        if (edgeAuto) {
+          edgeTook = true
+          vizs.push({ id: a.id, snapshot: { ...edgeAuto, kind: 'edgeAuto' } })
+        }
+        if (d.goal.type === 'gates' && a.id === 'CA-A') {
+          const nextIdx = gates.findIndex(g => !g.hit)
+          if (nextIdx >= 0) {
+            const crossing = gateCrossing(a.position, m.position, gates[nextIdx])
+            if (crossing === 'hit') {
+              gates = gates.map((g, i) => (i === nextIdx ? { ...g, hit: true } : g))
+              gatesChanged = true
+            } else if (crossing === 'miss') {
+              missed = gates[nextIdx].id
+            }
+          }
+        }
+        return m
+      })
+
+      aircraftRef.current = moved
+      setAircraftList(moved)
+      if (gatesChanged) {
+        gatesRef.current = gates
+        setGateList(gates)
+      }
+
+      if (pendingRef.current) return
+
+      // The boundary turning the aircraft round is a run's safety net, not
+      // something a drill should teach against. Before any command it just
+      // means the player is still reading, so the aircraft quietly goes back
+      // to its start and the numpad is left exactly as they had it; after
+      // one, it means the command sent the aircraft the wrong way, and the
+      // card says so.
+      if (edgeTook) {
+        if (armedRef.current) {
+          for (const { id, snapshot } of vizs) showViz(id, snapshot)
+          scheduleReset('The aircraft reached the edge and turned itself back toward the middle. Back to the start.', PRACTICE_RESET_MS)
+        } else {
+          resetFlight(stepRef.current)
+        }
+        return
+      }
+      if (missed) {
+        scheduleReset(`Missed gate ${missed}. Back to the start.`, PRACTICE_RESET_MS)
+        return
+      }
+      if (d.goal.type === 'gates' && gates.length > 0 && gates.every(g => g.hit)) {
+        scheduleAdvance(gates.length > 1 ? 'Through both. Well flown.' : 'Through. Well flown.')
+        return
+      }
+      if (d.goal.type === 'heading' && armedRef.current && headingSettled(d, moved)) {
+        scheduleAdvance(`Heading ${pad3(d.goal.target)}. Well done.`)
+      }
+    }
+
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [done, resetFlight, scheduleReset, scheduleAdvance, showViz])
+
+  // ── Commands ───────────────────────────────────────────────────────────────
+  const commitInput = useCallback((digits) => {
+    const value = parseInt(digits, 10)
+    const id    = activeIdRef.current
+    if (inputMode === 'ALT') {
+      const ft = Math.max(ALT_MIN, Math.min(ALT_MAX, value * 100))
+      const next = aircraftRef.current.map(a => (a.id === id ? { ...a, targetAltitudeFt: ft } : a))
+      aircraftRef.current = next
+      setAircraftList(next)
+      return
+    }
+    const bearing = normalizeDeg(value)
+    const target  = aircraftRef.current.find(a => a.id === id)
+    if (!target) return
+    showViz(id, {
+      fromHeading:   target.headingDeg,
+      targetBearing: bearing,
+      direction:     turnDir,
+      capturedPos:   { x: target.position.x, y: target.position.y },
+      kind:          'user',
+    })
+    // The aircraft does what it was told, right or wrong.
+    const next = aircraftRef.current.map(a => (a.id === id ? { ...a, targetHeadingDeg: bearing, turnDirection: turnDir } : a))
+    aircraftRef.current = next
+    setAircraftList(next)
+
+    if (pendingRef.current) return
+    const d = drillRef.current
+    const verdict = judgeCommand(d, target, id, bearing, turnDir)
+    if (verdict.verdict !== 'ok') {
+      scheduleReset(verdict.text, PRACTICE_RESET_MS)
+      return
+    }
+    armedRef.current = true
+    setArmed(true)
+    if (d.goal.type === 'heading') {
+      setFeedback({ tone: 'ok', text: verdict.note ? `${verdict.text} ${verdict.note}` : verdict.text })
+    }
+  }, [inputMode, turnDir, showViz, scheduleReset])
+
+  useEffect(() => { bearingInputRef.current = bearingInput }, [bearingInput])
+
+  const handleInputModeChange = useCallback((m) => {
+    setInputMode(m)
+    setBearingInput('')
+    bearingInputRef.current = ''
+    if (m === 'ALT') setAltPulseKey(k => k + 1)
+    else if (m === 'BRG') setBrgPulseKey(k => k + 1)
+  }, [])
+
+  const handleDigit = useCallback((dgt) => {
+    const prev = bearingInputRef.current
+    if (prev.length >= 3) return
+    const next = prev + dgt
+    if (next.length === 3) {
+      bearingInputRef.current = ''
+      setBearingInput('')
+      commitInput(next)
+      return
+    }
+    bearingInputRef.current = next
+    setBearingInput(next)
+  }, [commitInput])
+
+  const selectAircraft = useCallback((id) => {
+    if (!aircraftRef.current.some(a => a.id === id)) return
+    activeIdRef.current = id
+    setActiveId(id)
+  }, [])
+
+  // The run's keyboard shortcuts, so what is learnt here is what a run takes.
+  useEffect(() => {
+    if (done) return
+    function onKey(e) {
+      if (e.key >= '0' && e.key <= '9') { handleDigit(e.key); e.preventDefault(); return }
+      if (e.key === 'ArrowLeft')  { handleTurnDir('L'); e.preventDefault(); return }
+      if (e.key === 'ArrowRight') { handleTurnDir('R'); e.preventDefault(); return }
+      if (e.key === 'ArrowUp')    { handleInputModeChange('BRG'); e.preventDefault(); return }
+      if (e.key === 'ArrowDown')  { handleInputModeChange('ALT'); e.preventDefault(); return }
+      const k = e.key.toLowerCase()
+      if (k === 'l') { handleTurnDir('L'); return }
+      if (k === 'r') { handleTurnDir('R'); return }
+      if (k === 'm') { handleInputModeChange(inputMode === 'BRG' ? 'ALT' : 'BRG'); return }
+      if (k === 'a') { selectAircraft('CA-A'); return }
+      if (k === 'n') { selectAircraft('CA-N'); return }
+      if (k === 'f') { selectAircraft('Fighter'); return }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [done, handleDigit, handleInputModeChange, handleTurnDir, selectAircraft, inputMode])
+
+  if (done) {
+    return (
+      <div className="flex flex-col items-center">
+        <PracticeComplete onExit={() => onExit('viewed')} />
+      </div>
+    )
+  }
+
+  // What the arrows point at right now: the aircraft to select, then the
+  // direction, then each digit in turn. Nothing once a correct command is in.
+  const guide = (() => {
+    const g = drill.guide
+    if (g.aircraft && activeId !== g.aircraft) return { aircraft: g.aircraft }
+    if (drill.goal.type === 'direction') {
+      // L first: R is already lit, so L is the press that visibly changes something.
+      const next = ['L', 'R'].find(d => !dirsPressed.includes(d))
+      return next ? { dir: next } : {}
+    }
+    if (armed) return {}
+    if (inputMode !== 'BRG') return { mode: 'BRG' }
+    if (g.dir && turnDir !== g.dir) return { dir: g.dir }
+    if (g.digits) return { digit: g.digits[bearingInput.length] }
+    return {}
+  })()
+
+  const nextGateIndex = gateList.findIndex(g => !g.hit)
+  const total = DPT_PRACTICE_DRILLS.length
+  // The compass follows the selected aircraft and lights up with the digits
+  // only while they are a bearing; an altitude being typed lights nothing.
+  const activeAircraft = aircraftList.find(a => a.id === activeId) ?? null
+  const compassSector  = inputMode === 'BRG' ? bearingSector(bearingInput) : null
+  // On a gate drill, lined up on the next gate means no turn is needed, so the
+  // turn-direction arrow comes down; it returns if the line is lost or the
+  // gate after this one needs a turn.
+  const onTrack = drill.goal.type === 'gates' && !!activeAircraft
+    && onTrackForGate(activeAircraft, gateList[nextGateIndex])
+
+  return (
+    <div className="w-full flex flex-col md:grid md:grid-cols-[auto_440px] md:gap-4 md:justify-center">
+      {/* Arena — the live game's sizing (see the playing branch) so the drills
+          are flown on the arena a run will use. Second on a phone, under the
+          card; the left column on desktop, spanning both rows on the right. */}
+      <div className="order-2 md:order-none md:row-span-2 md:col-start-1 w-full max-w-md md:max-w-none mx-auto md:mx-0 md:w-[min(calc(100vh_-_134px),calc(100vw_-_704px))]">
+        <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+          <span className="text-slate-400">DRILL <span className="text-brand-600">{stepIdx + 1}</span>/{total}</span>
+          <span className="text-slate-400">TUTORIAL · NO SCORE</span>
+        </div>
+        <div ref={arenaRef} className="relative z-10 bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl shadow-[0_0_30px_rgba(91,170,255,0.08)] overflow-hidden" style={{ width: '100%', aspectRatio: '1' }}>
+          <DptAircraftLayer aircraftList={aircraftWithModel} sizeMultiplier={1} doneIds={PRACTICE_NO_DONE} />
+          <ArenaScope brgPulseKey={brgPulseKey}>
+            {gateList.map((g, i) => (
+              <GateMarker key={`${g.kind}-${g.id}`} gate={g} isNext={i === nextGateIndex} />
+            ))}
+            {Object.entries(commandViz).map(([id, viz]) => (
+              <CommandViz key={`viz-${id}-${viz.capturedPos.x}-${viz.capturedPos.y}`} viz={viz} />
+            ))}
+            {aircraftList.flatMap(a => nearEdges(a.position).map(edge => (
+              <EdgeWarning key={`edge-${a.id}-${edge}`} edge={edge} x={a.position.x} y={a.position.y} />
+            )))}
+            {activeAircraft && (
+              <MiniCompass
+                aircraft={activeAircraft}
+                sector={compassSector}
+                turnDir={inputMode === 'BRG' && !onTrack ? turnDir : null}
+                scale={miniCompassScale(arenaPx)}
+              />
+            )}
+            {aircraftList.map(a => (
+              <AircraftSprite
+                key={a.id}
+                aircraft={a}
+                active={a.id === activeId}
+                edgeWarn={nearEdges(a.position).length > 0}
+                dim={false}
+                altPulseKey={altPulseKey}
+              />
+            ))}
+          </ArenaScope>
+        </div>
+        <AircraftButtons
+          aircraftList={aircraftList}
+          activeId={activeId}
+          onSelectActive={selectAircraft}
+          guideId={guide.aircraft ?? null}
+        />
+      </div>
+
+      {/* Drill card — first on a phone, top of the right column on desktop. */}
+      <div className="order-1 md:order-none md:col-start-2 md:row-start-1 w-full max-w-md md:max-w-none mx-auto md:mx-0 mb-3 md:mb-0">
+        <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4" data-practice-card>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Tutorial</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => goToStep(Math.max(0, stepIdx - 1))}
+                disabled={stepIdx === 0}
+                aria-label="Previous drill"
+                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 disabled:opacity-30 disabled:cursor-not-allowed bg-transparent border-0 cursor-pointer"
+              >
+                {'‹'}
+              </button>
+              <span className="text-[10px] text-slate-500 tabular-nums">{stepIdx + 1} / {total}</span>
+              <button
+                onClick={advance}
+                aria-label="Next drill"
+                className="px-1.5 py-0.5 text-base leading-none text-slate-400 hover:text-brand-600 bg-transparent border-0 cursor-pointer"
+              >
+                {'›'}
+              </button>
+            </div>
+          </div>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={stepIdx}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+            >
+              <h2 className="text-base font-extrabold text-white mb-1">{drill.title}</h2>
+              <p className="text-sm text-[#ddeaf8] leading-relaxed">{drill.body}</p>
+            </motion.div>
+          </AnimatePresence>
+          {/* Verdict line. Held at a fixed minimum height so the numpad below
+              does not jump when a verdict comes and goes. */}
+          <p
+            className={`mt-3 min-h-[2.5rem] text-sm font-semibold leading-snug ${feedback?.tone === 'ok' ? 'text-green-400' : 'text-amber-400'}`}
+            data-practice-feedback={feedback?.tone ?? 'none'}
+            aria-live="polite"
+          >
+            {feedback?.text ?? ''}
+          </p>
+          <div className="flex items-center gap-3 mt-2">
+            <button
+              onClick={() => onExit('skipped')}
+              className="text-xs text-slate-500 hover:text-slate-300 transition-colors bg-transparent border-0 cursor-pointer"
+            >
+              Exit tutorial
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Numpad — the run's own, arrows and all. */}
+      <div className="order-3 md:order-none md:col-start-2 md:row-start-2 w-full max-w-md md:max-w-none mx-auto md:mx-0 mt-2 md:mt-0">
+        <DptControls
+          turnDir={turnDir}
+          onTurnDir={handleTurnDir}
+          inputMode={inputMode}
+          onInputMode={handleInputModeChange}
+          bearingInput={bearingInput}
+          onDigit={handleDigit}
+          guideDir={guide.dir ?? null}
+          guideDigit={guide.digit ?? null}
+          guideMode={guide.mode ?? null}
+        />
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ──────────────────────────────────────────────────────────
 export default function CbatDpt() {
   const { user, apiFetch, API } = useAuth()
@@ -1100,10 +1828,14 @@ export default function CbatDpt() {
 
   // Phase state machine: select → playing → finished. (`over` reserved for
   // mid-round death/abandon overlays once the game loop lands in Chunk 5.)
+  // 'practice' is the drills, reached from the select card and always
+  // returning to it: starting a scored run stays a deliberate pick.
   const [phase, setPhase] = useState('select')
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing' || phase === 'over' || phase === 'intro') enterImmersive()
+    // Practice hides the nav chrome like a run does — it lays the arena and
+    // numpad out exactly where a run will put them.
+    if (phase === 'playing' || phase === 'over' || phase === 'intro' || phase === 'practice') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -1113,7 +1845,21 @@ export default function CbatDpt() {
   // (which is already offset for the sidebar via md:ml-56 on app-shell-main).
   // 'intro' is included so the arena mounts behind the curtain at the same
   // width it'll have once the curtain lifts — avoids a layout shift on reveal.
-  useGameBodyClass('cbat-dpt-fullwidth', phase === 'playing' || phase === 'intro')
+  useGameBodyClass('cbat-dpt-fullwidth', phase === 'playing' || phase === 'intro' || phase === 'practice')
+
+  // ── Practice ───────────────────────────────────────────────────────────────
+  // Fire-and-forget usage tracking (admin Reports per-drill drop-off). Online-
+  // only by design — a learning aid, not a score, so no offline outbox.
+  const reportPracticeProgress = useCallback((body) => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/dpt/tutorial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }, [user, apiFetch, API])
+  const openPractice  = useCallback(() => setPhase('practice'), [])
+  const closePractice = useCallback(() => setPhase('select'), [])
 
   // Game state — wired up properly in Chunks 4–9
   const [round, setRound]                                 = useState(1)
@@ -1530,7 +2276,7 @@ export default function CbatDpt() {
       const edgeAutoVizSnapshots = []  // collected during the map, applied after
 
       const newAircraft = prevAircraft.map(a => {
-        let { headingDeg, targetHeadingDeg, turnDirection, position, altitudeFt, targetAltitudeFt, aiNextDecision, altNextChange, wasInEdgeBuffer } = a
+        let { headingDeg, targetHeadingDeg, turnDirection, position, altitudeFt, targetAltitudeFt, aiNextDecision, altNextChange } = a
 
         // 0. Enemy AI — pick a new bearing every few seconds. 60% random, 25%
         //    aim at a player aircraft, 15% aim at a gate. Erratic by design.
@@ -1567,68 +2313,20 @@ export default function CbatDpt() {
           }
         }
 
-        // 1. Edge auto-turn — fires ONCE on entry into the buffer rather
-        //    than every frame. That way a user-issued bearing while the
-        //    yellow pulse is still active sticks instead of being blown
-        //    away the next frame. Auto-turn re-fires only after the
-        //    aircraft has left the buffer and re-entered.
-        const dxFromEdge = ARENA_HALF - Math.abs(position.x - SCOPE_HALF)
-        const dyFromEdge = ARENA_HALF - Math.abs(position.y - SCOPE_HALF)
-        const inBuffer = dxFromEdge < EDGE_BUFFER || dyFromEdge < EDGE_BUFFER
-        if (inBuffer && !wasInEdgeBuffer) {
-          const t  = bearingToCenter(position.x, position.y)
-          targetHeadingDeg = t
-          turnDirection    = normalizeDeg(t - headingDeg) <= 180 ? 'R' : 'L'
-          // Player aircraft get a yellow degree-calc line + arc so the
-          // player sees the auto-redirect direction. Enemies skip the viz.
-          if (a.kind === 'CA-A' || a.kind === 'CA-N' || a.kind === 'Fighter') {
-            edgeAutoVizSnapshots.push({
-              id: a.id,
-              snapshot: {
-                fromHeading:   headingDeg,
-                targetBearing: t,
-                direction:     turnDirection,
-                capturedPos:   { x: position.x, y: position.y },
-                kind:          'edgeAuto',
-              },
-            })
-          }
+        // 1–4. Edge auto-turn, rotate toward the target heading, altitude
+        //      interpolation, advance forward — the shared flight model in
+        //      utils/cbat/dptPhysics.js. `edgeAuto` is set on the frame the
+        //      boundary took the heading over.
+        const { aircraft: moved, edgeAuto } = moveAircraft(
+          { ...a, headingDeg, targetHeadingDeg, turnDirection, altitudeFt, targetAltitudeFt, aiNextDecision, altNextChange },
+          dt,
+        )
+        // Player aircraft get a yellow degree-calc line + arc so the
+        // player sees the auto-redirect direction. Enemies skip the viz.
+        if (edgeAuto && (a.kind === 'CA-A' || a.kind === 'CA-N' || a.kind === 'Fighter')) {
+          edgeAutoVizSnapshots.push({ id: a.id, snapshot: { ...edgeAuto, kind: 'edgeAuto' } })
         }
-        wasInEdgeBuffer = inBuffer
-
-        // 2. Rotate toward target heading
-        if (targetHeadingDeg != null) {
-          const angleStep = TURN_RATE * dt
-          const remaining = turnDistance(headingDeg, targetHeadingDeg, turnDirection)
-          if (remaining <= angleStep) {
-            headingDeg       = targetHeadingDeg
-            targetHeadingDeg = null
-            turnDirection    = null
-          } else if (turnDirection === 'L') {
-            headingDeg = normalizeDeg(headingDeg - angleStep)
-          } else {
-            headingDeg = normalizeDeg(headingDeg + angleStep)
-          }
-        }
-
-        // 3. Altitude interpolation
-        if (targetAltitudeFt != null) {
-          const altStep = ALT_RATE * dt
-          const altDiff = targetAltitudeFt - altitudeFt
-          if (Math.abs(altDiff) <= altStep) {
-            altitudeFt       = targetAltitudeFt
-            targetAltitudeFt = null
-          } else {
-            altitudeFt += Math.sign(altDiff) * altStep
-          }
-        }
-
-        // 4. Advance forward
-        const rad = (headingDeg * Math.PI) / 180
-        let nx  = position.x + Math.sin(rad) * AIRCRAFT_SPEED * dt
-        let ny  = position.y - Math.cos(rad) * AIRCRAFT_SPEED * dt
-        nx = Math.max(SCOPE_HALF - ARENA_HALF, Math.min(SCOPE_HALF + ARENA_HALF, nx))
-        ny = Math.max(SCOPE_HALF - ARENA_HALF, Math.min(SCOPE_HALF + ARENA_HALF, ny))
+        const next = moved.position
 
         // 5. Gate hit detection — CA-A → letter, CA-N → number, in order only.
         // Iterate by index so we can mutate the cloned array after lazily
@@ -1637,14 +2335,14 @@ export default function CbatDpt() {
           const g = gates[gi]
           if (g.hit) continue
           if (a.kind === 'CA-A' && g.kind === 'letter' && g.index === nextLetIdx) {
-            if (segmentsIntersect(position, { x: nx, y: ny }, g.p1, g.p2)) {
+            if (segmentsIntersect(position, next, g.p1, g.p2)) {
               ensureGatesMutable()
               gates[gi].hit = true
               nextLetIdx += 1; scoreDelta += POINTS_PER_GATE; gatesDelta += 1
             }
           }
           if (a.kind === 'CA-N' && g.kind === 'number' && g.index === nextNumIdx) {
-            if (segmentsIntersect(position, { x: nx, y: ny }, g.p1, g.p2)) {
+            if (segmentsIntersect(position, next, g.p1, g.p2)) {
               ensureGatesMutable()
               gates[gi].hit = true
               nextNumIdx += 1; scoreDelta += POINTS_PER_GATE; gatesDelta += 1
@@ -1652,7 +2350,7 @@ export default function CbatDpt() {
           }
         }
 
-        return { ...a, headingDeg, targetHeadingDeg, turnDirection, position: { x: nx, y: ny }, altitudeFt, targetAltitudeFt, aiNextDecision, altNextChange, wasInEdgeBuffer }
+        return moved
       })
 
       // 6. Interception — Fighter intersecting an enemy's white ring at
@@ -2008,6 +2706,14 @@ export default function CbatDpt() {
     if (selected) handleSelect(selected)
   }, [selected, handleSelect])
 
+  // The model the practice drills fly. Nobody has picked an aircraft yet on
+  // the select card, so it takes the Typhoon if the roster has one and the
+  // first 3D aircraft otherwise; null (a triangle only) until the roster loads.
+  const practiceModelUrl = (() => {
+    const pick = aircraft.find(a => /typhoon/i.test(a.title)) || aircraft[0]
+    return pick ? getModelUrl(pick.briefId, pick.title) : null
+  })()
+
   // Set of aircraft ids that have finished their assigned task this round —
   // dimmed to 20% in both SVG and GLB layers. State derives from gate-hit
   // counts and live enemy presence, so it auto-clears when the next round
@@ -2035,10 +2741,11 @@ export default function CbatDpt() {
         <div className="flex items-center gap-3">
           {phase === 'select'
             ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-            : <CbatQuitButton onConfirm={handleMenu} confirmNeeded={['intro', 'playing', 'over'].includes(phase)} label={<>&larr; Quit</>} />
+            : <CbatQuitButton onConfirm={phase === 'practice' ? closePractice : handleMenu} confirmNeeded={['intro', 'playing', 'over'].includes(phase)} label={<>&larr; Quit</>} />
           }
           <h1 className="text-sm font-extrabold text-text">DPT</h1>
-          {phase !== 'select' && <ModeMarker mode={runTuning} />}
+          {phase === 'practice' && <ModeMarker mode={PRACTICE_MODE_MARKER} />}
+          {phase !== 'select' && phase !== 'practice' && <ModeMarker mode={runTuning} />}
         </div>
       </div>
 
@@ -2069,8 +2776,19 @@ export default function CbatDpt() {
                 bestLoading={bestLoading}
                 difficulty={difficulty}
                 onDifficulty={handleDifficulty}
+                onPractice={openPractice}
               />
             </div>
+          )}
+
+          {/* Practice — the drills, on the run's own arena and numpad. Always
+              exits back to the select card rather than into a run. */}
+          {phase === 'practice' && (
+            <DptPractice
+              modelUrl={practiceModelUrl}
+              onExit={closePractice}
+              onProgress={reportPracticeProgress}
+            />
           )}
 
           {/* Game arena — mounted during 'intro' too so it sits ready behind

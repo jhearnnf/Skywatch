@@ -1100,6 +1100,32 @@ body.community-selectable .app-shell-content * {
   animation: dpt-command-pulse 1.6s ease-out forwards;
 }
 
+/* Practice mini compass: the committed bearing blinks on the ring until the
+   aircraft has finished turning onto it. */
+@keyframes dpt-compass-flash {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+.dpt-compass-flash {
+  animation: dpt-compass-flash 0.6s ease-in-out infinite;
+}
+/* Practice mini compass: the turn-direction arrow, sweeping from the nose
+   round the outside of the ring the way L or R would take the aircraft. The
+   group's origin is the compass centre, so a plain rotate is the sweep.
+   How far it sweeps (`--sweep`, signed: negative is anticlockwise) and how
+   long it takes (`--sweep-dur`) are set inline per frame, so the arrow can
+   pull up short of a lit band instead of running through it. */
+@keyframes dpt-compass-sweep {
+  0%   { transform: rotate(0deg);        opacity: 0; }
+  12%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: rotate(var(--sweep, 140deg)); opacity: 0; }
+}
+.dpt-compass-sweep-r,
+.dpt-compass-sweep-l {
+  animation: dpt-compass-sweep var(--sweep-dur, 1.5s) ease-in-out infinite;
+}
+
 /* Score-sync pill (OfflineStatus). Deliberately slow — this sits on the CBAT
    menu to say something is unsynced, not to demand attention. A quick blink
    would read as an error and pull focus off the page. The dot carries most of

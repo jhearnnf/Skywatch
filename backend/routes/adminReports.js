@@ -31,7 +31,7 @@ const PRACTICE_GAME_KEYS = ['plane-turn-2d', 'plane-turn-3d'];
 // game has one tutorial shared by both difficulties (CbatFlag posts to
 // /cbat/flag/tutorial whichever difficulty is selected), so "FLAG (Hard)
 // (tutorial)" would name a row that doesn't exist.
-const TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat'];
+const TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat', 'dpt'];
 const TUTORIAL_GAMES = TUTORIAL_GAME_KEYS.map(gameKey => ({
   key: `${gameKey}-tutorial`,
   gameKey,
