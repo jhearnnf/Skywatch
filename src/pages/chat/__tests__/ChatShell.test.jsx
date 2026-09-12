@@ -4,6 +4,8 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 const mockApiFetch = vi.hoisted(() => vi.fn())
 const mockRefresh  = vi.hoisted(() => vi.fn())
 const mockParams   = vi.hoisted(() => ({ value: {} }))
+const mockUnread   = vi.hoisted(() => ({ value: {} }))
+const mockThread   = vi.hoisted(() => ({ props: null }))
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
@@ -17,13 +19,14 @@ vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => ({ API: '', apiFetch: mockApiFetch, user: { _id: 'u1' } }),
 }))
 vi.mock('../../../context/ChatUnreadContext', () => ({
-  useChatUnread: () => ({ refresh: mockRefresh }),
+  useChatUnread: () => ({ refresh: mockRefresh, ...mockUnread.value }),
 }))
 // The thread pane fetches its own messages; this file is about the shell.
 vi.mock('../ChatThread', () => ({
-  default: ({ conversationId, title }) => (
-    <div data-testid="thread">{title || conversationId}</div>
-  ),
+  default: (props) => {
+    mockThread.props = props
+    return <div data-testid="thread">{props.title || props.conversationId}</div>
+  },
 }))
 
 import ChatShell from '../ChatShell'
@@ -51,6 +54,8 @@ describe('ChatShell', () => {
     mockApiFetch.mockReset()
     mockRefresh.mockReset()
     mockParams.value = {}
+    mockUnread.value = { hasUnread: false, totalUnread: 0, badgeCount: 0 }
+    mockThread.props = null
     document.body.className = ''
     // The rail cache lives for the life of the page, so it outlives a test too.
     // Each one starts cold unless it says otherwise.
@@ -122,6 +127,66 @@ describe('ChatShell', () => {
     expect(screen.getByText('General')).toBeTruthy()
     expect(screen.getByText('Flight Deck')).toBeTruthy()
     expect(mockApiFetch).toHaveBeenCalledTimes(1)
+  })
+
+  // The rail's dots and the navbar badge are fed by two different fetches on
+  // two different clocks. These pin down the moments they must agree.
+  describe('keeping the rail in step', () => {
+    it('reloads the rail when the thread reads a conversation the rail still shows as unread', async () => {
+      mockParams.value = { conversationId: 'c1' }
+      const unreadChannel = { ...CHANNEL, unread: true }
+      overview({ support: null, channels: [unreadChannel], dms: [], viewer: VIEWER })
+      render(<ChatShell />)
+
+      await waitFor(() => expect(mockThread.props).not.toBeNull())
+      expect(mockApiFetch).toHaveBeenCalledTimes(1)
+
+      // The rail had the dot lit; the read must clear it now, not at the poll.
+      overview({ support: null, channels: [CHANNEL], dms: [], viewer: VIEWER })
+      mockThread.props.onRead('c1')
+      await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(2))
+    })
+
+    it('does not reload the rail on a read that changes nothing', async () => {
+      // The thread marks read on every 5s poll; the rail must not refetch
+      // itself every 5s to keep up with that.
+      mockParams.value = { conversationId: 'c1' }
+      overview({ support: null, channels: [CHANNEL], dms: [], viewer: VIEWER })
+      render(<ChatShell />)
+
+      await waitFor(() => expect(mockThread.props).not.toBeNull())
+      mockThread.props.onRead('c1')
+      mockThread.props.onRead('c1')
+      await new Promise(r => setTimeout(r, 20))
+      expect(mockApiFetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('reloads the rail when the navbar badge changes', async () => {
+      // A DM that has just bumped Community to "1" must also be in the list
+      // beside it, not sitting behind "No direct messages" for another 30s.
+      overview({ support: null, channels: [CHANNEL], dms: [], viewer: VIEWER })
+      const { rerender } = render(<ChatShell />)
+      await waitFor(() => expect(screen.getByText(/No direct messages/)).toBeTruthy())
+      expect(mockApiFetch).toHaveBeenCalledTimes(1)
+
+      overview({ support: null, channels: [CHANNEL], dms: [DM], viewer: VIEWER })
+      mockUnread.value = { hasUnread: true, totalUnread: 1, badgeCount: 1 }
+      rerender(<ChatShell />)
+
+      await waitFor(() => expect(screen.getByText('Viper')).toBeTruthy())
+      expect(mockApiFetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('leaves the rail alone when the badge re-reports the same numbers', async () => {
+      overview({ support: null, channels: [CHANNEL], dms: [], viewer: VIEWER })
+      const { rerender } = render(<ChatShell />)
+      await waitFor(() => expect(screen.getByText('General')).toBeTruthy())
+
+      mockUnread.value = { hasUnread: false, totalUnread: 0, badgeCount: 0 }
+      rerender(<ChatShell />)
+      await new Promise(r => setTimeout(r, 20))
+      expect(mockApiFetch).toHaveBeenCalledTimes(1)
+    })
   })
 
   // What "Community takes ages to load" actually was: the rail could not start

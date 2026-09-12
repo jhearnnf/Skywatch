@@ -25,7 +25,7 @@ const PENDING_MS = 30_000
 // about the wider chat (its title, whether the viewer still needs a display
 // name) comes from ChatShell, which already has the overview.
 export default function ChatThread({
-  conversationId, title, displayNameRequired, onChanged,
+  conversationId, title, displayNameRequired, onChanged, onRead,
   // Admin-only presence, owned and polled by ChatShell so the rail and the
   // thread mark the same people online off one request. A map of id →
   // 'online' | 'away', or null for everyone who is not an admin.
@@ -147,8 +147,8 @@ export default function ChatThread({
   const markRead = useCallback(() => {
     apiFetch(`${API}/api/chat/conversations/${conversationId}/read`, {
       method: 'POST', credentials: 'include',
-    }).then(() => refreshUnread()).catch(() => {})
-  }, [API, apiFetch, conversationId, refreshUnread])
+    }).then(() => { refreshUnread(); onRead?.(conversationId) }).catch(() => {})
+  }, [API, apiFetch, conversationId, refreshUnread, onRead])
 
   useEffect(() => {
     let cancelled = false

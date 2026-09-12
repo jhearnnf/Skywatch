@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
@@ -28,7 +28,11 @@ const POLL_MS = 30_000
 export default function ChatShell() {
   const { conversationId } = useParams()
   const { API, apiFetch, user } = useAuth()
-  const { refresh: refreshUnread, totalUnreadConversations: supportQueueUnread = 0 } = useChatUnread()
+  const {
+    refresh: refreshUnread,
+    totalUnreadConversations: supportQueueUnread = 0,
+    hasUnread, totalUnread, badgeCount,
+  } = useChatUnread()
   const navigate = useNavigate()
 
   // Seeded from the last copy of the rail — either the one this session already
@@ -56,6 +60,60 @@ export default function ChatShell() {
     load().then(setData).catch(() => {})
     refreshUnread()
   }, [load, refreshUnread])
+
+  // Mirror of `data` for callbacks that must stay stable. `onRead` below is a
+  // dependency of the thread's markRead, which is in turn a dependency of its
+  // mount effect — a new identity per rail update would refetch the messages
+  // every time the rail changed.
+  const dataRef = useRef(data)
+  dataRef.current = data
+
+  // Rail reloads that are not the mount load or the 30s poll. Coalesced on an
+  // in-flight request: opening an unread channel triggers both `onRead` and,
+  // one round trip later, the badge-change effect, and they want the same
+  // answer. The mount load is deliberately not shared — it may have started
+  // before the read was posted, so its copy can be the stale one.
+  const reloadRef = useRef(null)
+  const reloadRail = useCallback(() => {
+    if (reloadRef.current) return reloadRef.current
+    const p = load()
+      .then(setData)
+      .catch(() => {})
+      .finally(() => { reloadRef.current = null })
+    reloadRef.current = p
+    return p
+  }, [load])
+
+  // The thread has just told the server it read this conversation. The rail's
+  // own copy of `unread` is only as fresh as its last fetch, so without this
+  // the red dot on General stayed lit for up to 30s after you had read every
+  // post in it. Reload only when the rail actually shows the dot — the thread
+  // marks read on every 5s poll, and most of those change nothing.
+  const onRead = useCallback((conversationId) => {
+    const d = dataRef.current
+    if (!d) return
+    const rows = [
+      d.support,
+      ...(d.channels ?? []),
+      ...(d.dms ?? []),
+      ...(d.bots ?? []).map(b => ({ _id: b.conversationId, unread: b.unread })),
+    ].filter(Boolean)
+    const row = rows.find(r => String(r._id) === String(conversationId))
+    if (row?.unread) reloadRail()
+  }, [reloadRail])
+
+  // Keep the rail in step with the navbar badge. The badge context polls on
+  // its own clock, so a new DM could bump the Community badge to 1 while the
+  // rail beside it still said "No direct messages" until its own next poll.
+  // Whenever the badge's numbers move, the rail refetches too — and only then,
+  // so a poll that returns the same answer costs nothing extra here.
+  const unreadKey = `${hasUnread}|${totalUnread}|${badgeCount}`
+  const seenUnreadKey = useRef(unreadKey)
+  useEffect(() => {
+    if (seenUnreadKey.current === unreadKey) return
+    seenUnreadKey.current = unreadKey
+    reloadRail()
+  }, [unreadKey, reloadRail])
 
   useEffect(() => {
     let cancelled = false
@@ -169,6 +227,7 @@ export default function ChatShell() {
             displayNameRequired={Boolean(data?.viewer?.displayNameRequired)}
             presenceById={presence.presenceById}
             onChanged={refreshOverview}
+            onRead={onRead}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-surface rounded-2xl border border-slate-200 card-shadow">
