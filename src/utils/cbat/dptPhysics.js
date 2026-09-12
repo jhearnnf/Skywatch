@@ -24,6 +24,27 @@ export const ALT_MIN        = 1000  // ft — lowest commandable altitude
 export const ALT_MAX        = 10000 // ft — highest commandable altitude
 export const EDGE_BUFFER    = 90    // scope units inside boundary that triggers auto-turn
 
+// Danger zones. A zone is a circle on the arena at one of two heights; an
+// aircraft inside the circle within DZ_SEP_REQUIRED of that height is in it.
+export const DZ_RADIUS       = 70     // visual radius of danger zone circle
+export const DZ_ALT_2K       = 2000   // ft — white-ring zone is centred at 2,000ft
+export const DZ_ALT_3K       = 3000   // ft — black-ring zone is centred at 3,000ft
+export const DZ_SEP_REQUIRED = 1000   // ft — aircraft must stay this far above/below the zone alt
+
+export function zoneAltitude(zone) {
+  return zone.band === '2k' ? DZ_ALT_2K : DZ_ALT_3K
+}
+
+// Where an aircraft stands with a zone: 'clear' (outside the circle), 'inside'
+// (in the circle with the height to spare) or 'violating' (in the circle and
+// within DZ_SEP_REQUIRED of the zone's height, which is what a run penalises).
+export function zoneStatus(aircraft, zone) {
+  const d = Math.hypot(aircraft.position.x - zone.position.x, aircraft.position.y - zone.position.y)
+  if (d >= zone.radius) return 'clear'
+  const altGap = Math.abs(aircraft.altitudeFt - zoneAltitude(zone))
+  return altGap < DZ_SEP_REQUIRED ? 'violating' : 'inside'
+}
+
 export function normalizeDeg(d) {
   let x = d % 360
   if (x < 0) x += 360

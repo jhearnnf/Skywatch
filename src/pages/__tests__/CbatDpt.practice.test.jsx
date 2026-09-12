@@ -407,3 +407,81 @@ describe('DPT practice — the turn-direction sweep', () => {
     expect(compass(container).dataset.compassSweep).toBeUndefined()
   })
 })
+
+describe('DPT tutorial — the height drills', () => {
+  const compass = (container) => container.querySelector('[data-mini-compass]')
+
+  it('climb: points at ALT, then the digits, and moves on once level', async () => {
+    const { container } = mount()
+    openPractice()
+    const idx = goTo('climb')
+    // The pad opens on BRG here, so the first arrow is on the ALT button.
+    expect(guidedButtons(container).map(b => b.textContent)).toEqual(['ALT (altitude)'])
+    // No turn wanted, so no turn-direction sweep either.
+    expect(compass(container).dataset.compassSweep).toBeUndefined()
+    key('m')
+    expect(guidedButtons(container).map(b => b.textContent)).toEqual(['0'])
+    key('0'); key('8')
+    expect(guidedButtons(container).map(b => b.textContent)).toEqual(['0'])
+    key('0')
+    expect(feedback(container).dataset.practiceFeedback).toBe('ok')
+    expect(feedback(container).textContent).toMatch(/Climbing to 8,000ft/)
+    expect(arrowsIn(container)).toHaveLength(0)
+    // 3,000ft at 500ft/s is 6s, then the hold.
+    await act(async () => { vi.advanceTimersByTime(8_000) })
+    expect(screen.getByText(DPT_PRACTICE_DRILLS[idx + 1].title)).toBeInTheDocument()
+  })
+
+  it('climb: a bearing typed with the pad on BRG is named and put back', async () => {
+    const { container } = mount()
+    openPractice()
+    goTo('climb')
+    key('0'); key('8'); key('0')
+    expect(feedback(container).dataset.practiceFeedback).toBe('bad')
+    expect(feedback(container).textContent).toMatch(/bearing of 080/)
+    await act(async () => { vi.advanceTimersByTime(2_000) })
+    expect(guidedButtons(container).map(b => b.textContent)).toEqual(['ALT (altitude)'])
+  })
+
+  it('descend: opens on ALT, then wants the pad back on BRG before it moves on', async () => {
+    const { container } = mount()
+    openPractice()
+    const idx = goTo('descend')
+    // Already on ALT from the last drill: straight to the digits.
+    expect(guidedButtons(container).map(b => b.textContent)).toEqual(['0'])
+    key('0'); key('3'); key('0')
+    expect(feedback(container).textContent).toMatch(/press BRG/)
+    expect(guidedButtons(container).map(b => b.textContent)).toEqual(['BRG (heading)'])
+    // Level (10s) but the pad is still on ALT: not done.
+    await act(async () => { vi.advanceTimersByTime(12_000) })
+    expect(screen.getByText(DPT_PRACTICE_DRILLS[idx].title)).toBeInTheDocument()
+    key('ArrowUp')
+    await act(async () => { vi.advanceTimersByTime(1_500) })
+    expect(screen.getByText(DPT_PRACTICE_DRILLS[idx + 1].title)).toBeInTheDocument()
+  })
+
+  it('zone: draws the zone, rejects a height inside its band, and finishes when flown through clear', async () => {
+    const { container } = mount()
+    openPractice()
+    goTo('zone')
+    expect(container.querySelectorAll('circle[stroke="#ffffff"][stroke-width="4"]')).toHaveLength(1)
+    key('m'); key('0'); key('2'); key('5')
+    expect(feedback(container).dataset.practiceFeedback).toBe('bad')
+    expect(feedback(container).textContent).toMatch(/within 1,000ft of the zone/)
+    await act(async () => { vi.advanceTimersByTime(2_000) })
+    key('m'); key('0'); key('5'); key('0')
+    expect(feedback(container).textContent).toMatch(/Climbing to 5,000ft/)
+    // 260 units to the zone at 18/s, plus its width: well under 25s.
+    await act(async () => { vi.advanceTimersByTime(25_000) })
+    expect(screen.getByText(/tutorial complete/i)).toBeInTheDocument()
+  })
+
+  it('zone: flying on at 2,000ft is caught inside the band', async () => {
+    const { container } = mount()
+    openPractice()
+    goTo('zone')
+    await act(async () => { vi.advanceTimersByTime(16_000) })
+    expect(feedback(container).dataset.practiceFeedback).toBe('bad')
+    expect(feedback(container).textContent).toMatch(/Inside the zone at/)
+  })
+})

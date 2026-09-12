@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   DPT_PRACTICE_DRILLS, buildDrillAircraft, buildDrillGates, judgeCommand,
   headingSettled, gateCrossing, bearingSector, sweepExtent, onTrackForGate, pad3,
+  judgeAltitudeCommand, altitudeSettled, altitudeFromDigits, zoneStatus,
 } from '../dptPractice'
 import { moveAircraft, shortestTurnDirection, bearingBetween } from '../dptPhysics'
 
@@ -43,12 +44,12 @@ function fly(drill, { dir, bearing, aircraftId = 'CA-A', maxSeconds = 40 } = {})
 }
 
 describe('drill roster', () => {
-  it('is nine drills, each with a title, a body and a goal', () => {
-    expect(DPT_PRACTICE_DRILLS).toHaveLength(9)
+  it('is twelve drills, each with a title, a body and a goal', () => {
+    expect(DPT_PRACTICE_DRILLS).toHaveLength(12)
     for (const d of DPT_PRACTICE_DRILLS) {
       expect(d.title).toBeTruthy()
       expect(d.body.length).toBeGreaterThan(40)
-      expect(['heading', 'gates', 'direction']).toContain(d.goal.type)
+      expect(['heading', 'gates', 'direction', 'altitude', 'zone']).toContain(d.goal.type)
       expect(d.aircraft.length).toBeGreaterThan(0)
     }
   })
@@ -366,5 +367,111 @@ describe('onTrackForGate', () => {
     const { list } = fly(d, { dir: 'R', bearing: 135, maxSeconds: 4 })
     // Turn settled (4s > 135/35), gate still ahead: lined up.
     expect(onTrackForGate(list[0], buildDrillGates(d)[0])).toBe(true)
+  })
+})
+
+describe('height drills', () => {
+  it('come last, after every heading drill, and the second opens on ALT', () => {
+    const types = DPT_PRACTICE_DRILLS.map(d => d.goal.type)
+    const firstHeight = types.findIndex(t => t === 'altitude' || t === 'zone')
+    expect(types.slice(firstHeight)).toEqual(['altitude', 'altitude', 'zone'])
+    expect(byKey.descend.startMode).toBe('ALT')
+    expect(byKey.climb.startMode).toBeUndefined()
+  })
+
+  it('guide the digits of the height they ask for', () => {
+    expect(byKey.climb.guide.digits).toBe('080')
+    expect(byKey.descend.guide.digits).toBe('030')
+    // The zone drill suggests 5,000ft, which is clear of a 2,000ft zone.
+    expect(byKey.zone.guide.digits).toBe('050')
+    expect(byKey.zone.guide.mode).toBe('ALT')
+  })
+
+  it('carry the height over: climb ends where descend begins', () => {
+    expect(byKey.climb.goal.target).toBe(byKey.descend.aircraft[0].altitudeFt)
+  })
+
+  it('read the pad in hundreds of feet, clamped to the band a run allows', () => {
+    expect(altitudeFromDigits(80)).toBe(8000)
+    expect(altitudeFromDigits(5)).toBe(1000)
+    expect(altitudeFromDigits(150)).toBe(10000)
+  })
+})
+
+describe('judgeAltitudeCommand', () => {
+  it('accepts the height the card asks for and says which way it is going', () => {
+    expect(judgeAltitudeCommand(byKey.climb, 8000)).toMatchObject({ verdict: 'ok' })
+    expect(judgeAltitudeCommand(byKey.climb, 8000).text).toMatch(/Climbing to 8,000ft/)
+    const v = judgeAltitudeCommand(byKey.descend, 3000)
+    expect(v.verdict).toBe('ok')
+    expect(v.text).toMatch(/Descending to 3,000ft/)
+    expect(v.text).toMatch(/press BRG/)
+  })
+
+  it('names a wrong height and spells the right one', () => {
+    const v = judgeAltitudeCommand(byKey.climb, 6000)
+    expect(v.verdict).toBe('wrongAltitude')
+    expect(v.text).toMatch(/That was 6,000ft/)
+    expect(v.text).toMatch(/type 0 8 0/)
+  })
+
+  it('rejects a height still inside the zone band, and offers both ways out', () => {
+    const v = judgeAltitudeCommand(byKey.zone, 2500)
+    expect(v.verdict).toBe('unsafe')
+    expect(v.text).toMatch(/within 1,000ft of the zone at 2,000ft/)
+    expect(v.text).toMatch(/3,000ft or higher, or 1,000ft or lower/)
+    expect(judgeAltitudeCommand(byKey.zone, 3000).verdict).toBe('ok')
+    expect(judgeAltitudeCommand(byKey.zone, 1000).verdict).toBe('ok')
+  })
+
+  it('lets a heading drill take a height without complaint', () => {
+    expect(judgeAltitudeCommand(byKey.east, 6000).verdict).toBe('ok')
+  })
+
+  it('catches a bearing typed on a height drill', () => {
+    const d = byKey.climb
+    const v = judgeCommand(d, buildDrillAircraft(d, null)[0], 'CA-A', 80, 'R')
+    expect(v.verdict).toBe('wrongMode')
+    expect(v.text).toMatch(/bearing of 080/)
+    expect(v.text).toMatch(/Press ALT, then type 0 8 0/)
+    expect(judgeCommand(byKey.zone, buildDrillAircraft(byKey.zone, null)[0], 'CA-A', 50, 'R').text).toMatch(/type 0 5 0/)
+  })
+})
+
+describe('the height drills fly as their cards say', () => {
+  const flyAlt = (drill, ft, seconds) => {
+    let list = buildDrillAircraft(drill, null).map(a => ({ ...a, targetAltitudeFt: ft }))
+    const statuses = []
+    for (let i = 0; i < seconds * 30; i++) {
+      list = list.map(a => moveAircraft(a, 1 / 30).aircraft)
+      if (drill.zones) statuses.push(zoneStatus(list[0], drill.zones[0]))
+    }
+    return { list, statuses }
+  }
+
+  it('climb levels at 8,000ft; descend at 3,000ft', () => {
+    expect(altitudeSettled(byKey.climb, flyAlt(byKey.climb, 8000, 8).list)).toBe(true)
+    expect(altitudeSettled(byKey.descend, flyAlt(byKey.descend, 3000, 12).list)).toBe(true)
+    // Not settled before the height is reached.
+    expect(altitudeSettled(byKey.climb, flyAlt(byKey.climb, 8000, 2).list)).toBe(false)
+  })
+
+  it('5,000ft clears the zone: inside it with room, then out the far side, never violating', () => {
+    const { statuses } = flyAlt(byKey.zone, 5000, 25)
+    expect(statuses).not.toContain('violating')
+    expect(statuses).toContain('inside')
+    const firstInside = statuses.indexOf('inside')
+    expect(statuses.slice(firstInside)).toContain('clear')
+  })
+
+  it('doing nothing flies straight into the band', () => {
+    const { statuses } = flyAlt(byKey.zone, 2000, 25)
+    expect(statuses).toContain('violating')
+  })
+
+  it('the zone is far enough ahead that the climb finishes first', () => {
+    // 2,000 to 5,000ft at 500ft/s is 6s; the zone edge must be further than that.
+    const { statuses } = flyAlt(byKey.zone, 5000, 6)
+    expect(statuses.every(s => s === 'clear')).toBe(true)
   })
 })

@@ -14,7 +14,8 @@
 
 import {
   SCOPE_HALF, moveAircraft, turnDistance, shortestTurnDirection, bearingToVec,
-  segmentsIntersect, normalizeDeg,
+  segmentsIntersect, normalizeDeg, ALT_MIN, ALT_MAX, DZ_RADIUS, DZ_SEP_REQUIRED,
+  zoneAltitude, zoneStatus,
 } from './dptPhysics'
 
 const CENTRE = { x: SCOPE_HALF, y: SCOPE_HALF }
@@ -22,6 +23,9 @@ const GATE_HALF_LEN = 50   // matches the live game's gates
 
 export const pad3 = (n) => String(n === 0 ? 360 : n).padStart(3, '0')
 const spaced = (digits) => digits.split('').join(' ')
+// Altitude as the pad types it (hundreds of feet) and as prose.
+export const altDigits = (ft) => String(Math.round(ft / 100)).padStart(3, '0')
+export const altProse  = (ft) => `${ft.toLocaleString('en-GB')}ft`
 
 // One entry per drill. Fields:
 //   aircraft   the aircraft on the arena at the start (and after a reset)
@@ -34,9 +38,18 @@ const spaced = (digits) => digits.split('').join(' ')
 //                  every gate has been flown through, in order
 //                { type: 'direction' }
 //                  both L and R have been pressed; nothing is flown
+//                { type: 'altitude', target, aircraftId, thenMode? }
+//                  the aircraft has levelled at `target` ft after a correct
+//                  ALT command; `thenMode` also wants the pad switched back
+//                { type: 'zone' }
+//                  the aircraft has flown through the drill's danger zone
+//                  with the height to spare, never inside its band
+//   zones      danger zones on the arena (zone drills only)
+//   startMode  which mode the pad opens in, BRG unless said otherwise
 //   guide      what the arrows point at: `aircraft` until it is selected, then
-//              `dir` until it is chosen, then each of `digits` in turn. A
-//              'direction' drill points at whichever side is still unpressed.
+//              `mode` until the pad is on it, then `dir` until it is chosen,
+//              then each of `digits` in turn. A 'direction' drill points at
+//              whichever side is still unpressed.
 export const DPT_PRACTICE_DRILLS = [
   {
     key: 'direction',
@@ -125,6 +138,35 @@ export const DPT_PRACTICE_DRILLS = [
     goal: { type: 'gates' },
     guide: { dir: null, digits: null },
   },
+  {
+    key: 'climb',
+    title: 'Climb',
+    body: 'Height uses the same pad. Press ALT and the three digits become a height in hundreds of feet: 0 8 0 is 8,000ft. The number under the callsign is the aircraft\'s height in the same units, 050 now. Press ALT, then 0 8 0, and watch it climb.',
+    aircraft: [{ id: 'CA-A', position: CENTRE, headingDeg: 360, altitudeFt: 5000 }],
+    gates: [],
+    goal: { type: 'altitude', target: 8000, aircraftId: 'CA-A' },
+    guide: { mode: 'ALT', dir: null, digits: '080' },
+  },
+  {
+    key: 'descend',
+    title: 'Back to headings',
+    body: 'The pad is still on ALT from the last drill, and it stays there until you switch it back. Type 0 3 0 to descend to 3,000ft, then press BRG so the next command is a bearing again. In a run, digits typed while the pad is on ALT are always a height, whatever you meant them to be.',
+    aircraft: [{ id: 'CA-A', position: CENTRE, headingDeg: 360, altitudeFt: 8000 }],
+    gates: [],
+    startMode: 'ALT',
+    goal: { type: 'altitude', target: 3000, aircraftId: 'CA-A', thenMode: 'BRG' },
+    guide: { mode: 'ALT', dir: null, digits: '030' },
+  },
+  {
+    key: 'zone',
+    title: 'Clear a danger zone',
+    body: 'The red circle ahead is a danger zone. Its white ring means it sits at 2,000ft, and you are at 2,000ft heading straight for it. An aircraft inside the circle within 1,000ft of the zone\'s height loses points every second it stays there. Climb to 3,000ft or higher before you reach it: ALT, then 0 5 0.',
+    aircraft: [{ id: 'CA-A', position: CENTRE, headingDeg: 90, altitudeFt: 2000 }],
+    gates: [],
+    zones: [{ id: 0, position: { x: 760, y: 500 }, band: '2k', radius: DZ_RADIUS }],
+    goal: { type: 'zone' },
+    guide: { mode: 'ALT', dir: null, digits: '050' },
+  },
 ]
 
 // Where the first aircraft ends up after turning onto `heading` from its start
@@ -189,7 +231,7 @@ export function buildDrillAircraft(drill, modelUrl) {
     kind:             a.id,
     modelUrl,
     position:         { ...a.position },
-    altitudeFt:       5000 + i * 3000,
+    altitudeFt:       a.altitudeFt ?? 5000 + i * 3000,
     targetAltitudeFt: null,
     headingDeg:       a.headingDeg,
     targetHeadingDeg: null,
@@ -208,6 +250,16 @@ export function buildDrillAircraft(drill, modelUrl) {
 // round, on drills that do not yet insist on the short one.
 export function judgeCommand(drill, aircraft, activeId, bearing, dir) {
   const goal = drill.goal
+  // A bearing typed on a height drill: the pad was on BRG when it should have
+  // been on ALT. The most common slip with this pad, and the one drill 11 is
+  // about, so it is named rather than silently flown.
+  if (goal.type === 'altitude' || goal.type === 'zone') {
+    const want = goal.type === 'altitude' ? altDigits(goal.target) : drill.guide.digits
+    return {
+      verdict: 'wrongMode',
+      text: `That was a bearing of ${pad3(bearing)}: the pad is on BRG. Press ALT, then type ${spaced(want)}.`,
+    }
+  }
   if (goal.type !== 'heading') return { verdict: 'ok', text: `${dir} ${pad3(bearing)}.` }
 
   if (activeId !== goal.aircraftId) {
@@ -240,6 +292,60 @@ export function judgeCommand(drill, aircraft, activeId, bearing, dir) {
       : null,
   }
 }
+
+// Judge a committed height (already clamped to the operational band) against
+// the drill. Same contract as judgeCommand: anything but 'ok' resets the pose.
+export function judgeAltitudeCommand(drill, ft) {
+  const goal = drill.goal
+  if (goal.type === 'altitude') {
+    if (ft !== goal.target) {
+      return {
+        verdict: 'wrongAltitude',
+        text: `That was ${altProse(ft)}. This drill wants ${altProse(goal.target)}: type ${spaced(altDigits(goal.target))}.`,
+      }
+    }
+    const verb = ft > 5000 ? 'Climbing' : 'Descending'
+    return {
+      verdict: 'ok',
+      text: goal.thenMode
+        ? `${verb} to ${altProse(goal.target)}. Now press ${goal.thenMode} to put the pad back on headings.`
+        : `${verb} to ${altProse(goal.target)}. Watch the height under the callsign.`,
+    }
+  }
+  if (goal.type === 'zone') {
+    const zone = drill.zones[0]
+    const zoneAlt = zoneAltitude(zone)
+    if (Math.abs(ft - zoneAlt) < DZ_SEP_REQUIRED) {
+      const low  = zoneAlt - DZ_SEP_REQUIRED
+      const high = zoneAlt + DZ_SEP_REQUIRED
+      const ways = low >= ALT_MIN
+        ? `${altProse(high)} or higher, or ${altProse(low)} or lower`
+        : `${altProse(high)} or higher`
+      return {
+        verdict: 'unsafe',
+        text: `${altProse(ft)} is still within 1,000ft of the zone at ${altProse(zoneAlt)}. It needs ${ways}: ALT, then ${spaced(drill.guide.digits)}.`,
+      }
+    }
+    return { verdict: 'ok', text: `Climbing to ${altProse(ft)}. That clears the zone with room to spare.` }
+  }
+  return { verdict: 'ok', text: `Altitude ${altProse(ft)}.` }
+}
+
+// Has the drill's aircraft levelled off at the goal height?
+export function altitudeSettled(drill, aircraftList) {
+  const goal = drill.goal
+  if (goal.type !== 'altitude') return false
+  const a = aircraftList.find(x => x.id === goal.aircraftId)
+  return !!a && a.targetAltitudeFt == null && a.altitudeFt === goal.target
+}
+
+// The pad's clamp, as the live game applies it: three digits in hundreds of
+// feet, snapped into the operational band.
+export function altitudeFromDigits(value) {
+  return Math.max(ALT_MIN, Math.min(ALT_MAX, value * 100))
+}
+
+export { zoneStatus }
 
 // The slice of the compass a partly typed bearing can still land in, for the
 // mini compass drawn around the aircraft. One digit narrows it to 100 degrees

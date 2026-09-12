@@ -25,10 +25,12 @@ import {
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import {
   SCOPE_SIZE, SCOPE_HALF, ARENA_HALF, EDGE_BUFFER, ALT_MIN, ALT_MAX,
-  normalizeDeg, bearingToVec, bearingToCenter, segmentsIntersect, moveAircraft,
+  DZ_RADIUS, DZ_ALT_2K, DZ_ALT_3K, DZ_SEP_REQUIRED,
+  normalizeDeg, bearingToVec, bearingToCenter, segmentsIntersect, moveAircraft, zoneStatus,
 } from '../utils/cbat/dptPhysics'
 import {
   DPT_PRACTICE_DRILLS, buildDrillAircraft, buildDrillGates, judgeCommand,
+  judgeAltitudeCommand, altitudeFromDigits, altitudeSettled, altProse,
   headingSettled, gateCrossing, bearingSector, sweepExtent, onTrackForGate, pad3,
 } from '../utils/cbat/dptPractice'
 import GuideArrow from '../components/cbat/GuideArrow'
@@ -130,11 +132,9 @@ function pickEnemyAltStep(currentAlt) {
 }
 
 // ── Danger zones (Chunk 9) ───────────────────────────────────────────────────
+// Radius, the two heights and the separation rule live in dptPhysics.js,
+// shared with the tutorial's zone drill.
 const DZ_PENALTY_PER_S    = 10     // score loss per sec inside danger zone
-const DZ_RADIUS           = 70     // visual radius of danger zone circle
-const DZ_ALT_2K           = 2000   // ft — white-ring zone is centred at 2,000ft
-const DZ_ALT_3K           = 3000   // ft — black-ring zone is centred at 3,000ft
-const DZ_SEP_REQUIRED     = 1000   // ft — aircraft must stay this far above/below the zone alt
 
 // ── Round completion bonus ───────────────────────────────────────────────────
 const ROUND_BONUS_PER_ROUND = 50   // × roundNum awarded when all gates hit
@@ -1007,7 +1007,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
           Tutorial
         </button>
         <p className="text-[11px] text-slate-500 mt-2 text-center">
-          Nine short drills on turning. No score, no timer.
+          Twelve short drills on turning and height. No score, no timer.
         </p>
       </div>
 
@@ -1064,10 +1064,11 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
 }
 
 // ── Practice mode ───────────────────────────────────────────────────────────
-// Nine drills on the real arena with the real numpad, teaching the one idea
+// Twelve drills on the real arena with the real numpad, teaching the one idea
 // DPT never explains on screen: the three digits are an absolute compass
 // bearing, and the L/R press before them decides which way round the aircraft
-// turns to reach it. The drills themselves (poses, gates, goals, the judging of
+// turns to reach it. The last three do the same for height: ALT, hundreds of
+// feet, and the danger zone that is the reason height matters. The drills themselves (poses, gates, goals, the judging of
 // a command) live in utils/cbat/dptPractice.js; this component owns the loop,
 // the input and the rendering, and it flies the same `moveAircraft` a run does.
 //
@@ -1262,7 +1263,7 @@ function PracticeComplete({ onExit }) {
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
       <p className="text-sm text-slate-400 mb-2">
-        Those are the turns. Altitude works the same way: press ALT, then type the height in hundreds of feet, so 0 5 0 is 5,000ft.
+        That is every control: a side and a bearing for heading, ALT and a height for altitude.
       </p>
       <p className="text-sm text-slate-400 mb-6">
         Pick an aircraft on the briefing to start a run.
@@ -1326,8 +1327,14 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
   // A reset or an advance is queued; the loop stops judging outcomes until it
   // has fired, so a miss cannot be reported twice.
   const pendingRef                      = useRef(null)
+  // Zone drill: the aircraft has been inside the circle (with the height to
+  // spare). Leaving it again is the drill done.
+  const zoneEnteredRef                  = useRef(false)
   const activeIdRef                     = useRef('CA-A')
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
+  // The loop reads the pad's mode for the "then switch back" height drill.
+  const inputModeRef                    = useRef('BRG')
+  useEffect(() => { inputModeRef.current = inputMode }, [inputMode])
   // The arena's rendered width, for sizing the mini compass: its text is in
   // scope units, and a phone renders those at half the pixels a desktop does.
   const arenaRef                        = useRef(null)
@@ -1358,6 +1365,7 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
     setCommandViz({})
     armedRef.current = false
     setArmed(false)
+    zoneEnteredRef.current = false
   }, [])
 
   // Rebuild the drill's whole pose, input included. `keepFeedback` leaves the
@@ -1366,13 +1374,16 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
   const loadPose = useCallback((idx, { keepFeedback = false } = {}) => {
     clearTimeout(pendingRef.current)
     pendingRef.current = null
+    const d = DPT_PRACTICE_DRILLS[idx]
     resetFlight(idx)
     setActiveId('CA-A')
     activeIdRef.current = 'CA-A'
     setTurnDir('R')
     dirsPressedRef.current = []
     setDirsPressed([])
-    setInputMode('BRG')
+    // The height drills open on ALT where the lesson is that the pad stays
+    // there; everything else opens on BRG as a run does.
+    setInputMode(d.startMode ?? 'BRG')
     bearingInputRef.current = ''
     setBearingInput('')
     if (!keepFeedback) setFeedback(null)
@@ -1537,6 +1548,30 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
       }
       if (d.goal.type === 'heading' && armedRef.current && headingSettled(d, moved)) {
         scheduleAdvance(`Heading ${pad3(d.goal.target)}. Well done.`)
+        return
+      }
+      // A height drill is done once the aircraft has levelled off, and, where
+      // the drill also wants the pad switched back, once that has happened.
+      if (d.goal.type === 'altitude' && armedRef.current && altitudeSettled(d, moved)) {
+        if (d.goal.thenMode && inputModeRef.current !== d.goal.thenMode) return
+        scheduleAdvance(d.goal.thenMode
+          ? `Level at ${altProse(d.goal.target)}, and the pad is back on ${d.goal.thenMode}. Well done.`
+          : `Level at ${altProse(d.goal.target)}. Well done.`)
+        return
+      }
+      // The zone drill: inside its band is a run's penalty and a restart here;
+      // through it with the height to spare is the drill done.
+      if (d.goal.type === 'zone') {
+        const ac = moved.find(a => a.id === 'CA-A')
+        const zone = d.zones[0]
+        if (!ac || !zone) return
+        const status = zoneStatus(ac, zone)
+        if (status === 'violating') {
+          scheduleReset(`Inside the zone at ${altProse(Math.round(ac.altitudeFt))}, within 1,000ft of its ${altProse(zone.band === '2k' ? DZ_ALT_2K : DZ_ALT_3K)}. Back to the start.`, PRACTICE_RESET_MS)
+          return
+        }
+        if (status === 'inside') zoneEnteredRef.current = true
+        else if (zoneEnteredRef.current) scheduleAdvance('Through the zone with room to spare. Well done.')
       }
     }
 
@@ -1549,10 +1584,25 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
     const value = parseInt(digits, 10)
     const id    = activeIdRef.current
     if (inputMode === 'ALT') {
-      const ft = Math.max(ALT_MIN, Math.min(ALT_MAX, value * 100))
+      const ft = altitudeFromDigits(value)
+      // The aircraft does what it was told, right or wrong.
       const next = aircraftRef.current.map(a => (a.id === id ? { ...a, targetAltitudeFt: ft } : a))
       aircraftRef.current = next
       setAircraftList(next)
+      setAltPulseKey(k => k + 1)
+
+      if (pendingRef.current) return
+      const d = drillRef.current
+      const verdict = judgeAltitudeCommand(d, ft)
+      if (verdict.verdict !== 'ok') {
+        scheduleReset(verdict.text, PRACTICE_RESET_MS)
+        return
+      }
+      if (d.goal.type === 'altitude' || d.goal.type === 'zone') {
+        armedRef.current = true
+        setArmed(true)
+        setFeedback({ tone: 'ok', text: verdict.text })
+      }
       return
     }
     const bearing = normalizeDeg(value)
@@ -1653,6 +1703,17 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
       const next = ['L', 'R'].find(d => !dirsPressed.includes(d))
       return next ? { dir: next } : {}
     }
+    // Height drills: ALT, then the digits; then, where the drill asks for it,
+    // the switch back to BRG once the height command is in.
+    if (drill.goal.type === 'altitude' || drill.goal.type === 'zone') {
+      if (!armed) {
+        if (inputMode !== 'ALT') return { mode: 'ALT' }
+        return g.digits ? { digit: g.digits[bearingInput.length] } : {}
+      }
+      const then = drill.goal.thenMode
+      if (then && inputMode !== then) return { mode: then }
+      return {}
+    }
     if (armed) return {}
     if (inputMode !== 'BRG') return { mode: 'BRG' }
     if (g.dir && turnDir !== g.dir) return { dir: g.dir }
@@ -1671,6 +1732,9 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
   // gate after this one needs a turn.
   const onTrack = drill.goal.type === 'gates' && !!activeAircraft
     && onTrackForGate(activeAircraft, gateList[nextGateIndex])
+  // No turn is wanted on a height drill, so no turn-direction arrow either.
+  const heightDrill = drill.goal.type === 'altitude' || drill.goal.type === 'zone'
+  const zoneList = drill.zones ?? []
 
   return (
     <div className="w-full flex flex-col md:grid md:grid-cols-[auto_440px] md:gap-4 md:justify-center">
@@ -1685,6 +1749,9 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
         <div ref={arenaRef} className="relative z-10 bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl shadow-[0_0_30px_rgba(91,170,255,0.08)] overflow-hidden" style={{ width: '100%', aspectRatio: '1' }}>
           <DptAircraftLayer aircraftList={aircraftWithModel} sizeMultiplier={1} doneIds={PRACTICE_NO_DONE} />
           <ArenaScope brgPulseKey={brgPulseKey}>
+            {zoneList.map(z => (
+              <DangerZoneMarker key={`dz-${z.id}`} zone={z} />
+            ))}
             {gateList.map((g, i) => (
               <GateMarker key={`${g.kind}-${g.id}`} gate={g} isNext={i === nextGateIndex} />
             ))}
@@ -1698,7 +1765,7 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
               <MiniCompass
                 aircraft={activeAircraft}
                 sector={compassSector}
-                turnDir={inputMode === 'BRG' && !onTrack ? turnDir : null}
+                turnDir={inputMode === 'BRG' && !onTrack && !heightDrill ? turnDir : null}
                 scale={miniCompassScale(arenaPx)}
               />
             )}
