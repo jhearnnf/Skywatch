@@ -43,13 +43,19 @@
 //   aliases      what people actually type. Lower case, no punctuation.
 //   what         one sentence: what you do. Present tense, plain British English.
 //   difficulties the split, where there is one
+//   tutorial     what the game's own Tutorial button teaches, where it has one.
+//                Pinned to CBAT_TUTORIAL_GAME_KEYS by the drift test: a game
+//                that gains a tutorial must say so here, and a game without one
+//                must not claim one. "How do I learn the controls" is the
+//                question this answers, and it is asked about DPT above all.
 const CBAT_GAME_CATALOGUE = [
   {
     name: 'Target',
     registryKeys: ['target'],
     simulates: 'TRT',
     aliases: ['target', 'trt', 'target recognition'],
-    what: 'eight panels running at once for two minutes - hunt shapes, match warning lights, identify aircraft and find codes. Its Tutorial button opens a practice mode that unlocks the panels one at a time.',
+    what: 'eight panels running at once for two minutes - hunt shapes, match warning lights, find codes and identify aircraft and vehicles from a silhouette revealed through a strip that sweeps across it.',
+    tutorial: 'a practice mode that unlocks the panels one at a time - spot the targets, read a full target, match the lights, identify the aircraft, catch the code - so each is learnt on its own before the full board runs.',
   },
   {
     name: 'ANT',
@@ -58,6 +64,7 @@ const CBAT_GAME_CATALOGUE = [
     aliases: ['ant', 'airborne numerical', 'airbourne numerical', 'the ant board'],
     what: 'speed, distance, time and fuel. Easier reads the figures off a board; Hard is the written version with weather, part journeys and two aircraft.',
     difficulties: ['Easier', 'Hard'],
+    tutorial: 'six steps on the real board - read the route, read the flight data, then solve arrival time, total distance, fuel and speed one at a time.',
   },
   {
     name: 'ANT Practise',
@@ -134,6 +141,7 @@ const CBAT_GAME_CATALOGUE = [
     aliases: ['flag', 'figures logistics and groups'],
     what: 'sixty seconds of tracking aircraft, answering maths and identification questions and hitting target shapes at the same time.',
     difficulties: ['Easier', 'Hard'],
+    tutorial: 'three steps on the live field, one job at a time - strike the armed shapes, watch the aircraft and answer YES or NO on callsigns, then solve the maths - before they all run together.',
   },
   {
     name: 'Visualisation 2D and 3D',
@@ -149,6 +157,7 @@ const CBAT_GAME_CATALOGUE = [
     aliases: ['dpt', 'dynamic projection', 'dynamic projection test'],
     what: 'vector several aircraft through gates on compass bearings and intercept contacts. The longest game here.',
     difficulties: ['Easier', 'Hard'],
+    tutorial: 'twelve short drills on the real arena with the real numpad. Nine teach the turn - the three digits are an absolute compass bearing, and the L or R pressed first decides which way round the aircraft turns to reach it - with a compass ring drawn round the aircraft while you type. Three teach height: ALT, hundreds of feet, and the danger zone. A wrong command is flown, not blocked, so you see the long way round, then the drill resets. New, and the answer to "how do the DPT controls work".',
   },
   {
     name: 'ACT',
@@ -179,6 +188,7 @@ const CBAT_GAME_CATALOGUE = [
     aliases: ['cut', 'cognitive updating', 'cognitive updating test'],
     what: 'six aircraft displays at once for three minutes - hold fuel, speed, sensors, pressure and load drops in tolerance while the warnings stack up.',
     difficulties: ['Easier', 'Hard'],
+    tutorial: 'eight steps on a moving board - the two windows and the warning strip first, then Message, Engine, Navigation, Sensor, Mission and System one display at a time, with an arrow on the exact control to press.',
   },
   {
     name: 'Situational Awareness Test',
@@ -187,6 +197,7 @@ const CBAT_GAME_CATALOGUE = [
     aliases: ['sat', 'situational awareness', 'situational awareness test'],
     what: 'watch a tactical picture of units, aircraft and radio calls build up, then answer on it from memory.',
     difficulties: ['Easier', 'Hard'],
+    tutorial: 'four steps - read the grid and its markers (colour for allegiance, letter for type, number for strength, arrow for heading), the controller aircraft, the radio calls, then a recall round.',
   },
   {
     name: 'Rapid Tracking Test',
@@ -201,7 +212,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['sit', 'sit-easier'],
     simulates: 'SIT',
     aliases: ['sit', 'spatial integration', 'spatial integration test'],
-    what: 'study the ground one isolated layer at a time, then judge a rotated two-second clip of the whole scene on a single detail.',
+    what: 'study the ground one isolated layer at a time, then judge a rotated clip of the whole scene, three seconds on Hard and four on Easier, on a single detail. Every question gets its own viewing of the clip, and the question is asked after it, so the whole frame has to be taken in each time.',
     difficulties: ['Easier', 'Hard'],
   },
   {
@@ -249,7 +260,7 @@ const CBAT_GAME_CATALOGUE = [
 // this block rides in every system prompt, and anything longer belongs in the
 // guide rather than here.
 const CBAT_APP_FEATURES = [
-  'Aptitude Report - estimates your battery score against the cutoff for a role from the games you have played, and shows which parts of the battery you have not covered yet.',
+  'Aptitude Report - estimates your battery score against the cutoff for a role from the games you have played, and shows which parts of the battery you have not covered yet. A test only counts as firm once you have three runs on it (six for CUT, whose scores keep climbing for longer than any other game), and it averages your last three.',
   'Leaderboards on every game, weekly and all-time, plus a chart of your own scores over time.',
   'Every game plays offline in the app, and scores sync when you are back on.',
   'A written CBAT guide, plus Canadian and Australian equivalents, in the Community section.',
@@ -278,7 +289,8 @@ function renderGameCatalogue({ isEnabled = null } = {}) {
     CATALOGUE_HEADER,
     'This is the full, current list of practice games SkyWatch has built. It is fact about this app, not a candidate report, so it carries no confidence codes and needs no hedging.',
     'They are CBAT-style simulations written from what candidates described. They are not the real tests, and nobody outside the test provider has those.',
-    'Each line reads: NAME | also called | what you do | drills, meaning the real test it is built from | modes, where the game has two difficulties.',
+    'Each line reads: NAME | also called | what you do | drills, meaning the real test it is built from | modes, where the game has two difficulties | tutorial, where the game has a Tutorial button of its own and what it teaches.',
+    'Six games have a tutorial: Target, ANT, FLAG, SAT, CUT and DPT. It is opened from a Tutorial button on the game page itself, it is not scored, and it is the answer to "how do the controls work" or "I do not understand what to do" for those games. For a game without one, the answer is to play its Easier mode where it has one.',
     '',
   ];
 
@@ -288,6 +300,7 @@ function renderGameCatalogue({ isEnabled = null } = {}) {
     parts.push(g.what);
     parts.push(g.simulates ? `drills: ${g.simulates}` : 'drills: no matching test code');
     if (g.difficulties) parts.push(`modes: ${g.difficulties.join(' and ')}`);
+    if (g.tutorial) parts.push(`tutorial: ${g.tutorial}`);
     if (g.tile) parts.push(`found under the ${g.tile} tile`);
     lines.push(`- ${parts.join(' | ')}`);
   }

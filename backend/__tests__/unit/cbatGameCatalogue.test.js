@@ -10,7 +10,7 @@
 const {
   CBAT_GAME_CATALOGUE, renderGameCatalogue, CATALOGUE_HEADER, CATALOGUE_FOOTER,
 } = require('../../constants/cbatGameCatalogue');
-const { CBAT_GAMES, isCbatEasierKey } = require('../../constants/cbatGames');
+const { CBAT_GAMES, CBAT_TUTORIAL_GAME_KEYS, isCbatEasierKey } = require('../../constants/cbatGames');
 const { TESTS } = require('../../constants/cbatBatteries');
 
 describe('coverage of the registry', () => {
@@ -34,6 +34,23 @@ describe('coverage of the registry', () => {
       if (!game.simulates) continue;
       expect({ game: game.name, defined: game.simulates in TESTS })
         .toEqual({ game: game.name, defined: true });
+    }
+  });
+
+  // A tutorial is the answer to "how do the controls work", so the bot must
+  // know exactly which games have one. The registry list is what the admin
+  // funnels read and what the games actually post to, so it is the truth here;
+  // CUT's tutorial shipped without being added to it and went unreported for a
+  // day, which is the drift this pins.
+  it('claims a tutorial for exactly the games that ship one', () => {
+    const claimed = CBAT_GAME_CATALOGUE.filter(g => g.tutorial).flatMap(g => g.registryKeys);
+    for (const key of CBAT_TUTORIAL_GAME_KEYS) {
+      expect({ key, described: claimed.includes(key) }).toEqual({ key, described: true });
+    }
+    for (const game of CBAT_GAME_CATALOGUE) {
+      const ships = game.registryKeys.some(k => CBAT_TUTORIAL_GAME_KEYS.includes(k));
+      expect([game.name, Boolean(game.tutorial)]).toEqual([game.name, ships]);
+      if (game.tutorial) expect(game.tutorial.length).toBeGreaterThan(20);
     }
   });
 
@@ -99,6 +116,18 @@ describe('rendering', () => {
 
   it('still says these are simulations rather than the real tests', () => {
     expect(renderGameCatalogue()).toMatch(/not the real tests/i);
+  });
+
+  // Where a game has a tutorial the rendered line must say so, and the
+  // preamble must name the set, or a user asking "is there a DPT tutorial"
+  // gets the real-battery answer instead of ours.
+  it('prints each tutorial on its game and names the six games that have one', () => {
+    const block = renderGameCatalogue();
+    for (const game of CBAT_GAME_CATALOGUE) {
+      const line = block.split('\n').find(l => l.startsWith(`- ${game.name} |`));
+      expect([game.name, line.includes('tutorial:')]).toEqual([game.name, Boolean(game.tutorial)]);
+    }
+    expect(block).toMatch(/Six games have a tutorial: Target, ANT, FLAG, SAT, CUT and DPT/);
   });
 
   it('drops a game an admin has switched off', () => {
