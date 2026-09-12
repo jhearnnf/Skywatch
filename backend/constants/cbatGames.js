@@ -512,4 +512,15 @@ function cbatLabelWithDifficulty(gameKey) {
   return HARD_KEYS.has(gameKey) ? `${cfg.label} (Hard)` : cfg.label;
 }
 
-module.exports = { CBAT_GAMES, cbatLabelWithDifficulty, cbatHardKeyFor, isCbatEasierKey };
+// The games that ship an in-app tutorial / practice mode, by the key it posts
+// progress under (POST /games/cbat/:gameKey/tutorial). One tutorial per game,
+// shared by both difficulties where the game is split. Read by the admin
+// Reports funnels (render order is this order) and pinned to the guide bot's
+// catalogue by a test, so a game that gains a tutorial and is not added here
+// fails the build rather than going unreported and unmentioned - which is
+// exactly what happened to CUT's for a day.
+const CBAT_TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat', 'cut', 'dpt'];
+
+module.exports = {
+  CBAT_GAMES, CBAT_TUTORIAL_GAME_KEYS, cbatLabelWithDifficulty, cbatHardKeyFor, isCbatEasierKey,
+};

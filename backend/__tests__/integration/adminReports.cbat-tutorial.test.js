@@ -146,7 +146,11 @@ describe('GET /api/admin/reports/cbat — tutorial usage', () => {
     expect(tut.funnel).toEqual([]);
   });
 
-  // Every CBAT game shipping a practice/tutorial mode must appear, not just Target.
+  // Every CBAT game shipping a practice/tutorial mode must appear, not just
+  // Target. The list is CBAT_TUTORIAL_GAME_KEYS on the registry; spelt out here
+  // rather than read from it so a game that gains a tutorial has to be added
+  // to this test on purpose (CUT's went unreported when the list was private
+  // to the route).
   it('covers all tutorial-enabled games, with Target first', async () => {
     const res = await request(app)
       .get('/api/admin/reports/cbat?window=all')
@@ -156,12 +160,12 @@ describe('GET /api/admin/reports/cbat — tutorial usage', () => {
     const { data } = res.body;
 
     expect(data.tutorials.map(t => t.key))
-      .toEqual(['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial']);
+      .toEqual(['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial', 'cut-tutorial', 'dpt-tutorial']);
     // Labels are derived from CBAT_GAMES, so a game rename carries through.
     expect(data.gameLabels['flag-tutorial']).toBe('FLAG (tutorial)');
     expect(data.gameLabels['ant-tutorial']).toBe('Airborne Numerical Test (tutorial)');
     // All of them grey out and get a per-game row + stacked-chart series.
-    for (const key of ['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial']) {
+    for (const key of ['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial', 'cut-tutorial', 'dpt-tutorial']) {
       expect(data.practiceKeys).toContain(key);
       expect(data.gameKeys).toContain(key);
       expect(data.perGame.find(g => g.key === key)?.isTutorial).toBe(true);

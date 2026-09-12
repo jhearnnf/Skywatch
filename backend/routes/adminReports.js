@@ -12,7 +12,7 @@ const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const AppOpen = require('../models/AppOpen');
 const ChatConversation = require('../models/ChatConversation');
 const ChatMessage = require('../models/ChatMessage');
-const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
+const { CBAT_GAMES, CBAT_TUTORIAL_GAME_KEYS, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { OS_KEYS } = require('../constants/clientPlatforms');
 
 // Games whose names render greyed on the Reports page — tutorial/practice modes
@@ -21,18 +21,18 @@ const { OS_KEYS } = require('../constants/clientPlatforms');
 const PRACTICE_GAME_KEYS = ['plane-turn-2d', 'plane-turn-3d'];
 
 // In-app tutorials surfaced on the Reports page — the CBAT games that ship a
-// practice/tutorial mode reporting progress to POST /games/cbat/:gameKey/tutorial.
-// `key` is a display-only pseudo game key; `gameKey` is the real CBAT game the
-// tutorial belongs to (what the GameSessionCbatTutorial rows store). Labels are
-// derived from CBAT_GAMES so a game rename can't leave the tutorial row stale.
-// Order here is the render order of the Tutorial Drop-off funnels.
+// practice/tutorial mode reporting progress to POST /games/cbat/:gameKey/tutorial,
+// listed in CBAT_TUTORIAL_GAME_KEYS on the registry (its order is the render
+// order of the Tutorial Drop-off funnels). `key` is a display-only pseudo game
+// key; `gameKey` is the real CBAT game the tutorial belongs to (what the
+// GameSessionCbatTutorial rows store). Labels are derived from CBAT_GAMES so a
+// game rename can't leave the tutorial row stale.
 //
 // Deliberately the plain registry label, NOT cbatLabelWithDifficulty: a split
 // game has one tutorial shared by both difficulties (CbatFlag posts to
 // /cbat/flag/tutorial whichever difficulty is selected), so "FLAG (Hard)
 // (tutorial)" would name a row that doesn't exist.
-const TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat', 'dpt'];
-const TUTORIAL_GAMES = TUTORIAL_GAME_KEYS.map(gameKey => ({
+const TUTORIAL_GAMES = CBAT_TUTORIAL_GAME_KEYS.map(gameKey => ({
   key: `${gameKey}-tutorial`,
   gameKey,
   label: `${CBAT_GAMES[gameKey]?.label ?? gameKey} (tutorial)`,
