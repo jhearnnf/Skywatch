@@ -488,13 +488,18 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('no longer flags ANT\'s Hard board — it has stopped being news', () => {
-    // ANT's Easier/Hard pair (written objectives, weather, two-lookup fuel and
-    // two aircraft, its own leaderboard from zero) has had the "New Hard Mode"
-    // badge long enough that it was just crowding the tile, same as the
-    // difficulty-modes badge above.
+  it('points at DPT, which has gained a tutorial', () => {
+    // DPT's controls (a side, then three digits that are an absolute compass
+    // bearing) are the thing nothing on screen explains, and the tutorial that
+    // now teaches them lives behind a button on the select card that a
+    // returning player has no reason to look for. Drop this once it has been
+    // true long enough to stop being news.
+    //
+    // One badge at a time, or the slot stops meaning "look here" — ANT's "New
+    // Hard Mode" and the earlier practise badge each gave the slot up in turn.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge)).toEqual([])
+    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['dpt'])
+    expect(screen.getByText('New Tutorial')).toBeTruthy()
     expect(screen.queryByText('New Hard Mode')).toBeNull()
     expect(screen.queryByText('New Practise Mode')).toBeNull()
   })
