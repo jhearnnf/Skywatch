@@ -109,6 +109,14 @@ describe('bars belong to difficulties, badges to everything else', () => {
     expect(barsIn(button(container, '3d'))).toBe(0)
   })
 
+  it('names the two Visualisation boards by dimension alone', () => {
+    const { container } = render(
+      <CbatModeRow modes={VISUALISATION_MODES} value="2d" onSelect={() => {}} />,
+    )
+    expect(button(container, '2d').textContent).toBe('2D')
+    expect(button(container, '3d').textContent).toBe('3D')
+  })
+
   it('never puts bars on a mode that is a different test rather than a harder one', () => {
     for (const mode of [...TRACE_MODES, ...VISUALISATION_MODES, ANT_MODES[2]]) {
       expect([mode.key, mode.bars ?? null]).toEqual([mode.key, null])
