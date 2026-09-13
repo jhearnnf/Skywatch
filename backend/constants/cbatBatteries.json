@@ -8,7 +8,9 @@
     "Transcribed from real OASC 'Aptitude Scores' sheets (APPLICATION_INFO/cbat scores). Each",
     "battery is one role. A battery scores a candidate across weighted domains; each domain is fed",
     "by named tests with multipliers. Every test yields a stanine (1-9), a domain's stanine is the",
-    "multiplier-weighted mean of its tests, and the battery score is",
+    "multiplier-weighted mean of its tests ROUNDED to a whole 1-9 (verified against three batteries on",
+    "two real sheets: the bars sit on gridlines and decode back to the printed score exactly), and",
+    "the battery score is",
     "  round(sum(domainWeight * domainStanine) / 100 * 20)   -> max 180",
     "Pass is score >= cutoff. Domain weights sum to 100 in every battery (asserted in tests)."
   ],

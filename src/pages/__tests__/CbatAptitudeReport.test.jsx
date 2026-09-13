@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatAptitudeReport from '../CbatAptitudeReport'
 
@@ -72,7 +72,7 @@ const report = {
   focus: [
     { kind: 'improve', code: 'CUT', label: 'Cognitive Updating Test', match: 'direct', domainKey: 'StrgcTM',
       domainLabel: 'Strategic Task Management', domainWeight: 17, stanine: 5,
-      nextTarget: { gameKey: 'cut', stanine: 6, score: 409 }, gain: 4.9 },
+      nextTarget: { gameKey: 'cut', stanine: 6, score: 409 }, gain: 4.9, tipsLevel: true, levelsNeeded: 1, domainStanine: 5 },
     { kind: 'unlock', code: 'SAT', label: 'Situational Awareness Test', match: 'direct', domainKey: 'StrgcTM',
       domainLabel: 'Strategic Task Management', domainWeight: 17, stanine: null,
       needsRuns: [{ gameKey: 'sat', label: 'Situational Awareness Test', runs: 1, runsNeeded: 2 }],
@@ -287,6 +287,120 @@ describe('CbatAptitudeReport', () => {
     // CUT is sat three times inside this skill area. The multiplier shows on the always-visible
     // chip and again on the expanded row, so both places tell you where practice pays off most.
     expect(screen.getAllByText(/×3/)).toHaveLength(2)
+  })
+
+  // The real sheet reports a skill area as a whole number and builds the 180 from it, verified by
+  // decoding the bars on three batteries across two sheets back to their printed scores. So the row
+  // prints the whole stanine the backend scored, while the BAR is drawn to the unrounded mean
+  // behind it. The two are allowed to disagree by up to half a level, and that gap is the point:
+  // the number is the result, the bar is how close you are to the next one.
+  it('prints the whole skill area level and draws the bar at the unrounded mean', async () => {
+    global.fetch = vi.fn((url) => {
+      let body = summary
+      if (url.includes('/report-users')) body = { users: reportUsers }
+      else if (url.includes('/report/')) {
+        body = { ...report, domains: [{ ...report.domains[0], stanine: 9, stanineRaw: 8.67 }, report.domains[1]] }
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+
+    // Scoped to the row: the 1-9 axis above the sheet has a 9 of its own.
+    const row = screen.getByText('Strategic Task Management').closest('button')
+    expect(within(row).getByText('9')).toBeInTheDocument()
+    // The average sits underneath at one decimal, which is where practice between levels shows up.
+    expect(within(row).getByText('8.7')).toBeInTheDocument()
+    expect(within(row).queryByText('8.67')).not.toBeInTheDocument()
+  })
+
+  // An area fed by a single test has an average identical to its level, and printing "9" over "9.0"
+  // is noise rather than information.
+  it('hides the average when it says nothing the level does not', async () => {
+    global.fetch = vi.fn((url) => {
+      let body = summary
+      if (url.includes('/report-users')) body = { users: reportUsers }
+      else if (url.includes('/report/')) {
+        body = { ...report, domains: [{ ...report.domains[0], stanine: 9, stanineRaw: 9 }, report.domains[1]] }
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+
+    const row = screen.getByText('Strategic Task Management').closest('button')
+    expect(within(row).getByText('9')).toBeInTheDocument()
+    expect(within(row).queryByText('9.0')).not.toBeInTheDocument()
+  })
+
+  // Whole-level pricing. A skill area is rounded before it is weighted, so a test that cannot tip
+  // its area is worth nothing to the score yet, and saying "+0" would be true and useless. Those
+  // rows carry the distance instead, and only the rows that actually move the score show points.
+  it('prices a focus row on the whole level it tips, not the fraction it adds', async () => {
+    const focusRow = over => ({ ...report.focus[0], ...over })
+    const serveFocus = f => {
+      global.fetch = vi.fn((url) => {
+        let body = summary
+        if (url.includes('/report-users')) body = { users: reportUsers }
+        else if (url.includes('/report/')) body = { ...report, focus: [f] }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+      })
+    }
+
+    serveFocus(focusRow({ tipsLevel: false, levelsNeeded: 2, gain: 0, domainStanine: 7 }))
+    const { unmount } = render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.getByText('2 lvl')).toBeInTheDocument()
+    expect(screen.queryByText('+0')).not.toBeInTheDocument()
+    expect(screen.getByText(/needs 2 levels on this one to reach 8/)).toBeInTheDocument()
+    unmount()
+
+    serveFocus(focusRow({ tipsLevel: true, levelsNeeded: 1, gain: 2.8, domainStanine: 7 }))
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.getByText('+2.8')).toBeInTheDocument()
+    expect(screen.getByText(/lifts your Strategic Task Management to 8/)).toBeInTheDocument()
+  })
+
+  // Maxing a role empties the focus list legitimately, and a panel that just disappears at 178 out
+  // of 180 reads as a broken page rather than a finished role.
+  describe('a role with nothing left to gain', () => {
+    const serveFocusless = (over = {}) => {
+      global.fetch = vi.fn((url) => {
+        let body = summary
+        if (url.includes('/report-users')) body = { users: reportUsers }
+        else if (url.includes('/report/')) body = { ...report, focus: [], coverage: 100, ...over }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+      })
+    }
+
+    it('says so rather than showing nothing', async () => {
+      serveFocusless()
+      render(<CbatAptitudeReport />)
+      await screen.findByText('100')
+
+      expect(screen.getByText('Nothing left to play for here')).toBeInTheDocument()
+      expect(screen.queryByText('Play these next')).not.toBeInTheDocument()
+      expect(screen.queryByText(/no game yet are the only part/)).not.toBeInTheDocument()
+    })
+
+    it('points at the unmeasurable tests when the role is not fully covered', async () => {
+      serveFocusless({ coverage: 81 })
+      render(<CbatAptitudeReport />)
+      await screen.findByText('100')
+
+      expect(screen.getByText(/no game yet are the only part/)).toBeInTheDocument()
+    })
+
+    // A brand new player has no improve rows either, but they do have unlocks, so they must never
+    // be told they have finished the role.
+    it('never shows it to a player with no score yet', async () => {
+      serveFocusless({ score: null })
+      render(<CbatAptitudeReport />)
+      await screen.findByText('Pilot')
+
+      expect(screen.queryByText('Nothing left to play for here')).not.toBeInTheDocument()
+    })
   })
 
   it('lists tests SkyWatch has no game for as gaps', async () => {

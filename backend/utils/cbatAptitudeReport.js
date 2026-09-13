@@ -4,7 +4,7 @@
 // The chain, mirroring the real "Aptitude Scores" sheet exactly:
 //
 //   recent form on a game  →  test stanine (1-9)
-//   tests in a domain      →  domain stanine   (multiplier-weighted mean)
+//   tests in a domain      →  domain stanine   (multiplier-weighted mean, ROUNDED to 1-9)
 //   domains in a battery   →  score out of 180 (weight-weighted mean × 20)
 //   score vs the battery's cutoff  →  pass / fail
 //
@@ -349,9 +349,20 @@ function buildBatteryReport(battery, form) {
     // toward the middle of the scale by its own shrink, and discounting it a second time here
     // would count the same uncertainty twice and quietly hand the domain to whichever test the
     // user happens to have played most. The uncertainty that is left rides in `stanineSd`.
-    const stanine = scoredMult
+    // ROUNDED TO A WHOLE NUMBER, because that is what the real sheet does and the 180 is computed
+    // from it. Measured off three batteries on two real sheets: the green bars land exactly on the
+    // 1-9 gridlines, never between them, and decoding them reproduces the printed Current score to
+    // the point every time. Pilot 2026 read 5,8,5,6,9,8,9 against weights 17/14/11/15/12/15/16,
+    // giving 714/100 × 20 = 142.8 -> 143, which is what the sheet prints. Control Officer (ATC) on
+    // the same sheet collapses to 20s + 21 and solves at exactly s = 5 for its printed 121. Pilot
+    // 2025 on the older form read 8,4,5,6,8,9,7 against 18/14/11/16/11/15/15 for 135.8 -> 136.
+    //
+    // We used to keep the unrounded mean here and score from it, which is what let a row print 9
+    // while the battery came out at 173 rather than 180. That was ours, not theirs.
+    const stanineRaw = scoredMult
       ? scored.reduce((a, t) => a + t.stanine * t.mult, 0) / scoredMult
       : null;
+    const stanine = stanineRaw === null ? null : Math.round(stanineRaw);
     // Independent readings, so the sds combine in quadrature under the same weights. Zero once
     // every test in the domain is firm.
     const stanineSd = scoredMult
@@ -363,7 +374,12 @@ function buildBatteryReport(battery, form) {
       label: DOMAINS[d.key].label,
       blurb: DOMAINS[d.key].blurb,
       weight: d.weight,
-      stanine: stanine === null ? null : Number(stanine.toFixed(2)),
+      stanine,
+      // The unrounded mean behind it. Nothing scores off this: it is what the row's BAR is drawn
+      // to, so a player on 7.6 can see they are nearly an 8 while the sheet still calls them 8.
+      // The real form has this too, in its way — its bars sit on gridlines, but ours is a training
+      // tool and the distance to the next level is the most useful thing on the row.
+      stanineRaw: stanineRaw === null ? null : Number(stanineRaw.toFixed(2)),
       stanineSd: stanineSd === null ? null : Number(stanineSd.toFixed(2)),
       // Share of this domain's own tests that fed the stanine, discounted by how firm each one is
       // — the caveat on the domain row.
@@ -548,13 +564,35 @@ function buildFocus(domains, measuredWeight, coverage) {
     for (const t of scored) {
       if (!t.firm) continue;
       if (t.stanine >= MAX_STANINE) continue;   // already topped out
+      // So is a test sitting inside a skill area that has already reached the top of the scale.
+      // Nothing done to it can move THIS role's score, so the row is not "what helps you most
+      // right now" by any reading — and before this guard the copy went further and offered to
+      // take a 9 up to a 10, which is not a number that exists.
+      if (d.stanine >= MAX_STANINE) continue;
+      // PRICED ON WHOLE LEVELS, because that is the only way the score can move. A domain is
+      // rounded before it is weighted, so taking one test up a stanine lifts the domain's raw mean
+      // by mult/scoredMult and then buys precisely nothing until that lift tips the rounded level.
+      // The old figure here was the fraction — a smooth "+1.5" that a player could earn in full and
+      // watch their score sit still, because the domain went from 7.2 to 7.4 and still read 7.
+      const liftedRaw = d.stanineRaw + t.mult / scoredMult;
+      const liftedStanine = Math.min(MAX_STANINE, Math.round(liftedRaw));
+      // How many stanines this one test still has to gain before the domain ticks over. The share
+      // it carries is mult/scoredMult, so a x3 test inside a pool of 6 moves the domain half a
+      // level per level of its own. This is what ranks the rows the score cannot move yet.
+      const levelsNeeded = Math.max(1, Math.ceil(((d.stanine + 0.5) - d.stanineRaw) / (t.mult / scoredMult)));
       out.push({
         kind: 'improve',
         code: t.code, label: t.label, match: t.match,
         domainKey: d.key, domainLabel: d.label, domainWeight: d.weight,
         stanine: t.stanine,
         nextTarget: t.nextTarget,
-        gain: measuredWeight ? (d.weight / measuredWeight) * (t.mult / scoredMult) * (MAX_SCORE / MAX_STANINE) : null,
+        gain: measuredWeight
+          ? ((stanineWeight - d.stanine * d.weight + liftedStanine * d.weight) / measuredWeight) * (MAX_SCORE / MAX_STANINE) - currentScore
+          : null,
+        // True when one more level on this test is enough on its own to lift the skill area.
+        tipsLevel: liftedStanine > d.stanine,
+        levelsNeeded,
+        domainStanine: d.stanine,
         coverageGain: 0,   // already counted; improving it measures nothing new
       });
     }
@@ -573,9 +611,13 @@ function buildFocus(domains, measuredWeight, coverage) {
       // are saying, freed of the shrink — a far better estimate, and the reason firming up can
       // legitimately move the score DOWN for someone below the median.
       const settledStanine = thin ? t.rawStanine : ASSUMED_UNLOCK_STANINE;
-      const newDomainStanine = thin
-        ? (d.stanine * scoredMult - t.stanine * t.mult + settledStanine * t.mult) / scoredMult
-        : ((opensDomain ? 0 : d.stanine * scoredMult) + settledStanine * t.mult) / (scoredMult + t.mult);
+      // Rebuilt from the UNROUNDED mean and rounded once at the end, for the same reason the
+      // improve rows are: rounding is the last step before weighting, so feeding an already-rounded
+      // domain back into the mean would round twice and drift.
+      const newDomainRaw = thin
+        ? (d.stanineRaw * scoredMult - t.stanine * t.mult + settledStanine * t.mult) / scoredMult
+        : ((opensDomain ? 0 : d.stanineRaw * scoredMult) + settledStanine * t.mult) / (scoredMult + t.mult);
+      const newDomainStanine = Math.round(newDomainRaw);
       const newWeight = measuredWeight + (opensDomain ? d.weight : 0);
       const newStanineWeight =
         stanineWeight - (opensDomain ? 0 : d.stanine * d.weight) + newDomainStanine * d.weight;
@@ -607,9 +649,13 @@ function buildFocus(domains, measuredWeight, coverage) {
   const unlocksLead = coverage < MIN_COVERAGE_FOR_VERDICT;
   const block = f => ((f.kind === 'unlock') === unlocksLead ? 0 : 1);
   const rank = f => (f.kind === 'unlock' ? f.coverageGain : f.gain);
+  // Whole-level pricing means most improve rows are worth 0 right now and tie on `gain`. Break
+  // that tie on how close the row is to tipping its skill area, so the list still reads as an
+  // order of work rather than an arbitrary shuffle of zeroes.
+  const tie = f => (f.kind === 'unlock' ? 0 : (f.levelsNeeded ?? 99));
 
   return out
-    .sort((a, b) => block(a) - block(b) || rank(b) - rank(a))
+    .sort((a, b) => block(a) - block(b) || rank(b) - rank(a) || tie(a) - tie(b))
     .slice(0, FOCUS_LIMIT)
     .map(f => ({
       ...f,

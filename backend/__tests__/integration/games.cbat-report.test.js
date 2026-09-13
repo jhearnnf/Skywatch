@@ -7,7 +7,7 @@ const { createUser, createSettings, authCookie } = require('../helpers/factories
 
 const User = require('../../models/User');
 const { CBAT_GAMES } = require('../../constants/cbatGames');
-const { BATTERIES, BATTERY_BY_KEY, TESTS, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MIN_COVERAGE_FOR_VERDICT } = require('../../constants/cbatBatteries');
+const { BATTERIES, BATTERY_BY_KEY, TESTS, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MAX_STANINE, MIN_COVERAGE_FOR_VERDICT } = require('../../constants/cbatBatteries');
 const { FORM_MIN_RUNS, minRunsFor } = require('../../utils/cbatAptitudeReport');
 
 let user, cookie;
@@ -565,6 +565,25 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     expect(focus.slice(0, 2).map(f => f.code).sort()).toEqual(['CUT', 'SAT']);
     // Gains are in score points, so they must be a sane fraction of the 180-point scale.
     for (const f of focus) expect(f.gain).toBeLessThan(MAX_SCORE);
+  });
+
+  // A skill area that has reached 9 has nowhere left to go, so no test inside it belongs on a list
+  // headed "play these next": the row could never move this role's score. It also used to offer to
+  // take the area from 9 to 10, a number that does not exist on a 1-9 scale.
+  it('drops improve rows for a skill area already at the top of the scale', async () => {
+    await playAll(a => (Number.isFinite(a.max) ? a.max : a.strong * 3));
+
+    const res = await request(app).get('/api/games/cbat/report/pilot').set('Cookie', cookie);
+    const { domains, focus } = res.body.data;
+
+    const maxed = domains.filter(d => d.stanine === MAX_STANINE).map(d => d.key);
+    expect(maxed.length).toBeGreaterThan(0);
+    for (const f of focus) {
+      if (f.kind !== 'improve') continue;
+      expect(maxed).not.toContain(f.domainKey);
+      // Nothing may ever name a level above the top of the scale.
+      expect(f.domainStanine + 1).toBeLessThanOrEqual(MAX_STANINE);
+    }
   });
 
   // ── What leads the list ────────────────────────────────────────────────────────────────────

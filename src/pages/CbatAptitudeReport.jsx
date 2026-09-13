@@ -266,9 +266,28 @@ function DomainRow({ domain, targetStanine }) {
             {unmeasured ? (noGameAtAll ? 'No game yet' : 'Not enough games') : band.label}
           </span>
         </span>
-        <span className="flex-1 min-w-0"><StanineBar stanine={domain.stanine} target={targetStanine} /></span>
-        <span className={`w-7 text-right font-mono text-base font-extrabold ${tone.text}`}>
-          {domain.stanine == null ? '-' : Math.round(domain.stanine)}
+        {/* The BAR is drawn to the unrounded mean and the NUMBER is the whole stanine the score is
+            built from. They are allowed to disagree by up to half a level, and that gap is the
+            useful part: the number is what the real sheet would call you, the bar is how close you
+            are to the next one. The bug this replaced was not the rounding here, it was the score
+            being computed from the unrounded mean, so a row could read 9 inside a battery of 173. */}
+        <span className="flex-1 min-w-0"><StanineBar stanine={domain.stanineRaw ?? domain.stanine} target={targetStanine} /></span>
+        {/* The whole level, with the average it came from underneath. The small figure is the only
+            place practice shows up between levels: grinding a skill area from 8.1 to 8.4 is real
+            improvement that the level cannot show and the bar moves about three pixels for. It is
+            also the number the Play these next panel's "needs 2 levels on this one" rests on, so
+            without it that claim is unverifiable. One decimal, not two: a domain average is
+            quantised to 1/multiplier-sum, so a second place would claim precision we do not have.
+            Hidden when it adds nothing, which is any area fed by a single test. */}
+        <span className="w-7 text-right shrink-0">
+          <span className={`block font-mono text-base font-extrabold leading-none ${tone.text}`}>
+            {domain.stanine == null ? '-' : domain.stanine}
+          </span>
+          {domain.stanineRaw != null && Number(domain.stanineRaw.toFixed(1)) !== domain.stanine && (
+            <span className="block text-[11px] text-slate-700 font-mono leading-tight" title="The exact average behind your level">
+              {domain.stanineRaw.toFixed(1)}
+            </span>
+          )}
         </span>
         <span className="hidden sm:block w-[104px] lg:w-[132px] shrink-0 text-right">
           <span className="block text-[10px] text-slate-600 font-mono">counts {domain.weight}%</span>
@@ -824,8 +843,9 @@ export default function CbatAptitudeReport() {
               <h2 className="text-sm font-extrabold text-slate-900 mb-0.5">Play these next</h2>
               <p className="text-[11px] text-slate-600 mb-3">
                 Ranked by what helps you most right now. A % is a test we cannot measure yet, and playing it is what
-                lets us judge your score. A number is roughly the points it adds. Only Hard runs count, so these open
-                on Hard.
+                lets us judge your score. A green number is the points you gain, because that game is close enough to
+                lift its whole skill area. A grey one is how many levels that game still needs before your score moves.
+                Only Hard runs count, so these open on Hard.
               </p>
               <div className="space-y-1.5">
                 {report.focus.map((f) => {
@@ -837,8 +857,17 @@ export default function CbatAptitudeReport() {
                           a scored test, because there is a base to express them against. Coverage for
                           a test we cannot measure yet, because its points would rest on a stanine we
                           have never seen, and the share of the role it opens up is a certainty. */}
-                      <span className="font-mono font-extrabold text-emerald-300 text-sm w-12 shrink-0">
-                        {f.kind === 'unlock' ? `+${f.coverageGain}%` : `+${f.gain}`}
+                      {/* A skill area is rounded to a whole number before it is weighted, so an
+                          improve row is worth either a whole jump or nothing at all yet. Showing
+                          "+0" on the rows that cannot move the score would be accurate and useless,
+                          so those carry the figure they were actually ranked on instead: how many
+                          levels this game still needs to tick its skill area over. */}
+                      <span className={`font-mono font-extrabold text-sm w-12 shrink-0 ${
+                        f.kind === 'unlock' || f.tipsLevel ? 'text-emerald-300' : 'text-slate-600'
+                      }`}>
+                        {f.kind === 'unlock'
+                          ? `+${f.coverageGain}%`
+                          : f.tipsLevel ? `+${f.gain}` : `${f.levelsNeeded} lvl`}
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className="block text-xs font-bold text-slate-800 truncate">
@@ -853,7 +882,10 @@ export default function CbatAptitudeReport() {
                                 // something it started last night.
                                 : `Play it${onHard(game)} ${f.needsRuns?.[0]?.runsNeeded ?? 3} more time${(f.needsRuns?.[0]?.runsNeeded ?? 3) === 1 ? '' : 's'} ${f.stanine == null ? 'and it starts counting' : 'to settle it and narrow your range'}. Helps your ${f.domainLabel}.`)
                             : f.nextTarget
-                              ? `Average ${f.nextTarget.score}+ across 3 goes${onHard(game)} to go from level ${Math.round(f.stanine)} to ${Math.round(f.stanine) + 1}. Helps your ${f.domainLabel}.`
+                              ? `Average ${f.nextTarget.score}+ across 3 goes${onHard(game)} to go from level ${Math.round(f.stanine)} to ${Math.round(f.stanine) + 1}.${
+                                  f.tipsLevel
+                                    ? ` That lifts your ${f.domainLabel} to ${f.domainStanine + 1}.`
+                                    : ` Your ${f.domainLabel} needs ${f.levelsNeeded} levels on this one to reach ${f.domainStanine + 1}.`}`
                               : `You're on level ${Math.round(f.stanine)}. Helps your ${f.domainLabel}.`}
                         </span>
                       </span>
@@ -872,6 +904,23 @@ export default function CbatAptitudeReport() {
                   )
                 })}
               </div>
+            </div>
+          )}
+
+          {/* Topped out. An empty focus list on a SCORED report means every skill area we can
+              measure has reached 9, so there is genuinely nothing to rank. Without this the panel
+              simply vanished, which at 178 out of 180 reads as a page that has broken rather than a
+              role that has been finished. Scored is the guard that matters: a brand new player also
+              has no improve rows, but they have unlocks, so they never land here. */}
+          {report.focus.length === 0 && report.score != null && (
+            <div className="bg-surface border border-emerald-500/30 rounded-2xl p-4 mb-5 card-shadow">
+              <h2 className="text-sm font-extrabold text-emerald-300 mb-0.5">Nothing left to play for here</h2>
+              <p className="text-[11px] text-slate-600">
+                Every skill area we can measure for this role is on level 9, the top of the scale, so your score
+                cannot go any higher.
+                {report.coverage < 100 && ' The tests below with no game yet are the only part we cannot see.'}
+                {' '}Pick a harder role to aim at, or keep your runs up so this one stays where it is.
+              </p>
             </div>
           )}
 
@@ -941,7 +990,10 @@ export default function CbatAptitudeReport() {
               <li>
                 <span className="block text-slate-700 font-bold mb-0.5">What the 1 to 9 levels mean</span>
                 Each skill area is scored 1 to 9. This is called a stanine. 5 is dead average, most people land between 4
-                and 6, and 7 or above puts you in the top quarter.
+                and 6, and 7 or above puts you in the top quarter. Your level for a skill area is the average of the
+                tests feeding it, rounded to a whole number, and your score is built from those whole numbers. The
+                smaller figure under each level is that average before rounding, so you can see yourself creeping
+                toward the next one even while the level stays put.
                 {report.score != null && (
                   <> Yours averages out at about {Math.round((report.score / MAX_SCORE) * MAX_STANINE * 10) / 10},
                   which would put you ahead of roughly {stanineBeatsPct((report.score / MAX_SCORE) * MAX_STANINE)}% of
