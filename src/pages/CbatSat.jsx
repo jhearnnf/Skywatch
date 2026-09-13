@@ -1021,19 +1021,19 @@ export default function CbatSat() {
 
               <div className="flex items-center justify-center gap-3 lg:gap-4">
                 <button
+                  onClick={() => { primeSpeech(); setPhase('tutorial') }}
+                  disabled={launching}
+                  className={`px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base${dim}`}
+                >
+                  Tutorial
+                </button>
+                <button
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
                   className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
                 >
                   Start
-                </button>
-                <button
-                  onClick={() => { primeSpeech(); setPhase('tutorial') }}
-                  disabled={launching}
-                  className={`px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base${dim}`}
-                >
-                  Tutorial
                 </button>
               </div>
             </motion.div>

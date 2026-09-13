@@ -1425,8 +1425,8 @@ export default function CbatCut() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 justify-center">
-                  <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
                   <button onClick={openTutorial} disabled={launching} className={`px-6 py-3 lg:px-8 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] disabled:text-slate-500 text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Tutorial</button>
+                  <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
                 </div>
               </motion.div>
             </div>
