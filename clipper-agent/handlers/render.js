@@ -190,8 +190,15 @@ module.exports = async function renderHandler({ job, progress }) {
   } else {
     // Ship the render rather than failing the job over its level. The reason
     // travels back in the result so the admin can see it was skipped instead of
-    // wondering why the video is still quiet.
-    await fs.rename(rawPath, outPath);
+    // wondering why the video is still quiet. The loudness pass is also where
+    // the container metadata gets stripped, so try that on its own first and
+    // only fall back to the raw file when ffmpeg itself is unavailable.
+    const strip = await audio.stripContainerMetadata(rawPath, outPath);
+    if (strip.stripped) {
+      await fs.rm(rawPath, { force: true });
+    } else {
+      await fs.rename(rawPath, outPath);
+    }
   }
 
   const { size } = await fs.stat(outPath);
