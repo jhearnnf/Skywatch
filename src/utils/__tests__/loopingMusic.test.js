@@ -135,4 +135,39 @@ describe('createLoopingMusic', () => {
     music.update('on')
     expect(playing()).toHaveLength(0)
   })
+
+  it('auditions a level on the clip already playing instead of building a second one', () => {
+    const music = makeMusic()
+    music.update('on')
+    flushFrames()
+    expect(playing()).toHaveLength(1)
+    const [clip] = playing()
+    expect(clip.volume).toBe(1)
+
+    expect(music.audition(0.3)).toBe(true)
+    expect(built).toHaveLength(1)
+    expect(clip.volume).toBeCloseTo(0.3)
+
+    // Dropping the override goes back to the saved admin level.
+    music.audition(null)
+    expect(clip.volume).toBe(1)
+  })
+
+  it('refuses to audition while nothing is playing', () => {
+    const music = makeMusic()
+    expect(music.audition(0.3)).toBe(false)
+    expect(built).toHaveLength(0)
+  })
+
+  it('forgets the auditioned level once the track has stopped', () => {
+    const music = makeMusic()
+    music.update('on')
+    flushFrames()
+    music.audition(0.3)
+    music.update(null)
+    flushFrames()
+    music.update('on')
+    flushFrames()
+    expect(playing()[0].volume).toBe(1)
+  })
 })

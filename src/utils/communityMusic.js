@@ -40,6 +40,15 @@ export function refreshCommunityMusicVolume() {
   music.refreshVolume()
 }
 
+// Audition a slider value on the track already playing in Community. The
+// console lives under /chat, so the bed is normally running while the admin
+// tunes it: a one-shot preview clip there just stacks a second copy on top.
+// `sliderValue` is the admin 0..100 level, or null to go back to the saved
+// setting. Returns false when nothing is playing (autoplay blocked, or off).
+export function auditionCommunityMusicVolume(sliderValue) {
+  return music.audition(sliderValue == null ? null : sliderValue / 100)
+}
+
 // Test/HMR helper — hard reset without fades.
 export function _resetCommunityMusic() {
   music.reset()

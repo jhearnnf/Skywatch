@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import {
   invalidateSoundSettings, previewCommunityMusic, getMasterVolume,
 } from '../../utils/sound'
-import { refreshCommunityMusicVolume } from '../../utils/communityMusic'
+import { auditionCommunityMusicVolume, refreshCommunityMusicVolume } from '../../utils/communityMusic'
 
 // The Community soundtrack's controls, in the console rather than only buried
 // in Admin › Sound Effects — you tune it while listening to it.
@@ -56,6 +56,7 @@ export default function CommunitySoundEditor({ API }) {
       // listening to right now follows the slider instead of waiting for a
       // reload.
       invalidateSoundSettings()
+      auditionCommunityMusicVolume(null)
       refreshCommunityMusicVolume()
       setSaved(true)
     } catch (e) {
@@ -63,6 +64,14 @@ export default function CommunitySoundEditor({ API }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  // The console sits under /chat, so the soundtrack is already playing while
+  // you tune it. Preview retargets THAT track to the slider value; the
+  // one-shot clip is only for when nothing is running (e.g. autoplay was
+  // blocked), otherwise it would play on top of the live bed.
+  const preview = () => {
+    if (!auditionCommunityMusicVolume(volume)) previewCommunityMusic(volume)
   }
 
   if (loading) return <p className="text-xs text-slate-400">Loading…</p>
@@ -111,7 +120,7 @@ export default function CommunitySoundEditor({ API }) {
         <div className="flex items-center gap-2 mt-2">
           <button
             type="button"
-            onClick={() => previewCommunityMusic(volume)}
+            onClick={preview}
             className="px-3 py-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 border border-brand-200 hover:bg-brand-100 rounded-lg transition-colors"
           >
             ▶ Preview

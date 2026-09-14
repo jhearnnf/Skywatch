@@ -39,6 +39,7 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
   let present      = true  // is the user currently present (visible + focused)?
   let pageVisible  = true  // document not hidden (minimise / tab-switch / background)
   let windowFocused = true // window has focus (another app/window on top)
+  let auditionVol  = null  // admin-level override (0..1) while an admin auditions a slider value
 
   function hasRAF() {
     return typeof requestAnimationFrame === 'function'
@@ -53,7 +54,8 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
   // master scaling.
   function targetGain(vol = zoneVol) {
     let adminVol = 1
-    try { adminVol = getSetting().volume } catch {}
+    if (auditionVol != null) adminVol = auditionVol
+    else { try { adminVol = getSetting().volume } catch {} }
     return Math.min(1, Math.max(0, vol * adminVol * masterFactor()))
   }
 
@@ -261,6 +263,7 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
     if (!playing && !startAudio && !repeatAudio) return
     playing = false
     zoneVol = 0
+    auditionVol = null
     detachGestureRetry()
     const audios = liveAudios()
     fadeTo(0, () => {
@@ -297,9 +300,25 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
     applyGain(targetGain())
   }
 
+  // Audition an admin level on the track that is ALREADY playing, instead of
+  // starting a second copy on top of it. `volume` is the admin level (0..1),
+  // or null to drop the override and go back to the saved setting. Returns
+  // false when nothing is playing (the caller can fall back to a one-shot
+  // preview clip in that case — there is nothing to double up with).
+  function audition(volume) {
+    if (!playing) { auditionVol = null; return false }
+    auditionVol = volume == null ? null : Math.min(1, Math.max(0, volume))
+    cancelFade()
+    applyGain(targetGain())
+    return true
+  }
+
+  function isPlaying() { return playing }
+
   // Test/HMR helper — hard reset without fades.
   function reset() {
     cancelFade()
+    auditionVol = null
     detachGestureRetry()
     unbindPresence()
     for (const a of liveAudios()) { try { a.pause() } catch {} }
@@ -313,5 +332,5 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
     appliedGain = 0
   }
 
-  return { update, refreshVolume, reset }
+  return { update, refreshVolume, audition, isPlaying, reset }
 }
