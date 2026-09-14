@@ -7,30 +7,41 @@
 <meta name="description" content="What the Canadian Forces Aircrew Selection Test at Trenton actually involves, test by test, from candidates who have sat it.">
 
 <!--
-  ADMIN PREVIEW. This guide is not linked publicly and is deliberately kept out
-  of the index: robots noindex below, a Disallow in public/robots.txt, and no
-  sitemap entry. The Community rail shows it to admins only, via the ChatGuide
-  `adminOnly` flag. When it goes live, four things change together:
-    1. this robots tag becomes "index, follow"
-    2. the Disallow line comes out of public/robots.txt
-    3. a <url> entry goes into public/sitemap.xml
-    4. the ChatGuide row's adminOnly flag is turned off in the admin console
-  Until all four happen, treat the page as a draft that happens to be reachable.
+  Served at two URLs: /cbat-guide-canada (vercel.json rewrite, and
+  staticDocRoutes() in vite.config.js for dev) and /cbat-guide-canada.html
+  directly. The canonical names the clean URL so the pair are never treated as
+  duplicates. Do not point it at the .html form.
 
-  Served at /cbat-guide-canada (vercel.json rewrite, and staticDocRoutes() in
-  vite.config.js for dev) and at /cbat-guide-canada.html directly.
+  Live since 2026-09-14. Indexable state lives in four places that must agree:
+  this robots tag, public/robots.txt, public/sitemap.xml, and the ChatGuide
+  row's adminOnly flag (admin console). src/__tests__/internationalGuides.test.js
+  checks the first three against each other.
 -->
-<meta name="robots" content="noindex, nofollow">
+<link rel="canonical" href="https://skywatch.academy/cbat-guide-canada">
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
 <meta name="theme-color" content="#1d3f76">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/guide-assets/guide.css">
 
+<meta property="og:site_name" content="SkyWatch">
+<meta property="og:locale" content="en_GB">
+<meta property="og:title" content="Canadian Aircrew Selection (CFAST): the candidate guide">
+<meta property="og:description" content="What the Canadian Forces Aircrew Selection Test at Trenton actually involves, test by test, from candidates who have sat it.">
+<meta property="og:url" content="https://skywatch.academy/cbat-guide-canada">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://skywatch.academy/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Canadian Aircrew Selection (CFAST): the candidate guide">
+<meta name="twitter:description" content="What the Canadian Forces Aircrew Selection Test at Trenton actually involves, test by test, from candidates who have sat it.">
+<meta name="twitter:image" content="https://skywatch.academy/og-image.png">
 </head>
 <body>
 
 <header class="masthead">
   <div class="wrap">
-    <div class="kicker"><a href="/">A SkyWatch Academy guide</a> · draft, admin preview</div>
+    <div class="kicker"><a href="/">A SkyWatch Academy guide</a></div>
     <h1>Canadian <span>Aircrew Selection</span></h1>
     <p class="sub">Two days at Trenton, about eight hours of testing, and one result that decides which
     of three aircrew trades you are eligible for. This is what candidates say the days actually contain,
@@ -423,8 +434,8 @@
 </div>
 
 <footer><div class="wrap">
-  <p><strong>Draft, admin preview.</strong> Not linked publicly and not indexed. Built from candidate
-  write-ups and published recruiting messages, not from any official or internal source.</p>
+  <p>Built from candidate write-ups and published recruiting messages, not from any official or
+  internal source.</p>
   <p>SkyWatch is independent and is not affiliated with, endorsed by or connected to the Canadian Armed
   Forces, the Royal Canadian Air Force or any other armed force. Our games are simulations built from
   publicly available descriptions. They are not the real tests and we have no access to them. Selection
