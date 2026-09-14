@@ -19,6 +19,15 @@ vi.mock('../../utils/appVersion', () => ({
   peekClientInfo: () => clientRef.value,
 }))
 
+// Where they are is a network lookup that resolves after mount. Existing tests
+// run with nothing known, so their beats are unchanged; the geo tests below
+// set a value and control when it resolves.
+const geoRef = vi.hoisted(() => ({ value: null, resolve: null }))
+vi.mock('../../utils/geoHint', () => ({
+  getGeoHint:  () => new Promise(resolve => { geoRef.resolve = () => resolve(geoRef.value) }),
+  peekGeoHint: () => geoRef.value,
+}))
+
 import useHeartbeat from '../useHeartbeat'
 
 const setVisibility = (state) => {
@@ -31,6 +40,8 @@ describe('useHeartbeat', () => {
     authRef.user = { _id: 'u1' }
     optionsRef.value = { credentials: 'include' }
     clientRef.value = { platform: 'web', version: '1.2.3', build: 'a3f9c21' }
+    geoRef.value = null
+    geoRef.resolve = null
     setVisibility('visible')
     global.fetch = vi.fn(() => Promise.resolve({ ok: true }))
   })
@@ -162,6 +173,62 @@ describe('useHeartbeat', () => {
       goTo('/cbat/rtt')
       act(() => { vi.advanceTimersByTime(30_000) })
       expect(bodyOf(global.fetch.mock.calls.length - 1).path).toBe('/cbat/rtt')
+    })
+  })
+
+  // Feeds the country flag in Admin › Users. The server reconciles the three
+  // signals — see backend/constants/geo.js.
+  describe('reporting where they are', () => {
+    const bodyOf = (i = 0) => JSON.parse(optsOf(global.fetch.mock.calls[i]).body)
+    const HINT = { country: 'GB', timeZone: 'Europe/London', language: 'en-GB' }
+
+    it('beats again as soon as the lookup resolves, carrying the hint once', async () => {
+      renderHook(() => useHeartbeat())
+      expect(bodyOf(0).geo).toBeUndefined()
+
+      geoRef.value = HINT
+      await act(async () => { geoRef.resolve() })
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(bodyOf(1).geo).toEqual(HINT)
+
+      // Later beats leave it out: the server has it, and it does not change.
+      await act(async () => { vi.advanceTimersByTime(30_000) })
+      expect(global.fetch).toHaveBeenCalledTimes(3)
+      expect(bodyOf(2).geo).toBeUndefined()
+    })
+
+    it('attaches it to the first beat when it is already known', async () => {
+      geoRef.value = HINT
+      renderHook(() => useHeartbeat())
+      expect(bodyOf(0).geo).toEqual(HINT)
+
+      // The resolve-time beat is not needed and must not double-send.
+      await act(async () => { geoRef.resolve() })
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+    })
+
+    it('tries again on the next beat if the carrying request failed', async () => {
+      geoRef.value = HINT
+      global.fetch = vi.fn()
+        .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValue({ ok: true })
+      renderHook(() => useHeartbeat())
+      await act(async () => {})
+      expect(bodyOf(0).geo).toEqual(HINT)
+
+      await act(async () => { vi.advanceTimersByTime(30_000) })
+      expect(bodyOf(1).geo).toEqual(HINT)
+      await act(async () => { vi.advanceTimersByTime(30_000) })
+      expect(bodyOf(2).geo).toBeUndefined()
+    })
+
+    it('does not beat for a lookup that resolves after unmount', async () => {
+      const { unmount } = renderHook(() => useHeartbeat())
+      unmount()
+      global.fetch.mockClear()
+      geoRef.value = HINT
+      await act(async () => { geoRef.resolve() })
+      expect(global.fetch).not.toHaveBeenCalled()
     })
   })
 

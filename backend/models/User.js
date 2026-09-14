@@ -351,6 +351,30 @@ const userSchema = new mongoose.Schema(
       android: { type: Date, default: null },
     },
 
+    // Where the account is, at country level, for Admin › Users and cohort
+    // work (which market a user came from). Written from POST
+    // /api/users/heartbeat; see constants/geo.js for how the two signals are
+    // reconciled. Admin-facing only: never on a public profile or leaderboard.
+    //
+    // Only derived values are kept. The IP address itself is never stored —
+    // `ipCountry` is the country Vercel's edge worked out from it, kept
+    // alongside the resolved `country` so a mismatch can show both.
+    geo: {
+      country:   { type: String, default: null },  // the answer (ISO 3166-1 alpha-2)
+      source:    { type: String, enum: ['ip', 'timezone', null], default: null },
+      mismatch:  { type: Boolean, default: false }, // IP and timezone disagreed last beat
+      ipCountry: { type: String, default: null },
+      timeZone:  { type: String, default: null },   // IANA zone the device reported
+      language:  { type: String, default: null },   // navigator.language
+      updatedAt: { type: Date,   default: null },
+    },
+
+    // The first country this account was seen from, set once and never
+    // changed — which market they came from, as opposed to `geo.country`,
+    // which follows them. For accounts that predate country tracking (before
+    // 14 Sep 2026) it is the first country seen after rollout, not at signup.
+    firstSeenCountry: { type: String, default: null },
+
     // Game tutorial tracking
     gameTypesSeen: [gameTutorialSchema],
 

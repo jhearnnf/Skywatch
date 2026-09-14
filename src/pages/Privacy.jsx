@@ -5,7 +5,7 @@ import SEO from '../components/SEO'
 const PRIVACY_EMAIL = 'skywatchdev@proton.me'
 // Section 12 promises changes are posted with an updated effective date, so this
 // moves whenever the policy's substance does — not on typo fixes.
-const EFFECTIVE_DATE = '2 September 2026'
+const EFFECTIVE_DATE = '14 September 2026'
 
 function Section({ title, children }) {
   return (
@@ -56,7 +56,7 @@ export default function Privacy() {
             <li><span className="text-slate-700 font-medium">Support data</span> — content and email address provided when you submit a problem report.</li>
             <li><span className="text-slate-700 font-medium">Message data</span> — the content of messages you send in chat channels, direct messages and support threads, and any messages you report to us. See section 6.</li>
             <li><span className="text-slate-700 font-medium">Analytics data</span> — page views, click events, session replays, and device/browser information collected via PostHog. We also count a few things directly, such as whether a donation page or prompt was shown and whether it was used. If you are not signed in, that counting uses a random identifier held only for the current browser tab and is not linked to you.</li>
-            <li><span className="text-slate-700 font-medium">Approximate location</span> — the country and general area you are in, worked out from your IP address. We do not use GPS and the app never asks your device for your location. It is used for usage statistics only, and it is never shown to other users.</li>
+            <li><span className="text-slate-700 font-medium">Approximate location</span> — the country and general area you are in, worked out from your IP address. We do not use GPS and the app never asks your device for your location. PostHog records this with your analytics events. We also store the country against your account, worked out from your IP address together with your device's time zone and language setting, so that administrators can see which country an account is used from. Your IP address itself is not stored against your account. This is used for usage statistics and administration only, and it is never shown to other users.</li>
             <li><span className="text-slate-700 font-medium">Presence data</span> — a "last seen" timestamp recorded periodically while you are actively using the app with the page visible and in focus. This is used by administrators to monitor platform usage.</li>
           </ul>
         </Section>
@@ -65,6 +65,7 @@ export default function Privacy() {
           <ul className="list-disc pl-5 space-y-1">
             <li>Directly from you when you register, sign in, or interact with the app.</li>
             <li>Automatically through PostHog analytics as you use the app, including the approximate location worked out from your IP address.</li>
+            <li>Automatically from the app itself while you are signed in: the country worked out from your IP address, and the time zone and language your device reports.</li>
             <li>Via Google when you choose to sign in with a Google account.</li>
           </ul>
         </Section>

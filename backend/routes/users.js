@@ -28,6 +28,7 @@ const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
 const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
+const { sanitiseGeoInfo, resolveCountry } = require('../constants/geo');
 const { latestNativeReleases } = require('../utils/latestNativeReleases');
 const AppOpen = require('../models/AppOpen');
 
@@ -896,6 +897,27 @@ router.post('/heartbeat', protect, async (req, res) => {
       ? client.platform
       : osFromUserAgent(req.headers['user-agent']);
     if (os) update[`osSeen.${os}`] = now;
+
+    // Where they are. The client sends this once per session rather than on
+    // every beat, so the extra read it costs (the stored answer is an input
+    // to the resolution rule, and firstSeenCountry must only ever be set
+    // once) happens once per session too. Best-effort like everything else
+    // here: an unusable payload just means nothing geographic is written.
+    const geo = sanitiseGeoInfo(req.body?.geo);
+    if (geo) {
+      const prev = await User.findById(req.user._id).select('geo firstSeenCountry').lean();
+      const resolved = resolveCountry({ ...geo, previous: prev?.geo });
+      update.geo = {
+        country:   resolved?.country  ?? prev?.geo?.country ?? null,
+        source:    resolved?.source   ?? prev?.geo?.source  ?? null,
+        mismatch:  resolved?.mismatch ?? false,
+        ipCountry: geo.ipCountry,
+        timeZone:  geo.timeZone,
+        language:  geo.language,
+        updatedAt: now,
+      };
+      if (resolved?.country && !prev?.firstSeenCountry) update.firstSeenCountry = resolved.country;
+    }
 
     await User.findByIdAndUpdate(req.user._id, update);
 

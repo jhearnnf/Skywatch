@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useAuth, authFetchOptions } from '../context/AuthContext'
 import { getClientInfo, peekClientInfo } from '../utils/appVersion'
+import { getGeoHint, peekGeoHint } from '../utils/geoHint'
 
 const INTERVAL_MS = 30_000
 
@@ -26,6 +27,11 @@ export default function useHeartbeat() {
     // peekClientInfo() has an answer by the second beat at the latest.
     getClientInfo()
 
+    // Where they are goes up once per session, not on every beat: the server
+    // does a little more work for it (see the heartbeat route), and the answer
+    // does not change from one beat to the next.
+    let geoSent = false
+
     const send = async () => {
       if (document.visibilityState !== 'visible') return
       if (Date.now() - lastActivityRef.current > IDLE_THRESHOLD_MS) return
@@ -50,17 +56,36 @@ export default function useHeartbeat() {
       let path = null
       try { path = window.location.pathname } catch { /* no location to read; presence still sends */ }
 
+      // Claimed by this beat before the request leaves, so an overlapping
+      // beat cannot also attach it; handed back if the request fails, so the
+      // next beat tries again.
+      const geo = geoSent ? null : peekGeoHint()
+      if (geo) geoSent = true
+
       try {
-        await fetch(`${API}/api/users/heartbeat`, {
+        const res = await fetch(`${API}/api/users/heartbeat`, {
           method: 'POST',
           ...opts,
           headers: { ...(opts.headers ?? {}), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...(client ? { client } : {}), ...(path ? { path } : {}) }),
+          body: JSON.stringify({
+            ...(client ? { client } : {}),
+            ...(path ? { path } : {}),
+            ...(geo ? { geo } : {}),
+          }),
         })
+        if (geo && !res?.ok) geoSent = false
       } catch {
+        if (geo) geoSent = false
         // ignore network errors silently
       }
     }
+
+    // The country lookup is a network round-trip, so the first beat almost
+    // always goes up without it. Rather than wait for the next timer tick —
+    // by which time someone who only glanced at the app has gone — beat again
+    // the moment the answer arrives.
+    let stopped = false
+    getGeoHint().then(hint => { if (hint && !geoSent && !stopped) send() })
 
     // Coming back to the tab is itself activity — otherwise a tab left in the
     // background past the idle threshold stays silent until the user happens to
@@ -76,6 +101,7 @@ export default function useHeartbeat() {
     const id = setInterval(send, INTERVAL_MS)
 
     return () => {
+      stopped = true
       events.forEach(e => window.removeEventListener(e, onActivity))
       document.removeEventListener('visibilitychange', onVisibility)
       clearInterval(id)
