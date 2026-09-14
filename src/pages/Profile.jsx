@@ -17,6 +17,7 @@ import SocialLinks from '../components/SocialLinks'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
+import { SLIM_APP } from '../utils/appMode'
 import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
 import { PLAY_STORE_URL, forceUpdateWebApp, isNativeUpdateAvailable } from '../utils/appUpdate'
@@ -774,6 +775,14 @@ export default function Profile() {
               <span>⚠️ Report a Problem</span>
               <span className="text-slate-400">→</span>
             </Link>
+            {/* Never in the native app: Google Play forbids off-store payment
+                links, so /donate is web-only everywhere (see Donate.jsx). */}
+            {!SLIM_APP && (
+              <Link to="/donate" data-testid="profile-help-donate" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
+                <span>💙 Support SkyWatch</span>
+                <span className="text-slate-400">→</span>
+              </Link>
+            )}
           </div>
           {!slim && (<>
           <p className="text-sm text-slate-500 mb-1">Replay any tutorial to revisit how a feature works.</p>
