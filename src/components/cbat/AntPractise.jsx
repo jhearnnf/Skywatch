@@ -14,7 +14,6 @@
 // 2D/3D sit beside Trace 1/2.
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { submitCbatResult } from '../../lib/cbatOutbox'
 import { useCbatTracking } from '../../utils/cbat/useCbatTracking'
@@ -371,18 +370,6 @@ export default function AntPractise({ onExit }) {
             Mark My Answers
           </button>
         </div>
-      </div>
-
-      <div className="flex items-center justify-between mt-3 px-1">
-        <button
-          onClick={onExit}
-          className="text-xs text-slate-500 hover:text-brand-400 transition-colors cursor-pointer"
-        >
-          {'← Back to ANT'}
-        </button>
-        <Link to={`/cbat/${GAME_KEY}/leaderboard`} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-          {'Leaderboard →'}
-        </Link>
       </div>
     </div>
   )

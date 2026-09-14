@@ -99,7 +99,7 @@ describe('DPT practice — opening and leaving', () => {
     const last = JSON.parse(practicePosts().at(-1)[1].body)
     expect(last).toMatchObject({ furthestStep: TOTAL - 1, totalSteps: TOTAL, completed: true })
 
-    fireEvent.click(screen.getByRole('button', { name: /back to briefing/i }))
+    fireEvent.click(screen.getByRole('button', { name: /back to instructions/i }))
     expect(screen.getByRole('button', { name: /^tutorial$/i })).toBeInTheDocument()
   })
 

@@ -141,7 +141,7 @@ describe('CUT tutorial — walking it', () => {
     for (let i = 0; i < TOTAL_STEPS; i++) next()
 
     expect(screen.getByText(/tutorial complete/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /back to briefing/i }))
+    fireEvent.click(screen.getByRole('button', { name: /back to instructions/i }))
     // Back to the briefing, never straight into a scored run.
     expect(screen.getByRole('button', { name: /^start$/i })).toBeInTheDocument()
   })
@@ -589,7 +589,7 @@ describe('CUT tutorial — what it records', () => {
     mount()
     await settle()
     for (let i = 0; i < TOTAL_STEPS; i++) next()
-    fireEvent.click(screen.getByRole('button', { name: /back to briefing/i }))
+    fireEvent.click(screen.getByRole('button', { name: /back to instructions/i }))
 
     await waitFor(() => {
       const [, opt] = seenPatches().at(-1)

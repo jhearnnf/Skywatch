@@ -1272,7 +1272,7 @@ function PracticeComplete({ onExit }) {
         onClick={onExit}
         className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
       >
-        Back to Briefing
+        Back to Instructions
       </button>
     </motion.div>
   )
