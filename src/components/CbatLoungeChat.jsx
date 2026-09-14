@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { nameColour } from '../pages/chat/nameColour'
@@ -11,6 +11,7 @@ import DisplayNameGate from '../pages/chat/components/DisplayNameGate'
 import SeenByDialog from '../pages/chat/components/SeenByDialog'
 import EditHistoryDialog from '../pages/chat/components/EditHistoryDialog'
 import MentionPicker from '../pages/chat/components/MentionPicker'
+import UserCard from '../pages/chat/components/UserCard'
 
 // The mini chat docked under Recent Scores on the CBAT hub.
 //
@@ -156,6 +157,8 @@ function Reactions({ message, onReact, picking, onPick }) {
 export default function CbatLoungeChat({ open, onToggle }) {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
+  const navigate = useNavigate()
+  const location = useLocation()
 
   const [lounge,    setLounge]    = useState(null)
   const [gone,      setGone]      = useState(false)
@@ -182,6 +185,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const [seenByMsg, setSeenByMsg] = useState(null)
   // The message whose edit history is open, or null. Admin-only.
   const [editsMsg,  setEditsMsg]  = useState(null)
+  // Tapping a name opens the same card as the full room: message, block, and
+  // for an admin the profile. Nothing rebuilt here; UserCard does its own
+  // fetching and the lounge only needs to know who was tapped.
+  const [cardUserId, setCardUserId] = useState(null)
   // The message being edited in the composer, or null. The widget has one
   // input, so editing borrows it rather than growing a second one inside a
   // 40-message list that is already only a few hundred pixels tall.
@@ -762,6 +769,8 @@ export default function CbatLoungeChat({ open, onToggle }) {
             const mineTag = (m.mentions ?? []).some(id => String(id) === String(user?._id))
             const acting  = canPost && !m.deleted
             const mine    = String(m.senderUserId ?? '') === String(user?._id)
+            const canOpenUser   = !mine && Boolean(m.senderUserId)
+            const nameColourFor = isBot ? 'var(--color-game-accent)' : nameColour(m.senderUserId)
             // Exactly the rule the full room uses, enforced again by the
             // endpoint: your own messages, and admins on anyone's. Not gated on
             // canPost — being unable to speak is no reason to lose sight of who
@@ -802,12 +811,24 @@ export default function CbatLoungeChat({ open, onToggle }) {
               >
                 {m.replyTo && <ReplyQuote replyTo={m.replyTo} senders={senders} />}
                 <p title={formatTime(m.createdAt)}>
-                  <span
-                    className="font-bold"
-                    style={{ color: isBot ? 'var(--color-game-accent)' : nameColour(m.senderUserId) }}
-                  >
-                    {name}
-                  </span>
+                  {/* Same rule as the full room: anyone but yourself who still
+                      has an id. A button so the row's own click handler leaves
+                      it alone — a tap on a name should open the person, not
+                      toggle the action bar underneath. */}
+                  {canOpenUser ? (
+                    <button
+                      type="button"
+                      onClick={() => setCardUserId(String(m.senderUserId))}
+                      className="font-bold hover:underline"
+                      style={{ color: nameColourFor }}
+                    >
+                      {name}
+                    </button>
+                  ) : (
+                    <span className="font-bold" style={{ color: nameColourFor }}>
+                      {name}
+                    </span>
+                  )}
                   {isBot && (
                     <span className="ml-1 px-1 py-px rounded bg-brand-600/15 text-brand-600 text-[8px] font-extrabold uppercase tracking-wide align-middle">
                       Bot
@@ -1051,6 +1072,26 @@ export default function CbatLoungeChat({ open, onToggle }) {
           message={editsMsg}
           senders={senders}
           onClose={() => setEditsMsg(null)}
+        />
+      )}
+      {cardUserId && (
+        <UserCard
+          userId={cardUserId}
+          onClose={() => setCardUserId(null)}
+          // A DM has no home on the hub, so it opens in Community.
+          onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`) }}
+          // Admin only. Carries the hub so the profile's Back button returns
+          // here rather than to the admin panel, which is not where they were.
+          onViewProfile={(id) => {
+            setCardUserId(null)
+            navigate(`/admin/agent/${id}`, {
+              state: { backTo: location.pathname, backLabel: 'Back to CBAT' },
+            })
+          }}
+          // Their messages have just left (or rejoined) the room server-side.
+          // The stream does not announce a block — it is private to the person
+          // who did it — so refetch rather than waiting for the fallback poll.
+          onBlockChanged={() => { loadMessages().catch(() => {}) }}
         />
       )}
     </div>

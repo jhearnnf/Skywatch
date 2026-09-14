@@ -7,9 +7,13 @@ import { REACTION_EMOJI } from '../../pages/chat/reactionEmoji'
 
 const mockUseAuth     = vi.hoisted(() => vi.fn())
 const mockSettings    = vi.hoisted(() => ({ value: { chatEnabled: true } }))
+const mockNavigate    = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
+  useNavigate: () => mockNavigate,
+  // The user card hands the admin profile a "back to" built from it.
+  useLocation: () => ({ pathname: '/cbat', search: '' }),
 }))
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
 vi.mock('../../context/AppSettingsContext', () => ({
@@ -44,6 +48,22 @@ vi.mock('../../pages/chat/components/MentionPicker', () => ({
       <button type="button" onClick={() => onPick({ _id: 'u2', displayName: 'Viper' })}>
         pick Viper
       </button>
+    </div>
+  ),
+}))
+
+// Stubbed to its callbacks. The card's own fetching, confirmation step and
+// admin gating are covered in pages/chat/__tests__; what belongs here is that
+// tapping a name opens it for the right person and that each way out of it
+// lands where the lounge says it should.
+vi.mock('../../pages/chat/components/UserCard', () => ({
+  default: ({ userId, onClose, onOpenDm, onViewProfile, onBlockChanged }) => (
+    <div data-testid="user-card">
+      card:{userId}
+      <button type="button" onClick={onClose}>close card</button>
+      <button type="button" onClick={() => onOpenDm('dm-9')}>open dm</button>
+      <button type="button" onClick={() => onViewProfile(userId)}>view profile</button>
+      <button type="button" onClick={() => { onBlockChanged(true); onClose() }}>block</button>
     </div>
   ),
 }))
@@ -1150,5 +1170,64 @@ describe('a send that races a refresh', () => {
 
     await screen.findByText('back again')
     expect(screen.queryByText('my message')).toBeNull()
+  })
+})
+
+describe('who said it', () => {
+  it('opens the user card when you tap a name', async () => {
+    stubFetch()
+    renderOpen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Viper' }))
+    expect(screen.getByTestId('user-card').textContent).toContain('card:u2')
+    fireEvent.click(screen.getByText('close card'))
+    expect(screen.queryByTestId('user-card')).toBeNull()
+  })
+
+  it('does not make your own name a button', async () => {
+    stubFetch({ messages: [
+      { _id: 'm1', senderUserId: 'u1', senderDisplayName: 'Falcon', body: 'hello me', createdAt: new Date().toISOString(), mentions: [] },
+    ] })
+    renderOpen()
+    await screen.findByText('hello me')
+    expect(screen.queryByRole('button', { name: 'Falcon' })).toBeNull()
+  })
+
+  it('leaves the action bar alone when the name is tapped', async () => {
+    stubFetch()
+    renderOpen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Viper' }))
+    // Open by hover only: the row's tap-to-open must not have fired.
+    expect(screen.getByTestId('lounge-actions-m1').className).toContain('hidden')
+  })
+
+  it('takes a new direct message to Community', async () => {
+    stubFetch()
+    renderOpen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Viper' }))
+    fireEvent.click(screen.getByText('open dm'))
+    expect(mockNavigate).toHaveBeenCalledWith('/chat/dm-9')
+    expect(screen.queryByTestId('user-card')).toBeNull()
+  })
+
+  it('sends an admin to the profile with a way back to the hub', async () => {
+    stubFetch()
+    renderOpen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Viper' }))
+    fireEvent.click(screen.getByText('view profile'))
+    expect(mockNavigate).toHaveBeenCalledWith('/admin/agent/u2', {
+      state: { backTo: '/cbat', backLabel: 'Back to CBAT' },
+    })
+    expect(screen.queryByTestId('user-card')).toBeNull()
+  })
+
+  it('refetches the room after a block rather than waiting for the poll', async () => {
+    const fetchMock = stubFetch()
+    renderOpen()
+    fireEvent.click(await screen.findByRole('button', { name: 'Viper' }))
+    const before = fetchMock.mock.calls.filter(([url, opts]) =>
+      String(url).includes('/messages') && opts?.method !== 'POST').length
+    fireEvent.click(screen.getByText('block'))
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url, opts]) =>
+      String(url).includes('/messages') && opts?.method !== 'POST').length).toBe(before + 1))
   })
 })
