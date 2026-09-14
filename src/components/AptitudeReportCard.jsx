@@ -127,10 +127,14 @@ export default function AptitudeReportCard({ userId = null }) {
   // nothing for a frame and then swapping in the skeleton.
   const [loading, setLoading] = useState(true)
 
+  // Keyed on WHO the user is, not the user object: the object is replaced on
+  // every account tweak (a theme switch, a streak tick), and re-fetching on
+  // each one put the skeleton back over a report that had not changed.
+  const userKey = user?._id ?? null
   useEffect(() => {
     // No user means no fetch will ever run, so the skeleton has to come down or
     // it would sit there for the life of the page.
-    if (!user) { setLoading(false); return }
+    if (!userKey) { setLoading(false); return }
     let cancelled = false
     setLoading(true)
     ;(async () => {
@@ -142,7 +146,7 @@ export default function AptitudeReportCard({ userId = null }) {
       finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [user, API, apiFetch, userId])
+  }, [userKey, API, apiFetch, userId])
 
   // Guards the SHAPE, not just the absence. `data` is whatever the endpoint returned, and every
   // branch below walks `batteries` — so a response that came back without it (an error body, an
