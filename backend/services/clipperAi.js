@@ -356,6 +356,8 @@ const scriptSchema = (recipeIds) => `Return ONLY a JSON object:
 - Mark the re-hook beat with "rehook": true. Exactly one beat, somewhere around the middle.
 - factKeys may be empty for a linking beat, but every fact you were given should appear in some beat.
 - visual.kind is "capture" for any beat showing the platform itself - a real screen recording of the site. Available recipeIds, and NOTHING else: ${recipeIds.map(r => `\`${r}\``).join(', ')}. Otherwise use "stock" with a query.
+- Capture is the default, stock is the exception. A recording of the game is footage nobody else has; a stock clip is the same clip every other channel pulled from the same library, and the platforms downrank videos built from it. Use stock only where a line genuinely needs a picture the site cannot show.
+- Never write a web address, domain or "www" into any spoken line. Anything on screen or in the voice that sends people off the platform is kept out of the feed.
 - visual.query must name PHYSICAL THINGS a camera has been pointed at, and should be aviation or military wherever the line allows it. Aircraft, cockpits, runways, radar screens, control towers, flight helmets, instrument panels, hangars, ground crew.
   A stock library cannot film an idea. Queries like "determination", "mental focus", "person thinking", "under pressure" or "making a decision" all return a stranger looking out of a window, and that is what makes a video look like filler. If a beat is about something abstract, pick the concrete aviation image that sits nearest to it - a beat about split-second decisions is a cockpit, not a furrowed brow.
 - Do not put an overlay on every beat. Three or four across the video is right.`;
@@ -384,6 +386,7 @@ Rules for this video. These are checked by a validator, and a script that breaks
 
 - Say "${subject.spokenName}" out loud in at least THREE beats, and one of those must be in the first two. Named once in the outro is a product nobody remembers; named in the hook is a product the video is about.
 - At least THREE beats must be visual.kind "capture" with recipeId "${subject.recipeId}", and one of those must be in the first two beats. The viewer has to SEE it, and see it early - the words alone do not tell anyone what the screen looks like.
+- The FIRST beat must be a capture, and at most ONE beat in every three may be stock. The recording is the video; stock is garnish.
 - The only recipeIds you may use are: ${recipeIds.join(', ')}. Never film a different game while the voice is talking about this one.
 - Describe what it actually asks you to do, using the description above. Do not invent mechanics, scoring or features.${isGame ? `
 - It is a CBAT-style simulation of that subtest, not the real CBAT.` : ''}`;
@@ -420,7 +423,7 @@ Facts you may use - the grade in brackets decides whether you state it flatly or
 ${formatFactsForPrompt(facts)}
 
 ${outroEnabled
-  ? 'End with a short call to action pointing at skywatch.academy. One sentence, spoken in under three seconds - the outro is the last thing on screen and every extra word there is time the viewer spends not looking at anything new. It must not mention RAF applications.'
+  ? 'End with a short call to action that sends the viewer to the link in bio - say "link in bio", never the web address. One sentence, spoken in under three seconds - the outro is the last thing on screen and every extra word there is time the viewer spends not looking at anything new. It must not mention RAF applications.'
   : 'Do not write an outro - return "" for outro.'}
 
 Return ONLY the JSON object.`;

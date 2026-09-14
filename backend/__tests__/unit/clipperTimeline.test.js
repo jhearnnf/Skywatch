@@ -9,7 +9,7 @@ const {
   buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, MIN_BEAT_MS,
   shotLengths, snapLengths, cueTimeMs, defaultCueWord,
   MAX_SHOT_MS, FIRST_SHOT_MS, MIN_SHOT_MS, MAX_SHOTS, SNAP_MS,
-  BRAND_DOMAIN, MIN_BRAND_MS, END_CARD_MS,
+  BRAND_NAME, MIN_BRAND_MS, END_CARD_MS,
 } = require('../../utils/clipperTimeline');
 const { focusFor } = require('../../constants/clipperCapture');
 
@@ -501,7 +501,7 @@ describe('beat shots', () => {
       footage: { b1: { chosen: null }, b2: { chosen: null } },
     }));
     expect(t.beats[1].shots).toEqual([
-      { videoUrl: null, trimInMs: 0, durationMs: 6000, move: 'out', focus: null, framed: false },
+      { videoUrl: null, trimInMs: 0, durationMs: 6000, move: 'out', focus: null, framed: false, stock: false },
     ]);
   });
 
@@ -979,7 +979,10 @@ describe('branding', () => {
     const t = buildTimeline(brandScript(['stock', 'stock', 'capture']));
     expect(t.beats[2].shots[0].framed).toBe(true);
     expect(t.branding.revealAtMs).toBe(6000);
-    expect(t.branding.domain).toBe(BRAND_DOMAIN);
+    // The name, never the address: a domain on screen is what the platforms'
+    // off-platform rule is written about.
+    expect(t.branding.name).toBe(BRAND_NAME);
+    expect(t.branding.domain).toBeUndefined();
   });
 
   // Past the hook, still early. Nothing competes with the opening line.
@@ -1058,5 +1061,70 @@ describe('move direction across beats', () => {
   it('still refuses to split a capture', () => {
     const t = buildTimeline(captureBeats(3));
     expect(t.beats.every(b => b.shots.length === 1)).toBe(true);
+  });
+});
+
+/**
+ * Stock footage is the same clip every other channel pulled from the same
+ * library, and a platform's duplicate matcher sees it as exactly that. The
+ * builder marks every stock shot so the composition never shows it as the raw
+ * source frame; a capture is footage nobody else has and keeps its treatment.
+ */
+describe('stock treatment', () => {
+  const mixed = (kinds, over = {}) => ({
+    script: {
+      beats: kinds.map((k, i) => ({
+        id: `b${i + 1}`, text: `${i + 1}.`,
+        visual: { kind: k, recipeId: k === 'capture' ? 'play-flag' : '' },
+      })),
+    },
+    footage: Object.fromEntries(kinds.map((k, i) => [
+      `b${i + 1}`,
+      { chosen: k === 'capture'
+        ? { provider: 'capture', playbackUrl: 'cap.mp4', durationSec: 28 }
+        : { provider: 'pexels', downloadUrl: 'stock.mp4', durationSec: 12 },
+        trim: { inMs: 0 } },
+    ])),
+    voice: { lines: kinds.map((_, i) => ({
+      beatId: `b${i + 1}`, durationMs: 3000, startMs: i * 3000,
+    })) },
+    outro: { enabled: false, copy: '' },
+    ...over,
+  });
+
+  it('marks stock shots and leaves captures alone', () => {
+    const t = buildTimeline(mixed(['capture', 'stock', 'capture']));
+    expect(t.beats[0].shots.every(s => s.stock === false)).toBe(true);
+    expect(t.beats[1].shots.every(s => s.stock === true)).toBe(true);
+    expect(t.beats[2].shots.every(s => s.stock === false)).toBe(true);
+  });
+
+  // Every shot a stock beat is cut into is stock; the split must not lose the
+  // flag on the second and third shots.
+  it('carries the flag across a split', () => {
+    const t = buildTimeline(mixed(['capture', 'stock']));
+    expect(t.beats[1].shots.length).toBeGreaterThan(1);
+    expect(t.beats[1].shots.map(s => s.stock)).toEqual(t.beats[1].shots.map(() => true));
+  });
+
+  // A beat with nothing chosen renders the backdrop, and the backdrop is not
+  // stock footage.
+  it('is off for a beat with no footage', () => {
+    const script = mixed(['capture', 'stock']);
+    script.footage.b2 = {};
+    const t = buildTimeline(script);
+    expect(t.beats[1].shots[0].stock).toBe(false);
+  });
+
+  it('gives the end card the treatment of the shot it continues', () => {
+    const onStock = buildTimeline(mixed(['capture', 'stock'], {
+      outro: { enabled: true, copy: 'Link in bio.' },
+    }));
+    expect(onStock.beats[onStock.beats.length - 1].stock).toBe(true);
+
+    const onCapture = buildTimeline(mixed(['stock', 'capture'], {
+      outro: { enabled: true, copy: 'Link in bio.' },
+    }));
+    expect(onCapture.beats[onCapture.beats.length - 1].stock).toBe(false);
   });
 });

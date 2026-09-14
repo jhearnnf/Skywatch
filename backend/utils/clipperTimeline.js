@@ -239,10 +239,10 @@ function snapLengths(lens, startMs, periodMs) {
 // Cover one beat with shots taken from its clip.
 function buildShots({
   videoUrl, trimInMs, durationMs, clipDurationSec,
-  focus = null, framed = false, splittable = true, first = false,
+  focus = null, framed = false, stock = false, splittable = true, first = false,
   startMs = 0, beatPeriodMs = 0, move = 'in',
 }) {
-  const single = [{ videoUrl, trimInMs, durationMs, move, focus, framed }];
+  const single = [{ videoUrl, trimInMs, durationMs, move, focus, framed, stock }];
   if (!videoUrl || !splittable) return single;
 
   // Without a clip length there is no telling whether a later in-point has
@@ -277,6 +277,7 @@ function buildShots({
       move: (i + (move === 'out' ? 1 : 0)) % 2 === 0 ? 'in' : 'out',
       focus,
       framed,
+      stock,
     });
 
     wanted = inMs + lens[i] + SHOT_JUMP_MS;
@@ -379,6 +380,14 @@ function buildTimeline(script) {
     // than 596x1060, so the same source is downscaled and reads sharper.
     const framed = isCapture && index >= FRAMED_FROM_BEAT;
 
+    // Stock is never shown as the raw source frame. The composition puts it in
+    // a card over a blurred copy of itself and pans across it, so the frame
+    // the platform sees is one we composed rather than the one every other
+    // channel pulled from the same library. Decided here, not in the
+    // composition, for the same reason `framed` is: the preview and the render
+    // must agree about which treatment a shot gets.
+    const stock = !isCapture && Boolean(videoUrl);
+
     // Where the bot's hand actually went beats a rect measured once by hand.
     // The recipe rect answers "which part of this page is worth showing"; the
     // input log answers "which part of it was being used while this shot is on
@@ -416,6 +425,7 @@ function buildTimeline(script) {
           : (inputFocus ?? focusFor(beat.visual?.recipeId)))
         : null,
       framed,
+      stock,
       splittable: !isCapture,
       first: index === 0,
       startMs: cursor,
@@ -482,6 +492,10 @@ function buildTimeline(script) {
       trimInMs: tail?.videoUrl
         ? clampTrimIn((tail.trimInMs ?? 0) + tail.durationMs, tailClip?.durationSec, durationMs)
         : 0,
+      // Same treatment as the shot it continues, so a stock tail stays in its
+      // card under the end card rather than going full-bleed for the last two
+      // seconds.
+      stock: Boolean(tail?.shots?.[tail.shots.length - 1]?.stock),
       audioUrl: line?.audioUrl || pathToFileUrl(line?.wavPath),
       overlay: null,
       sfx: [],
@@ -532,7 +546,14 @@ function buildTimeline(script) {
 // no capture in it falls back to the second beat: past the hook, still early.
 // Only the anchor is decided here — how the reveal animates belongs to the
 // composition, the same split ducking uses.
-const BRAND_DOMAIN = 'skywatch.academy';
+//
+// The reveal names the brand, not the domain. It used to print
+// skywatch.academy beside the mark, and the end card printed it again: a web
+// address on screen is the one thing the platforms' "directs people off the
+// platform" rule is written about, and the first Clipper video posted to
+// TikTok was held to 5 views. The name is enough for attribution; the address
+// lives in the bio, which is where the outro now sends people.
+const BRAND_NAME = 'SkyWatch';
 
 // Below this the mark would be on screen for less time than its own reveal
 // takes, which reads as a flicker. Drop it rather than flash it.
@@ -573,7 +594,7 @@ function buildBranding(script, beats) {
   if (untilMs - revealAtMs < MIN_BRAND_MS) return null;
 
   return {
-    domain: script?.branding?.domain || BRAND_DOMAIN,
+    name: BRAND_NAME,
     revealAtMs,
     untilMs,
   };
@@ -627,7 +648,7 @@ function buildMusic(script, beats, totalDurationMs) {
 module.exports = {
   buildTimeline, buildCaptionPages, clampTrimIn, pathToFileUrl, buildMusic,
   buildShots, shotLengths, snapLengths, cueTimeMs, defaultCueWord,
-  buildBranding, BRAND_DOMAIN, MIN_BRAND_MS,
+  buildBranding, BRAND_NAME, MIN_BRAND_MS,
   MIN_BEAT_MS, END_CARD_MS, HOOK_MAX_CHARS,
   MAX_SHOT_MS, FIRST_SHOT_MS, MIN_SHOT_MS, MAX_SHOTS, SHOT_JUMP_MS, MIN_JUMP_MS,
   SNAP_MS,

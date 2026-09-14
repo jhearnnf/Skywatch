@@ -92,7 +92,7 @@ export default function RenderPanel({ script, timeline, job, agentOnline, mediaB
             disabled={busy}
             onChange={e => onBranding?.(e.target.checked)}
           />
-          SkyWatch mark - top left, names the domain once when the app appears
+          SkyWatch mark - top left, shows the name once when the app appears
         </label>
 
         {missing.length > 0 && (

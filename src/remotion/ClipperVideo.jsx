@@ -474,6 +474,108 @@ function Footage({ src, trimInMs, durationInFrames, move = 'in', focus = null })
   )
 }
 
+// ── Stock footage ───────────────────────────────────────────────────────────
+
+// A stock clip, composed rather than shown.
+//
+// Every other channel that searched the same library got the same clip, and a
+// platform's duplicate matcher recognises it however it is cropped, flipped or
+// reversed - those are the transforms it was built to see through. What it
+// cannot match is a frame that is mostly not the clip: the source plays inside
+// a card at about half the frame, over a blurred and darkened copy of itself,
+// and the card pans across the beat so no two frames share a crop. The result
+// is a frame we composed, which is also the honest description of it.
+//
+// It is a gear change on purpose. Captures run full-bleed or in the phone;
+// stock in a card reads as an insert, which is what it is, and the video stops
+// pretending its b-roll is its subject.
+//
+// The card keeps the frame's own 9:16, so a portrait clip fills it and a
+// landscape one is cover-cropped to its middle, which is where a stock clip's
+// subject is anyway. It sits a little high for the same reason the phone does:
+// captions own the bottom of the frame.
+const CARD_WIDTH = 0.86
+const CARD_HEIGHT = 0.56
+const CARD_CENTRE_Y = 0.44
+const CARD_RADIUS = 36
+// How far the source drifts across the card over a shot, as a fraction of the
+// card's width. Enough that the crop visibly changes; not so much that the
+// subject leaves.
+const CARD_PAN = 0.06
+// The source is scaled up inside the card so the pan has somewhere to go.
+const CARD_ZOOM = 1.14
+
+function StockCard({ src, trimInMs, durationInFrames, move = 'in' }) {
+  const frame = useCurrentFrame()
+
+  if (!src) {
+    return <AbsoluteFill style={{ background: `linear-gradient(160deg, ${BACKDROP}, #0c1829)` }} />
+  }
+
+  const t = interpolate(frame, [0, durationInFrames], [0, 1], { extrapolateRight: 'clamp' })
+  // 'in' drifts left-to-right with a slight push; 'out' drifts back with a
+  // slight pull, so consecutive shots change direction at the cut.
+  const along = move === 'out' ? 1 - t : t
+  const pan = along * 2 - 1
+  const zoom = CARD_ZOOM + along * 0.04
+
+  const cardW = WIDTH * CARD_WIDTH
+  const cardH = HEIGHT * CARD_HEIGHT
+  const top = HEIGHT * CARD_CENTRE_Y - cardH / 2
+  const left = (WIDTH - cardW) / 2
+
+  const startFrom = msToFrames(trimInMs || 0)
+
+  return (
+    <AbsoluteFill style={{ overflow: 'hidden', background: BACKDROP }}>
+      {/* The same clip, blown up and blurred, as the room the card sits in.
+          Darkened hard: it is there to keep the frame from being flat, not to
+          be looked at. */}
+      <OffthreadVideo
+        src={resolveSrc(src)}
+        startFrom={startFrom}
+        muted
+        style={{
+          width: '100%', height: '100%', objectFit: 'cover',
+          transform: 'scale(1.3)',
+          filter: 'blur(32px) saturate(0.6) brightness(0.38)',
+        }}
+      />
+
+      <div
+        style={{
+          position: 'absolute',
+          top, left, width: cardW, height: cardH,
+          borderRadius: CARD_RADIUS,
+          overflow: 'hidden',
+          border: '3px solid rgba(91,170,255,0.55)',
+          boxShadow: '0 30px 80px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.06) inset',
+          background: BACKDROP,
+        }}
+      >
+        <OffthreadVideo
+          src={resolveSrc(src)}
+          startFrom={startFrom}
+          muted
+          style={{
+            width: '100%', height: '100%', objectFit: 'cover',
+            transform: `translateX(${pan * CARD_PAN * 100}%) scale(${zoom})`,
+          }}
+        />
+      </div>
+
+      {/* Same legibility gradient as a full-bleed shot, so captions and
+          overlays sit on the same ground whichever treatment is underneath. */}
+      <AbsoluteFill
+        style={{
+          background:
+            'linear-gradient(180deg, rgba(6,16,30,0.55) 0%, rgba(6,16,30,0) 28%, rgba(6,16,30,0) 58%, rgba(6,16,30,0.75) 100%)',
+        }}
+      />
+    </AbsoluteFill>
+  )
+}
+
 // ── Title card ──────────────────────────────────────────────────────────────
 
 // The hook, on screen in full from the first frame.
@@ -535,22 +637,27 @@ function TitleCard({ text, style }) {
 // picture alive under the text costs nothing: the clip is already downloaded.
 //
 // The backdrop is still there for a video whose last beat had no footage.
-function EndCard({ text, videoUrl, trimInMs, durationInFrames }) {
+function EndCard({ text, videoUrl, trimInMs, durationInFrames, stock = false }) {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
   const enter = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 14 })
 
-  // The scripted outro almost always names the site out loud, and the lockup
-  // used to print it again underneath — the domain twice on one card, once
-  // mid-sentence and once on its own. Show the lockup only when the line has
-  // not already said it.
-  const namesDomain = /skywatch\.academy/i.test(String(text ?? ''))
+  // This card used to print skywatch.academy. A web address on screen is the
+  // one thing the platforms' "directs people off the platform" rule is written
+  // about, and the first Clipper video posted to TikTok was held to 5 views.
+  // The address lives in the bio now; the card says where to find it, unless
+  // the outro line already does.
+  const namesBio = /\bbio\b/i.test(String(text ?? ''))
+
+  const under = !videoUrl
+    ? <AbsoluteFill style={{ background: `linear-gradient(160deg, ${BACKDROP}, #0c1829)` }} />
+    : stock
+      ? <StockCard src={videoUrl} trimInMs={trimInMs} durationInFrames={durationInFrames} />
+      : <Footage src={videoUrl} trimInMs={trimInMs} durationInFrames={durationInFrames} />
 
   return (
     <AbsoluteFill style={{ background: BACKDROP }}>
-      {videoUrl
-        ? <Footage src={videoUrl} trimInMs={trimInMs} durationInFrames={durationInFrames} />
-        : <AbsoluteFill style={{ background: `linear-gradient(160deg, ${BACKDROP}, #0c1829)` }} />}
+      {under}
 
       {/* Heavy enough that the copy is never fighting the footage, light
           enough that the footage is still visibly moving behind it. */}
@@ -563,11 +670,9 @@ function EndCard({ text, videoUrl, trimInMs, durationInFrames }) {
         }}
       >
         <div style={{ textAlign: 'center' }}>
-          {/* The mark, always — the domain line below it is suppressed when the
-              outro says the domain out loud, and without this the last four
-              seconds of the video carried no branding at all. A measured render
-              ended on text over a dark rectangle: the one card that exists to
-              be remembered, with nothing on it to remember. */}
+          {/* The mark, always. A measured render once ended on text over a
+              dark rectangle: the one card that exists to be remembered, with
+              nothing on it to remember. */}
           <div style={{
             display: 'flex', justifyContent: 'center', marginBottom: 44,
             transform: `scale(${interpolate(enter, [0, 1], [0.8, 1])})`,
@@ -583,12 +688,12 @@ function EndCard({ text, videoUrl, trimInMs, durationInFrames }) {
           }}>
             {text}
           </p>
-          {!namesDomain && (
+          {!namesBio && (
             <p style={{
               color: BRAND, fontFamily: 'Inter, Arial, sans-serif', fontWeight: 800,
               fontSize: 46, marginTop: 40, letterSpacing: 1,
             }}>
-              skywatch.academy
+              Link in bio
             </p>
           )}
         </div>
@@ -639,10 +744,10 @@ const BUG_SIZE = 60
 const BUG_OPACITY = 0.8
 
 const REVEAL_IN = 12      // frames to arrive
-const REVEAL_HOLD = 36    // frames the domain stays up — 1.2s, one glance
+const REVEAL_HOLD = 36    // frames the name stays up — 1.2s, one glance
 const REVEAL_SETTLE = 14  // frames to shrink to the corner bug
 
-// The mark, revealed once with the domain beside it and then left in the corner.
+// The mark, revealed once with the name beside it and then left in the corner.
 //
 // The shrink is anchored at the left edge (transformOrigin) so the mark stays
 // exactly where it is while it gets smaller. A logo that travels across the
@@ -653,7 +758,7 @@ const REVEAL_SETTLE = 14  // frames to shrink to the corner bug
 // the filter applies to the alpha of everything inside it. The top gradient is
 // only about 0.4 alpha this far down the frame, which is enough for the type
 // but not for 3px SVG strokes over a bright sky.
-function BrandBug({ domain }) {
+function BrandBug({ name }) {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
 
@@ -667,7 +772,7 @@ function BrandBug({ domain }) {
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
   )
 
-  // The domain goes before the mark finishes shrinking, so the two changes read
+  // The name goes before the mark finishes shrinking, so the two changes read
   // as one move rather than as a wordmark hanging next to a smaller logo.
   const wordOpacity = interpolate(
     frame,
@@ -708,12 +813,12 @@ function BrandBug({ domain }) {
           fontSize: 40,
           letterSpacing: 1,
           whiteSpace: 'nowrap',
-          // The lowercase domain, exactly as the end card prints it. The brand
-          // is SkyWatch with a capital W everywhere on screen; a domain is not.
           transform: `translateX(${interpolate(enter, [0, 1], [-18, 0])}px)`,
         }}
       >
-        {domain}
+        {/* The name, never the address: SkyWatch with a capital W, as
+            everywhere on screen. See the note on BRAND_NAME in the builder. */}
+        {name}
       </span>
     </div>
   )
@@ -816,6 +921,13 @@ function renderShots(beat, beatFrames) {
             move={shot.move}
             focus={shot.focus}
           />
+        ) : shot.stock ? (
+          <StockCard
+            src={shot.videoUrl}
+            trimInMs={shot.trimInMs}
+            durationInFrames={dur}
+            move={shot.move}
+          />
         ) : (
           <Footage
             src={shot.videoUrl}
@@ -859,6 +971,7 @@ export function ClipperVideo({ timeline }) {
                   videoUrl={beat.videoUrl}
                   trimInMs={beat.trimInMs}
                   durationInFrames={durationInFrames}
+                  stock={beat.stock}
                 />
               : renderShots(beat, durationInFrames)}
 
@@ -904,7 +1017,7 @@ export function ClipperVideo({ timeline }) {
           from={msToOffset(branding.revealAtMs)}
           durationInFrames={msToFrames(branding.untilMs - branding.revealAtMs)}
         >
-          <BrandBug domain={branding.domain} />
+          <BrandBug name={branding.name} />
         </Sequence>
       )}
     </AbsoluteFill>

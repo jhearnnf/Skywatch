@@ -15,8 +15,8 @@ const {
 } = require('../../constants/clipperSubjects');
 
 const {
-  checkSubject, validateScript,
-  MIN_SUBJECT_MENTIONS, MIN_SUBJECT_CAPTURES,
+  checkSubject, checkOriginality, validateScript,
+  MIN_SUBJECT_MENTIONS, MIN_SUBJECT_CAPTURES, MAX_STOCK_SHARE,
 } = require('../../utils/clipperGuardrails');
 
 const capture = (recipeId) => ({ kind: 'capture', recipeId });
@@ -135,6 +135,64 @@ describe('checkSubject', () => {
   it('asks for as many mentions and shots as the prompt promises', () => {
     expect(MIN_SUBJECT_MENTIONS).toBe(3);
     expect(MIN_SUBJECT_CAPTURES).toBe(3);
+  });
+});
+
+// Stock footage is the same clip every other channel pulled from the same
+// library, and the platforms treat a video built from it as exactly that. The
+// recording is the video; stock is the garnish.
+describe('checkOriginality', () => {
+  const dpt = subjectFor('dpt');
+  const cap = () => capture('play-dpt');
+
+  it('passes a video that opens on the game and keeps stock to a third', () => {
+    const beats = [
+      beat('b1', 'One.', cap()), beat('b2', 'Two.'), beat('b3', 'Three.', cap()),
+      beat('b4', 'Four.', cap()), beat('b5', 'Five.'), beat('b6', 'Six.', cap()),
+    ];
+    expect(checkOriginality(beats, dpt)).toEqual([]);
+  });
+
+  it('objects when more than a third of the beats are stock', () => {
+    const beats = [
+      beat('b1', 'One.', cap()), beat('b2', 'Two.'), beat('b3', 'Three.'),
+      beat('b4', 'Four.', cap()), beat('b5', 'Five.'), beat('b6', 'Six.', cap()),
+    ];
+    const heavy = checkOriginality(beats, dpt).find(f => f.rule === 'stock-heavy');
+    expect(heavy).toBeDefined();
+    expect(heavy.severity).toBe('warning');
+    expect(heavy.message).toMatch(/3 of 6/);
+  });
+
+  // The first frame decides whether anyone sees the rest, and the first frame
+  // of a stock clip is the first frame of every other video that used it.
+  it('objects when the video opens on stock', () => {
+    const beats = [
+      beat('b1', 'One.'), beat('b2', 'Two.', cap()), beat('b3', 'Three.', cap()),
+    ];
+    const opens = checkOriginality(beats, dpt).find(f => f.rule === 'opens-on-stock');
+    expect(opens).toBeDefined();
+    expect(opens.beatId).toBe('b1');
+  });
+
+  // A tips video promoting nothing has nothing to record.
+  it('has nothing to say about a video promoting nothing', () => {
+    expect(checkOriginality([beat('b1', 'One.'), beat('b2', 'Two.')], null)).toEqual([]);
+  });
+
+  it('caps stock where the prompt says it does', () => {
+    expect(MAX_STOCK_SHARE).toBeCloseTo(1 / 3);
+  });
+
+  it('runs as part of validateScript', () => {
+    const result = validateScript(
+      { beats: [beat('b1', 'DPT.'), beat('b2', 'Again.'), beat('b3', 'More.')], outro: { copy: '' } },
+      [], [], { key: 'dpt' },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.warnings.map(f => f.rule)).toEqual(
+      expect.arrayContaining(['stock-heavy', 'opens-on-stock']),
+    );
   });
 });
 

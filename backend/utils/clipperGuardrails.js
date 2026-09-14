@@ -56,6 +56,20 @@ const RAF_APPLICATION_PATTERNS = [
     message: 'Claims the site improves RAF application chances' },
 ];
 
+// A web address anywhere in the spoken copy.
+//
+// The first Clipper video posted to TikTok got 5 views against a manual
+// baseline of 200+, and "content that directs people off the platform" is on
+// TikTok's own list of what is kept out of the For You feed. A domain in a beat
+// is burned into the karaoke captions; a domain in the outro was printed on the
+// end card and read out by the voice, which the platform transcribes. "Link in
+// bio" is the convention the platforms tolerate, so that is what the prompt
+// asks for and this is what refuses anything else.
+const OFF_PLATFORM_PATTERNS = [
+  { re: /https?:\/\/|\bwww\.|\b[a-z0-9-]+\.(?:academy|com|co\.uk|org|net|io|app|uk)\b/i,
+    message: 'Spoken copy must not name a web address - say "link in bio" instead' },
+];
+
 // Hedging that makes an amber-confidence finding honest. An amber fact stated
 // flatly reads as established fact; the guide's own confidence grade says it
 // isn't. See §3 of APPLICATION_INFO/CLIPPER_PLAN.md.
@@ -241,6 +255,44 @@ function checkSubject(beats, subject) {
   return findings;
 }
 
+// ── Is the video mostly ours? ───────────────────────────────────────────────
+//
+// Stock footage is the same clip every other account pulled from the same
+// library, and a platform's duplicate matcher sees it as exactly that. A screen
+// recording of the game is footage nobody else has. So the recording is the
+// hero and stock is the garnish: no more than a third of the beats, and never
+// the one the video opens on, because the first frame is the one that decides
+// whether anyone sees the rest.
+//
+// Only checked when there is a subject to film. A tips video promoting nothing
+// has nothing to record, and is stock by definition.
+const MAX_STOCK_SHARE = 1 / 3;
+
+function checkOriginality(beats, subject) {
+  if (!subject || beats.length === 0) return [];
+
+  const findings = [];
+  const isStock = (b) => b.visual?.kind !== 'capture';
+  const stock = beats.filter(isStock);
+  const allowed = Math.floor(beats.length * MAX_STOCK_SHARE);
+
+  if (stock.length > allowed) {
+    findings.push({
+      rule: 'stock-heavy', severity: 'warning', beatId: null,
+      message: `${stock.length} of ${beats.length} beats are stock footage - at most ${allowed} may be, the rest should show ${subject.spokenName} being played`,
+    });
+  }
+
+  if (isStock(beats[0])) {
+    findings.push({
+      rule: 'opens-on-stock', severity: 'warning', beatId: beats[0].id ?? null,
+      message: `The video opens on stock footage - the first beat should be a recording of ${subject.spokenName}`,
+    });
+  }
+
+  return findings;
+}
+
 // ── Public API ──────────────────────────────────────────────────────────────
 
 // Validate a whole generated script.
@@ -265,6 +317,7 @@ function validateScript(script, facts, blocklist, subject = null) {
       ...checkNames(text, blocklist),
       ...checkPatterns(text, REAL_CBAT_PATTERNS, 'real-cbat-claim'),
       ...checkPatterns(text, RAF_APPLICATION_PATTERNS, 'raf-application-claim'),
+      ...checkPatterns(text, OFF_PLATFORM_PATTERNS, 'off-platform-url'),
       ...checkStyle(text),
     ];
     for (const f of scoped) findings.push({ ...f, beatId: beat?.id ?? null });
@@ -278,13 +331,16 @@ function validateScript(script, facts, blocklist, subject = null) {
       ...checkNames(outro, blocklist),
       ...checkPatterns(outro, REAL_CBAT_PATTERNS, 'real-cbat-claim'),
       ...checkPatterns(outro, RAF_APPLICATION_PATTERNS, 'raf-application-claim'),
+      ...checkPatterns(outro, OFF_PLATFORM_PATTERNS, 'off-platform-url'),
       ...checkStyle(outro),
     ];
     for (const f of scoped) findings.push({ ...f, beatId: 'outro' });
   }
 
+  const resolvedSubject = subjectFor(subject?.key ?? subject);
   findings.push(...checkGrades(beats, factsByKey));
-  findings.push(...checkSubject(beats, subjectFor(subject?.key ?? subject)));
+  findings.push(...checkSubject(beats, resolvedSubject));
+  findings.push(...checkOriginality(beats, resolvedSubject));
 
   const errors   = findings.filter(f => f.severity === 'error');
   const warnings = findings.filter(f => f.severity === 'warning');
@@ -299,11 +355,14 @@ module.exports = {
   checkGrades,
   checkStyle,
   checkSubject,
+  checkOriginality,
   MIN_SUBJECT_MENTIONS,
   MIN_SUBJECT_CAPTURES,
   EARLY_BEATS,
+  MAX_STOCK_SHARE,
   COMMON_WORD_HANDLES,
   REAL_CBAT_PATTERNS,
   RAF_APPLICATION_PATTERNS,
+  OFF_PLATFORM_PATTERNS,
   HEDGE_PATTERNS,
 };

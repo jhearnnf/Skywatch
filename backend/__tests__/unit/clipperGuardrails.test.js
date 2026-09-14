@@ -140,6 +140,43 @@ describe('RAF application claims', () => {
   });
 });
 
+// A web address in the copy is the one thing the platforms' "directs people
+// off the platform" rule is written about. A domain in a beat is burned into
+// the captions; one in the outro is read out and was printed on the end card.
+describe('off-platform addresses', () => {
+  it.each([
+    'Head to skywatch.academy and try it.',
+    'Go to www.skywatch.academy now.',
+    'Full guide at https://skywatch.academy/guide.',
+    'Search example.co.uk for more.',
+  ])('rejects %p', (text) => {
+    const r = run(script(text));
+    expect(r.ok).toBe(false);
+    expect(rules(r)).toContain('off-platform-url');
+  });
+
+  it('rejects the address in the outro, where it used to be asked for', () => {
+    const r = run(script('A normal line.', [], 'Practise free at skywatch.academy.'));
+    expect(r.ok).toBe(false);
+    expect(r.errors.some(f => f.rule === 'off-platform-url' && f.beatId === 'outro')).toBe(true);
+  });
+
+  it('reports one finding for one address, however many ways it matches', () => {
+    const r = run(script('Go to www.skywatch.academy now.'));
+    expect(r.errors.filter(f => f.rule === 'off-platform-url')).toHaveLength(1);
+  });
+
+  it.each([
+    'Link in bio.',
+    'The link is in my bio.',
+    'Scored 4.5 out of 9. Not great.',
+    'A CBAT-style test.',
+  ])('allows %p', (text) => {
+    const r = run(script(text, [], 'Link in bio.'));
+    expect(rules(r)).not.toContain('off-platform-url');
+  });
+});
+
 describe('style', () => {
   it('warns on em and en dashes without blocking', () => {
     const r = run(script('The test is fast — brutally fast.'));
@@ -153,7 +190,7 @@ describe('overall shape', () => {
     const r = run(script(
       'Only circled aircraft matter. Ignore the rest.',
       ['test:flag:0'],
-      'More CBAT tips, free at skywatch.academy.',
+      'More CBAT tips, free - link in bio.',
     ));
     expect(r.ok).toBe(true);
     expect(r.findings).toHaveLength(0);
