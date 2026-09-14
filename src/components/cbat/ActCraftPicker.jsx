@@ -20,9 +20,9 @@ export default function ActCraftPicker({ options, value, onChange, loading }) {
   }
 
   return (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-5 text-left">
+    <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-5 text-left">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Your craft</p>
-      <p className="text-[10px] text-[#8a9bb5] mb-3">
+      <p className="text-[10px] text-game-muted mb-3">
         Pick what you fly. It only changes how you look, not how the game scores.
       </p>
 
@@ -44,8 +44,8 @@ export default function ActCraftPicker({ options, value, onChange, loading }) {
               aria-pressed={selected}
               className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all cursor-pointer group ${
                 selected
-                  ? 'border-[#5baaff] bg-[#0f2240]'
-                  : 'border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240]'
+                  ? 'border-game-accent bg-game-raised'
+                  : 'border-game-line bg-game-panel hover:border-game-accent hover:bg-game-raised'
               }`}
             >
               {opt.id === ACT_CRAFT_BALL ? (

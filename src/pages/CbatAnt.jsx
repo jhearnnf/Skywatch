@@ -65,7 +65,7 @@ function JourneyMap({ round, pillAnchor, reveal = false, highlight = null }) {
           <line
             key={key}
             x1={pa.x} y1={pa.y} x2={pb.x} y2={pb.y}
-            stroke={active ? '#5baaff' : '#3d5a7a'}
+            stroke={active ? 'var(--color-game-accent)' : '#3d5a7a'}
             strokeWidth={active ? 2.5 : 1.25}
             strokeDasharray={active ? '' : '3 3'}
           />
@@ -114,7 +114,7 @@ function JourneyMap({ round, pillAnchor, reveal = false, highlight = null }) {
               fontSize="26"
               fontFamily="monospace"
               fontWeight="bold"
-              fill={onPath ? '#ddeaf8' : '#b8c8dc'}
+              fill={onPath ? 'var(--color-game-text)' : '#b8c8dc'}
             >
               {name[0]}
             </text>
@@ -124,7 +124,7 @@ function JourneyMap({ round, pillAnchor, reveal = false, highlight = null }) {
               fontSize="24"
               fontFamily="monospace"
               fontWeight="bold"
-              fill={onPath ? '#ddeaf8' : '#b8c8dc'}
+              fill={onPath ? 'var(--color-game-text)' : '#b8c8dc'}
             >
               {name}
             </text>
@@ -144,11 +144,11 @@ function DistanceLabel({ a, b, miles, anchor, flash = false }) {
     <g>
       <rect
         x={mx - 31} y={my - 16} width={62} height={32} rx={5}
-        fill="#0a1628" stroke="#5baaff" strokeWidth={1.5}
+        fill="var(--color-game-panel)" stroke="var(--color-game-accent)" strokeWidth={1.5}
         className={flash ? 'cbat-pill-flash' : undefined}
         data-anchor={anchor || undefined}
       />
-      <text x={mx} y={my + 9} textAnchor="middle" fontSize="26" fontFamily="monospace" fill="#5baaff" fontWeight="bold">
+      <text x={mx} y={my + 9} textAnchor="middle" fontSize="26" fontFamily="monospace" fill="var(--color-game-accent)" fontWeight="bold">
         {miles}
       </text>
     </g>
@@ -158,8 +158,8 @@ function DistanceLabel({ a, b, miles, anchor, flash = false }) {
 // ── Weight reference table ────────────────────────────────────────────────────
 function WeightTable({ currentWeight, flashActive = false, cueAnchors = false, highlight = null }) {
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
-      <p className="text-[10px] text-slate-500 uppercase tracking-wide px-2 py-1 border-b border-[#1a3a5c] bg-[#0a1628]">
+    <div className="bg-game-arena border border-game-line rounded-lg overflow-hidden">
+      <p className="text-[10px] text-slate-500 uppercase tracking-wide px-2 py-1 border-b border-game-line bg-game-panel">
         Parcel Weight Reference
       </p>
       <table className="w-full text-[11px] font-mono">
@@ -174,7 +174,7 @@ function WeightTable({ currentWeight, flashActive = false, cueAnchors = false, h
           {WEIGHT_TABLE.map(row => {
             const active = row.weight === currentWeight
             return (
-              <tr key={row.weight} className={active ? `bg-[#102040] text-brand-600 font-bold${flashActive ? ' cbat-cell-flash' : ''}` : 'text-[#ddeaf8]'}>
+              <tr key={row.weight} className={active ? `bg-surface-raised text-brand-600 font-bold${flashActive ? ' cbat-cell-flash' : ''}` : 'text-game-text'}>
                 <td className="px-2 py-0.5">{row.weight}</td>
                 <td
                   className={`px-2 py-0.5 text-right${active && highlight?.has('mpm') ? ' cbat-cell-flash' : ''}`}
@@ -203,30 +203,30 @@ function DataTable({ round, flashWeight = false, cueAnchors = false, highlight =
   const hl = name => (highlight?.has(name) ? ' cbat-cell-flash' : '')
   const showArrival = round.show.arrivalTime || reveal
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
+    <div className="bg-game-arena border border-game-line rounded-lg overflow-hidden">
       <table className="w-full text-xs font-mono">
-        <thead className="bg-[#0a1628] text-slate-500">
+        <thead className="bg-game-panel text-slate-500">
           <tr>
-            <th colSpan={3} className="px-2 py-1 text-left font-normal border-b border-[#1a3a5c]">Journey</th>
-            <th colSpan={2} className="px-2 py-1 text-left font-normal border-b border-l border-[#1a3a5c]">Timings</th>
-            <th colSpan={2} className="px-2 py-1 text-left font-normal border-b border-l border-[#1a3a5c]">Parcel</th>
+            <th colSpan={3} className="px-2 py-1 text-left font-normal border-b border-game-line">Journey</th>
+            <th colSpan={2} className="px-2 py-1 text-left font-normal border-b border-l border-game-line">Timings</th>
+            <th colSpan={2} className="px-2 py-1 text-left font-normal border-b border-l border-game-line">Parcel</th>
           </tr>
           <tr className="text-[10px] text-slate-500 uppercase">
             <th className="px-2 py-1 text-left font-normal">Start</th>
             <th className="px-2 py-1 text-left font-normal">Via</th>
             <th className="px-2 py-1 text-left font-normal">End</th>
-            <th className="px-2 py-1 text-left font-normal border-l border-[#1a3a5c]">Now</th>
+            <th className="px-2 py-1 text-left font-normal border-l border-game-line">Now</th>
             <th className="px-2 py-1 text-left font-normal">Arrive</th>
-            <th className="px-2 py-1 text-left font-normal border-l border-[#1a3a5c]">Y/N</th>
+            <th className="px-2 py-1 text-left font-normal border-l border-game-line">Y/N</th>
             <th className="px-2 py-1 text-left font-normal">kg</th>
           </tr>
         </thead>
-        <tbody className="text-[#ddeaf8]">
+        <tbody className="text-game-text">
           <tr>
             <td className="px-2 py-2">{round.start}</td>
             <td className="px-2 py-2">{round.via}</td>
             <td className="px-2 py-2">{round.destination}</td>
-            <td className={`px-2 py-2 border-l border-[#1a3a5c]${hl('now')}`} data-anchor={cueAnchors && round.show.timeNow ? 'now' : undefined}>
+            <td className={`px-2 py-2 border-l border-game-line${hl('now')}`} data-anchor={cueAnchors && round.show.timeNow ? 'now' : undefined}>
               {round.show.timeNow ? formatHHMM(round.timeNowMin) : <span className="text-amber-400">?</span>}
             </td>
             <td className={`px-2 py-2${hl('arrive')}`} data-anchor={cueAnchors && round.show.arrivalTime ? 'arrive' : undefined}>
@@ -234,7 +234,7 @@ function DataTable({ round, flashWeight = false, cueAnchors = false, highlight =
                 ? <span className={round.show.arrivalTime ? undefined : 'text-brand-600 font-bold'}>{formatHHMM(round.arrivalMin)}</span>
                 : <span className="text-amber-400">?</span>}
             </td>
-            <td className="px-2 py-2 border-l border-[#1a3a5c]">
+            <td className="px-2 py-2 border-l border-game-line">
               {hasParcel ? 'Y' : 'N'}
             </td>
             <td className="px-2 py-2" data-anchor={cueAnchors && hasParcel && round.show.weight ? 'weightkg' : undefined}>
@@ -258,7 +258,7 @@ function DataTable({ round, flashWeight = false, cueAnchors = false, highlight =
 function SolutionBreakdown({ round }) {
   const steps = solutionSteps(round)
   return (
-    <div className="w-full mt-3 bg-[#060e1a]/70 border border-[#1a3a5c] rounded-lg p-2.5 text-left">
+    <div className="w-full mt-3 bg-game-arena/70 border border-game-line rounded-lg p-2.5 text-left">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5">How it's worked out</p>
       <ol className="space-y-2">
         {steps.map(step => (
@@ -272,7 +272,7 @@ function SolutionBreakdown({ round }) {
                   : <span key={j} className="px-1 text-brand-600 font-bold cbat-cell-flash">{tok.text}</span>
               ))}
               <span className="text-slate-500">=</span>
-              <span className="text-[#ddeaf8] font-bold">{step.result}</span>
+              <span className="text-game-text font-bold">{step.result}</span>
             </div>
             <p className="text-[11px] text-slate-400 leading-snug ml-[1.15rem] mt-0.5">{step.note}</p>
           </li>
@@ -297,12 +297,12 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
     : { emoji: '\u{1F4A5}', color: 'text-red-400' }
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{gradeStyle.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">ANT Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 mb-4">
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
@@ -320,8 +320,8 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
         </p>
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-56 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Round Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 max-h-56 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Round Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => {
             const label = QUESTION_META[a.type].short
@@ -500,7 +500,7 @@ function makeTutorialRunId() {
 
 function LockedPanel({ label, className = '' }) {
   return (
-    <div className={`cbat-tutorial-disabled w-full h-full bg-[#0a1628] border border-[#15293f] rounded-lg flex items-center justify-center select-none ${className}`}>
+    <div className={`cbat-tutorial-disabled w-full h-full bg-game-panel border border-[#15293f] rounded-lg flex items-center justify-center select-none ${className}`}>
       <span className="text-[10px] uppercase tracking-wide text-slate-600 flex items-center gap-1">
         {'\u{1F512}'} {label}
       </span>
@@ -513,7 +513,7 @@ function TutorialComplete({ onExit }) {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
@@ -668,7 +668,7 @@ function AntTutorial({ onExit, onProgress }) {
         >
           <defs>
             <marker id="cbatCueHead" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
-              <path d="M0,0 L7,4.5 L0,9 Z" fill="#5baaff" />
+              <path d="M0,0 L7,4.5 L0,9 Z" fill="var(--color-game-accent)" />
             </marker>
           </defs>
           {links.map(l => {
@@ -688,7 +688,7 @@ function AntTutorial({ onExit, onProgress }) {
       )}
 
       {/* Coach card */}
-      <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
+      <div className="w-full bg-game-panel border border-game-line rounded-xl p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
           <div className="flex items-center gap-1.5">
@@ -720,7 +720,7 @@ function AntTutorial({ onExit, onProgress }) {
             transition={{ duration: 0.2 }}
           >
             <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
-            <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+            <p className="text-sm text-game-text leading-relaxed">{step.body}</p>
           </motion.div>
         </AnimatePresence>
         <div className="mt-4">
@@ -733,7 +733,7 @@ function AntTutorial({ onExit, onProgress }) {
       {/* Practice arena — mirrors the live playing layout; locked panels greyed out */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         {/* Left column — map */}
-        <div className={`md:col-span-2 bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 flex flex-col md:min-h-0${pulse('map')}${dim('map')}`}>
+        <div className={`md:col-span-2 bg-game-panel border border-game-line rounded-xl p-3 flex flex-col md:min-h-0${pulse('map')}${dim('map')}`}>
           {enabled.map ? (
             <>
               <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Map</p>
@@ -754,7 +754,7 @@ function AntTutorial({ onExit, onProgress }) {
           </div>
 
           {/* Ask */}
-          <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3${pulse('solve')}${dim('solve')}`}>
+          <div className={`bg-game-panel border border-game-line rounded-xl p-3${pulse('solve')}${dim('solve')}`}>
             {enabled.solve ? (
               <>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Solve For</p>
@@ -783,10 +783,10 @@ function AntTutorial({ onExit, onProgress }) {
           {/* Answer */}
           <div className={`${pulse('answer').trim()}${dim('answer')}`.trim()}>
             {enabled.answer ? (
-              <div className={`bg-[#0a1628] border rounded-xl p-3 transition-colors ${
+              <div className={`bg-game-panel border rounded-xl p-3 transition-colors ${
                 flash === 'ok' ? 'border-green-500 bg-green-500/10'
                 : flash === 'miss' ? 'border-red-500'
-                : 'border-[#1a3a5c]'
+                : 'border-game-line'
               }`}>
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Answer</p>
                 <div className="flex items-center gap-2">
@@ -798,7 +798,7 @@ function AntTutorial({ onExit, onProgress }) {
                     onChange={(e) => { setAnswerInput(e.target.value); if (flash === 'miss') setFlash(null) }}
                     onKeyDown={(e) => { if (e.key === 'Enter') submitAnswer() }}
                     placeholder={QUESTION_META[round.type].unit}
-                    className="flex-1 min-w-0 bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-3 py-2 text-white font-mono text-lg focus:outline-none focus:border-brand-400"
+                    className="flex-1 min-w-0 bg-game-arena border border-game-line rounded-lg px-3 py-2 text-white font-mono text-lg focus:outline-none focus:border-brand-400"
                   />
                   <button
                     onClick={submitAnswer}
@@ -1147,7 +1147,7 @@ export default function CbatAnt() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-xl lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-xl lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className={`text-4xl lg:text-5xl mb-3${introDim}`}>{'\u{1F4E1}'}</p>
 
@@ -1173,8 +1173,8 @@ export default function CbatAnt() {
                   : 'Speed, distance and time under pressure. Deliver a parcel across an eight-node network — each round one value is missing (Arrival Time, Total Distance, Fuel, or Speed). Calculate it from the data shown.'}
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-4 lg:mb-7 text-left space-y-2 lg:space-y-3${introDim}`}>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-4 lg:mb-7 text-left space-y-2 lg:space-y-3${introDim}`}>
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">
                     {isPractise
@@ -1184,42 +1184,42 @@ export default function CbatAnt() {
                 </div>
                 {isPractise ? (
                   <>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9EE}'}</span>
                       <span className="pt-0.5">Every figure is written out for you. No map, no tables, no hunting.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
                       <span className="pt-0.5">Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}, on its own leaderboard.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4A1}'}</span>
                       <span className="pt-0.5">Get these automatic before you take Hard on. On that board the reading is what costs you, not the arithmetic.</span>
                     </div>
                   </>
                 ) : isHard ? (
                   <>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4C4}'}</span>
                       <span className="pt-0.5">Read the last line of the objective box first. It tells you what is being asked.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9EE}'}</span>
                       <span className="pt-0.5">Weight gives you speed on the Load chart. Speed gives you miles per gallon on the Fuel chart.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u26C8'}</span>
                       <span className="pt-0.5">A weather leg has its revised speed given to you in the flight data. One of them makes you faster.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2708'}</span>
                       <span className="pt-0.5">The last three rounds fly two aircraft with a chart each. Check you are reading the right one.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
                       <span className="pt-0.5">Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4CF}'}</span>
                       <span className="pt-0.5">
                         Every answer is a whole number. Close counts as within 3 minutes, 5 miles, 10 mph or
@@ -1229,15 +1229,15 @@ export default function CbatAnt() {
                   </>
                 ) : (
                   <>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9EE}'}</span>
                       <span className="pt-0.5">Speed = Distance / Time. Parcel weight sets miles/min and gal/hr.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
                       <span className="pt-0.5">Exact = 10 pts, close = 5 pts, miss = 0 pts. Max score {tuning.maxScore}.</span>
                     </div>
-                    <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                       <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4CF}'}</span>
                       <span className="pt-0.5">
                         Every answer is a whole number. Close counts as within 5 miles, 10 mph or 2 minutes —
@@ -1280,7 +1280,7 @@ export default function CbatAnt() {
                     that switches board belongs down here. */}
                 <button
                   onClick={() => setPhase('tutorial')}
-                  className="px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
+                  className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
                 >
                   Tutorial
                 </button>
@@ -1288,7 +1288,7 @@ export default function CbatAnt() {
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
-                  className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
+                  className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
                 >
                   Start
                 </button>
@@ -1330,7 +1330,7 @@ export default function CbatAnt() {
               </div>
 
               {/* Time bar */}
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className={`h-full rounded-full ${reviewing ? 'bg-brand-600/40' : timeLeft < 10 ? 'bg-red-500' : 'bg-brand-600'}`}
                   initial={false}
@@ -1341,7 +1341,7 @@ export default function CbatAnt() {
 
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                 {/* Left column — map (2/5) */}
-                <div className="md:col-span-2 bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 flex flex-col md:min-h-0">
+                <div className="md:col-span-2 bg-game-panel border border-game-line rounded-xl p-3 flex flex-col md:min-h-0">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Map</p>
                   <JourneyMap round={round} reveal={reviewing} highlight={solutionHighlight} />
                   {!round.show.segments && (
@@ -1356,7 +1356,7 @@ export default function CbatAnt() {
                   <DataTable round={round} reveal={reviewing} highlight={solutionHighlight} />
 
                   {/* Ask */}
-                  <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3">
+                  <div className="bg-game-panel border border-game-line rounded-xl p-3">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Solve For</p>
                     <p className="text-lg font-bold text-brand-600">
                       {QUESTION_META[round.type].label}
@@ -1424,7 +1424,7 @@ export default function CbatAnt() {
                       </motion.div>
                     ) : (
                       <div className="flex-1 flex flex-col sm:flex-row items-stretch gap-3">
-                        <div className="flex-1 min-w-0 bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3">
+                        <div className="flex-1 min-w-0 bg-game-panel border border-game-line rounded-xl p-3">
                           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Answer</p>
                           <div className="flex items-center gap-2">
                             <input
@@ -1439,7 +1439,7 @@ export default function CbatAnt() {
                                 if (e.key === 'Enter') handleSubmit(false)
                               }}
                               placeholder={QUESTION_META[round.type].unit}
-                              className="flex-1 min-w-0 bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-3 py-2 text-white font-mono text-lg focus:outline-none focus:border-brand-400"
+                              className="flex-1 min-w-0 bg-game-arena border border-game-line rounded-lg px-3 py-2 text-white font-mono text-lg focus:outline-none focus:border-brand-400"
                             />
                             <button
                               onClick={() => handleSubmit(false)}
@@ -1450,7 +1450,7 @@ export default function CbatAnt() {
                             </button>
                           </div>
                         </div>
-                        <div className="sm:w-36 shrink-0 bg-[#060e1a] border border-[#1a3a5c] rounded-xl p-3 flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-0 text-center">
+                        <div className="sm:w-36 shrink-0 bg-game-arena border border-game-line rounded-xl p-3 flex flex-row sm:flex-col items-center justify-center gap-2 sm:gap-0 text-center">
                           <p className="text-[10px] text-slate-500 uppercase tracking-wide sm:mb-1">Formula</p>
                           <p className="text-xs font-mono text-brand-600 leading-tight">
                             Speed = Distance / Time

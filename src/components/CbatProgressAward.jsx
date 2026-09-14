@@ -59,7 +59,7 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
         initial={{ opacity: 0, scale: 0.9, y: 12 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-        className="w-full max-w-sm bg-[#0a1628] border border-[#1a3a5c] rounded-2xl p-7 text-center"
+        className="w-full max-w-sm bg-game-panel border border-game-line rounded-2xl p-7 text-center"
       >
         {/* The emoji identifies the game up here rather than inside the ring, where it was
             competing with the number for the same 112px. */}
@@ -75,11 +75,11 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
           <svg viewBox={`0 0 ${RING_BOX} ${RING_BOX}`} className="w-full h-full -rotate-90">
             <circle
               cx={RING_BOX / 2} cy={RING_BOX / 2} r={RING_R}
-              fill="none" stroke="#1a3a5c" strokeWidth={RING_SW}
+              fill="none" stroke="var(--color-game-line)" strokeWidth={RING_SW}
             />
             <motion.circle
               cx={RING_BOX / 2} cy={RING_BOX / 2} r={RING_R}
-              fill="none" stroke="#5baaff" strokeWidth={RING_SW} strokeLinecap="round"
+              fill="none" stroke="var(--color-game-accent)" strokeWidth={RING_SW} strokeLinecap="round"
               strokeDasharray={RING_C}
               initial={{ strokeDashoffset: RING_C }}
               animate={{ strokeDashoffset: 0 }}
@@ -102,7 +102,7 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: SUMMARY_DELAY }}
         >
-          <p className="text-sm text-[#ddeaf8] leading-relaxed">{awardSummary(pct, gameTitle)}</p>
+          <p className="text-sm text-game-text leading-relaxed">{awardSummary(pct, gameTitle)}</p>
           {attempts != null && (
             <p className="text-[11px] text-slate-500 mt-1.5">Across {attempts} attempts</p>
           )}
@@ -175,7 +175,7 @@ export function CbatDonationNote({ onRecord }) {
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.25 }}
-      className="relative bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 pr-9 text-left"
+      className="relative bg-game-arena rounded-lg border border-game-line p-3 pr-9 text-left"
       data-testid="cbat-donation-note"
     >
       <button
@@ -185,7 +185,7 @@ export function CbatDonationNote({ onRecord }) {
       >
         ✕
       </button>
-      <p className="text-xs text-[#ddeaf8] leading-relaxed">
+      <p className="text-xs text-game-text leading-relaxed">
         SkyWatch is free and has no ads. If it's helping, a one-off donation from £3 helps keep it
         running.
       </p>

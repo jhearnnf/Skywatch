@@ -153,10 +153,10 @@ function CountdownScreen({ count, tileCount }) {
       </div>
 
       {/* Progress bar — empty, ready to fill */}
-      <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden" />
+      <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden" />
 
       {/* Grid card */}
-      <div className="relative bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 mb-3 overflow-hidden">
+      <div className="relative bg-game-panel border border-game-line rounded-xl p-3 mb-3 overflow-hidden">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-3">
           Find the target symbol
         </p>
@@ -169,8 +169,8 @@ function CountdownScreen({ count, tileCount }) {
               key={i}
               className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl transition-colors duration-100 ${
                 i === selected
-                  ? 'bg-[#0f2240] border-brand-400 text-brand-200'
-                  : 'bg-[#060e1a] border-[#1a3a5c] text-[#ddeaf8]'
+                  ? 'bg-game-raised border-brand-400 text-brand-200'
+                  : 'bg-game-arena border-game-line text-game-text'
               }`}
             >
               <span style={{ fontSize: `${getSymbolScale(sym)}em`, lineHeight: 1 }}>{sym}</span>
@@ -179,7 +179,7 @@ function CountdownScreen({ count, tileCount }) {
         </div>
 
         {/* Scrim — constant, right up to the handoff */}
-        <div className="absolute inset-0 bg-[#060e1a]/55 pointer-events-none" />
+        <div className="absolute inset-0 bg-game-arena/55 pointer-events-none" />
 
         {/* Count */}
         <div
@@ -205,12 +205,12 @@ function CountdownScreen({ count, tileCount }) {
       </div>
 
       {/* Target card — same box the round uses, cycling with the selector */}
-      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
+      <div className="bg-game-panel border border-game-line rounded-xl p-4">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2">
           Target
         </p>
         <div className="flex items-center justify-center">
-          <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400/50 bg-[#060e1a] flex items-center justify-center text-6xl text-[#ddeaf8]/60">
+          <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400/50 bg-game-arena flex items-center justify-center text-6xl text-game-text/60">
             <span style={{ fontSize: `${getSymbolScale(spotlit)}em`, lineHeight: 1 }}>{spotlit}</span>
           </div>
         </div>
@@ -238,19 +238,19 @@ function ResultsScreen({ answers, totalTime }) {
     : { label: 'Failed', emoji: '\u{1F4A5}', color: 'text-red-400' }
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Symbol Recognition Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_ROUNDS} correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(2)}s</p>
             <p className="text-sm text-slate-400">total time</p>
@@ -265,7 +265,7 @@ function ResultsScreen({ answers, totalTime }) {
 
       <div className="grid grid-cols-3 gap-2 mb-6">
         {['Tier 1', 'Tier 2', 'Tier 3'].map((label, i) => (
-          <div key={i} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <div key={i} className="bg-game-arena rounded-lg border border-game-line p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
             <p className="text-xl font-mono font-bold text-brand-600">
               {tierCorrect[i].correct}/{tierCorrect[i].total}
@@ -275,8 +275,8 @@ function ResultsScreen({ answers, totalTime }) {
       </div>
 
       {/* Answer review — scrollable */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-6 max-h-48 overflow-y-auto">
-        <div className="flex items-baseline justify-between mb-2 sticky top-0 bg-[#060e1a]">
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-6 max-h-48 overflow-y-auto">
+        <div className="flex items-baseline justify-between mb-2 sticky top-0 bg-game-arena">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Round Review</p>
           <p className="text-[10px] text-slate-600">{'target \u2192 your pick'}</p>
         </div>
@@ -284,7 +284,7 @@ function ResultsScreen({ answers, totalTime }) {
           {answers.map((a, i) => (
             <div key={i} className={`flex items-center justify-between gap-2 text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
               <span className="text-slate-500 w-6 shrink-0 text-left">#{i + 1}</span>
-              <span className="text-lg w-7 shrink-0 text-center overflow-hidden text-[#ddeaf8]">
+              <span className="text-lg w-7 shrink-0 text-center overflow-hidden text-game-text">
                 <span style={{ fontSize: `${getSymbolScale(a.target)}em`, lineHeight: 1 }}>{a.target}</span>
               </span>
               <span className="w-4 shrink-0 text-center">{a.correct ? '\u2713' : '\u2717'}</span>
@@ -556,7 +556,7 @@ export default function CbatSymbols() {
           <button
             onClick={startCountdown}
             disabled={phase === 'countdown'}
-            className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#1a3a5c] bg-[#0a1628] text-[11px] font-bold text-brand-600 transition-colors ${
+            className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-game-line bg-game-panel text-[11px] font-bold text-brand-600 transition-colors ${
               phase === 'countdown'
                 ? 'opacity-40 cursor-default'
                 : 'hover:text-brand-700 hover:border-brand-400'
@@ -588,7 +588,7 @@ export default function CbatSymbols() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className="text-4xl lg:text-5xl mb-3">{'\u{1F523}'}</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Symbol Recognition</p>
@@ -597,27 +597,27 @@ export default function CbatSymbols() {
                 increasing difficulty.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>T1</CbatIntroLabel>
                   <span className="pt-0.5">{'Rounds 1\u20135 \u00b7 grid of 12\u201315 symbols'}</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>T2</CbatIntroLabel>
                   <span className="pt-0.5">{'Rounds 6\u201310 \u00b7 grid of 15\u201320 symbols'}</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>T3</CbatIntroLabel>
                   <span className="pt-0.5">{'Rounds 11\u201315 \u00b7 grid of 18\u201325 symbols'}</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'\u26A0\uFE0F'}</span>
                   <span className="pt-0.5">{'A wrong click counts as missed \u2014 round skips automatically'}</span>
                 </div>
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4 text-center">
+                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
                   <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
@@ -671,7 +671,7 @@ export default function CbatSymbols() {
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -685,21 +685,21 @@ export default function CbatSymbols() {
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 mb-3"
+                className="bg-game-panel border border-game-line rounded-xl p-3 mb-3"
               >
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-3">
                   Find the target symbol
                 </p>
                 <div className={`grid ${gridCols} gap-1.5`}>
                   {currentRound.symbols.map((sym, i) => {
-                    let btnClass = 'bg-[#060e1a] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240]'
+                    let btnClass = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised'
                     if (phase === 'feedback') {
                       if (sym === currentRound.target) {
                         btnClass = 'bg-green-500/20 border-green-500/50 text-green-300'
                       } else if (sym === pickedSymbol && !wasCorrect) {
                         btnClass = 'bg-red-500/20 border-red-500/50 text-red-300'
                       } else {
-                        btnClass = 'bg-[#060e1a] border-[#1a3a5c] text-[#5a6a80] opacity-50'
+                        btnClass = 'bg-game-arena border-game-line text-game-faint opacity-50'
                       }
                     }
                     return (
@@ -724,12 +724,12 @@ export default function CbatSymbols() {
               </motion.div>
 
               {/* Target card */}
-              <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 relative overflow-hidden">
+              <div className="bg-game-panel border border-game-line rounded-xl p-4 relative overflow-hidden">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2">
                   Target
                 </p>
                 <div className="flex items-center justify-center">
-                  <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400 bg-[#060e1a] flex items-center justify-center text-6xl">
+                  <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400 bg-game-arena flex items-center justify-center text-6xl">
                     <span style={{ fontSize: `${getSymbolScale(currentRound.target)}em`, lineHeight: 1 }}>
                       {currentRound.target}
                     </span>

@@ -4,6 +4,7 @@ const { DIFFICULTY_LEVELS } = require('../constants/difficulty');
 const { SUBSCRIPTION_TIERS } = require('../constants/subscriptionTiers');
 const { TUTORIAL_STATUS } = require('../constants/tutorialStatus');
 const { RESULT_IMAGE_SOURCES } = require('../constants/survey');
+const { UI_THEMES, DEFAULT_UI_THEME } = require('../constants/uiThemes.json');
 
 const loginSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
@@ -220,6 +221,13 @@ const userSchema = new mongoose.Schema(
     // sheets that get revised, and a stored key that stops matching should degrade to "pick a
     // target again", never block the user from saving their profile.
     cbatTargetBattery: { type: String, default: null },
+
+    // Which look the whole site wears for this user: the gamified SkyWatch
+    // theme (default) or a "Real CBAT" theme styled after the actual test
+    // software — flat navy, plain white text, square panels. Set from the
+    // theme selector in the top bar and honoured on every page and game.
+    // Visual only: it never changes how a game plays.
+    uiTheme: { type: String, enum: UI_THEMES, default: DEFAULT_UI_THEME },
 
     // Subscription
     subscriptionTier: {

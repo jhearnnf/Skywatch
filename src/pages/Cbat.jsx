@@ -40,7 +40,7 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
         aria-hidden="true"
         draggable={false}
         data-testid={`card-bg-image-${game.key}`}
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+        className="cbat-card-art absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
         style={{
           filter:     'grayscale(1) brightness(0.85) blur(4px)',
           opacity:    dimmed ? 0.4 : 1,
@@ -52,7 +52,7 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
       {/* Brand-blue colour wash — forces consistent blue tint over greyscale image */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 pointer-events-none"
+        className="cbat-card-art absolute inset-0 pointer-events-none"
         style={{
           background:   '#5baaff',
           opacity:      0.45,
@@ -63,7 +63,7 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
       {/* Blue radial bloom — slow pulse */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 pointer-events-none"
+        className="cbat-card-art absolute inset-0 pointer-events-none"
         style={{
           background: 'radial-gradient(ellipse 80% 70% at 50% 50%, rgba(91,170,255,0.16) 0%, transparent 75%)',
           animation:  `cbat-bloom-pulse 4.5s ease-in-out ${delay * 0.4}s infinite`,
@@ -73,7 +73,7 @@ function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) 
       {/* Scanlines */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 pointer-events-none"
+        className="cbat-card-art absolute inset-0 pointer-events-none"
         style={{
           background: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px)',
           zIndex: 3,
@@ -306,7 +306,7 @@ function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, nav
               navigate(`/cbat/${h.lbKey}/leaderboard?period=all-time`)
             }}
             className="flex-1 max-w-[40%] flex items-center justify-center px-5 py-6 rounded-xl cursor-pointer select-none
-              border border-[#1a3a5c] bg-[#0a1628] text-slate-400 opacity-60 transition-all
+              border border-game-line bg-game-panel text-slate-400 opacity-60 transition-all
               hover:opacity-100 hover:bg-brand-600 hover:text-white hover:border-brand-400
               hover:shadow-[0_0_16px_rgba(91,170,255,0.45)]"
           >

@@ -103,7 +103,7 @@ const CARD_SCORE   = 'font-mono font-extrabold text-lg sm:text-2xl leading-tight
 const CARD_UNIT    = 'text-[11px] sm:text-sm font-bold'
 const CARD_ACTION  = 'text-[9px] leading-[1.2] sm:text-[11px] font-bold truncate'
 const CARD_OPEN    = 'shrink-0 text-[10px] sm:text-xs font-bold'
-const CARD_RAIL    = 'relative mt-1 h-1.5 sm:mt-3 sm:h-2 bg-[#060e1a] border border-[#1a3a5c] rounded-sm overflow-hidden'
+const CARD_RAIL    = 'relative mt-1 h-1.5 sm:mt-3 sm:h-2 bg-game-arena border border-game-line rounded-sm overflow-hidden'
 const CARD_SHELL   = 'block bg-surface border border-slate-200 rounded-xl sm:rounded-2xl overflow-hidden card-shadow'
 
 // The states are built to be the same height, but "built to be" is not "guaranteed to be" — a
@@ -284,7 +284,7 @@ function ProgressCard({ label, headline, unit, action, pct, tick, to = '/cbat/re
     >
       <div className="flex">
         {/* The neutral stripe, never a status colour. Nothing here is a result. */}
-        <div data-testid="aptitude-card-stripe" className={`${CARD_STRIPE} bg-[#1a3a5c]`} />
+        <div data-testid="aptitude-card-stripe" className={`${CARD_STRIPE} bg-game-line`} />
 
         <div data-testid="aptitude-card-body" className={CARD_BODY}>
           <div className="flex items-baseline gap-2">
@@ -344,7 +344,7 @@ function ScoredCard({ target, label, to = '/cbat/report' }) {
         <div
           data-testid="aptitude-card-stripe"
           className={`${CARD_STRIPE} ${
-            target.status === 'pass' ? 'bg-[#2f7d5b]' : target.status === 'fail' ? 'bg-[#a34a45]' : 'bg-[#1a3a5c]'
+            target.status === 'pass' ? 'bg-[#2f7d5b]' : target.status === 'fail' ? 'bg-[#a34a45]' : 'bg-game-line'
           }`}
         />
         <div data-testid="aptitude-card-body" className={CARD_BODY}>
@@ -445,7 +445,7 @@ function ReportSkeleton({ voice = VOICES.own }) {
 
       <div className="flex">
         {/* The real card's own neutral stripe — the colour it uses when a status is unknown. */}
-        <div data-testid="aptitude-card-stripe" className={`${CARD_STRIPE} bg-[#1a3a5c]`} />
+        <div data-testid="aptitude-card-stripe" className={`${CARD_STRIPE} bg-game-line`} />
 
         <div data-testid="aptitude-card-body" className={CARD_BODY}>
           <div className="flex items-baseline gap-2">

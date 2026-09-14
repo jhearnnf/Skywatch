@@ -129,7 +129,7 @@ describe('AptitudeReportCard — below the verdict threshold', () => {
   it('keeps the neutral stripe', async () => {
     renderWith(PROVISIONAL)
     await settled()
-    expect(screen.getByTestId('aptitude-card-stripe').className).toContain('bg-[#1a3a5c]')
+    expect(screen.getByTestId('aptitude-card-stripe').className).toContain('bg-game-line')
   })
 
   // Coverage exists from the first run now, so this user has both a coverage figure and a nearly

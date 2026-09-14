@@ -7,14 +7,14 @@ export default function AircraftQuestion({ symbol, onAnswer, disabled, pulseSymb
         onClick={() => !disabled && hasSymbol && onAnswer('no')}
         disabled={disabled || !hasSymbol}
         data-demo-answer
-        className="shrink-0 px-2.5 py-1.5 bg-[#1a3a5c] hover:bg-[#254a6e] disabled:opacity-40 disabled:cursor-not-allowed text-[#ddeaf8] text-xs font-bold rounded-lg transition-colors cursor-pointer"
+        className="shrink-0 px-2.5 py-1.5 bg-game-fill hover:bg-game-fill-strong disabled:opacity-40 disabled:cursor-not-allowed text-game-text text-xs font-bold rounded-lg transition-colors cursor-pointer"
       >
         NO
       </button>
 
       <div className="flex-1 min-w-0 text-center">
         {hasSymbol ? (
-          <span className={`font-mono text-base font-bold tracking-widest ${pulseSymbol ? 'text-brand-300 cbat-flag-callsign-pulse' : 'text-[#ddeaf8]'}`}>{symbol}</span>
+          <span className={`font-mono text-base font-bold tracking-widest ${pulseSymbol ? 'text-brand-300 cbat-flag-callsign-pulse' : 'text-game-text'}`}>{symbol}</span>
         ) : (
           <span className="font-mono text-base font-bold text-slate-600 tracking-widest">—</span>
         )}

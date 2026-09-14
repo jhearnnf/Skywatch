@@ -63,16 +63,16 @@ import { initialDifficulty } from '../utils/cbat/difficultyParam'
 function GridPanel({ grid }) {
   const labels = axisLabels(grid.extent)
   return (
-    <div className="overflow-auto max-h-[46vh] lg:max-h-[70vh] border border-[#1a3a5c] rounded-lg bg-[#060e1a]">
+    <div className="overflow-auto max-h-[46vh] lg:max-h-[70vh] border border-game-line rounded-lg bg-game-arena">
       <table
         className="border-collapse font-mono w-full table-fixed text-[10px] sm:text-xs lg:text-sm"
         style={{ minWidth: `${(labels.length + 1) * 32}px` }}
       >
         <thead>
           <tr>
-            <th className="sticky top-0 left-0 z-20 bg-[#0f2240] text-slate-600 px-1 py-1 lg:py-1.5">·</th>
+            <th className="sticky top-0 left-0 z-20 bg-game-raised text-slate-600 px-1 py-1 lg:py-1.5">·</th>
             {labels.map(l => (
-              <th key={l} className="sticky top-0 z-10 px-1 py-1 lg:py-1.5 font-bold bg-[#0f2240] text-slate-500">
+              <th key={l} className="sticky top-0 z-10 px-1 py-1 lg:py-1.5 font-bold bg-game-raised text-slate-500">
                 {l}
               </th>
             ))}
@@ -81,11 +81,11 @@ function GridPanel({ grid }) {
         <tbody>
           {grid.cells.map((rowVals, r) => (
             <tr key={r}>
-              <th className="sticky left-0 z-10 px-1 py-1 lg:py-1.5 font-bold bg-[#0f2240] text-slate-500">
+              <th className="sticky left-0 z-10 px-1 py-1 lg:py-1.5 font-bold bg-game-raised text-slate-500">
                 {labels[r]}
               </th>
               {rowVals.map((v, c) => (
-                <td key={c} className="px-1 py-1 lg:py-1.5 text-center text-[#ddeaf8] border-b border-[#0d1c30]">{v}</td>
+                <td key={c} className="px-1 py-1 lg:py-1.5 text-center text-game-text border-b border-[#0d1c30]">{v}</td>
               ))}
             </tr>
           ))}
@@ -105,7 +105,7 @@ function GridPanel({ grid }) {
 // the question names one of the two and the other is sitting right beside it.
 function SheetPanel({ sheet }) {
   return (
-    <div className="overflow-auto max-h-[46vh] lg:max-h-[70vh] border border-[#1a3a5c] rounded-lg bg-[#060e1a] p-2 space-y-3">
+    <div className="overflow-auto max-h-[46vh] lg:max-h-[70vh] border border-game-line rounded-lg bg-game-arena p-2 space-y-3">
       {sheet.tables.map(table => (
         <table key={table.airSpeed} className="border-collapse font-mono w-full text-[10px] sm:text-xs lg:text-sm" style={{ minWidth: '460px' }}>
           <caption className="caption-top text-left text-[10px] lg:text-xs font-bold text-brand-600 uppercase tracking-wide pb-1">
@@ -113,9 +113,9 @@ function SheetPanel({ sheet }) {
           </caption>
           <thead>
             <tr>
-              <th rowSpan={2} className="bg-[#0f2240] text-slate-600 px-2 py-1 text-left align-bottom">W/V</th>
+              <th rowSpan={2} className="bg-game-raised text-slate-600 px-2 py-1 text-left align-bottom">W/V</th>
               {sheet.angles.map(a => (
-                <th key={a} colSpan={2} className="bg-[#0f2240] text-slate-500 px-2 py-1 font-bold border-l border-[#1a3a5c]">
+                <th key={a} colSpan={2} className="bg-game-raised text-slate-500 px-2 py-1 font-bold border-l border-game-line">
                   {a}°
                 </th>
               ))}
@@ -123,7 +123,7 @@ function SheetPanel({ sheet }) {
             <tr>
               {sheet.angles.map(a => (
                 <Fragment key={a}>
-                  <th className="bg-[#0b1a2e] text-slate-600 px-1 py-0.5 font-bold border-l border-[#1a3a5c]">{READOUTS.drift.short}</th>
+                  <th className="bg-[#0b1a2e] text-slate-600 px-1 py-0.5 font-bold border-l border-game-line">{READOUTS.drift.short}</th>
                   <th className="bg-[#0b1a2e] text-slate-600 px-1 py-0.5 font-bold">{READOUTS.ground.short}</th>
                 </Fragment>
               ))}
@@ -132,11 +132,11 @@ function SheetPanel({ sheet }) {
           <tbody>
             {sheet.rows.map((v, r) => (
               <tr key={v}>
-                <th className="bg-[#0f2240] text-slate-500 px-2 py-1 font-bold text-left">{v}</th>
+                <th className="bg-game-raised text-slate-500 px-2 py-1 font-bold text-left">{v}</th>
                 {sheet.angles.map((a, c) => (
                   <Fragment key={a}>
-                    <td className="px-1 py-1 text-center text-[#ddeaf8] border-b border-l border-[#0d1c30]">{table.cells[r][c].drift}</td>
-                    <td className="px-1 py-1 text-center text-[#ddeaf8] border-b border-[#0d1c30]">{table.cells[r][c].ground}</td>
+                    <td className="px-1 py-1 text-center text-game-text border-b border-l border-[#0d1c30]">{table.cells[r][c].drift}</td>
+                    <td className="px-1 py-1 text-center text-game-text border-b border-[#0d1c30]">{table.cells[r][c].ground}</td>
                   </Fragment>
                 ))}
               </tr>
@@ -155,19 +155,19 @@ function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade 
   const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">Table Reading Test Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}</p>
             <p className="text-sm text-slate-400">correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{accuracy}%</p>
             <p className="text-sm text-slate-400">of {attempted} attempted</p>
@@ -176,11 +176,11 @@ function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade 
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Part 1 · Grid</p>
           <p className="text-2xl font-mono font-bold text-brand-600">{gridCorrect}</p>
         </div>
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Part 2 · Wind Sheet</p>
           <p className="text-2xl font-mono font-bold text-brand-600">{tableCorrect}</p>
         </div>
@@ -395,7 +395,7 @@ export default function CbatMatf() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className={`text-4xl lg:text-5xl mb-3${dim}`}>📋</p>
 
@@ -415,7 +415,7 @@ export default function CbatMatf() {
                 Two parts against the clock. Answer as many as you can. Nothing here is hard to understand, and everything here is hard to do quickly.
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Coordinate grid, running from minus {introTuning.gridExtent} to plus {introTuning.gridExtent} both ways. Bring one number across, one down, read where they meet.</span>
@@ -424,7 +424,7 @@ export default function CbatMatf() {
                   <CbatIntroLabel>2.</CbatIntroLabel>
                   <span className="pt-0.5">Wind sheet, in three steps. Air speed picks the table, wind velocity picks the row, wind angle picks the column. Then read the one of Drift Correction or Ground Speed you were asked for.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-brand-600/90 border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-brand-600/90 border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'💡'}</span>
                   <span className="pt-0.5">On the grid the pair works either way round. The value at 4, −11 is the value at −11, 4. Don’t spend a moment deciding which is which.</span>
                 </div>
@@ -432,11 +432,11 @@ export default function CbatMatf() {
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'💡'}</span>
                   <span className="pt-0.5">On the wind sheet, check the air speed on the table you have landed in before you read anything off it. Every table looks the same, and the right row and column of the wrong table is offered as an answer.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] pt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted pt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'📄'}</span>
                   <span className="pt-0.5">The real test puts the reference on a printed sheet beside the screen, and moving between two surfaces is a lot of what it costs. Practise with a printed grid next to you as well as here.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">±{introTuning.gridExtent} grid · {introTuning.tableCount} air-speed tables · {Math.round(introTuning.partMs / 1000)}s per part</span>
                 </div>
@@ -467,12 +467,12 @@ export default function CbatMatf() {
             <motion.div
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center"
+              className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-8 text-center"
             >
               <p className="text-4xl mb-3">✅</p>
               <p className="text-lg font-extrabold text-white mb-1">Part 1 complete</p>
               <p className="text-sm text-slate-400 mb-5">{gridCorrect} correct on the grid.</p>
-              <p className="text-sm text-[#ddeaf8] mb-6">
+              <p className="text-sm text-game-text mb-6">
                 Part 2 swaps the grid for the wind sheet. Three steps: the air speed tells you which table, the wind velocity the row, the wind angle the column. Each column carries a Drift Correction and a Ground Speed, and the question says which one it wants.
               </p>
               <button
@@ -499,7 +499,7 @@ export default function CbatMatf() {
                 </span>
               </div>
 
-              <div className="w-full max-w-2xl mx-auto h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full max-w-2xl mx-auto h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -511,12 +511,12 @@ export default function CbatMatf() {
               {/* Question above the reference, so the two numbers you are
                   carrying stay in view while you scan. */}
               <div
-                className={`bg-[#0a1628] border-2 rounded-xl p-4 mb-3 max-w-2xl mx-auto transition-colors duration-150 ${
-                  flash === 'right' ? 'border-green-500/60' : flash === 'wrong' ? 'border-red-500/60' : 'border-[#1a3a5c]'
+                className={`bg-game-panel border-2 rounded-xl p-4 mb-3 max-w-2xl mx-auto transition-colors duration-150 ${
+                  flash === 'right' ? 'border-green-500/60' : flash === 'wrong' ? 'border-red-500/60' : 'border-game-line'
                 }`}
               >
                 {question.part === 'grid' ? (
-                  <p className="text-center text-lg sm:text-xl font-bold text-[#ddeaf8] mb-3 font-mono">
+                  <p className="text-center text-lg sm:text-xl font-bold text-game-text mb-3 font-mono">
                     {question.a} <span className="text-slate-600">,</span> {question.b}
                   </p>
                 ) : (
@@ -524,7 +524,7 @@ export default function CbatMatf() {
                   // gives them. The readout is on its own line because it is the
                   // step people forget: right cell, wrong half of it.
                   <div className="text-center mb-3">
-                    <p className="font-mono text-base sm:text-lg font-bold text-[#ddeaf8]">
+                    <p className="font-mono text-base sm:text-lg font-bold text-game-text">
                       <span className="text-slate-500 text-xs font-sans font-normal">A/S </span>{question.airSpeed}
                       <span className="text-slate-600 mx-2">·</span>
                       <span className="text-slate-500 text-xs font-sans font-normal">W/V </span>{question.windVelocity}
@@ -546,7 +546,7 @@ export default function CbatMatf() {
                       type="button"
                       onClick={() => handlePick(opt)}
                       data-demo-answer
-                      className="py-3 rounded-lg border-2 border-[#1a3a5c] bg-[#060e1a] text-[#ddeaf8] font-mono font-bold text-base hover:border-brand-400 hover:bg-[#0f2240] transition-all cursor-pointer"
+                      className="py-3 rounded-lg border-2 border-game-line bg-game-arena text-game-text font-mono font-bold text-base hover:border-brand-400 hover:bg-game-raised transition-all cursor-pointer"
                     >
                       <span className="text-[10px] text-slate-600 mr-1.5">{i + 1}</span>{opt}
                     </button>

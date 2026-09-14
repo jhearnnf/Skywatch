@@ -27,7 +27,7 @@ function SltTab(tab) {
         {tab.fields.map(f => (
           <div key={f.key} className="flex items-baseline justify-between gap-3 border-b border-[#13294a] pb-1">
             <dt className="text-xs text-slate-400">{f.label}</dt>
-            <dd className="text-sm font-mono font-bold text-[#ddeaf8] whitespace-nowrap">
+            <dd className="text-sm font-mono font-bold text-game-text whitespace-nowrap">
               {f.value.toLocaleString()}{f.unit ? ` ${f.unit}` : ''}
             </dd>
           </div>

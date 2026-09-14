@@ -28,8 +28,8 @@ function useInterp(target, randomRange = 0) {
 function InstrumentFace({ label, children, onClick, active }) {
   const clickable = typeof onClick === 'function'
   const wrapperClass = [
-    'bg-[#060e1a] border rounded-xl p-2 flex flex-col items-center transition-colors w-full',
-    active ? 'border-amber-700 ring-2 ring-amber-700/40' : 'border-[#1a3a5c]',
+    'bg-game-arena border rounded-xl p-2 flex flex-col items-center transition-colors w-full',
+    active ? 'border-amber-700 ring-2 ring-amber-700/40' : 'border-game-line',
     clickable && !active ? 'hover:border-brand-500' : '',
     clickable ? 'cursor-pointer active:scale-[0.98] transition-transform' : '',
   ].filter(Boolean).join(' ')
@@ -39,11 +39,11 @@ function InstrumentFace({ label, children, onClick, active }) {
       <svg viewBox="0 0 100 100" className="w-full max-w-[120px] aspect-square pointer-events-none">
         <defs>
           <radialGradient id="faceBg" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#0a1628" />
-            <stop offset="100%" stopColor="#060e1a" />
+            <stop offset="0%" stopColor="var(--color-game-panel)" />
+            <stop offset="100%" stopColor="var(--color-game-arena)" />
           </radialGradient>
         </defs>
-        <circle cx="50" cy="50" r="48" fill="url(#faceBg)" stroke="#1a3a5c" strokeWidth="1" />
+        <circle cx="50" cy="50" r="48" fill="url(#faceBg)" stroke="var(--color-game-line)" strokeWidth="1" />
         {children}
       </svg>
     </>
@@ -78,8 +78,8 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
         const y2 = 50 + 46 * Math.sin(theta)
         return (
           <g key={i}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#5a6a80" strokeWidth="1" />
-            <text x={tx} y={ty} fill="#ddeaf8" fontSize="8" textAnchor="middle"
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--color-game-faint)" strokeWidth="1" />
+            <text x={tx} y={ty} fill="var(--color-game-text)" fontSize="8" textAnchor="middle"
                   fontFamily="monospace" fontWeight="bold">{i}</text>
           </g>
         )
@@ -96,14 +96,14 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
       })}
       {/* Big hand — hundreds (longer, thinner) */}
       <g style={{ ...t, transform: `rotate(${bigAngle}deg)` }}>
-        <line x1="50" y1="50" x2="50" y2="14" stroke="#ddeaf8" strokeWidth="2" strokeLinecap="round" />
-        <polygon points="50,10 47,18 53,18" fill="#ddeaf8" />
+        <line x1="50" y1="50" x2="50" y2="14" stroke="var(--color-game-text)" strokeWidth="2" strokeLinecap="round" />
+        <polygon points="50,10 47,18 53,18" fill="var(--color-game-text)" />
       </g>
       {/* Small hand — thousands (shorter, thicker, brand colour) */}
       <g style={{ ...t, transform: `rotate(${smallAngle}deg)` }}>
-        <line x1="50" y1="50" x2="50" y2="28" stroke="#5baaff" strokeWidth="4" strokeLinecap="round" />
+        <line x1="50" y1="50" x2="50" y2="28" stroke="var(--color-game-accent)" strokeWidth="4" strokeLinecap="round" />
       </g>
-      <circle cx="50" cy="50" r="3" fill="#5baaff" />
+      <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
     </InstrumentFace>
   )
 }
@@ -148,12 +148,12 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
             {/* Ground */}
             <rect x="0" y="50" width="100" height="50" fill="#6b4a2a" />
             {/* Horizon line */}
-            <line x1="0" y1="50" x2="100" y2="50" stroke="#ddeaf8" strokeWidth="1.2" />
+            <line x1="0" y1="50" x2="100" y2="50" stroke="var(--color-game-text)" strokeWidth="1.2" />
             {/* Pitch reference ladders */}
-            <line x1="42" y1="40" x2="58" y2="40" stroke="#ddeaf8" strokeWidth="0.5" />
-            <line x1="44" y1="45" x2="56" y2="45" stroke="#ddeaf8" strokeWidth="0.5" />
-            <line x1="44" y1="55" x2="56" y2="55" stroke="#ddeaf8" strokeWidth="0.5" />
-            <line x1="42" y1="60" x2="58" y2="60" stroke="#ddeaf8" strokeWidth="0.5" />
+            <line x1="42" y1="40" x2="58" y2="40" stroke="var(--color-game-text)" strokeWidth="0.5" />
+            <line x1="44" y1="45" x2="56" y2="45" stroke="var(--color-game-text)" strokeWidth="0.5" />
+            <line x1="44" y1="55" x2="56" y2="55" stroke="var(--color-game-text)" strokeWidth="0.5" />
+            <line x1="42" y1="60" x2="58" y2="60" stroke="var(--color-game-text)" strokeWidth="0.5" />
           </g>
         </g>
       </g>
@@ -162,7 +162,7 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
       <line x1="58" y1="50" x2="70" y2="50" stroke="#ffc857" strokeWidth="2.5" strokeLinecap="round" />
       <circle cx="50" cy="50" r="2" fill="#ffc857" />
       {/* Outer ring mask */}
-      <circle cx="50" cy="50" r="40" fill="none" stroke="#1a3a5c" strokeWidth="1.5" />
+      <circle cx="50" cy="50" r="40" fill="none" stroke="var(--color-game-line)" strokeWidth="1.5" />
     </InstrumentFace>
   )
 }
@@ -185,8 +185,8 @@ export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
         const y2 = 50 + 46 * Math.sin(theta)
         return (
           <g key={v}>
-            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#5a6a80" strokeWidth="1" />
-            <text x={tx} y={ty} fill="#ddeaf8" fontSize="7" textAnchor="middle"
+            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--color-game-faint)" strokeWidth="1" />
+            <text x={tx} y={ty} fill="var(--color-game-text)" fontSize="7" textAnchor="middle"
                   fontFamily="monospace" fontWeight="bold">{v}</text>
           </g>
         )
@@ -204,9 +204,9 @@ export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
       })}
       {/* Needle */}
       <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
-        <polygon points="50,50 47,50 50,12 53,50" fill="#5baaff" />
+        <polygon points="50,50 47,50 50,12 53,50" fill="var(--color-game-accent)" />
       </g>
-      <circle cx="50" cy="50" r="3" fill="#5baaff" />
+      <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
     </InstrumentFace>
   )
 }
@@ -226,17 +226,17 @@ export function VSI({ vs, durationMs = 2000, onClick, active }) {
         const y1 = 50 + 42 * Math.sin(theta)
         const x2 = 50 + 46 * Math.cos(theta)
         const y2 = 50 + 46 * Math.sin(theta)
-        return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#5a6a80" strokeWidth="1" />
+        return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--color-game-faint)" strokeWidth="1" />
       })}
       {/* UP / DN text */}
-      <text x="22" y="26" fill="#5a6a80" fontSize="6" fontFamily="monospace" fontWeight="bold">UP</text>
-      <text x="22" y="79" fill="#5a6a80" fontSize="6" fontFamily="monospace" fontWeight="bold">DN</text>
-      <text x="8" y="54" fill="#ddeaf8" fontSize="7" fontFamily="monospace" fontWeight="bold">0</text>
+      <text x="22" y="26" fill="var(--color-game-faint)" fontSize="6" fontFamily="monospace" fontWeight="bold">UP</text>
+      <text x="22" y="79" fill="var(--color-game-faint)" fontSize="6" fontFamily="monospace" fontWeight="bold">DN</text>
+      <text x="8" y="54" fill="var(--color-game-text)" fontSize="7" fontFamily="monospace" fontWeight="bold">0</text>
       {/* Needle */}
       <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
-        <line x1="50" y1="50" x2="50" y2="14" stroke="#5baaff" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="50" y1="50" x2="50" y2="14" stroke="var(--color-game-accent)" strokeWidth="2.5" strokeLinecap="round" />
       </g>
-      <circle cx="50" cy="50" r="3" fill="#5baaff" />
+      <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
     </InstrumentFace>
   )
 }
@@ -265,7 +265,7 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
           const y1 = 50 + 42 * Math.sin(theta)
           const x2 = 50 + 46 * Math.cos(theta)
           const y2 = 50 + 46 * Math.sin(theta)
-          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#5a6a80" strokeWidth="1" />
+          return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--color-game-faint)" strokeWidth="1" />
         })}
         {/* Cardinal letters */}
         {cardinals.map(({ label, deg }) => {
@@ -273,7 +273,7 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
           const x = 50 + 34 * Math.cos(theta)
           const y = 50 + 34 * Math.sin(theta) + 3
           return (
-            <text key={label} x={x} y={y} fill="#ddeaf8" fontSize="10" textAnchor="middle"
+            <text key={label} x={x} y={y} fill="var(--color-game-text)" fontSize="10" textAnchor="middle"
                   fontFamily="monospace" fontWeight="bold">{label}</text>
           )
         })}
@@ -301,29 +301,29 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active }) {
   return (
     <InstrumentFace label="Turn" onClick={onClick} active={active}>
       {/* L / R labels */}
-      <text x="18" y="38" fill="#5a6a80" fontSize="7" fontFamily="monospace" fontWeight="bold">L</text>
-      <text x="78" y="38" fill="#5a6a80" fontSize="7" fontFamily="monospace" fontWeight="bold">R</text>
+      <text x="18" y="38" fill="var(--color-game-faint)" fontSize="7" fontFamily="monospace" fontWeight="bold">L</text>
+      <text x="78" y="38" fill="var(--color-game-faint)" fontSize="7" fontFamily="monospace" fontWeight="bold">R</text>
       {/* Wingtip reference marks */}
-      <line x1="22" y1="50" x2="30" y2="50" stroke="#5a6a80" strokeWidth="1" />
-      <line x1="70" y1="50" x2="78" y2="50" stroke="#5a6a80" strokeWidth="1" />
+      <line x1="22" y1="50" x2="30" y2="50" stroke="var(--color-game-faint)" strokeWidth="1" />
+      <line x1="70" y1="50" x2="78" y2="50" stroke="var(--color-game-faint)" strokeWidth="1" />
       {/* Standard-rate turn marks */}
-      <line x1="25" y1="40" x2="29" y2="44" stroke="#5a6a80" strokeWidth="1" />
-      <line x1="71" y1="44" x2="75" y2="40" stroke="#5a6a80" strokeWidth="1" />
+      <line x1="25" y1="40" x2="29" y2="44" stroke="var(--color-game-faint)" strokeWidth="1" />
+      <line x1="71" y1="44" x2="75" y2="40" stroke="var(--color-game-faint)" strokeWidth="1" />
       {/* Aircraft silhouette — rotates with the turn rate */}
       <g style={{ transition: t, transformOrigin: '50px 50px', transformBox: 'view-box', transform: `rotate(${needleAngle}deg)` }}>
-        <rect x="32" y="48" width="36" height="3" fill="#5baaff" rx="1" />
-        <rect x="46" y="42" width="8" height="12" fill="#5baaff" rx="1" />
+        <rect x="32" y="48" width="36" height="3" fill="var(--color-game-accent)" rx="1" />
+        <rect x="46" y="42" width="8" height="12" fill="var(--color-game-accent)" rx="1" />
       </g>
       {/* Inclinometer — "Level" box */}
       <g>
-        <rect x="32" y="72" width="36" height="10" rx="5" fill="#060e1a" stroke="#1a3a5c" strokeWidth="1" />
-        <line x1="46" y1="72" x2="46" y2="82" stroke="#1a3a5c" strokeWidth="0.5" />
-        <line x1="54" y1="72" x2="54" y2="82" stroke="#1a3a5c" strokeWidth="0.5" />
+        <rect x="32" y="72" width="36" height="10" rx="5" fill="var(--color-game-arena)" stroke="var(--color-game-line)" strokeWidth="1" />
+        <line x1="46" y1="72" x2="46" y2="82" stroke="var(--color-game-line)" strokeWidth="0.5" />
+        <line x1="54" y1="72" x2="54" y2="82" stroke="var(--color-game-line)" strokeWidth="0.5" />
         <circle cx="50" cy="77" r="3"
           fill="#ffffff"
           style={{ transition: t, transformOrigin: '50px 77px', transformBox: 'view-box', transform: `translateX(${ballX}px)` }} />
       </g>
-      <text x="50" y="66" fill="#5a6a80" fontSize="5" textAnchor="middle"
+      <text x="50" y="66" fill="var(--color-game-faint)" fontSize="5" textAnchor="middle"
             fontFamily="monospace" fontWeight="bold">LEVEL</text>
     </InstrumentFace>
   )

@@ -82,15 +82,15 @@ export default function RecentCbatScores({ fill = false }) {
   const visible = view === 'top' ? rows.filter(r => r.rank <= TOP_RANK_CUTOFF) : rows
 
   return (
-    <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden${
+    <div className={`bg-game-panel border border-game-line rounded-xl overflow-hidden${
       fill ? ' h-full flex flex-col min-h-0' : ''
     }`}>
-      <div className="shrink-0 px-4 py-3 border-b border-[#1a3a5c] flex items-center justify-between gap-2">
+      <div className="shrink-0 px-4 py-3 border-b border-game-line flex items-center justify-between gap-2">
         <div className="flex items-baseline gap-2 min-w-0">
           <p className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">Recent Scores</p>
           <span className="text-[10px] text-slate-500 truncate">All-time rank</span>
         </div>
-        <div className="flex shrink-0 rounded-lg border border-[#1a3a5c] overflow-hidden" role="group" aria-label="Filter recent scores">
+        <div className="flex shrink-0 rounded-lg border border-game-line overflow-hidden" role="group" aria-label="Filter recent scores">
           {[
             ['all', 'All', 'Every score from the last 24 hours'],
             ['top', 'Top', `Only scores that placed in the all-time top ${TOP_RANK_CUTOFF}`],
@@ -104,7 +104,7 @@ export default function RecentCbatScores({ fill = false }) {
               className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors ${
                 view === key
                   ? 'bg-brand-600/15 text-brand-600'
-                  : 'text-slate-500 hover:text-slate-400 hover:bg-[#102040]'
+                  : 'text-slate-500 hover:text-slate-400 hover:bg-surface-raised'
               }`}
             >
               {label}
@@ -140,7 +140,7 @@ export default function RecentCbatScores({ fill = false }) {
           )}
         </div>
       ) : (
-        <div className={`divide-y divide-[#1a3a5c]/50 overflow-y-auto ${
+        <div className={`divide-y divide-game-line/50 overflow-y-auto ${
           fill ? 'flex-1 min-h-0' : 'max-h-[640px]'
         }`}>
           {visible.map((r) => {
@@ -170,7 +170,7 @@ export default function RecentCbatScores({ fill = false }) {
             return (
               <div
                 key={r._id}
-                className={`relative px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center hover:bg-[#102040] transition-colors ${
+                className={`relative px-4 py-2.5 text-sm grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 items-center hover:bg-surface-raised transition-colors ${
                   isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
                 }`}
               >
@@ -193,12 +193,12 @@ export default function RecentCbatScores({ fill = false }) {
                       },
                     })}
                     title={`View ${agentLabel}'s profile`}
-                    className={`relative z-10 justify-self-start text-left truncate hover:underline ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}
+                    className={`relative z-10 justify-self-start text-left truncate hover:underline ${isMe ? 'text-brand-600 font-bold' : 'text-game-text'}`}
                   >
                     {agentLabel}{isMe ? ' (you)' : ''}
                   </button>
                 ) : (
-                  <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`} title={r.email || ''}>
+                  <span className={`truncate ${isMe ? 'text-brand-600 font-bold' : 'text-game-text'}`} title={r.email || ''}>
                     {agentLabel}{isMe ? ' (you)' : ''}
                   </span>
                 )}
@@ -214,7 +214,7 @@ export default function RecentCbatScores({ fill = false }) {
                       className={`shrink-0 px-1.5 py-px rounded text-[9px] font-extrabold uppercase tracking-wide ${
                         difficulty === 'Hard'
                           ? 'bg-brand-600/15 text-brand-600'
-                          : 'bg-[#0c1829] border border-[#1a3a5c] text-slate-600'
+                          : 'bg-surface border border-game-line text-slate-600'
                       }`}
                     >
                       {difficulty}

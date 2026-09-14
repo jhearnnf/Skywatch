@@ -144,21 +144,21 @@ function PathReveal({ path, youLabel = 'YOU' }) {
           <path d={`M0,0 L${a},${a / 2} L0,${a} Z`} fill="#4ade80" />
         </marker>
       </defs>
-      <rect x="0" y="0" width={W} height={H} fill="#060e1a" />
+      <rect x="0" y="0" width={W} height={H} fill="var(--color-game-arena)" />
       <rect x="0" y="0" width={W} height={H} fill="url(#dadgrid)" />
 
       {/* N indicator */}
-      <text x={fs * 0.4} y={fs * 1.1} fill="#5a6a80" fontSize={fs} fontWeight="bold">N ↑</text>
+      <text x={fs * 0.4} y={fs * 1.1} fill="var(--color-game-faint)" fontSize={fs} fontWeight="bold">N ↑</text>
 
       {/* traveled route — grows as the object moves (full route once done) */}
-      <polyline points={drawnStr} fill="none" stroke="#5baaff" strokeWidth={span * 0.012}
+      <polyline points={drawnStr} fill="none" stroke="var(--color-game-accent)" strokeWidth={span * 0.012}
         strokeLinejoin="round" strokeLinecap="round" />
 
       {/* start marker */}
       <circle cx={sxS} cy={syS} r={r} fill="#4ade80" />
 
       {/* moving object marker — sits at the final position once travel completes */}
-      <circle cx={head[0]} cy={head[1]} r={r} fill="#5baaff" />
+      <circle cx={head[0]} cy={head[1]} r={r} fill="var(--color-game-accent)" />
 
       {/* answer arrow + labels — fade in once the journey finishes. Labels carry
           a dark halo (paint-order: stroke) so they stay legible over the route /
@@ -168,9 +168,9 @@ function PathReveal({ path, youLabel = 'YOU' }) {
           stroke="#4ade80" strokeWidth={span * 0.009}
           strokeDasharray={`${span * 0.035} ${span * 0.025}`} markerEnd="url(#dadArrow)" />
         <text x={startLbl.x} y={startLbl.y} fill="#4ade80" fontSize={fs} fontWeight="bold" textAnchor="middle"
-          paintOrder="stroke" stroke="#060e1a" strokeWidth={fs * 0.22} strokeLinejoin="round">START</text>
-        <text x={youLbl.x} y={youLbl.y} fill="#5baaff" fontSize={fs} fontWeight="bold" textAnchor="middle"
-          paintOrder="stroke" stroke="#060e1a" strokeWidth={fs * 0.22} strokeLinejoin="round">{youLabel}</text>
+          paintOrder="stroke" stroke="var(--color-game-arena)" strokeWidth={fs * 0.22} strokeLinejoin="round">START</text>
+        <text x={youLbl.x} y={youLbl.y} fill="var(--color-game-accent)" fontSize={fs} fontWeight="bold" textAnchor="middle"
+          paintOrder="stroke" stroke="var(--color-game-arena)" strokeWidth={fs * 0.22} strokeLinejoin="round">{youLabel}</text>
       </motion.g>
     </svg>
   )
@@ -187,19 +187,19 @@ function ResultsScreen({ answers, totalTime }) {
     : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Directions &amp; Distances Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{TOTAL_QUESTIONS}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
@@ -208,8 +208,8 @@ function ResultsScreen({ answers, totalTime }) {
       </div>
 
       {/* Answer review — scrollable */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-48 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Answer Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Answer Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => (
             <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
@@ -413,7 +413,7 @@ export default function CbatDAD() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className="text-4xl lg:text-5xl mb-3">🧭</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Directions &amp; Distances</p>
@@ -421,7 +421,7 @@ export default function CbatDAD() {
                 Read each journey carefully. An object — a ship, aircraft or drone — sets off, and only its first leg gives a compass heading; every turn after that is relative to the way <span className="text-brand-600">it</span> is facing. Track its route and work out which direction it ends up from the start point.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]">
+              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text">
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Read the route — text only, no map while you solve.</span>
@@ -434,18 +434,18 @@ export default function CbatDAD() {
                   <CbatIntroLabel>3.</CbatIntroLabel>
                   <span className="pt-0.5">The route is then drawn so you can check your answer.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>🧭</span>
                   <span className="pt-0.5">Later rounds add diagonal headings (NE/SE/SW/NW) and 45° turns.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
                   <span className="pt-0.5">{TOTAL_QUESTIONS} questions · 45s each — running out counts as wrong</span>
                 </div>
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4 text-center">
+                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
                   <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_QUESTIONS}
@@ -489,7 +489,7 @@ export default function CbatDAD() {
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -503,10 +503,10 @@ export default function CbatDAD() {
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 sm:p-5 mb-2 sm:mb-3"
+                className="bg-game-panel border border-game-line rounded-xl p-4 sm:p-5 mb-2 sm:mb-3"
               >
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">The Route</p>
-                <p className="text-sm sm:text-lg text-[#ddeaf8] leading-relaxed">{currentQuestion.prose}</p>
+                <p className="text-sm sm:text-lg text-game-text leading-relaxed">{currentQuestion.prose}</p>
                 <p className="text-sm font-bold text-brand-600 mt-3 sm:mt-4">
                   Which direction is {objectPhrase(currentQuestion.subject)} from the start point?
                 </p>
@@ -515,11 +515,11 @@ export default function CbatDAD() {
               {/* Options */}
               <div className="grid grid-cols-2 gap-2">
                 {currentQuestion.options.map(opt => {
-                  let cls = 'bg-[#0a1628] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer'
+                  let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                   if (phase === 'feedback') {
                     if (opt === feedback?.answer) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                     else if (opt === feedback?.picked) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
-                    else cls = 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80]'
+                    else cls = 'bg-game-panel border-game-line text-game-faint'
                   }
                   return (
                     <button
@@ -552,7 +552,7 @@ export default function CbatDAD() {
                           ? `⏱ Timeout — the answer was ${feedback.answer}`
                           : `✗ The answer was ${feedback.answer}`}
                     </div>
-                    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-2 sm:p-3 overflow-hidden">
+                    <div className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3 overflow-hidden">
                       <PathReveal path={currentQuestion.path} youLabel={objectLabel(currentQuestion.subject)} />
                     </div>
                     <button

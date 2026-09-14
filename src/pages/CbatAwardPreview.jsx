@@ -79,7 +79,7 @@ export default function CbatAwardPreview() {
   return (
     <div className="max-w-md mx-auto px-5 py-6 flex flex-col items-center gap-4">
       {/* Deliberately NOT styled like a results panel. The first version reused
-          `bg-[#060e1a] border-[#1a3a5c]` — the exact treatment of <WeeklyChase> and
+          `bg-game-arena border-game-line` — the exact treatment of <WeeklyChase> and
           <ProgressTrend> — so while previewing it read as one more panel of the screen being
           previewed. A neutral background and a dashed border say "tooling, not content", which
           is the one thing this card must never be mistaken for. */}
@@ -89,8 +89,8 @@ export default function CbatAwardPreview() {
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Players never see this card</p>
         </div>
         <p className="text-[11px] text-slate-400 mt-1">
-          Showing <span className="text-[#ddeaf8] font-bold">{cbatTitleWithDifficulty(run.gameKey, cfg.title)}</span> at the{' '}
-          <span className="text-[#ddeaf8] font-bold">+{run.award.tier}%</span> tier. The score is
+          Showing <span className="text-game-text font-bold">{cbatTitleWithDifficulty(run.gameKey, cfg.title)}</span> at the{' '}
+          <span className="text-game-text font-bold">+{run.award.tier}%</span> tier. The score is
           made up; the progress and weekly panels below the award are your real data. Nothing here
           is saved.
         </p>
@@ -108,13 +108,13 @@ export default function CbatAwardPreview() {
         <div className="flex gap-3 mt-2.5">
           <button
             onClick={reroll}
-            className="px-3 py-1.5 bg-[#232b36] hover:bg-[#2d3745] text-[#ddeaf8] text-xs font-bold rounded-lg transition-colors"
+            className="px-3 py-1.5 bg-[#232b36] hover:bg-[#2d3745] text-game-text text-xs font-bold rounded-lg transition-colors"
           >
             Roll another
           </button>
           <button
             onClick={() => navigate('/admin')}
-            className="px-3 py-1.5 bg-[#232b36] hover:bg-[#2d3745] text-[#ddeaf8] text-xs font-bold rounded-lg transition-colors"
+            className="px-3 py-1.5 bg-[#232b36] hover:bg-[#2d3745] text-game-text text-xs font-bold rounded-lg transition-colors"
           >
             Back to Admin
           </button>

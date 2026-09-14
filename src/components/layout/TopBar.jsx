@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import ProfileBadge from '../ProfileBadge'
 import OfflineBadge from './OfflineBadge'
+import ThemeSelector from './ThemeSelector'
 import { useSlimMode, useLandingPageEnabled } from '../../hooks/useSlimMode'
 
 function CrosshairLogo() {
@@ -56,6 +57,13 @@ export default function TopBar() {
         <div className="flex items-center gap-2">
           {user ? (
             <>
+              {/* Theme — desktop only for now. An account setting, so it shows
+                  in slim mode too: the look applies to the CBAT games as much
+                  as to the rest of the site. */}
+              <div className="hidden md:flex items-center mr-2">
+                <ThemeSelector />
+              </div>
+
               {/* Streak — hidden in slim (native) mode */}
               {!slim && (
                 <button

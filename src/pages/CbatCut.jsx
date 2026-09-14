@@ -29,10 +29,10 @@ import { useCbatDemo } from '../utils/cbat/demoMode'
 import GuideArrow, { GuideOk } from '../components/cbat/GuideArrow'
 
 // ── Panels ───────────────────────────────────────────────────────────────────
-function Panel({ title, accent = '#5baaff', children, pad = true }) {
+function Panel({ title, accent = 'var(--color-game-accent)', children, pad = true }) {
   return (
-    <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
-      <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-[#1a3a5c]"
+    <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+      <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-game-line"
         style={{ color: accent }}>
         {title}
       </div>
@@ -71,14 +71,14 @@ function MessagePanel({ messages, litId = null, arrowId = null, emphasis = null 
     if (el) el.scrollTop = el.scrollHeight
   }, [lastId])
   return (
-    <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
-      <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-[#1a3a5c]" style={{ color: '#5baaff' }}>
+    <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+      <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-game-line" style={{ color: 'var(--color-game-accent)' }}>
         Message
       </div>
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
         <ul className="mt-auto space-y-1">
           {messages.map(m => (
-            <li key={m.id} className="text-[11px] leading-snug text-[#ddeaf8] flex gap-2 items-baseline">
+            <li key={m.id} className="text-[11px] leading-snug text-game-text flex gap-2 items-baseline">
               {m.id === arrowId && <GuideArrow dir="right" inline />}
               <span className="text-slate-500 font-mono shrink-0">{m.wall}</span>
               <span className={m.id === litId ? 'cbat-word-lit font-bold' : ''}>
@@ -111,18 +111,18 @@ function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false }) 
           const low = f.level < floor
           return (
             <div key={i} className="flex-1 flex flex-col items-center h-full">
-              <div className="relative flex-1 min-h-0 w-10 bg-[#060e1a] border border-[#1a3a5c] rounded overflow-hidden">
+              <div className="relative flex-1 min-h-0 w-10 bg-game-arena border border-game-line rounded overflow-hidden">
                 <div className="absolute bottom-0 left-0 right-0 transition-[height] duration-100"
-                  style={{ height: `${pct}%`, background: f.on ? '#22c55e' : low ? '#ef4444' : '#5baaff' }} />
+                  style={{ height: `${pct}%`, background: f.on ? '#22c55e' : low ? '#ef4444' : 'var(--color-game-accent)' }} />
               </div>
-              <p className={`shrink-0 text-base font-mono font-bold mt-1 ${low ? 'text-red-400' : 'text-[#ddeaf8]'}`}>
+              <p className={`shrink-0 text-base font-mono font-bold mt-1 ${low ? 'text-red-400' : 'text-game-text'}`}>
                 {Math.round(f.level)}<span className="text-[10px] font-normal text-slate-500 ml-0.5">L</span>
               </p>
               <button
                 onClick={() => onToggle(i)}
                 data-demo-answer
                 className={`relative mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
-                  f.on ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
+                  f.on ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
                 }`}
               >
                 {i === arrowTank && <GuideArrow dir="right" urgent={arrowUrgent} />}
@@ -162,7 +162,7 @@ function NavigationPanel({ speed, requiredSpeed, onAdjust, arrowPlus = false, ar
         </div>
         <p className="text-[10px] text-slate-400">Hold within ±{SPEED_TOL} kts (aim for required + {SPEED_TOL})</p>
         <div className="flex gap-3">
-          <button onClick={() => onAdjust(-SPEED_STEP)} className="relative px-4 py-2 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-lg font-bold rounded cursor-pointer">
+          <button onClick={() => onAdjust(-SPEED_STEP)} className="relative px-4 py-2 bg-game-fill hover:bg-game-fill-strong text-white text-lg font-bold rounded cursor-pointer">
             {arrowMinus && <GuideArrow dir="up" urgent={arrowUrgent} />}
             −
           </button>
@@ -183,14 +183,14 @@ function SensorRow({ label, rem, kind, onActivate, arrow = false, urgent = false
   const overdue = rem < 0
   const armed = rem <= SENSOR_ARM_WINDOW / 1000
   return (
-    <div className="flex items-center justify-between gap-2 bg-[#060e1a] border border-[#1a3a5c] rounded px-2 py-1.5">
-      <span className="text-[11px] text-[#ddeaf8]">{label}</span>
+    <div className="flex items-center justify-between gap-2 bg-game-arena border border-game-line rounded px-2 py-1.5">
+      <span className="text-[11px] text-game-text">{label}</span>
       <span className={`text-[11px] font-mono ${overdue ? 'text-red-400 font-bold' : armed ? 'text-amber-400' : 'text-slate-400'}`}>
         {overdue ? 'OVERDUE' : `${Math.ceil(rem)}s`}
       </span>
       <button onClick={() => onActivate(kind)} data-demo-answer
         className={`relative px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
-          armed || overdue ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
+          armed || overdue ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
         }`}>
         {arrow && <GuideArrow dir="down" urgent={urgent} />}
         Activate
@@ -212,7 +212,7 @@ function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt,
             {['Alpha', 'Bravo'].map(c => (
               <button key={c} onClick={() => onCamera(c)} data-demo-answer
                 className={`relative flex-1 px-2 py-1.5 text-[11px] font-bold rounded cursor-pointer transition-colors ${
-                  camera === c ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
+                  camera === c ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
                 }`}>
                 {c === arrowCamera && <GuideArrow dir="down" urgent={arrowUrgent} />}
                 {c}
@@ -235,7 +235,7 @@ function MissionPanel({ onRelease, litStation = null, arrowStation = null }) {
     <Panel title="Mission">
       <div className="flex flex-col items-center justify-center gap-3 h-full">
         <p className="text-[10px] text-slate-400 text-center">
-          Release the <b className="text-[#ddeaf8]">package</b> at its scheduled time — read the ordered station in Message and watch the Clock.
+          Release the <b className="text-game-text">package</b> at its scheduled time — read the ordered station in Message and watch the Clock.
         </p>
         {/* Three drop stations — the panel says neither which one nor when. Both
             the station and its time live only in Message, so the release is a
@@ -246,7 +246,7 @@ function MissionPanel({ onRelease, litStation = null, arrowStation = null }) {
               one, lives inside the button it points at. */}
           {Array.from({ length: LOAD_POINTS }, (_, i) => (
             <button key={i} onClick={() => onRelease(i)} data-demo-answer
-              className={`relative px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]${i === litStation ? ' cbat-triple-pulse' : ''}`}>
+              className={`relative px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors bg-game-fill text-game-text hover:bg-game-fill-strong${i === litStation ? ' cbat-triple-pulse' : ''}`}>
               {i === arrowStation && <GuideArrow dir="down" urgent />}
               {stationName(i)}
             </button>
@@ -281,7 +281,7 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
             the gauge itself is a thin bar, so it loses nothing. */}
         <div className="flex flex-col items-center justify-between shrink-0 w-[38%] sm:w-1/2">
           <p className="text-[9px] uppercase tracking-wide text-slate-500">Hydraulic Pressure</p>
-          <div className="relative flex-1 w-8 my-1 bg-[#060e1a] border border-[#1a3a5c] rounded overflow-hidden">
+          <div className="relative flex-1 w-8 my-1 bg-game-arena border border-game-line rounded overflow-hidden">
             {/* correct band, tinted behind the fill */}
             <div className="absolute left-0 right-0 bg-green-500/20"
               style={{ bottom: `${gaugePct(PRESS_LOW)}%`, height: `${gaugePct(PRESS_HIGH) - gaugePct(PRESS_LOW)}%` }} />
@@ -299,7 +299,7 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
           <p className={`text-[9px] font-bold ${zoneCol}`}>{zone}</p>
           <button onClick={onPump} data-demo-answer
             className={`relative mt-1 px-3 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
-              pump ? 'bg-green-600 text-white' : 'bg-[#1a3a5c] text-[#ddeaf8] hover:bg-[#254a6e]'
+              pump ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
             }`}>
             {arrowPump && <GuideArrow dir="down" urgent={arrowUrgent} />}
             Pump {pump ? 'ON' : 'OFF'}
@@ -309,7 +309,7 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
           <p className="text-[9px] uppercase tracking-wide text-slate-500">Comms Code</p>
           <div className="flex items-center justify-between mb-1">
-            <span className="font-mono text-lg text-[#ddeaf8] tracking-widest">{codeEntry.padEnd(3, '·')}</span>
+            <span className="font-mono text-lg text-game-text tracking-widest">{codeEntry.padEnd(3, '·')}</span>
             {code
               ? submitOpen
                 ? <span className={`text-[10px] font-mono ${codeRem <= 5 ? 'text-red-400' : 'text-amber-400'}`}>{codeRem}s</span>
@@ -326,16 +326,16 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
               flat keypad. The keys are never stretched to fill the panel. */}
           <div className={`grid grid-cols-3 gap-1 ${code ? '' : 'opacity-40 pointer-events-none'}`} aria-disabled={!code}>
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
-              <button key={d} onClick={() => onDigit(d)} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
+              <button key={d} onClick={() => onDigit(d)} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
                 {arrowKey === d && <GuideArrow dir="down" urgent={arrowUrgent} />}
                 {d}
               </button>
             ))}
-            <button onClick={onClearCode} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
+            <button onClick={onClearCode} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-fill hover:bg-game-fill-strong text-game-text text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
               {arrowKey === 'CLR' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               CLR
             </button>
-            <button onClick={() => onDigit('0')} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-[#0f2240] hover:bg-[#163055] text-[#ddeaf8] font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
+            <button onClick={() => onDigit('0')} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
               {arrowKey === '0' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               0
             </button>
@@ -367,7 +367,7 @@ function NavButtons({ active, onSelect, arrowActive = false }) {
           {arrowActive && active === k && <GuideArrow dir="up" />}
           <button onClick={() => onSelect(k)} data-demo-answer
             className={`w-full min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
-              active === k ? 'bg-green-600 text-white' : 'bg-[#0f2240] text-[#ddeaf8] hover:bg-[#163055] hover:text-white'
+              active === k ? 'bg-green-600 text-white' : 'bg-game-raised text-game-text hover:bg-[#163055] hover:text-white'
             }`}>
             {SYSTEM_LABELS[k]}
           </button>
@@ -388,7 +388,7 @@ function CommentaryPanel({ log, open, onToggle }) {
     return (
       <aside className="hidden lg:block lg:shrink-0 lg:sticky lg:top-2" style={ARENA_STYLE}>
         <button onClick={onToggle} title="Show commentary"
-          className="w-8 h-full flex flex-col items-center gap-2 pt-2 bg-[#0a1628] border border-[#1a3a5c] rounded-lg text-slate-400 hover:text-brand-600 cursor-pointer">
+          className="w-8 h-full flex flex-col items-center gap-2 pt-2 bg-game-panel border border-game-line rounded-lg text-slate-400 hover:text-brand-600 cursor-pointer">
           <span className="text-xs">◀</span>
           <span className="text-[10px] font-extrabold uppercase tracking-wider" style={{ writingMode: 'vertical-rl' }}>Commentary</span>
         </button>
@@ -397,8 +397,8 @@ function CommentaryPanel({ log, open, onToggle }) {
   }
   return (
     <aside className="hidden lg:block lg:w-[300px] lg:shrink-0 lg:sticky lg:top-2" style={ARENA_STYLE}>
-      <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
-        <div className="shrink-0 flex items-center justify-between px-2 py-1.5 border-b border-[#1a3a5c]">
+      <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+        <div className="shrink-0 flex items-center justify-between px-2 py-1.5 border-b border-game-line">
           <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-500">Commentary</span>
           <button onClick={onToggle} title="Minimise"
             className="text-slate-400 hover:text-brand-600 text-[10px] font-bold uppercase tracking-wide px-1 cursor-pointer">
@@ -414,7 +414,7 @@ function CommentaryPanel({ log, open, onToggle }) {
                 <span className={`font-mono font-bold shrink-0 ${e.delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {e.delta >= 0 ? `+${e.delta}` : e.delta}
                 </span>
-                <span className="text-[#ddeaf8] min-w-0">{e.text}</span>
+                <span className="text-game-text min-w-0">{e.text}</span>
               </div>
             ))}
         </div>
@@ -428,14 +428,14 @@ function CommentaryPanel({ log, open, onToggle }) {
 function ResultsScreen({ stats, tuning }) {
   const g = grade(stats.totalScore, tuning)
   const row = (label, val, sub) => (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+    <div className="bg-game-arena rounded-lg border border-game-line p-3">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
       <p className="text-xl font-mono font-bold text-brand-600">{val}</p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
     </div>
   )
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-6 text-center">
       <p className="text-4xl mb-2">{g.emoji}</p>
       <p className={`text-xl font-extrabold mb-1 ${g.color}`}>{g.label}</p>
       <p className="text-sm text-slate-400 mb-4">Cognitive Updating Test Complete</p>
@@ -681,7 +681,7 @@ function TutorialComplete({ onExit }) {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
@@ -936,7 +936,7 @@ function CutTutorial({ onExit, onProgress }) {
 
   return (
     <div>
-      <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
+      <div className="w-full bg-game-panel border border-game-line rounded-xl p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Tutorial</span>
           <div className="flex items-center gap-1.5">
@@ -967,7 +967,7 @@ function CutTutorial({ onExit, onProgress }) {
             transition={{ duration: 0.2 }}
           >
             <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
-            <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+            <p className="text-sm text-game-text leading-relaxed">{step.body}</p>
           </motion.div>
         </AnimatePresence>
         <div className="flex items-center gap-3 mt-4">
@@ -991,9 +991,9 @@ function CutTutorial({ onExit, onProgress }) {
       <div className="cbat-tutorial-arena flex flex-col gap-1.5" style={TUTORIAL_ARENA_STYLE}>
         <div className={`flex gap-1.5${cls('strip', missionStep)}`} style={{ flex: '10 1 0', minHeight: 0 }}>
           <div style={{ width: '80%' }}>
-            <div className="w-full h-full flex flex-col bg-[#0a1628] border rounded-lg overflow-hidden"
-              style={{ borderColor: sim.warnings.length ? '#ef4444' : '#1a3a5c' }}>
-              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-red-400">Warning</div>
+            <div className="w-full h-full flex flex-col bg-game-panel border rounded-lg overflow-hidden"
+              style={{ borderColor: sim.warnings.length ? '#ef4444' : 'var(--color-game-line)' }}>
+              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-red-400">Warning</div>
               <div className="flex-1 min-h-0 overflow-auto px-2 py-0.5 sm:py-1 flex flex-wrap items-start sm:items-center content-start sm:content-center gap-x-3 sm:gap-y-0.5">
                 {guide.warning && <GuideArrow dir="right" inline />}
                 {sim.warnings.length === 0
@@ -1003,11 +1003,11 @@ function CutTutorial({ onExit, onProgress }) {
             </div>
           </div>
           <div style={{ width: '20%' }}>
-            <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
-              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-brand-500">Clock</div>
+            <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-brand-500">Clock</div>
               <div className="flex-1 min-h-0 flex items-center justify-center px-1 overflow-hidden">
                 {guide.clock && <GuideArrow dir="right" inline />}
-                <span className={`font-mono font-bold leading-none text-[#ddeaf8] tabular-nums whitespace-nowrap${guide.clock || guide.mission === 'press' ? ' cbat-word-lit' : ''}`} style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
+                <span className={`font-mono font-bold leading-none text-game-text tabular-nums whitespace-nowrap${guide.clock || guide.mission === 'press' ? ' cbat-word-lit' : ''}`} style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
                   {fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}
                 </span>
               </div>
@@ -1384,7 +1384,7 @@ export default function CbatCut() {
             <div className="flex flex-col items-center">
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+                className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
               >
                 <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🖥️</p>
 
@@ -1406,14 +1406,14 @@ export default function CbatCut() {
                   tolerance and react to scheduled tasks — the goal is to keep the <span className="text-red-400">Warning panel</span> empty.
                 </p>
 
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+                <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Engine</CbatIntroLabel><span className="pt-0.5">keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Nav</CbatIntroLabel><span className="pt-0.5">hold airspeed within ±{SPEED_TOL} kts of required</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Sensor</CbatIntroLabel><span className="pt-0.5">re-activate Air &amp; Ground sensors on time; select the ordered camera</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Mission</CbatIntroLabel><span className="pt-0.5">drop the ordered station at its scheduled Clock time (from Message)</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">keep hydraulic pressure 90–110; enter comms codes in 15s</span></div>
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'🕑'}</span><span className="pt-0.5">The Clock shows in-game time — some tasks are scheduled to it</span></div>
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">3 minutes — the Message display feeds every task</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'🕑'}</span><span className="pt-0.5">The Clock shows in-game time — some tasks are scheduled to it</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">3 minutes — the Message display feeds every task</span></div>
                 </div>
 
                 <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
@@ -1425,8 +1425,8 @@ export default function CbatCut() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 justify-center">
-                  <button onClick={openTutorial} disabled={launching} className={`px-6 py-3 lg:px-8 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] disabled:text-slate-500 text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Tutorial</button>
-                  <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
+                  <button onClick={openTutorial} disabled={launching} className={`px-6 py-3 lg:px-8 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong disabled:text-slate-500 text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Tutorial</button>
+                  <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
                 </div>
               </motion.div>
             </div>
@@ -1439,12 +1439,12 @@ export default function CbatCut() {
               {/* Warning strip — 10% */}
               <div className="flex gap-1.5" style={{ flex: '10 1 0', minHeight: 0 }}>
                 <div style={{ width: '80%' }}>
-                  <div className="w-full h-full flex flex-col bg-[#0a1628] border rounded-lg overflow-hidden"
-                    style={{ borderColor: sim.warnings.length ? '#ef4444' : '#1a3a5c' }}>
+                  <div className="w-full h-full flex flex-col bg-game-panel border rounded-lg overflow-hidden"
+                    style={{ borderColor: sim.warnings.length ? '#ef4444' : 'var(--color-game-line)' }}>
                     {/* Below sm the header and rows tighten up so four wrapped
                         warning lines still fit the strip; sm+ keeps the original
                         sizing, which already had the room. */}
-                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-red-400">Warning</div>
+                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-red-400">Warning</div>
                     <div className="flex-1 min-h-0 overflow-auto px-2 py-0.5 sm:py-1 flex flex-wrap items-start sm:items-center content-start sm:content-center gap-x-3 sm:gap-y-0.5">
                       {sim.warnings.length === 0
                         ? <span className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
@@ -1453,12 +1453,12 @@ export default function CbatCut() {
                   </div>
                 </div>
                 <div style={{ width: '20%' }}>
-                  <div className="w-full h-full flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-lg overflow-hidden">
-                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-[#1a3a5c] text-brand-500">Clock</div>
+                  <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-brand-500">Clock</div>
                     <div className="flex-1 min-h-0 flex items-center justify-center px-1 overflow-hidden">
                       {/* Fluid so HH:MM:SS always fits this narrow panel; capped at
                           the old 20px so desktop is unchanged. */}
-                      <span className="font-mono font-bold leading-none text-[#ddeaf8] tabular-nums whitespace-nowrap"
+                      <span className="font-mono font-bold leading-none text-game-text tabular-nums whitespace-nowrap"
                         style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
                         {fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}
                       </span>

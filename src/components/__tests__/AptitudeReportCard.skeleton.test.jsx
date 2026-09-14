@@ -155,7 +155,7 @@ describe('AptitudeReportCard — loading skeleton', () => {
   // explicitly rather than by a catch-all pattern: `text-lg` is a colour class by
   // shape and a geometry class by effect, so a loose /text-\S+/ would quietly stop
   // this test checking the thing it exists to check.
-  const NON_GEOMETRY = /\s*(?:text-(?:slate|brand|emerald|amber|sky)-\d+|bg-\[#[0-9a-f]{6}\]|tabular-nums)(?![\w-])/gi
+  const NON_GEOMETRY = /\s*(?:text-(?:slate|brand|emerald|amber|sky)-\d+|bg-\[#[0-9a-f]{6}\]|bg-game-[a-z-]+|tabular-nums)(?![\w-])/gi
   const geometry = s => s.replace(NON_GEOMETRY, '').trim()
 
   it('mirrors the progress card boxes that set its height, at every breakpoint', async () => {

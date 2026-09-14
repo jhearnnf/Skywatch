@@ -53,19 +53,19 @@ function ResultsScreen({ rounds, totalTime }) {
   })
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Code Duplicates Assessment Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_ROUNDS} correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
@@ -75,7 +75,7 @@ function ResultsScreen({ rounds, totalTime }) {
 
       <div className="grid grid-cols-3 gap-3 mb-6">
         {tiers.map((t, ti) => (
-          <div key={t} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <div key={t} className="bg-game-arena rounded-lg border border-game-line p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{t}</p>
             <p className="text-xl font-mono font-bold text-brand-600">{tierCorrect[ti]}/5</p>
           </div>
@@ -83,8 +83,8 @@ function ResultsScreen({ rounds, totalTime }) {
       </div>
 
       {/* Answer review */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-6 max-h-48 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Answer Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-6 max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Answer Review</p>
         <div className="space-y-1">
           {rounds.map((r, i) => (
             <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${r.correct ? 'text-green-400' : 'text-red-400'}`}>
@@ -356,7 +356,7 @@ export default function CbatCodeDuplicates() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className="text-4xl lg:text-5xl mb-3">🧩</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Code Duplicates</p>
@@ -364,27 +364,27 @@ export default function CbatCodeDuplicates() {
                 A sequence of digits will flash on screen for 5 seconds. Memorise them, then count how many times a specific digit appeared.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>1–5</CbatIntroLabel>
                   <span className="pt-0.5">Easy — 7 to 10 digits</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>6–10</CbatIntroLabel>
                   <span className="pt-0.5">Medium — 8 to 12 digits</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>11–15</CbatIntroLabel>
                   <span className="pt-0.5">Hard — 12 to 15 digits</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
                   <span className="pt-0.5">Each sequence is shown for 5 seconds</span>
                 </div>
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4 text-center">
+                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
                   <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">
                     {personalBest.bestScore}/{TOTAL_ROUNDS} ({Math.round((personalBest.bestScore / TOTAL_ROUNDS) * 100)}%)
@@ -435,7 +435,7 @@ export default function CbatCodeDuplicates() {
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -449,7 +449,7 @@ export default function CbatCodeDuplicates() {
                 key={round}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 mb-3 relative overflow-hidden min-h-[200px] flex flex-col items-center justify-center"
+                className="bg-game-panel border border-game-line rounded-xl p-6 mb-3 relative overflow-hidden min-h-[200px] flex flex-col items-center justify-center"
               >
                 {/* Radar sweep */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.03]"
@@ -472,14 +472,14 @@ export default function CbatCodeDuplicates() {
                           initial={{ opacity: 0, scale: 0.5 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: i * 0.06 }}
-                          className="inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-lg bg-[#060e1a] border border-[#1a3a5c] text-2xl font-mono font-bold text-brand-600"
+                          className="inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-lg bg-game-arena border border-game-line text-2xl font-mono font-bold text-brand-600"
                         >
                           {digit}
                         </motion.span>
                       ))}
                     </div>
                     {/* Countdown bar */}
-                    <div className="w-full h-1 bg-[#1a3a5c] rounded-full mt-4 overflow-hidden">
+                    <div className="w-full h-1 bg-game-line rounded-full mt-4 overflow-hidden">
                       <motion.div
                         className="h-full bg-amber-500 rounded-full"
                         initial={{ width: '100%' }}
@@ -507,7 +507,7 @@ export default function CbatCodeDuplicates() {
                         onChange={(e) => setUserAnswer(e.target.value)}
                         data-demo-input="3"
                         onKeyDown={handleKeyDown}
-                        className="w-20 h-12 text-center text-2xl font-mono font-bold rounded-lg bg-[#060e1a] border-2 border-[#1a3a5c] text-[#ddeaf8] focus:border-brand-400 focus:outline-none transition-colors"
+                        className="w-20 h-12 text-center text-2xl font-mono font-bold rounded-lg bg-game-arena border-2 border-game-line text-game-text focus:border-brand-400 focus:outline-none transition-colors"
                         placeholder="?"
                       />
                       <button
@@ -550,7 +550,7 @@ export default function CbatCodeDuplicates() {
                             className={`inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-md text-lg font-mono font-bold border ${
                               digit === queryDigit
                                 ? 'bg-brand-600/20 border-brand-400 text-brand-600'
-                                : 'bg-[#060e1a] border-[#1a3a5c] text-slate-500'
+                                : 'bg-game-arena border-game-line text-slate-500'
                             }`}
                           >
                             {digit}

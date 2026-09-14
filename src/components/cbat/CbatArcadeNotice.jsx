@@ -23,7 +23,7 @@ export default function CbatArcadeNotice({ title, headline, icon, children, clas
   return (
     <div
       className={[
-        'cbat-arcade-panel cbat-notice-idle rounded-lg border-2 border-[#1a3a5c] p-3 text-left',
+        'cbat-arcade-panel cbat-notice-idle rounded-lg border-2 border-game-line p-3 text-left',
         className,
       ].filter(Boolean).join(' ')}
     >
@@ -40,7 +40,7 @@ export default function CbatArcadeNotice({ title, headline, icon, children, clas
         <span aria-hidden="true" className="ml-1.5">{'◂'}</span>
       </p>
 
-      <p className="text-xs text-[#8a9bb5] leading-snug">{children}</p>
+      <p className="text-xs text-game-muted leading-snug">{children}</p>
     </div>
   )
 }

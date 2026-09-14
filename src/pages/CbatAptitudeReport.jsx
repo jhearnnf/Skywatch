@@ -43,7 +43,7 @@ function StanineBar({ stanine, target, compact = false }) {
   // Built from spans throughout, not divs: a domain row is a <button> and a test row nests this
   // inside a <span>, and neither may legally contain flow content.
   return (
-    <span className={`relative block w-full ${compact ? 'h-3' : 'h-5'} bg-[#060e1a] border border-[#1a3a5c] rounded-sm overflow-hidden`}>
+    <span className={`relative block w-full ${compact ? 'h-3' : 'h-5'} bg-game-arena border border-game-line rounded-sm overflow-hidden`}>
       {/* Nine cells, so the bar reads as a scale rather than a percentage. */}
       <span className="absolute inset-0 flex pointer-events-none">
         {Array.from({ length: MAX_STANINE }, (_, i) => (
@@ -93,7 +93,7 @@ function TestRow({ test }) {
     return (
       <div className="flex items-center gap-2 py-1 pl-3 text-[11px] min-w-0 opacity-45" title={`${test.label}. SkyWatch has no game for this yet, so it is left out of your score.`}>
         <span className="text-slate-600 w-[92px] shrink-0 truncate line-through decoration-slate-600/60">{test.code}{mult}</span>
-        <span className="px-1.5 py-0.5 rounded bg-[#0d1a2b] border border-[#1a3a5c] text-slate-600 text-[9px] font-bold uppercase tracking-wide shrink-0">
+        <span className="px-1.5 py-0.5 rounded bg-[#0d1a2b] border border-game-line text-slate-600 text-[9px] font-bold uppercase tracking-wide shrink-0">
           No game yet
         </span>
         <span className="text-slate-600 truncate hidden sm:block">Left out of your score</span>
@@ -196,7 +196,7 @@ function DomainTestChips({ tests }) {
             <span
               key={t.code}
               title={`${t.code} · ${t.label}. No SkyWatch game for this yet.`}
-              className={`${chip} bg-[#0d1a2b] border-[#1a3a5c] text-slate-600 line-through decoration-slate-600/60 opacity-50`}
+              className={`${chip} bg-[#0d1a2b] border-game-line text-slate-600 line-through decoration-slate-600/60 opacity-50`}
             >
               {t.label}{mult}
             </span>
@@ -214,7 +214,7 @@ function DomainTestChips({ tests }) {
           ? 'bg-amber-500/10 border-amber-400/40 text-amber-700'
           : (t.state === 'needs-runs' || thin)
             ? 'bg-brand-500/10 border-brand-400/40 text-brand-700'
-            : 'bg-[#060e1a] border-[#1a3a5c] text-slate-700 hover:border-brand-400 hover:text-brand-700'
+            : 'bg-game-arena border-game-line text-slate-700 hover:border-brand-400 hover:text-brand-700'
 
         const hint = t.state === 'needs-runs'
           ? ` Play it${onHard(t.needsRuns?.[0]?.gameKey ?? t.games[0])} ${t.needsRuns?.[0]?.runsNeeded ?? 3} more time(s) to start counting.`
@@ -257,7 +257,7 @@ function DomainRow({ domain, targetStanine }) {
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 text-left hover:bg-[#0a1628] transition-colors"
+        className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 text-left hover:bg-game-panel transition-colors"
       >
         <span className="text-slate-500 text-[10px] w-3 shrink-0">{open ? '▾' : '▸'}</span>
         <span className="w-[104px] sm:w-[150px] shrink-0 min-w-0">
@@ -345,7 +345,7 @@ function RolePicker({ batteries, selected, targetBattery, onSelect, onSetTarget,
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-colors ${
                     isSelected
                       ? 'border-brand-400 bg-brand-50'
-                      : 'border-[#1a3a5c] bg-[#060e1a] hover:border-brand-300 hover:bg-[#0a1628]'
+                      : 'border-game-line bg-game-arena hover:border-brand-300 hover:bg-game-panel'
                   }`}
                 >
                   <span className="flex-1 min-w-0">
@@ -376,7 +376,7 @@ function RolePicker({ batteries, selected, targetBattery, onSelect, onSetTarget,
             type="button"
             onClick={() => onSetTarget(selected)}
             disabled={selected === targetBattery}
-            className="mt-2 w-full px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:bg-[#0a1628] disabled:text-slate-600 text-white text-xs font-bold transition-colors"
+            className="mt-2 w-full px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:bg-game-panel disabled:text-slate-600 text-white text-xs font-bold transition-colors"
           >
             {selected === targetBattery
               ? `${BATTERY_BY_KEY[selected]?.label} is the role you're aiming for`
@@ -439,7 +439,7 @@ function AdminUserPicker({ current, onPick, onClose }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search agent number, name or email…"
-        className="w-full px-3 py-2 mb-3 rounded-lg bg-[#060e1a] border border-[#1a3a5c] text-sm text-slate-800
+        className="w-full px-3 py-2 mb-3 rounded-lg bg-game-arena border border-game-line text-sm text-slate-800
           placeholder:text-slate-600 focus:border-brand-400 focus:outline-none"
       />
 
@@ -464,7 +464,7 @@ function AdminUserPicker({ current, onPick, onClose }) {
             className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-colors ${
               u._id === current
                 ? 'border-brand-400 bg-brand-50'
-                : 'border-[#1a3a5c] bg-[#060e1a] hover:border-brand-300 hover:bg-[#0a1628]'
+                : 'border-game-line bg-game-arena hover:border-brand-300 hover:bg-game-panel'
             }`}
           >
             <span className="flex-1 min-w-0">
@@ -740,7 +740,7 @@ export default function CbatAptitudeReport() {
               {/* The ribbon down the left edge, exactly where the real sheet puts it. */}
               <div
                 className={`w-8 sm:w-10 shrink-0 flex items-center justify-center ${
-                  report.status === 'pass' ? 'bg-[#2f7d5b]' : report.status === 'fail' ? 'bg-[#a34a45]' : 'bg-[#1a3a5c]'
+                  report.status === 'pass' ? 'bg-[#2f7d5b]' : report.status === 'fail' ? 'bg-[#a34a45]' : 'bg-game-line'
                 }`}
               >
                 <span className="text-white text-[11px] font-extrabold tracking-[0.3em] uppercase" style={{ writingMode: 'vertical-rl' }}>
@@ -781,7 +781,7 @@ export default function CbatAptitudeReport() {
                 </div>
 
                 {/* Score track with the cutoff marked. */}
-                <div className="relative mt-4 h-3 bg-[#060e1a] border border-[#1a3a5c] rounded-sm overflow-hidden">
+                <div className="relative mt-4 h-3 bg-game-arena border border-game-line rounded-sm overflow-hidden">
                   <motion.div
                     className="absolute inset-y-0 left-0"
                     style={{ background: statusColour(report.status), opacity: 0.9 }}
@@ -852,7 +852,7 @@ export default function CbatAptitudeReport() {
                   const test = report.domains.flatMap(d => d.tests).find(t => t.code === f.code)
                   const game = test?.games?.[0]
                   return (
-                    <div key={`${f.domainKey}-${f.code}`} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#060e1a] border border-[#1a3a5c]">
+                    <div key={`${f.domainKey}-${f.code}`} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-game-arena border border-game-line">
                       {/* One currency per kind, and it is the one the row was ranked on. Points for
                           a scored test, because there is a base to express them against. Coverage for
                           a test we cannot measure yet, because its points would rest on a stanine we
@@ -926,7 +926,7 @@ export default function CbatAptitudeReport() {
 
           {/* The sheet. */}
           <div className="bg-surface border border-slate-200 rounded-2xl overflow-hidden mb-5 card-shadow">
-            <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 bg-[#060e1a] border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold">
+            <div className="flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-2 bg-game-arena border-b border-game-line text-[10px] text-slate-500 uppercase tracking-wide font-bold">
               <span className="w-3 shrink-0" />
               <span className="w-[104px] sm:w-[150px] shrink-0">Skill area</span>
               <span className="flex-1 min-w-0"><StanineScale /></span>
@@ -957,7 +957,7 @@ export default function CbatAptitudeReport() {
                 {report.gaps.map(g => (
                   <span
                     key={g.code}
-                    className="px-2.5 py-1 rounded-lg bg-[#0d1a2b] border border-[#1a3a5c] text-[11px] opacity-60"
+                    className="px-2.5 py-1 rounded-lg bg-[#0d1a2b] border border-game-line text-[11px] opacity-60"
                     title={g.label}
                   >
                     <span className="font-mono font-bold text-slate-600">{g.code}</span>
@@ -970,7 +970,7 @@ export default function CbatAptitudeReport() {
 
           {/* Not small print: the page is worthless, and misleading, if it is mistaken for a result.
               Written for someone who has never sat the CBAT and may not know what a stanine is. */}
-          <div className="border border-[#1a3a5c] rounded-2xl p-4 bg-[#060e1a]">
+          <div className="border border-game-line rounded-2xl p-4 bg-game-arena">
             <button
               type="button"
               onClick={() => setHelpOpen(!showHelp)}

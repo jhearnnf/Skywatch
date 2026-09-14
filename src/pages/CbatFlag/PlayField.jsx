@@ -543,7 +543,7 @@ function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlig
             {showCircle && (
               <circle
                 cx={ac.x} cy={ac.y} r={AIRCRAFT_RADIUS}
-                fill="none" stroke="#ddeaf8" strokeWidth="1.5" opacity="0.8"
+                fill="none" stroke="var(--color-game-text)" strokeWidth="1.5" opacity="0.8"
               />
             )}
             {leaving && (
@@ -571,7 +571,7 @@ function SymbolOverlay({ aircraft, fieldW, fieldH, blinkSymbols = false, highlig
                 fontSize={fontSize}
                 fontWeight="bold"
                 fontFamily="monospace"
-                fill={highlighted ? '#5baaff' : '#ddeaf8'}
+                fill={highlighted ? 'var(--color-game-accent)' : 'var(--color-game-text)'}
                 className={pulseSymbol ? 'cbat-flag-callsign-pulse' : undefined}
                 style={{ textShadow: '0 0 4px #000' }}
               >
@@ -1131,7 +1131,7 @@ function PlayFieldImpl({
   return (
     <div
       ref={fieldRef}
-      className="relative w-full h-full bg-[#020a18] rounded-lg overflow-hidden border border-[#1a3a5c]"
+      className="relative w-full h-full bg-[#020a18] rounded-lg overflow-hidden border border-game-line"
     >
       <ShapeOverlay
         shapes={displayShapes}

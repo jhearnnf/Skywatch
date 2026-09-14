@@ -66,8 +66,8 @@ function TabStrip({ tabs, openIds, onSelect }) {
             aria-pressed={open}
             className={`shrink-0 px-3 py-1.5 rounded-t-lg border-b-2 text-[11px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
               open
-                ? 'bg-[#0f2240] border-brand-600 text-[#ddeaf8]'
-                : 'bg-[#060e1a] border-transparent text-slate-600 hover:text-[#ddeaf8]'
+                ? 'bg-game-raised border-brand-600 text-game-text'
+                : 'bg-game-arena border-transparent text-slate-600 hover:text-game-text'
             }`}
           >
             <span className={`mr-1.5 ${open ? 'text-brand-600' : 'text-slate-700'}`}>{i + 1}</span>
@@ -86,19 +86,19 @@ function ResultsScreen({ answers, totalTime, totalQuestions, grade, gameName }) 
   const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">{gameName} Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{totalQuestions}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
@@ -106,8 +106,8 @@ function ResultsScreen({ answers, totalTime, totalQuestions, grade, gameName }) 
         </div>
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-80 overflow-y-auto text-left">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Answer Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 max-h-80 overflow-y-auto text-left">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Answer Review</p>
         <div className="space-y-1.5">
           {answers.map((a, i) => (
             <div key={i} className="text-xs px-2 py-1 rounded">
@@ -195,15 +195,15 @@ function evidenceSteps(question, tabs) {
 function Walkthrough({ steps, showQuotes = false }) {
   if (!steps?.length) return null
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-3 text-left">
+    <div className="bg-game-arena border border-game-line rounded-lg p-3 text-left">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">How to get there</p>
       <ol className="space-y-1.5">
         {steps.map((step, i) => (
           <li key={i} className="flex items-start gap-2 text-[11px] leading-snug">
             <span className="text-brand-600 font-bold shrink-0">{i + 1}</span>
-            <span className="text-[#8a9bb5]">
+            <span className="text-game-muted">
               {step.tabLabel && <span className="text-brand-600 font-bold">Tab {step.tabLabel}: </span>}
-              {showQuotes && step.quote && <span className="text-[#ddeaf8]">“{step.quote}” </span>}
+              {showQuotes && step.quote && <span className="text-game-text">“{step.quote}” </span>}
               {step.why}
             </span>
           </li>
@@ -481,7 +481,7 @@ export default function CbatTabbedReasoning({
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className={`text-4xl lg:text-5xl mb-3${dim}`}>{emoji}</p>
 
@@ -499,10 +499,10 @@ export default function CbatTabbedReasoning({
 
               <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>{introLead}</p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 {introBullets.map((b, i) => (
                   b.muted ? (
-                    <div key={i} className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                    <div key={i} className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                       <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{b.icon}</span>
                       <span className="pt-0.5">{b.text}</span>
                     </div>
@@ -513,7 +513,7 @@ export default function CbatTabbedReasoning({
                     </div>
                   )
                 ))}
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
                   <span className="pt-0.5">
                     {Math.round(introTuning.readMs / 1000)}s to read · {totalQuestions} questions ·{' '}
@@ -568,7 +568,7 @@ export default function CbatTabbedReasoning({
                 </span>
               </div>
 
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -585,16 +585,16 @@ export default function CbatTabbedReasoning({
                   key={currentIdx}
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3 max-w-3xl mx-auto"
+                  className="bg-game-panel border border-game-line rounded-xl p-4 mb-3 max-w-3xl mx-auto"
                 >
-                  <p className="text-sm sm:text-base text-[#ddeaf8] leading-relaxed mb-3">{currentQuestion.prompt}</p>
+                  <p className="text-sm sm:text-base text-game-text leading-relaxed mb-3">{currentQuestion.prompt}</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {currentQuestion.options.map((opt, i) => {
-                      let cls = 'bg-[#060e1a] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer'
+                      let cls = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                       if (feedback) {
                         if (opt === feedback.answer) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                         else if (opt === feedback.picked) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
-                        else cls = 'bg-[#060e1a] border-[#1a3a5c] text-[#5a6a80]'
+                        else cls = 'bg-game-arena border-game-line text-game-faint'
                       }
                       return (
                         <button
@@ -650,7 +650,7 @@ export default function CbatTabbedReasoning({
                 {openTabs.map(tab => (
                   <div
                     key={tab.id}
-                    className="bg-[#0a1628] border border-[#1a3a5c] rounded-b-xl rounded-tr-xl p-4 min-h-[180px] overflow-y-auto max-h-[46vh] lg:max-h-[58vh]"
+                    className="bg-game-panel border border-game-line rounded-b-xl rounded-tr-xl p-4 min-h-[180px] overflow-y-auto max-h-[46vh] lg:max-h-[58vh]"
                   >
                     {renderTab(tab, tabHighlights?.[tab.id] || null)}
                   </div>

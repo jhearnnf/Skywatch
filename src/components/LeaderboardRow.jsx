@@ -95,7 +95,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
     <motion.div
       layout={layout}
       transition={{ layout: { duration: 0.6, ease: [0.4, 0, 0.2, 1] } }}
-      className={`grid ${rowCols(variant, cfg, compact)} ${rowPad(compact)} py-2.5 text-sm ${divider ? 'border-t border-[#1a3a5c]' : ''} ${
+      className={`grid ${rowCols(variant, cfg, compact)} ${rowPad(compact)} py-2.5 text-sm ${divider ? 'border-t border-game-line' : ''} ${
         isMe ? 'bg-brand-600/10 border-l-2 border-l-brand-400' : ''
       }`}
     >
@@ -111,7 +111,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           </motion.span>
         )}
       </span>
-      <span className={`min-w-0 flex items-center gap-1 ${isMe ? 'text-brand-600 font-bold' : 'text-[#ddeaf8]'}`}>
+      <span className={`min-w-0 flex items-center gap-1 ${isMe ? 'text-brand-600 font-bold' : 'text-game-text'}`}>
         {/* The name keeps the truncation, and the admin timestamp tooltip: both
             belong to the name itself. The mark is pulled out of it so a long
             name shortens rather than pushing the mark off the row. */}

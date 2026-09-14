@@ -91,7 +91,7 @@ export function ModeButton({ mode, selected, onSelect, flashing, dimmed }) {
       className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-extrabold uppercase tracking-wide transition-all duration-200 cursor-pointer ${
         selected
           ? 'bg-brand-600 border-brand-600 text-white shadow-[0_0_12px_rgba(91,170,255,0.35)]'
-          : 'bg-[#060e1a] border-[#1a3a5c] text-slate-600 hover:text-[#ddeaf8] hover:border-brand-600'
+          : 'bg-game-arena border-game-line text-slate-600 hover:text-game-text hover:border-brand-600'
       }${flashing ? ' cbat-launch-flash' : ''}${dimmed ? ' cbat-launch-dim' : ''}`}
     >
       {mode.bars != null && <ModeBars filled={mode.bars} tone={selected ? 'solid' : 'muted'} />}
@@ -129,7 +129,7 @@ export function ModeMarker({ mode }) {
     <span
       data-difficulty-marker={mode.key}
       data-mode-marker={mode.key}
-      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0c1829] border border-[#1a3a5c] text-[10px] font-extrabold uppercase tracking-wide text-brand-300"
+      className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface border border-game-line text-[10px] font-extrabold uppercase tracking-wide text-brand-300"
     >
       {mode.bars != null && <ModeBars filled={mode.bars} tone="accent" />}
       {mode.label}

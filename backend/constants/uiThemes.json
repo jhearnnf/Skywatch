@@ -1,0 +1,8 @@
+{
+  "UI_THEMES": ["skywatch", "cbat"],
+  "DEFAULT_UI_THEME": "skywatch",
+  "UI_THEME_LABELS": {
+    "skywatch": "SkyWatch",
+    "cbat": "Real CBAT"
+  }
+}

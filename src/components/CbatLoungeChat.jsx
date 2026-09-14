@@ -63,7 +63,7 @@ function ActivityStrip({ activity }) {
   }
 
   return (
-    <p className="shrink-0 px-4 py-1.5 border-b border-[#1a3a5c] text-[10px] text-slate-500 truncate">
+    <p className="shrink-0 px-4 py-1.5 border-b border-game-line text-[10px] text-slate-500 truncate">
       {parts.join(' · ')}
     </p>
   )
@@ -132,7 +132,7 @@ function Reactions({ message, onReact, picking, onPick }) {
           className={`flex items-center gap-0.5 px-1 py-px rounded text-[10px] border transition-colors
             ${r.mine
               ? 'bg-brand-600/20 border-brand-400 text-brand-700'
-              : 'bg-[#0c1829] border-[#1a3a5c] text-slate-600 hover:border-brand-400'}`}
+              : 'bg-surface border-game-line text-slate-600 hover:border-brand-400'}`}
         >
           <span>{r.emoji}</span>
           <span className="font-bold">{r.count}</span>
@@ -144,7 +144,7 @@ function Reactions({ message, onReact, picking, onPick }) {
           key={e}
           type="button"
           onClick={() => { onPick(null); onReact(message, e) }}
-          className="px-1 py-px rounded text-xs bg-[#0c1829] border border-[#1a3a5c] hover:border-brand-400 transition-colors"
+          className="px-1 py-px rounded text-xs bg-surface border border-game-line hover:border-brand-400 transition-colors"
         >
           {e}
         </button>
@@ -679,7 +679,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
         type="button"
         onClick={() => onToggle(true)}
         aria-expanded="false"
-        className="shrink-0 mt-3 w-full flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0a1628] border border-[#1a3a5c] hover:border-brand-400 hover:bg-[#102040] transition-colors text-left"
+        className="shrink-0 mt-3 w-full flex items-center gap-2 px-4 py-2.5 rounded-xl bg-game-panel border border-game-line hover:border-brand-400 hover:bg-surface-raised transition-colors text-left"
       >
         <span className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">
           {lounge?.title ?? '🛩️ CBAT Lounge'}
@@ -713,8 +713,8 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const showMentionPicker = Boolean(mention) && mention.start !== mentionDismissed
 
   return (
-    <div ref={setPanelEl} className="flex-[2] min-h-0 mt-3 flex flex-col bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
-      <div className="shrink-0 px-4 py-3 border-b border-[#1a3a5c] flex items-center gap-2">
+    <div ref={setPanelEl} className="flex-[2] min-h-0 mt-3 flex flex-col bg-game-panel border border-game-line rounded-xl overflow-hidden">
+      <div className="shrink-0 px-4 py-3 border-b border-game-line flex items-center gap-2">
         <p className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">
           {lounge?.title ?? '🛩️ CBAT Lounge'}
         </p>
@@ -730,7 +730,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
           onClick={() => onToggle(false)}
           aria-expanded="true"
           aria-label="Close the lounge"
-          className="ml-auto text-[11px] text-slate-500 hover:text-slate-400 px-1.5 py-0.5 rounded-lg border border-[#1a3a5c] hover:border-brand-400 transition-colors"
+          className="ml-auto text-[11px] text-slate-500 hover:text-slate-400 px-1.5 py-0.5 rounded-lg border border-game-line hover:border-brand-400 transition-colors"
         >
           Close
         </button>
@@ -804,7 +804,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
                 <p title={formatTime(m.createdAt)}>
                   <span
                     className="font-bold"
-                    style={{ color: isBot ? '#5baaff' : nameColour(m.senderUserId) }}
+                    style={{ color: isBot ? 'var(--color-game-accent)' : nameColour(m.senderUserId) }}
                   >
                     {name}
                   </span>
@@ -814,7 +814,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
                     </span>
                   )}
                   <span className="text-slate-500">: </span>
-                  <span className={`whitespace-pre-wrap ${m.deleted ? 'text-slate-500 line-through opacity-60' : 'text-[#ddeaf8]'}`}>
+                  <span className={`whitespace-pre-wrap ${m.deleted ? 'text-slate-500 line-through opacity-60' : 'text-game-text'}`}>
                     <MessageBody message={m} senders={senders} currentUserId={user?._id} />
                   </span>
                   {m.edited && !m.deleted && (
@@ -863,7 +863,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
                 {hasActions && (
                   <span
                     data-testid={`lounge-actions-${m._id}`}
-                    className={`absolute top-0 right-0 ${actionsOpen ? 'flex' : 'hidden'} group-hover:flex gap-0.5 rounded-md bg-[#0a1628] border border-[#1a3a5c] px-0.5`}
+                    className={`absolute top-0 right-0 ${actionsOpen ? 'flex' : 'hidden'} group-hover:flex gap-0.5 rounded-md bg-game-panel border border-game-line px-0.5`}
                   >
                     {canSeen && (
                       <button
@@ -932,10 +932,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
         )}
       </div>
 
-      {err && <p className="shrink-0 text-[11px] text-red-400 px-3 py-1.5 border-t border-[#1a3a5c]">{err}</p>}
+      {err && <p className="shrink-0 text-[11px] text-red-400 px-3 py-1.5 border-t border-game-line">{err}</p>}
 
       {needsName ? (
-        <div className="shrink-0 border-t border-[#1a3a5c]">
+        <div className="shrink-0 border-t border-game-line">
           <DisplayNameGate onDone={() => {
             // Optimistic so the composer appears the instant the name saves,
             // then confirmed by the refetch — which is also what catches any
@@ -946,13 +946,13 @@ export default function CbatLoungeChat({ open, onToggle }) {
           }} />
         </div>
       ) : !canPost ? (
-        <p className="shrink-0 text-[11px] text-slate-500 px-3 py-2.5 border-t border-[#1a3a5c] text-center">
+        <p className="shrink-0 text-[11px] text-slate-500 px-3 py-2.5 border-t border-game-line text-center">
           {lounge?.chatBanned
             ? 'You cannot post in chat.'
             : lounge?.postBlockedMessage || 'You cannot post here right now.'}
         </p>
       ) : (
-        <div className="shrink-0 border-t border-[#1a3a5c]">
+        <div className="shrink-0 border-t border-game-line">
           {editing && (
             <div className="flex items-center gap-1.5 px-2 pt-1.5 text-[10px] min-w-0">
               <span className="text-brand-600 font-semibold shrink-0">Editing</span>
@@ -998,7 +998,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
                 type="button"
                 onClick={askBot}
                 title={`Ask ${lounge.botName} a question`}
-                className="shrink-0 px-2 py-1.5 rounded-lg border border-[#1a3a5c] text-[11px] font-bold text-slate-500 hover:text-brand-600 hover:border-brand-400 transition-colors"
+                className="shrink-0 px-2 py-1.5 rounded-lg border border-game-line text-[11px] font-bold text-slate-500 hover:text-brand-600 hover:border-brand-400 transition-colors"
               >
                 🤖
               </button>
@@ -1024,7 +1024,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
                 if (e.key === 'Escape' && editing) { e.preventDefault(); cancelEdit() }
               }}
               placeholder={editing ? 'Edit your message…' : 'Message the lounge…'}
-              className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-[#0c1829] border border-[#1a3a5c] focus:border-brand-400 outline-none text-xs text-[#ddeaf8] placeholder:text-slate-500"
+              className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-surface border border-game-line focus:border-brand-400 outline-none text-xs text-game-text placeholder:text-slate-500"
             />
             <button
               type="button"

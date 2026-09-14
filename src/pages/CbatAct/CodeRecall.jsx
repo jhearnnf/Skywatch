@@ -49,7 +49,7 @@ export default function CodeRecall({ codeLength = 7, onSubmit }) {
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
       data-testid="act-code-recall"
     >
       <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Memory check</p>
@@ -63,8 +63,8 @@ export default function CodeRecall({ codeLength = 7, onSubmit }) {
             key={i}
             className={`w-9 h-12 max-[600px]:w-8 max-[600px]:h-11 flex items-center justify-center rounded-lg border font-mono text-xl font-extrabold ${
               entered[i]
-                ? 'bg-[#0f2240] border-brand-400 text-brand-300'
-                : 'bg-[#060e1a] border-[#1a3a5c] text-slate-600'
+                ? 'bg-game-raised border-brand-400 text-brand-300'
+                : 'bg-game-arena border-game-line text-slate-600'
             }`}
           >
             {entered[i] || '·'}
@@ -79,7 +79,7 @@ export default function CodeRecall({ codeLength = 7, onSubmit }) {
             key={d}
             onClick={() => pushDigit(d)}
             disabled={full || submitted}
-            className="py-3.5 bg-[#0a1628] border border-[#1a3a5c] hover:bg-[#0f2240] hover:border-brand-400 disabled:opacity-40 disabled:cursor-not-allowed text-[#ddeaf8] font-mono text-lg font-bold rounded-lg transition-all cursor-pointer"
+            className="py-3.5 bg-game-panel border border-game-line hover:bg-game-raised hover:border-brand-400 disabled:opacity-40 disabled:cursor-not-allowed text-game-text font-mono text-lg font-bold rounded-lg transition-all cursor-pointer"
           >
             {d}
           </button>

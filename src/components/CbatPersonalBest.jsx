@@ -30,7 +30,7 @@ export default function CbatPersonalBest({
   children,
 }) {
   return (
-    <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 ${className}`.trim()}>
+    <div className={`bg-game-arena rounded-lg border border-game-line p-3 mb-4 ${className}`.trim()}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">
         Personal Best{label ? ` · ${label}` : ''}
       </p>

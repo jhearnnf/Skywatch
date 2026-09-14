@@ -195,7 +195,7 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
   // pressed. See .cbat-arcade-btn in main.css.
   const btn = 'cbat-arcade-btn px-3 py-1.5 rounded text-[11px] font-extrabold uppercase tracking-wider cursor-pointer'
   const primary = `${btn} bg-brand-600 hover:bg-brand-700 border-b-[#1f5da8] text-white`
-  const ghost = `${btn} border border-[#1a3a5c] border-b-[#0c1829] text-slate-500 hover:text-brand-600 hover:border-brand-600`
+  const ghost = `${btn} border border-game-line border-b-surface text-slate-500 hover:text-brand-600 hover:border-brand-600`
 
   return (
     <div
@@ -203,7 +203,7 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
       className={`cbat-arcade-panel rounded-lg border-2 p-3 mb-4 text-left transition-opacity duration-300 ${
         view.connected
           ? 'border-brand-600/50 opacity-100'
-          : 'cbat-arcade-idle border-[#1a3a5c] opacity-90'
+          : 'cbat-arcade-idle border-game-line opacity-90'
       }`}
     >
       {/* Marquee. The title bar of a cabinet, not a form legend. */}
@@ -247,14 +247,14 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
             No joystick detected
             <span aria-hidden="true" className="ml-1.5">{'◂'}</span>
           </p>
-          <p className="text-xs text-[#8a9bb5]">{WAKE_HINT}</p>
+          <p className="text-xs text-game-muted">{WAKE_HINT}</p>
         </>
       )}
 
       {view.connected && !calibrating && (
         <>
           <p
-            className="mb-2 truncate rounded border border-[#12283f] bg-[#0a1628] px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-[#8a9bb5]"
+            className="mb-2 truncate rounded border border-[#12283f] bg-game-panel px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-game-muted"
             title={view.id}
           >
             {view.id}
@@ -264,7 +264,7 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
             <AxisBar label="Pitch" value={view.y} />
           </div>
           {!view.calibrated && (
-            <p className="mb-3 text-xs text-[#8a9bb5]">
+            <p className="mb-3 text-xs text-game-muted">
               Flying on a guessed mapping. If the bars above do not follow the stick — or follow it the
               wrong way — calibrate and they will.
             </p>
@@ -283,8 +283,8 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
 
       {calibrating && step && (
         <div>
-          <p className="font-mono text-sm font-extrabold uppercase tracking-wider text-[#ddeaf8]">{step.prompt}</p>
-          <p className="mb-2 text-xs text-[#8a9bb5]">{step.hint}</p>
+          <p className="font-mono text-sm font-extrabold uppercase tracking-wider text-game-text">{step.prompt}</p>
+          <p className="mb-2 text-xs text-game-muted">{step.hint}</p>
           <p className="mb-3 text-[10px] text-slate-500">
             {step.kind === 'axes'
               ? 'Hold it there and squeeze any button on the stick — or press Capture.'
@@ -304,16 +304,16 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
       {view.connected && (
         <details className="mt-3">
           <summary className="cursor-pointer font-mono text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Raw readout</summary>
-          <p className="mt-1 break-all font-mono text-[10px] text-[#8a9bb5]">
+          <p className="mt-1 break-all font-mono text-[10px] text-game-muted">
             axes [{view.rawAxes.map(v => v.toFixed(2)).join(', ')}]
           </p>
-          <p className="break-all font-mono text-[10px] text-[#8a9bb5]">
+          <p className="break-all font-mono text-[10px] text-game-muted">
             buttons down [{view.rawButtons.join(', ')}]
           </p>
         </details>
       )}
 
-      {children && <div className="mt-3 border-t border-[#1a3a5c] pt-3">{children}</div>}
+      {children && <div className="mt-3 border-t border-game-line pt-3">{children}</div>}
     </div>
   )
 }

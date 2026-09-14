@@ -61,7 +61,7 @@ function Readout({ label, children, align = 'left' }) {
   return (
     <div className={align === 'right' ? 'text-right' : ''}>
       <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500 leading-none mb-0.5">{label}</p>
-      <p className="font-mono text-sm font-bold text-[#ddeaf8] leading-none tabular-nums">{children}</p>
+      <p className="font-mono text-sm font-bold text-game-text leading-none tabular-nums">{children}</p>
     </div>
   )
 }
@@ -107,7 +107,7 @@ function TargetCue({ innerRef, armRef }) {
 // without it players read the game as "aim with the mouse" and fight it.
 function StickIndicator({ innerRef }) {
   return (
-    <div className="relative w-11 h-11 rounded-full border border-[#1a3a5c] bg-[#060e1a]/70" aria-hidden="true">
+    <div className="relative w-11 h-11 rounded-full border border-game-line bg-game-arena/70" aria-hidden="true">
       <div className="absolute left-1/2 top-1/2 w-[3px] h-[3px] -ml-[1.5px] -mt-[1.5px] rounded-full bg-slate-600" />
       <div
         ref={innerRef}
@@ -140,7 +140,7 @@ function ResultsScreen({ stats, tuning }) {
           ['Shutter accuracy', `${accuracy}%`],
           ['Average centring', `${stats.avgCentringErrorDeg}°`],
         ].map(([label, value]) => (
-          <div key={label} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <div key={label} className="bg-game-arena rounded-lg border border-game-line p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
             <p className="font-mono font-bold text-brand-600">{value}</p>
           </div>
@@ -414,7 +414,7 @@ export default function CbatRtt() {
             >
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+                className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
               >
                 <p className={`text-4xl lg:text-5xl mb-3${dim}`}>📷</p>
                 <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Rapid Tracking Test</p>
@@ -428,24 +428,24 @@ export default function CbatRtt() {
 
                 <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
                   You are looking through a sensor camera slung under an aircraft. Slew it onto each target and
-                  capture <span className="text-[#ddeaf8]">three frames</span> with the target in the centre of
+                  capture <span className="text-game-text">three frames</span> with the target in the centre of
                   the reticle before the pass ends.
                 </p>
 
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+                <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Slew</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Shoot</CbatIntroLabel><span className="pt-0.5">click, or press Space, with the target inside the reticle — dead centre is worth double</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Targets</CbatIntroLabel><span className="pt-0.5">{tuning.targets} passes: {tuning.kinds.map(k => RTT_KINDS[k].label.toLowerCase()).join(', ')}</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Cover</CbatIntroLabel><span className="pt-0.5">targets pass behind cloud and terrain — predict where they come out and pick the track back up</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Drift</CbatIntroLabel><span className="pt-0.5">the aircraft never sits still — the picture wanders on its own and you have to keep trimming it back</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Cue</CbatIntroLabel><span className="pt-0.5">an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
                 </div>
 
                 {/* On the card only while there is no stick. With one plugged
                     in this same control renders inside the joystick panel. */}
                 {!stickConnected && (
-                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
+                  <div className={`bg-game-arena rounded-lg border border-game-line p-3 mb-4 text-left${dim}`}>
                     {sensitivityControl}
                   </div>
                 )}
@@ -462,7 +462,7 @@ export default function CbatRtt() {
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
-                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
+                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
                 >
                   Start
                 </button>
@@ -476,7 +476,7 @@ export default function CbatRtt() {
               <div
                 ref={arenaRef}
                 data-testid="rtt-arena"
-                className="relative w-full rounded-xl overflow-hidden border border-[#1a3a5c] bg-[#060e1a] select-none touch-none cursor-crosshair"
+                className="relative w-full rounded-xl overflow-hidden border border-game-line bg-game-arena select-none touch-none cursor-crosshair"
                 style={{ height: 'min(72vh, 620px)' }}
               >
                 <RttScene

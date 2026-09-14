@@ -61,7 +61,7 @@ function Face({ ringPercent, dotLayerRef, ringRef, faceRef }) {
     <div
       ref={faceRef}
       data-testid="sma-face"
-      className="relative w-full aspect-square rounded-full border border-[#1a3a5c] bg-[#060e1a] overflow-hidden select-none touch-none cursor-crosshair"
+      className="relative w-full aspect-square rounded-full border border-game-line bg-game-arena overflow-hidden select-none touch-none cursor-crosshair"
     >
       {/* Graticule. Faint, and behind everything — it exists so the eye has a
           frame of reference for how far off the dot is, not to be read. */}
@@ -122,7 +122,7 @@ function TouchPad({ padRef, ringRef, knobRef, onPointerDown, onPointerMove, onPo
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      className="sma-pad relative w-full h-40 mt-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] overflow-hidden"
+      className="sma-pad relative w-full h-40 mt-3 rounded-xl border border-game-line bg-game-panel overflow-hidden"
       style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
       role="application"
       aria-label="Touch control pad — hold and move to steer the dot"
@@ -142,7 +142,7 @@ function Readout({ label, children, align = 'left' }) {
   return (
     <div className={align === 'right' ? 'text-right' : ''}>
       <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500 leading-none mb-0.5">{label}</p>
-      <p className="font-mono text-sm font-bold text-[#ddeaf8] leading-none tabular-nums">{children}</p>
+      <p className="font-mono text-sm font-bold text-game-text leading-none tabular-nums">{children}</p>
     </div>
   )
 }
@@ -167,7 +167,7 @@ function ResultsScreen({ stats, tuning }) {
           ['Worst error', `${stats.worstErrorPct}%`],
           ['Time tracked', `${Math.round(tuning.durationMs / 1000)}s`],
         ].map(([label, value]) => (
-          <div key={label} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <div key={label} className="bg-game-arena rounded-lg border border-game-line p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
             <p className="font-mono font-bold text-brand-600">{value}</p>
           </div>
@@ -496,7 +496,7 @@ export default function CbatSma() {
             >
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+                className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
               >
                 <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🕹️</p>
                 <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Sensory Motor Apparatus Test</p>
@@ -514,25 +514,25 @@ export default function CbatSma() {
                   again while you deal with the last drift.
                 </p>
 
-                <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+                <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Control</CbatIntroLabel><span className="pt-0.5">your input sets how fast the dot moves, not where it goes. Centre the control and the dot keeps drifting, so you are always holding something.</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Mouse</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the display, the harder the dot is pushed that way</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Touch</CbatIntroLabel><span className="pt-0.5">hold anywhere on the pad below and move from there. Where you first touch becomes the centre.</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Joystick</CbatIntroLabel><span className="pt-0.5">push away to send the dot down, pull back to bring it up, exactly as the real test does</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Keys</CbatIntroLabel><span className="pt-0.5">arrow keys or WASD, if you have neither a mouse nor a touchscreen</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Scoring</CbatIntroLabel><span className="pt-0.5">you earn points for every second the dot is inside the ring, and the most for holding it dead centre</span></div>
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">{Math.round(tuning.durationMs / 1000)} seconds, after {LEAD_IN_MS / 1000} seconds to get hold of it. A perfect run is {maxSmaScore(tuning)}.</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">{Math.round(tuning.durationMs / 1000)} seconds, after {LEAD_IN_MS / 1000} seconds to get hold of it. A perfect run is {maxSmaScore(tuning)}.</span></div>
                   {/* Never imply we have reproduced the apparatus. The real test
                       is flown on a stick and a set of foot pedals; this is one
                       control doing both jobs, and a player comparing notes with
                       someone who has sat it should know that going in. */}
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]"><span className="shrink-0 w-8 text-center" aria-hidden>{'ℹ️'}</span><span className="pt-0.5">On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. Here both axes are on one control, because nobody has the pedals at home.</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center" aria-hidden>{'ℹ️'}</span><span className="pt-0.5">On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. Here both axes are on one control, because nobody has the pedals at home.</span></div>
                 </div>
 
                 {/* On the card only while there is no stick. With one plugged
                     in this same control renders inside the joystick panel. */}
                 {!stickConnected && (
-                  <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4 text-left${dim}`}>
+                  <div className={`bg-game-arena rounded-lg border border-game-line p-3 mb-4 text-left${dim}`}>
                     {sensitivityControl}
                   </div>
                 )}
@@ -549,7 +549,7 @@ export default function CbatSma() {
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
-                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
+                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
                 >
                   Start
                 </button>

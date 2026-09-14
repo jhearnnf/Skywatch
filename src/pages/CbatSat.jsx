@@ -75,7 +75,7 @@ function SatGrid({ units }) {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Tactical grid of units">
-      <rect x="0" y="0" width={W} height={H} fill="#060e1a" />
+      <rect x="0" y="0" width={W} height={H} fill="var(--color-game-arena)" />
 
       {/* gridlines */}
       {Array.from({ length: N + 1 }).map((_, i) => (
@@ -106,7 +106,7 @@ function SatGrid({ units }) {
             <circle cx={cx} cy={cy} r={r} fill={color} fillOpacity="0.18" stroke={color} strokeWidth="2.2" />
             <text x={cx} y={cy + 6} fill={color} fontSize="18" fontWeight="bold" textAnchor="middle">{TYPE_LETTER[u.type]}</text>
             {/* count badge, top-right of the marker */}
-            <text x={cx + r + 2} y={cy - r + 4} fill="#ddeaf8" fontSize="15" fontWeight="bold" textAnchor="middle">{u.count}</text>
+            <text x={cx + r + 2} y={cy - r + 4} fill="var(--color-game-text)" fontSize="15" fontWeight="bold" textAnchor="middle">{u.count}</text>
             {/* travel-direction arrow, offset from the marker on the heading side */}
             <polygon
               points={arrowPoints(cx + HEADING_VEC[u.heading][0] * (r + 6), cy + HEADING_VEC[u.heading][1] * (r + 6), u.heading, 5)}
@@ -138,7 +138,7 @@ const WAYPOINT_ARROW = { N: '↑', S: '↓', E: '→', W: '←' }
 // Each callsign owns a colour so the panel reads at a glance when it switches:
 // York blue, Leeds red, Hull yellow.
 const CALLSIGN_THEME = {
-  York: { panel: '#0a1628', field: '#060e1a', border: '#1a3a5c', dot: '#5baaff', text: 'text-brand-600' },
+  York: { panel: 'var(--color-game-panel)', field: 'var(--color-game-arena)', border: 'var(--color-game-line)', dot: 'var(--color-game-accent)', text: 'text-brand-600' },
   Leeds: { panel: '#1c0d12', field: '#120709', border: '#5c1f2a', dot: '#ff7b8a', text: 'text-red-300' },
   Hull: { panel: '#1a1405', field: '#120d03', border: '#5c4a12', dot: '#fbbf24', text: 'text-amber-300' },
 }
@@ -151,7 +151,7 @@ function AircraftField({ label, children, theme = DEFAULT_THEME }) {
       style={{ backgroundColor: theme.field, borderColor: theme.border }}
     >
       <dt className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">{label}</dt>
-      <dd className="text-lg text-[#ddeaf8] font-mono">{children}</dd>
+      <dd className="text-lg text-game-text font-mono">{children}</dd>
     </div>
   )
 }
@@ -261,7 +261,7 @@ function ObserveCard({ card }) {
         <p className={`text-3xl font-extrabold tracking-wide mb-4 ${theme.text}`}>{card.callsign}</p>
         <div className="border rounded-lg px-4 py-5" style={{ backgroundColor: theme.field, borderColor: theme.border }}>
           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{FIELD_LABEL[card.field]}</p>
-          <p className="text-3xl text-[#ddeaf8] font-mono font-bold">
+          <p className="text-3xl text-game-text font-mono font-bold">
             <FieldValue ac={card.aircraft} field={card.field} />
           </p>
         </div>
@@ -270,7 +270,7 @@ function ObserveCard({ card }) {
   }
 
   return (
-    <div className="w-full max-w-sm bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 text-center">
+    <div className="w-full max-w-sm bg-game-panel border border-game-line rounded-xl p-5 text-center">
       <p className="text-4xl mb-3">🔊</p>
       <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Radio</p>
       <p className="text-base sm:text-lg leading-snug text-green-300 font-mono break-words">{card.comm.text}</p>
@@ -290,7 +290,7 @@ function ObserveCard({ card }) {
 function panelChrome(live) {
   return live
     ? { className: 'border-brand-400', style: { boxShadow: '0 0 0 1px rgba(91,170,255,0.35)' } }
-    : { className: 'border-[#1a3a5c] opacity-40', style: undefined }
+    : { className: 'border-game-line opacity-40', style: undefined }
 }
 
 function AircraftPanelSerial({ aircraft, fields, card }) {
@@ -327,7 +327,7 @@ function AircraftPanelSerial({ aircraft, fields, card }) {
               style={{ backgroundColor: theme.field, borderColor: on ? theme.dot : theme.border, opacity: on ? 1 : 0.35 }}
             >
               <dt className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">{FIELD_LABEL[f]}</dt>
-              <dd className="text-lg text-[#ddeaf8] font-mono min-h-[1.75rem] flex items-center">
+              <dd className="text-lg text-game-text font-mono min-h-[1.75rem] flex items-center">
                 {on ? <FieldValue ac={live.aircraft} field={f} arrowClass="text-2xl" /> : '—'}
               </dd>
             </div>
@@ -348,7 +348,7 @@ function ObservePanels({ situation, card, fields }) {
   return (
     <>
       <div className="flex flex-col sm:flex-row gap-2 mb-2">
-        <div className={`sm:flex-[3] bg-[#0a1628] border rounded-lg p-3 ${grid.className}`} style={grid.style}>
+        <div className={`sm:flex-[3] bg-game-panel border rounded-lg p-3 ${grid.className}`} style={grid.style}>
           {/* No grid ref in the header: reading "D4" off a label is much easier
               to hold than locating a dot, and locating it is what's being
               tested. Easier's card layout does print it — it's the intro. */}
@@ -367,7 +367,7 @@ function ObservePanels({ situation, card, fields }) {
       </div>
 
       <div
-        className={`bg-[#0a1628] border rounded-lg px-3 py-2 mb-2 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1 ${radio.className}`}
+        className={`bg-game-panel border rounded-lg px-3 py-2 mb-2 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1 ${radio.className}`}
         style={radio.style}
       >
         <div className="flex items-center gap-2 shrink-0">
@@ -399,19 +399,19 @@ function ResultsScreen({ answers, totalTime, tuning }) {
   const grade = { label, ...GRADE_STYLE[label] }
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Situational Awareness Test Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{total}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
@@ -420,8 +420,8 @@ function ResultsScreen({ answers, totalTime, tuning }) {
       </div>
 
       {/* Answer review — scrollable */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-48 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Answer Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Answer Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => (
             <div key={i} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
@@ -512,7 +512,7 @@ function TutorialComplete({ onExit }) {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
@@ -559,7 +559,7 @@ function SatTutorial({ onExit, onProgress }) {
   return (
     <div className="w-full max-w-2xl">
       {/* Coach card */}
-      <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
+      <div className="w-full bg-game-panel border border-game-line rounded-xl p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
           <div className="flex items-center gap-1.5">
@@ -573,7 +573,7 @@ function SatTutorial({ onExit, onProgress }) {
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={stepIdx} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
             <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
-            <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+            <p className="text-sm text-game-text leading-relaxed">{step.body}</p>
           </motion.div>
         </AnimatePresence>
         <div className="mt-4">
@@ -584,17 +584,17 @@ function SatTutorial({ onExit, onProgress }) {
       {/* Steps 1–3: study the picture (all units shown at once for learning) */}
       {step.focus !== 'recall' ? (
         <div>
-          <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-3 mb-2${pulse('grid')}`}>
+          <div className={`bg-game-panel border border-game-line rounded-lg p-3 mb-2${pulse('grid')}`}>
             <SatGrid units={sit.units} />
             <GridLegend />
           </div>
           {/* The tutorial teaches the whole game, so it always shows the full
               four-field panel regardless of the difficulty selected behind it —
               the coach copy for this step describes all four. */}
-          <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1 mb-2${pulse('aircraft')}`}>
+          <div className={`bg-game-panel border border-game-line rounded-lg p-1 mb-2${pulse('aircraft')}`}>
             <AircraftPanel aircraft={sit.aircraft} activeIdx={0} fields={ALL_AIRCRAFT_FIELDS} />
           </div>
-          <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2 mb-3 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1${pulse('radio')}`}>
+          <div className={`bg-game-panel border border-game-line rounded-lg px-3 py-2 mb-3 flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-1${pulse('radio')}`}>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-base">🔊</span>
               <span className="text-[10px] text-slate-500 uppercase tracking-wide">Radio</span>
@@ -617,17 +617,17 @@ function SatTutorial({ onExit, onProgress }) {
       ) : (
         /* Step 4: recall — picture hidden, answer one sample question */
         <div className="max-w-md mx-auto">
-          <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 mb-3">
+          <div className="bg-game-panel border border-game-line rounded-xl p-5 mb-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Recall — from memory</p>
-            <p className="text-base sm:text-lg text-[#ddeaf8] leading-relaxed">{sampleQ.prompt}</p>
+            <p className="text-base sm:text-lg text-game-text leading-relaxed">{sampleQ.prompt}</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {sampleQ.options.map(opt => {
-              let cls = 'bg-[#0a1628] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer'
+              let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
               if (picked !== null) {
                 if (String(opt) === String(sampleQ.answer)) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                 else if (String(opt) === String(picked)) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
-                else cls = 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80]'
+                else cls = 'bg-game-panel border-game-line text-game-faint'
               }
               return (
                 <button key={String(opt)} type="button" onClick={() => picked === null && setPicked(opt)} disabled={picked !== null}
@@ -960,7 +960,7 @@ export default function CbatSat() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🗺️</p>
 
@@ -984,7 +984,7 @@ export default function CbatSat() {
                 Build and hold a mental picture of a changing battlefield. Each situation feeds you one piece of information at a time — a contact on the grid, one field of a controller aircraft, or a call over the <span className="text-brand-600">radio</span>. Each one vanishes before the next arrives, then you answer from memory.
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-base lg:text-lg text-[#ddeaf8]${dim}`}>
+              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-base lg:text-lg text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Observe — contacts (type, count, allegiance, heading), aircraft data, and radio calls, one at a time.</span>
@@ -997,7 +997,7 @@ export default function CbatSat() {
                   <CbatIntroLabel>3.</CbatIntroLabel>
                   <span className="pt-0.5">{tuning.situations} situations · {satTotalQuestions(tuning)} questions total.</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">{PER_QUESTION_MS / 1000}s per question — running out counts as wrong. 🔊 Turn your sound on for the radio calls.</span>
                 </div>
@@ -1023,7 +1023,7 @@ export default function CbatSat() {
                 <button
                   onClick={() => { primeSpeech(); setPhase('tutorial') }}
                   disabled={launching}
-                  className={`px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base${dim}`}
+                  className={`px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base${dim}`}
                 >
                   Tutorial
                 </button>
@@ -1031,7 +1031,7 @@ export default function CbatSat() {
                   onClick={beginLaunch}
                   disabled={launching}
                   data-demo-start
-                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
+                  className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
                 >
                   Start
                 </button>
@@ -1054,7 +1054,7 @@ export default function CbatSat() {
             >
               {/* Instruction + progress + timer */}
               <div className="flex items-stretch gap-2 mb-2">
-                <div className="flex-1 bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-3 py-2">
+                <div className="flex-1 bg-game-panel border border-game-line rounded-lg px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations} — Memorise the picture</p>
                     <button
@@ -1066,9 +1066,9 @@ export default function CbatSat() {
                       {audioOn ? '🔊' : '🔇'}
                     </button>
                   </div>
-                  <p className="text-sm text-[#ddeaf8]">Each fact shows once, then vanishes. Nothing comes back.</p>
+                  <p className="text-sm text-game-text">Each fact shows once, then vanishes. Nothing comes back.</p>
                 </div>
-                <div className="w-20 bg-[#0a1628] border border-[#1a3a5c] rounded-lg flex flex-col items-center justify-center">
+                <div className="w-20 bg-game-panel border border-game-line rounded-lg flex flex-col items-center justify-center">
                   <p className="text-[11px] text-slate-500 uppercase">Time</p>
                   <p className={`text-2xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-600'}`}>{observeSec}s</p>
                 </div>
@@ -1083,7 +1083,7 @@ export default function CbatSat() {
                   fields={runTuning.aircraftFields}
                 />
               ) : (
-                <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-3 mb-2">
+                <div className="bg-game-panel border border-game-line rounded-lg p-3 mb-2">
                   <div className="min-h-[26rem] flex items-center justify-center">
                     <AnimatePresence mode="wait" initial={false}>
                       <motion.div
@@ -1106,7 +1106,7 @@ export default function CbatSat() {
                 <p className="text-xs text-slate-500 uppercase tracking-wide shrink-0">
                   Fact {Math.min(cardIdx + 1, cardCount)} / {cardCount}
                 </p>
-                <div className="h-1 flex-1 rounded-full bg-[#1a3a5c] overflow-hidden">
+                <div className="h-1 flex-1 rounded-full bg-game-line overflow-hidden">
                   <div
                     className="h-full bg-brand-400"
                     style={{ width: `${Math.round(((cardIdx + 1) / Math.max(1, cardCount)) * 100)}%` }}
@@ -1128,7 +1128,7 @@ export default function CbatSat() {
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -1142,20 +1142,20 @@ export default function CbatSat() {
                 key={`${situationIdx}-${questionIdx}`}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 mb-3"
+                className="bg-game-panel border border-game-line rounded-xl p-5 mb-3"
               >
                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Recall — Situation {situationIdx + 1}</p>
-                <p className="text-lg sm:text-xl text-[#ddeaf8] leading-relaxed">{currentQuestion.prompt}</p>
+                <p className="text-lg sm:text-xl text-game-text leading-relaxed">{currentQuestion.prompt}</p>
               </motion.div>
 
               {/* Options */}
               <div className="grid grid-cols-2 gap-2">
                 {currentQuestion.options.map(opt => {
-                  let cls = 'bg-[#0a1628] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer'
+                  let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                   if (phase === 'feedback') {
                     if (String(opt) === String(feedback?.answer)) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                     else if (String(opt) === String(feedback?.picked)) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
-                    else cls = 'bg-[#0a1628] border-[#1a3a5c] text-[#5a6a80]'
+                    else cls = 'bg-game-panel border-game-line text-game-faint'
                   }
                   return (
                     <button

@@ -43,7 +43,7 @@ export default function GuideArrow({ dir = 'down', inline = false, urgent = fals
         viewBox="0 0 24 28"
         style={{ display: 'block', transform: ARROW_ROTATE[dir] ? `rotate(${ARROW_ROTATE[dir]}deg)` : undefined }}
       >
-        <path d="M12 27 L3 15 H9 V2 H15 V15 H21 Z" fill="#5baaff" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />
+        <path d="M12 27 L3 15 H9 V2 H15 V15 H21 Z" fill="var(--color-game-accent)" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />
       </svg>
     </span>
   )

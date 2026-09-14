@@ -48,7 +48,7 @@ const IS_TOUCH = typeof window !== 'undefined'
   && typeof window.matchMedia === 'function'
   && window.matchMedia('(hover: none) and (pointer: coarse)').matches
 
-const ROUTE_COLOUR = '#5baaff'   // the aircraft the question is about
+const ROUTE_COLOUR = 'var(--color-game-accent)'   // the aircraft the question is about
 const PARTNER_COLOUR = '#f59e0b' // the second aircraft, late rounds only
 
 // ── Objective box ────────────────────────────────────────────────────────────
@@ -60,17 +60,17 @@ function ObjectiveBox({ round }) {
   const ask = lines[lines.length - 1]
   const context = lines.slice(0, -1)
   return (
-    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 mb-3">
+    <div className="bg-game-panel border border-game-line rounded-xl p-3 mb-3">
       <div className="flex items-baseline justify-between mb-1.5">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide">Objective</p>
         <p className="text-[10px] text-slate-500 uppercase tracking-wide">{round.stage}</p>
       </div>
       <div className="space-y-1">
         {context.map((line, i) => (
-          <p key={i} className="text-[13px] text-[#ddeaf8] leading-snug">{line}</p>
+          <p key={i} className="text-[13px] text-game-text leading-snug">{line}</p>
         ))}
       </div>
-      <p className="mt-2 pt-2 border-t border-[#1a3a5c] text-sm font-bold text-brand-600 leading-snug">
+      <p className="mt-2 pt-2 border-t border-game-line text-sm font-bold text-brand-600 leading-snug">
         {ask}
       </p>
     </div>
@@ -96,7 +96,7 @@ function RouteLegs({ flight, colour, dashed, show, offset = 0 }) {
           <>
             <rect
               x={mx - 34} y={my - 16} width={68} height={32} rx={5}
-              fill="#0a1628" stroke={colour} strokeWidth={1.5}
+              fill="var(--color-game-panel)" stroke={colour} strokeWidth={1.5}
             />
             <text x={mx} y={my + 9} textAnchor="middle" fontSize="24" fontFamily="monospace" fill={colour} fontWeight="bold">
               {leg.miles}
@@ -157,14 +157,14 @@ function AntHardMap({ round }) {
             <text
               x={pos.x} y={pos.y + 9} textAnchor="middle"
               fontSize="26" fontFamily="monospace" fontWeight="bold"
-              fill={active ? '#ddeaf8' : '#8fa4bd'}
+              fill={active ? 'var(--color-game-text)' : '#8fa4bd'}
             >
               {name[0]}
             </text>
             <text
               x={pos.x + off.dx} y={pos.y + off.dy} textAnchor={off.anchor}
               fontSize="24" fontFamily="monospace" fontWeight="bold"
-              fill={active ? '#ddeaf8' : '#8fa4bd'}
+              fill={active ? 'var(--color-game-text)' : '#8fa4bd'}
             >
               {name}
             </text>
@@ -190,7 +190,7 @@ function BarChart({ rows, valueKey, labelKey, unit, activeLabel, colour = ROUTE_
             <span className={`w-10 shrink-0 text-right text-[11px] font-mono ${active ? 'text-brand-600 font-bold' : 'text-slate-500'}`}>
               {row[labelKey]}
             </span>
-            <div className="flex-1 h-3.5 bg-[#0a1628] rounded-sm overflow-hidden">
+            <div className="flex-1 h-3.5 bg-game-panel rounded-sm overflow-hidden">
               <div
                 className="h-full rounded-sm"
                 style={{
@@ -225,15 +225,15 @@ function ReferencePanel({ round }) {
   const activeMpm = round.show.weight ? f.mpm : null
 
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
-      <div className="flex border-b border-[#1a3a5c] bg-[#0a1628]">
+    <div className="bg-game-arena border border-game-line rounded-lg overflow-hidden">
+      <div className="flex border-b border-game-line bg-game-panel">
         {REF_TABS.map(t => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
             className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-colors cursor-pointer ${
-              tab === t.key ? 'text-brand-600 border-b-2 border-brand-600' : 'text-slate-500 hover:text-[#ddeaf8]'
+              tab === t.key ? 'text-brand-600 border-b-2 border-brand-600' : 'text-slate-500 hover:text-game-text'
             }`}
           >
             {t.label}
@@ -243,7 +243,7 @@ function ReferencePanel({ round }) {
 
       <div className="p-2.5">
         {tab === 'brief' && (
-          <div className="space-y-1.5 text-[11px] text-[#ddeaf8] leading-snug">
+          <div className="space-y-1.5 text-[11px] text-game-text leading-snug">
             <p>Round and estimate. Close answers still score.</p>
             <p><span className="text-brand-600 font-bold">Weight gives you speed</span> on the aircraft&apos;s own Load chart. The chart steps in hundreds, so read the nearest row.</p>
             <p><span className="text-brand-600 font-bold">Speed gives you economy</span> on the Fuel chart. Fuel = distance divided by miles per gallon.</p>
@@ -304,8 +304,8 @@ function FlightTable({ flight, round, partner = false }) {
   const hideDepart = partner ? !round.show.partnerDepart : !round.show.departTime
   const hideArrive = !partner && !round.show.arriveTime
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg overflow-hidden">
-      <div className="flex items-baseline justify-between px-2 py-1 border-b border-[#1a3a5c] bg-[#0a1628]">
+    <div className="bg-game-arena border border-game-line rounded-lg overflow-hidden">
+      <div className="flex items-baseline justify-between px-2 py-1 border-b border-game-line bg-game-panel">
         <p className={`text-[11px] font-bold uppercase tracking-wide ${colour}`}>{flight.name}</p>
         <p className="text-[10px] text-slate-500 font-mono">
           {round.show.weight || partner
@@ -323,7 +323,7 @@ function FlightTable({ flight, round, partner = false }) {
             <th className="px-2 py-1 text-right font-normal">Speed</th>
           </tr>
         </thead>
-        <tbody className="text-[#ddeaf8]">
+        <tbody className="text-game-text">
           {flight.legs.map((leg, i) => {
             const w = ANT_HARD_WEATHER[leg.weather]
             return (
@@ -346,22 +346,22 @@ function FlightTable({ flight, round, partner = false }) {
         </tbody>
       </table>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-0.5 px-2 py-1 border-t border-[#1a3a5c] bg-[#0a1628] text-[11px] font-mono">
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 px-2 py-1 border-t border-game-line bg-game-panel text-[11px] font-mono">
         <span className="text-slate-500">
-          Depart <span className="text-[#ddeaf8]">
+          Depart <span className="text-game-text">
             {hideDepart || flight.departMin == null ? <span className="text-amber-400">?</span> : formatHHMM(flight.departMin)}
           </span>
         </span>
         {!partner && (
           <span className="text-slate-500">
-            Arrive <span className="text-[#ddeaf8]">
+            Arrive <span className="text-game-text">
               {hideArrive ? <span className="text-amber-400">?</span> : formatHHMM(flight.arriveMin)}
             </span>
           </span>
         )}
         {!partner && round.show.fuelOnBoard && (
           <span className="text-slate-500">
-            Fuel on board <span className="text-[#ddeaf8]">{flight.fuelOnBoard} gal</span>
+            Fuel on board <span className="text-game-text">{flight.fuelOnBoard} gal</span>
           </span>
         )}
       </div>
@@ -373,7 +373,7 @@ function FlightTable({ flight, round, partner = false }) {
 function SolutionBreakdown({ round }) {
   const steps = solutionSteps(round)
   return (
-    <div className="w-full mt-3 bg-[#060e1a]/70 border border-[#1a3a5c] rounded-lg p-2.5 text-left">
+    <div className="w-full mt-3 bg-game-arena/70 border border-game-line rounded-lg p-2.5 text-left">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5">How it&apos;s worked out</p>
       <ol className="space-y-2">
         {steps.map(step => (
@@ -385,7 +385,7 @@ function SolutionBreakdown({ round }) {
                 <span key={j} className="px-1 text-brand-600 font-bold">{tok}</span>
               ))}
               <span className="text-slate-500">=</span>
-              <span className="text-[#ddeaf8] font-bold">{step.result}</span>
+              <span className="text-game-text font-bold">{step.result}</span>
             </div>
             <p className="text-[11px] text-slate-400 leading-snug ml-[1.15rem] mt-0.5">{step.note}</p>
           </li>
@@ -409,12 +409,12 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
     : { emoji: '💥', color: 'text-red-400' }
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{gradeStyle.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">ANT (Hard) Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 mb-4">
         <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
         <p className="text-sm text-slate-400">accuracy</p>
         <p className="text-xs text-slate-500 mt-3">
@@ -428,8 +428,8 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
         </p>
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-56 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Round Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 max-h-56 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Round Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => {
             const color = a.exact ? 'text-green-400' : a.partial ? 'text-amber-400' : 'text-red-400'
@@ -652,7 +652,7 @@ export default function AntHardGame({ tuning, onExit }) {
               </span>
             </div>
 
-            <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+            <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
               <motion.div
                 className={`h-full rounded-full ${reviewing ? 'bg-brand-600/40' : timeLeft < 10 ? 'bg-red-500' : 'bg-brand-600'}`}
                 initial={false}
@@ -664,7 +664,7 @@ export default function AntHardGame({ tuning, onExit }) {
             <ObjectiveBox round={round} />
 
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-              <div className="md:col-span-2 bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3">
+              <div className="md:col-span-2 bg-game-panel border border-game-line rounded-xl p-3">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Map</p>
                 <AntHardMap round={round} />
               </div>
@@ -673,7 +673,7 @@ export default function AntHardGame({ tuning, onExit }) {
                 <FlightTable flight={round.flight} round={round} />
                 {round.partner && <FlightTable flight={round.partner} round={round} partner />}
 
-                <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3">
+                <div className="bg-game-panel border border-game-line rounded-xl p-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Solve For</p>
                   <p className="text-lg font-bold text-brand-600">
                     {ANT_HARD_QUESTIONS[round.type].label}
@@ -730,7 +730,7 @@ export default function AntHardGame({ tuning, onExit }) {
                       </button>
                     </motion.div>
                   ) : (
-                    <div className="flex-1 bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3">
+                    <div className="flex-1 bg-game-panel border border-game-line rounded-xl p-3">
                       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Answer</p>
                       <div className="flex items-center gap-2">
                         <input
@@ -742,7 +742,7 @@ export default function AntHardGame({ tuning, onExit }) {
                           onChange={(e) => setAnswerInput(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(false) }}
                           placeholder={ANT_HARD_QUESTIONS[round.type].unit}
-                          className="flex-1 min-w-0 bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-3 py-2 text-white font-mono text-lg focus:outline-none focus:border-brand-400"
+                          className="flex-1 min-w-0 bg-game-arena border border-game-line rounded-lg px-3 py-2 text-white font-mono text-lg focus:outline-none focus:border-brand-400"
                         />
                         <button
                           onClick={() => handleSubmit(false)}

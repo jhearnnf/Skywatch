@@ -78,7 +78,7 @@ function QuestionRow({ n, round, value, onChange, onEnter, inputRef }) {
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
           placeholder={q.placeholder}
           aria-label={`Question ${n} answer in ${q.unit}`}
-          className="w-24 bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-2 py-2 text-white font-mono text-base text-center focus:outline-none focus:border-brand-400"
+          className="w-24 bg-game-arena border border-game-line rounded-lg px-2 py-2 text-white font-mono text-base text-center focus:outline-none focus:border-brand-400"
         />
         <span className="text-xs text-slate-500 sm:text-center">{q.unit}</span>
       </div>
@@ -89,7 +89,7 @@ function QuestionRow({ n, round, value, onChange, onEnter, inputRef }) {
 // ── results ──────────────────────────────────────────────────────────────────
 function Stat({ label, value }) {
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-2.5 text-center">
+    <div className="bg-game-arena border border-game-line rounded-lg p-2.5 text-center">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
       <p className="text-base font-mono font-bold text-brand-600">{value}</p>
     </div>
@@ -104,13 +104,13 @@ function ByCalculation({ answers }) {
     return { type, exact: of.filter(a => a.exact).length, points: of.reduce((s, a) => s + a.points, 0) }
   })
   return (
-    <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-3">
+    <div className="bg-game-arena border border-game-line rounded-lg p-3">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">By calculation</p>
       <div className="space-y-1.5">
         {rows.map(row => (
           <div key={row.type} className="flex items-center gap-2 text-xs">
             <span className="w-20 shrink-0 text-slate-400">{QUESTION_META[row.type].short}</span>
-            <div className="flex-1 h-1.5 bg-[#1a3a5c] rounded-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-game-line rounded-full overflow-hidden">
               <div
                 className="h-full bg-brand-600 rounded-full"
                 style={{ width: `${(row.points / (PRACTISE_PER_TYPE * 10)) * 100}%` }}
@@ -147,7 +147,7 @@ function MarkedSheet({ run, answers }) {
         }[tone]
         const verdict = a.exact ? 'Exact' : a.partial ? 'Close' : a.userInput.trim() === '' ? 'Blank' : 'Off'
         return (
-          <div key={i} className="bg-[#060e1a] border border-[#15293f] rounded-lg p-3 text-left">
+          <div key={i} className="bg-game-arena border border-[#15293f] rounded-lg p-3 text-left">
             <div className="flex items-start justify-between gap-3 mb-1.5">
               <p className="text-xs text-slate-400 leading-snug">
                 <span className="text-slate-500 font-mono mr-1.5">{i + 1}.</span>
@@ -174,7 +174,7 @@ function MarkedSheet({ run, answers }) {
                   <span className="text-slate-600 w-[5.5rem] shrink-0">{step.label}</span>
                   <span className="text-slate-400">{step.expr}</span>
                   <span className="text-slate-600">=</span>
-                  <span className="text-[#ddeaf8] font-bold">{step.result}</span>
+                  <span className="text-game-text font-bold">{step.result}</span>
                 </li>
               ))}
             </ol>
@@ -338,7 +338,7 @@ export default function AntPractise({ onExit }) {
       </p>
 
       {/* The sheet — one surface, hairline between questions */}
-      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl divide-y divide-[#13273d]">
+      <div className="bg-game-panel border border-game-line rounded-xl divide-y divide-[#13273d]">
         {run.map((round, i) => (
           <QuestionRow
             key={i}
@@ -354,7 +354,7 @@ export default function AntPractise({ onExit }) {
 
       {/* Hand-in bar — sticks to the bottom so it stays reachable from any
           question on a sheet taller than the viewport. */}
-      <div className="sticky bottom-0 mt-4 -mx-1 px-1 pt-3 pb-3 bg-[#06101e]/95 backdrop-blur-sm border-t border-[#1a3a5c]">
+      <div className="sticky bottom-0 mt-4 -mx-1 px-1 pt-3 pb-3 bg-bg/95 backdrop-blur-sm border-t border-game-line">
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs text-slate-400">
             <span className="text-brand-600 font-bold font-mono">{answeredCount}</span>

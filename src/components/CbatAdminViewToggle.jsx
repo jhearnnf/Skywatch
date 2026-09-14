@@ -27,12 +27,12 @@ export default function CbatAdminViewToggle() {
         ? 'Boards show player emails. Switch to see them as a player does.'
         : 'Boards show agent names, as a player sees them. Switch back to admin view.'}
       className="relative z-10 -mb-px inline-flex items-center gap-1.5 px-2.5 py-1 cursor-pointer
-        rounded-t-lg border border-b-0 border-[#1a3a5c] bg-[#0a1628]
-        hover:bg-[#102040] transition-colors group"
+        rounded-t-lg border border-b-0 border-game-line bg-game-panel
+        hover:bg-surface-raised transition-colors group"
     >
       <span
         aria-hidden="true"
-        className={`relative w-6 h-3 rounded-full transition-colors ${on ? 'bg-brand-600' : 'bg-[#1a3a5c]'}`}
+        className={`relative w-6 h-3 rounded-full transition-colors ${on ? 'bg-brand-600' : 'bg-game-line'}`}
       >
         <span
           className={`absolute top-0.5 left-0.5 w-2 h-2 rounded-full transition-transform

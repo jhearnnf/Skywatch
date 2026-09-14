@@ -23,6 +23,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { BATTERY_BY_KEY } = require('../constants/cbatBatteries');
+const { UI_THEMES } = require('../constants/uiThemes.json');
 const { withSelectedBadge } = require('../utils/selectedBadge');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
@@ -176,6 +177,33 @@ router.patch('/me/target-battery', protect, async (req, res) => {
       { cbatTargetBattery: batteryKey },
       { returnDocument: 'after' }
     ).populate('rank');
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/theme — pick the look the site wears for this user.
+// Body { theme: 'skywatch' | 'cbat' }.
+//
+// Saved on the account rather than in the browser so it follows the user
+// between devices, and so a future update can let the games themselves read
+// it. Unknown keys 400 rather than reaching the enum so the client gets a
+// clear answer instead of a Mongoose validation message.
+router.patch('/me/theme', protect, async (req, res) => {
+  try {
+    const { theme } = req.body ?? {};
+    if (!UI_THEMES.includes(theme)) {
+      return res.status(400).json({ status: 'error', message: 'Unknown theme' });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { uiTheme: theme },
+      { returnDocument: 'after' }
+    ).populate('rank');
+
     const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
     res.json({ status: 'success', data: { user } });
   } catch (err) {

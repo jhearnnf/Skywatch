@@ -74,7 +74,7 @@ function ResultsScreen({ stats, tuning }) {
   const gs = GRADE_STYLE[grade]
 
   const row = (label, val, sub) => (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+    <div className="bg-game-arena rounded-lg border border-game-line p-3">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
       <p className="text-xl font-mono font-bold text-brand-600">{val}</p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
@@ -82,7 +82,7 @@ function ResultsScreen({ stats, tuning }) {
   )
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-6 text-center">
       <p className="text-5xl mb-3">{gs.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gs.color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-5">FLAG Assessment Complete</p>
@@ -112,7 +112,7 @@ function IntroScreen({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+      className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
     >
       <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🚩</p>
 
@@ -131,24 +131,24 @@ function IntroScreen({
         Track aircraft, solve maths under pressure, and strike target shapes. All at once.
       </p>
 
-      <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+      <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
           <span className="pt-0.5">60-second mission</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🎯'}</span>
           <span className="pt-0.5">Click shapes when an aircraft circle overlaps them</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'✈️'}</span>
           <span className="pt-0.5">Only ringed aircraft carry a callsign — press YES/NO on whether that callsign is currently on screen</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🔢'}</span>
           <span className="pt-0.5">Solve maths questions on the numpad before they time out</span>
         </div>
-        <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+        <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Wrong answers lose points. Score can go negative.</span>
         </div>
@@ -169,7 +169,7 @@ function IntroScreen({
       <div className={`flex flex-wrap gap-3 lg:gap-4 justify-center${dim}`}>
         <button
           onClick={onTutorial}
-          className="px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
+          className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
         </button>
@@ -177,7 +177,7 @@ function IntroScreen({
           onClick={onStart}
           disabled={disabled || launching}
           data-demo-start
-          className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
+          className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
         >
           {aircraftLoading ? 'Loading aircraft…' : aircraftList.length === 0 ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
         </button>
@@ -254,7 +254,7 @@ function TutorialComplete({ onExit }) {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
@@ -474,7 +474,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
   return (
     <div className="w-full max-w-md">
       {/* Coach card */}
-      <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4 mb-3">
+      <div className="w-full bg-game-panel border border-game-line rounded-xl p-4 mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
           <div className="flex items-center gap-1.5">
@@ -506,7 +506,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
             transition={{ duration: 0.2 }}
           >
             <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
-            <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+            <p className="text-sm text-game-text leading-relaxed">{step.body}</p>
           </motion.div>
         </AnimatePresence>
         <div className="mt-4">
@@ -554,7 +554,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
       </div>
 
       <div className="w-full max-w-[280px] mx-auto mt-3">
-        <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 flex flex-col gap-3">
+        <div className="bg-game-panel border border-game-line rounded-xl p-3 flex flex-col gap-3">
           {/* Numpad (maths) */}
           <div className={`rounded-lg${zoneCls(mathsActive)}`}>
             <Numpad
@@ -618,7 +618,7 @@ function FlagTutorial({ onExit, onProgress, modelUrl }) {
               <div className="mt-1.5 min-h-[1rem] text-[11px] leading-tight text-center">
                 {acFlash === 'miss' && <span className="text-red-400">Not quite — check the field.</span>}
                 {acFlash === 'ok' && <span className="text-green-400">✓ Correct</span>}
-                {!acFlash && acQuestion && <span className="text-slate-500">Is <b className="text-[#ddeaf8]">{acQuestion.sym}</b> on the field right now?</span>}
+                {!acFlash && acQuestion && <span className="text-slate-500">Is <b className="text-game-text">{acQuestion.sym}</b> on the field right now?</span>}
                 {!acFlash && !acQuestion && <span className="text-slate-600">Watch the field…</span>}
               </div>
             )}
@@ -1151,9 +1151,9 @@ export default function CbatFlag() {
       <SEO title="FLAG — CBAT" description="Multi-task: track aircraft, solve maths, and strike target shapes." />
 
       {!user && (
-        <div className="bg-[#0a1628] rounded-2xl border border-[#1a3a5c] p-6 text-center">
+        <div className="bg-game-panel rounded-2xl border border-game-line p-6 text-center">
           <div className="text-4xl mb-3">🔒</div>
-          <p className="font-bold text-[#ddeaf8] mb-1">Sign in to play</p>
+          <p className="font-bold text-game-text mb-1">Sign in to play</p>
           <p className="text-sm text-slate-400 mb-4">Create a free account to access CBAT games.</p>
           <Link to="/login" className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors no-underline">
             Sign In
@@ -1168,7 +1168,7 @@ export default function CbatFlag() {
               ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
               : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
             }
-            <h1 className="text-sm font-extrabold text-[#ddeaf8]">FLAG</h1>
+            <h1 className="text-sm font-extrabold text-game-text">FLAG</h1>
             {phase === 'playing' && <ModeMarker mode={runTuning} />}
           </div>
 
@@ -1239,7 +1239,7 @@ export default function CbatFlag() {
                   <div
                     className="cbat-flag-controls w-full max-w-[280px] mx-auto shrink-0 z-10"
                   >
-                    <div className="cbat-flag-panel bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 max-[600px]:p-1.5 flex flex-col gap-3 max-[600px]:gap-1.5">
+                    <div className="cbat-flag-panel bg-game-panel border border-game-line rounded-xl p-3 max-[600px]:p-1.5 flex flex-col gap-3 max-[600px]:gap-1.5">
                       <Numpad
                         question={mathQuestion}
                         entered={mathEntered}

@@ -48,9 +48,9 @@ function trendTile(board, lowerIsBetter) {
   return { heading: 'Declined', value: `${trend.pct}%`, tone: 'text-slate-400' }
 }
 
-function StatTile({ label, value, tone = 'text-[#ddeaf8]' }) {
+function StatTile({ label, value, tone = 'text-game-text' }) {
   return (
-    <div className="flex-1 bg-[#060e1a] border border-[#1a3a5c] rounded-lg px-3 py-2 text-center">
+    <div className="flex-1 bg-game-arena border border-game-line rounded-lg px-3 py-2 text-center">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
       <p className={`text-base font-mono font-bold ${tone}`}>{value}</p>
     </div>
@@ -93,7 +93,7 @@ function FormPercentile({ form, cfg }) {
   const showTime = !cfg.hideTime && formTime != null
 
   return (
-    <div className="mt-4 pt-3 border-t border-[#1a3a5c]">
+    <div className="mt-4 pt-3 border-t border-game-line">
       <div className="flex items-baseline justify-between mb-1.5">
         <p className="text-[11px] text-slate-500 uppercase tracking-wide">Current Form</p>
         {/* Shows the exact basis of the ranking, so "top 8%" on a perfect score is self-explaining:
@@ -114,7 +114,7 @@ function FormPercentile({ form, cfg }) {
           )}
         </p>
       ) : outsideTop ? (
-        <p className="text-sm font-bold text-[#ddeaf8] mt-2">
+        <p className="text-sm font-bold text-game-text mt-2">
           You're outside the top{' '}
           <span className="text-xl font-mono font-extrabold text-slate-700">{OUTSIDE_TOP_PCT}%</span>
           <span className="block text-[10px] font-normal text-slate-500 mt-0.5">
@@ -122,7 +122,7 @@ function FormPercentile({ form, cfg }) {
           </span>
         </p>
       ) : (
-        <p className="text-sm font-bold text-[#ddeaf8] mt-2">
+        <p className="text-sm font-bold text-game-text mt-2">
           You're in the top{' '}
           <span className="text-xl font-mono font-extrabold text-brand-600">{topPct}%</span>
           {' '}of agents!
@@ -150,7 +150,7 @@ function ProgressPanel({ board, cfg }) {
   // "Play {game}" action directly below this panel, so one here would just repeat it.
   if (attempts === 0) {
     return (
-      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+      <div className="bg-game-panel border border-game-line rounded-xl p-8 text-center">
         <p className="text-4xl mb-3">📈</p>
         <p className="font-bold text-white mb-1">No runs yet</p>
         <p className="text-sm text-slate-400">Finish a game and your progress starts charting here.</p>
@@ -161,7 +161,7 @@ function ProgressPanel({ board, cfg }) {
   // Two points is a line between two dots — it implies a trend that isn't there yet.
   if (series.length < 3) {
     return (
-      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+      <div className="bg-game-panel border border-game-line rounded-xl p-8 text-center">
         <p className="text-4xl mb-3">📈</p>
         <p className="font-bold text-white mb-1">{attempts} run{attempts === 1 ? '' : 's'} logged</p>
         <p className="text-sm text-slate-400">
@@ -188,7 +188,7 @@ function ProgressPanel({ board, cfg }) {
   )
 
   return (
-    <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
+    <div className="bg-game-panel border border-game-line rounded-xl p-4">
       <div className="flex gap-2 mb-4">
         <StatTile label="Attempts" value={attempts} />
         <StatTile label="Best" value={best != null ? formatScore(best) : '—'} tone="text-amber-300" />
@@ -208,7 +208,7 @@ function ProgressPanel({ board, cfg }) {
       </p>
 
       {showSpeed && (
-        <div className="mt-4 pt-3 border-t border-[#1a3a5c]">
+        <div className="mt-4 pt-3 border-t border-game-line">
           <div className="flex items-baseline justify-between mb-1">
             <p className="text-[11px] text-slate-500 uppercase tracking-wide">Speed</p>
             {/* Names the amber points. Without it the two-tone line is a puzzle. */}
@@ -424,7 +424,7 @@ export default function CbatLeaderboard() {
           <Link to={cfg.backPath} className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; Instructions</Link>
           <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
           {difficultyPills && (
-            <div className="flex bg-[#060e1a] border border-[#1a3a5c] rounded-full p-0.5" role="tablist" aria-label="Difficulty">
+            <div className="flex bg-game-arena border border-game-line rounded-full p-0.5" role="tablist" aria-label="Difficulty">
               {difficultyPills.map(d => {
                 const active = d.gameKey === gameKey
                 return (
@@ -434,7 +434,7 @@ export default function CbatLeaderboard() {
                     role="tab"
                     aria-selected={active}
                     className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-colors no-underline ${
-                      active ? 'bg-brand-600 text-white' : 'text-slate-600 hover:text-[#ddeaf8]'
+                      active ? 'bg-brand-600 text-white' : 'text-slate-600 hover:text-game-text'
                     }`}
                   >
                     {d.label}
@@ -448,7 +448,7 @@ export default function CbatLeaderboard() {
 
       {/* Weekly / All-Time segmented control (source of truth; swipe is an accelerator) */}
       <div className="w-full max-w-lg mx-auto mb-3">
-        <div className="flex bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-0.5" role="tablist">
+        <div className="flex bg-game-arena border border-game-line rounded-lg p-0.5" role="tablist">
           {TABS.map(t => {
             const active = tab === t.key
             return (
@@ -458,7 +458,7 @@ export default function CbatLeaderboard() {
                 aria-selected={active}
                 onClick={() => setTab(t.key)}
                 className={`relative flex-1 px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
-                  active ? 'text-white' : 'text-slate-400 hover:text-[#ddeaf8]'
+                  active ? 'text-white' : 'text-slate-400 hover:text-game-text'
                 }`}
               >
                 {/* Active-pill background. Shares INTRO_PILL_LAYOUT_ID with the
@@ -508,7 +508,7 @@ export default function CbatLeaderboard() {
           {isProgress ? (
             <ProgressPanel board={board} cfg={cfg} />
           ) : (board.leaderboard || []).length === 0 ? (
-            <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+            <div className="bg-game-panel border border-game-line rounded-xl p-8 text-center">
               <p className="text-4xl mb-3">🏆</p>
               <p className="font-bold text-white mb-1">{isWeekly ? 'No scores yet this week' : 'No scores yet'}</p>
               <p className="text-sm text-slate-400 mb-4">Be the first to set a score!</p>
@@ -517,9 +517,9 @@ export default function CbatLeaderboard() {
               </Link>
             </div>
           ) : (
-            <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden">
+            <div className="bg-game-panel border border-game-line rounded-xl overflow-hidden">
               {/* Table header */}
-              <div className={`grid ${cols} ${rowPad()} py-2.5 bg-[#060e1a] border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
+              <div className={`grid ${cols} ${rowPad()} py-2.5 bg-game-arena border-b border-game-line text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
                 <span>Rank</span>
                 <span>Agent</span>
                 {isWeekly ? (
@@ -536,7 +536,7 @@ export default function CbatLeaderboard() {
               </div>
 
               {/* Rows */}
-              <div className="divide-y divide-[#1a3a5c]/50">
+              <div className="divide-y divide-game-line/50">
                 {rowsToRender.map(entry => {
                   const isMe = !!(user && entry.userId === user._id)
                   return (

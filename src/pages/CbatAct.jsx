@@ -1300,7 +1300,7 @@ function TouchSteerPad({ onPointerDown, onPointerMove, onPointerUp, isDragging }
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      className="relative w-full h-36 mt-3 bg-[#0a1628] border border-[#1a3a5c] rounded-xl overflow-hidden"
+      className="relative w-full h-36 mt-3 bg-game-panel border border-game-line rounded-xl overflow-hidden"
       style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
       aria-label="Touch steering pad — drag to steer"
       role="application"
@@ -1340,7 +1340,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
     >
       <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Round {roundIdx + 1} of {TOTAL_ROUNDS} — debrief</p>
       <p className="text-xl font-extrabold text-white mb-4">
@@ -1358,7 +1358,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
       </div>
 
       {codeResult && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-4">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1.5">Memory code</p>
           <p className="font-mono text-xl font-extrabold tracking-[0.2em] mb-1">
             {codeResult.expected.split('').map((d, i) => (
@@ -1373,7 +1373,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
         </div>
       )}
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-4">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Round score</p>
         <p className="text-3xl font-mono font-extrabold text-brand-600">{Math.round(stats.score)}</p>
       </div>
@@ -1391,7 +1391,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
 function Stat({ label, value, good, bad }) {
   const tone = good ? 'text-green-400' : bad ? 'text-red-400' : 'text-brand-600'
   return (
-    <div className="bg-[#060e1a] rounded-md border border-[#1a3a5c] p-2">
+    <div className="bg-game-arena rounded-md border border-game-line p-2">
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">{label}</p>
       <p className={`text-base font-mono font-bold ${tone}`}>{value}</p>
     </div>
@@ -1842,7 +1842,7 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
             onChange={(e) => changeStickRate(Number(e.target.value))}
             className="w-full accent-brand-600 cursor-pointer"
           />
-          <p className="mt-1 text-[10px] text-[#8a9bb5]">How fast the ball turns with the stick hard over.</p>
+          <p className="mt-1 text-[10px] text-game-muted">How fast the ball turns with the stick hard over.</p>
           </>)}
         </StickSetup>
       }
@@ -1850,7 +1850,7 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+      className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
     >
       <p className="text-4xl lg:text-5xl mb-3">🎧</p>
       <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Auditory Capacity Test</p>
@@ -1868,20 +1868,20 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
       {/* Only below lg. Above it this same notice is the right-hand column. */}
       <div className="w-full mb-5 lg:hidden">{headphonesNotice}</div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🎯'}</span>
           <span className="pt-0.5">Default: thread every shape (+20 each, −10 if missed)</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🔇'}</span>
           <span className="pt-0.5">"Avoid" instructions: skip = +25, miss = −25</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⚡'}</span>
           <span className="pt-0.5">Tap BLEEP fast when you hear it (+25/+20/+10), miss or false tap = −10</span>
         </div>
-        <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+        <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Scraping the tunnel wall costs −5 / second</span>
         </div>
@@ -1895,7 +1895,7 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
       />
 
       {personalBest && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4">
           <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
           <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
           <p className="text-[10px] lg:text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
@@ -2064,7 +2064,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
         </span>
       </div>
 
-      <div className="relative aspect-square sm:aspect-[4/3] bg-[#020812] border border-[#1a3a5c] rounded-xl overflow-hidden">
+      <div className="relative aspect-square sm:aspect-[4/3] bg-[#020812] border border-game-line rounded-xl overflow-hidden">
         <ActScene state={state} craftUrl={craftUrl} />
 
         {showCallsignOverlay && (
@@ -2201,7 +2201,7 @@ function FinalResults({ allRoundStats, codeResult, debug }) {
   }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0, bleepFalseAlarms: 0 })
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-6 text-center">
       <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Mission Debrief</p>
       <p className={`text-xl font-extrabold text-white ${debug ? 'mb-1' : 'mb-4'}`}>Final score</p>
       {debug && <p className="text-xs text-amber-400 mb-4">DEBUG MODE · run not submitted to leaderboard</p>}

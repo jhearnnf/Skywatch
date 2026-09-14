@@ -22,6 +22,7 @@ import TutorialPickerOverlay                  from './components/TutorialPickerO
 import CbatMenuMusic                          from './components/CbatMenuMusic'
 import CommunityMusic                         from './components/CommunityMusic'
 import AppShell                            from './components/layout/AppShell'
+import UiThemeSync                         from './components/layout/UiThemeSync'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
@@ -499,6 +500,7 @@ export default function App() {
               <UnsolvedReportsProvider>
                 <ChatUnreadProvider>
                   <GameChromeProvider>
+                    <UiThemeSync />
                     <AppRoutes />
                     <CbatMenuMusic />
         <CommunityMusic />

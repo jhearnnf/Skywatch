@@ -41,7 +41,7 @@ const NEXT_REVEAL_S_3D = 0.5
 
 // ── SVG helpers (2D only) ───────────────────────────────────────────────────
 
-const STROKE = '#5baaff'
+const STROKE = 'var(--color-game-accent)'
 const FILL   = 'rgba(91,170,255,0.18)'
 const LABEL_OFFSET = 14
 
@@ -86,7 +86,7 @@ function PromptShape({ shape, rotation, labels, svgRef }) {
             dominantBaseline="central"
             fontSize="14"
             fontWeight="700"
-            fill="#5baaff"
+            fill="var(--color-game-accent)"
             style={{ paintOrder: 'stroke', stroke: '#06101e', strokeWidth: 3 }}
           >
             {letter}
@@ -244,7 +244,7 @@ function AssemblyAnimation({ data }) {
               dominantBaseline="central"
               fontSize={14}
               fontWeight={700}
-              fill="#5baaff"
+              fill="var(--color-game-accent)"
               style={{ paintOrder: 'stroke', stroke: '#06101e', strokeWidth: 3 }}
             >
               {d.letter}
@@ -385,7 +385,7 @@ function ResultsScreen({ answers, totalTime }) {
     : { label: 'Failed', emoji: '\u{1F4A5}', color: 'text-red-400' }
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Visualisation Complete</p>
@@ -393,12 +393,12 @@ function ResultsScreen({ answers, totalTime }) {
       {/* Score and time together — the run's two headline numbers. The time was
           already recorded and submitted; it just wasn't being shown back. */}
       <div className="grid grid-cols-2 gap-2 mb-2">
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Score</p>
           <p className="text-xl font-mono font-bold text-brand-600">{correct}/{TOTAL_ROUNDS}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">{pct}%</p>
         </div>
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Time</p>
           <p className="text-xl font-mono font-bold text-brand-600">{totalTime.toFixed(1)}s</p>
           <p className="text-[10px] text-slate-500 mt-0.5">
@@ -409,7 +409,7 @@ function ResultsScreen({ answers, totalTime }) {
 
       <div className="grid grid-cols-2 gap-2 mb-6">
         {['Tier 1', 'Tier 2'].map((label, i) => (
-          <div key={i} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <div key={i} className="bg-game-arena rounded-lg border border-game-line p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
             <p className="text-xl font-mono font-bold text-brand-600">
               {tierCorrect[i].correct}/{tierCorrect[i].total}
@@ -418,8 +418,8 @@ function ResultsScreen({ answers, totalTime }) {
         ))}
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-6 max-h-48 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Round Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-6 max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Round Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => (
             <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
@@ -739,7 +739,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className="text-4xl lg:text-5xl mb-3">{is3D ? '\u{1F9CA}' : '\u{1F9EE}'}</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-1">Visualisation</p>
@@ -755,18 +755,18 @@ export default function CbatVisualisation({ forcedMode = null }) {
                   : 'Each round shows a few shapes with letter-labelled sides. Sides sharing the same letter weld together. Pick the correct final figure from the six options.'}
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F551}'}</span>
                   <span className="pt-0.5">{'30 seconds per round · 8 rounds'}</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F4A1}'}</span>
                   <span className="pt-0.5">{is3D
                     ? 'Mentally rotate each shape to match the prompt — the dot must end up on the same corner.'
                     : 'Match letters — e.g. side “A” meets the other side “A”'}</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
                   <span className="pt-0.5">{'Tap your answer — it’s locked in immediately'}</span>
                 </div>
@@ -820,7 +820,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                 </span>
               </div>
 
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -836,7 +836,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     key={`prompt-${currentIdx}`}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-2 sm:p-3 mb-2 sm:mb-3"
+                    className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3 mb-2 sm:mb-3"
                   >
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       These pieces weld on matching letters
@@ -860,21 +860,21 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     key={`choices-${currentIdx}`}
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-2 sm:p-3"
+                    className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3"
                   >
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       Which is the correct final figure?
                     </p>
                     <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                       {currentRound.choices.map((choice, i) => {
-                        let btnClass = 'bg-[#060e1a] border-[#1a3a5c] hover:border-brand-400 hover:bg-[#0f2240]'
+                        let btnClass = 'bg-game-arena border-game-line hover:border-brand-400 hover:bg-game-raised'
                         if (phase === 'feedback') {
                           if (i === currentRound.correctIdx) {
                             btnClass = 'bg-green-500/20 border-green-500/50'
                           } else if (i === pickedKey && !wasCorrect) {
                             btnClass = 'bg-red-500/20 border-red-500/50'
                           } else {
-                            btnClass = 'bg-[#060e1a] border-[#1a3a5c] opacity-50'
+                            btnClass = 'bg-game-arena border-game-line opacity-50'
                           }
                         }
                         return (
@@ -954,7 +954,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     key={`prompt3d-${currentIdx}`}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-2 sm:p-3 mb-2 sm:mb-3"
+                    className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3 mb-2 sm:mb-3"
                   >
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       Find the option with the dots on the same corners
@@ -990,21 +990,21 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     key={`choices3d-${currentIdx}`}
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-2 sm:p-3"
+                    className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3"
                   >
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       Which option matches?
                     </p>
                     <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                       {currentRound.options.map((opt) => {
-                        let btnClass = 'bg-[#060e1a] border-[#1a3a5c] hover:border-brand-400 hover:bg-[#0f2240]'
+                        let btnClass = 'bg-game-arena border-game-line hover:border-brand-400 hover:bg-game-raised'
                         if (phase === 'feedback') {
                           if (opt.id === currentRound.correctOptionId) {
                             btnClass = 'bg-green-500/20 border-green-500/50'
                           } else if (opt.id === pickedKey && !wasCorrect) {
                             btnClass = 'bg-red-500/20 border-red-500/50'
                           } else {
-                            btnClass = 'bg-[#060e1a] border-[#1a3a5c] opacity-50'
+                            btnClass = 'bg-game-arena border-game-line opacity-50'
                           }
                         }
                         return (

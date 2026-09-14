@@ -23,7 +23,7 @@ function VltTab(tab, highlights) {
   return (
     <div>
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">{tab.title}</p>
-      <p className="text-sm text-[#ddeaf8] leading-relaxed">
+      <p className="text-sm text-game-text leading-relaxed">
         {parts
           ? parts.map((part, i) => (part.kind
             ? (

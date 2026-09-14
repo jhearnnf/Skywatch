@@ -144,19 +144,19 @@ function ResultsScreen({ answers, totalTime }) {
     : 0
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{gradeStyle.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">Instrument Read Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}</p>
             <p className="text-sm text-slate-400">correct / {rounds}</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">accuracy</p>
@@ -172,8 +172,8 @@ function ResultsScreen({ answers, totalTime }) {
       </div>
 
       {/* Answer review */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-6 max-h-48 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Round Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-6 max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Round Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => (
             <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
@@ -413,7 +413,7 @@ export default function CbatInstruments() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className="text-4xl lg:text-5xl mb-3">{'\u{1F6EB}'}</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Instrument Read</p>
@@ -422,23 +422,23 @@ export default function CbatInstruments() {
                 describes the flight state. As many rounds as you can in 90 seconds.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
                   <span className="pt-0.5">90-second total time limit</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9ED}'}</span>
                   <span className="pt-0.5">Needles calibrate each round — wait for them to settle, then choose</span>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2713'}</span>
                   <span className="pt-0.5">One correct statement, four distractors — variables swapped subtly</span>
                 </div>
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4 text-center">
+                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
                   <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">
                     {personalBest.bestScore} correct
@@ -480,7 +480,7 @@ export default function CbatInstruments() {
               </div>
 
               {/* Time bar */}
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className={`h-full rounded-full ${timeRemaining < 10 ? 'bg-red-500' : 'bg-brand-600'}`}
                   initial={false}
@@ -490,7 +490,7 @@ export default function CbatInstruments() {
               </div>
 
               {/* Instruments */}
-              <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 mb-3">
+              <div className="bg-game-panel border border-game-line rounded-xl p-3 mb-3">
                 <InstrumentPanel
                   key={roundIndex}
                   altitude={round.params.altitude}
@@ -551,14 +551,14 @@ export default function CbatInstruments() {
                     </p>
                     {round.statements.map((s, i) => {
                       const segments = statementSegments(s)
-                      let btnClass = 'bg-[#060e1a] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240]'
+                      let btnClass = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised'
                       if (phase === 'feedback') {
                         if (i === round.correctIdx) {
                           btnClass = 'bg-green-500/20 border-green-500/50 text-green-300'
                         } else if (i === pickedIdx && !wasCorrect) {
                           btnClass = 'bg-red-500/20 border-red-500/50 text-red-300'
                         } else {
-                          btnClass = 'bg-[#060e1a] border-[#1a3a5c] text-[#5a6a80] opacity-50'
+                          btnClass = 'bg-game-arena border-game-line text-game-faint opacity-50'
                         }
                       }
                       return (

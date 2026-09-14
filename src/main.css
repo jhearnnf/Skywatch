@@ -76,6 +76,24 @@
   --color-red-100: #2e0a10;
   --color-red-200: #4a1018;
 
+  /* ── CBAT game palette ────────────────────────────────────────────────
+     The colours every CBAT game, arena and results screen is drawn in. They
+     used to be arbitrary-value classes (`bg-[#0a1628]`) repeated ~1,300
+     times across the games; naming them is what lets the Real CBAT theme
+     re-skin every game from one place (see `:root[data-theme="cbat"]`).
+     Values are unchanged from the literals they replaced. */
+  --color-game-arena:       #060e1a;  /* play field / map / instrument face */
+  --color-game-panel:       #0a1628;  /* panel and card fill */
+  --color-game-raised:      #0f2240;  /* hover / selected / raised fill */
+  --color-game-line:        #1a3a5c;  /* borders, grid lines, dividers */
+  --color-game-line-strong: #254a6e;  /* emphasised border */
+  --color-game-fill:        #1a3a5c;  /* secondary button fill (same as line here, not in every theme) */
+  --color-game-fill-strong: #254a6e;  /* its hover */
+  --color-game-text:        #ddeaf8;  /* primary text and needles */
+  --color-game-muted:       #8a9bb5;  /* secondary text */
+  --color-game-faint:       #5a6a80;  /* tertiary text, tick marks */
+  --color-game-accent:      #5baaff;  /* the electric-blue highlight */
+
   /* ── XP / coins */
   --color-xp:    #fbbf24;
   --color-xp-bg: #1a1200;
@@ -258,6 +276,229 @@ body::before {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #1a3060; border-radius: 9999px; }
+
+/* ── "Real CBAT" theme ─────────────────────────────────────────────────
+   Picked per account from the top-bar theme selector (ThemeSelector.jsx);
+   useUiTheme stamps `data-theme="cbat"` on <html>. The default SkyWatch
+   theme carries no attribute, so nothing below runs for it.
+
+   Styled after the actual test software as seen on candidates' photos: a
+   flat #000080 navy screen, plain white Tahoma-style text with wide
+   tracking, thin white rules for the title and status bars, boxes drawn as
+   pale-yellow outlines with no fill, grey bevelled key caps, and cream
+   instruction dialogs. No gradients, no glow, no rounded corners.
+
+   It works by re-pointing the design tokens: every Tailwind colour utility
+   here resolves to var(--color-*), so overriding the variables re-skins each
+   page and game without touching a component. Game canvases (WebGL, SVG
+   arenas) draw their own colours and are deliberately left alone — the
+   games' own Real CBAT treatment is a separate, later piece of work.
+   These rules are unlayered, so they beat Tailwind's layered utilities. */
+:root[data-theme="cbat"] {
+  /* Screen */
+  --color-bg:             #000080;
+  --color-surface:        #000070;
+  --color-surface-raised: #0c0c94;
+
+  /* Text — white on navy, softened greys for the secondary levels */
+  --color-text:       #ffffff;
+  --color-text-muted: #c8c8e8;
+  --color-text-faint: #8c8cc0;
+
+  /* Brand — as TEXT (600+) it is the pale yellow the real software uses
+     for labels and prompts; as a FILL (bg-brand-600 etc.) it is remapped
+     to a grey key cap below, so the fill value here only shows through
+     tints like `bg-brand-600/20`. 50–300 are the navy tints and outlines. */
+  --color-brand-50:  #000060;
+  --color-brand-100: #0a0a72;
+  --color-brand-200: #3c3cb0;
+  --color-brand-300: #8c8c50;
+  --color-brand-400: #b4b458;
+  --color-brand-500: #dcdc78;
+  --color-brand-600: #ffff99;
+  --color-brand-700: #ffffbb;
+  --color-brand-800: #ffffd4;
+  --color-brand-900: #ffffec;
+
+  /* Slate — navy tints for surfaces, greys-to-white for text. 200/300 sit
+     brighter than the SkyWatch scale because they are the site's border
+     tokens, and the real screens draw every box as a thin visible outline */
+  --color-slate-50:  #000066;
+  --color-slate-100: #000074;
+  --color-slate-200: #3c3cb0;
+  --color-slate-300: #6060c8;
+  --color-slate-400: #8080d0;
+  --color-slate-500: #a0a0dc;
+  --color-slate-600: #aaaad8;
+  --color-slate-700: #c8c8e4;
+  --color-slate-800: #e0e0f0;
+  --color-slate-900: #ffffff;
+
+  /* Amber → the pale yellow the real software uses for labels and boxes */
+  --color-amber-50:  #1a1a00;
+  --color-amber-100: #303000;
+  --color-amber-200: #505000;
+  --color-amber-600: #ffff80;
+  --color-amber-700: #ffff99;
+  --color-amber-800: #ffffbb;
+  --color-xp:        #ffff99;
+  --color-xp-bg:     #1a1a00;
+  --color-warning:   #ffff99;
+
+  /* Status — the flat primaries of the ACT shapes */
+  --color-emerald-600: #2ecc4a;
+  --color-emerald-800: #7dfc98;
+  --color-success:     #2ecc4a;
+  --color-danger:      #cc2222;
+
+  /* CBAT games — the play field IS the navy screen. Panels sit on it with
+     no fill of their own, only a pale-yellow outline (the MAT-F answer box,
+     the ACT frame); text is white; the highlight is the same pale yellow
+     the real software uses for "Your Answer" and the key prompts */
+  --color-game-arena:       #000080;
+  --color-game-panel:       #000080;
+  --color-game-raised:      #10109a;
+  --color-game-line:        #d8d890;
+  --color-game-line-strong: #ffffaa;
+  --color-game-fill:        #2c3cb0;  /* a secondary key: the key-icon blue, white text stays legible */
+  --color-game-fill-strong: #4058d0;
+  --color-game-text:        #ffffff;
+  --color-game-muted:       #c8c8e8;
+  --color-game-faint:       #a0a0c8;
+  --color-game-accent:      #ffff99;
+
+  /* Square everything — the real screens have not a single rounded corner */
+  --radius-card: 0;
+  --radius-btn:  0;
+  --radius-pill: 0;
+  --radius-xs:  0;
+  --radius-sm:  0;
+  --radius-md:  0;
+  --radius-lg:  0;
+  --radius-xl:  0;
+  --radius-2xl: 0;
+  --radius-3xl: 0;
+  --radius-4xl: 0;
+
+  /* Type — Tahoma/Verdana is what the photos show */
+  --font-family-sans: Tahoma, Verdana, Geneva, 'DejaVu Sans', sans-serif;
+  --font-sans:        Tahoma, Verdana, Geneva, 'DejaVu Sans', sans-serif;
+  --font-family-mono: 'Courier New', Courier, monospace;
+  --font-mono:        'Courier New', Courier, monospace;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="cbat"] body {
+  letter-spacing: 0.03em;
+  -webkit-font-smoothing: auto;
+}
+
+/* Swap the tactical grid for the faint tiled texture of the real backdrop */
+:root[data-theme="cbat"] body::before {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 6px 6px;
+}
+
+/* Title bar: solid navy under a single thin white rule, no frosted glass */
+:root[data-theme="cbat"] .app-topbar {
+  background-color: var(--color-bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: 1px solid #ffffff;
+}
+
+/* Filled brand buttons become grey key caps with black text on a bevel:
+   the single most recognisable thing about the real software's screens
+   (the numbered answer keys on MAT-F, the arrow-key prompts). Exact
+   class-token matches so `bg-brand-600/20` tints are left alone. The rule
+   sets `color` on the element itself, which is where `text-white` lives on
+   every button in the codebase; children with their own colour keep it. */
+:root[data-theme="cbat"] [class~="bg-brand-600"],
+:root[data-theme="cbat"] [class~="bg-brand-500"],
+:root[data-theme="cbat"] [class~="bg-brand-700"],
+:root[data-theme="cbat"] .theme-selector-option[aria-pressed="true"] {
+  background-color: #b4b4b4;
+  color: #000000;
+  box-shadow: inset -1px -1px 0 #606060, inset 1px 1px 0 #f0f0f0;
+}
+:root[data-theme="cbat"] [class~="hover:bg-brand-700"]:hover,
+:root[data-theme="cbat"] [class~="hover:bg-brand-600"]:hover,
+:root[data-theme="cbat"] [class~="hover:bg-brand-500"]:hover {
+  background-color: #d2d2d2;
+  color: #000000;
+}
+:root[data-theme="cbat"] [class~="bg-brand-600"]:disabled,
+:root[data-theme="cbat"] [class~="bg-brand-600"][aria-disabled="true"] {
+  background-color: #6e6e7c;
+  color: #1a1a1a;
+  box-shadow: none;
+}
+
+/* Target's scene: a flat field, shapes in their true flat colours rather
+   than muted for the arcade look. The cloud cover stays; it is part of the
+   hunt, not the decoration. */
+:root[data-theme="cbat"] .cbat-target-scene {
+  background-color: var(--color-game-arena);
+  background-image: none;
+}
+:root[data-theme="cbat"] .cbat-target-scene .cbat-shape-wrap {
+  filter: none;
+  opacity: 1;
+}
+:root[data-theme="cbat"] .cbat-led-on {
+  background-color: var(--color-game-accent);
+  box-shadow: none;
+}
+
+/* No drop shadows or glows: the real screens are perfectly flat */
+:root[data-theme="cbat"] .card-shadow,
+:root[data-theme="cbat"] .card-shadow-hover {
+  box-shadow: none;
+}
+
+/* One-off shades a few games picked by hand (a slightly darker panel
+   here, a slightly lighter hover there). Under the SkyWatch theme they stay
+   exactly as written; here they fold into the nearest game token so no
+   near-black blotch is left sitting on the navy screen. Exact class-token
+   matches, so nothing else is caught. */
+:root[data-theme="cbat"] [class~="bg-[#020a18]"],
+:root[data-theme="cbat"] [class~="bg-[#020812]"] { background-color: var(--color-game-arena); }
+:root[data-theme="cbat"] [class~="bg-[#0b1a2e]"],
+:root[data-theme="cbat"] [class~="bg-[#12253c]"] { background-color: var(--color-game-panel); }
+:root[data-theme="cbat"] [class~="bg-[#13294a]"],
+:root[data-theme="cbat"] [class~="hover:bg-[#163055]"]:hover,
+:root[data-theme="cbat"] [class~="active:bg-[#163055]"]:active { background-color: var(--color-game-raised); }
+:root[data-theme="cbat"] [class~="border-[#0d1c30]"],
+:root[data-theme="cbat"] [class~="border-[#12283f]"],
+:root[data-theme="cbat"] [class~="border-[#13294a]"],
+:root[data-theme="cbat"] [class~="border-[#15293f]"] { border-color: var(--color-game-line); }
+:root[data-theme="cbat"] [class~="border-[#3a7bbf]"] { border-color: var(--color-game-line-strong); }
+
+/* Glows, drop shadows and frosted glass are the gamified look; the real
+   software has none of them. Class-based only: an inline gradient may be a
+   gauge fill, and removing it would blank the gauge. `rounded-[50%]` is left
+   alone because it is how the games draw dots and rings. */
+:root[data-theme="cbat"] [class*="shadow-"] { box-shadow: none; }
+:root[data-theme="cbat"] [class*="backdrop-blur"] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+:root[data-theme="cbat"] [class*="rounded-["]:not([class*="rounded-[50%]"]) { border-radius: 0; }
+:root[data-theme="cbat"] [style*="box-shadow"] { box-shadow: none !important; }
+
+/* The CBAT hub tiles' decorative art (blurred game stills, colour wash,
+   bloom, scanlines) is the gamified look; under this theme a tile is a
+   plain outlined box, as it would be in the test software */
+:root[data-theme="cbat"] .cbat-card-art {
+  display: none;
+}
+
+/* Scrollbar: a plain grey block, square-ended */
+:root[data-theme="cbat"] ::-webkit-scrollbar-thumb {
+  background: #a0a0a0;
+  border-radius: 0;
+}
 
 /* prevent layout shift when bottom-sheet open */
 .no-scroll { overflow: hidden; }
@@ -515,7 +756,7 @@ body.cbat-dpt-fullwidth .app-shell-content {
    two are clearly one machine rather than two things flashing at each other. */
 @keyframes cbat-arcade-idle {
   0%, 100% {
-    border-color: #1a3a5c;
+    border-color: var(--color-game-line);
     box-shadow: inset 0 0 0 1px rgba(91, 170, 255, 0.14), 0 0 18px rgba(245, 165, 36, 0.05);
   }
   50% {
@@ -556,7 +797,7 @@ body.cbat-dpt-fullwidth .app-shell-content {
 
 @keyframes cbat-notice-idle {
   0%, 100% {
-    border-color: #1a3a5c;
+    border-color: var(--color-game-line);
     box-shadow: inset 0 0 0 1px rgba(91, 170, 255, 0.14), 0 0 18px rgba(52, 211, 153, 0.05);
   }
   50% {
@@ -961,7 +1202,7 @@ body.community-selectable .app-shell-content * {
   border-radius: 9999px;
   border: 1px solid currentColor;
   pointer-events: none;
-  color: #1a3a5c;
+  color: var(--color-game-line);
   transition: color 90ms linear;
 }
 .sma-ring[data-state='on']   { color: #22c55e; }
@@ -2039,8 +2280,8 @@ body.play-mode .card-shadow {
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px;
-  background: #0a1628;
-  border: 1px solid #1a3a5c;
+  background: var(--color-game-panel);
+  border: 1px solid var(--color-game-line);
   border-radius: 8px;
 }
 
@@ -2114,7 +2355,7 @@ body.play-mode .card-shadow {
 
 /* Rapid blink for a system-feed row when the target code scrolls into view. */
 @keyframes cbatRowFlash {
-  0%, 100% { background-color: rgba(91, 170, 255, 0);   color: #ddeaf8; }
+  0%, 100% { background-color: rgba(91, 170, 255, 0);   color: var(--color-game-text); }
   50%      { background-color: rgba(91, 170, 255, 0.95); color: #04101f; }
 }
 .cbat-row-flash {
@@ -2139,7 +2380,7 @@ body.play-mode .card-shadow {
    can't take a background-color animation. Fill/stroke instead, same timing so
    a lit pill and a lit table cell beat together. */
 @keyframes cbatPillFlash {
-  0%, 12%, 24%, 36%, 100% { fill: #0a1628; stroke: #5baaff; }
+  0%, 12%, 24%, 36%, 100% { fill: var(--color-game-panel); stroke: var(--color-game-accent); }
   6%, 18%, 30%            { fill: #1d4b8f; stroke: #9ccaff; }
 }
 .cbat-pill-flash {
@@ -2212,7 +2453,7 @@ body.play-mode .card-shadow {
    mark currently being drawn. Colour + glow only — no weight or scale change, so
    the surrounding words never reflow as the lit word moves along the label. */
 @keyframes cbatWordLit {
-  0%, 12%, 24%, 36%, 100% { color: #ddeaf8; text-shadow: none; }
+  0%, 12%, 24%, 36%, 100% { color: var(--color-game-text); text-shadow: none; }
   6%, 18%, 30%            { color: #9ccaff; text-shadow: 0 0 6px rgba(91, 170, 255, 0.85); }
 }
 .cbat-word-lit {

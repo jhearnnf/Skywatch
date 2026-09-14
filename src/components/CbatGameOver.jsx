@@ -158,7 +158,7 @@ function WeeklyChase({ weekly }) {
   const toPass = above ? Math.max(1, above.weekTotal - pointsShown) : null
 
   return (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-2 mb-4 text-left">
+    <div className="bg-game-arena rounded-lg border border-game-line p-2 mb-4 text-left">
       <div className="flex items-center gap-1.5 px-1">
         <span className="px-1.5 py-0.5 rounded bg-brand-600 text-white text-[10px] font-extrabold uppercase tracking-wide">
           Weekly
@@ -168,7 +168,7 @@ function WeeklyChase({ weekly }) {
       <p className="text-[10px] text-slate-500 px-1 mt-1 mb-1.5">
         Points add up across every run this week{countdown ? ` · resets in ${countdown}` : ''}
       </p>
-      <div className={`grid ${rowCols('weekly', null, true)} ${rowPad(true)} pb-1.5 border-b border-[#1a3a5c] text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
+      <div className={`grid ${rowCols('weekly', null, true)} ${rowPad(true)} pb-1.5 border-b border-game-line text-[10px] text-slate-500 uppercase tracking-wide font-bold`}>
         <span>Rank</span>
         <span>Agent</span>
         <span className="text-right">Points</span>
@@ -179,7 +179,7 @@ function WeeklyChase({ weekly }) {
           players just overtaken are usually outside it. The moving number carries the change.
           The user's cells stay illuminated from the flash right through the count-up, so the
           figure they were told to watch is still lit while it moves. */}
-      <div className="divide-y divide-[#1a3a5c]/50">
+      <div className="divide-y divide-game-line/50">
         {weekly.neighbors.map(n => (
           <LeaderboardRow
             key={`${n.rank}-${n.name}`}
@@ -277,7 +277,7 @@ function ProgressTrend({ progress, cfg }) {
   const formatTime = fmtTime(cfg.timeDecimals ?? 1)
 
   return (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-2 mb-4">
+    <div className="bg-game-arena rounded-lg border border-game-line p-2 mb-4">
       <div className="flex items-center justify-between mb-0.5 px-1">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide">
           {showSpeed ? 'Your Progress · Score' : 'Your Progress'}
@@ -293,7 +293,7 @@ function ProgressTrend({ progress, cfg }) {
       {verdict && <p className="text-[11px] text-center mt-1">{verdict}</p>}
 
       {showSpeed && (
-        <div className="mt-2 pt-2 border-t border-[#1a3a5c]">
+        <div className="mt-2 pt-2 border-t border-game-line">
           <div className="flex items-center justify-between mb-0.5 px-1">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide">Speed</p>
             {/* Names what the amber points are. Without it the two-tone line is a puzzle. */}
@@ -373,7 +373,7 @@ function QueuedScoreNote() {
   const others = Math.max(0, pending - 1)
 
   return (
-    <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-1 text-left">
+    <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-1 text-left">
       <p className="text-xs text-amber-300 font-bold">📡 Score saved on this device</p>
       <p className="text-[11px] text-slate-400 mt-1">
         {reason} Your weekly rank updates then too.
@@ -538,7 +538,7 @@ export default function CbatGameOver({
     : progressDone ? fallbackIsPB
     : false
 
-  const secondaryBtn = 'px-5 py-2.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] text-sm font-bold rounded-lg transition-colors no-underline'
+  const secondaryBtn = 'px-5 py-2.5 bg-game-fill hover:bg-game-fill-strong text-game-text text-sm font-bold rounded-lg transition-colors no-underline'
 
   return (
     <motion.div
@@ -565,7 +565,7 @@ export default function CbatGameOver({
       </AnimatePresence>
 
       {/* Panel 1 — personal beat + weekly position */}
-      <div className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
+      <div className="bg-game-panel border border-game-line rounded-xl p-6 text-center">
         {/* Score and clock sit side by side, but not as equals: the score stays the headline and
             the time is deliberately the smaller figure, because it only ever breaks ties between
             equal scores. Games with a fixed duration (hideTime) show the score alone — their

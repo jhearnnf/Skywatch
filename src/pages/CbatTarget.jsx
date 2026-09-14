@@ -469,10 +469,10 @@ function InfoPanel({ highlight = null } = {}) {
       : 'transition-opacity duration-300'
   )
   return (
-    <div className="w-full h-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg px-1.5 py-1 text-[10px] text-[#ddeaf8] leading-[1.2]">
+    <div className="w-full h-full bg-game-panel border border-game-line rounded-lg px-1.5 py-1 text-[10px] text-game-text leading-[1.2]">
       <div className="flex flex-wrap gap-x-2 gap-y-0.5">
         <Item className={cls('hostile')} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#ef4444]" />} label="hostile" />
-        <Item className={cls('friendly')} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5baaff]" />} label="friendly" />
+        <Item className={cls('friendly')} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-game-accent" />} label="friendly" />
         <Item className={cls('neutral')} icon={<span className="inline-block w-2.5 h-2.5 rounded-full bg-[#facc15]" />} label="neutral" />
         <Item className={cls('truck')} icon={outlineSvg(<circle cx="0" cy="0" r="4.5" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="truck" />
         <Item className={cls('tank')} icon={outlineSvg(<rect x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#94a3b8" strokeWidth="1.3" />)} label="tank" />
@@ -480,7 +480,7 @@ function InfoPanel({ highlight = null } = {}) {
         <Item className={cls('unknown')} icon={outlineSvg(<rect x="-3.5" y="-3.5" width="7" height="7" fill="none" stroke="#facc15" strokeWidth="1.3" transform="rotate(45)" />)} label="unknown" />
         <Item className={cls('damaged')} icon={<span className="text-red-300 font-bold">✕</span>} label="damaged" />
         <Item className={cls('hi-pri')} icon={outlineSvg(
-          <g stroke="#5baaff" strokeWidth="1.5" strokeLinecap="round">
+          <g stroke="var(--color-game-accent)" strokeWidth="1.5" strokeLinecap="round">
             <line x1="0" y1="-5" x2="0" y2="-2" />
             <line x1="0" y1="2" x2="0" y2="5" />
             <line x1="-5" y1="0" x2="-2" y2="0" />
@@ -495,7 +495,7 @@ function InfoPanel({ highlight = null } = {}) {
 // ── Light panel ──────────────────────────────────────────────────────────────
 function LightPanel({ pattern, flash, onPress, lockPulse = false }) {
   return (
-    <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-2 flex items-center justify-around gap-2 transition-colors ${flash ? 'border-green-400 bg-green-500/15' : 'border-[#1a3a5c]'}`}>
+    <div className={`h-full w-full bg-game-panel border rounded-lg p-2 flex items-center justify-around gap-2 transition-colors ${flash ? 'border-green-400 bg-green-500/15' : 'border-game-line'}`}>
       <div className="flex gap-2">
         {pattern.map((c, i) => (
           <span key={i} className="inline-block rounded-full"
@@ -514,11 +514,11 @@ function LightPanel({ pattern, flash, onPress, lockPulse = false }) {
 
 function LightTargetPanel({ pattern }) {
   return (
-    <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-2 flex flex-col items-center justify-center gap-1 max-[900px]:flex-row max-[900px]:gap-2">
+    <div className="h-full w-full bg-game-panel border border-game-line rounded-lg p-2 flex flex-col items-center justify-center gap-1 max-[900px]:flex-row max-[900px]:gap-2">
       <p className="text-[9px] uppercase tracking-wide text-slate-500 shrink-0">Light Target</p>
       <div className="flex gap-1.5">
         {pattern.map((c, i) => (
-          <span key={i} className="inline-block rounded-full border border-[#0c1829]"
+          <span key={i} className="inline-block rounded-full border border-surface"
             style={{ width: 14, height: 14, background: LIGHT_HEX[c] }} />
         ))}
       </div>
@@ -578,7 +578,7 @@ function ScanPanel({ aircraft, onPress, flash, idPulse = false }) {
   const boxRef = useRef(null)
   const square = useContainSquare(boxRef)
   return (
-    <div className={`h-full w-full bg-[#0a1628] border rounded-lg p-1 flex items-center gap-1 transition-colors ${SCAN_FLASH_CLASS[flash] ?? 'border-[#1a3a5c]'}`}>
+    <div className={`h-full w-full bg-game-panel border rounded-lg p-1 flex items-center gap-1 transition-colors ${SCAN_FLASH_CLASS[flash] ?? 'border-game-line'}`}>
       <div ref={boxRef} className="flex-1 h-full relative rounded-lg overflow-hidden bg-[#020a18] flex items-center justify-center">
         <ScanGrid />
         {aircraft && square > 0 && (
@@ -613,7 +613,7 @@ function ScanPanel({ aircraft, onPress, flash, idPulse = false }) {
 
 function ScanTargetPanel({ aircraft }) {
   return (
-    <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1 flex flex-col items-center gap-0.5 max-[900px]:flex-row max-[900px]:items-center max-[900px]:gap-1.5">
+    <div className="h-full w-full bg-game-panel border border-game-line rounded-lg p-1 flex flex-col items-center gap-0.5 max-[900px]:flex-row max-[900px]:items-center max-[900px]:gap-1.5">
       <p className="text-[9px] uppercase tracking-wide text-slate-500 shrink-0 max-[900px]:px-1">Scan Target</p>
       <div className="flex-1 w-full relative max-[900px]:h-full">
         {aircraft ? (
@@ -632,7 +632,7 @@ function ScanTargetPanel({ aircraft }) {
 // `highlight` spotlights one chip by id. `demoChip` instead renders a single
 // chip whose words are individually spanned, so the tutorial can light the one
 // word belonging to the symbol mark it is currently drawing.
-const SCENE_TARGET_CHIP = 'inline-flex items-center gap-1 px-1.5 py-0.5 bg-[#060e1a] border border-[#1a3a5c] rounded text-[10px] text-[#ddeaf8]'
+const SCENE_TARGET_CHIP = 'inline-flex items-center gap-1 px-1.5 py-0.5 bg-game-arena border border-game-line rounded text-[10px] text-game-text'
 
 function SceneTargetPanel({ labels, diamondsActive, highlight = null, demoChip = null }) {
   const all = [
@@ -640,7 +640,7 @@ function SceneTargetPanel({ labels, diamondsActive, highlight = null, demoChip =
     ...labels.map(l => ({ id: l.id, text: labelFor(l) })),
   ]
   return (
-    <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1.5 overflow-hidden">
+    <div className="h-full w-full bg-game-panel border border-game-line rounded-lg p-1.5 overflow-hidden">
       <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">Scene Targets</p>
       <div className="flex flex-wrap gap-1 overflow-hidden">
         {demoChip ? (
@@ -676,10 +676,10 @@ function SceneTargetPanel({ labels, diamondsActive, highlight = null, demoChip =
 // ── System panel ─────────────────────────────────────────────────────────────
 function SystemPanel({ columns, highlights, onClickCode, flashCode = null }) {
   return (
-    <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1 overflow-hidden">
+    <div className="h-full w-full bg-game-panel border border-game-line rounded-lg p-1 overflow-hidden">
       <div className="grid grid-cols-3 gap-1 h-full">
         {columns.map((col, ci) => (
-          <div key={ci} className="sys-column relative overflow-hidden h-full bg-[#060e1a] rounded">
+          <div key={ci} className="sys-column relative overflow-hidden h-full bg-game-arena rounded">
             <div
               className="sys-column-inner"
               style={{ animationDuration: `${col.durationMs}ms` }}
@@ -695,7 +695,7 @@ function SystemPanel({ columns, highlights, onClickCode, flashCode = null }) {
                     onClick={() => onClickCode(ci, actualRow, code)}
                     data-demo-answer
                     className={`sys-row w-full text-center font-mono text-[19px] cursor-pointer transition-colors ${
-                      isGreen ? 'bg-green-500/40 text-green-200' : 'text-[#ddeaf8] hover:bg-[#0f2240]'
+                      isGreen ? 'bg-green-500/40 text-green-200' : 'text-game-text hover:bg-game-raised'
                     }${isFlash ? ' cbat-row-flash' : ''}`}
                   >
                     {code}
@@ -712,11 +712,11 @@ function SystemPanel({ columns, highlights, onClickCode, flashCode = null }) {
 
 function SystemTargetPanel({ targets }) {
   return (
-    <div className="h-full w-full bg-[#0a1628] border border-[#1a3a5c] rounded-lg p-1.5 flex flex-col">
+    <div className="h-full w-full bg-game-panel border border-game-line rounded-lg p-1.5 flex flex-col">
       <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">System Targets</p>
       <div className="flex flex-wrap gap-1">
         {targets.map(t => (
-          <span key={t.id} className="px-2 py-0.5 bg-[#060e1a] border border-[#2e5d94] rounded font-mono text-[13px] font-bold text-white" style={{ textShadow: '0 0 6px rgba(91,170,255,0.75)' }}>
+          <span key={t.id} className="px-2 py-0.5 bg-game-arena border border-[#2e5d94] rounded font-mono text-[13px] font-bold text-white" style={{ textShadow: '0 0 6px rgba(91,170,255,0.75)' }}>
             {t.code}
           </span>
         ))}
@@ -735,13 +735,13 @@ function Compass({ pulse = false }) {
       className={`absolute top-1.5 left-1.5 pointer-events-none${pulse ? ' cbat-compass-pulse' : ''}`}
       style={{ zIndex: 25, opacity: pulse ? 1 : 0.55 }}
     >
-      <circle cx="23" cy="23" r="20" fill="#060e1a" fillOpacity="0.35" stroke="#1a3a5c" strokeWidth="1.3" />
+      <circle cx="23" cy="23" r="20" fill="var(--color-game-arena)" fillOpacity="0.35" stroke="var(--color-game-line)" strokeWidth="1.3" />
       <polygon points="23,5 20,23 26,23" fill="#ef4444" />
-      <polygon points="23,41 20,23 26,23" fill="#5baaff" />
-      <text x="23" y="10" textAnchor="middle" fontSize="7" fill="#ddeaf8" fontWeight="bold">N</text>
-      <text x="23" y="43" textAnchor="middle" fontSize="7" fill="#ddeaf8" fontWeight="bold">S</text>
-      <text x="5"  y="25" textAnchor="middle" fontSize="7" fill="#ddeaf8" fontWeight="bold">W</text>
-      <text x="41" y="25" textAnchor="middle" fontSize="7" fill="#ddeaf8" fontWeight="bold">E</text>
+      <polygon points="23,41 20,23 26,23" fill="var(--color-game-accent)" />
+      <text x="23" y="10" textAnchor="middle" fontSize="7" fill="var(--color-game-text)" fontWeight="bold">N</text>
+      <text x="23" y="43" textAnchor="middle" fontSize="7" fill="var(--color-game-text)" fontWeight="bold">S</text>
+      <text x="5"  y="25" textAnchor="middle" fontSize="7" fill="var(--color-game-text)" fontWeight="bold">W</text>
+      <text x="41" y="25" textAnchor="middle" fontSize="7" fill="var(--color-game-text)" fontWeight="bold">E</text>
     </svg>
   )
 }
@@ -757,7 +757,7 @@ function ResultsScreen({ stats }) {
   }[grade]
 
   const row = (label, val, sub, wide = false) => (
-    <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 ${wide ? 'col-span-2' : ''}`}>
+    <div className={`bg-game-arena rounded-lg border border-game-line p-3 ${wide ? 'col-span-2' : ''}`}>
       <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
       <p className="text-xl font-mono font-bold text-brand-600">{val}</p>
       {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
@@ -765,7 +765,7 @@ function ResultsScreen({ stats }) {
   )
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-6 text-center">
       <p className="text-4xl mb-2">{gradeStyle.emoji}</p>
       <p className={`text-xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-4">Target Complete</p>
@@ -787,7 +787,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+      className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
     >
       <p className="text-4xl lg:text-5xl mb-3">🎯</p>
       <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Target</p>
@@ -796,39 +796,39 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
         identify aircraft on radar, and find strings in the system feed.
       </p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
           <span className="pt-0.5">2-minute total time limit</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <CbatIntroLabel>Scene</CbatIntroLabel>
           <span className="pt-0.5">click shapes matching each target label</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <CbatIntroLabel>Light</CbatIntroLabel>
           <span className="pt-0.5">press LOCK when your 3-light pattern matches the target</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <CbatIntroLabel>Scan</CbatIntroLabel>
           <span className="pt-0.5">press ID when your radar aircraft matches the scan target</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <CbatIntroLabel>System</CbatIntroLabel>
           <span className="pt-0.5">click any scrolling code matching a system target</span>
         </div>
-        <div className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+        <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <CbatIntroLabel tone="danger">Alert</CbatIntroLabel>
           <span className="pt-0.5">click the red pulsing circles fast — the sooner, the more points</span>
         </div>
-        <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+        <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Wrong clicks lose points. Score can go negative.</span>
         </div>
       </div>
 
       {personalBest && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4">
           <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
           <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
           <p className="text-[10px] lg:text-xs text-slate-500">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
@@ -844,7 +844,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
       <div className="flex flex-wrap gap-3 lg:gap-4 justify-center">
         <button
           onClick={onTutorial}
-          className="px-6 py-3 lg:px-7 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
+          className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
         </button>
@@ -852,7 +852,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
           onClick={onStart}
           disabled={!aircraftReady}
           data-demo-start
-          className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
+          className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
         >
           {aircraftReady ? 'Start' : 'Loading aircraft…'}
         </button>
@@ -1093,7 +1093,7 @@ function TutorialArrow({ x, y }) {
       <svg width="24" height="28" viewBox="0 0 24 28" style={{ display: 'block' }}>
         <path
           d="M12 27 L3 15 H9 V2 H15 V15 H21 Z"
-          fill="#5baaff"
+          fill="var(--color-game-accent)"
           stroke="#06101e"
           strokeWidth="1.5"
           strokeLinejoin="round"
@@ -1105,7 +1105,7 @@ function TutorialArrow({ x, y }) {
 
 function TutorialDisabledPanel({ label }) {
   return (
-    <div className="cbat-tutorial-disabled w-full h-full bg-[#0a1628] border border-[#15293f] rounded-lg flex items-center justify-center select-none">
+    <div className="cbat-tutorial-disabled w-full h-full bg-game-panel border border-[#15293f] rounded-lg flex items-center justify-center select-none">
       <span className="text-[10px] uppercase tracking-wide text-slate-600 flex items-center gap-1">
         {'\u{1F512}'} {label}
       </span>
@@ -1118,7 +1118,7 @@ function TutorialComplete({ onExit }) {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
@@ -1466,7 +1466,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
         style={{ overflow: 'hidden' }}
         className="mb-3"
       >
-        <div ref={coachRef} className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4">
+        <div ref={coachRef} className="w-full bg-game-panel border border-game-line rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Practice Mode</span>
             <div className="flex items-center gap-1.5">
@@ -1498,7 +1498,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
               transition={{ duration: 0.2 }}
             >
               <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
-              <p className="text-sm text-[#ddeaf8] leading-relaxed">{step.body}</p>
+              <p className="text-sm text-game-text leading-relaxed">{step.body}</p>
               {isDemo && (
                 /* Per-mark caption, nested inside the step's own transition so it
                    cross-fades on its own without re-sliding the whole card. */
@@ -1511,7 +1511,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.2 }}
-                    className="text-sm text-[#ddeaf8] leading-relaxed mt-2 pl-2 border-l-2 border-brand-600"
+                    className="text-sm text-game-text leading-relaxed mt-2 pl-2 border-l-2 border-brand-600"
                   >
                     {demoStage === 'reveal' ? demoPhase?.caption
                       : demoStage === 'ready' ? DEMO_DONE_CAPTION
@@ -1585,7 +1585,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
               : isDemo && demoStage !== 'hunt' ? (
               /* Section 2's explanation puts one enlarged symbol in an otherwise
                  empty scene, reusing this grid slot so the arena doesn't shift. */
-              <div className="cbat-target-scene cbat-tut-symbol relative w-full h-full border border-[#1a3a5c] rounded-lg overflow-hidden">
+              <div className="cbat-target-scene cbat-tut-symbol relative w-full h-full border border-game-line rounded-lg overflow-hidden">
                 <Compass pulse={demoPhase?.part === 'direction'} />
                 <Shape
                   shape={demoShapeAt(phaseIdx)}
@@ -1596,7 +1596,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
             ) : isDemo ? (
               /* …then the hunt: a real scene the player has to pick out of. */
               <div
-                className={`cbat-target-scene cbat-tut-hunt relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-[#1a3a5c]'}`}
+                className={`cbat-target-scene cbat-tut-hunt relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-game-line'}`}
                 onClick={onHuntClick}
               >
                 <Compass />
@@ -1606,7 +1606,7 @@ function TargetTutorial({ onExit, shapeScale, aircraftList = [], onProgress }) {
               </div>
             ) : (
               <div
-                className={`cbat-target-scene relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-[#1a3a5c]'}`}
+                className={`cbat-target-scene relative w-full h-full border rounded-lg overflow-hidden cursor-pointer transition-colors ${missFlash ? 'border-red-500' : 'border-game-line'}`}
                 onClick={onSceneClick}
               >
                 <Compass />
@@ -2215,7 +2215,7 @@ export default function CbatTarget() {
             </div>
             <div className="grid-scene">
               <div
-                className="cbat-target-scene relative w-full h-full border border-[#1a3a5c] rounded-lg overflow-hidden cursor-pointer"
+                className="cbat-target-scene relative w-full h-full border border-game-line rounded-lg overflow-hidden cursor-pointer"
                 onClick={onSceneClick}
               >
                 <Compass />

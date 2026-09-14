@@ -133,7 +133,7 @@ function SitMap({ objects, labelled, dim, sizeClass = 'max-w-[min(360px,52vh)]' 
       aria-label={labelled ? 'Ground layout to study' : 'Camera pass over the same ground'}
       style={dim ? { opacity: 0.25 } : undefined}
     >
-      <rect x={-pad} y={-pad} width={SIZE + pad * 2} height={SIZE + pad * 2} fill="#060e1a" />
+      <rect x={-pad} y={-pad} width={SIZE + pad * 2} height={SIZE + pad * 2} fill="var(--color-game-arena)" />
       {Array.from({ length: GRID + 1 }, (_, i) => (
         <g key={i}>
           <line x1={i * CELL} y1={0} x2={i * CELL} y2={SIZE} stroke="#13294a" strokeWidth={1} />
@@ -141,10 +141,10 @@ function SitMap({ objects, labelled, dim, sizeClass = 'max-w-[min(360px,52vh)]' 
         </g>
       ))}
       {labelled && COL_LABELS.map((l, i) => (
-        <text key={`c${l}`} x={(i + 0.5) * CELL} y={-5} fill="#5a6a80" fontSize={13} textAnchor="middle" fontWeight="bold">{l}</text>
+        <text key={`c${l}`} x={(i + 0.5) * CELL} y={-5} fill="var(--color-game-faint)" fontSize={13} textAnchor="middle" fontWeight="bold">{l}</text>
       ))}
       {labelled && Array.from({ length: GRID }, (_, i) => (
-        <text key={`r${i}`} x={-6} y={(i + 0.5) * CELL + 4} fill="#5a6a80" fontSize={13} textAnchor="end" fontWeight="bold">{i + 1}</text>
+        <text key={`r${i}`} x={-6} y={(i + 0.5) * CELL + 4} fill="var(--color-game-faint)" fontSize={13} textAnchor="end" fontWeight="bold">{i + 1}</text>
       ))}
       {objects.map(o => <MapObject key={o.id} o={o} cell={CELL} />)}
     </svg>
@@ -190,19 +190,19 @@ function ResultsScreen({ answers, totalTime, grade }) {
   const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">Spatial Integration Test Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{SIT_ROUNDS}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
@@ -210,8 +210,8 @@ function ResultsScreen({ answers, totalTime, grade }) {
         </div>
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-h-48 overflow-y-auto text-left">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Round Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 max-h-48 overflow-y-auto text-left">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Round Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => (
             <div key={i} className="text-xs px-2 py-1">
@@ -570,7 +570,7 @@ export default function CbatSit() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🛰️</p>
 
@@ -590,7 +590,7 @@ export default function CbatSit() {
                 Study the ground one layer at a time, from above. No layer shows the whole picture, so putting it together is on you. A camera then flies over the same ground in 3D, and not from the direction you studied it.
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]${dim}`}>
+              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Study the layers. Each one holds a single kind of thing, and you move between them as you like. Only the hills appear on every layer.</span>
@@ -603,14 +603,14 @@ export default function CbatSit() {
                   <CbatIntroLabel>3.</CbatIntroLabel>
                   <span className="pt-0.5">Two questions on each clip. The clip plays again before the second one, but you are only told what is being asked after it has finished. Answer the question you were asked, and only that one.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-amber-400/80 border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-amber-400/80 border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
                   <span className="pt-0.5">Other things in the frame will be wrong. That never counts against the answer. Checking them costs you the question.</span>
                 </div>
                 {/* All THREE phases, and the total. Studying is where most of a
                     run goes on this test — quoting only the clip length, as this
                     line used to, made it look like a two-minute game. */}
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] pt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted pt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">
                     {SIT_CLIPS} clips of {SIT_QUESTIONS_PER_CLIP} questions ·{' '}
@@ -619,7 +619,7 @@ export default function CbatSit() {
                     {Math.round(introTuning.answerMs / 1000)}s per question
                   </span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'🕐'}</span>
                   <span className="pt-0.5">
                     About {Math.round(sitRunEstimateMs(introTuning) / 60000)} minutes if you use
@@ -675,7 +675,7 @@ export default function CbatSit() {
                 </span>
               </div>
 
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -684,7 +684,7 @@ export default function CbatSit() {
                 />
               </div>
 
-              <div className={`bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-3 mx-auto w-full transition-[max-width] duration-300 ${panelWidth}`}>
+              <div className={`bg-game-panel border border-game-line rounded-xl p-3 mx-auto w-full transition-[max-width] duration-300 ${panelWidth}`}>
                 {phase === 'study' && (
                   /* Sized off the viewport HEIGHT as well as a pixel cap: the
                      map is square, and everything above and below it in this
@@ -726,8 +726,8 @@ export default function CbatSit() {
                           aria-pressed={i === layerIdx}
                           className={`shrink-0 px-2.5 py-1 rounded-lg border text-[10px] font-bold capitalize transition-colors cursor-pointer ${
                             i === layerIdx
-                              ? 'bg-[#0f2240] border-brand-600 text-[#ddeaf8]'
-                              : 'bg-[#060e1a] border-[#1a3a5c] text-slate-600 hover:text-[#ddeaf8]'
+                              ? 'bg-game-raised border-brand-600 text-game-text'
+                              : 'bg-game-arena border-game-line text-slate-600 hover:text-game-text'
                           }`}
                         >
                           {CLASS_LABEL[layer.cls]}
@@ -745,7 +745,7 @@ export default function CbatSit() {
                     <button
                       onClick={endStudyEarly}
                       data-demo-answer
-                      className="w-full mt-2.5 px-6 py-2.5 rounded-lg border border-[#1a3a5c] bg-[#060e1a] text-brand-600 font-bold text-sm hover:bg-[#0f2240] hover:border-brand-400 transition-colors cursor-pointer"
+                      className="w-full mt-2.5 px-6 py-2.5 rounded-lg border border-game-line bg-game-arena text-brand-600 font-bold text-sm hover:bg-game-raised hover:border-brand-400 transition-colors cursor-pointer"
                     >
                       Skip study time · Go to the clip
                     </button>
@@ -774,7 +774,7 @@ export default function CbatSit() {
                       transition={{ duration: 0.3 }}
                       /* 4:3, so the height cap has to be expressed as a WIDTH:
                          at 4:3 a width of 96vh is a height of 72vh. */
-                      className="w-full mx-auto aspect-[4/3] rounded-lg overflow-hidden bg-[#060e1a] border border-[#13294a]"
+                      className="w-full mx-auto aspect-[4/3] rounded-lg overflow-hidden bg-game-arena border border-[#13294a]"
                     >
                       <ClipBoundary fallback={<SitMap objects={current.clip} labelled={false} />}>
                         <Suspense fallback={<SitMap objects={current.clip} labelled={false} />}>
@@ -795,16 +795,16 @@ export default function CbatSit() {
                     <p className="text-[10px] text-slate-600 uppercase tracking-wide mb-1 text-center">
                       Question {questionIdx + 1} of {current.questions.length} on this clip
                     </p>
-                    <p className="text-center text-base sm:text-lg font-bold text-[#ddeaf8] mb-4 px-2">
+                    <p className="text-center text-base sm:text-lg font-bold text-game-text mb-4 px-2">
                       {currentQuestion.prompt}
                     </p>
                     <div className="grid grid-cols-2 gap-2 px-2">
                       {[true, false].map(value => {
-                        let cls = 'bg-[#060e1a] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer'
+                        let cls = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                         if (phase === 'feedback') {
                           if (value === currentQuestion.answer) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                           else if (value === feedback?.picked) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
-                          else cls = 'bg-[#060e1a] border-[#1a3a5c] text-[#5a6a80]'
+                          else cls = 'bg-game-arena border-game-line text-game-faint'
                         }
                         return (
                           <button

@@ -53,7 +53,7 @@ function StartScreen({ onStart, personalBest, traceModeSelector }) {
         <span className="text-slate-800">Four coloured jets fly the sky. After each round the picture clears and you answer one question about their movements. 8 rounds — questions get harder.</span>
       </div>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 max-w-md mx-auto mb-4 text-sm text-[#ddeaf8] space-y-1.5">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 max-w-md mx-auto mb-4 text-sm text-game-text space-y-1.5">
         <div className="flex items-start gap-2">
           <span className="text-brand-600 shrink-0">👀</span>
           <span>Watch <span className="font-bold text-red-300">Red</span>, <span className="font-bold text-yellow-300">Yellow</span>, <span className="font-bold text-blue-300">Blue</span> and <span className="font-bold text-green-300">Green</span> fly for a few seconds.</span>
@@ -73,7 +73,7 @@ function StartScreen({ onStart, personalBest, traceModeSelector }) {
       </div>
 
       {personalBest && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 max-w-md mx-auto mb-2 text-center">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3 max-w-md mx-auto mb-2 text-center">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
           <p className="text-lg font-mono font-bold text-brand-600">{personalBest.bestScore}/{TRACE2_ROUNDS}</p>
           <p className="text-[10px] text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
@@ -254,7 +254,7 @@ export default function CbatTrace2({ traceModeSelector }) {
       </div>
 
       {phase === 'menu' && (
-        <div className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5">
+        <div className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-5">
           <StartScreen onStart={startGame} personalBest={personalBest} traceModeSelector={traceModeSelector} />
         </div>
       )}
@@ -269,11 +269,11 @@ export default function CbatTrace2({ traceModeSelector }) {
           onPlayAgain={handlePlayAgain}
           extraActions={[{ label: 'Back to Modes', onClick: handleBackToMenu }]}
         >
-          <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+          <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
             <p className="text-4xl mb-2">🛩️</p>
             <p className="text-xl font-extrabold text-white mb-1">Trace 2 Complete</p>
             <p className="text-sm text-slate-400 mb-5">All {TRACE2_ROUNDS} rounds finished.</p>
-            <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 sm:p-5">
+            <div className="bg-game-arena rounded-lg border border-game-line p-4 sm:p-5">
               <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
               <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600">
                 {correctCount}<span className="text-slate-400">/{TRACE2_ROUNDS}</span>
@@ -321,7 +321,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                   exit={{ opacity: 0 }}
                   className="absolute top-3 inset-x-0 z-20 flex justify-center pointer-events-none"
                 >
-                  <span className="px-4 py-1.5 rounded-full bg-[#0a1628]/85 border border-brand-500 text-brand-800 text-xs font-extrabold uppercase tracking-[0.2em] backdrop-blur">
+                  <span className="px-4 py-1.5 rounded-full bg-game-panel/85 border border-brand-500 text-brand-800 text-xs font-extrabold uppercase tracking-[0.2em] backdrop-blur">
                     Round {roundIndex + 1} · {round.tier === 'easy' ? 'Watch' : 'Watch closely'}
                   </span>
                 </motion.div>
@@ -336,10 +336,10 @@ export default function CbatTrace2({ traceModeSelector }) {
                   key={`q-${roundIndex}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 p-4 bg-[#060e1a] overflow-y-auto"
+                  className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 p-4 bg-game-arena overflow-y-auto"
                 >
                   <p className="text-[10px] text-slate-500 uppercase tracking-widest">Round {roundIndex + 1} · Question</p>
-                  <p className="text-base sm:text-lg font-bold text-[#ddeaf8] text-center leading-snug max-w-sm">
+                  <p className="text-base sm:text-lg font-bold text-game-text text-center leading-snug max-w-sm">
                     {round.question.prompt}
                   </p>
                   <div className="grid grid-cols-2 gap-2.5 w-full max-w-sm">
@@ -347,10 +347,10 @@ export default function CbatTrace2({ traceModeSelector }) {
                       const reveal = answered
                       const isChosen = chosen === i
                       const isCorrect = opt.correct
-                      let cls = 'border-[#1a3a5c] bg-[#0a1628] hover:border-brand-400 hover:bg-[#0f2240] text-[#ddeaf8]'
+                      let cls = 'border-game-line bg-game-panel hover:border-brand-400 hover:bg-game-raised text-game-text'
                       if (reveal && isCorrect) cls = 'border-[#34d399] bg-[#34d399]/15 text-[#8ef0b0]'
                       else if (reveal && isChosen && !isCorrect) cls = 'border-[#f87171] bg-[#f87171]/15 text-[#ffb4b4]'
-                      else if (reveal) cls = 'border-[#1a3a5c] bg-[#0a1628] text-[#7c8ba3]'
+                      else if (reveal) cls = 'border-game-line bg-game-panel text-[#7c8ba3]'
                       return (
                         <button
                           key={i}
@@ -382,7 +382,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                         onClick={startReplay}
                         animate={{ opacity: [0.7, 1, 0.7] }}
                         transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
-                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-[#1a3a5c] bg-[#0a1628] text-slate-400 hover:text-brand-600 hover:border-brand-500 text-[11px] font-bold uppercase tracking-wide transition-colors"
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border border-game-line bg-game-panel text-slate-400 hover:text-brand-600 hover:border-brand-500 text-[11px] font-bold uppercase tracking-wide transition-colors"
                       >
                         🔁 Replay round
                       </motion.button>
@@ -414,7 +414,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                       transition={replayStage === 'rewind'
                         ? { repeat: Infinity, duration: 0.7, ease: 'easeInOut' }
                         : { duration: 0.2 }}
-                      className="pointer-events-auto cursor-pointer px-4 py-1.5 rounded-full bg-[#0a1628]/90 border border-amber-500 text-amber-300 hover:text-amber-200 hover:border-amber-400 text-xs font-extrabold uppercase tracking-[0.2em] backdrop-blur flex items-center gap-2 transition-colors"
+                      className="pointer-events-auto cursor-pointer px-4 py-1.5 rounded-full bg-game-panel/90 border border-amber-500 text-amber-300 hover:text-amber-200 hover:border-amber-400 text-xs font-extrabold uppercase tracking-[0.2em] backdrop-blur flex items-center gap-2 transition-colors"
                     >
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                       {replayStage === 'rewind' ? '⏪ Rewinding' : '▶ Replay'}
@@ -423,7 +423,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                   <div className="flex justify-center">
                     <button
                       onClick={() => setReplaying(false)}
-                      className="pointer-events-auto px-4 py-2 rounded-full bg-[#0a1628]/90 border border-brand-500 text-[#ddeaf8] hover:text-white hover:border-brand-400 text-xs font-extrabold uppercase tracking-wide transition-colors"
+                      className="pointer-events-auto px-4 py-2 rounded-full bg-game-panel/90 border border-brand-500 text-game-text hover:text-white hover:border-brand-400 text-xs font-extrabold uppercase tracking-wide transition-colors"
                     >
                       Skip ▶▶
                     </button>

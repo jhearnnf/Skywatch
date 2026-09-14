@@ -104,14 +104,14 @@ function KeyButton({ children, onClick, accent, disabled, canSubmit, demoAnswer 
         accent === 'submit'
           ? (canSubmit && !disabled
               ? 'bg-brand-600 hover:bg-brand-700 border-brand-600 text-white cursor-pointer'
-              : 'bg-[#0a1628] border-[#1a3a5c] text-slate-500 cursor-not-allowed')
+              : 'bg-game-panel border-game-line text-slate-500 cursor-not-allowed')
           : accent === 'back'
             ? (disabled
-                ? 'bg-[#0a1628] border-[#1a3a5c] text-slate-500 cursor-not-allowed'
-                : 'bg-[#1a3a5c] hover:bg-[#254a6e] border-[#1a3a5c] text-white cursor-pointer')
+                ? 'bg-game-panel border-game-line text-slate-500 cursor-not-allowed'
+                : 'bg-game-fill hover:bg-game-fill-strong border-game-line text-white cursor-pointer')
             : (disabled
-                ? 'bg-[#0a1628] border-[#1a3a5c] text-slate-500 cursor-not-allowed'
-                : 'bg-[#0a1628] border-[#1a3a5c] text-[#ddeaf8] hover:border-brand-400 hover:bg-[#0f2240] cursor-pointer')
+                ? 'bg-game-panel border-game-line text-slate-500 cursor-not-allowed'
+                : 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer')
       }`}
     >
       {children}
@@ -154,19 +154,19 @@ function ResultsScreen({ answers, totalTime, tuning }) {
   const grade = { label, ...GRADE_STYLE[label] }
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{grade.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Numerical Operations Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex justify-center gap-8 items-end">
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_QUESTIONS} correct</p>
           </div>
-          <div className="w-px h-12 bg-[#1a3a5c]" />
+          <div className="w-px h-12 bg-game-line" />
           <div>
             <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
@@ -176,7 +176,7 @@ function ResultsScreen({ answers, totalTime, tuning }) {
 
       <div className="grid grid-cols-4 gap-2 mb-6">
         {perRound.map(({ r, correct }) => (
-          <div key={r} className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+          <div key={r} className="bg-game-arena rounded-lg border border-game-line p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">R{r}</p>
             <p className="text-xl font-mono font-bold text-brand-600">{correct}/{QUESTIONS_PER_ROUND}</p>
           </div>
@@ -184,8 +184,8 @@ function ResultsScreen({ answers, totalTime, tuning }) {
       </div>
 
       {/* Answer review — scrollable */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 mb-6 max-h-48 overflow-y-auto">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-[#060e1a]">Answer Review</p>
+      <div className="bg-game-arena rounded-lg border border-game-line p-3 mb-6 max-h-48 overflow-y-auto">
+        <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 sticky top-0 bg-game-arena">Answer Review</p>
         <div className="space-y-1">
           {answers.map((a, i) => (
             <div key={i} className={`flex items-center justify-between text-xs px-2 py-1 rounded ${a.correct ? 'text-green-400' : 'text-red-400'}`}>
@@ -495,7 +495,7 @@ export default function CbatNumericalOps() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🧮</p>
 
@@ -516,20 +516,20 @@ export default function CbatNumericalOps() {
                 Solve two-number arithmetic against the clock. Four rounds of five questions, with numbers getting bigger each round. 20 seconds per question.
               </p>
 
-              <div className={`bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
+              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
                 {[1, 2, 3, 4].map(r => (
-                  <div key={r} className="flex items-start gap-3 text-sm lg:text-base text-[#ddeaf8]">
+                  <div key={r} className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                     <CbatIntroLabel>R{r}</CbatIntroLabel>
                     <span className="pt-0.5">5 questions · numbers 1–{tuning.roundMax[r - 1]} · +, −, ×, ÷</span>
                   </div>
                 ))}
                 {tuning.factorMax && (
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                     <span className="shrink-0 w-8 text-center" aria-hidden>{'✕'}</span>
                     <span className="pt-0.5">× and ÷ stay inside the {tuning.factorMax} times table</span>
                   </div>
                 )}
-                <div className={`flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] ${tuning.factorMax ? 'pt-1' : 'border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1'}`}>
+                <div className={`flex items-start gap-3 text-xs lg:text-sm text-game-muted ${tuning.factorMax ? 'pt-1' : 'border-t border-game-line pt-2 lg:pt-3 mt-1'}`}>
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">20s per question — running out counts as wrong</span>
                 </div>
@@ -555,7 +555,7 @@ export default function CbatNumericalOps() {
                 onClick={beginLaunch}
                 disabled={launching}
                 data-demo-start
-                className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-[#1a3a5c] disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
+                className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
               >
                 Start
               </button>
@@ -585,7 +585,7 @@ export default function CbatNumericalOps() {
               </div>
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
@@ -599,7 +599,7 @@ export default function CbatNumericalOps() {
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 mb-3 relative overflow-hidden"
+                className="bg-game-panel border border-game-line rounded-xl p-6 mb-3 relative overflow-hidden"
               >
                 <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-3 relative z-10">
                   Solve

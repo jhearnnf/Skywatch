@@ -389,17 +389,17 @@ const ArenaChrome = memo(function ArenaChrome({ brgPulseKey = 0 }) {
             key={`lbl-${b}-${brgPulseKey}`}
             className={brgPulseKey > 0 ? 'dpt-select-pulse' : undefined}
             x={SCOPE_HALF + dx * t} y={SCOPE_HALF + dy * t}
-            fill="#5baaff" fontSize={26}
+            fill="var(--color-game-accent)" fontSize={26}
             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fontWeight={700}
             textAnchor="middle" dominantBaseline="middle" opacity={0.85}>
             {String(b === 360 ? 360 : b).padStart(3, '0')}
           </text>
         )
       })}
-      <g stroke="#5baaff" strokeWidth={2} strokeLinecap="round" opacity={0.45}>
+      <g stroke="var(--color-game-accent)" strokeWidth={2} strokeLinecap="round" opacity={0.45}>
         <line x1={SCOPE_HALF - 14} y1={SCOPE_HALF} x2={SCOPE_HALF + 14} y2={SCOPE_HALF} />
         <line x1={SCOPE_HALF} y1={SCOPE_HALF - 14} x2={SCOPE_HALF} y2={SCOPE_HALF + 14} />
-        <circle cx={SCOPE_HALF} cy={SCOPE_HALF} r={2.5} fill="#5baaff" stroke="none" />
+        <circle cx={SCOPE_HALF} cy={SCOPE_HALF} r={2.5} fill="var(--color-game-accent)" stroke="none" />
       </g>
     </>
   )
@@ -431,7 +431,7 @@ function ArenaScope({ children, brgPulseKey }) {
 // All letter gates share LETTER_GATE_COLOR, all number gates share NUMBER_GATE_COLOR.
 // Both blue but distinct shades; "next" status is signalled by a glow filter,
 // not a colour change, so each gate kind reads as a single consistent colour.
-const LETTER_GATE_COLOR = '#5baaff'   // brand electric blue
+const LETTER_GATE_COLOR = 'var(--color-game-accent)'   // brand electric blue
 const NUMBER_GATE_COLOR = '#9ed5ff'   // lighter cyan-blue
 
 const GateMarker = memo(function GateMarker({ gate, isNext }) {
@@ -474,7 +474,7 @@ const COMMAND_VIZ_DURATION_MS = 1600
 // command) vs 'edgeAuto' = yellow (auto-turn redirected at the boundary).
 function CommandViz({ viz }) {
   const { capturedPos, fromHeading, targetBearing, direction, kind } = viz
-  const color = kind === 'edgeAuto' ? '#ffd84a' : '#5baaff'
+  const color = kind === 'edgeAuto' ? '#ffd84a' : 'var(--color-game-accent)'
   const LINE_LEN = 260
   const ARC_R    = 38
 
@@ -588,13 +588,13 @@ function AircraftSprite({ aircraft, active, edgeWarn, dim, altPulseKey = 0 }) {
   }
 
   const altLabel = String(Math.round(altitudeFt / 100)).padStart(3, '0')
-  const tone     = active ? '#5baaff' : '#88a4c4'
+  const tone     = active ? 'var(--color-game-accent)' : '#88a4c4'
   return (
     <g transform={`translate(${tx}, ${ty})`} opacity={dim ? 0.2 : 1}>
       {/* Faint blue interception ring — mirrors the enemy white ring; any
           other player aircraft entering this circle (with <3000ft altitude
           difference) triggers the player-on-player intercept penalty. */}
-      <circle r={BLUE_RING_R} fill="none" stroke="#5baaff" strokeWidth={1} opacity={0.18} strokeDasharray="6 4" />
+      <circle r={BLUE_RING_R} fill="none" stroke="var(--color-game-accent)" strokeWidth={1} opacity={0.18} strokeDasharray="6 4" />
       {/* Yellow pulse halo — only when the aircraft is in the edge buffer
           and auto-turn has taken control. Signals "I'm bringing you back". */}
       {edgeWarn && (
@@ -649,8 +649,8 @@ const DangerZoneMarker = memo(function DangerZoneMarker({ zone }) {
 // standalone AircraftButtons component (rendered next to the arena panel)
 // and any future selectors can share the same palette.
 const AIRCRAFT_ACCENT = {
-  'CA-A':    { bg: LETTER_GATE_COLOR, border: '#86c0ff', textActive: '#0a1628', textInactive: '#5baaff' },
-  'CA-N':    { bg: NUMBER_GATE_COLOR, border: '#c2e3ff', textActive: '#0a1628', textInactive: '#9ed5ff' },
+  'CA-A':    { bg: LETTER_GATE_COLOR, border: '#86c0ff', textActive: 'var(--color-game-panel)', textInactive: 'var(--color-game-accent)' },
+  'CA-N':    { bg: NUMBER_GATE_COLOR, border: '#c2e3ff', textActive: 'var(--color-game-panel)', textInactive: '#9ed5ff' },
   'Fighter': { bg: '#d83b3b',         border: '#ff6868', textActive: '#ffffff', textInactive: '#ff7a7a' },
 }
 
@@ -669,8 +669,8 @@ function AircraftButtons({ aircraftList, activeId, onSelectActive, guideId = nul
         const isActive = id === activeId && exists
         const acc      = AIRCRAFT_ACCENT[id]
         const inactiveCls = exists
-          ? 'bg-[#0a1628] border-[#1a3a5c] hover:bg-[#0f2240]'
-          : 'bg-[#060e1a] border-[#1a3a5c] text-slate-600 cursor-not-allowed opacity-50'
+          ? 'bg-game-panel border-game-line hover:bg-game-raised'
+          : 'bg-game-arena border-game-line text-slate-600 cursor-not-allowed opacity-50'
         return (
           <button
             key={id}
@@ -732,8 +732,8 @@ const DptControls = memo(function DptControls({
   const dirDisabled = inputMode === 'ALT'
   const dirBtn = (d, label) => {
     const isActive = turnDir === d && !dirDisabled
-    const inactiveCls = 'bg-[#0a1628] border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240]'
-    const disabledCls = 'bg-[#060e1a] border-[#1a3a5c] text-slate-600 cursor-not-allowed opacity-50'
+    const inactiveCls = 'bg-game-panel border-game-line text-brand-600 hover:bg-game-raised'
+    const disabledCls = 'bg-game-arena border-game-line text-slate-600 cursor-not-allowed opacity-50'
     return (
       <button
         type="button"
@@ -768,7 +768,7 @@ const DptControls = memo(function DptControls({
         className={`relative flex-1 pt-1.5 pb-3 rounded-t-lg font-mono font-bold text-xs border transition-colors ${
           isActive
             ? (useAltAccent ? 'text-white' : 'bg-brand-600 border-brand-400 text-white')
-            : 'bg-[#0a1628] border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240]'
+            : 'bg-game-panel border-game-line text-brand-600 hover:bg-game-raised'
         }${guideMode === mode ? ' cbat-triple-pulse' : ''}`}
         style={useAltAccent
           ? { background: accent.solid, borderColor: accent.border, touchAction: 'manipulation' }
@@ -800,7 +800,7 @@ const DptControls = memo(function DptControls({
         if (r.label === label && Date.now() - r.t < 500) return
         fire()
       }}
-      className={`relative aspect-square rounded-lg font-mono font-bold text-xl bg-[#0a1628] border border-[#1a3a5c] text-brand-600 hover:bg-[#0f2240] active:bg-[#163055] transition-colors select-none${guideDigit === label ? ' cbat-triple-pulse' : ''}`}
+      className={`relative aspect-square rounded-lg font-mono font-bold text-xl bg-game-panel border border-game-line text-brand-600 hover:bg-game-raised active:bg-[#163055] transition-colors select-none${guideDigit === label ? ' cbat-triple-pulse' : ''}`}
       style={{ touchAction: 'manipulation' }}
     >
       {label}
@@ -827,13 +827,13 @@ const DptControls = memo(function DptControls({
         className="relative z-10 grid grid-cols-[3.5rem_1fr_3.5rem] gap-2 p-2 rounded-lg"
         style={{
           backgroundImage: `linear-gradient(${accent.tint}, ${accent.tint})`,
-          backgroundColor: '#0a1628',
+          backgroundColor: 'var(--color-game-panel)',
           transition:      'background-image 200ms ease',
         }}
       >
         {dirBtn('L', 'L')}
         <div>
-          <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg py-2 mb-2 text-center font-mono text-xl tracking-[0.3em] text-brand-600 flex items-center justify-center gap-3">
+          <div className="bg-game-arena border border-game-line rounded-lg py-2 mb-2 text-center font-mono text-xl tracking-[0.3em] text-brand-600 flex items-center justify-center gap-3">
             <span className="text-[10px] text-slate-500 tracking-normal">{inputMode}</span>
             <span className="text-2xl tracking-[0.4em]">{display}</span>
           </div>
@@ -856,7 +856,7 @@ const DptControls = memo(function DptControls({
       </p>
 
       {/* Danger-zone legend — replaces the in-circle altitude labels. */}
-      <div className="mt-3 pt-3 border-t border-[#1a3a5c] space-y-1.5 text-[10px] text-slate-400">
+      <div className="mt-3 pt-3 border-t border-game-line space-y-1.5 text-[10px] text-slate-400">
         <div className="flex items-center gap-2">
           <span
             aria-hidden
@@ -903,7 +903,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
       </p>
 
       {/* Instructions */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-[#ddeaf8] space-y-1.5 lg:space-y-2">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
         <div className="flex items-start gap-2">
           <span className="text-brand-600 shrink-0">🎯</span>
           <span>Vector aircraft through gates using compass bearings</span>
@@ -948,7 +948,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
           enemy squadron arrive at ladder round 6) and no danger zones (they
           start at ladder round 5), so it lists only the rule it can actually
           break: CA-A and CA-N closing on each other once both are up. */}
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 text-sm lg:text-base text-[#ddeaf8] space-y-1.5 lg:space-y-2">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
         <p className="text-[10px] lg:text-xs uppercase tracking-wide text-slate-500 mb-1">
           {difficulty === 'easier' ? 'Separation rule' : 'Intercept rules'}
         </p>
@@ -1002,7 +1002,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
         <button
           type="button"
           onClick={onPractice}
-          className="px-6 py-3 lg:px-8 lg:py-3.5 bg-[#1a3a5c] hover:bg-[#254a6e] text-[#ddeaf8] font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
+          className="px-6 py-3 lg:px-8 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
         </button>
@@ -1041,7 +1041,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
               transition={{ delay: i * 0.04 }}
               onClick={() => onSelect(a)}
               data-demo-start
-              className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240] transition-all group cursor-pointer"
+              className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-game-line bg-game-panel hover:border-game-accent hover:bg-game-raised transition-all group cursor-pointer"
             >
               <span className="absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-brand-600/80 text-white leading-none">
                 3D
@@ -1172,12 +1172,12 @@ function MiniCompass({ aircraft, sector, turnDir = null, scale = 1 }) {
        data-compass-commit={committed != null ? pad3(committed) : undefined}
        data-compass-sweep={sweep && extent ? sweep : undefined}
        data-compass-sweep-rotation={extent ? Math.round(extent.rotation) : undefined}>
-      <circle r={ringR} fill="none" stroke="#5baaff" strokeWidth={1 * kf} opacity={0.4} />
+      <circle r={ringR} fill="none" stroke="var(--color-game-accent)" strokeWidth={1 * kf} opacity={0.4} />
       {MC_TICKS.map(b => {
         const major = b % 30 === 0
         const p1 = mcPolar(b, ringR)
         const p2 = mcPolar(b, ringR + (major ? 7 : 4) * kr)
-        return <line key={b} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="#5baaff" strokeWidth={(major ? 1.4 : 1) * kf} opacity={major ? 0.7 : 0.4} />
+        return <line key={b} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="var(--color-game-accent)" strokeWidth={(major ? 1.4 : 1) * kf} opacity={major ? 0.7 : 0.4} />
       })}
       {/* Current heading: where the aircraft is pointing now. */}
       <line x1={h1.x} y1={h1.y} x2={h2.x} y2={h2.y} stroke="#ffffff" strokeWidth={2.5 * kf} strokeLinecap="round" opacity={0.9} />
@@ -1216,13 +1216,13 @@ function MiniCompass({ aircraft, sector, turnDir = null, scale = 1 }) {
       {quiet && MC_CARDINALS.map(b => {
         const p = mcPolar(b, ringR + 26 * kr)
         return (
-          <text key={b} x={p.x} y={p.y} fill="#5baaff" fontSize={MC_FONT_CARDINAL * kf} fontFamily={MC_FONT} fontWeight={700}
+          <text key={b} x={p.x} y={p.y} fill="var(--color-game-accent)" fontSize={MC_FONT_CARDINAL * kf} fontFamily={MC_FONT} fontWeight={700}
                 textAnchor="middle" dominantBaseline="middle" opacity={0.6}>{pad3(b)}</text>
         )
       })}
       {sector && (
         <g data-compass-band>
-          <path d={mcSector(sector.start, sector.end, ringR, ringR + band)} fill="#5baaff" opacity={0.4} />
+          <path d={mcSector(sector.start, sector.end, ringR, ringR + band)} fill="var(--color-game-accent)" opacity={0.4} />
           {sector.labels.map((v, i) => {
             // Ten labels 10 degrees apart do not fit on one radius at this
             // size, so they alternate between two, the way tick labels on a
@@ -1258,7 +1258,7 @@ function PracticeComplete({ onExit }) {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-md bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 text-center"
+      className="w-full max-w-md bg-game-panel border border-game-line rounded-xl p-6 text-center"
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
@@ -1746,7 +1746,7 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
           <span className="text-slate-400">DRILL <span className="text-brand-600">{stepIdx + 1}</span>/{total}</span>
           <span className="text-slate-400">TUTORIAL · NO SCORE</span>
         </div>
-        <div ref={arenaRef} className="relative z-10 bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl shadow-[0_0_30px_rgba(91,170,255,0.08)] overflow-hidden" style={{ width: '100%', aspectRatio: '1' }}>
+        <div ref={arenaRef} className="relative z-10 bg-game-arena border-2 border-game-line rounded-xl shadow-[0_0_30px_rgba(91,170,255,0.08)] overflow-hidden" style={{ width: '100%', aspectRatio: '1' }}>
           <DptAircraftLayer aircraftList={aircraftWithModel} sizeMultiplier={1} doneIds={PRACTICE_NO_DONE} />
           <ArenaScope brgPulseKey={brgPulseKey}>
             {zoneList.map(z => (
@@ -1791,7 +1791,7 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
 
       {/* Drill card — first on a phone, top of the right column on desktop. */}
       <div className="order-1 md:order-none md:col-start-2 md:row-start-1 w-full max-w-md md:max-w-none mx-auto md:mx-0 mb-3 md:mb-0">
-        <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-4" data-practice-card>
+        <div className="w-full bg-game-panel border border-game-line rounded-xl p-4" data-practice-card>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] uppercase tracking-wide text-brand-600 font-bold">Tutorial</span>
             <div className="flex items-center gap-1.5">
@@ -1822,7 +1822,7 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
               transition={{ duration: 0.2 }}
             >
               <h2 className="text-base font-extrabold text-white mb-1">{drill.title}</h2>
-              <p className="text-sm text-[#ddeaf8] leading-relaxed">{drill.body}</p>
+              <p className="text-sm text-game-text leading-relaxed">{drill.body}</p>
             </motion.div>
           </AnimatePresence>
           {/* Verdict line. Held at a fixed minimum height so the numpad below
@@ -2834,7 +2834,7 @@ export default function CbatDpt() {
 
           {/* Aircraft selection */}
           {phase === 'select' && (
-            <div className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 lg:p-8">
+            <div className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-5 lg:p-8">
               <AircraftSelect
                 aircraft={aircraft}
                 onSelect={handleSelect}
@@ -2886,7 +2886,7 @@ export default function CbatDpt() {
                   </div>
                 )
               })()}
-              <div className="relative z-10 bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl shadow-[0_0_30px_rgba(91,170,255,0.08)] overflow-hidden" style={{ width: '100%', aspectRatio: '1' }}>
+              <div className="relative z-10 bg-game-arena border-2 border-game-line rounded-xl shadow-[0_0_30px_rgba(91,170,255,0.08)] overflow-hidden" style={{ width: '100%', aspectRatio: '1' }}>
                 {/* Layer 1: Three.js Canvas with GLB aircraft, top-down ortho */}
                 <DptAircraftLayer aircraftList={aircraftList} sizeMultiplier={aircraftSizeMultiplier} doneIds={doneIds} />
                 {/* Layer 2: SVG arena chrome + gates + aircraft data blocks */}
@@ -2943,7 +2943,7 @@ export default function CbatDpt() {
                       <motion.div
                         initial={{ scale: 0.85 }}
                         animate={{ scale: 1 }}
-                        className="text-center px-6 py-5 rounded-xl bg-[#0a1628] border border-[#1a3a5c]"
+                        className="text-center px-6 py-5 rounded-xl bg-game-panel border border-game-line"
                       >
                         <p className="text-3xl mb-1">{roundOverlay.success ? '✅' : '⏱'}</p>
                         <p className="text-lg font-extrabold text-white mb-0.5">
@@ -2997,12 +2997,12 @@ export default function CbatDpt() {
                 personalBest={personalBest}
                 onPlayAgain={handlePlayAgain}
               >
-                <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+                <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
                   <p className="text-5xl mb-3">🎖️</p>
                   <p className="text-2xl font-extrabold text-white mb-1">Run Complete</p>
                   <p className="text-sm text-slate-400 mb-6">Reached round {displayRound(round, runTuning)} of {runTuning.rounds.length}.</p>
 
-                  <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-6">
+                  <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-6">
                     <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
                       <div className="flex justify-between"><span>Gates hit</span><span className="text-brand-600 font-mono">{gatesHit}</span></div>

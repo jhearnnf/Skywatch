@@ -155,7 +155,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
 
       {/* Instructions */}
       {!gameModeTrace2 && (
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-[#ddeaf8] space-y-1.5 lg:space-y-2">
+        <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
           {gameModeTrace1 ? (
             <>
               <div className="flex items-start gap-2">
@@ -206,7 +206,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
       )}
 
       {gameModeTrace2 && (
-        <div className="max-w-md lg:max-w-2xl mx-auto mb-6 bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-6 lg:p-9 text-center">
+        <div className="max-w-md lg:max-w-2xl mx-auto mb-6 bg-game-arena border border-game-line rounded-lg p-6 lg:p-9 text-center">
           <p className="text-3xl lg:text-4xl mb-2">🛠️</p>
           <p className="text-base lg:text-lg font-bold text-slate-700 mb-1">Trace 2 — Coming Soon</p>
           <p className="text-xs lg:text-sm text-slate-500">Pick Trace 1 or a Practise mode above.</p>
@@ -286,7 +286,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
               transition={{ delay: i * 0.04 }}
               onClick={() => onSelect(a)}
               data-demo-start
-              className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-[#1a3a5c] bg-[#0a1628] hover:border-[#5baaff] hover:bg-[#0f2240] transition-all group cursor-pointer"
+              className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-game-line bg-game-panel hover:border-game-accent hover:bg-game-raised transition-all group cursor-pointer"
             >
               {!gameMode2D && has3DModel(a.briefId, a.title) && (
                 <span className="absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-brand-600/80 text-white leading-none">
@@ -328,7 +328,7 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
           {won ? 'Mission Complete' : 'Crashed'}
         </p>
         {won ? (
-          <div className="text-sm text-[#ddeaf8] mb-4">
+          <div className="text-sm text-game-text mb-4">
             <p>Level {level} cleared</p>
             <p className="font-mono text-brand-600 text-lg mt-1">
               {score.rotations} rotations &middot; {score.time}s
@@ -347,7 +347,7 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
           </button>
           <button
             onClick={onMenu}
-            className="px-4 py-2 bg-[#1a3a5c] hover:bg-[#254a6e] text-white text-sm font-bold rounded-lg transition-colors"
+            className="px-4 py-2 bg-game-fill hover:bg-game-fill-strong text-white text-sm font-bold rounded-lg transition-colors"
           >
             Change Aircraft
           </button>
@@ -406,7 +406,7 @@ function DpadBtn({ label, onPress, ariaLabel }) {
     <button
       onPointerDown={onPress}
       data-demo-answer
-      className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-3xl text-slate-700 active:text-brand-600 select-none"
+      className="rounded-xl bg-game-panel border-2 border-game-line active:border-brand-400 active:bg-game-raised transition-colors flex items-center justify-center text-3xl text-slate-700 active:text-brand-600 select-none"
       style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.22)', height: 'calc(min(100vw - 2rem, 28rem) * 0.22)' }}
       aria-label={ariaLabel}
     >
@@ -1312,7 +1312,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
           {/* Aircraft selection */}
           {phase === 'select' && (
-            <div className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-5 lg:p-8">
+            <div className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-5 lg:p-8">
               <AircraftSelect
                 aircraft={displayAircraft}
                 onSelect={handleSelect}
@@ -1336,14 +1336,14 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               onPlayAgain={handlePlayAgain}
               extraActions={[{ label: 'Back to Modes', onClick: handleMenu }]}
             >
-              <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+              <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
                 <p className="text-4xl mb-2">🛩️</p>
                 <p className="text-xl font-extrabold text-white mb-1">Trace 1 Complete</p>
                 {trace1Debug
                   ? <p className="text-xs text-amber-400 mb-5">DEBUG MODE · run not submitted to leaderboard</p>
                   : <p className="text-sm text-slate-400 mb-5">All {TRACE1_ROUNDS} rounds finished.</p>}
 
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 sm:p-5">
+                <div className="bg-game-arena rounded-lg border border-game-line p-4 sm:p-5">
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
                   <div className="flex justify-center items-center gap-4 sm:gap-8">
                     <div className="min-w-0">
@@ -1352,7 +1352,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                       </p>
                       <p className="text-xs text-slate-500 mt-1">correct</p>
                     </div>
-                    <div className="w-px self-stretch bg-[#1a3a5c]" />
+                    <div className="w-px self-stretch bg-game-line" />
                     <div className="min-w-0">
                       <p className="text-2xl sm:text-3xl font-mono font-bold text-brand-600">{trace1Total > 0 ? Math.round((trace1Correct / trace1Total) * 100) : 0}%</p>
                       <p className="text-xs text-slate-500 mt-1">accuracy</p>
@@ -1375,19 +1375,19 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               onPlayAgain={handlePlayAgain}
               extraActions={[{ label: 'Change Aircraft', onClick: handleMenu }]}
             >
-              <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+              <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
                 <p className="text-4xl mb-2">🎖️</p>
                 <p className="text-xl font-extrabold text-white mb-1">All Levels Complete</p>
                 <p className="text-sm text-slate-400 mb-5">You cleared all {MAX_LEVEL} levels.</p>
 
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5">
+                <div className="bg-game-arena rounded-lg border border-game-line p-5">
                   <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Final Score</p>
                   <div className="flex justify-center gap-8">
                     <div>
                       <p className="text-3xl font-mono font-bold text-brand-600">{totalRotations}</p>
                       <p className="text-xs text-slate-500 mt-1">rotations</p>
                     </div>
-                    <div className="w-px bg-[#1a3a5c]" />
+                    <div className="w-px bg-game-line" />
                     <div>
                       <p className="text-3xl font-mono font-bold text-brand-600">{totalTime.toFixed(1)}s</p>
                       <p className="text-xs text-slate-500 mt-1">total time</p>
@@ -1412,7 +1412,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               {(gameMode3D || gameModeTrace1) ? (
                 <div
                   className={`relative border-2 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)] ${
-                    gameModeTrace1 ? 'border-[#3a7bbf]' : 'bg-[#060e1a] border-[#1a3a5c]'
+                    gameModeTrace1 ? 'border-[#3a7bbf]' : 'bg-game-arena border-game-line'
                   }`}
                   style={{
                     width: '100%',
@@ -1494,9 +1494,9 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                           animate={{ scale: 1, opacity: 1, y: 0 }}
                           exit={{ scale: 1.05, opacity: 0, y: -10 }}
                           transition={{ type: 'spring', stiffness: 240, damping: 18 }}
-                          className="relative text-center px-6 py-5 rounded-2xl border-2 bg-[#0a1628]/95 backdrop-blur"
+                          className="relative text-center px-6 py-5 rounded-2xl border-2 bg-game-panel/95 backdrop-blur"
                           style={{
-                            borderColor: trace1Banner.variant === 'final' ? '#fbbf24' : '#5baaff',
+                            borderColor: trace1Banner.variant === 'final' ? '#fbbf24' : 'var(--color-game-accent)',
                             boxShadow: trace1Banner.variant === 'final'
                               ? '0 0 40px rgba(251,191,36,0.45), inset 0 0 28px rgba(251,191,36,0.18)'
                               : '0 0 40px rgba(91,170,255,0.45), inset 0 0 28px rgba(91,170,255,0.18)',
@@ -1562,7 +1562,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                 </div>
               ) : (
                 /* ── 2D Game ── */
-                <div className="relative bg-[#060e1a] border-2 border-[#1a3a5c] rounded-xl overflow-visible shadow-[0_0_30px_rgba(91,170,255,0.08)]">
+                <div className="relative bg-game-arena border-2 border-game-line rounded-xl overflow-visible shadow-[0_0_30px_rgba(91,170,255,0.08)]">
                   {/* Aircraft name with cycle arrows */}
                   <div className="absolute top-1 left-1 z-30 flex items-center gap-1">
                     <button onClick={() => cycleAircraft(-1)} className="text-[10px] text-slate-500 hover:text-brand-600 transition-colors px-0.5 cursor-pointer">&larr;</button>
@@ -1729,8 +1729,8 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
                   {/* Grid crosshair lines */}
                   <div className="absolute inset-0 pointer-events-none z-10">
-                    <div className="absolute top-1/2 left-0 right-0 h-px bg-[#1a3a5c]/40" />
-                    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[#1a3a5c]/40" />
+                    <div className="absolute top-1/2 left-0 right-0 h-px bg-game-line/40" />
+                    <div className="absolute left-1/2 top-0 bottom-0 w-px bg-game-line/40" />
                   </div>
 
                   {/* Game over overlay */}
@@ -1764,7 +1764,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                   <button
                     onPointerDown={() => handleRotate('left')}
                     data-demo-answer
-                    className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-700 active:text-brand-600 select-none"
+                    className="rounded-xl bg-game-panel border-2 border-game-line active:border-brand-400 active:bg-game-raised transition-colors flex items-center justify-center text-5xl text-slate-700 active:text-brand-600 select-none"
                     style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.45)', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                     aria-label="Rotate left"
                   >
@@ -1773,7 +1773,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                   <button
                     onPointerDown={() => handleRotate('right')}
                     data-demo-answer
-                    className="rounded-xl bg-[#0a1628] border-2 border-[#1a3a5c] active:border-brand-400 active:bg-[#0f2240] transition-colors flex items-center justify-center text-5xl text-slate-700 active:text-brand-600 select-none"
+                    className="rounded-xl bg-game-panel border-2 border-game-line active:border-brand-400 active:bg-game-raised transition-colors flex items-center justify-center text-5xl text-slate-700 active:text-brand-600 select-none"
                     style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.45)', height: 'calc(min(100vw - 2rem, 28rem) * 0.35)' }}
                     aria-label="Rotate right"
                   >

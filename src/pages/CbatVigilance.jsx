@@ -102,7 +102,7 @@ function StarGrid({ stars, pendingRow, lastEvent, clears }) {
     burstsByCell.get(key).push(c)
   }
   return (
-    <div className="vigilance-board inline-block bg-[#060e1a] border border-[#1a3a5c] rounded-lg p-1.5 select-none">
+    <div className="vigilance-board inline-block bg-game-arena border border-game-line rounded-lg p-1.5 select-none">
       <table
         className="table-fixed border-collapse font-mono text-[10px] sm:text-xs lg:text-lg"
         style={{ width: BOARD_WIDTH }}
@@ -184,7 +184,7 @@ function Keypad({ onDigit, onClear, pendingRow }) {
     <div className="mt-3 w-full max-w-[280px] lg:max-w-[240px] lg:mt-0 mx-auto">
       {/* The half-entered coordinate, shown the way DPT shows its bearing: the
           digit you have committed and a placeholder for the one still owed. */}
-      <div className="bg-[#060e1a] border border-[#1a3a5c] rounded-lg py-2 mb-2 text-center">
+      <div className="bg-game-arena border border-game-line rounded-lg py-2 mb-2 text-center">
         <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-0.5">
           {pendingRow === null ? 'Enter row' : 'Enter column'}
         </p>
@@ -200,7 +200,7 @@ function Keypad({ onDigit, onClear, pendingRow }) {
             type="button"
             onClick={() => onDigit(d)}
             data-demo-answer
-            className="py-3 rounded-lg border border-[#1a3a5c] bg-[#0a1628] text-[#ddeaf8] font-mono text-base font-bold hover:bg-[#0f2240] hover:border-brand-400 active:bg-brand-600 transition-all cursor-pointer"
+            className="py-3 rounded-lg border border-game-line bg-game-panel text-game-text font-mono text-base font-bold hover:bg-game-raised hover:border-brand-400 active:bg-brand-600 transition-all cursor-pointer"
           >
             {d}
           </button>
@@ -210,7 +210,7 @@ function Keypad({ onDigit, onClear, pendingRow }) {
       <button
         type="button"
         onClick={onClear}
-        className="mt-1.5 w-full py-1.5 rounded-lg border border-[#1a3a5c] bg-[#060e1a] text-slate-500 text-[11px] font-bold hover:text-[#ddeaf8] transition-colors cursor-pointer"
+        className="mt-1.5 w-full py-1.5 rounded-lg border border-game-line bg-game-arena text-slate-500 text-[11px] font-bold hover:text-game-text transition-colors cursor-pointer"
       >
         Clear
       </button>
@@ -226,26 +226,26 @@ function ResultsScreen({ stats, grade }) {
   const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
   return (
-    <div className="w-full bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-8 text-center">
+    <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${color}`}>{grade}</p>
       <p className="text-sm text-slate-400 mb-6">Vigilance Test Complete</p>
 
-      <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Score</p>
         <p className="text-4xl font-mono font-bold text-brand-600">{stats.score}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Stars</p>
           <p className="text-xl font-mono font-bold text-brand-600">{stats.starsCleared}</p>
         </div>
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Priority</p>
           <p className="text-xl font-mono font-bold text-amber-300">{stats.prioritiesCleared}</p>
         </div>
-        <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3">
+        <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Mis-keyed</p>
           <p className="text-xl font-mono font-bold text-red-400">{stats.misKeyed}</p>
         </div>
@@ -501,7 +501,7 @@ export default function CbatVigilance() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full max-w-md lg:max-w-2xl bg-[#0a1628] border border-[#1a3a5c] rounded-xl p-6 lg:p-9 text-center"
+              className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className="text-4xl lg:text-5xl mb-3">⭐</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Vigilance Test</p>
@@ -509,7 +509,7 @@ export default function CbatVigilance() {
                 Stars appear on a 9 by 9 grid. Clear each one by keying its coordinates: the row number first, then the column. It is the simplest thing on the battery, and it runs for three minutes, which is the point of it.
               </p>
 
-              <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-[#ddeaf8]">
+              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text">
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'★'}</span>
                   <span className="pt-0.5">A star is worth {STAR_POINTS} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
@@ -522,22 +522,22 @@ export default function CbatVigilance() {
                   <span className="shrink-0 w-8 text-center text-red-400 lg:text-lg" aria-hidden>{'−'}</span>
                   <span className="pt-0.5">A coordinate with no star on it costs {MISKEY_PENALTY} points, so guessing is worse than looking.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5] border-t border-[#1a3a5c] pt-2 lg:pt-3 mt-1">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⌨'}</span>
                   <span className="pt-0.5">Use the number row. The bottleneck is the keying, not the finding. Backspace clears a half-entered coordinate.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'💡'}</span>
                   <span className="pt-0.5">Work along a row in sequence, 2 then 1, 2 then 2, 2 then 3, rather than jumping about. You re-key only the second digit that way. Clear the edges first as well, because they sit right next to their labels.</span>
                 </div>
-                <div className="flex items-start gap-3 text-xs lg:text-sm text-[#8a9bb5]">
+                <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">{VIGILANCE_DURATION_MS / 1000} seconds. One difficulty, because a shorter version would not be testing the same thing.</span>
                 </div>
               </div>
 
               {personalBest && (
-                <div className="bg-[#060e1a] rounded-lg border border-[#1a3a5c] p-3 lg:p-4 mb-4 text-center">
+                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
                   <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
                   <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
                   <p className="text-[10px] lg:text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
@@ -572,7 +572,7 @@ export default function CbatVigilance() {
                 </span>
               </div>
 
-              <div className="w-full max-w-md h-1 bg-[#1a3a5c] rounded-full mb-3 overflow-hidden">
+              <div className="w-full max-w-md h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <div
                   className="h-full bg-brand-600 rounded-full transition-[width] duration-100"
                   style={{ width: `${100 - (snapshot.remainingMs / VIGILANCE_DURATION_MS) * 100}%` }}
