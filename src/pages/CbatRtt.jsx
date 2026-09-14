@@ -7,7 +7,7 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import RttScene from '../components/RttScene'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
@@ -398,14 +398,16 @@ export default function CbatRtt() {
       {user && (
         <>
           {/* Header */}
-          <div className={`flex items-center gap-2 mb-2${launching ? ' cbat-launch-dim' : ''}`}>
-            {phase === 'intro' || launching
-              ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-              : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
-            }
-            <h1 className="text-sm font-extrabold text-slate-900">Rapid Tracking Test</h1>
+          <CbatGameHeader
+            title="Rapid Tracking Test"
+            intro={phase === 'intro' || launching}
+            onQuit={goToIntro}
+            confirmNeeded={phase === 'playing'}
+            className={launching ? 'cbat-launch-dim' : ''}
+            test={phase === 'playing' ? { stage: 'Testing' } : null}
+          >
             {phase === 'playing' && <ModeMarker mode={runTuning} />}
-          </div>
+          </CbatGameHeader>
 
           {/* Intro */}
           {(phase === 'intro' || launching) && (

@@ -6,7 +6,9 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
@@ -15,6 +17,9 @@ import { useGameBodyClass } from '../hooks/useGameBodyClass'
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
 const DISPLAY_TIME = 5000 // ms to show the sequence
+// Real CBAT theme only: unscored practice rounds (round-1 length) before the
+// test, the way the real software runs "Practice 1 of 3" before "Testing".
+const PRACTICE_COUNT = 3
 const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 // ── Sequence generation ─────────────────────────────────────────────────────
@@ -140,6 +145,10 @@ export default function CbatCodeDuplicates() {
   // leaderboard. Mirrors cheatUsed in DPT and debugUsed in ACT.
   const [debugUsed, setDebugUsed] = useState(false)
   const debugUsedRef = useRef(false)
+  const cbat = useCbatTheme()
+  // Practice rounds still to play; 0 = the scored test is running.
+  const [practiceLeft, setPracticeLeft] = useState(0)
+  const isPractice = practiceLeft > 0
 
   const tierLabel = round <= 5 ? 'Easy' : round <= 10 ? 'Medium' : 'Hard'
 
@@ -189,9 +198,9 @@ export default function CbatCodeDuplicates() {
       .catch(() => {})
   }, [apiFetch, API])
 
-  // Timer — runs during displaying, answering, feedback phases
+  // Timer — runs during displaying and answering, never on a practice round
   useEffect(() => {
-    if (phase === 'displaying' || phase === 'answering') {
+    if ((phase === 'displaying' || phase === 'answering') && !isPractice) {
       const offset = elapsed * 1000
       const t0 = Date.now() - offset
       timerRef.current = setInterval(() => {
@@ -201,7 +210,7 @@ export default function CbatCodeDuplicates() {
     } else {
       clearInterval(timerRef.current)
     }
-  }, [phase])
+  }, [phase, isPractice])
 
   const startRound = useCallback((roundNum) => {
     const len = getSequenceLength(roundNum)
@@ -259,8 +268,17 @@ export default function CbatCodeDuplicates() {
     setElapsed(0)
     setDebugUsed(false)
     debugUsedRef.current = false
+    setPracticeLeft(cbat ? PRACTICE_COUNT : 0)
     startRound(1)
-  }, [startRound, apiFetch, API, setDebugUsed])
+  }, [startRound, apiFetch, API, setDebugUsed, cbat])
+
+  // Escape is the real keyboard's green "Go": skip what's left of practice
+  // and begin the test.
+  const skipPractice = useCallback(() => {
+    if (!isPractice) return
+    setPracticeLeft(0)
+    startRound(1)
+  }, [isPractice, startRound])
 
   // ?round=N — start on a later, harder sequence instead of playing through
   // the five easy ones. See utils/cbat/adminRoundParam.js.
@@ -287,6 +305,7 @@ export default function CbatCodeDuplicates() {
     setIsCorrect(null)
     setRoundResults([])
     setElapsed(0)
+    setPracticeLeft(0)
     setScoreSaved(false)
   }, [])
 
@@ -295,15 +314,28 @@ export default function CbatCodeDuplicates() {
     const answer = parseInt(userAnswer, 10)
     const correct = answer === actualCount
 
-    setIsCorrect(correct)
-    setRoundResults(prev => [...prev, {
+    // Practice rounds are not recorded, and always show the answer
+    if (isPractice) {
+      setIsCorrect(correct)
+      setPhase('feedback')
+      return
+    }
+    const nextResults = [...roundResults, {
       round,
       sequenceLength: sequence.length,
       queryDigit,
       actualCount,
       userAnswer: answer,
       correct,
-    }])
+    }]
+    setRoundResults(nextResults)
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a scored round moves straight on to the next.
+    if (cbat) {
+      advance(nextResults)
+      return
+    }
+    setIsCorrect(correct)
     setPhase('feedback')
   }
 
@@ -311,34 +343,62 @@ export default function CbatCodeDuplicates() {
   // row the width of the screen instead (shell widened via main.css).
   useGameBodyClass('cbat-stage-wide', phase === 'displaying' || phase === 'answering' || phase === 'feedback')
 
-  const handleNext = () => {
+  const advance = (results) => {
     const nextRound = round + 1
     if (nextRound > TOTAL_ROUNDS) {
-      submitScore(roundResults, elapsed)
+      submitScore(results, elapsed)
       setPhase('results')
       return
     }
     startRound(nextRound)
   }
 
+  const handleNext = () => {
+    if (isPractice) {
+      // Practice rounds all run at round-1 length; the last one hands over to
+      // round 1 of the test.
+      const left = practiceLeft - 1
+      setPracticeLeft(left)
+      startRound(1)
+      return
+    }
+    advance(roundResults)
+  }
+
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       handleSubmit()
+    } else if (e.key === 'Escape') {
+      skipPractice()
     }
   }
+
+  // Enter moves past practice feedback; Escape skips practice from any phase.
+  useCbatAnswerKeys({ enabled: phase === 'feedback', count: 0, onEnter: handleNext })
+  useCbatAnswerKeys({ enabled: isPractice && phase !== 'answering', count: 0, onEscape: skipPractice })
+
+  const inRound = phase === 'displaying' || phase === 'answering' || phase === 'feedback'
+  const testBar = inRound ? {
+    stage: isPractice ? 'Practice' : 'Testing',
+    item: isPractice ? PRACTICE_COUNT - practiceLeft + 1 : round,
+    total: isPractice ? PRACTICE_COUNT : TOTAL_ROUNDS,
+    timeFrac: null,
+    progressFrac: isPractice ? 0 : (round - 1) / TOTAL_ROUNDS,
+  } : null
 
   return (
     <div className="cbat-code-duplicates-page">
       <SEO title="Code Duplicates — CBAT" description="Count how many times a digit appeared in a sequence." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['displaying', 'answering', 'feedback'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Code Duplicates</h1>
-      </div>
+      <CbatGameHeader
+        title="Code Duplicates"
+        fullTitle="Digit Recognition"
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={['displaying', 'answering', 'feedback'].includes(phase)}
+        test={testBar}
+      />
 
       {/* Not logged in */}
       {!user && (
@@ -419,8 +479,8 @@ export default function CbatCodeDuplicates() {
           {/* Displaying / Answering / Feedback */}
           {(phase === 'displaying' || phase === 'answering' || phase === 'feedback') && (
             <div className="w-full max-w-md lg:max-w-4xl">
-              {/* HUD */}
-              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{round}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
@@ -437,17 +497,17 @@ export default function CbatCodeDuplicates() {
                 <span className="text-slate-400">
                   ⏱ <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
-              </div>
+              </div>}
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
                   animate={{ width: `${((round - 1 + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>
+              </div>}
 
               {/* Main display area */}
               <motion.div
@@ -586,9 +646,25 @@ export default function CbatCodeDuplicates() {
                 )}
               </AnimatePresence>
 
+              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              <CbatFooterStrip
+                answer={phase === 'answering' ? (userAnswer === '' ? null : userAnswer) : undefined}
+                text={phase === 'displaying' ? 'Remember this number.' : undefined}
+                onSubmit={phase === 'answering' ? handleSubmit : phase === 'feedback' ? handleNext : undefined}
+                canSubmit={phase === 'feedback' || userAnswer !== ''}
+                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
+              />
+              {cbat && isPractice && (
+                <div className="text-center mt-2">
+                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                    Skip practice and begin the test
+                  </button>
+                </div>
+              )}
+
               {/* Tier transition indicator */}
               <AnimatePresence>
-                {phase === 'displaying' && (round === 6 || round === 11) && (
+                {phase === 'displaying' && !isPractice && (round === 6 || round === 11) && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

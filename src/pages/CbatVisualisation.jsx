@@ -9,7 +9,9 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useCbatDemo, useCbatDemoPortalTarget, getDemoStageFrame } from '../utils/cbat/demoMode'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import {
@@ -29,6 +31,9 @@ import Visualisation3DShape, { VisualisationShapeCanvas } from '../components/cb
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 const TOTAL_ROUNDS = 8
+// Real CBAT theme only: unscored practice rounds before the test, the way the
+// real software runs "Practice 1 of 3" before "Testing".
+const PRACTICE_COUNT = 3
 const ROUND_TIMER_S = 30
 // Animation timing — out-expo "click into place" feel (2D only).
 const ANIM_DELAY_MS   = 150
@@ -561,10 +566,16 @@ export default function CbatVisualisation({ forcedMode = null }) {
       .catch(() => {})
   }, [apiFetch, API, gameKey, markGameCompleted])
 
+  const cbat = useCbatTheme()
   const currentRound = rounds[currentIdx] || null
+  const isPractice = !!currentRound?.practice
+  // Index within the scored test, ignoring any practice rounds in front of it.
+  const practiceCount = rounds.filter(r => r.practice).length
+  const testIdx = currentIdx - practiceCount
 
+  // The run clock never runs on a practice round
   useEffect(() => {
-    if (phase === 'playing') {
+    if (phase === 'playing' && !isPractice) {
       const offset = elapsed * 1000
       const t0 = Date.now() - offset
       startTimeRef.current = t0
@@ -575,7 +586,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
     } else {
       clearInterval(timerRef.current)
     }
-  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, isPractice]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return () => {
@@ -605,7 +616,8 @@ export default function CbatVisualisation({ forcedMode = null }) {
     }
 
     const roundTime = elapsed - roundStartRef.current
-    const newAnswers = [
+    // Practice rounds are not recorded
+    const newAnswers = round.practice ? answers : [
       ...answers,
       {
         correct,
@@ -617,18 +629,24 @@ export default function CbatVisualisation({ forcedMode = null }) {
       },
     ]
     setAnswers(newAnswers)
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a scored round moves straight on. Practice still shows the answer.
+    if (cbat && !round.practice) {
+      advance(currentIdx, newAnswers)
+      return
+    }
     setPickedKey(opts.timedOut ? null : pick)
     setWasCorrect(correct)
     setLastRoundTime(roundTime)
     setAnimationData(animData)
     setPhase('feedback')
-  }, [phase, rounds, currentIdx, answers, elapsed, is3D, demoPortalTarget])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, rounds, currentIdx, answers, elapsed, is3D, demoPortalTarget, cbat])
 
-  const handleNext = useCallback(() => {
-    if (phase !== 'feedback') return
-    const nextIdx = currentIdx + 1
-    if (nextIdx >= TOTAL_ROUNDS) {
-      submitScore(answers, elapsed)
+  function advance(fromIdx, finalAnswers) {
+    const nextIdx = fromIdx + 1
+    if (nextIdx >= rounds.length) {
+      submitScore(finalAnswers, elapsed)
       setAnimationData(null)
       setPhase('results')
       return
@@ -638,7 +656,34 @@ export default function CbatVisualisation({ forcedMode = null }) {
     setWasCorrect(null)
     setAnimationData(null)
     setPhase('playing')
-  }, [phase, currentIdx, answers, elapsed, submitScore])
+  }
+
+  const handleNext = useCallback(() => {
+    if (phase !== 'feedback') return
+    advance(currentIdx, answers)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, currentIdx, answers, elapsed, submitScore, rounds])
+
+  // Escape is the real keyboard's green "Go": skip what's left of practice
+  // and begin the test.
+  const skipPractice = () => {
+    if (!isPractice) return
+    advance(practiceCount - 1, answers)
+  }
+
+  // Keyboard answering: number keys (2D's three figures) or letters (3D's
+  // A-E) pick an option, marked under the Real CBAT theme and committed with
+  // Enter, committed at once otherwise. Enter moves past feedback.
+  const optionCount = currentRound ? (is3D ? currentRound.options.length : currentRound.choices.length) : 0
+  const { pending, select, commit } = useCbatMcq({
+    enabled: phase === 'playing' && !!currentRound,
+    count: optionCount,
+    kind: is3D ? 'both' : 'number',
+    onCommit: (i) => handlePick(is3D ? currentRound.options[i].id : i),
+    resetKey: currentIdx,
+  })
+  useCbatAnswerKeys({ enabled: phase === 'feedback', count: 0, onEnter: handleNext })
+  useCbatAnswerKeys({ enabled: isPractice && (phase === 'playing' || phase === 'feedback'), count: 0, onEscape: skipPractice })
 
   const handlePickRef = useRef(handlePick)
   useEffect(() => { handlePickRef.current = handlePick }, [handlePick])
@@ -662,7 +707,12 @@ export default function CbatVisualisation({ forcedMode = null }) {
 
   const startGame = useCallback(() => {
     startTracking(gameKey)
-    setRounds(is3D ? buildRounds3D() : buildRounds(TOTAL_ROUNDS))
+    const built = is3D ? buildRounds3D() : buildRounds(TOTAL_ROUNDS)
+    // Practice rounds are drawn separately, from the easy end of a fresh build
+    const practice = cbat
+      ? (is3D ? buildRounds3D() : buildRounds(TOTAL_ROUNDS)).slice(0, PRACTICE_COUNT).map(r => ({ ...r, practice: true }))
+      : []
+    setRounds([...practice, ...built])
     setCurrentIdx(0)
     setAnswers([])
     setPickedKey(null)
@@ -674,7 +724,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
     debugUsedRef.current = false
     roundStartRef.current = 0
     setPhase('playing')
-  }, [gameKey, is3D, startTracking, setDebugUsed])
+  }, [gameKey, is3D, startTracking, setDebugUsed, cbat])
 
   // ?round=N — open on a harder tier instead of playing up to it. The rounds
   // are pre-built, so moving the cursor is the whole jump.
@@ -685,7 +735,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
     onJump: (roundNum) => {
       setDebugUsed(true)
       debugUsedRef.current = true
-      setCurrentIdx(roundNum - 1)
+      setCurrentIdx(practiceCount + roundNum - 1)
       setPickedKey(null)
       setWasCorrect(null)
       setAnimationData(null)
@@ -712,6 +762,14 @@ export default function CbatVisualisation({ forcedMode = null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx, phase])
 
+  const testBar = (phase === 'playing' || phase === 'feedback') && currentRound ? {
+    stage: isPractice ? 'Practice' : 'Testing',
+    item: isPractice ? currentIdx + 1 : testIdx + 1,
+    total: isPractice ? practiceCount : TOTAL_ROUNDS,
+    timeFrac: phase === 'playing' ? Math.max(0, roundTimeLeft) / ROUND_TIMER_S : 1,
+    progressFrac: isPractice ? 0 : (testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS,
+  } : null
+
   const labelsForShape = useCallback((shapeIdx) => {
     if (!currentRound || is3D) return []
     return currentRound.welds.flatMap(w => {
@@ -730,13 +788,14 @@ export default function CbatVisualisation({ forcedMode = null }) {
           : 'Mentally weld labelled shapes into the correct final figure.'}
       />
 
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['playing', 'feedback'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Visualisation {is3D ? '3D' : '2D'}</h1>
-      </div>
+      <CbatGameHeader
+        title={`Visualisation ${is3D ? '3D' : '2D'}`}
+        fullTitle={is3D ? 'Visualization 2 - Rotated Shapes' : 'Visualization 1 - Joined Shapes'}
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={['playing', 'feedback'].includes(phase)}
+        test={testBar}
+      />
 
       {!user && (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
@@ -819,10 +878,10 @@ export default function CbatVisualisation({ forcedMode = null }) {
             <div className={`w-full max-w-2xl ${is3D
               ? 'lg:max-w-none lg:w-[min(64rem,calc((100vh_-_24rem)_*_1.9))]'
               : 'lg:max-w-none lg:w-[min(52rem,calc((100vh_-_28rem)_*_1.5))]'}`}>
-              {/* HUD */}
-              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
+                  Round <span className="text-brand-600">{testIdx + 1}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
                       needs to see that the run will not be submitted, rather
                       than find out from a leaderboard that never moved. */}
@@ -837,16 +896,16 @@ export default function CbatVisualisation({ forcedMode = null }) {
                 <span className="text-slate-400">
                   Total <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
-              </div>
+              </div>}
 
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
-                  animate={{ width: `${((currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS) * 100}%` }}
+                  animate={{ width: `${((testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>
+              </div>}
 
               {!is3D && (
                 <>
@@ -887,6 +946,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                       {currentRound.choices.map((choice, i) => {
                         let btnClass = 'bg-game-arena border-game-line hover:border-brand-400 hover:bg-game-raised'
+                        if (pending === i) btnClass += ' cbat-option-pending'
                         if (phase === 'feedback') {
                           if (i === currentRound.correctIdx) {
                             btnClass = 'bg-green-500/20 border-green-500/50'
@@ -899,13 +959,14 @@ export default function CbatVisualisation({ forcedMode = null }) {
                         return (
                           <button
                             key={i}
-                            onClick={() => handlePick(i)}
+                            onClick={() => select(i)}
                             disabled={phase === 'feedback'}
                             data-demo-answer
-                            className={`flex items-center justify-center rounded-lg border-2 p-1 sm:p-2 transition-all aspect-square ${btnClass} ${
+                            className={`relative flex items-center justify-center rounded-lg border-2 p-1 sm:p-2 transition-all aspect-square ${btnClass} ${
                               phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                             }`}
                           >
+                            <CbatKeyCap label={i + 1} className="absolute top-1 left-1" />
                             {phase === 'feedback' && i === currentRound.correctIdx
                               ? <div className="w-full h-full" />
                               : <CompositeShape
@@ -1015,8 +1076,9 @@ export default function CbatVisualisation({ forcedMode = null }) {
                       Which option matches?
                     </p>
                     <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
-                      {currentRound.options.map((opt) => {
+                      {currentRound.options.map((opt, optIdx) => {
                         let btnClass = 'bg-game-arena border-game-line hover:border-brand-400 hover:bg-game-raised'
+                        if (pending === optIdx) btnClass += ' cbat-option-pending'
                         if (phase === 'feedback') {
                           if (opt.id === currentRound.correctOptionId) {
                             btnClass = 'bg-green-500/20 border-green-500/50'
@@ -1029,14 +1091,16 @@ export default function CbatVisualisation({ forcedMode = null }) {
                         return (
                           <button
                             key={opt.id}
-                            onClick={() => handlePick(opt.id)}
+                            onClick={() => select(optIdx)}
                             disabled={phase === 'feedback'}
                             data-demo-answer
                             className={`flex flex-col items-center justify-center rounded-lg border-2 p-1 sm:p-1.5 transition-all ${btnClass} ${
                               phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                             }`}
                           >
-                            <span className="text-[10px] lg:text-sm font-extrabold text-slate-400 mb-1">{opt.id}</span>
+                            {cbat
+                              ? <CbatKeyCap label={opt.id} className="mb-1" />
+                              : <span className="text-[10px] lg:text-sm font-extrabold text-slate-400 mb-1">{opt.id}</span>}
                             <div className="flex flex-col items-center gap-0.5 w-full min-w-0">
                               {currentRound.shapes.map((s, i) => (
                                 <div key={i} className="flex flex-col items-center w-full min-w-0">
@@ -1111,6 +1175,23 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     </AnimatePresence>
                   </motion.div>
                 </>
+              )}
+
+              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              <CbatFooterStrip
+                answer={phase === 'playing'
+                  ? (pending != null ? (is3D ? currentRound.options[pending]?.id : pending + 1) : null)
+                  : (pickedKey == null ? null : is3D ? pickedKey : pickedKey + 1)}
+                onSubmit={phase === 'playing' ? commit : handleNext}
+                canSubmit={phase === 'feedback' || pending != null}
+                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
+              />
+              {cbat && isPractice && (
+                <div className="text-center mt-2">
+                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                    Skip practice and begin the test
+                  </button>
+                </div>
               )}
             </div>
           )}

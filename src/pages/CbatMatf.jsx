@@ -21,7 +21,9 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
@@ -38,6 +40,10 @@ import {
   readStoredMatfDifficulty, storeMatfDifficulty,
 } from '../utils/cbat/matfDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
+
+// Real CBAT theme only: unscored practice problems before each part's clock
+// starts, the way the real screen opens with "Practice Problem 1".
+const MATF_PRACTICE_COUNT = 3
 
 // ── Reference panels ─────────────────────────────────────────────────────────
 // Top-level components, never defined inside the page's render — these hold the
@@ -218,6 +224,11 @@ export default function CbatMatf() {
   const [attempted, setAttempted] = useState(0)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
+  const cbat = useCbatTheme()
+  // Real CBAT theme only: each part opens with unscored practice problems
+  // ("Practice Problem 1" on the real screen) before its clock starts.
+  const [practiceLeft, setPracticeLeft] = useState(0)
+  const isPractice = practiceLeft > 0
 
   const tickRef = useRef(null)
   const launchTimerRef = useRef(null)
@@ -269,6 +280,7 @@ export default function CbatMatf() {
   // when a question count is reached. That is what makes the test speeded.
   useEffect(() => {
     if (phase !== 'part1' && phase !== 'part2') return
+    if (isPractice) return
     const limit = runTuning.partMs
     phaseStartRef.current = Date.now()
     setRemainingMs(limit)
@@ -283,7 +295,7 @@ export default function CbatMatf() {
     }, 100)
     return () => clearInterval(tickRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase])
+  }, [phase, isPractice])
 
   function nextQuestion(part) {
     setFlash(null)
@@ -294,6 +306,14 @@ export default function CbatMatf() {
   function handlePick(option) {
     if (!question) return
     const correct = option === question.answer
+    if (isPractice) {
+      // Practice problems are not scored and the flash is kept, so the player
+      // can see how the sheet is read before the clock starts.
+      setPracticeLeft(n => n - 1)
+      setFlash(correct ? 'right' : 'wrong')
+      nextQuestion(question.part === 'grid' ? 'part1' : 'part2')
+      return
+    }
     scoreRef.current.attempted += 1
     setAttempted(scoreRef.current.attempted)
     if (correct) {
@@ -305,12 +325,34 @@ export default function CbatMatf() {
         setTableCorrect(scoreRef.current.table)
       }
     }
-    setFlash(correct ? 'right' : 'wrong')
+    // The real test gives no right/wrong mid-run, so under the Real CBAT theme
+    // there is no flash at all.
+    setFlash(cbat ? null : correct ? 'right' : 'wrong')
     // Straight on to the next question. No pause for feedback: a speeded test
     // that stops to congratulate you is no longer measuring the same thing, so
     // the flash rides on the next question's render instead.
     nextQuestion(question.part === 'grid' ? 'part1' : 'part2')
   }
+
+  // Escape is the real keyboard's green "Go": skip the rest of the practice
+  // problems and start the part's clock.
+  function skipPractice() {
+    if (!isPractice) return
+    setPracticeLeft(0)
+    setFlash(null)
+    nextQuestion(phase === 'part1' ? 'part1' : 'part2')
+  }
+
+  // Keyboard answering: 1-5 pick an option (marked under the Real CBAT theme
+  // and committed with Enter; committed at once otherwise).
+  const { pending, select, commit } = useCbatMcq({
+    enabled: (phase === 'part1' || phase === 'part2') && !!question,
+    count: question?.options?.length ?? 0,
+    kind: 'number',
+    onCommit: (i) => handlePick(question.options[i]),
+    resetKey: question,
+  })
+  useCbatAnswerKeys({ enabled: isPractice, count: 0, onEscape: skipPractice })
 
   function finishRun() {
     const totalMs = runTuning.partMs * 2
@@ -320,6 +362,7 @@ export default function CbatMatf() {
 
   function beginPart2() {
     nextQuestion('part2')
+    if (cbat) setPracticeLeft(MATF_PRACTICE_COUNT)
     setPhase('part2')
   }
 
@@ -341,11 +384,12 @@ export default function CbatMatf() {
     setTableCorrect(0)
     setAttempted(0)
     startTracking(tuning.gameKey)
+    setPracticeLeft(cbat && !isDemo ? MATF_PRACTICE_COUNT : 0)
 
     if (isDemo) { setPhase('part1'); return }
     setPhase('launching')
     launchTimerRef.current = setTimeout(() => setPhase('part1'), MATF_LAUNCH_MS)
-  }, [difficulty, startTracking, isDemo])
+  }, [difficulty, startTracking, isDemo, cbat])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -353,6 +397,7 @@ export default function CbatMatf() {
     setPhase('intro')
     setQuestion(null)
     setFlash(null)
+    setPracticeLeft(0)
     scoreRef.current = { grid: 0, table: 0, attempted: 0 }
     setGridCorrect(0)
     setTableCorrect(0)
@@ -362,6 +407,15 @@ export default function CbatMatf() {
 
   const playing = phase === 'part1' || phase === 'part2'
   const correctSoFar = gridCorrect + tableCorrect
+  // A part is a countdown with no fixed problem count, so the title bar
+  // counts practice problems only and the Time meter carries the part.
+  const testBar = playing ? {
+    stage: isPractice ? 'Practice' : 'Testing',
+    item: isPractice ? MATF_PRACTICE_COUNT - practiceLeft + 1 : undefined,
+    total: isPractice ? MATF_PRACTICE_COUNT : undefined,
+    timeFrac: isPractice ? 1 : remainingMs / runTuning.partMs,
+    progressFrac: phase === 'part2' ? 0.5 : 0,
+  } : null
   // Everything on the intro card except the flashing difficulty button dims
   // during the launch flash — the same treatment FLAG, SAT and RTT use.
   const dim = phase === 'launching' ? ' cbat-launch-dim' : ''
@@ -370,14 +424,16 @@ export default function CbatMatf() {
     <div>
       <SEO title="Table Reading Test (CBAT)" description="A signed coordinate grid and a wind reference sheet, worked against the clock." />
 
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={playing} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Table Reading Test</h1>
+      <CbatGameHeader
+        title="Table Reading Test"
+        fullTitle={`MAT-F Part ${phase === 'part2' ? 'Two' : 'One'}`}
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={playing}
+        test={testBar}
+      >
         {phase !== 'intro' && <ModeMarker mode={runTuning} />}
-      </div>
+      </CbatGameHeader>
 
       {!user && (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
@@ -491,22 +547,23 @@ export default function CbatMatf() {
               into a letterbox on a wide monitor. */}
           {playing && question && (
             <div className="w-full">
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
                 <span className="text-slate-400">Part <span className="text-brand-600">{phase === 'part1' ? 1 : 2}</span>/2</span>
                 <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span>/{attempted}</span>
                 <span className="text-slate-400">
                   ⏱ <span className={remainingMs < 15000 ? 'text-red-400' : 'text-brand-600'}>{Math.ceil(remainingMs / 1000)}s</span>
                 </span>
-              </div>
+              </div>}
 
-              <div className="w-full max-w-2xl mx-auto h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full max-w-2xl mx-auto h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
                   animate={{ width: `${100 - (remainingMs / runTuning.partMs) * 100}%` }}
                   transition={{ duration: 0.1 }}
                 />
-              </div>
+              </div>}
 
               {/* Question above the reference, so the two numbers you are
                   carrying stay in view while you scan. */}
@@ -544,11 +601,11 @@ export default function CbatMatf() {
                     <button
                       key={`${opt}-${i}`}
                       type="button"
-                      onClick={() => handlePick(opt)}
+                      onClick={() => select(i)}
                       data-demo-answer
-                      className="py-3 rounded-lg border-2 border-game-line bg-game-arena text-game-text font-mono font-bold text-base hover:border-brand-400 hover:bg-game-raised transition-all cursor-pointer"
+                      className={`py-3 rounded-lg border-2 border-game-line bg-game-arena text-game-text font-mono font-bold text-base hover:border-brand-400 hover:bg-game-raised transition-all cursor-pointer${pending === i ? ' cbat-option-pending' : ''}`}
                     >
-                      <span className="text-[10px] text-slate-600 mr-1.5">{i + 1}</span>{opt}
+                      {cbat ? <CbatKeyCap label={i + 1} className="mr-1.5" /> : <span className="text-[10px] text-slate-600 mr-1.5">{i + 1}</span>}{opt}
                     </button>
                   ))}
                 </div>
@@ -556,6 +613,21 @@ export default function CbatMatf() {
 
               {phase === 'part1' && grid && <GridPanel grid={grid} />}
               {phase === 'part2' && sheet && <SheetPanel sheet={sheet} />}
+
+              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              <CbatFooterStrip
+                answer={pending != null ? pending + 1 : null}
+                onSubmit={commit}
+                canSubmit={pending != null}
+                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
+              />
+              {cbat && isPractice && (
+                <div className="text-center mt-2">
+                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                    Skip practice and start the clock
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

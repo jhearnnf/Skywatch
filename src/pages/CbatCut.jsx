@@ -6,7 +6,8 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
@@ -1041,6 +1042,7 @@ export default function CbatCut() {
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const { enterImmersive, exitImmersive } = useGameChrome()
   const isDemo = !!useCbatDemo()
+  const cbat = useCbatTheme()
 
   const [phaseState, setPhase] = useState('intro') // intro | launching | playing | tutorial | results
   // Defaults to 'easier'; a user who switches gets their most recent choice
@@ -1358,26 +1360,29 @@ export default function CbatCut() {
       {user && (
         <>
           {/* Header */}
-          <div className={`flex items-center gap-2 mb-2${phase === 'launching' ? ' cbat-launch-dim' : ''}`}>
-            {phase === 'intro' || phase === 'launching'
-              ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-              : <CbatQuitButton
-                  // Backing out of the tutorial counts as having been offered it,
-                  // same as the Skip button — otherwise it would reopen by itself
-                  // on the next visit.
-                  onConfirm={phase === 'tutorial' ? () => closeTutorial('skipped') : goToIntro}
-                  confirmNeeded={phase === 'playing'}
-                />
-            }
-            <h1 className="text-sm font-extrabold text-slate-900">Cognitive Updating Test</h1>
+          <CbatGameHeader
+            title="Cognitive Updating Test"
+            intro={phase === 'intro' || phase === 'launching'}
+            // Backing out of the tutorial counts as having been offered it,
+            // same as the Skip button — otherwise it would reopen by itself
+            // on the next visit.
+            onQuit={phase === 'tutorial' ? () => closeTutorial('skipped') : goToIntro}
+            confirmNeeded={phase === 'playing'}
+            className={phase === 'launching' ? 'cbat-launch-dim' : ''}
+            test={phase === 'playing' ? {
+              stage: 'Testing',
+              timeFrac: remainingMs / GAME_MS,
+              progressFrac: 1 - remainingMs / GAME_MS,
+            } : phase === 'tutorial' ? { stage: 'Instructions' } : null}
+          >
             {phase === 'playing' && <ModeMarker mode={runTuning} />}
-            {phase === 'playing' && (
+            {phase === 'playing' && !cbat && (
               <span className="ml-auto font-mono text-xs text-slate-500 flex gap-3">
                 <span>⏱ <span className={remainingMs < 20000 ? 'text-red-500' : 'text-slate-600'}>{fmtClock(remainingMs)}</span></span>
                 <span>Score: <span className={sim.score >= 0 ? 'text-brand-500' : 'text-red-500'}>{Math.round(sim.score)}</span></span>
               </span>
             )}
-          </div>
+          </CbatGameHeader>
 
           {/* Intro */}
           {(phase === 'intro' || phase === 'launching') && (

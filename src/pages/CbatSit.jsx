@@ -34,7 +34,9 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
@@ -272,6 +274,7 @@ export default function CbatSit() {
   const [totalElapsedMs, setTotalElapsedMs] = useState(0)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
+  const cbat = useCbatTheme()
 
   const phaseStartRef = useRef(null)
   const tickRef = useRef(null)
@@ -416,6 +419,12 @@ export default function CbatSit() {
     answersRef.current = next
     // The run clock is not touched here — the phase timer above already counts
     // the answer window, and adding it again would double it.
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a question moves straight on.
+    if (cbat) {
+      goNext()
+      return
+    }
     setFeedback(entry)
     setPhase('feedback')
   }
@@ -425,6 +434,18 @@ export default function CbatSit() {
     clearInterval(tickRef.current)
     recordAnswer(value)
   }
+
+  // Keyboard answering: 1 = Yes, 2 = No (marked under the Real CBAT theme and
+  // committed with Enter; committed at once otherwise). Enter moves past the
+  // review.
+  const { pending, select, commit } = useCbatMcq({
+    enabled: phase === 'answer',
+    count: 2,
+    kind: 'number',
+    onCommit: (i) => handlePick(i === 0),
+    resetKey: `${currentIdx}-${questionIdx}`,
+  })
+  useCbatAnswerKeys({ enabled: phase === 'feedback', count: 0, onEnter: goNext })
 
   // The study window is the player's to spend, so they can hand back whatever is
   // left of it. It buys nothing: the clip runs on its own fixed window either
@@ -545,14 +566,23 @@ export default function CbatSit() {
     <div>
       <SEO title="Spatial Integration Test (CBAT)" description="Study the ground one plan-view layer at a time, then judge a three-second 3D camera pass over the whole scene on one detail alone." />
 
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={playing} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Spatial Integration Test</h1>
+      <CbatGameHeader
+        title="Spatial Integration Test"
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={playing}
+        test={playing ? {
+          stage: 'Testing',
+          item: answers.length + (phase === 'feedback' ? 0 : 1),
+          total: SIT_ROUNDS,
+          timeFrac: phase === 'study' ? remainingMs / Math.max(1, studyMs)
+            : phase === 'answer' ? remainingMs / Math.max(1, runTuning.answerMs)
+            : null,
+          progressFrac: answers.length / SIT_ROUNDS,
+        } : null}
+      >
         {phase !== 'intro' && <ModeMarker mode={runTuning} />}
-      </div>
+      </CbatGameHeader>
 
       {!user && (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
@@ -661,7 +691,8 @@ export default function CbatSit() {
                own content, because a Yes/No pair stretched across 1100px is not
                an improvement on one that is 400px wide. */
             <div className="w-full">
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
                 <span className="text-slate-400">
                   Clip <span className="text-brand-600">{currentIdx + 1}</span>/{SIT_CLIPS}
                   <span className="text-slate-600 mx-1">·</span>
@@ -673,16 +704,16 @@ export default function CbatSit() {
                     ? <>⏱ <span className={remainingMs < 4000 ? 'text-red-400' : 'text-brand-600'}>{Math.ceil(remainingMs / 1000)}s</span></>
                     : phase === 'clip' ? 'CLIP' : ''}
                 </span>
-              </div>
+              </div>}
 
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
                   animate={{ width: `${(answers.length / SIT_ROUNDS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>
+              </div>}
 
               <div className={`bg-game-panel border border-game-line rounded-xl p-3 mx-auto w-full transition-[max-width] duration-300 ${panelWidth}`}>
                 {phase === 'study' && (
@@ -799,8 +830,9 @@ export default function CbatSit() {
                       {currentQuestion.prompt}
                     </p>
                     <div className="grid grid-cols-2 gap-2 px-2">
-                      {[true, false].map(value => {
+                      {[true, false].map((value, i) => {
                         let cls = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
+                        if (pending === i) cls += ' cbat-option-pending'
                         if (phase === 'feedback') {
                           if (value === currentQuestion.answer) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                           else if (value === feedback?.picked) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
@@ -810,12 +842,12 @@ export default function CbatSit() {
                           <button
                             key={String(value)}
                             type="button"
-                            onClick={() => handlePick(value)}
+                            onClick={() => select(i)}
                             disabled={phase === 'feedback'}
                             data-demo-answer
                             className={`py-4 rounded-lg border-2 font-bold text-lg transition-all ${cls}`}
                           >
-                            {value ? 'Yes' : 'No'}
+                            <CbatKeyCap label={i + 1} className="mr-2" />{value ? 'Yes' : 'No'}
                           </button>
                         )
                       })}
@@ -869,6 +901,14 @@ export default function CbatSit() {
                   </div>
                 )}
               </div>
+
+              {/* Real CBAT theme: the instruction strip */}
+              <CbatFooterStrip
+                text={phase === 'study' ? 'Study the map. A clip of the same ground follows.' : phase === 'clip' ? 'Watch the clip.' : undefined}
+                answer={phase === 'answer' ? (pending != null ? (pending === 0 ? 'Yes' : 'No') : null) : phase === 'feedback' ? (feedback?.picked == null ? null : feedback.picked ? 'Yes' : 'No') : undefined}
+                onSubmit={phase === 'answer' ? commit : phase === 'feedback' ? goNext : undefined}
+                canSubmit={phase === 'feedback' || pending != null}
+              />
             </div>
           )}
 

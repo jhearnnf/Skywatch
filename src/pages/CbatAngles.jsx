@@ -6,14 +6,19 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const ROUND_1_COUNT = 10
 const ROUND_2_COUNT = 10
+// Real CBAT theme only: unscored practice items before the test, the way the
+// real software runs "Practice 1 of 3" before "Testing".
+const PRACTICE_COUNT = 3
 const TOTAL_QUESTIONS = ROUND_1_COUNT + ROUND_2_COUNT
 const OPTIONS_COUNT = 5
 const CANVAS_SIZE = 220
@@ -101,6 +106,17 @@ function buildQuestions() {
   for (let i = 0; i < ROUND_2_COUNT; i++) {
     const angle = generateAngle(2)
     questions.push({ angle, round: 2, options: generateOptions(angle, 2) })
+  }
+  return questions
+}
+
+// Practice items are round-1 difficulty and flagged so nothing about them is
+// scored or timed.
+function buildPracticeQuestions() {
+  const questions = []
+  for (let i = 0; i < PRACTICE_COUNT; i++) {
+    const angle = generateAngleCapped(1, 170)
+    questions.push({ angle, round: 1, options: generateOptions(angle, 1), practice: true })
   }
   return questions
 }
@@ -299,14 +315,20 @@ export default function CbatAngles() {
       .catch(() => {})
   }, [apiFetch, API])
 
+  const cbat = useCbatTheme()
   const currentQuestion = questions[currentIdx] || null
+  const isPractice = !!currentQuestion?.practice
+  // Index within the scored test, ignoring any practice items in front of it.
+  const practiceCount = questions.filter(q => q.practice).length
+  const testIdx = currentIdx - practiceCount
   const currentRound = currentQuestion ? currentQuestion.round : 1
-  const questionInRound = currentRound === 1 ? currentIdx + 1 : currentIdx - ROUND_1_COUNT + 1
+  const questionInRound = currentRound === 1 ? testIdx + 1 : testIdx - ROUND_1_COUNT + 1
   const roundTotal = currentRound === 1 ? ROUND_1_COUNT : ROUND_2_COUNT
 
-  // Timer — runs during 'playing' phase, pauses during 'feedback'
+  // Timer — runs during 'playing' phase, pauses during 'feedback' and never
+  // runs on a practice item
   useEffect(() => {
-    if (phase === 'playing') {
+    if (phase === 'playing' && !isPractice) {
       const offset = elapsed * 1000
       const t0 = Date.now() - offset
       startTimeRef.current = t0
@@ -317,18 +339,18 @@ export default function CbatAngles() {
     } else {
       clearInterval(timerRef.current)
     }
-  }, [phase])
+  }, [phase, isPractice])
 
   const startGame = useCallback(() => {
     startTracking('angles')
-    setQuestions(buildQuestions())
+    setQuestions(cbat ? [...buildPracticeQuestions(), ...buildQuestions()] : buildQuestions())
     setCurrentIdx(0)
     setAnswers([])
     setSelectedOption(null)
     setIsCorrect(null)
     setElapsed(0)
     setPhase('playing')
-  }, [apiFetch, API])
+  }, [apiFetch, API, cbat])
 
   const goToIntro = useCallback(() => {
     clearInterval(timerRef.current)
@@ -346,24 +368,10 @@ export default function CbatAngles() {
   // tall monitor is wider than the shell's max-w-3xl. See main.css.
   useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'feedback')
 
-  const handleAnswer = (option) => {
-    if (phase !== 'playing') return
-    const correct = option === currentQuestion.angle
-    setSelectedOption(option)
-    setIsCorrect(correct)
-    setAnswers(prev => [...prev, {
-      angle: currentQuestion.angle,
-      picked: option,
-      correct,
-      round: currentQuestion.round,
-    }])
-    setPhase('feedback')
-  }
-
-  const handleNext = () => {
-    const nextIdx = currentIdx + 1
-    if (nextIdx >= TOTAL_QUESTIONS) {
-      submitScore(answers, elapsed)
+  const advance = (fromIdx, finalAnswers) => {
+    const nextIdx = fromIdx + 1
+    if (nextIdx >= questions.length) {
+      submitScore(finalAnswers, elapsed)
       setPhase('results')
       return
     }
@@ -373,18 +381,74 @@ export default function CbatAngles() {
     setPhase('playing')
   }
 
+  const handleAnswer = (option) => {
+    if (phase !== 'playing') return
+    const correct = option === currentQuestion.angle
+    // Practice items are not recorded
+    const nextAnswers = isPractice ? answers : [...answers, {
+      angle: currentQuestion.angle,
+      picked: option,
+      correct,
+      round: currentQuestion.round,
+    }]
+    setAnswers(nextAnswers)
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a scored item moves straight on. Practice still shows the answer.
+    if (cbat && !isPractice) {
+      advance(currentIdx, nextAnswers)
+      return
+    }
+    setSelectedOption(option)
+    setIsCorrect(correct)
+    setPhase('feedback')
+  }
+
+  const handleNext = () => advance(currentIdx, answers)
+
+  // Escape is the real keyboard's green "Go": skip what's left of practice
+  // and begin the test.
+  const skipPractice = () => {
+    if (!isPractice) return
+    setCurrentIdx(practiceCount)
+    setSelectedOption(null)
+    setIsCorrect(null)
+    setPhase('playing')
+  }
+
+  // Keyboard answering: 1-5 pick an option (marked under the Real CBAT theme,
+  // committed with Enter; committed at once otherwise), Enter moves past
+  // feedback.
+  const { pending, select, commit } = useCbatMcq({
+    enabled: phase === 'playing',
+    count: OPTIONS_COUNT,
+    kind: 'number',
+    onCommit: (i) => handleAnswer(currentQuestion.options[i]),
+    resetKey: currentIdx,
+  })
+  useCbatAnswerKeys({ enabled: phase === 'feedback', onEnter: handleNext })
+  useCbatAnswerKeys({ enabled: (phase === 'playing' || phase === 'feedback') && isPractice, count: 0, onEscape: skipPractice })
+
+  const testBar = (phase === 'playing' || phase === 'feedback') && currentQuestion ? {
+    stage: isPractice ? 'Practice' : 'Testing',
+    item: isPractice ? currentIdx + 1 : testIdx + 1,
+    total: isPractice ? practiceCount : TOTAL_QUESTIONS,
+    timeFrac: null,
+    progressFrac: isPractice ? 0 : (testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS,
+  } : null
+
   return (
     <div className="cbat-angles-page">
       <SEO title="Angles — CBAT" description="Judge bearing angles quickly and accurately." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['playing', 'feedback'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Angles</h1>
-      </div>
+      <CbatGameHeader
+        title="Angles"
+        fullTitle="Angles, Bearings and Degrees"
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={['playing', 'feedback'].includes(phase)}
+        test={testBar}
+      />
 
       {/* Not logged in */}
       {!user && (
@@ -461,8 +525,8 @@ export default function CbatAngles() {
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
             <div className="w-full max-w-md lg:max-w-none lg:w-[min(50rem,calc(100vh_-_24rem))]">
-              {/* HUD */}
-              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{currentRound}</span>/2
                 </span>
@@ -478,17 +542,17 @@ export default function CbatAngles() {
                 <span className="text-slate-400">
                   ⏱ <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
-              </div>
+              </div>}
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
-                  animate={{ width: `${((currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS) * 100}%` }}
+                  animate={{ width: `${((testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>
+              </div>}
 
               {/* Angle display */}
               <motion.div
@@ -534,8 +598,9 @@ export default function CbatAngles() {
 
               {/* Options */}
               <div className="grid grid-cols-5 gap-2 lg:gap-3 mb-3">
-                {currentQuestion.options.map((opt) => {
+                {currentQuestion.options.map((opt, i) => {
                   let btnClass = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised'
+                  if (pending === i) btnClass += ' cbat-option-pending'
                   if (phase === 'feedback') {
                     if (opt === currentQuestion.angle) {
                       btnClass = 'bg-green-500/20 border-green-500/50 text-green-400'
@@ -549,14 +614,14 @@ export default function CbatAngles() {
                   return (
                     <button
                       key={opt}
-                      onClick={() => handleAnswer(opt)}
+                      onClick={() => select(i)}
                       disabled={phase === 'feedback'}
                       data-demo-answer
                       className={`py-3 lg:py-4 rounded-lg border-2 font-mono font-bold text-sm lg:text-xl transition-all ${btnClass} ${
                         phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                       }`}
                     >
-                      {opt}°
+                      <CbatKeyCap label={i + 1} className="mr-1.5" />{opt}°
                     </button>
                   )
                 })}
@@ -580,9 +645,24 @@ export default function CbatAngles() {
                 )}
               </AnimatePresence>
 
+              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              <CbatFooterStrip
+                answer={phase === 'playing' ? (pending != null ? pending + 1 : null) : selectedOption != null ? currentQuestion.options.indexOf(selectedOption) + 1 : null}
+                onSubmit={phase === 'playing' ? commit : handleNext}
+                canSubmit={phase === 'feedback' || pending != null}
+                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
+              />
+              {cbat && isPractice && (
+                <div className="text-center mt-2">
+                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                    Skip practice and begin the test
+                  </button>
+                </div>
+              )}
+
               {/* Round transition indicator */}
               <AnimatePresence>
-                {phase === 'playing' && currentIdx === ROUND_1_COUNT && (
+                {phase === 'playing' && testIdx === ROUND_1_COUNT && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

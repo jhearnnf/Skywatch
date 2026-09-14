@@ -35,7 +35,9 @@ import { useGameChrome } from '../../context/GameChromeContext'
 import { useCbatDemo } from '../../utils/cbat/demoMode'
 import { initialDifficulty } from '../../utils/cbat/difficultyParam'
 import SEO from '../SEO'
-import CbatQuitButton from '../CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from './CbatTestChrome'
+import { useCbatTheme } from '../../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../CbatModeSelector'
 import CbatPersonalBest from '../CbatPersonalBest'
@@ -265,6 +267,7 @@ export default function CbatTabbedReasoning({
   const [totalElapsedMs, setTotalElapsedMs] = useState(0)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
+  const cbat = useCbatTheme()
 
   const phaseStartRef = useRef(null)
   const tickRef = useRef(null)
@@ -366,6 +369,12 @@ export default function CbatTabbedReasoning({
     answersRef.current = next
     setTotalElapsedMs(prev => prev + elapsedMs)
     totalElapsedRef.current += elapsedMs
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a scored question moves straight on to the next.
+    if (cbat) {
+      goNext()
+      return
+    }
     setFeedback({ correct, picked, answer: q.answer })
 
     // Put the evidence on screen rather than one click away. Whichever tabs the
@@ -382,6 +391,19 @@ export default function CbatTabbedReasoning({
     clearInterval(tickRef.current)
     recordAnswer(option, Date.now() - phaseStartRef.current)
   }
+
+  // Keyboard answering: the real keyboard's lettered keys (or 1-4) pick an
+  // option, marked under the Real CBAT theme and committed with Enter,
+  // committed at once otherwise. Enter moves past feedback.
+  const optionCount = run?.questions?.[currentIdx]?.options?.length ?? 0
+  const { pending, select, commit } = useCbatMcq({
+    enabled: phase === 'playing' && !feedback && optionCount > 0,
+    count: optionCount,
+    kind: 'both',
+    onCommit: (i) => handlePick(run.questions[currentIdx].options[i]),
+    resetKey: currentIdx,
+  })
+  useCbatAnswerKeys({ enabled: phase === 'playing' && !!feedback, count: 0, onEnter: goNext })
 
   function goNext() {
     const nextIdx = currentIdx + 1
@@ -456,14 +478,21 @@ export default function CbatTabbedReasoning({
     <div>
       <SEO title={seoTitle} description={seoDescription} />
 
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['reading', 'playing'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">{gameName}</h1>
+      <CbatGameHeader
+        title={gameName}
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={['reading', 'playing'].includes(phase)}
+        test={(phase === 'reading' || phase === 'playing') && run ? {
+          stage: phase === 'reading' ? 'Instructions' : 'Testing',
+          item: phase === 'playing' ? currentIdx + 1 : undefined,
+          total: phase === 'playing' ? totalQuestions : undefined,
+          timeFrac: remainingMs / (phase === 'reading' ? runTuning.readMs : runTuning.perQuestionMs),
+          progressFrac: phase === 'reading' ? 0 : currentIdx / totalQuestions,
+        } : null}
+      >
         {phase !== 'intro' && <ModeMarker mode={runTuning} />}
-      </div>
+      </CbatGameHeader>
 
       {!user && (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
@@ -554,7 +583,8 @@ export default function CbatTabbedReasoning({
                question keep their own narrower measure below, because a line of
                prose 1100px long is harder to read, not easier. */
             <div className="w-full max-w-[1180px]">
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
                 <span className="text-slate-400">
                   {phase === 'reading'
                     ? readPhaseLabel
@@ -566,16 +596,16 @@ export default function CbatTabbedReasoning({
                 <span className="text-slate-400">
                   ⏱ <span className={remainingMs < 10000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span>
                 </span>
-              </div>
+              </div>}
 
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden max-w-2xl mx-auto">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
                   animate={{ width: phase === 'reading' ? '0%' : `${(currentIdx / totalQuestions) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>
+              </div>}
 
               {/* Question first, tabs below — the question is what you come back
                   to after every trip into the tabs, so it stays put at the top
@@ -591,6 +621,7 @@ export default function CbatTabbedReasoning({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {currentQuestion.options.map((opt, i) => {
                       let cls = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
+                      if (pending === i) cls += ' cbat-option-pending'
                       if (feedback) {
                         if (opt === feedback.answer) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                         else if (opt === feedback.picked) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
@@ -600,12 +631,12 @@ export default function CbatTabbedReasoning({
                         <button
                           key={`${opt}-${i}`}
                           type="button"
-                          onClick={() => handlePick(opt)}
+                          onClick={() => select(i)}
                           disabled={!!feedback}
                           data-demo-answer
                           className={`px-3 py-2.5 rounded-lg border-2 text-sm font-bold text-left transition-all ${cls}`}
                         >
-                          {formatAnswer(opt, currentQuestion)}
+                          <CbatKeyCap label={String.fromCharCode(65 + i)} className="mr-2" />{formatAnswer(opt, currentQuestion)}
                         </button>
                       )
                     })}
@@ -661,6 +692,14 @@ export default function CbatTabbedReasoning({
                   Two tabs at a time. Opening a third closes whichever has been open longest.
                 </p>
               )}
+
+              {/* Real CBAT theme: the instruction strip */}
+              <CbatFooterStrip
+                text={phase === 'reading' ? 'Read the pages. The questions follow.' : undefined}
+                answer={phase === 'playing' ? (pending != null ? String.fromCharCode(65 + pending) : null) : undefined}
+                onSubmit={phase === 'playing' ? commit : undefined}
+                canSubmit={pending != null}
+              />
 
               {phase === 'reading' && (
                 <button

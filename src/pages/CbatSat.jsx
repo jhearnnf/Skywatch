@@ -9,7 +9,9 @@ import { generateSatSituation, SAT_GRID, ALL_AIRCRAFT_FIELDS } from '../utils/cb
 import { buildSatCards, satObserveMs } from '../utils/cbat/satCards'
 import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
@@ -711,6 +713,7 @@ export default function CbatSat() {
   const [audioOn, setAudioOn] = useState(true)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
+  const cbat = useCbatTheme()
 
   const qStartRef = useRef(null)
   const tickRef = useRef(null)
@@ -832,6 +835,12 @@ export default function CbatSat() {
     answersRef.current = nextAnswers
     setTotalElapsedMs(prev => prev + elapsedMs)
     totalElapsedRef.current = totalElapsedRef.current + elapsedMs
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a question moves straight on to the next.
+    if (cbat) {
+      goNext()
+      return
+    }
     setFeedback({ correct, picked, answer: currentQuestion.answer })
     setPhase('feedback')
   }
@@ -841,6 +850,18 @@ export default function CbatSat() {
     clearInterval(tickRef.current)
     recordAnswer(option, Date.now() - qStartRef.current)
   }
+
+  // Keyboard answering: 1-4 pick an option (marked under the Real CBAT theme
+  // and committed with Enter; committed at once otherwise). Enter moves past
+  // the reveal.
+  const { pending, select, commit } = useCbatMcq({
+    enabled: phase === 'playing' && !!currentQuestion,
+    count: currentQuestion?.options?.length ?? 0,
+    kind: 'number',
+    onCommit: (i) => handlePick(currentQuestion.options[i]),
+    resetKey: `${situationIdx}-${questionIdx}`,
+  })
+  useCbatAnswerKeys({ enabled: phase === 'feedback', count: 0, onEnter: goNext })
 
   function goNext() {
     setFeedback(null)
@@ -935,14 +956,22 @@ export default function CbatSat() {
       <SEO title="Situational Awareness Test — CBAT" description="Observe a tactical picture of units, aircraft and radio calls, then recall the details from memory." />
 
       {/* Header */}
-      <div className={`flex items-center gap-2 mb-2${dim}`}>
-        {phase === 'intro' || launching
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['observe', 'playing', 'feedback'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Situational Awareness Test</h1>
+      <CbatGameHeader
+        title="Situational Awareness Test"
+        intro={phase === 'intro' || launching}
+        onQuit={goToIntro}
+        confirmNeeded={['observe', 'playing', 'feedback'].includes(phase)}
+        className={dim.trim()}
+        test={['observe', 'playing', 'feedback'].includes(phase) ? {
+          stage: 'Testing',
+          item: phase === 'observe' ? undefined : globalQ,
+          total: phase === 'observe' ? undefined : runTotalQuestions,
+          timeFrac: phase === 'playing' ? qRemainingMs / PER_QUESTION_MS : phase === 'observe' ? null : 1,
+          progressFrac: answers.length / runTotalQuestions,
+        } : null}
+      >
         {['observe', 'playing', 'feedback'].includes(phase) && <ModeMarker mode={runTuning} />}
-      </div>
+      </CbatGameHeader>
 
       {/* Not logged in */}
       {!user && (
@@ -1124,22 +1153,22 @@ export default function CbatSat() {
           {/* Playing / Feedback — recall questions (picture hidden) */}
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
             <div className="w-full max-w-md lg:max-w-2xl">
-              {/* HUD */}
-              <div className="flex items-center justify-between text-sm font-mono mb-2 px-1">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">Q <span className="text-brand-600">{globalQ}</span>/{runTotalQuestions}</span>
                 <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span></span>
                 <span className="text-slate-400">⏱ <span className={qRemainingMs < 6000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span></span>
-              </div>
+              </div>}
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
                   animate={{ width: `${(answers.length / runTotalQuestions) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>
+              </div>}
 
               {/* Question */}
               <motion.div
@@ -1154,8 +1183,9 @@ export default function CbatSat() {
 
               {/* Options */}
               <div className="grid grid-cols-2 gap-2 lg:gap-3">
-                {currentQuestion.options.map(opt => {
+                {currentQuestion.options.map((opt, i) => {
                   let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
+                  if (pending === i) cls += ' cbat-option-pending'
                   if (phase === 'feedback') {
                     if (String(opt) === String(feedback?.answer)) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                     else if (String(opt) === String(feedback?.picked)) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
@@ -1165,11 +1195,11 @@ export default function CbatSat() {
                     <button
                       key={String(opt)}
                       type="button"
-                      onClick={() => handlePick(opt)}
+                      onClick={() => select(i)}
                       disabled={phase === 'feedback'}
                       className={`py-4 lg:py-5 px-2 rounded-lg border-2 font-mono font-bold text-lg lg:text-2xl transition-all ${cls}`}
                     >
-                      {opt}
+                      <CbatKeyCap label={i + 1} className="mr-2" />{opt}
                     </button>
                   )
                 })}
@@ -1199,6 +1229,13 @@ export default function CbatSat() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Real CBAT theme: the instruction strip */}
+              <CbatFooterStrip
+                answer={phase === 'playing' ? (pending != null ? pending + 1 : null) : (feedback?.picked == null ? null : currentQuestion.options.findIndex(o => String(o) === String(feedback.picked)) + 1)}
+                onSubmit={phase === 'playing' ? commit : goNext}
+                canSubmit={phase === 'feedback' || pending != null}
+              />
             </div>
           )}
 

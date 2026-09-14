@@ -6,13 +6,18 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import InstrumentPanel from '../components/cbat/InstrumentPanel'
 import CbatGameOver from '../components/CbatGameOver'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TIME_LIMIT = 90          // seconds
+// Real CBAT theme only: unscored, untimed practice rounds before the clock
+// starts, the way the real software runs "Practice 1 of 3" before "Testing".
+const PRACTICE_COUNT = 3
 const FEEDBACK_MS = 2000
 const CALIBRATION_MIN_MS = 1000
 const CALIBRATION_MAX_MS = 3000
@@ -222,6 +227,11 @@ export default function CbatInstruments() {
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [highlightedKey, setHighlightedKey] = useState(null)
+  const cbat = useCbatTheme()
+  // Practice rounds still to play before the scored run begins; 0 = testing.
+  const [practiceLeft, setPracticeLeft] = useState(0)
+  const practiceLeftRef = useRef(0)
+  const isPractice = practiceLeft > 0
   const [hintDismissed, setHintDismissed] = useState(
     () => typeof localStorage !== 'undefined' && localStorage.getItem('cbat.instruments.highlightHint') === '1'
   )
@@ -330,16 +340,40 @@ export default function CbatInstruments() {
     }, dur)
   }, [])
 
+  // The clock starts when the scored run does: at once under the SkyWatch
+  // theme, after practice under the Real CBAT theme.
+  const beginTest = useCallback(() => {
+    practiceLeftRef.current = 0
+    setPracticeLeft(0)
+    startTimeRef.current = Date.now()
+  }, [])
+
   const startGame = useCallback(() => {
     startTracking('instruments')
     setAnswers([])
     answersRef.current = []
     setElapsed(0)
-    startTimeRef.current = Date.now()
     setScoreSaved(false)
     setRoundIndex(0)
+    if (cbat) {
+      practiceLeftRef.current = PRACTICE_COUNT
+      setPracticeLeft(PRACTICE_COUNT)
+      startTimeRef.current = null
+    } else {
+      beginTest()
+    }
     startCalibration()
-  }, [startCalibration, apiFetch, API])
+  }, [startCalibration, beginTest, cbat, apiFetch, API])
+
+  // Escape is the real keyboard's green "Go": skip what's left of practice
+  // and begin the test on a fresh round.
+  const skipPractice = useCallback(() => {
+    if (practiceLeftRef.current === 0) return
+    if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current)
+    if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
+    beginTest()
+    startCalibration()
+  }, [beginTest, startCalibration])
 
   const goToIntro = useCallback(() => {
     if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current)
@@ -350,6 +384,8 @@ export default function CbatInstruments() {
     answersRef.current = []
     setElapsed(0)
     startTimeRef.current = null
+    practiceLeftRef.current = 0
+    setPracticeLeft(0)
     setScoreSaved(false)
   }, [])
 
@@ -360,6 +396,22 @@ export default function CbatInstruments() {
   const handlePick = useCallback((idx) => {
     if (phase !== 'playing' || !round) return
     const correct = idx === round.correctIdx
+    const practice = practiceLeftRef.current > 0
+    if (practice) {
+      // Practice rounds are not recorded. The last one hands over to the test
+      // once its feedback has been seen.
+      practiceLeftRef.current -= 1
+      setPracticeLeft(practiceLeftRef.current)
+      setPickedIdx(idx)
+      setWasCorrect(correct)
+      setLastRoundTime(0)
+      setPhase('feedback')
+      advanceTimeoutRef.current = setTimeout(() => {
+        if (practiceLeftRef.current === 0) beginTest()
+        startCalibration()
+      }, FEEDBACK_MS)
+      return
+    }
     const roundTime = readElapsed() - roundStartRef.current
     const newAnswers = [
       ...answersRef.current,
@@ -367,6 +419,13 @@ export default function CbatInstruments() {
     ]
     setAnswers(newAnswers)
     answersRef.current = newAnswers
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a scored round moves straight on to the next.
+    if (cbat) {
+      if (readElapsed() >= TIME_LIMIT) { endGame(); return }
+      startCalibration()
+      return
+    }
     setPickedIdx(idx)
     setWasCorrect(correct)
     setLastRoundTime(roundTime)
@@ -379,23 +438,45 @@ export default function CbatInstruments() {
       }
       startCalibration()
     }, FEEDBACK_MS)
-  }, [phase, round, readElapsed, startCalibration, endGame])
+  }, [phase, round, readElapsed, startCalibration, endGame, beginTest, cbat])
+
+  // Keyboard answering: 1-5 or A-E pick a statement (marked under the Real
+  // CBAT theme and committed with Enter; committed at once otherwise).
+  const { pending, select, commit } = useCbatMcq({
+    enabled: phase === 'playing',
+    count: 5,
+    kind: 'both',
+    onCommit: handlePick,
+    resetKey: roundIndex,
+  })
+  useCbatAnswerKeys({ enabled: isPractice && phase !== 'intro' && phase !== 'results', count: 0, onEscape: skipPractice })
 
   const timeRemaining = Math.max(0, TIME_LIMIT - elapsed)
   const correctSoFar = answers.filter(a => a.correct).length
+  const inRound = phase === 'calibrating' || phase === 'playing' || phase === 'feedback'
+  // No fixed number of rounds: the run is the 90 s clock, so the title bar
+  // counts practice items only and the Time meter carries the test.
+  const testBar = inRound ? {
+    stage: isPractice ? 'Practice' : 'Testing',
+    item: isPractice ? PRACTICE_COUNT - practiceLeft + 1 : undefined,
+    total: isPractice ? PRACTICE_COUNT : undefined,
+    timeFrac: isPractice ? 1 : timeRemaining / TIME_LIMIT,
+    progressFrac: null,
+  } : null
 
   return (
     <div className="cbat-instruments-page">
       <SEO title="Instruments — CBAT" description="Read cockpit instruments under time pressure." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['calibrating', 'playing', 'feedback'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Instruments</h1>
-      </div>
+      <CbatGameHeader
+        title="Instruments"
+        fullTitle="Instrument Comprehension"
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={['calibrating', 'playing', 'feedback'].includes(phase)}
+        test={testBar}
+      />
 
       {/* Not logged in */}
       {!user && (
@@ -471,8 +552,8 @@ export default function CbatInstruments() {
           {/* Playing / Calibrating / Feedback */}
           {(phase === 'calibrating' || phase === 'playing' || phase === 'feedback') && round && (
             <div className="w-full max-w-md lg:max-w-6xl">
-              {/* HUD */}
-              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{answers.length + (phase === 'feedback' ? 0 : 1)}</span>
                 </span>
@@ -482,17 +563,17 @@ export default function CbatInstruments() {
                 <span className="text-slate-400">
                   {'\u23F1'} <span className={timeRemaining < 10 ? 'text-red-400' : 'text-brand-600'}>{timeRemaining.toFixed(1)}s</span>
                 </span>
-              </div>
+              </div>}
 
               {/* Time bar */}
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className={`h-full rounded-full ${timeRemaining < 10 ? 'bg-red-500' : 'bg-brand-600'}`}
                   initial={false}
                   animate={{ width: `${(timeRemaining / TIME_LIMIT) * 100}%` }}
-                  transition={{ duration: 0.1, ease: 'linear' }}
+                    transition={{ duration: 0.1, ease: 'linear' }}
                 />
-              </div>
+              </div>}
 
               {/* Desktop: the six dials take the height of the screen on the
                   left and the statements sit beside them, instead of both
@@ -562,6 +643,7 @@ export default function CbatInstruments() {
                     {round.statements.map((s, i) => {
                       const segments = statementSegments(s)
                       let btnClass = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised'
+                      if (pending === i) btnClass += ' cbat-option-pending'
                       if (phase === 'feedback') {
                         if (i === round.correctIdx) {
                           btnClass = 'bg-green-500/20 border-green-500/50 text-green-300'
@@ -577,14 +659,16 @@ export default function CbatInstruments() {
                           initial={{ opacity: 0, x: -16 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.06, duration: 0.22, ease: 'easeOut' }}
-                          onClick={() => handlePick(i)}
+                          onClick={() => select(i)}
                           disabled={phase === 'feedback'}
                           data-demo-answer
                           className={`w-full text-left px-3 py-2.5 lg:px-5 lg:py-4 rounded-lg border-2 text-xs sm:text-sm lg:text-lg lg:leading-relaxed transition-all min-h-[3.75rem] sm:min-h-[4.25rem] lg:min-h-[5.5rem] ${btnClass} ${
                             phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                           }`}
                         >
-                          <span className="font-mono text-[10px] lg:text-sm text-slate-500 mr-2">{String.fromCharCode(65 + i)}</span>
+                          {cbat
+                            ? <CbatKeyCap label={i + 1} className="mr-2" />
+                            : <span className="font-mono text-[10px] lg:text-sm text-slate-500 mr-2">{String.fromCharCode(65 + i)}</span>}
                           {segments.map((seg, j) => {
                             // 'attitude' is a meta-key — the attitude indicator
                             // shows both pitch (vs) and roll (turn), so tapping
@@ -625,6 +709,21 @@ export default function CbatInstruments() {
                 )}
               </AnimatePresence>
               </div>
+
+              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              <CbatFooterStrip
+                answer={pending != null ? pending + 1 : null}
+                onSubmit={commit}
+                canSubmit={pending != null}
+                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
+              />
+              {cbat && isPractice && (
+                <div className="text-center mt-2">
+                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                    Skip practice and begin the test
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

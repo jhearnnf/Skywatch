@@ -24,7 +24,7 @@ import PlayField from './CbatFlag/PlayField'
 import Numpad from './CbatFlag/Numpad'
 import AircraftQuestion from './CbatFlag/AircraftQuestion'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
@@ -1163,14 +1163,22 @@ export default function CbatFlag() {
 
       {user && (
         <>
-          <div className={`flex items-center gap-2 mb-2 max-[600px]:mb-1${phase === 'launching' ? ' cbat-launch-dim' : ''}`}>
-            {phase === 'intro' || phase === 'launching'
-              ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-              : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
-            }
-            <h1 className="text-sm font-extrabold text-game-text">FLAG</h1>
+          <CbatGameHeader
+            title="FLAG"
+            fullTitle="Figures, Logistics and Groups"
+            titleClass="text-game-text"
+            intro={phase === 'intro' || phase === 'launching'}
+            onQuit={goToIntro}
+            confirmNeeded={phase === 'playing'}
+            className={`max-[600px]:mb-1${phase === 'launching' ? ' cbat-launch-dim' : ''}`}
+            test={phase === 'playing' ? {
+              stage: 'Testing',
+              timeFrac: 1 - elapsed / GAME_DURATION,
+              progressFrac: elapsed / GAME_DURATION,
+            } : null}
+          >
             {phase === 'playing' && <ModeMarker mode={runTuning} />}
-          </div>
+          </CbatGameHeader>
 
           <div className="cbat-flag-body flex flex-col items-center max-[600px]:w-full">
             {(phase === 'intro' || phase === 'launching') && (

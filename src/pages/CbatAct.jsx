@@ -13,9 +13,8 @@ import usePagePresence from '../hooks/usePagePresence'
 import { useCbatDemo, useCbatDemoCanvas } from '../utils/cbat/demoMode'
 import { pickAim, steerInput, wobbleAt } from '../utils/cbat/actDemoPilot'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
-import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import {
   ActAudioEngine,
   CALLSIGNS,
@@ -1422,7 +1421,7 @@ export default function CbatAct() {
   const { start: startTracking, setRound: trackRound, markCompleted: markGameCompleted } = useCbatTracking()
   const appSettings = useAppSettings()
   const settings = appSettings?.settings
-  const [phase, setPhase] = useState('intro')   // intro | logoIntro | callsign | playing | recap | results
+  const [phase, setPhase] = useState('intro')   // intro | callsign | playing | recap | results
   const [roundIdx, setRoundIdx] = useState(0)
   const [allRoundStats, setAllRoundStats] = useState([])
   const [latestStats, setLatestStats]   = useState(null)
@@ -1484,10 +1483,6 @@ export default function CbatAct() {
     })
   }, [audioReady, settings])
 
-  // SkyWatch logo curtain — plays once per page mount on the first
-  // start. Subsequent Play Again's skip it for snappy replays.
-  const logoPlayedRef = useRef(false)
-
   // Round-1 bleep tutorial: fires once per "session". A session ends when
   // the player explicitly returns to the instructions screen (handleMenu)
   // or navigates away from the page entirely (component unmount). Play
@@ -1548,13 +1543,8 @@ export default function CbatAct() {
     setPendingStats(null)
     setCodeResult(null)
     setDebugUsed(false)
-    setPhase(logoPlayedRef.current ? 'callsign' : 'logoIntro')
-  }, [apiFetch, API, initAudio])
-
-  const handleLogoComplete = useCallback(() => {
-    logoPlayedRef.current = true
     setPhase('callsign')
-  }, [])
+  }, [apiFetch, API, initAudio])
 
   // ── Admin round-skip ───────────────────────────────────────────────────────
   // Jump straight into a round without playing the ones before it. Wipes the
@@ -1732,13 +1722,14 @@ export default function CbatAct() {
     <div className="cbat-act-page">
       <SEO title="ACT — Auditory Capacity Test" description="Track callsigns, steer through rings, react to bleeps." />
 
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={handleMenu} confirmNeeded={!['intro', 'results'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">🎧 ACT</h1>
-      </div>
+      <CbatGameHeader
+        title="🎧 ACT"
+        fullTitle="Auditory Capacity Test"
+        intro={phase === 'intro'}
+        onQuit={handleMenu}
+        confirmNeeded={!['intro', 'results'].includes(phase)}
+        test={!['intro', 'results'].includes(phase) ? { stage: phase === 'tutorial' ? 'Instructions' : 'Testing' } : null}
+      />
 
       {!user && (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
@@ -1762,10 +1753,6 @@ export default function CbatAct() {
               onCraftChange={changeCraft}
               craftLoading={rosterLoading}
             />
-          )}
-
-          {phase === 'logoIntro' && (
-            <SkywatchLogoIntro onComplete={handleLogoComplete} />
           )}
 
           {(phase === 'callsign' || phase === 'playing') && audioRef.current && (

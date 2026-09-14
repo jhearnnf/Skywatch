@@ -7,13 +7,18 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { generateDadQuestion } from '../utils/cbat/dadGenerator'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_QUESTIONS = 15
 const PER_QUESTION_MS = 45000
+// Real CBAT theme only: unscored practice journeys before the test, the way
+// the real software runs "Practice 1 of 3" before "Testing".
+const PRACTICE_COUNT = 3
 // Leg count ramps with progress: Q1–4 → 3 legs, Q5–8 → 4, Q9–12 → 5, Q13–15 → 6.
 function legCountFor(idx) {
   return 3 + Math.floor(idx / 4)
@@ -27,6 +32,16 @@ function buildQuestions() {
   const out = []
   for (let i = 0; i < TOTAL_QUESTIONS; i++) {
     out.push(generateDadQuestion(legCountFor(i), undefined, { diagonals: i >= DIAGONALS_FROM }))
+  }
+  return out
+}
+
+// Practice journeys are the easy opening shape, flagged so nothing about them
+// is scored or timed against the run.
+function buildPracticeQuestions() {
+  const out = []
+  for (let i = 0; i < PRACTICE_COUNT; i++) {
+    out.push({ ...generateDadQuestion(legCountFor(0), undefined, { diagonals: false }), practice: true })
   }
   return out
 }
@@ -291,12 +306,18 @@ export default function CbatDAD() {
       .catch(() => {})
   }, [apiFetch, API, markGameCompleted])
 
+  const cbat = useCbatTheme()
   const currentQuestion = questions[currentIdx] || null
+  const isPractice = !!currentQuestion?.practice
+  // Index within the scored test, ignoring any practice journeys in front of it.
+  const practiceCount = questions.filter(q => q.practice).length
+  const testIdx = currentIdx - practiceCount
 
-  // Per-question countdown — runs only during 'playing'. On timeout, record a
-  // wrong answer (picked = null) and move to the reveal.
+  // Per-question countdown — runs only during 'playing', and not on a
+  // practice journey. On timeout, record a wrong answer (picked = null) and
+  // move to the reveal.
   useEffect(() => {
-    if (phase !== 'playing' || !currentQuestion) return
+    if (phase !== 'playing' || !currentQuestion || currentQuestion.practice) return
     qStartRef.current = Date.now()
     setQRemainingMs(PER_QUESTION_MS)
     tickRef.current = setInterval(() => {
@@ -315,6 +336,12 @@ export default function CbatDAD() {
   function recordAnswer(picked, elapsedMs) {
     if (!currentQuestion) return
     const correct = picked !== null && picked === currentQuestion.answer
+    // Practice journeys are not recorded, and always show the reveal
+    if (currentQuestion.practice) {
+      setFeedback({ correct, picked, answer: currentQuestion.answer })
+      setPhase('feedback')
+      return
+    }
     const entry = {
       answer: currentQuestion.answer,
       picked,
@@ -326,6 +353,12 @@ export default function CbatDAD() {
     answersRef.current = nextAnswers
     setTotalElapsedMs(prev => prev + elapsedMs)
     totalElapsedRef.current = totalElapsedRef.current + elapsedMs
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a scored journey moves straight on to the next.
+    if (cbat) {
+      goNext()
+      return
+    }
     setFeedback({ correct, picked, answer: currentQuestion.answer })
     setPhase('feedback')
   }
@@ -337,10 +370,32 @@ export default function CbatDAD() {
     recordAnswer(option, elapsedMs)
   }
 
+  // Escape is the real keyboard's green "Go": skip what's left of practice
+  // and begin the test.
+  function skipPractice() {
+    if (!isPractice) return
+    setFeedback(null)
+    setCurrentIdx(practiceCount)
+    setPhase('playing')
+  }
+
+  // Keyboard answering: 1-8 pick a direction (marked under the Real CBAT
+  // theme and committed with Enter; committed at once otherwise). Enter moves
+  // past the reveal.
+  const { pending, select, commit } = useCbatMcq({
+    enabled: phase === 'playing' && !!currentQuestion,
+    count: currentQuestion?.options?.length ?? 0,
+    kind: 'number',
+    onCommit: (i) => handlePick(currentQuestion.options[i]),
+    resetKey: currentIdx,
+  })
+  useCbatAnswerKeys({ enabled: phase === 'feedback', count: 0, onEnter: goNext })
+  useCbatAnswerKeys({ enabled: isPractice && (phase === 'playing' || phase === 'feedback'), count: 0, onEscape: skipPractice })
+
   function goNext() {
     const nextIdx = currentIdx + 1
     setFeedback(null)
-    if (nextIdx >= TOTAL_QUESTIONS) {
+    if (nextIdx >= questions.length) {
       submitScore(answersRef.current, totalElapsedRef.current)
       setPhase('results')
       return
@@ -351,7 +406,7 @@ export default function CbatDAD() {
 
   const startGame = useCallback(() => {
     startTracking('dad')
-    setQuestions(buildQuestions())
+    setQuestions(cbat ? [...buildPracticeQuestions(), ...buildQuestions()] : buildQuestions())
     setCurrentIdx(0)
     setAnswers([])
     answersRef.current = []
@@ -360,7 +415,7 @@ export default function CbatDAD() {
     setTotalElapsedMs(0)
     totalElapsedRef.current = 0
     setPhase('playing')
-  }, [startTracking])
+  }, [startTracking, cbat])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -378,19 +433,27 @@ export default function CbatDAD() {
 
   const remainingSec = (qRemainingMs / 1000).toFixed(0)
   const correctSoFar = answers.filter(a => a.correct).length
+  const testBar = (phase === 'playing' || phase === 'feedback') && currentQuestion ? {
+    stage: isPractice ? 'Practice' : 'Testing',
+    item: isPractice ? currentIdx + 1 : testIdx + 1,
+    total: isPractice ? practiceCount : TOTAL_QUESTIONS,
+    timeFrac: isPractice || phase === 'feedback' ? 1 : qRemainingMs / PER_QUESTION_MS,
+    progressFrac: isPractice ? 0 : (testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS,
+  } : null
 
   return (
     <div className="cbat-dad-page">
       <SEO title="Directions & Distances — CBAT" description="Track a journey of relative turns from text alone, then name the direction back to the start." />
 
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['playing', 'feedback'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">Directions &amp; Distances</h1>
-      </div>
+      <CbatGameHeader
+        title={<>Directions &amp; Distances</>}
+        fullTitle="Directions and Distances"
+        intro={phase === 'intro'}
+        onQuit={goToIntro}
+        confirmNeeded={['playing', 'feedback'].includes(phase)}
+        test={testBar}
+      />
 
       {/* Not logged in */}
       {!user && (
@@ -475,10 +538,10 @@ export default function CbatDAD() {
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
             <div className="w-full max-w-md lg:max-w-2xl">
-              {/* HUD */}
-              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Q <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
+                  Q <span className="text-brand-600">{testIdx + 1}</span>/{TOTAL_QUESTIONS}
                 </span>
                 <span className="text-slate-400">
                   ✓ <span className="text-green-400">{correctSoFar}</span>
@@ -486,17 +549,17 @@ export default function CbatDAD() {
                 <span className="text-slate-400">
                   ⏱ <span className={qRemainingMs < 10000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span>
                 </span>
-              </div>
+              </div>}
 
               {/* Progress bar */}
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
-                  animate={{ width: `${((currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS) * 100}%` }}
+                  animate={{ width: `${((testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>
+              </div>}
 
               {/* Scenario */}
               <motion.div
@@ -514,8 +577,9 @@ export default function CbatDAD() {
 
               {/* Options */}
               <div className="grid grid-cols-2 gap-2 lg:gap-3">
-                {currentQuestion.options.map(opt => {
+                {currentQuestion.options.map((opt, i) => {
                   let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
+                  if (pending === i) cls += ' cbat-option-pending'
                   if (phase === 'feedback') {
                     if (opt === feedback?.answer) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
                     else if (opt === feedback?.picked) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
@@ -525,12 +589,12 @@ export default function CbatDAD() {
                     <button
                       key={opt}
                       type="button"
-                      onClick={() => handlePick(opt)}
+                      onClick={() => select(i)}
                       data-demo-answer
                       disabled={phase === 'feedback'}
                       className={`py-2.5 sm:py-4 lg:py-5 rounded-lg border-2 font-mono font-bold text-base sm:text-lg lg:text-2xl transition-all ${cls}`}
                     >
-                      {opt}
+                      <CbatKeyCap label={i + 1} className="mr-2" />{opt}
                     </button>
                   )
                 })}
@@ -565,6 +629,23 @@ export default function CbatDAD() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              <CbatFooterStrip
+                answer={phase === 'playing'
+                  ? (pending != null ? pending + 1 : null)
+                  : (feedback?.picked == null ? null : currentQuestion.options.indexOf(feedback.picked) + 1)}
+                onSubmit={phase === 'playing' ? commit : goNext}
+                canSubmit={phase === 'feedback' || pending != null}
+                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
+              />
+              {cbat && isPractice && (
+                <div className="text-center mt-2">
+                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
+                    Skip practice and begin the test
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

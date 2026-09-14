@@ -6,7 +6,8 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
+import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatGameOver from '../components/CbatGameOver'
 import AntPractise from '../components/cbat/AntPractise'
 import AntHardGame from '../components/cbat/AntHardGame'
@@ -892,6 +893,7 @@ export default function CbatAnt() {
   const [totalElapsed, setTotalElapsed] = useState(0)
   const [answerInput, setAnswerInput] = useState('')
   const [feedback, setFeedback] = useState(null) // { points, exact, partial, correct, user }
+  const cbat = useCbatTheme()
   // Keyed by board: the three boards are separate collections scored out of 80,
   // 120 and 80, so one figure could never stand for all of them, and blanking
   // the value on every flip is what used to make the card jump.
@@ -1010,9 +1012,17 @@ export default function CbatAnt() {
     const updated = [...answersRef.current, newAnswer]
     setAnswers(updated)
     answersRef.current = updated
+    // The real test gives no right/wrong mid-run; under the Real CBAT theme
+    // a round moves straight on with no debrief.
+    if (cbat) {
+      const nextIdx = roundIndexRef.current + 1
+      if (nextIdx >= ROUND_COUNT) endGame(updated)
+      else startRound(nextIdx)
+      return
+    }
     setFeedback({ ...result, correct: round.correctAnswer, user: typed, type: round.type, timedOut })
     setPhase('feedback')
-  }, [phase, round, answerInput])
+  }, [phase, round, answerInput, cbat, endGame, startRound])
 
   useEffect(() => { submitRef.current = handleSubmit }, [handleSubmit])
 
@@ -1124,13 +1134,20 @@ export default function CbatAnt() {
 
       {phase !== 'hard' && (<>
       {/* Header */}
-      <div className="flex items-center gap-2 mb-2">
-        {phase === 'intro' || phase === 'launching'
-          ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-          : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={['playing', 'feedback'].includes(phase)} />
-        }
-        <h1 className="text-sm font-extrabold text-slate-900">ANT</h1>
-      </div>
+      <CbatGameHeader
+        title="ANT"
+        fullTitle="Airborne Numerical Test"
+        intro={phase === 'intro' || phase === 'launching'}
+        onQuit={goToIntro}
+        confirmNeeded={['playing', 'feedback'].includes(phase)}
+        test={(phase === 'playing' || phase === 'feedback') && round ? {
+          stage: 'Testing',
+          item: roundIndex + 1,
+          total: ROUND_COUNT,
+          timeFrac: reviewing ? 1 : timeLeft / ROUND_TIME,
+          progressFrac: (roundIndex + (reviewing ? 1 : 0)) / ROUND_COUNT,
+        } : null}
+      />
 
       {/* Not logged in */}
       {!user && (
@@ -1319,8 +1336,8 @@ export default function CbatAnt() {
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && round && (
             <div className="w-full max-w-5xl">
-              {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              {/* HUD — under the Real CBAT theme the title bar carries this */}
+              {!cbat && <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{roundIndex + 1}</span>/{ROUND_COUNT}
                 </span>
@@ -1332,17 +1349,17 @@ export default function CbatAnt() {
                     ? <span className="text-brand-600">Reviewing — clock paused</span>
                     : <>{'⏱'} <span className={timeLeft < 10 ? 'text-red-400' : 'text-brand-600'}>{timeLeft.toFixed(1)}s</span></>}
                 </span>
-              </div>
+              </div>}
 
               {/* Time bar */}
-              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className={`h-full rounded-full ${reviewing ? 'bg-brand-600/40' : timeLeft < 10 ? 'bg-red-500' : 'bg-brand-600'}`}
                   initial={false}
                   animate={{ width: `${reviewing ? 100 : timePct}%` }}
                   transition={{ duration: 0.1, ease: 'linear' }}
                 />
-              </div>
+              </div>}
 
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                 {/* Left column — map (2/5) */}
@@ -1466,6 +1483,14 @@ export default function CbatAnt() {
                   </div>
                 </div>
               </div>
+
+              {/* Real CBAT theme: the instruction strip */}
+              <CbatFooterStrip
+                answer={phase === 'playing' ? (answerInput.trim() === '' ? null : answerInput) : undefined}
+                text={phase === 'playing' ? `Answer (${QUESTION_META[round.type].unit}) in whole numbers, then press` : undefined}
+                onSubmit={phase === 'playing' ? () => handleSubmit(false) : advanceRound}
+                canSubmit={phase !== 'playing' || answerInput.trim() !== ''}
+              />
             </div>
           )}
 

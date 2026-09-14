@@ -8,9 +8,8 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
-import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl, has3DModel } from '../data/aircraftModels'
 import { useTraceMode, TRACE_MODES } from '../hooks/useTraceMode'
 import { useModeFromSearch } from '../hooks/useModeFromSearch'
@@ -494,17 +493,13 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
   const [phase, setPhase]               = useState('select')
   // Desktop: the arena sizes itself to the viewport height with the controls
   // beside it, wider than the shell's max-w-3xl. See main.css.
-  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'over' || phase === 'intro')
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'over')
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing' || phase === 'over' || phase === 'intro') enterImmersive()
+    if (phase === 'playing' || phase === 'over') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
-
-  // Skip the logo-boot intro on Play Again within the same aircraft
-  // selection. Reset by handleMenu (back to aircraft select).
-  const introPlayedRef = useRef(false)
 
   const [plane, setPlane]               = useState({ r: 5, c: 5, dir: 0, angle: 0 })
   const [pkg, setPkg]                   = useState({ r: 0, c: 0 })
@@ -1134,23 +1129,11 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
       // Wipe any leftover Trace 1 state from a previous run before the new
       // phase commits so the HUD never paints a stale score for a frame.
       resetTrace1State()
-      setPhase(introPlayedRef.current ? 'playing' : 'intro')
+      setPhase('playing')
       return
     }
     startGame(1)
-    // Logo-boot intro covers the arena while it boots. Skip on replay
-    // within the same aircraft pick.
-    // startGame() above set phase='playing'; under React's batching the
-    // override below wins, so phase ends as 'intro' and the timer/movement/
-    // keyboard effects (gated on === 'playing') stay paused until the
-    // curtain lifts. handleIntroComplete flips phase back to 'playing'.
-    if (!introPlayedRef.current) setPhase('intro')
   }
-
-  const handleIntroComplete = useCallback(() => {
-    introPlayedRef.current = true
-    setPhase('playing')
-  }, [])
 
   const handleRestart = () => {
     if (won) {
@@ -1172,8 +1155,6 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
   const handleMenu = () => {
     setSelected(null)
-    // Back to aircraft select → next pick should replay the intro.
-    introPlayedRef.current = false
     setPhase('select')
   }
 
@@ -1277,15 +1258,15 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
           screen and back-button target). */}
       {!gameModeTrace2 && (
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            {phase === 'select'
-              ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-              : <CbatQuitButton onConfirm={handleMenu} confirmNeeded={['intro', 'playing', 'over'].includes(phase)} />
-            }
-            <h1 className="text-sm font-extrabold text-slate-900">
-              {TITLE_BY_MODE[mode] ?? 'Trace 1/2'}
-            </h1>
-          </div>
+          <CbatGameHeader
+            title={TITLE_BY_MODE[mode] ?? 'Trace 1/2'}
+            fullTitle={mode === 'trace1' ? 'Trace Test 1' : undefined}
+            intro={phase === 'select'}
+            onQuit={handleMenu}
+            confirmNeeded={['playing', 'over'].includes(phase)}
+            className="!mb-0 flex-1"
+            test={phase === 'playing' ? { stage: 'Testing' } : null}
+          />
         </div>
       )}
 
@@ -1402,11 +1383,8 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
             </CbatGameOver>
           )}
 
-          {/* Game board — mounted during 'intro' too so it sits ready behind
-              the curtain. Timer/movement/keyboard effects stay gated on
-              `phase === 'playing'`, so the simulation only starts once the
-              intro completes and flips us back to 'playing'. */}
-          {(phase === 'playing' || phase === 'over' || phase === 'intro') && selected && (
+          {/* Game board */}
+          {(phase === 'playing' || phase === 'over') && selected && (
             <div className="w-full max-w-md lg:w-auto lg:max-w-none">
               {gameModeTrace1
                 ? <Trace1HUD round={trace1Round} turn={trace1Turn} tracked={trace1Tracked} debug={trace1Debug} />
@@ -1806,12 +1784,6 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               </div>
             </div>
           )}
-
-          {/* Logo-boot intro — covers the viewport while the game board boots
-              behind it. Choreography + sound + completion timer all live in
-              <SkywatchLogoIntro>; we just gate it on phase. Shared with DPT
-              and applies to both 2D and 3D modes here. */}
-          {phase === 'intro' && <SkywatchLogoIntro onComplete={handleIntroComplete} />}
         </div>
       )}
 

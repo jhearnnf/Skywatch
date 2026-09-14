@@ -15,7 +15,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, hasWorkingCloseupModel, titleToSlug } from '../data/aircraftModels'
 import SEO from '../components/SEO'
-import CbatQuitButton from '../components/CbatQuitButton'
+import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
@@ -2171,13 +2171,18 @@ export default function CbatTarget() {
       )}
 
       {user && (
-        <div className="flex items-center gap-2 mb-2">
-          {phase === 'intro'
-            ? <Link to="/cbat" className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; CBAT</Link>
-            : <CbatQuitButton onConfirm={goToIntro} confirmNeeded={phase === 'playing'} />
-          }
-          <h1 className="text-sm font-extrabold text-slate-900">{phase === 'tutorial' ? 'Target Tutorial' : 'Target'}</h1>
-        </div>
+        <CbatGameHeader
+          title={phase === 'tutorial' ? 'Target Tutorial' : 'Target'}
+          fullTitle="Target Recognition Test"
+          intro={phase === 'intro'}
+          onQuit={goToIntro}
+          confirmNeeded={phase === 'playing'}
+          test={phase === 'playing' ? {
+            stage: 'Testing',
+            timeFrac: 1 - elapsedMs / GAME_MS,
+            progressFrac: elapsedMs / GAME_MS,
+          } : phase === 'tutorial' ? { stage: 'Instructions' } : null}
+        />
       )}
 
       {user && (phase === 'intro' || phase === 'results') && (
