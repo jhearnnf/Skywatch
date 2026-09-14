@@ -18,7 +18,6 @@ vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ se
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 vi.mock('../../components/CbatGameOver', () => ({ default: ({ children }) => <div>{children}</div> }))
 vi.mock('../../components/CbatQuitButton', () => ({ default: () => null }))
-vi.mock('../../components/SkywatchLogoIntro', () => ({ default: () => null }))
 vi.mock('../../lib/cbatOutbox', () => ({ submitCbatResult: vi.fn(() => Promise.resolve({ synced: true })) }))
 vi.mock('../../lib/offlineRoster', () => ({
   getAircraftRoster: vi.fn(async () => ({

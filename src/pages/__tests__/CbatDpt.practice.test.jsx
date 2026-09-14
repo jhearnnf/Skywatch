@@ -24,7 +24,6 @@ vi.mock('../../components/CbatQuitButton', () => ({
   default: ({ onConfirm }) => <button onClick={onConfirm}>Quit</button>,
 }))
 vi.mock('../../components/CbatGameOver', () => ({ default: ({ children }) => <div>{children}</div> }))
-vi.mock('../../components/SkywatchLogoIntro', () => ({ default: () => null, SKYWATCH_LOGO_INTRO_MS: 0 }))
 vi.mock('../../components/DptAircraftLayer', () => ({ default: () => null }))
 vi.mock('@react-three/drei', () => ({ useGLTF: { preload: vi.fn() } }))
 vi.mock('../../lib/cbatOutbox', () => ({ submitCbatResult: vi.fn(() => Promise.resolve({ synced: true })) }))

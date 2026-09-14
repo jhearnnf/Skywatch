@@ -26,10 +26,6 @@ vi.mock('../../components/CbatQuitButton', () => ({ default: () => null }))
 vi.mock('../../components/CbatGameOver', () => ({
   default: ({ children, gameKey }) => <div data-game-key={gameKey}>{children}</div>,
 }))
-vi.mock('../../components/SkywatchLogoIntro', () => ({
-  default: () => null,
-  SKYWATCH_LOGO_INTRO_MS: 0,
-}))
 vi.mock('../../components/DptAircraftLayer', () => ({ default: () => null }))
 vi.mock('@react-three/drei', () => ({ useGLTF: { preload: vi.fn() } }))
 vi.mock('../../lib/cbatOutbox', () => ({
