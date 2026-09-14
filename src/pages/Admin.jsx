@@ -4480,6 +4480,103 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CBAT DATE ROW (Admin › Users)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The stored value is UTC midnight of a calendar day, so the first ten
+// characters of its ISO form are exactly what <input type="date"> wants.
+const toDateInput = iso => (iso ? new Date(iso).toISOString().slice(0, 10) : '')
+// Read in UTC for the same reason: a local-time render would show the day
+// before for anyone west of Greenwich.
+const fmtCbatDate = iso => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+// "in 12 days" / "3 days ago" / "today", counted in whole calendar days so the
+// answer does not flip during the day.
+function describeCbatDate(iso) {
+  if (!iso) return null
+  const day   = 24 * 60 * 60 * 1000
+  const now   = new Date()
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+  const diff  = Math.round((new Date(iso).getTime() - today) / day)
+  if (diff === 0)  return 'today'
+  if (diff === 1)  return 'tomorrow'
+  if (diff === -1) return 'yesterday'
+  return diff > 0 ? `in ${diff} days` : `${-diff} days ago`
+}
+
+// Defined at module level, never inside UsersTab: an inline component would
+// remount on every parent render and the date field would lose focus on each
+// keystroke.
+function UserCbatDateRow({ u, API, apiFetch, onChange, onToast }) {
+  const [value, setValue]   = useState(() => toDateInput(u.cbatDate))
+  const [saving, setSaving] = useState(false)
+
+  const saved = toDateInput(u.cbatDate)
+  const dirty = value !== saved
+
+  async function saveDate(next) {
+    setSaving(true)
+    try {
+      const res = await apiFetch(`${API}/api/admin/users/${u._id}/cbat-date`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cbatDate: next }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.message || 'Could not save the CBAT date')
+      const stored = data.data?.cbatDate ?? null
+      onChange({ cbatDate: stored })
+      setValue(toDateInput(stored))
+      onToast(stored ? `CBAT date set to ${fmtCbatDate(stored)}` : 'CBAT date cleared')
+    } catch (err) {
+      onToast(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="px-4 py-3 border-b border-slate-100">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">CBAT date</p>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={e => { e.preventDefault(); if (dirty) saveDate(value) }}
+      >
+        <input
+          type="date"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          aria-label="CBAT date"
+          className="px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-transparent outline-none focus:ring-2 focus:ring-brand-200"
+        />
+        <button
+          type="submit"
+          disabled={!dirty || saving}
+          aria-label="Save CBAT date"
+          className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition-colors disabled:opacity-40"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        {saved && (
+          <button
+            type="button"
+            aria-label="Clear CBAT date"
+            onClick={() => saveDate('')}
+            disabled={saving}
+            className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors disabled:opacity-40"
+          >
+            Clear
+          </button>
+        )}
+        {saved && (
+          <span className="text-xs text-slate-400">{describeCbatDate(u.cbatDate)}</span>
+        )}
+      </form>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // REDDIT ACCOUNT PANEL (Admin › Users)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -5671,6 +5768,17 @@ function UsersTab({ API, onViewEmailHistory }) {
                 <SubscriptionTierRow u={u} action={action} />
               </div>
             )}
+
+            {/* CBAT date — when they sit the real thing. Always shown once the
+                row is open, unlike the Reddit and results panels, because it is
+                the one fact an admin most often needs to write down. */}
+            <UserCbatDateRow
+              u={u}
+              API={API}
+              apiFetch={apiFetch}
+              onChange={patch => setUsers(prev => prev.map(x => x._id === u._id ? { ...x, ...patch } : x))}
+              onToast={setToast}
+            />
 
             {/* Reddit account panel (expanded) */}
             {redditPanel === u._id && (

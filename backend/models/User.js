@@ -147,6 +147,13 @@ const userSchema = new mongoose.Schema(
     // Admin-facing only: never rendered on a public profile or leaderboard.
     redditUsername: { type: String, trim: true, default: null },
 
+    // The date the user sits (or sat) the real CBAT, typed in by an admin from
+    // Admin › Users. Stored as UTC midnight of a calendar day: the time of day
+    // is meaningless here and would only make the same date compare unequal
+    // across timezones. Admin-facing only: never rendered on a public profile
+    // or leaderboard.
+    cbatDate: { type: Date, default: null },
+
     // Screenshots of the user's real CBAT score sheet. These are the evidence
     // behind `cbatPassed` — a sheet shows the actual battery scores, which
     // nothing in the app can otherwise know and which is what the Aptitude

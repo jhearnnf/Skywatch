@@ -1792,6 +1792,46 @@ router.patch('/users/:id/reddit', async (req, res) => {
   }
 });
 
+// The CBAT date typed into Admin › Users. Accepts the `YYYY-MM-DD` string an
+// <input type="date"> produces and stores it as UTC midnight of that day, so the
+// calendar date round-trips unchanged whatever timezone the admin or server is
+// in. Returns null for anything empty, which is how the panel clears the date,
+// and false for anything that is not a real calendar date.
+//
+// Exported for the tests, which cover the input shapes rather than the route.
+function parseCbatDate(input) {
+  const s = (input ?? '').toString().trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  // Date.UTC rolls an impossible day (31 Feb) forward into the next month
+  // rather than failing, so check nothing moved.
+  if (date.getUTCFullYear() !== y || date.getUTCMonth() !== mo - 1 || date.getUTCDate() !== d) return false;
+  return date;
+}
+
+// PATCH /api/admin/users/:id/cbat-date — set (or clear) the date the user sits
+// the real CBAT. Same lightweight shape as the tester, cbat-passed and reddit
+// fields: no reason, no AdminAction entry, because this records a fact about
+// the person rather than taking an action against their account.
+router.patch('/users/:id/cbat-date', async (req, res) => {
+  try {
+    const cbatDate = parseCbatDate(req.body?.cbatDate);
+    if (cbatDate === false) {
+      return res.status(400).json({ message: 'CBAT date must be a calendar date (YYYY-MM-DD).' });
+    }
+    const updated = await User.findByIdAndUpdate(
+      req.params.id, { cbatDate }, { returnDocument: 'after' }
+    );
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+    res.json({ status: 'success', data: { cbatDate: updated.cbatDate } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/admin/users/:id/cbat-results — the images themselves, for a viewer
 // that only knows the userId (the questionnaire results page, which lists a
 // sheet count per respondent but never fetches their whole user document).
@@ -7242,3 +7282,4 @@ router.post('/progress-award/reset', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.parseCbatDate = parseCbatDate;
