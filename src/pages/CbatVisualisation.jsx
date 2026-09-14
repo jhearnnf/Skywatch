@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
-import { useCbatDemoPortalTarget, getDemoStageFrame } from '../utils/cbat/demoMode'
+import { useCbatDemo, useCbatDemoPortalTarget, getDemoStageFrame } from '../utils/cbat/demoMode'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
@@ -482,6 +482,23 @@ export default function CbatVisualisation({ forcedMode = null }) {
   }, [phase, enterImmersive, exitImmersive])
 
   useGameBodyClass('cbat-vis2d-locked', phase === 'playing' || phase === 'feedback')
+  // Desktop: the board sizes itself to the viewport height, which can be wider
+  // than the shell's max-w-3xl. See main.css. The 3D shapes are drawn at a
+  // pixel size, not a CSS one, so they need to know too — never inside a demo
+  // tile, which is scaled to a card.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'feedback')
+  const isDemo = !!useCbatDemo()
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1024px)').matches
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const onChange = (e) => setIsDesktop(e.matches)
+    mq.addEventListener?.('change', onChange)
+    return () => mq.removeEventListener?.('change', onChange)
+  }, [])
+  const bigShapes = isDesktop && !isDemo
 
   const [rounds, setRounds] = useState([])
   const [currentIdx, setCurrentIdx] = useState(0)
@@ -799,9 +816,11 @@ export default function CbatVisualisation({ forcedMode = null }) {
           )}
 
           {(phase === 'playing' || phase === 'feedback') && currentRound && (
-            <div className="w-full max-w-2xl">
+            <div className={`w-full max-w-2xl ${is3D
+              ? 'lg:max-w-none lg:w-[min(64rem,calc((100vh_-_24rem)_*_1.9))]'
+              : 'lg:max-w-none lg:w-[min(52rem,calc((100vh_-_28rem)_*_1.5))]'}`}>
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
@@ -838,12 +857,12 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3 mb-2 sm:mb-3"
                   >
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
+                    <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       These pieces weld on matching letters
                     </p>
                     <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-5">
                       {currentRound.shapes.map((s, i) => (
-                        <div key={i} className="flex items-center justify-center w-14 h-14 sm:w-24 sm:h-24">
+                        <div key={i} className="flex items-center justify-center w-14 h-14 sm:w-24 sm:h-24 lg:w-32 lg:h-32">
                           <PromptShape
                             shape={s}
                             rotation={currentRound.promptRotations[i]}
@@ -862,7 +881,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     animate={{ opacity: 1, scale: 1 }}
                     className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3"
                   >
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
+                    <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       Which is the correct final figure?
                     </p>
                     <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
@@ -956,7 +975,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     animate={{ opacity: 1, y: 0 }}
                     className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3 mb-2 sm:mb-3"
                   >
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
+                    <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       Find the option with the dots on the same corners
                     </p>
                     <div className="flex items-start justify-center gap-2 sm:gap-5">
@@ -967,7 +986,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                             rotation={[0, 0, 0]}
                             dotCornerId={s.dotCornerId}
                             accent="prompt"
-                            size={120}
+                            size={bigShapes ? 180 : 120}
                           />
                           {/* Names the shape being asked about, so a report
                               about a specific composite can be traced back to
@@ -976,7 +995,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                           <span
                             data-composite-name={s.compositeKey}
                             title="Composite shape name"
-                            className="font-mono text-[10px] text-amber-400 tracking-wide"
+                            className="font-mono text-[10px] lg:text-xs text-amber-400 tracking-wide"
                           >
                             {s.compositeKey}
                           </span>
@@ -992,7 +1011,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                     animate={{ opacity: 1, scale: 1 }}
                     className="bg-game-panel border border-game-line rounded-xl p-2 sm:p-3"
                   >
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
+                    <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-2 sm:mb-3">
                       Which option matches?
                     </p>
                     <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
@@ -1017,7 +1036,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                               phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                             }`}
                           >
-                            <span className="text-[10px] font-extrabold text-slate-400 mb-1">{opt.id}</span>
+                            <span className="text-[10px] lg:text-sm font-extrabold text-slate-400 mb-1">{opt.id}</span>
                             <div className="flex flex-col items-center gap-0.5 w-full min-w-0">
                               {currentRound.shapes.map((s, i) => (
                                 <div key={i} className="flex flex-col items-center w-full min-w-0">
@@ -1026,7 +1045,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                                     rotation={opt.rotations[i]}
                                     dotCornerId={opt.dots[i]}
                                     accent="option"
-                                    size={72}
+                                    size={bigShapes ? 120 : 72}
                                   />
                                   {/* Only once the round is answered — naming
                                       the composites while the question is live

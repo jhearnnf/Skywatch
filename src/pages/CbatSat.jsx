@@ -21,6 +21,7 @@ import {
 } from '../utils/cbat/satDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import { useCbatDemo } from '../utils/cbat/demoMode'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // Situation count, question count, how many units and aircraft appear, how often
@@ -662,6 +663,9 @@ export default function CbatSat() {
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | tutorial | launching | observe | playing | feedback | results
+  // Desktop: the console sizes itself to the viewport height while a picture
+  // is being memorised, wider than the shell's max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'observe')
   const isDemo = !!useCbatDemo()
 
   // The difficulty the instructions card is set to. Persisted, so the card opens
@@ -1050,13 +1054,13 @@ export default function CbatSat() {
               key={`obs-${situationIdx}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="w-full max-w-2xl"
+              className="w-full max-w-2xl lg:max-w-none lg:w-[min(64rem,calc((100vh_-_18rem)_*_1.6))]"
             >
               {/* Instruction + progress + timer */}
               <div className="flex items-stretch gap-2 mb-2">
                 <div className="flex-1 bg-game-panel border border-game-line rounded-lg px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations} — Memorise the picture</p>
+                    <p className="text-xs lg:text-sm text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations} — Memorise the picture</p>
                     <button
                       onClick={() => { setAudioOn(v => { if (v) stopSpeech(); return !v }) }}
                       className="shrink-0 text-base bg-transparent border-0 cursor-pointer p-0"
@@ -1066,11 +1070,11 @@ export default function CbatSat() {
                       {audioOn ? '🔊' : '🔇'}
                     </button>
                   </div>
-                  <p className="text-sm text-game-text">Each fact shows once, then vanishes. Nothing comes back.</p>
+                  <p className="text-sm lg:text-base text-game-text">Each fact shows once, then vanishes. Nothing comes back.</p>
                 </div>
-                <div className="w-20 bg-game-panel border border-game-line rounded-lg flex flex-col items-center justify-center">
-                  <p className="text-[11px] text-slate-500 uppercase">Time</p>
-                  <p className={`text-2xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-600'}`}>{observeSec}s</p>
+                <div className="w-20 lg:w-28 bg-game-panel border border-game-line rounded-lg flex flex-col items-center justify-center">
+                  <p className="text-[11px] lg:text-xs text-slate-500 uppercase">Time</p>
+                  <p className={`text-2xl lg:text-4xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-600'}`}>{observeSec}s</p>
                 </div>
               </div>
 
@@ -1119,7 +1123,7 @@ export default function CbatSat() {
 
           {/* Playing / Feedback — recall questions (picture hidden) */}
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:max-w-2xl">
               {/* HUD */}
               <div className="flex items-center justify-between text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">Q <span className="text-brand-600">{globalQ}</span>/{runTotalQuestions}</span>
@@ -1142,14 +1146,14 @@ export default function CbatSat() {
                 key={`${situationIdx}-${questionIdx}`}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-game-panel border border-game-line rounded-xl p-5 mb-3"
+                className="bg-game-panel border border-game-line rounded-xl p-5 lg:p-7 mb-3"
               >
                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Recall — Situation {situationIdx + 1}</p>
-                <p className="text-lg sm:text-xl text-game-text leading-relaxed">{currentQuestion.prompt}</p>
+                <p className="text-lg sm:text-xl lg:text-2xl text-game-text leading-relaxed">{currentQuestion.prompt}</p>
               </motion.div>
 
               {/* Options */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 lg:gap-3">
                 {currentQuestion.options.map(opt => {
                   let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                   if (phase === 'feedback') {
@@ -1163,7 +1167,7 @@ export default function CbatSat() {
                       type="button"
                       onClick={() => handlePick(opt)}
                       disabled={phase === 'feedback'}
-                      className={`py-4 px-2 rounded-lg border-2 font-mono font-bold text-lg transition-all ${cls}`}
+                      className={`py-4 lg:py-5 px-2 rounded-lg border-2 font-mono font-bold text-lg lg:text-2xl transition-all ${cls}`}
                     >
                       {opt}
                     </button>

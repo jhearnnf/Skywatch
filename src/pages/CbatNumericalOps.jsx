@@ -12,6 +12,7 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import {
   NUMERICAL_OPS_DIFFICULTIES, NUMERICAL_OPS_LAUNCH_MS, numericalOpsTuning, computeGrade,
   readStoredNumericalOpsDifficulty, storeNumericalOpsDifficulty,
@@ -100,7 +101,7 @@ function KeyButton({ children, onClick, accent, disabled, canSubmit, demoAnswer 
       onClick={onClick}
       disabled={disabled}
       data-demo-answer={demoAnswer ? '' : undefined}
-      className={`py-4 rounded-lg border-2 font-mono font-bold text-xl transition-all ${
+      className={`py-4 lg:py-5 rounded-lg border-2 font-mono font-bold text-xl lg:text-3xl transition-all ${
         accent === 'submit'
           ? (canSubmit && !disabled
               ? 'bg-brand-600 hover:bg-brand-700 border-brand-600 text-white cursor-pointer'
@@ -119,9 +120,9 @@ function KeyButton({ children, onClick, accent, disabled, canSubmit, demoAnswer 
   )
 }
 
-function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit }) {
+function Keypad({ onDigit, onBackspace, onSubmit, disabled, canSubmit, className = '' }) {
   return (
-    <div className="grid grid-cols-3 gap-2 mt-3">
+    <div className={`grid grid-cols-3 gap-2 lg:gap-3 mt-3 ${className}`}>
       {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
         <KeyButton key={d} onClick={() => onDigit(String(d))} disabled={disabled} demoAnswer>{d}</KeyButton>
       ))}
@@ -366,6 +367,10 @@ export default function CbatNumericalOps() {
     recordAnswer(currentInput, elapsedMs)
   }
 
+  // Desktop: the sum and the keypad sit side by side, wider than the shell's
+  // max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'feedback')
+
   function handleDigit(d) {
     if (phase !== 'playing') return
     // Cap input length so users can't type runaway strings; max answer is
@@ -564,9 +569,9 @@ export default function CbatNumericalOps() {
 
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:max-w-5xl">
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{currentRound}</span>/{ROUNDS}
                 </span>
@@ -594,19 +599,22 @@ export default function CbatNumericalOps() {
                 />
               </div>
 
+              {/* Desktop: sum on the left, keypad on the right, so the sum can
+                  be read from across the room instead of from a 448px card. */}
+              <div className="lg:flex lg:gap-5 lg:items-stretch">
               {/* Question display */}
               <motion.div
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-game-panel border border-game-line rounded-xl p-6 mb-3 relative overflow-hidden"
+                className="bg-game-panel border border-game-line rounded-xl p-6 mb-3 lg:mb-0 lg:flex-1 lg:min-w-0 lg:flex lg:flex-col lg:justify-center relative overflow-hidden"
               >
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-3 relative z-10">
+                <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-3 relative z-10">
                   Solve
                 </p>
 
                 <div className="relative z-10 text-center">
-                  <p className="text-4xl sm:text-5xl font-mono font-bold text-white tracking-wider">
+                  <p className="text-4xl sm:text-5xl lg:text-8xl font-mono font-bold text-white tracking-wider">
                     {currentQuestion.a}
                     <span className="text-brand-600 mx-3">{formatOp(currentQuestion.op)}</span>
                     {currentQuestion.b}
@@ -630,7 +638,7 @@ export default function CbatNumericalOps() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className={`absolute top-2 right-2 z-20 px-3 py-1.5 rounded-lg text-xs font-bold ${
+                      className={`absolute top-2 right-2 lg:top-3 lg:right-3 z-20 px-3 py-1.5 rounded-lg text-xs lg:text-sm font-bold ${
                         feedback.correct
                           ? 'bg-green-500/20 border border-green-500/40 text-green-400'
                           : 'bg-red-500/20 border border-red-500/40 text-red-400'
@@ -651,7 +659,9 @@ export default function CbatNumericalOps() {
                 onSubmit={handleSubmit}
                 disabled={phase === 'feedback'}
                 canSubmit={currentInput.length > 0}
+                className="lg:mt-0 lg:w-80 lg:shrink-0"
               />
+              </div>
 
               {/* Round transition indicator */}
               <AnimatePresence>
@@ -665,7 +675,7 @@ export default function CbatNumericalOps() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-600 font-bold">
+                    <span className="text-xs lg:text-sm text-brand-600 font-bold">
                       Round {currentRound} — numbers now up to {runTuning.roundMax[currentRound - 1]}
                     </span>
                   </motion.div>

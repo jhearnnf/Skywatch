@@ -11,6 +11,7 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
@@ -143,9 +144,9 @@ function CountdownScreen({ count, tileCount }) {
   const spotlit = tiles[selected] || tiles[0]
 
   return (
-    <div className="w-full max-w-md" data-testid="symbols-countdown">
+    <div className="w-full max-w-md lg:max-w-none lg:w-[min(48rem,calc(100vh_-_30rem))]" data-testid="symbols-countdown">
       {/* HUD — same row as in play, holding its place with resting values */}
-      <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 text-slate-400 opacity-50">
+      <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1 text-slate-400 opacity-50">
         <span>Round <span className="text-brand-600">1</span>/{TOTAL_ROUNDS}</span>
         <span>Tier <span className="text-brand-600">1</span></span>
         <span>{'✓'} <span className="text-green-400">0</span></span>
@@ -156,18 +157,18 @@ function CountdownScreen({ count, tileCount }) {
       <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden" />
 
       {/* Grid card */}
-      <div className="relative bg-game-panel border border-game-line rounded-xl p-3 mb-3 overflow-hidden">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-3">
+      <div className="relative bg-game-panel border border-game-line rounded-xl p-3 lg:p-4 mb-3 overflow-hidden">
+        <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-3">
           Find the target symbol
         </p>
         {/* Scatter — held at a constant dim through GO. It must never start to
             resolve into a readable grid: the real symbols appear only when the
             round takes over, so there is nothing to pre-read. */}
-        <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 opacity-40" aria-hidden="true">
+        <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 lg:gap-2.5 opacity-40" aria-hidden="true">
           {tiles.map((sym, i) => (
             <div
               key={i}
-              className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl transition-colors duration-100 ${
+              className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl lg:text-5xl transition-colors duration-100 ${
                 i === selected
                   ? 'bg-game-raised border-brand-400 text-brand-200'
                   : 'bg-game-arena border-game-line text-game-text'
@@ -193,7 +194,7 @@ function CountdownScreen({ count, tileCount }) {
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ duration: 0.22 }}
             className={`font-mono font-extrabold drop-shadow-[0_0_18px_rgba(6,16,26,0.9)] ${
-              isGo ? 'text-5xl sm:text-6xl text-green-400' : 'text-7xl sm:text-8xl text-brand-600'
+              isGo ? 'text-5xl sm:text-6xl lg:text-8xl text-green-400' : 'text-7xl sm:text-8xl lg:text-9xl text-brand-600'
             }`}
           >
             {isGo ? 'GO' : count}
@@ -206,11 +207,11 @@ function CountdownScreen({ count, tileCount }) {
 
       {/* Target card — same box the round uses, cycling with the selector */}
       <div className="bg-game-panel border border-game-line rounded-xl p-4">
-        <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2">
+        <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-2">
           Target
         </p>
         <div className="flex items-center justify-center">
-          <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400/50 bg-game-arena flex items-center justify-center text-6xl text-game-text/60">
+          <div className="w-24 h-24 lg:w-28 lg:h-28 overflow-hidden rounded-xl border-2 border-brand-400/50 bg-game-arena flex items-center justify-center text-6xl lg:text-7xl text-game-text/60">
             <span style={{ fontSize: `${getSymbolScale(spotlit)}em`, lineHeight: 1 }}>{spotlit}</span>
           </div>
         </div>
@@ -498,6 +499,11 @@ export default function CbatSymbols() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx, phase])
 
+  // Desktop: the grid sizes itself to the viewport height (less the target card,
+  // which always sits BELOW it — the eye drops from grid to target and back),
+  // which on a tall monitor is wider than the shell's max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'countdown' || phase === 'playing' || phase === 'feedback')
+
   const handlePick = (symbol) => {
     if (phase !== 'playing' || !currentRound) return
     const correct = symbol === currentRound.target
@@ -649,9 +655,9 @@ export default function CbatSymbols() {
 
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && currentRound && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:max-w-none lg:w-[min(48rem,calc(100vh_-_30rem))]">
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
@@ -685,12 +691,12 @@ export default function CbatSymbols() {
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-game-panel border border-game-line rounded-xl p-3 mb-3"
+                className="bg-game-panel border border-game-line rounded-xl p-3 lg:p-4 mb-3"
               >
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-3">
+                <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-3">
                   Find the target symbol
                 </p>
-                <div className={`grid ${gridCols} gap-1.5`}>
+                <div className={`grid ${gridCols} gap-1.5 lg:gap-2.5`}>
                   {currentRound.symbols.map((sym, i) => {
                     let btnClass = 'bg-game-arena border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised'
                     if (phase === 'feedback') {
@@ -708,7 +714,7 @@ export default function CbatSymbols() {
                         onClick={() => handlePick(sym)}
                         disabled={phase === 'feedback'}
                         data-demo-answer
-                        className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl transition-all ${btnClass} ${
+                        className={`aspect-square flex items-center justify-center overflow-hidden rounded-lg border-2 text-2xl sm:text-3xl lg:text-5xl transition-all ${btnClass} ${
                           phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                         }`}
                       >
@@ -725,11 +731,11 @@ export default function CbatSymbols() {
 
               {/* Target card */}
               <div className="bg-game-panel border border-game-line rounded-xl p-4 relative overflow-hidden">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2">
+                <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-2">
                   Target
                 </p>
                 <div className="flex items-center justify-center">
-                  <div className="w-24 h-24 overflow-hidden rounded-xl border-2 border-brand-400 bg-game-arena flex items-center justify-center text-6xl">
+                  <div className="w-24 h-24 lg:w-28 lg:h-28 overflow-hidden rounded-xl border-2 border-brand-400 bg-game-arena flex items-center justify-center text-6xl lg:text-7xl">
                     <span style={{ fontSize: `${getSymbolScale(currentRound.target)}em`, lineHeight: 1 }}>
                       {currentRound.target}
                     </span>
@@ -743,7 +749,7 @@ export default function CbatSymbols() {
                       initial={{ opacity: 0, y: -6 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className={`absolute top-2 right-2 px-3 py-1.5 rounded-lg text-xs font-bold ${
+                      className={`absolute top-2 right-2 px-3 py-1.5 rounded-lg text-xs lg:text-sm font-bold ${
                         wasCorrect
                           ? 'bg-green-500/20 border border-green-500/40 text-green-400'
                           : 'bg-red-500/20 border border-red-500/40 text-red-400'
@@ -764,7 +770,7 @@ export default function CbatSymbols() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-600 font-bold">
+                    <span className="text-xs lg:text-sm text-brand-600 font-bold">
                       Tier {tierFor(currentIdx) + 1} {'\u2014 grid grows larger'}
                     </span>
                   </motion.div>

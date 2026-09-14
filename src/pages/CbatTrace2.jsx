@@ -10,6 +10,7 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import SkywatchLogoIntro from '../components/SkywatchLogoIntro'
 import { getModelUrl } from '../data/aircraftModels'
 import { generateTrace2Game, TRACE2_ROUNDS, TRACE2_COLORS, replayStatKind } from '../utils/cbat/trace2Generator'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 const Trace2Scene = lazy(() => import('../components/Trace2Scene'))
 const MODEL_URL = getModelUrl(null, 'Hawk T2')
@@ -23,7 +24,7 @@ function Dots({ colors }) {
   return (
     <span className="flex items-center gap-1">
       {colors.map((c, i) => (
-        <span key={i} className="inline-block w-3 h-3 rounded-full ring-1 ring-black/30" style={{ background: HEX[c] }} />
+        <span key={i} className="inline-block w-3 h-3 lg:w-4 lg:h-4 rounded-full ring-1 ring-black/30" style={{ background: HEX[c] }} />
       ))}
     </span>
   )
@@ -32,7 +33,7 @@ function Dots({ colors }) {
 // ── Trace 2 HUD ──────────────────────────────────────────────────────────────
 function Trace2HUD({ round, score, phase }) {
   return (
-    <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+    <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
       <span className="text-slate-400">ROUND <span className="text-brand-600">{Math.min(round + 1, TRACE2_ROUNDS)}</span>/{TRACE2_ROUNDS}</span>
       <span className="text-slate-400">{phase === 'watch' ? '👀 WATCH' : phase === 'question' ? '❓ RECALL' : ''}</span>
       <span className="text-slate-400">SCORE <span className="text-brand-600">{score}</span></span>
@@ -103,6 +104,9 @@ export default function CbatTrace2({ traceModeSelector }) {
   const { enterImmersive, exitImmersive } = useGameChrome()
 
   const [phase, setPhase] = useState('menu') // menu | intro | watch | question | finished
+  // Desktop: the arena sizes itself to the viewport height, wider than the
+  // shell's max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'intro' || phase === 'watch' || phase === 'question')
   const [game, setGame] = useState(null)
   const [roundIndex, setRoundIndex] = useState(0)
   const [answered, setAnswered] = useState(false)
@@ -285,7 +289,7 @@ export default function CbatTrace2({ traceModeSelector }) {
       )}
 
       {(phase === 'watch' || phase === 'question') && round && (
-        <div className="w-full max-w-md">
+        <div className="w-full max-w-md lg:max-w-none lg:w-[min(42rem,calc(100vh_-_14rem))]">
           <Trace2HUD round={roundIndex} score={correctCount} phase={phase} />
 
           <div
@@ -336,13 +340,13 @@ export default function CbatTrace2({ traceModeSelector }) {
                   key={`q-${roundIndex}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 p-4 bg-game-arena overflow-y-auto"
+                  className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 lg:gap-6 p-4 bg-game-arena overflow-y-auto"
                 >
-                  <p className="text-[10px] text-slate-500 uppercase tracking-widest">Round {roundIndex + 1} · Question</p>
-                  <p className="text-base sm:text-lg font-bold text-game-text text-center leading-snug max-w-sm">
+                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-widest">Round {roundIndex + 1} · Question</p>
+                  <p className="text-base sm:text-lg lg:text-2xl font-bold text-game-text text-center leading-snug max-w-sm lg:max-w-lg">
                     {round.question.prompt}
                   </p>
-                  <div className="grid grid-cols-2 gap-2.5 w-full max-w-sm">
+                  <div className="grid grid-cols-2 gap-2.5 lg:gap-3 w-full max-w-sm lg:max-w-lg">
                     {round.question.options.map((opt, i) => {
                       const reveal = answered
                       const isChosen = chosen === i
@@ -357,7 +361,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                           onClick={() => handleAnswer(i)}
                           disabled={answered}
                           data-demo-answer
-                          className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg border-2 text-sm font-bold transition-colors ${cls}`}
+                          className={`flex items-center justify-center gap-2 px-3 py-3 lg:py-4 rounded-lg border-2 text-sm lg:text-lg font-bold transition-colors ${cls}`}
                         >
                           <Dots colors={opt.colors} />
                           <span>{opt.label}</span>
@@ -371,10 +375,10 @@ export default function CbatTrace2({ traceModeSelector }) {
                   {/* After answering — Continue is the clear primary action;
                       Replay is a subtle secondary option. */}
                   {answered && (
-                    <div className="flex flex-col items-center gap-2.5 w-full max-w-sm mt-0.5">
+                    <div className="flex flex-col items-center gap-2.5 w-full max-w-sm lg:max-w-lg mt-0.5">
                       <button
                         onClick={advanceRound}
-                        className="w-full px-5 py-3 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-extrabold uppercase tracking-wide transition-colors shadow-[0_0_18px_rgba(91,170,255,0.35)]"
+                        className="w-full px-5 py-3 lg:py-4 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm lg:text-base font-extrabold uppercase tracking-wide transition-colors shadow-[0_0_18px_rgba(91,170,255,0.35)]"
                       >
                         {roundIndex + 1 >= TRACE2_ROUNDS ? 'Finish →' : 'Continue →'}
                       </button>
@@ -433,7 +437,7 @@ export default function CbatTrace2({ traceModeSelector }) {
             </AnimatePresence>
           </div>
 
-          <p className="text-center text-[10px] text-slate-500 mt-3">
+          <p className="text-center text-[10px] lg:text-xs text-slate-500 mt-3">
             {phase === 'watch'
               ? 'Watch the four jets — the question comes next'
               : 'Pick the aircraft (or pair) that matches'}

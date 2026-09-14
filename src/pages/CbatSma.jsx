@@ -141,8 +141,8 @@ function TouchPad({ padRef, ringRef, knobRef, onPointerDown, onPointerMove, onPo
 function Readout({ label, children, align = 'left' }) {
   return (
     <div className={align === 'right' ? 'text-right' : ''}>
-      <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500 leading-none mb-0.5">{label}</p>
-      <p className="font-mono text-sm font-bold text-game-text leading-none tabular-nums">{children}</p>
+      <p className="text-[9px] lg:text-[11px] uppercase tracking-[0.18em] text-slate-500 leading-none mb-0.5">{label}</p>
+      <p className="font-mono text-sm lg:text-lg font-bold text-game-text leading-none tabular-nums">{children}</p>
     </div>
   )
 }
@@ -196,6 +196,12 @@ export default function CbatSma() {
   const [phase, setPhase] = useState('intro')   // intro | launching | playing | results
   // Room for the joystick rail beside the instructions card.
   useGameBodyClass('cbat-stick-wide', phase === 'intro' || phase === 'launching')
+  // Desktop play: the face sizes itself to the viewport height (see the lg:
+  // width on the playing wrapper), which can be wider than the shell's
+  // max-w-3xl. Mouse deflection is normalised to the face radius, so a bigger
+  // face is more mouse travel for the same push — the sensitivity setting on
+  // the card is there for anyone who wants the old feel back.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing')
   const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredSmaDifficulty))
   const tuning = smaTuning(difficulty)
   // The difficulty the run on screen is being played at. Pinned at launch so a
@@ -559,7 +565,7 @@ export default function CbatSma() {
 
           {/* Playing */}
           {phase === 'playing' && (
-            <div className="w-full max-w-md mx-auto flex flex-col items-center">
+            <div className="w-full max-w-md lg:max-w-none lg:w-[min(38rem,calc(100vh_-_22rem))] mx-auto flex flex-col items-center">
               <div className="w-full flex items-end justify-between gap-3 mb-2">
                 <Readout label="Score"><span ref={el => (hudRef.current.score = el)}>0</span></Readout>
                 <Readout label="Tracking" align="right"><span ref={el => (hudRef.current.onTarget = el)}>OFF</span></Readout>

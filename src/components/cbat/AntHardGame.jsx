@@ -22,6 +22,7 @@ import { useCbatTracking } from '../../utils/cbat/useCbatTracking'
 import CbatQuitButton from '../CbatQuitButton'
 import CbatGameOver from '../CbatGameOver'
 import { ModeMarker } from '../CbatModeSelector'
+import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 import {
   ANT_NODES,
   ANT_EDGES,
@@ -462,6 +463,9 @@ export default function AntHardGame({ tuning, onExit }) {
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('playing')  // playing | feedback | results
+  // Same as the Easier board: the max-w-5xl layout only gets its width once
+  // the shell's max-w-3xl cap is lifted. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'feedback')
   const [round, setRound] = useState(null)
   const [roundIndex, setRoundIndex] = useState(0)
   const [answers, setAnswers] = useState([])

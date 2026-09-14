@@ -9,6 +9,7 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import InstrumentPanel from '../components/cbat/InstrumentPanel'
 import CbatGameOver from '../components/CbatGameOver'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TIME_LIMIT = 90          // seconds
@@ -352,6 +353,10 @@ export default function CbatInstruments() {
     setScoreSaved(false)
   }, [])
 
+  // Desktop: dials on the left, statements on the right, wider than the
+  // shell's max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'calibrating' || phase === 'playing' || phase === 'feedback')
+
   const handlePick = useCallback((idx) => {
     if (phase !== 'playing' || !round) return
     const correct = idx === round.correctIdx
@@ -465,9 +470,9 @@ export default function CbatInstruments() {
 
           {/* Playing / Calibrating / Feedback */}
           {(phase === 'calibrating' || phase === 'playing' || phase === 'feedback') && round && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:max-w-6xl">
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{answers.length + (phase === 'feedback' ? 0 : 1)}</span>
                 </span>
@@ -489,10 +494,15 @@ export default function CbatInstruments() {
                 />
               </div>
 
+              {/* Desktop: the six dials take the height of the screen on the
+                  left and the statements sit beside them, instead of both
+                  sharing a 448px column. */}
+              <div className="lg:flex lg:gap-5 lg:items-center">
               {/* Instruments */}
-              <div className="bg-game-panel border border-game-line rounded-xl p-3 mb-3">
+              <div className="bg-game-panel border border-game-line rounded-xl p-3 lg:p-4 mb-3 lg:mb-0 lg:shrink-0 lg:w-[min(46rem,calc(100vh_-_26rem))]">
                 <InstrumentPanel
                   key={roundIndex}
+                  large
                   altitude={round.params.altitude}
                   airspeed={round.params.airspeed}
                   heading={round.params.heading}
@@ -514,7 +524,7 @@ export default function CbatInstruments() {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.45, ease: 'easeOut' }}
-                        className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-500 uppercase tracking-wider font-bold"
+                        className="absolute inset-0 flex items-center justify-center text-[10px] lg:text-xs text-slate-500 uppercase tracking-wider font-bold"
                       >
                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse mr-1.5" />
                         Calibrating instruments…
@@ -527,7 +537,7 @@ export default function CbatInstruments() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.35, ease: 'easeOut' }}
-                        className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-500"
+                        className="absolute inset-0 flex items-center justify-center text-[10px] lg:text-xs text-slate-500"
                       >
                         Tap an instrument to highlight it in the answers
                       </motion.p>
@@ -544,9 +554,9 @@ export default function CbatInstruments() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="space-y-2"
+                    className="space-y-2 lg:space-y-3 lg:flex-1 lg:min-w-0"
                   >
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-1">
+                    <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-1">
                       Which statement is correct?
                     </p>
                     {round.statements.map((s, i) => {
@@ -570,11 +580,11 @@ export default function CbatInstruments() {
                           onClick={() => handlePick(i)}
                           disabled={phase === 'feedback'}
                           data-demo-answer
-                          className={`w-full text-left px-3 py-2.5 rounded-lg border-2 text-xs sm:text-sm transition-all min-h-[3.75rem] sm:min-h-[4.25rem] ${btnClass} ${
+                          className={`w-full text-left px-3 py-2.5 lg:px-5 lg:py-4 rounded-lg border-2 text-xs sm:text-sm lg:text-lg lg:leading-relaxed transition-all min-h-[3.75rem] sm:min-h-[4.25rem] lg:min-h-[5.5rem] ${btnClass} ${
                             phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                           }`}
                         >
-                          <span className="font-mono text-[10px] text-slate-500 mr-2">{String.fromCharCode(65 + i)}</span>
+                          <span className="font-mono text-[10px] lg:text-sm text-slate-500 mr-2">{String.fromCharCode(65 + i)}</span>
                           {segments.map((seg, j) => {
                             // 'attitude' is a meta-key — the attitude indicator
                             // shows both pitch (vs) and roll (turn), so tapping
@@ -603,7 +613,7 @@ export default function CbatInstruments() {
                           initial={{ opacity: 0, y: -4 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0 }}
-                          className={`text-center mt-2 text-xs font-bold ${wasCorrect ? 'text-green-400' : 'text-red-400'}`}
+                          className={`text-center mt-2 text-xs lg:text-sm font-bold ${wasCorrect ? 'text-green-400' : 'text-red-400'}`}
                         >
                           {wasCorrect
                             ? `\u2713 Correct \u2014 ${lastRoundTime.toFixed(2)}s`
@@ -614,6 +624,7 @@ export default function CbatInstruments() {
                   </motion.div>
                 )}
               </AnimatePresence>
+              </div>
             </div>
           )}
 

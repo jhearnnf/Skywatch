@@ -947,6 +947,20 @@ body.community-selectable .app-shell-content * {
   }
 }
 
+/* Board-style CBAT games (Angles, Symbols, Code Duplicates, Instruments,
+   Numerical Operations, Directions and Distances, SMA, Trace, Visualisation):
+   each one is a single stage that sizes itself to the viewport HEIGHT on desktop
+   (see the lg: width on each page's stage wrapper). On a tall monitor that
+   works out wider than max-w-3xl, so the shell has to stop capping it. Toggled
+   from each page through useGameBodyClass while a run is on screen. */
+@media (min-width: 1024px) {
+  body.cbat-stage-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
 /* FLAG gameplay: stacked, the play field and the control panel (numpad, strike
    buttons, YES/NO) are ~980px tall together — more than a 1080p monitor has
    left once the browser's own chrome is taken off, and far more than a 1366×768
@@ -2168,6 +2182,18 @@ body.play-mode .card-shadow {
   max-height: 60vh;
   min-height: 520px;
   gap: 4px;
+}
+
+/* Desktop: the arena takes the viewport height instead of 60% of it, and grows
+   wide with it (capped, so the scene keeps a landscape shape rather than a
+   letterbox). The shell is widened by body.cbat-stage-wide while playing. */
+@media (min-width: 1024px) {
+  .cbat-target-arena {
+    height: min(calc(100dvh - 12rem), 56rem);
+    max-height: none;
+    width: min(100%, calc((100dvh - 12rem) * 1.6), 84rem);
+    margin: 0 auto;
+  }
 }
 
 /* System panel — continuous smooth scroll */

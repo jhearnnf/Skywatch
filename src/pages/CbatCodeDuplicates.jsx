@@ -10,6 +10,7 @@ import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
@@ -306,6 +307,10 @@ export default function CbatCodeDuplicates() {
     setPhase('feedback')
   }
 
+  // Desktop: a 15-digit sequence in a 448px column is 27px per cell. Give the
+  // row the width of the screen instead (shell widened via main.css).
+  useGameBodyClass('cbat-stage-wide', phase === 'displaying' || phase === 'answering' || phase === 'feedback')
+
   const handleNext = () => {
     const nextRound = round + 1
     if (nextRound > TOTAL_ROUNDS) {
@@ -413,9 +418,9 @@ export default function CbatCodeDuplicates() {
 
           {/* Displaying / Answering / Feedback */}
           {(phase === 'displaying' || phase === 'answering' || phase === 'feedback') && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:max-w-4xl">
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{round}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
@@ -449,7 +454,7 @@ export default function CbatCodeDuplicates() {
                 key={round}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-game-panel border border-game-line rounded-xl p-6 mb-3 relative overflow-hidden min-h-[200px] flex flex-col items-center justify-center"
+                className="bg-game-panel border border-game-line rounded-xl p-6 lg:p-10 mb-3 relative overflow-hidden min-h-[200px] lg:min-h-[340px] flex flex-col items-center justify-center"
               >
                 {/* Radar sweep */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.03]"
@@ -461,18 +466,18 @@ export default function CbatCodeDuplicates() {
 
                 {/* Displaying phase — show sequence */}
                 {phase === 'displaying' && (
-                  <div className="relative z-10 text-center">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-4">
+                  <div className="relative z-10 text-center w-full">
+                    <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-4">
                       Memorise this sequence — {displayCountdown}s
                     </p>
-                    <div className="flex w-full gap-1.5">
+                    <div className="flex w-full gap-1.5 lg:gap-2.5">
                       {sequence.map((digit, i) => (
                         <motion.span
                           key={i}
                           initial={{ opacity: 0, scale: 0.5 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: i * 0.06 }}
-                          className="inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-lg bg-game-arena border border-game-line text-2xl font-mono font-bold text-brand-600"
+                          className="inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-lg bg-game-arena border border-game-line text-2xl lg:text-4xl font-mono font-bold text-brand-600"
                         >
                           {digit}
                         </motion.span>
@@ -493,10 +498,10 @@ export default function CbatCodeDuplicates() {
                 {/* Answering phase — ask the question */}
                 {phase === 'answering' && (
                   <div className="relative z-10 text-center w-full">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-3">
+                    <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-3">
                       How many times did this digit appear?
                     </p>
-                    <p className="text-5xl font-mono font-bold text-brand-600 mb-6">{queryDigit}</p>
+                    <p className="text-5xl lg:text-8xl font-mono font-bold text-brand-600 mb-6">{queryDigit}</p>
                     <div className="flex items-center justify-center gap-3">
                       <input
                         ref={inputRef}
@@ -507,14 +512,14 @@ export default function CbatCodeDuplicates() {
                         onChange={(e) => setUserAnswer(e.target.value)}
                         data-demo-input="3"
                         onKeyDown={handleKeyDown}
-                        className="w-20 h-12 text-center text-2xl font-mono font-bold rounded-lg bg-game-arena border-2 border-game-line text-game-text focus:border-brand-400 focus:outline-none transition-colors"
+                        className="w-20 h-12 lg:w-28 lg:h-16 text-center text-2xl lg:text-4xl font-mono font-bold rounded-lg bg-game-arena border-2 border-game-line text-game-text focus:border-brand-400 focus:outline-none transition-colors"
                         placeholder="?"
                       />
                       <button
                         onClick={handleSubmit}
                         disabled={userAnswer === ''}
                         data-demo-answer
-                        className="px-5 h-12 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors"
+                        className="px-5 h-12 lg:px-8 lg:h-16 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm lg:text-lg font-bold rounded-lg transition-colors"
                       >
                         Submit
                       </button>
@@ -524,30 +529,30 @@ export default function CbatCodeDuplicates() {
 
                 {/* Feedback phase */}
                 {phase === 'feedback' && (
-                  <div className="relative z-10 text-center">
+                  <div className="relative z-10 text-center w-full">
                     <motion.div
                       initial={{ scale: 0.8, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                     >
-                      <p className="text-4xl mb-3">{isCorrect ? '✓' : '✗'}</p>
-                      <p className={`text-xl font-extrabold mb-2 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                      <p className="text-4xl lg:text-6xl mb-3">{isCorrect ? '✓' : '✗'}</p>
+                      <p className={`text-xl lg:text-3xl font-extrabold mb-2 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
                         {isCorrect ? 'Correct!' : 'Wrong'}
                       </p>
-                      <p className="text-sm text-slate-400 mb-1">
+                      <p className="text-sm lg:text-lg text-slate-400 mb-1">
                         The digit <span className="font-mono font-bold text-brand-600">{queryDigit}</span> appeared <span className="font-mono font-bold text-brand-600">{actualCount}</span> time{actualCount !== 1 ? 's' : ''}.
                       </p>
                       {!isCorrect && (
-                        <p className="text-sm text-slate-500">
+                        <p className="text-sm lg:text-lg text-slate-500">
                           You answered <span className="font-mono font-bold text-red-400">{userAnswer}</span>.
                         </p>
                       )}
 
                       {/* Show the sequence again for review */}
-                      <div className="flex w-full gap-1 mt-4">
+                      <div className="flex w-full gap-1 lg:gap-2 mt-4 lg:mt-6">
                         {sequence.map((digit, i) => (
                           <span
                             key={i}
-                            className={`inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-md text-lg font-mono font-bold border ${
+                            className={`inline-flex items-center justify-center flex-1 min-w-0 aspect-square rounded-md text-lg lg:text-3xl font-mono font-bold border ${
                               digit === queryDigit
                                 ? 'bg-brand-600/20 border-brand-400 text-brand-600'
                                 : 'bg-game-arena border-game-line text-slate-500'
@@ -573,7 +578,7 @@ export default function CbatCodeDuplicates() {
                     <button
                       onClick={handleNext}
                       data-demo-answer
-                      className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
+                      className="px-6 py-2.5 lg:px-8 lg:py-3 bg-brand-600 hover:bg-brand-700 text-white text-sm lg:text-base font-bold rounded-lg transition-colors"
                     >
                       {round >= TOTAL_ROUNDS ? 'View Results' : 'Next Round'}
                     </button>
@@ -590,7 +595,7 @@ export default function CbatCodeDuplicates() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-600 font-bold">
+                    <span className="text-xs lg:text-sm text-brand-600 font-bold">
                       {round === 6 ? 'Medium — sequences are now longer' : 'Hard — maximum length sequences'}
                     </span>
                   </motion.div>

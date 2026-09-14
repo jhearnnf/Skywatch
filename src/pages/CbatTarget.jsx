@@ -18,6 +18,7 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 const AircraftTopDown = lazy(() => import('../components/AircraftTopDown'))
 
@@ -294,12 +295,18 @@ const SHAPE_BOX = 72      // wrapper box size in px (desktop baseline)
 const SHAPE_R_BASE = 18   // baseline half-extent; scaled per kind below
 
 // Mobile shrink factor — smaller physical shapes overlap less on narrow screens.
-function useShapeScale(breakpoint = 900) {
-  const [scale, setScale] = useState(() =>
-    typeof window !== 'undefined' && window.innerWidth <= breakpoint ? 0.6 : 1
-  )
+// Shapes are drawn at a pixel size, so they grow in two steps with the window
+// rather than with the scene: phones get 0.6, a wide desktop 1.2 — the arena is
+// nearly twice the size there (see .cbat-target-arena at lg in main.css), and
+// at scale 1 the same shapes were small marks lost in a big field.
+function useShapeScale(breakpoint = 900, wide = 1400) {
+  const compute = () => {
+    if (typeof window === 'undefined') return 1
+    return window.innerWidth <= breakpoint ? 0.6 : window.innerWidth >= wide ? 1.2 : 1
+  }
+  const [scale, setScale] = useState(compute)
   useEffect(() => {
-    const update = () => setScale(window.innerWidth <= breakpoint ? 0.6 : 1)
+    const update = () => setScale(compute())
     window.addEventListener('resize', update)
     return () => window.removeEventListener('resize', update)
   }, [breakpoint])
@@ -1668,6 +1675,9 @@ export default function CbatTarget() {
   const shapeScale = useShapeScale()
 
   const [phase, setPhase] = useState('intro')         // intro | playing | tutorial | results
+  // Desktop: the arena sizes itself to the viewport height, wider than the
+  // shell's max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'tutorial')
 
   // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
   // Online-only by design — a learning aid, not a score, so no offline outbox.

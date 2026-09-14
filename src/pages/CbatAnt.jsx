@@ -23,6 +23,7 @@ import {
 } from '../utils/cbat/antDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import { useAppSettings } from '../context/AppSettingsContext'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import {
   buildRound,
   scoreAnswer,
@@ -858,6 +859,10 @@ export default function CbatAnt() {
   // rebuild in AntHardGame, so the difficulty picks a component rather than a
   // tuning object. See src/utils/cbat/antDifficulty.js.
   const [phase, setPhase] = useState('intro')
+  // The board below is laid out for max-w-5xl (map beside the tables), but the
+  // shell caps every page at max-w-3xl, so on a desktop the two columns were
+  // squeezed into 768px. Lifted while a round is up; see main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'feedback')
   // Default 'easier'; a user's own choice is remembered. `?difficulty=` sets the
   // opening choice for one arrival without overwriting what they picked.
   const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredAntDifficulty))

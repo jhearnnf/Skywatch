@@ -9,6 +9,7 @@ import SEO from '../components/SEO'
 import CbatQuitButton from '../components/CbatQuitButton'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const ROUND_1_COUNT = 10
@@ -127,7 +128,7 @@ function AngleDiagram({ angle, size = CANVAS_SIZE }) {
   const largeArc = angle > 180 ? 1 : 0
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block mx-auto">
+    <svg viewBox={`0 0 ${size} ${size}`} className="block mx-auto w-full h-auto max-w-[220px] lg:max-w-none">
       {/* Subtle grid circles */}
       <circle cx={cx} cy={cy} r={len * 0.95} fill="none" stroke="var(--color-game-line)" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.4" />
       <circle cx={cx} cy={cy} r={len * 0.5} fill="none" stroke="var(--color-game-line)" strokeWidth="0.5" strokeDasharray="3,3" opacity="0.3" />
@@ -341,6 +342,10 @@ export default function CbatAngles() {
     setScoreSaved(false)
   }, [])
 
+  // Desktop: the stage below sizes itself to the viewport height, which on a
+  // tall monitor is wider than the shell's max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'feedback')
+
   const handleAnswer = (option) => {
     if (phase !== 'playing') return
     const correct = option === currentQuestion.angle
@@ -455,9 +460,9 @@ export default function CbatAngles() {
 
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:max-w-none lg:w-[min(50rem,calc(100vh_-_24rem))]">
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{currentRound}</span>/2
                 </span>
@@ -490,7 +495,7 @@ export default function CbatAngles() {
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-game-panel border border-game-line rounded-xl p-5 mb-3 relative overflow-hidden"
+                className="bg-game-panel border border-game-line rounded-xl p-5 lg:p-8 mb-3 relative overflow-hidden"
               >
                 {/* Radar sweep */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.03]"
@@ -500,7 +505,7 @@ export default function CbatAngles() {
                   }}
                 />
 
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide text-center mb-2 relative z-10">
+                <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide text-center mb-2 relative z-10">
                   Identify this bearing angle
                 </p>
 
@@ -515,7 +520,7 @@ export default function CbatAngles() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className={`absolute top-2 right-2 z-20 px-3 py-1.5 rounded-lg text-xs font-bold ${
+                      className={`absolute top-2 right-2 lg:top-3 lg:right-3 z-20 px-3 py-1.5 rounded-lg text-xs lg:text-sm font-bold ${
                         isCorrect
                           ? 'bg-green-500/20 border border-green-500/40 text-green-400'
                           : 'bg-red-500/20 border border-red-500/40 text-red-400'
@@ -528,7 +533,7 @@ export default function CbatAngles() {
               </motion.div>
 
               {/* Options */}
-              <div className="grid grid-cols-5 gap-2 mb-3">
+              <div className="grid grid-cols-5 gap-2 lg:gap-3 mb-3">
                 {currentQuestion.options.map((opt) => {
                   let btnClass = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised'
                   if (phase === 'feedback') {
@@ -547,7 +552,7 @@ export default function CbatAngles() {
                       onClick={() => handleAnswer(opt)}
                       disabled={phase === 'feedback'}
                       data-demo-answer
-                      className={`py-3 rounded-lg border-2 font-mono font-bold text-sm transition-all ${btnClass} ${
+                      className={`py-3 lg:py-4 rounded-lg border-2 font-mono font-bold text-sm lg:text-xl transition-all ${btnClass} ${
                         phase === 'feedback' ? 'cursor-default' : 'cursor-pointer'
                       }`}
                     >
@@ -567,7 +572,7 @@ export default function CbatAngles() {
                   >
                     <button
                       onClick={handleNext}
-                      className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-lg transition-colors"
+                      className="px-6 py-2.5 lg:px-8 lg:py-3 bg-brand-600 hover:bg-brand-700 text-white text-sm lg:text-base font-bold rounded-lg transition-colors"
                     >
                       {currentIdx + 1 >= TOTAL_QUESTIONS ? 'View Results' : 'Next Angle'}
                     </button>
@@ -584,7 +589,7 @@ export default function CbatAngles() {
                     exit={{ opacity: 0 }}
                     className="text-center mt-2"
                   >
-                    <span className="text-xs text-brand-600 font-bold">Round 2 — angles now in 5° increments</span>
+                    <span className="text-xs lg:text-sm text-brand-600 font-bold">Round 2 — angles now in 5° increments</span>
                   </motion.div>
                 )}
               </AnimatePresence>

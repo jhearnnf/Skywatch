@@ -134,7 +134,7 @@ function PathReveal({ path, youLabel = 'YOU' }) {
   const tipY = eyS - (vy / L) * r * 1.8
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="block w-full h-auto max-w-[min(300px,34vh)] mx-auto" role="img" aria-label="Plotted route from the start to the object's final position">
+    <svg viewBox={`0 0 ${W} ${H}`} className="block w-full h-auto max-w-[min(300px,34vh)] lg:max-w-[min(380px,34vh)] mx-auto" role="img" aria-label="Plotted route from the start to the object's final position">
       <defs>
         <pattern id="dadgrid" width="1" height="1" patternUnits="userSpaceOnUse">
           <path d="M1 0 L0 0 0 1" fill="none" stroke="#13294a" strokeWidth={span * 0.004} />
@@ -474,9 +474,9 @@ export default function CbatDAD() {
 
           {/* Playing / Feedback */}
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:max-w-2xl">
               {/* HUD */}
-              <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Q <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
                 </span>
@@ -503,17 +503,17 @@ export default function CbatDAD() {
                 key={currentIdx}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-game-panel border border-game-line rounded-xl p-4 sm:p-5 mb-2 sm:mb-3"
+                className="bg-game-panel border border-game-line rounded-xl p-4 sm:p-5 lg:p-7 mb-2 sm:mb-3"
               >
-                <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">The Route</p>
-                <p className="text-sm sm:text-lg text-game-text leading-relaxed">{currentQuestion.prose}</p>
-                <p className="text-sm font-bold text-brand-600 mt-3 sm:mt-4">
+                <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-2">The Route</p>
+                <p className="text-sm sm:text-lg lg:text-2xl text-game-text leading-relaxed">{currentQuestion.prose}</p>
+                <p className="text-sm lg:text-lg font-bold text-brand-600 mt-3 sm:mt-4">
                   Which direction is {objectPhrase(currentQuestion.subject)} from the start point?
                 </p>
               </motion.div>
 
               {/* Options */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 lg:gap-3">
                 {currentQuestion.options.map(opt => {
                   let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                   if (phase === 'feedback') {
@@ -528,7 +528,7 @@ export default function CbatDAD() {
                       onClick={() => handlePick(opt)}
                       data-demo-answer
                       disabled={phase === 'feedback'}
-                      className={`py-2.5 sm:py-4 rounded-lg border-2 font-mono font-bold text-base sm:text-lg transition-all ${cls}`}
+                      className={`py-2.5 sm:py-4 lg:py-5 rounded-lg border-2 font-mono font-bold text-base sm:text-lg lg:text-2xl transition-all ${cls}`}
                     >
                       {opt}
                     </button>
@@ -545,7 +545,7 @@ export default function CbatDAD() {
                     exit={{ opacity: 0 }}
                     className="mt-2 sm:mt-3"
                   >
-                    <div className={`text-center text-sm font-bold mb-1.5 sm:mb-2 ${feedback.correct ? 'text-green-400' : 'text-red-400'}`}>
+                    <div className={`text-center text-sm lg:text-base font-bold mb-1.5 sm:mb-2 ${feedback.correct ? 'text-green-400' : 'text-red-400'}`}>
                       {feedback.correct
                         ? '✓ Correct'
                         : feedback.picked === null
@@ -558,7 +558,7 @@ export default function CbatDAD() {
                     <button
                       onClick={goNext}
                       data-demo-answer
-                      className="w-full mt-2 sm:mt-3 px-6 py-2.5 sm:py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
+                      className="w-full mt-2 sm:mt-3 px-6 py-2.5 sm:py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
                     >
                       {currentIdx + 1 >= TOTAL_QUESTIONS ? 'See Results' : 'Next'}
                     </button>

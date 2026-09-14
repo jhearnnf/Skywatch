@@ -330,11 +330,14 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active }) {
 }
 
 // ── Combined panel ───────────────────────────────────────────────────────────
-export default function InstrumentPanel({ altitude, airspeed, heading, vs, turn, durationMs, highlightedKey, onToggleHighlight }) {
+export default function InstrumentPanel({ altitude, airspeed, heading, vs, turn, durationMs, highlightedKey, onToggleHighlight, large = false }) {
   const interactive = typeof onToggleHighlight === 'function'
   const handler = (k) => interactive ? () => onToggleHighlight(k) : undefined
+  // `large` lifts the 120px face cap on desktop so the dials fill whatever
+  // column the game gives them. The landing-page preview keeps the cap.
+  const sizing = large ? ' lg:gap-3 lg:[&_svg]:max-w-none lg:[&_p]:text-[11px]' : ''
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className={`grid grid-cols-3 gap-2${sizing}`}>
       <Altimeter altitude={altitude} durationMs={durationMs} onClick={handler('altitude')} active={highlightedKey === 'altitude'} />
       <AttitudeIndicator vs={vs} turn={turn} durationMs={durationMs} onClick={handler('attitude')} active={highlightedKey === 'attitude'} />
       <Airspeed knots={airspeed} durationMs={durationMs} onClick={handler('airspeed')} active={highlightedKey === 'airspeed'} />

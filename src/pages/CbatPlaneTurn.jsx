@@ -41,6 +41,7 @@ import {
 } from '../utils/cbat/tracePractise'
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 function forwardToMoveState(forwardVec, prevDir) {
   const x = Math.round(forwardVec.x), y = Math.round(forwardVec.y), z = Math.round(forwardVec.z)
@@ -362,7 +363,7 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
 // between, so the HUD stays exactly as it was before multi-aircraft rounds.
 function Trace1HUD({ round, turn, tracked, debug }) {
   return (
-    <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+    <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
       <span className="text-slate-400">
         ROUND <span className="text-brand-600">{Math.min(round + 1, TRACE1_ROUNDS)}</span>/{TRACE1_ROUNDS}
         {debug && <span className="ml-2 text-amber-400">DEBUG</span>}
@@ -385,7 +386,7 @@ function Trace1HUD({ round, turn, tracked, debug }) {
 // ── HUD ──────────────────────────────────────────────────────────────────────
 function HUD({ collected, rotations, elapsed, level }) {
   return (
-    <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+    <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
       <span className="text-slate-400">LVL <span className="text-brand-600">{level}</span>/{MAX_LEVEL}</span>
       <span className="text-slate-400">
         📦 <span className="text-brand-600">{collected}</span>/{TOTAL_PACKAGES}
@@ -406,7 +407,7 @@ function DpadBtn({ label, onPress, ariaLabel }) {
     <button
       onPointerDown={onPress}
       data-demo-answer
-      className="rounded-xl bg-game-panel border-2 border-game-line active:border-brand-400 active:bg-game-raised transition-colors flex items-center justify-center text-3xl text-slate-700 active:text-brand-600 select-none"
+      className="rounded-xl bg-game-panel border-2 border-game-line active:border-brand-400 active:bg-game-raised transition-colors flex items-center justify-center text-3xl lg:text-4xl text-slate-700 active:text-brand-600 select-none lg:w-28! lg:h-28!"
       style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.22)', height: 'calc(min(100vw - 2rem, 28rem) * 0.22)' }}
       aria-label={ariaLabel}
     >
@@ -491,6 +492,9 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
   // Game state
   const [phase, setPhase]               = useState('select')
+  // Desktop: the arena sizes itself to the viewport height with the controls
+  // beside it, wider than the shell's max-w-3xl. See main.css.
+  useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'over' || phase === 'intro')
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     if (phase === 'playing' || phase === 'over' || phase === 'intro') enterImmersive()
@@ -1403,19 +1407,23 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               `phase === 'playing'`, so the simulation only starts once the
               intro completes and flips us back to 'playing'. */}
           {(phase === 'playing' || phase === 'over' || phase === 'intro') && selected && (
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md lg:w-auto lg:max-w-none">
               {gameModeTrace1
                 ? <Trace1HUD round={trace1Round} turn={trace1Turn} tracked={trace1Tracked} debug={trace1Debug} />
                 : <HUD collected={collected} rotations={rotations} elapsed={elapsed} level={level} />}
 
+              {/* Desktop: the arena takes the viewport height with the controls
+                  beside it. Stacked, a 448px board left most of a monitor
+                  empty and the buttons sat below the fold. */}
+              <div className="lg:flex lg:items-center lg:gap-6">
+
               {/* ── 3D Game (Practise 3D + Trace 1 share the 3D arena) ── */}
               {(gameMode3D || gameModeTrace1) ? (
                 <div
-                  className={`relative border-2 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)] ${
+                  className={`relative w-full lg:w-[min(42rem,calc(100vh_-_14rem))] lg:shrink-0 border-2 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)] ${
                     gameModeTrace1 ? 'border-[#3a7bbf]' : 'bg-game-arena border-game-line'
                   }`}
                   style={{
-                    width: '100%',
                     aspectRatio: '1',
                     // Sky gradient for Trace modes, dark surface for Practise.
                     background: gameModeTrace1
@@ -1562,7 +1570,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                 </div>
               ) : (
                 /* ── 2D Game ── */
-                <div className="relative bg-game-arena border-2 border-game-line rounded-xl overflow-visible shadow-[0_0_30px_rgba(91,170,255,0.08)]">
+                <div className="relative w-full lg:w-[min(42rem,calc(100vh_-_14rem))] lg:shrink-0 bg-game-arena border-2 border-game-line rounded-xl overflow-visible shadow-[0_0_30px_rgba(91,170,255,0.08)]">
                   {/* Aircraft name with cycle arrows */}
                   <div className="absolute top-1 left-1 z-30 flex items-center gap-1">
                     <button onClick={() => cycleAircraft(-1)} className="text-[10px] text-slate-500 hover:text-brand-600 transition-colors px-0.5 cursor-pointer">&larr;</button>
@@ -1749,9 +1757,10 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                 </div>
               )}
 
-              {/* ── Mobile controls ── */}
+              {/* ── Controls ── */}
+              <div className="lg:flex lg:flex-col lg:items-center lg:shrink-0 lg:min-w-[16rem]">
               {(gameMode3D || gameModeTrace1) ? (
-                <div className="flex flex-col items-center gap-2 mt-4">
+                <div className="flex flex-col items-center gap-2 mt-4 lg:mt-0">
                   <DpadBtn label="↑" onPress={() => handleRotate('up')} ariaLabel={gameModeTrace1 ? 'Recall: dive' : 'Dive'} />
                   <div className="flex gap-2">
                     <DpadBtn label="←" onPress={() => handleRotate('left')}  ariaLabel={gameModeTrace1 ? 'Recall: yaw left' : 'Rotate left'} />
@@ -1760,7 +1769,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-4 justify-center mt-4">
+                <div className="flex gap-4 justify-center mt-4 lg:mt-0">
                   <button
                     onPointerDown={() => handleRotate('left')}
                     data-demo-answer
@@ -1783,7 +1792,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               )}
 
               {/* Instructions hint */}
-              <p className="text-center text-[10px] text-slate-500 mt-3">
+              <p className="text-center text-[10px] lg:text-xs text-slate-500 mt-3 lg:mt-5 lg:max-w-[18rem]">
                 {gameModeTrace1
                   ? (trace1PlaneCount > 1
                       ? <>After each turn, press the arrow the <span className="font-bold" style={{ color: trace1Tracked?.hex }}>ringed</span> aircraft just took</>
@@ -1793,6 +1802,8 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                     : <>Use <span className="font-mono text-slate-400">&larr;</span> <span className="font-mono text-slate-400">&rarr;</span> arrow keys or tap the buttons to rotate</>
                 }
               </p>
+              </div>
+              </div>
             </div>
           )}
 
