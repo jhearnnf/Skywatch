@@ -21,6 +21,7 @@ const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
+const { normalizeInputMethod } = require('../constants/cbatInputMethods');
 const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
@@ -2481,7 +2482,7 @@ router.post('/cbat/cut-easier/result', protect, (req, res) => submitCutResult(re
 // body) so a run can only ever land in the collection its board reads from.
 async function submitRttResult(req, res, Model) {
   try {
-    const { totalScore, totalTime, framesTaken, framesOnTarget, targetsCompleted, avgCentringErrorDeg } = req.body;
+    const { totalScore, totalTime, framesTaken, framesOnTarget, targetsCompleted, avgCentringErrorDeg, inputMethod } = req.body;
     const result = await saveCbatResult(Model, req, {
       totalScore: totalScore ?? 0,
       totalTime,
@@ -2489,6 +2490,7 @@ async function submitRttResult(req, res, Model) {
       framesOnTarget,
       targetsCompleted,
       avgCentringErrorDeg,
+      inputMethod: normalizeInputMethod(inputMethod),
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2574,13 +2576,14 @@ router.post('/cbat/vigilance/result', protect, async (req, res) => {
 // formula. See backend/models/GameSessionCbatSmaResult.js.
 async function submitSmaResult(req, res, Model) {
   try {
-    const { totalScore, onTargetPct, rmsErrorPct, worstErrorPct, totalTime } = req.body;
+    const { totalScore, onTargetPct, rmsErrorPct, worstErrorPct, totalTime, inputMethod } = req.body;
     const result = await saveCbatResult(Model, req, {
       totalScore: totalScore ?? 0,
       onTargetPct,
       rmsErrorPct,
       worstErrorPct,
       totalTime,
+      inputMethod: normalizeInputMethod(inputMethod),
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2817,7 +2820,7 @@ router.post('/cbat/act/result', protect, async (req, res) => {
       totalScore, totalTime, finalRound,
       ringsThreaded, ringsMissed, avoidObeyed, avoidViolated,
       wallScrapeSeconds, bleepHits, bleepMisses, avgBleepReactionMs,
-      codeAttempted, codeDigitsCorrect, codeRecalled,
+      codeAttempted, codeDigitsCorrect, codeRecalled, inputMethod,
     } = req.body;
     const result = await saveCbatResult(GameSessionCbatActResult, req, {
       totalScore:         Math.max(0, Math.round(totalScore ?? 0)),
@@ -2834,6 +2837,7 @@ router.post('/cbat/act/result', protect, async (req, res) => {
       codeAttempted:      !!codeAttempted,
       codeDigitsCorrect:  Math.max(0, Math.round(codeDigitsCorrect ?? 0)),
       codeRecalled:       !!codeRecalled,
+      inputMethod:        normalizeInputMethod(inputMethod),
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2889,6 +2893,10 @@ async function cbatLeaderboard(req, res, gameKey) {
           [cfg.primaryField]: { $first: `$${cfg.primaryField}` },
           totalTime: { $first: '$totalTime' },
           createdAt: { $first: '$createdAt' },
+          // Steered games only: the $sort above already put each user's best
+          // session first, so $first here is the control that best run was
+          // flown on.
+          ...(cfg.inputMethod ? { inputMethod: { $first: '$inputMethod' } } : {}),
         },
       },
       // $group doesn't preserve order — re-sort the deduped rows.
@@ -2923,6 +2931,7 @@ async function cbatLeaderboard(req, res, gameKey) {
           ...(isAdmin ? { email: '$user.email', achievedAt: '$createdAt' } : {}),
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
+          ...(cfg.inputMethod ? { inputMethod: 1 } : {}),
         },
       },
     ];
@@ -2993,6 +3002,7 @@ async function cbatLeaderboard(req, res, gameKey) {
             bestScore: scoreVal,
             bestTime: timeVal,
             rank: countBetter + 1,
+            ...(cfg.inputMethod ? { inputMethod: best.inputMethod ?? null } : {}),
           };
         }
       }
@@ -3037,6 +3047,10 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
       weekTotal: { $sum: valueExpr },
       plays: { $sum: 1 },
       lastPlayed: { $max: '$createdAt' },
+      // Steered games only: every distinct control used across the week's runs,
+      // filtered to non-null in the $project below (a run predating this
+      // feature, or with an unrecognised value, contributes nothing here).
+      ...(cfg.inputMethod ? { inputMethods: { $addToSet: '$inputMethod' } } : {}),
     },
   };
 
@@ -3063,6 +3077,11 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
           ...(isAdmin ? { email: '$user.email' } : {}),
           weekTotal: 1,
           plays: 1,
+          ...(cfg.inputMethod ? {
+            inputMethods: {
+              $filter: { input: '$inputMethods', as: 'm', cond: { $ne: ['$$m', null] } },
+            },
+          } : {}),
         },
       },
     ];
@@ -3080,7 +3099,14 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
       } else {
         const [mine] = await cfg.Model.aggregate([
           { $match: { ...(modeFilter ?? {}), userId: req.user._id, createdAt: { $gte: weekStart } } },
-          { $group: { _id: '$userId', weekTotal: { $sum: valueExpr }, plays: { $sum: 1 } } },
+          {
+            $group: {
+              _id: '$userId',
+              weekTotal: { $sum: valueExpr },
+              plays: { $sum: 1 },
+              ...(cfg.inputMethod ? { inputMethods: { $addToSet: '$inputMethod' } } : {}),
+            },
+          },
         ]);
         if (mine) {
           const betterAgg = await cfg.Model.aggregate([
@@ -3102,6 +3128,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
             weekTotal: mine.weekTotal,
             plays: mine.plays,
             rank: (betterAgg[0]?.n || 0) + 1,
+            ...(cfg.inputMethod ? { inputMethods: (mine.inputMethods || []).filter(m => m != null) } : {}),
           };
         }
       }

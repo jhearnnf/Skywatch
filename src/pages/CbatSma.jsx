@@ -255,6 +255,9 @@ export default function CbatSma() {
     if (!sim) return
     const playedTuning = runTuningRef.current
     const stats = smaStats(sim)
+    // Read before setPhase: the input layer is torn down when the phase leaves
+    // 'playing', and the tally goes with it.
+    const inputMethod = inputRef.current?.inputMethod() ?? null
     setFinalStats(stats)
     setScoreSaved(false)
     setQueued(false)
@@ -265,6 +268,7 @@ export default function CbatSma() {
       rmsErrorPct: stats.rmsErrorPct,
       worstErrorPct: stats.worstErrorPct,
       totalTime: stats.totalTime,
+      inputMethod,
     }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)

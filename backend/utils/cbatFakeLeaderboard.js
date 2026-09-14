@@ -468,6 +468,22 @@ const FAKE_TUNING = {
 const SCORE_STEPS = [1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1];
 const TIME_STEPS  = [1, 1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1];
 
+// Which control a demo row on a steered board (ACT/RTT/SMA — see
+// CBAT_GAMES[key].inputMethod) is shown flying. Fixed pattern rather than
+// randomness so padded rows are stable across requests and the tests can
+// snapshot them: 12 slots, mostly keyboard-mouse with joystick at exactly 1/4
+// and touch at exactly 1/6, indexed the same way FAKE_AGENTS is (by the
+// per-game GAME_OFFSET plus row index) so the two stay in step.
+const INPUT_METHOD_PATTERN = [
+  'keyboard-mouse', 'keyboard-mouse', 'joystick', 'keyboard-mouse',
+  'touch', 'keyboard-mouse', 'joystick', 'keyboard-mouse',
+  'keyboard-mouse', 'touch', 'joystick', 'keyboard-mouse',
+];
+
+function fakeInputMethodFor(gameKey, offset, i) {
+  return INPUT_METHOD_PATTERN[(offset + i) % INPUT_METHOD_PATTERN.length];
+}
+
 function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
   const offset = GAME_OFFSET[gameKey] ?? 0;
   const fakes = [];
@@ -501,6 +517,7 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
       isFake: true,
     };
     if (isAdmin) entry.email = 'demo';
+    if (CBAT_GAMES[gameKey]?.inputMethod) entry.inputMethod = fakeInputMethodFor(gameKey, offset, i);
     fakes.push(entry);
   }
   return fakes;
@@ -647,6 +664,10 @@ function generateWeeklyFakes(gameKey, perPlay, isAdmin) {
       isFake: true,
     };
     if (isAdmin) entry.email = 'demo';
+    // Single-element rather than one per play — a fake week's "runs" are a
+    // rolled-up total, not individual sessions, so there is no real per-run
+    // control to vary within one row the way a genuine week's $addToSet can.
+    if (CBAT_GAMES[gameKey]?.inputMethod) entry.inputMethods = [fakeInputMethodFor(gameKey, offset, i)];
     fakes.push(entry);
   }
   return fakes;

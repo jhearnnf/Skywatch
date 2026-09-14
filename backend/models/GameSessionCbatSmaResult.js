@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { CBAT_INPUT_METHODS } = require('../constants/cbatInputMethods');
 
 // Sensory Motor Apparatus Test — the Hard difficulty.
 //
@@ -23,6 +24,9 @@ const schema = new mongoose.Schema({
   rmsErrorPct:   { type: Number },
   worstErrorPct: { type: Number },
   totalTime:     { type: Number, required: true },
+  // Which physical control this run was flown on. Only the steered games (ACT,
+  // RTT, SMA) carry this field.
+  inputMethod:   { type: String, enum: CBAT_INPUT_METHODS, default: null },
   createdAt:     { type: Date, default: Date.now },
 });
 

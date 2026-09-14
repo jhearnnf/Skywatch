@@ -26,6 +26,10 @@ import {
   createStickReader, applyCurve, clamp1, loadProfile, defaultProfile, listPads,
   STICK_DEAD_ZONE, STICK_EXPO,
 } from './gamepad'
+import {
+  createInputTally, addInput, dominantInput,
+  INPUT_JOYSTICK, INPUT_KEYBOARD_MOUSE, INPUT_TOUCH,
+} from './inputMethod'
 
 // Re-exported under their old names: the curve is shared with the stick (a
 // mouse standing in for a stick had better behave like one), and these are the
@@ -72,6 +76,10 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
     // inside the arena; otherwise tapping the shutter button below the arena
     // would peg the aim downward on its way past.
     touchTracking: false,
+    // Frames flown on each kind of control, so the run can be labelled with the
+    // one that did most of the flying (see inputMethod.js). A frame with no
+    // pointer and no stick is nobody's and is not counted.
+    inputTally: createInputTally(),
   }
 
   const readRect = (now) => {
@@ -169,6 +177,7 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
         if (stick.awake() || shots > 0) state.source = 'gamepad'
         if (state.source === 'gamepad') {
           state.axes = stick.axes()
+          addInput(state.inputTally, INPUT_JOYSTICK)
           return
         }
       }
@@ -178,6 +187,10 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
         state.axes = { x: 0, y: 0 }
         return
       }
+      // A finger only exists while it is down (touchTracking), so a touch run
+      // is counted gesture by gesture; a mouse is somewhere all the time and
+      // counts every frame it is on the page.
+      addInput(state.inputTally, state.touchTracking ? INPUT_TOUCH : INPUT_KEYBOARD_MOUSE)
       state.axes = pointerAxes(state.pointer.x, state.pointer.y, rect, { deadZone, expo })
     },
 
@@ -199,6 +212,11 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
     source() { return state.source },
     // Which physical device is flying, for the HUD's source readout.
     stickId() { return stick.padId() },
+    // What the run was flown on, by frames — 'joystick', 'keyboard-mouse',
+    // 'touch', or null before anything has steered. Read once at the end of a
+    // run and sent with the score.
+    inputMethod() { return dominantInput(state.inputTally) },
+    inputTally() { return { ...state.inputTally } },
 
     dispose() {
       stick.dispose()

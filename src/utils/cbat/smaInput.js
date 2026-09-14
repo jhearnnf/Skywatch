@@ -43,6 +43,10 @@ import {
   STICK_DEAD_ZONE, STICK_EXPO,
 } from './gamepad'
 import { pointerAxes } from './rttInput'
+import {
+  createInputTally, addInput, dominantInput,
+  INPUT_JOYSTICK, INPUT_KEYBOARD_MOUSE, INPUT_TOUCH,
+} from './inputMethod'
 
 export { pointerAxes }
 
@@ -148,6 +152,13 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
 
     keysHeld: new Set(),
     keyAxes: { x: 0, y: 0 },
+
+    // Frames flown on each kind of control, so the run can be labelled with the
+    // one that did most of the flying (see inputMethod.js). The pad and the
+    // keyboard count only while they are being worked; a mouse is somewhere
+    // all the time and counts every frame it is on the page; a frame with none
+    // of them is nobody's.
+    inputTally: createInputTally(),
   }
 
   const readRect = (now) => {
@@ -278,6 +289,7 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
       if (state.padOrigin) {
         state.source = 'pad'
         state.axes = state.padAxes
+        addInput(state.inputTally, INPUT_TOUCH)
         return
       }
 
@@ -287,6 +299,7 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
         // flies differently on it, but it compares unequal to 0 and would put a
         // baffling minus sign in front of a HUD readout.
         state.axes = { x: a.x, y: a.y === 0 ? 0 : a.y * STICK_PITCH_SIGN }
+        addInput(state.inputTally, INPUT_JOYSTICK)
         return
       }
 
@@ -296,6 +309,7 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
       if (state.keysHeld.size || state.keyAxes.x !== 0 || state.keyAxes.y !== 0) {
         state.source = 'keyboard'
         state.axes = state.keyAxes
+        addInput(state.inputTally, INPUT_KEYBOARD_MOUSE)
         return
       }
 
@@ -310,6 +324,7 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
         state.axes = { x: 0, y: 0 }
         return
       }
+      addInput(state.inputTally, INPUT_KEYBOARD_MOUSE)
       state.axes = pointerAxes(state.pointer.x, state.pointer.y, rect, { deadZone, expo })
     },
 
@@ -317,6 +332,11 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     source() { return state.source },
     // Which physical device is flying, for the HUD's source readout.
     stickId() { return stick.padId() },
+    // What the run was flown on, by frames — 'joystick', 'keyboard-mouse',
+    // 'touch', or null before anything has steered. Read once at the end of a
+    // run and sent with the score.
+    inputMethod() { return dominantInput(state.inputTally) },
+    inputTally() { return { ...state.inputTally } },
     // Lets the stick pick up a fresh calibration without a remount.
     refresh() { stick.refresh() },
 

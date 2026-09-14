@@ -165,7 +165,13 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'dpt':             { title: 'DPT (8-round)',    emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/dpt' },
   'dpt-hard':        { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/dpt', difficultyGroup: 'dpt' },
   'dpt-easier':      { title: 'DPT',               emoji: '🛩️', scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/dpt', difficultyGroup: 'dpt' },
-  'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true },
+  // showInput adds the leaderboard's Input column (joystick / keyboard+mouse /
+  // touch) — only these three games are steered, so only on these does the
+  // control the score was set on change what the number means. This flag is
+  // half of the wiring: the backend registry's matching `inputMethod: true` on
+  // the same keys is what makes leaderboard rows actually carry the field, so
+  // the two must be added and removed together.
+  'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true, showInput: true },
   'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'numerical-ops-easier': { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad' },
@@ -178,8 +184,8 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'cut-easier':      { title: 'Cognitive Updating Test', emoji: '🖥️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/cut', hideTime: true, difficultyGroup: 'cut' },
   // Run length is fixed per difficulty, so every real time is near-identical and
   // the column tells nobody anything — hidden, like CUT's and FLAG's.
-  'rtt':             { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt' },
-  'rtt-easier':      { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt' },
+  'rtt':             { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt', showInput: true },
+  'rtt-easier':      { title: 'Rapid Tracking Test', emoji: '📷', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/rtt', hideTime: true, difficultyGroup: 'rtt', showInput: true },
   // SIT / SLT / VLT keep the same question count on both difficulties, so each
   // pair shares a ceiling and one maxScore serves both.
   'sit':             { title: 'Spatial Integration Test', emoji: '🛰️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`, backPath: '/cbat/sit', difficultyGroup: 'sit' },
@@ -200,8 +206,8 @@ export const CBAT_LEADERBOARD_CONFIG = {
   // The two difficulties do NOT share a ceiling (1500 against 1000) and are not
   // on one scale anyway, because Easier's wider tolerance ring pays more per
   // second — hence no maxScore on either.
-  'sma':             { title: 'Sensory Motor Apparatus Test', emoji: '🕹️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/sma', hideTime: true, difficultyGroup: 'sma' },
-  'sma-easier':      { title: 'Sensory Motor Apparatus Test', emoji: '🕹️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/sma', hideTime: true, difficultyGroup: 'sma' },
+  'sma':             { title: 'Sensory Motor Apparatus Test', emoji: '🕹️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/sma', hideTime: true, difficultyGroup: 'sma', showInput: true },
+  'sma-easier':      { title: 'Sensory Motor Apparatus Test', emoji: '🕹️', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/sma', hideTime: true, difficultyGroup: 'sma', showInput: true },
 }
 
 // Games whose difficulties keep separate leaderboards. The leaderboard page

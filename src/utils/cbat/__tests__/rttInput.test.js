@@ -295,3 +295,43 @@ describe('createRttInput — gamepad', () => {
     expect(i.axes().x).toBeCloseTo(1)
   })
 })
+
+// What the score gets labelled with. Counted by frames, so the control that
+// flew most of the run wins even if another was touched along the way.
+describe('createRttInput — input method', () => {
+  const pad = (axes = [0, 0]) => ({ connected: true, axes, buttons: [{ pressed: false }] })
+
+  it('reports nothing before anything has steered', () => {
+    const i = input(makeArena())
+    i.poll()
+    expect(i.inputMethod()).toBeNull()
+  })
+
+  it('reads a mouse run as keyboard + mouse', () => {
+    const i = input(makeArena())
+    window.dispatchEvent(pointerEvent('pointermove', { clientX: 400, clientY: 200 }))
+    i.poll(); i.poll(); i.poll()
+    expect(i.inputMethod()).toBe('keyboard-mouse')
+  })
+
+  it('reads a finger-flown run as touch, counting only while the finger is down', () => {
+    const el = makeArena()
+    const i = input(el)
+    el.dispatchEvent(pointerEvent('pointerdown', { clientX: 350, clientY: 200, pointerType: 'touch' }))
+    i.poll(); i.poll()
+    window.dispatchEvent(pointerEvent('pointerup', { clientX: 350, clientY: 200, pointerType: 'touch' }))
+    i.poll(); i.poll(); i.poll()   // lifted: nobody is flying, nothing counted
+    expect(i.inputTally()).toMatchObject({ touch: 2, 'keyboard-mouse': 0 })
+    expect(i.inputMethod()).toBe('touch')
+  })
+
+  it('reads a stick-flown run as joystick even after the mouse clicked Start', () => {
+    const i = input(makeArena())
+    window.dispatchEvent(pointerEvent('pointermove', { clientX: 400, clientY: 200 }))
+    i.poll()
+    navigator.getGamepads = vi.fn(() => [pad([0.9, 0])])
+    i.poll(); i.poll()
+    expect(i.inputTally()).toMatchObject({ joystick: 2, 'keyboard-mouse': 1 })
+    expect(i.inputMethod()).toBe('joystick')
+  })
+})

@@ -609,6 +609,69 @@ describe('CbatLeaderboard — "You" progress tab', () => {
   })
 })
 
+// RTT is one of the steered games (ACT, RTT, SMA) whose config sets
+// `showInput` — see cbatGames.js. Everything else keeps carrying no
+// inputMethod field at all, so the column has to actually be conditional
+// rather than just handling a missing field gracefully.
+describe('CbatLeaderboard — Input column', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows an Input header and the recorded method on the RTT all-time board', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', inputMethod: 'joystick' },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'rtt' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    await waitFor(() => expect(screen.getByText('Input')).toBeDefined())
+    const cell = screen.getByTestId('input-method')
+    expect(cell.getAttribute('title')).toBe('Joystick')
+    // Icon only in the cell; the name is the tooltip.
+    expect(cell.textContent).toBe('🕹️')
+    expect(screen.queryByText('Joystick')).toBeNull()
+  })
+
+  it('shows every icon for a weekly row with more than one input method this week', async () => {
+    setupAuth(mockApi({ weekly: { leaderboard: [
+      { _id: 'w1', userId: 'u1', rank: 1, weekTotal: 300, plays: 4, agentNumber: 'A001', inputMethods: ['joystick', 'touch'] },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'rtt' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+    const cell = screen.getByTestId('input-method')
+    expect(cell.getAttribute('title')).toBe('Joystick, Touch')
+    expect(cell.textContent).toBe('🕹️👆')
+  })
+
+  it('shows the "not recorded" marker for an older score with no input method', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', inputMethod: null },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'rtt' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    const cell = await waitFor(() => screen.getByTestId('input-method'))
+    expect(cell.getAttribute('title')).toBe('Not recorded')
+    expect(cell.textContent).toBe('?')
+  })
+
+  it('shows no Input column on a board that does not carry the field', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 15, bestTime: 30, agentNumber: 'A001' },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+    expect(screen.queryByText('Input')).toBeNull()
+    expect(screen.queryByTestId('input-method')).toBeNull()
+  })
+})
+
 // FLAG is the only difficulty-split game: 'flag' (Hard) and 'flag-easier' each
 // have their own board, and the pill pair beside the title is how a user moves
 // between them.

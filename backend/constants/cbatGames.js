@@ -53,6 +53,13 @@ const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSma
 // queries: `{ ...cfg.modeFilter, ...other }` for find/countDocuments,
 // `{ $match: { ...cfg.modeFilter, ...other } }` for aggregations.
 //
+// `inputMethod` (optional, boolean), when true, marks a registry entry as one
+// of the three steered games (ACT, RTT, SMA and their Easier halves): the
+// game is flown on a physical control, its result rows carry an `inputMethod`
+// field (see constants/cbatInputMethods.js), and its all-time/weekly boards
+// surface it per row. Every other game leaves the flag off and its payloads
+// are unaffected.
+//
 // `weeklyExpr` (optional) is the per-session MongoDB aggregation expression
 // summed into a user's weekly total on the weekly leaderboard. When omitted the
 // weekly value is just the primaryField (so each replay adds its score — e.g.
@@ -271,6 +278,7 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'ACT',
+    inputMethod: true,
   },
   'trace-1': {
     Model: GameSessionCbatTrace1Result,
@@ -353,6 +361,7 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better (accumulating score)
     bestOp: '$max',
     label: 'Rapid Tracking Test',
+    inputMethod: true,
   },
   // RTT's "Easier" difficulty — 8 target passes instead of 12, no fast air,
   // slower passes and less time behind cover. Its own collection and therefore
@@ -364,6 +373,7 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Rapid Tracking Test (Easier)',
+    inputMethod: true,
   },
   'sit': {
     Model: GameSessionCbatSitResult,
@@ -451,6 +461,7 @@ const CBAT_GAMES = {
     sortDir: -1,           // higher is better (accumulating score)
     bestOp: '$max',
     label: 'Sensory Motor Apparatus Test',
+    inputMethod: true,
   },
   // SMA's "Easier" difficulty — a slower drift, no gusts, a run of 30 scored
   // seconds instead of 60, and a tolerance ring of 0.24 of the display radius
@@ -463,6 +474,7 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Sensory Motor Apparatus Test (Easier)',
+    inputMethod: true,
   },
 };
 

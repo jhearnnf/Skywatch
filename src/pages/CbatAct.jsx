@@ -42,6 +42,10 @@ import {
   readStoredActStickRate, storeActStickRate,
   MIN_ACT_STICK_RATE, MAX_ACT_STICK_RATE,
 } from '../utils/cbat/actStickInput'
+import {
+  createInputTally, addInput, mergeInputTallies, dominantInput,
+  INPUT_JOYSTICK, INPUT_KEYBOARD_MOUSE, INPUT_TOUCH,
+} from '../utils/cbat/inputMethod'
 import { useMockStick } from '../utils/cbat/useMockStick'
 import StickSetup from '../components/cbat/StickSetup'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
@@ -579,6 +583,12 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     bleepFalseAlarms: 0,
     reactionMsList: [],
     score: 0,
+    // Pixel-equivalents of steering banked from each kind of control. Every
+    // source writes into the same accumulator in the same unit (see
+    // actStickInput.js), so the tally is a fair split and the run can be
+    // labelled with whichever did most of the flying. Summed across rounds
+    // when the score is submitted.
+    inputTally: createInputTally(),
   })
 
   // Round-1 bleep tutorial. While `tutorialActiveRef.current` is true the
@@ -706,6 +716,8 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     lastPointerRef.current = { x: e.clientX, y: e.clientY }
     inputRef.current.dx += dx
     inputRef.current.dy += dy
+    // A pen counts with the mouse: it is a desk pointer, not a thumb.
+    addInput(statsRef.current.inputTally, e.pointerType === 'touch' ? INPUT_TOUCH : INPUT_KEYBOARD_MOUSE, Math.abs(dx) + Math.abs(dy))
   }, [])
   const onPointerUp = useCallback((e) => {
     // A different pointer going up shouldn't end the captured drag.
@@ -740,10 +752,15 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     const interval = setInterval(() => {
       if (pausedRef.current) return
       const k = KEYBOARD_RATE_PER_TICK
+      const { dx: dx0, dy: dy0 } = inputRef.current
       if (keys.has('ArrowLeft')  || keys.has('a') || keys.has('A')) inputRef.current.dx -= k
       if (keys.has('ArrowRight') || keys.has('d') || keys.has('D')) inputRef.current.dx += k
       if (keys.has('ArrowUp')    || keys.has('w') || keys.has('W')) inputRef.current.dy -= k   // up arrow = pitch up
       if (keys.has('ArrowDown')  || keys.has('s') || keys.has('S')) inputRef.current.dy += k
+      // Opposite keys held together cancel in the accumulator and count for
+      // nothing here either — the ball did not move for them.
+      const moved = Math.abs(inputRef.current.dx - dx0) + Math.abs(inputRef.current.dy - dy0)
+      if (moved > 0) addInput(statsRef.current.inputTally, INPUT_KEYBOARD_MOUSE, moved)
     }, 16)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
@@ -916,6 +933,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
         const d = stick.poll(dt)
         stickDx = d.dx
         stickDy = d.dy
+        addInput(statsRef.current.inputTally, INPUT_JOYSTICK, Math.abs(stickDx) + Math.abs(stickDy))
         const bleeps = stick.consumeBleeps()
         for (let b = 0; b < bleeps; b++) onBleepTapRef.current?.()
         // One flash per frame's worth of presses. Two bleeps inside 16ms is a
@@ -1662,6 +1680,7 @@ export default function CbatAct() {
     setQueued(false)
     markGameCompleted({ score: Math.max(0, Math.round(totals.score)), round: allRoundStats.length })
     submitCbatResult(`act`, {
+        inputMethod:        dominantInput(mergeInputTallies(allRoundStats.map(s => s.inputTally))),
         totalScore:         Math.max(0, Math.round(totals.score)),
         totalTime,
         finalRound:         allRoundStats.length,

@@ -247,6 +247,9 @@ export default function CbatRtt() {
     if (!s) return
     const playedTuning = runTuningRef.current
     const stats = rttStats(s)
+    // Read before setPhase: the input layer is torn down when the phase leaves
+    // 'playing', and the tally goes with it.
+    const inputMethod = inputRef.current?.inputMethod() ?? null
     setFinalStats(stats)
     setScoreSaved(false)
     setQueued(false)
@@ -258,6 +261,7 @@ export default function CbatRtt() {
       framesOnTarget: stats.framesOnTarget,
       targetsCompleted: stats.targetsCompleted,
       avgCentringErrorDeg: stats.avgCentringErrorDeg,
+      inputMethod,
     }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)

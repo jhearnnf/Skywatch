@@ -327,4 +327,48 @@ describe('createSmaInput source priority', () => {
       expect([key, !!SMA_SOURCE_LABEL[key]]).toEqual([key, true])
     }
   })
+
+  // What the score gets labelled with. Four sources fold into three labels:
+  // keys and mouse are one desk, the pad is touch, the stick is a joystick.
+  describe('input method', () => {
+    it('reports nothing before anything has steered', () => {
+      input = createSmaInput({ el: arena() })
+      input.poll(16)
+      expect(input.inputMethod()).toBeNull()
+    })
+
+    it('folds keys and mouse into one label', () => {
+      input = createSmaInput({ el: arena() })
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400, clientY: 200 }))
+      input.poll(16)
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft' }))
+      input.poll(16); input.poll(16)
+      expect(input.inputTally()).toMatchObject({ 'keyboard-mouse': 3, touch: 0, joystick: 0 })
+      expect(input.inputMethod()).toBe('keyboard-mouse')
+    })
+
+    it('reads a pad-flown run as touch, counting only while the finger is down', () => {
+      input = createSmaInput({ el: arena() })
+      input.padDown(100, 100, rect(0, 400, 400, 200), 1)
+      input.poll(16); input.poll(16); input.poll(16)
+      input.padUp(1)
+      input.poll(16)   // lifted, and no mouse anywhere: nobody is flying
+      expect(input.inputTally()).toMatchObject({ touch: 3, 'keyboard-mouse': 0 })
+      expect(input.inputMethod()).toBe('touch')
+    })
+
+    it('reads a stick-flown run as joystick once the stick has woken', () => {
+      const pad = { id: 'Fake Stick', connected: true, axes: [0, 0], buttons: [{ pressed: false, value: 0 }] }
+      navigator.getGamepads = () => [pad]
+      input = createSmaInput({ el: arena() })
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400, clientY: 200 }))
+      input.poll(16)   // stick idle: the mouse's frame
+      pad.axes = [0.9, 0]
+      input.poll(16)
+      pad.axes = [0, 0]
+      input.poll(16)   // centred but still in charge: still the stick's frame
+      expect(input.inputTally()).toMatchObject({ joystick: 2, 'keyboard-mouse': 1 })
+      expect(input.inputMethod()).toBe('joystick')
+    })
+  })
 })

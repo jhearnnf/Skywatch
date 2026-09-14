@@ -1,8 +1,12 @@
 const mongoose = require('mongoose');
+const { CBAT_INPUT_METHODS } = require('../constants/cbatInputMethods');
 
 const schema = new mongoose.Schema({
   userId:               { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   totalScore:           { type: Number, required: true },
+  // Which physical control this run was flown on. Only the steered games (ACT,
+  // RTT, SMA) carry this field.
+  inputMethod:          { type: String, enum: CBAT_INPUT_METHODS, default: null },
   totalTime:            { type: Number, required: true },
   finalRound:           { type: Number, default: 1 },     // last round reached (1–5)
   ringsThreaded:        { type: Number, default: 0 },     // shapes the ball passed through (default-correct behaviour)

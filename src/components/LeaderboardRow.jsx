@@ -4,14 +4,20 @@
 // preview of the destination — same medals, same "you" highlight, same columns.
 //
 // Two variants:
-//   weekly   — Rank · Agent · Points (weekTotal) · Plays
-//   all-time — Rank · Agent · <scoreLabel> · Time
+//   weekly   — Rank · Agent · Points (weekTotal) · Plays [· Input]
+//   all-time — Rank · Agent · <scoreLabel> · Time [· Input]
+//
+// The trailing Input column is opt-in via `cfg.showInput` (only ACT, RTT and
+// SMA carry the field — see cbatGames.js) and is dropped from the compact
+// variant regardless, because the post-game chase window has no width to
+// spare for a fifth track.
 //
 // Name precedence matches everywhere: a precomputed `entry.name` (reveal
 // neighbours) wins, else displayName → admin email → agent number.
 
 import { motion } from 'framer-motion'
 import CbatPassedBadge from './CbatPassedBadge'
+import { INPUT_METHOD_ICON, INPUT_METHOD_LABEL, normalizeInputMethod } from '../utils/cbat/inputMethod'
 
 // `compact` narrows the fixed columns for constrained containers (the post-game
 // weekly-chase window, which is nested inside several layers of padding on a
@@ -22,14 +28,32 @@ import CbatPassedBadge from './CbatPassedBadge'
 // Agent is the `1fr` column, so every rem shaved off the fixed ones goes
 // straight into the name — on a 360px phone that took it from ~10 characters
 // to ~19, which is what a display name or "Agent 1234" needs to read.
-export const rowCols = (variant, cfg, compact = false) =>
-  variant === 'weekly'
-    ? (compact
-        ? 'grid-cols-[2.25rem_1fr_3.25rem_2.25rem]'
-        : 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem] sm:grid-cols-[3rem_1fr_5rem_4rem]')
-    : (cfg?.hideTime
-        ? 'grid-cols-[2.5rem_1fr_3.5rem] sm:grid-cols-[3rem_1fr_5rem]'
-        : 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem]')
+// Every class string below is written out in full. Tailwind only generates CSS
+// for class names it can find literally in the source, so building one with a
+// template literal (`grid-cols-[…${extra}]`) leaves the grid with no rule at
+// all and every cell stacks into one column.
+//
+// The Input column never appears compact — the post-game chase window is
+// already width-starved without a fifth track. The cell is icon-only (the
+// name is the hover tooltip), so the track is 2.5rem and 3.5rem on `sm:`,
+// enough for a "Mixed" week's two or three icons side by side.
+export const rowCols = (variant, cfg, compact = false) => {
+  const input = !!cfg?.showInput && !compact
+  if (variant === 'weekly') {
+    if (compact) return 'grid-cols-[2.25rem_1fr_3.25rem_2.25rem]'
+    return input
+      ? 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4rem_3.5rem]'
+      : 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem] sm:grid-cols-[3rem_1fr_5rem_4rem]'
+  }
+  if (cfg?.hideTime) {
+    return input
+      ? 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_3.5rem]'
+      : 'grid-cols-[2.5rem_1fr_3.5rem] sm:grid-cols-[3rem_1fr_5rem]'
+  }
+  return input
+    ? 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem_3.5rem]'
+    : 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem]'
+}
 
 // Row padding/gutter shrink alongside the columns on mobile for the same reason.
 export const rowPad = (compact = false) =>
@@ -71,6 +95,35 @@ function GainCell({ value, gain, pulse, tone, className = '' }) {
       >
         {value}
       </motion.span>
+    </span>
+  )
+}
+
+// The Input column's cell. All-time carries one `entry.inputMethod` (the run
+// that set the best score); weekly carries `entry.inputMethods`, the distinct
+// non-null methods across every play the user made this week, because one
+// weekly total can be built from runs on different controls.
+//
+// Icon only. The name lives in the hover tooltip (`title`) and in `aria-label`
+// for anyone not using a mouse; a text label was tried and it cost the Agent
+// column more width than a three-value column deserves. Two or more distinct
+// methods in a week show every icon rather than picking one — picking one
+// would hide that the total isn't comparable to a single-device rival's. No
+// recorded method (an older score) shows a muted "?" rather than a blank, so
+// it reads as "unknown" and not as a rendering bug.
+function InputMethodCell({ variant, entry }) {
+  const methods = variant === 'weekly'
+    ? (entry.inputMethods || []).map(normalizeInputMethod).filter(Boolean)
+    : (normalizeInputMethod(entry.inputMethod) ? [entry.inputMethod] : [])
+
+  const cellClass = 'flex items-center justify-end gap-0.5 text-right text-xs text-slate-400 whitespace-nowrap cursor-help'
+  const label = methods.length ? methods.map(m => INPUT_METHOD_LABEL[m]).join(', ') : 'Not recorded'
+
+  return (
+    <span className={cellClass} data-testid="input-method" title={label} aria-label={label}>
+      {methods.length
+        ? methods.map(m => <span key={m} aria-hidden="true">{INPUT_METHOD_ICON[m]}</span>)
+        : '?'}
     </span>
   )
 }
@@ -127,6 +180,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
         <>
           <GainCell value={entry.weekTotal} gain={gains?.points} pulse={pulse} tone="text-brand-600" className="font-bold" />
           <GainCell value={entry.plays} gain={gains?.plays} pulse={pulse} tone="text-slate-400" />
+          {cfg?.showInput && !compact && <InputMethodCell variant={variant} entry={entry} />}
         </>
       ) : (
         <>
@@ -134,6 +188,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
             {cfg.formatScore ? cfg.formatScore(entry.bestScore) : entry.bestScore}
           </span>
           {!cfg.hideTime && <span className="text-right font-mono text-slate-400">{entry.bestTime.toFixed(cfg.timeDecimals ?? 1)}s</span>}
+          {cfg?.showInput && !compact && <InputMethodCell variant={variant} entry={entry} />}
         </>
       )}
     </motion.div>

@@ -31,6 +31,10 @@ describe('leaderboard column budget', () => {
     ['weekly', 'weekly', cfg, 8],
     ['all-time', 'alltime', cfg, 9.5],
     ['all-time without the Time column', 'alltime', { hideTime: true }, 6],
+    // The Input column (steered games only) adds a 2rem icon-only track on
+    // mobile — budgets widen by exactly that much, not more.
+    ['weekly with Input', 'weekly', { ...cfg, showInput: true }, 10.5],
+    ['all-time without Time, with Input', 'alltime', { hideTime: true, showInput: true }, 8.5],
   ])('keeps %s fixed columns within the mobile budget', (_label, variant, c, budget) => {
     expect(mobileFixedRem(rowCols(variant, c))).toBeLessThanOrEqual(budget)
   })
@@ -52,5 +56,50 @@ describe('leaderboard column budget', () => {
   it('pairs narrower padding with the narrower columns on mobile', () => {
     expect(rowPad()).toBe('gap-1.5 px-3 sm:gap-2 sm:px-4')
     expect(rowPad(true)).toBe('gap-1.5 px-2.5')
+  })
+
+  // showInput's extra track exists only where there's room for it — the compact
+  // variant (the post-game chase window) is already fighting for width.
+  it('ignores showInput on the compact variant', () => {
+    expect(rowCols('weekly', { ...cfg, showInput: true }, true)).toBe(rowCols('weekly', cfg, true))
+  })
+
+  // Sum of tracks per bracket ("grid-cols-[...]" appears twice: the unprefixed
+  // base and the sm: override), so this catches a track added to one but not
+  // the other.
+  const trackCounts = (classes) =>
+    classes.match(/grid-cols-\[([^\]]+)\]/g).map(g => g.replace(/^grid-cols-\[|\]$/, '').split('_').length)
+
+  it('adds exactly one extra track (mobile and sm:) when showInput is set', () => {
+    for (const variant of ['weekly', 'alltime']) {
+      const base = trackCounts(rowCols(variant, cfg))
+      const withInput = trackCounts(rowCols(variant, { ...cfg, showInput: true }))
+      expect(withInput).toEqual(base.map(n => n + 1))
+    }
+  })
+})
+
+// Tailwind emits CSS only for class names it can find written out in the
+// source. A rowCols variant assembled from a template literal returns a class
+// with no rule behind it, and the board silently collapses into one column
+// (that happened when the Input column was added). Every string rowCols can
+// return must therefore exist verbatim in LeaderboardRow.jsx.
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+
+describe('rowCols classes are literal in the source', () => {
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'LeaderboardRow.jsx'), 'utf8')
+  const configs = [
+    {}, { hideTime: true }, { showInput: true }, { hideTime: true, showInput: true },
+  ]
+  it.each(['weekly', 'alltime'])('every %s variant is written out in full', (variant) => {
+    for (const c of configs) {
+      for (const compact of [false, true]) {
+        for (const cls of rowCols(variant, c, compact).split(' ')) {
+          expect(source).toContain(cls)
+        }
+      }
+    }
   })
 })
