@@ -53,13 +53,23 @@ export default function TopBar() {
           <OfflineBadge />
         </div>
 
+        {/* Theme — the phone's faint "Switch theme" link, in the gap between
+            the logo and the avatar. Desktop carries the full selector on the
+            right instead. */}
+        {user && (
+          <div className="flex md:hidden items-center justify-center min-w-0">
+            <ThemeSelector compact />
+          </div>
+        )}
+
         {/* Right side */}
         <div className="flex items-center gap-2">
           {user ? (
             <>
-              {/* Theme — desktop only for now. An account setting, so it shows
-                  in slim mode too: the look applies to the CBAT games as much
-                  as to the rest of the site. */}
+              {/* Theme — the full selector, desktop only (the phone has the
+                  link above). An account setting, so it shows in slim mode
+                  too: the look applies to the CBAT games as much as to the
+                  rest of the site. */}
               <div className="hidden md:flex items-center mr-2">
                 <ThemeSelector />
               </div>

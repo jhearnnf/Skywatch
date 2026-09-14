@@ -1,41 +1,31 @@
-import { useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
-import { UI_THEMES, UI_THEME_LABELS, resolveUiTheme } from '../../lib/uiTheme'
+import { useCallback, useState } from 'react'
+import { UI_THEMES, UI_THEME_LABELS } from '../../lib/uiTheme'
+import { animateThemeSwitch } from '../../lib/themeTransition'
+import { useUiThemeChoice } from '../../hooks/useUiThemeChoice'
+import ThemeHoldSwitch from './ThemeHoldSwitch'
+import ThemeFlash from './ThemeFlash'
 
-// Top-bar theme selector: SkyWatch (default) or Real CBAT. Desktop only for
-// now (the caller hides it below md); the setting itself is account-wide, so
-// a phone signed in to the same account still wears whatever was picked here.
-//
-// Applied optimistically: the user's local `uiTheme` flips first so the whole
-// page re-skins on the click, then the PATCH makes it stick. A failed save
-// puts the previous theme back rather than leaving the screen lying about
-// what the account will look like next time.
-export default function ThemeSelector() {
-  const { user, setUser, API, apiFetch } = useAuth()
-  const [busy, setBusy] = useState(false)
+// Top-bar theme selector: SkyWatch (default) or Real CBAT. On desktop it is
+// the two-option control on the right of the bar: a click sweeps the new
+// theme across the page from the clicked key (lib/themeTransition.js) and
+// the page flashes once with the theme's name. On a phone (`compact`) it
+// hands over to ThemeHoldSwitch, which does the same on a press-and-hold.
+// The setting itself is account-wide, so every device wears whatever was
+// picked here; the optimistic flip and the save live in
+// hooks/useUiThemeChoice.js.
+export default function ThemeSelector({ compact = false }) {
+  const [flash, setFlash] = useState(null)
+  const clearFlash = useCallback(() => setFlash(null), [])
+  const { user, current, busy, choose } = useUiThemeChoice({ onRevert: clearFlash })
   if (!user) return null
+  if (compact) return <ThemeHoldSwitch />
 
-  const current = resolveUiTheme(user)
-
-  const choose = async (theme) => {
-    if (busy || theme === current) return
-    const previous = current
-    setBusy(true)
-    setUser(prev => (prev ? { ...prev, uiTheme: theme } : prev))
-    try {
-      const res = await apiFetch(`${API}/api/users/me/theme`, {
-        method: 'PATCH', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ theme }),
-      })
-      const data = await res.json().catch(() => null)
-      if (res.ok && data?.data?.user) setUser(data.data.user)
-      else setUser(prev => (prev ? { ...prev, uiTheme: previous } : prev))
-    } catch {
-      setUser(prev => (prev ? { ...prev, uiTheme: previous } : prev))
-    } finally {
-      setBusy(false)
-    }
+  const pick = (theme, e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    // The flash is part of the committed state, so it is in the new page the
+    // sweep reveals rather than a beat behind it.
+    choose(theme, { apply: (commit) => animateThemeSwitch(() => { commit(); setFlash(theme) }, at, theme) })
   }
 
   return (
@@ -53,7 +43,7 @@ export default function ThemeSelector() {
             <button
               key={theme}
               type="button"
-              onClick={() => choose(theme)}
+              onClick={(e) => pick(theme, e)}
               disabled={busy}
               aria-pressed={active}
               className={`theme-selector-option px-2.5 py-0.5 text-xs font-semibold rounded-full transition-colors outline-none focus:outline-none ${
@@ -67,6 +57,7 @@ export default function ThemeSelector() {
           )
         })}
       </div>
+      {flash && <ThemeFlash theme={flash} onDone={clearFlash} />}
     </div>
   )
 }
