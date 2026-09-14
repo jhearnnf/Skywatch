@@ -3,6 +3,8 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import TopBar from '../TopBar'
 import ThemeHoldSwitch, { HOLD_MS } from '../ThemeHoldSwitch'
 import ThemeSelector from '../ThemeSelector'
+import { UI_THEME_TAGLINES } from '../../../lib/uiTheme'
+import { FLASH_MS } from '../ThemeFlash'
 
 // A phone's bar has no room for the two-option selector, so it gets a faint
 // "Switch theme" label instead. A press-and-hold fills a bar along the top
@@ -94,9 +96,12 @@ describe('ThemeHoldSwitch', () => {
     await settle()
     expect(auth.apiFetch).toHaveBeenCalledWith('/api/users/me/theme', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ theme: 'cbat' }) }))
     expect(screen.getByTestId('theme-flash')).toHaveTextContent('Real CBAT')
+    expect(screen.getByTestId('theme-flash')).toHaveTextContent(UI_THEME_TAGLINES.cbat)
     expect(auth.setUser).toHaveBeenCalledWith({ _id: 'u1', uiTheme: 'cbat' })
-    // One beat, then gone
+    // Still there after the old one-beat flash would have gone: the tagline needs reading time
     hold(1200)
+    expect(screen.getByTestId('theme-flash')).toHaveTextContent(UI_THEME_TAGLINES.cbat)
+    hold(FLASH_MS - 1200 + 50)
     expect(screen.queryByTestId('theme-flash')).toBeNull()
   })
 
@@ -134,8 +139,9 @@ describe('ThemeSelector (desktop)', () => {
     expect(transition.animate).toHaveBeenCalledWith(expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }), 'cbat')
     await settle()
     expect(screen.getByTestId('theme-flash')).toHaveTextContent('Real CBAT')
+    expect(screen.getByTestId('theme-flash')).toHaveTextContent(UI_THEME_TAGLINES.cbat)
     expect(auth.apiFetch).toHaveBeenCalledWith('/api/users/me/theme', expect.objectContaining({ method: 'PATCH' }))
-    hold(1200)
+    hold(FLASH_MS + 50)
     expect(screen.queryByTestId('theme-flash')).toBeNull()
   })
 })

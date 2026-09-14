@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { UI_THEMES, UI_THEME_LABELS } from '../../lib/uiTheme'
+import { UI_THEMES, UI_THEME_LABELS, UI_THEME_TAGLINES } from '../../lib/uiTheme'
 import { animateThemeSwitch } from '../../lib/themeTransition'
 import { useUiThemeChoice } from '../../hooks/useUiThemeChoice'
 import ThemeHoldSwitch from './ThemeHoldSwitch'
@@ -46,6 +46,7 @@ export default function ThemeSelector({ compact = false }) {
               onClick={(e) => pick(theme, e)}
               disabled={busy}
               aria-pressed={active}
+              title={UI_THEME_TAGLINES[theme]}
               className={`theme-selector-option px-2.5 py-0.5 text-xs font-semibold rounded-full transition-colors outline-none focus:outline-none ${
                 active
                   ? 'bg-brand-600 text-white'

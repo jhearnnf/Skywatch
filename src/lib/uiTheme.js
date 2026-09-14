@@ -1,10 +1,12 @@
-import { UI_THEMES, DEFAULT_UI_THEME, UI_THEME_LABELS } from '../../backend/constants/uiThemes.json'
+import { UI_THEMES, DEFAULT_UI_THEME, UI_THEME_LABELS, UI_THEME_TAGLINES } from '../../backend/constants/uiThemes.json'
 
 // The site's two looks: the gamified SkyWatch theme and a "Real CBAT" theme
 // styled after the actual test software (flat navy, plain white text, square
 // panels, Tahoma-style type). One list, shared with the backend enum, so the
-// selector can never offer a theme the account refuses to store.
-export { UI_THEMES, DEFAULT_UI_THEME, UI_THEME_LABELS }
+// selector can never offer a theme the account refuses to store. Each theme
+// also carries a one-line tagline (what the look is for), shown under its
+// name in the switch flash and as the selector's per-option tooltip.
+export { UI_THEMES, DEFAULT_UI_THEME, UI_THEME_LABELS, UI_THEME_TAGLINES }
 
 export const THEME_ATTR = 'data-theme'
 

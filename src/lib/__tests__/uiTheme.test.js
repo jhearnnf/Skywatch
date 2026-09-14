@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { applyUiTheme, resolveUiTheme, UI_THEMES, DEFAULT_UI_THEME, THEME_ATTR } from '../uiTheme'
+import { applyUiTheme, resolveUiTheme, UI_THEMES, DEFAULT_UI_THEME, THEME_ATTR, UI_THEME_LABELS, UI_THEME_TAGLINES } from '../uiTheme'
 
 // The theme lives on <html> as one attribute so main.css can key every override
 // off it. The default theme must leave NO attribute behind: the base tokens are
@@ -23,6 +23,14 @@ describe('resolveUiTheme', () => {
 
   it('offers exactly the two themes the account can store', () => {
     expect(UI_THEMES).toEqual(['skywatch', 'cbat'])
+  })
+
+  it('gives every theme a name and a one-line tagline, with no em dashes on screen', () => {
+    for (const theme of UI_THEMES) {
+      expect(UI_THEME_LABELS[theme]).toMatch(/\S/)
+      expect(UI_THEME_TAGLINES[theme]).toMatch(/\S/)
+      expect(UI_THEME_TAGLINES[theme]).not.toMatch(/\n|—/)
+    }
   })
 })
 

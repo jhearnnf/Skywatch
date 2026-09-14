@@ -4,5 +4,9 @@
   "UI_THEME_LABELS": {
     "skywatch": "SkyWatch",
     "cbat": "Real CBAT"
+  },
+  "UI_THEME_TAGLINES": {
+    "skywatch": "The modern, gamified SkyWatch look",
+    "cbat": "Styled after the real test software, for an authentic feel"
   }
 }
