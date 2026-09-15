@@ -6,7 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import { CbatGameHeader, CbatFooterStrip, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
@@ -29,9 +29,6 @@ const QUESTIONS_PER_ROUND = 5
 const TOTAL_QUESTIONS = ROUNDS * QUESTIONS_PER_ROUND
 const PER_QUESTION_MS = 20000
 const FEEDBACK_MS = 900
-// Real CBAT theme only: unscored, untimed practice sums before the test, the
-// way the real software runs "Practice 1 of 3" before "Testing".
-const PRACTICE_COUNT = 3
 
 // ── Question generation ──────────────────────────────────────────────────────
 function randInt(min, max) {
@@ -294,20 +291,15 @@ export default function CbatNumericalOps() {
   }, [apiFetch, API, markGameCompleted, fetchPB])
 
   const currentQuestion = questions[currentIdx] || null
-  const isPractice = !!currentQuestion?.practice
-  // Index within the scored test, ignoring any practice sums in front of it.
-  const practiceCount = questions.filter(q => q.practice).length
-  const testIdx = currentIdx - practiceCount
   const currentRound = currentQuestion ? currentQuestion.round : 1
   const questionInRound = currentQuestion
-    ? ((testIdx % QUESTIONS_PER_ROUND) + 1)
+    ? ((currentIdx % QUESTIONS_PER_ROUND) + 1)
     : 1
 
-  // Per-question countdown — runs only during 'playing', and not on a practice
-  // sum. On timeout, record a wrong answer (picked = null) and advance through
-  // the feedback phase.
+  // Per-question countdown — runs only during 'playing'. On timeout, record a
+  // wrong answer (picked = null) and advance through the feedback phase.
   useEffect(() => {
-    if (phase !== 'playing' || !currentQuestion || currentQuestion.practice) return
+    if (phase !== 'playing' || !currentQuestion) return
     qStartRef.current = Date.now()
     setQRemainingMs(PER_QUESTION_MS)
     tickRef.current = setInterval(() => {
@@ -337,12 +329,6 @@ export default function CbatNumericalOps() {
     if (!currentQuestion) return
     const picked = pickedRaw === null || pickedRaw === '' ? null : Number(pickedRaw)
     const correct = picked !== null && picked === currentQuestion.answer
-    // Practice sums are not recorded, and always show the answer
-    if (currentQuestion.practice) {
-      setFeedback({ correct, picked, answer: currentQuestion.answer })
-      setPhase('feedback')
-      return
-    }
     const entry = {
       a: currentQuestion.a,
       b: currentQuestion.b,
@@ -359,24 +345,13 @@ export default function CbatNumericalOps() {
     totalElapsedRef.current = totalElapsedRef.current + elapsedMs
     answersRef.current = nextAnswers
     // The real test gives no right/wrong mid-run; under the Real CBAT theme
-    // a scored sum moves straight on to the next.
+    // a sum moves straight on to the next.
     if (cbat) {
       goNext()
       return
     }
     setFeedback({ correct, picked, answer: currentQuestion.answer })
     setPhase('feedback')
-  }
-
-  // Escape is the real keyboard's green "Go": skip what's left of practice
-  // and begin the test.
-  function skipPractice() {
-    if (!isPractice) return
-    clearTimeout(advanceRef.current)
-    setFeedback(null)
-    setCurrentInput('')
-    setCurrentIdx(practiceCount)
-    setPhase('playing')
   }
 
   function goNext() {
@@ -430,8 +405,6 @@ export default function CbatNumericalOps() {
       } else if (e.key === 'Enter') {
         handleSubmit()
         e.preventDefault()
-      } else if (e.key === 'Escape') {
-        skipPractice()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -442,11 +415,7 @@ export default function CbatNumericalOps() {
   const startGame = useCallback(() => {
     startTracking(runTuningRef.current.gameKey)
     const qs = buildQuestions(runTuningRef.current)
-    // Practice sums are round-1 sums, drawn separately so the test is untouched
-    const practice = cbat
-      ? buildQuestions(runTuningRef.current).slice(0, PRACTICE_COUNT).map(q => ({ ...q, practice: true }))
-      : []
-    setQuestions([...practice, ...qs])
+    setQuestions(qs)
     setCurrentIdx(0)
     setAnswers([])
     answersRef.current = []
@@ -456,7 +425,7 @@ export default function CbatNumericalOps() {
     setTotalElapsedMs(0)
     totalElapsedRef.current = 0
     setPhase('playing')
-  }, [startTracking, cbat])
+  }, [startTracking])
 
   // Pressing Start doesn't drop straight into the game: the chosen difficulty
   // button flashes on a greyed-out card for NUMERICAL_OPS_LAUNCH_MS first.
@@ -505,11 +474,11 @@ export default function CbatNumericalOps() {
   // button greys out, so the flashing button is the only thing left alive.
   const dim = launching ? ' cbat-launch-dim' : ''
   const testBar = (phase === 'playing' || phase === 'feedback') && currentQuestion ? {
-    stage: isPractice ? 'Practice' : 'Testing',
-    item: isPractice ? currentIdx + 1 : testIdx + 1,
-    total: isPractice ? practiceCount : TOTAL_QUESTIONS,
-    timeFrac: isPractice || phase === 'feedback' ? 1 : qRemainingMs / PER_QUESTION_MS,
-    progressFrac: isPractice ? 0 : (testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS,
+    stage: 'Testing',
+    item: currentIdx + 1,
+    total: TOTAL_QUESTIONS,
+    timeFrac: phase === 'feedback' ? 1 : qRemainingMs / PER_QUESTION_MS,
+    progressFrac: (currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS,
   } : null
 
   return (
@@ -628,7 +597,7 @@ export default function CbatNumericalOps() {
                   Q <span className="text-brand-600">{questionInRound}</span>/{QUESTIONS_PER_ROUND}
                 </span>
                 <span className="text-slate-400">
-                  Overall <span className="text-brand-600">{testIdx + 1}</span>/{TOTAL_QUESTIONS}
+                  Overall <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_QUESTIONS}
                 </span>
                 <span className="text-slate-400">
                   ✓ <span className="text-green-400">{correctSoFar}</span>
@@ -643,7 +612,7 @@ export default function CbatNumericalOps() {
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
-                  animate={{ width: `${((testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS) * 100}%` }}
+                  animate={{ width: `${((currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_QUESTIONS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
               </div>}
@@ -712,27 +681,18 @@ export default function CbatNumericalOps() {
               />
               </div>
 
-              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              {/* Real CBAT theme: the instruction strip */}
               <CbatFooterStrip
                 answer={currentInput === '' ? null : currentInput}
                 onSubmit={handleSubmit}
                 canSubmit={phase === 'playing' && currentInput !== ''}
-                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
               />
-              {cbat && isPractice && (
-                <div className="text-center mt-2">
-                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-                    Skip practice and begin the test
-                  </button>
-                </div>
-              )}
 
               {/* Round transition indicator */}
               <AnimatePresence>
                 {phase === 'playing'
-                  && !isPractice
-                  && testIdx > 0
-                  && testIdx % QUESTIONS_PER_ROUND === 0
+                  && currentIdx > 0
+                  && currentIdx % QUESTIONS_PER_ROUND === 0
                   && currentRound > 1 && (
                   <motion.div
                     initial={{ opacity: 0 }}

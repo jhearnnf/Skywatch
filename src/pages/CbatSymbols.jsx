@@ -7,9 +7,8 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { getSymbolScale } from '../utils/cbat/symbolScale'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import { CbatGameHeader, CbatFooterStrip, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
-import { useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
@@ -18,9 +17,6 @@ import { useGameBodyClass } from '../hooks/useGameBodyClass'
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
 const FEEDBACK_MS = 1000
-// Real CBAT theme only: unscored, untimed practice rounds before the test,
-// the way the real software runs "Practice 1 of 3" before "Testing".
-const PRACTICE_COUNT = 3
 
 // Fast-restart countdown: 3 / 2 / 1 at half a second each, then a short GO flash.
 const COUNTDOWN_FROM = 3
@@ -115,20 +111,6 @@ function buildRounds() {
     const symbols = pickUniqueSymbols(size)
     const targetIdx = Math.floor(Math.random() * size)
     rounds.push({ symbols, target: symbols[targetIdx], tier })
-  }
-  return rounds
-}
-
-// Practice rounds are tier-1 sized and flagged so nothing about them is
-// scored or timed.
-function buildPracticeRounds() {
-  const rounds = []
-  for (let i = 0; i < PRACTICE_COUNT; i++) {
-    const { min, max } = TIERS[0]
-    const size = min + Math.floor(Math.random() * (max - min + 1))
-    const symbols = pickUniqueSymbols(size)
-    const targetIdx = Math.floor(Math.random() * size)
-    rounds.push({ symbols, target: symbols[targetIdx], tier: 0, practice: true })
   }
   return rounds
 }
@@ -410,10 +392,6 @@ export default function CbatSymbols() {
 
   const cbat = useCbatTheme()
   const currentRound = rounds[currentIdx] || null
-  const isPractice = !!currentRound?.practice
-  // Index within the scored test, ignoring any practice rounds in front of it.
-  const practiceCount = rounds.filter(r => r.practice).length
-  const testIdx = currentIdx - practiceCount
 
   // True elapsed since the run began. The clock is anchored to a single
   // start timestamp (set in startGame) rather than re-based on each phase
@@ -448,7 +426,7 @@ export default function CbatSymbols() {
     // The countdown builds the run ahead of time so its scatter can be sized to
     // round 1 exactly; fall back to a fresh build for a normal start.
     const built = pendingRoundsRef.current || buildRounds()
-    setRounds(cbat ? [...buildPracticeRounds(), ...built] : built)
+    setRounds(built)
     pendingRoundsRef.current = null
     setCurrentIdx(0)
     setAnswers([])
@@ -458,12 +436,10 @@ export default function CbatSymbols() {
     setElapsed(0)
     setDebugUsed(false)
     debugUsedRef.current = false
-    // The clock starts when the scored run does: at once under the SkyWatch
-    // theme, after practice under the Real CBAT theme.
-    startTimeRef.current = cbat ? null : Date.now()
+    startTimeRef.current = Date.now()
     roundStartRef.current = 0
     setPhase('playing')
-  }, [apiFetch, API, setDebugUsed, cbat])
+  }, [apiFetch, API, setDebugUsed])
 
   // ?round=N — open on a harder tier instead of playing up to it. Moving the
   // cursor is the whole jump here: the rounds are pre-built, so round N is
@@ -474,8 +450,7 @@ export default function CbatSymbols() {
     onJump: (roundNum) => {
       setDebugUsed(true)
       debugUsedRef.current = true
-      if (!startTimeRef.current) startTimeRef.current = Date.now()
-      setCurrentIdx(practiceCount + roundNum - 1)
+      setCurrentIdx(roundNum - 1)
       setPickedSymbol(null)
       setWasCorrect(null)
       roundStartRef.current = readElapsed()
@@ -532,7 +507,7 @@ export default function CbatSymbols() {
   // which on a tall monitor is wider than the shell's max-w-3xl. See main.css.
   useGameBodyClass('cbat-stage-wide', phase === 'countdown' || phase === 'playing' || phase === 'feedback')
 
-  // Move on from round `fromIdx`. The first scored round starts the clock.
+  // Move on from round `fromIdx`.
   const advance = (fromIdx, finalAnswers) => {
     const nextIdx = fromIdx + 1
     if (nextIdx >= rounds.length) {
@@ -546,35 +521,24 @@ export default function CbatSymbols() {
       setPhase('results')
       return
     }
-    if (!rounds[nextIdx].practice && !startTimeRef.current) startTimeRef.current = Date.now()
     setCurrentIdx(nextIdx)
     setPickedSymbol(null)
     setWasCorrect(null)
     setPhase('playing')
   }
 
-  // Escape is the real keyboard's green "Go": skip what's left of practice
-  // and begin the test.
-  const skipPractice = () => {
-    if (!isPractice) return
-    if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
-    advance(practiceCount - 1, answers)
-  }
-  useCbatAnswerKeys({ enabled: isPractice && (phase === 'playing' || phase === 'feedback'), count: 0, onEscape: skipPractice })
-
   const handlePick = (symbol) => {
     if (phase !== 'playing' || !currentRound) return
     const correct = symbol === currentRound.target
     const roundTime = readElapsed() - roundStartRef.current
-    // Practice rounds are not recorded
-    const newAnswers = isPractice ? answers : [
+    const newAnswers = [
       ...answers,
       { target: currentRound.target, picked: symbol, correct, roundTime, tier: currentRound.tier },
     ]
     setAnswers(newAnswers)
     // The real test gives no right/wrong mid-run; under the Real CBAT theme
-    // a scored round moves straight on. Practice still shows the answer.
-    if (cbat && !isPractice) {
+    // a round moves straight on.
+    if (cbat) {
       advance(currentIdx, newAnswers)
       return
     }
@@ -589,11 +553,11 @@ export default function CbatSymbols() {
   }
 
   const testBar = (phase === 'playing' || phase === 'feedback') && currentRound ? {
-    stage: isPractice ? 'Practice' : 'Testing',
-    item: isPractice ? currentIdx + 1 : testIdx + 1,
-    total: isPractice ? practiceCount : TOTAL_ROUNDS,
+    stage: 'Testing',
+    item: currentIdx + 1,
+    total: TOTAL_ROUNDS,
     timeFrac: null,
-    progressFrac: isPractice ? 0 : (testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS,
+    progressFrac: (currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS,
   } : null
 
   // Choose grid column count based on grid size — mobile-friendly
@@ -720,7 +684,7 @@ export default function CbatSymbols() {
               {/* HUD — under the Real CBAT theme the title bar carries this */}
               {!cbat && <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
-                  Round <span className="text-brand-600">{testIdx + 1}</span>/{TOTAL_ROUNDS}
+                  Round <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
                       needs to see that the run will not be submitted, rather
                       than find out from a leaderboard that never moved. */}
@@ -742,7 +706,7 @@ export default function CbatSymbols() {
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
-                  animate={{ width: `${((testIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS) * 100}%` }}
+                  animate={{ width: `${((currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
               </div>}
@@ -822,22 +786,12 @@ export default function CbatSymbols() {
                 </AnimatePresence>
               </div>
 
-              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
-              <CbatFooterStrip
-                text="Find the target symbol in the grid and click it"
-                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
-              />
-              {cbat && isPractice && (
-                <div className="text-center mt-2">
-                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-                    Skip practice and begin the test
-                  </button>
-                </div>
-              )}
+              {/* Real CBAT theme: the instruction strip */}
+              <CbatFooterStrip text="Find the target symbol in the grid and click it" />
 
               {/* Tier transition indicator */}
               <AnimatePresence>
-                {phase === 'playing' && !isPractice && (testIdx === 5 || testIdx === 10) && (
+                {phase === 'playing' && (currentIdx === 5 || currentIdx === 10) && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -845,7 +799,7 @@ export default function CbatSymbols() {
                     className="text-center mt-2"
                   >
                     <span className="text-xs lg:text-sm text-brand-600 font-bold">
-                      Tier {tierFor(testIdx) + 1} {'\u2014 grid grows larger'}
+                      Tier {tierFor(currentIdx) + 1} {'\u2014 grid grows larger'}
                     </span>
                   </motion.div>
                 )}

@@ -35,12 +35,11 @@ function typingTarget(el) {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable
 }
 
-export function useCbatAnswerKeys({ enabled = true, count = 0, kind = 'number', onPick, onEnter, onEscape } = {}) {
+export function useCbatAnswerKeys({ enabled = true, count = 0, kind = 'number', onPick, onEnter } = {}) {
   // Handlers ride in refs so the listener is attached once per enable and
   // never sees a stale question.
   const pickRef = useRef(onPick); pickRef.current = onPick
   const enterRef = useRef(onEnter); enterRef.current = onEnter
-  const escRef = useRef(onEscape); escRef.current = onEscape
 
   useEffect(() => {
     if (!enabled) return
@@ -49,10 +48,6 @@ export function useCbatAnswerKeys({ enabled = true, count = 0, kind = 'number', 
       if (document.querySelector('[role="dialog"]')) return
       if (e.key === 'Enter') {
         if (enterRef.current) { e.preventDefault(); enterRef.current() }
-        return
-      }
-      if (e.key === 'Escape') {
-        if (escRef.current) { e.preventDefault(); escRef.current() }
         return
       }
       const i = answerKeyIndex(e, kind, count)

@@ -21,9 +21,9 @@ import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import SEO from '../components/SEO'
-import { CbatGameHeader, CbatFooterStrip, CbatKeyCap, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
-import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
+import { useCbatMcq } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
@@ -40,10 +40,6 @@ import {
   readStoredMatfDifficulty, storeMatfDifficulty,
 } from '../utils/cbat/matfDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
-
-// Real CBAT theme only: unscored practice problems before each part's clock
-// starts, the way the real screen opens with "Practice Problem 1".
-const MATF_PRACTICE_COUNT = 3
 
 // ── Reference panels ─────────────────────────────────────────────────────────
 // Top-level components, never defined inside the page's render — these hold the
@@ -225,10 +221,6 @@ export default function CbatMatf() {
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const cbat = useCbatTheme()
-  // Real CBAT theme only: each part opens with unscored practice problems
-  // ("Practice Problem 1" on the real screen) before its clock starts.
-  const [practiceLeft, setPracticeLeft] = useState(0)
-  const isPractice = practiceLeft > 0
 
   const tickRef = useRef(null)
   const launchTimerRef = useRef(null)
@@ -280,7 +272,6 @@ export default function CbatMatf() {
   // when a question count is reached. That is what makes the test speeded.
   useEffect(() => {
     if (phase !== 'part1' && phase !== 'part2') return
-    if (isPractice) return
     const limit = runTuning.partMs
     phaseStartRef.current = Date.now()
     setRemainingMs(limit)
@@ -295,7 +286,7 @@ export default function CbatMatf() {
     }, 100)
     return () => clearInterval(tickRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, isPractice])
+  }, [phase])
 
   function nextQuestion(part) {
     setFlash(null)
@@ -306,14 +297,6 @@ export default function CbatMatf() {
   function handlePick(option) {
     if (!question) return
     const correct = option === question.answer
-    if (isPractice) {
-      // Practice problems are not scored and the flash is kept, so the player
-      // can see how the sheet is read before the clock starts.
-      setPracticeLeft(n => n - 1)
-      setFlash(correct ? 'right' : 'wrong')
-      nextQuestion(question.part === 'grid' ? 'part1' : 'part2')
-      return
-    }
     scoreRef.current.attempted += 1
     setAttempted(scoreRef.current.attempted)
     if (correct) {
@@ -334,15 +317,6 @@ export default function CbatMatf() {
     nextQuestion(question.part === 'grid' ? 'part1' : 'part2')
   }
 
-  // Escape is the real keyboard's green "Go": skip the rest of the practice
-  // problems and start the part's clock.
-  function skipPractice() {
-    if (!isPractice) return
-    setPracticeLeft(0)
-    setFlash(null)
-    nextQuestion(phase === 'part1' ? 'part1' : 'part2')
-  }
-
   // Keyboard answering: 1-5 pick an option (marked under the Real CBAT theme
   // and committed with Enter; committed at once otherwise).
   const { pending, select, commit } = useCbatMcq({
@@ -352,8 +326,6 @@ export default function CbatMatf() {
     onCommit: (i) => handlePick(question.options[i]),
     resetKey: question,
   })
-  useCbatAnswerKeys({ enabled: isPractice, count: 0, onEscape: skipPractice })
-
   function finishRun() {
     const totalMs = runTuning.partMs * 2
     submitScore(scoreRef.current, totalMs, gameKey)
@@ -362,7 +334,6 @@ export default function CbatMatf() {
 
   function beginPart2() {
     nextQuestion('part2')
-    if (cbat) setPracticeLeft(MATF_PRACTICE_COUNT)
     setPhase('part2')
   }
 
@@ -384,12 +355,11 @@ export default function CbatMatf() {
     setTableCorrect(0)
     setAttempted(0)
     startTracking(tuning.gameKey)
-    setPracticeLeft(cbat && !isDemo ? MATF_PRACTICE_COUNT : 0)
 
     if (isDemo) { setPhase('part1'); return }
     setPhase('launching')
     launchTimerRef.current = setTimeout(() => setPhase('part1'), MATF_LAUNCH_MS)
-  }, [difficulty, startTracking, isDemo, cbat])
+  }, [difficulty, startTracking, isDemo])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -397,7 +367,6 @@ export default function CbatMatf() {
     setPhase('intro')
     setQuestion(null)
     setFlash(null)
-    setPracticeLeft(0)
     scoreRef.current = { grid: 0, table: 0, attempted: 0 }
     setGridCorrect(0)
     setTableCorrect(0)
@@ -407,13 +376,11 @@ export default function CbatMatf() {
 
   const playing = phase === 'part1' || phase === 'part2'
   const correctSoFar = gridCorrect + tableCorrect
-  // A part is a countdown with no fixed problem count, so the title bar
-  // counts practice problems only and the Time meter carries the part.
+  // A part is a countdown with no fixed problem count, so the title bar shows
+  // no item count and the Time meter carries the part.
   const testBar = playing ? {
-    stage: isPractice ? 'Practice' : 'Testing',
-    item: isPractice ? MATF_PRACTICE_COUNT - practiceLeft + 1 : undefined,
-    total: isPractice ? MATF_PRACTICE_COUNT : undefined,
-    timeFrac: isPractice ? 1 : remainingMs / runTuning.partMs,
+    stage: 'Testing',
+    timeFrac: remainingMs / runTuning.partMs,
     progressFrac: phase === 'part2' ? 0.5 : 0,
   } : null
   // Everything on the intro card except the flashing difficulty button dims
@@ -614,20 +581,12 @@ export default function CbatMatf() {
               {phase === 'part1' && grid && <GridPanel grid={grid} />}
               {phase === 'part2' && sheet && <SheetPanel sheet={sheet} />}
 
-              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              {/* Real CBAT theme: the instruction strip */}
               <CbatFooterStrip
                 answer={pending != null ? pending + 1 : null}
                 onSubmit={commit}
                 canSubmit={pending != null}
-                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
               />
-              {cbat && isPractice && (
-                <div className="text-center mt-2">
-                  <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-                    Skip practice and start the clock
-                  </button>
-                </div>
-              )}
             </div>
           )}
 

@@ -6,7 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import CbatGameOver from '../components/CbatGameOver'
-import { CbatGameHeader, CbatFooterStrip, CbatKeyCap, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import { getModelUrl } from '../data/aircraftModels'
@@ -19,9 +19,6 @@ const HEX = Object.fromEntries(TRACE2_COLORS.map(c => [c.key, c.hex]))
 
 // Sky gradient shared with Trace 1's smooth-flight arena.
 const SKY_BG = 'linear-gradient(180deg, #cfe8ff 0%, #8fc4ee 45%, #5398d3 80%, #3a7bbf 100%)'
-// Real CBAT theme only: unscored practice rounds before the test, the way the
-// real software runs "Practice 1 of 3" before "Testing".
-const PRACTICE_COUNT = 3
 
 // Colour dot(s) for an option label.
 function Dots({ colors }) {
@@ -126,16 +123,11 @@ export default function CbatTrace2({ traceModeSelector }) {
 
   const correctRef = useRef(0)
   const startedAtRef = useRef(0)
-  const testStartedRef = useRef(false)
   const cbat = useCbatTheme()
   const watchTimerRef = useRef(null)
   const feedbackTimerRef = useRef(null)
 
   const round = game?.rounds?.[roundIndex] ?? null
-  const isPractice = !!round?.practice
-  // Index within the scored test, ignoring any practice rounds in front of it.
-  const practiceCount = game?.rounds?.filter(r => r.practice).length ?? 0
-  const testIdx = roundIndex - practiceCount
   const totalRounds = game?.rounds?.length ?? TRACE2_ROUNDS
 
   // Immersive chrome during play.
@@ -163,11 +155,6 @@ export default function CbatTrace2({ traceModeSelector }) {
   // Watch-phase timer: play the round's animation, then reveal the question.
   useEffect(() => {
     if (phase !== 'watch' || !round) return
-    // The run clock starts with the first scored round, after any practice
-    if (!round.practice && !testStartedRef.current) {
-      testStartedRef.current = true
-      startedAtRef.current = performance.now()
-    }
     setShowRoundBanner(true)
     const bannerT = setTimeout(() => setShowRoundBanner(false), 1100)
     // durationMs already includes a couple of ticks of onward flight past the
@@ -180,11 +167,7 @@ export default function CbatTrace2({ traceModeSelector }) {
   const startGame = useCallback(() => {
     startTracking('trace-2', {})
     const g = generateTrace2Game()
-    // Practice rounds come from a second, separate game so the test is untouched
-    const practice = cbat
-      ? generateTrace2Game().rounds.slice(0, PRACTICE_COUNT).map(r => ({ ...r, practice: true }))
-      : []
-    setGame({ ...g, rounds: [...practice, ...g.rounds] })
+    setGame(g)
     setRoundIndex(0)
     setAnswered(false)
     setChosen(null)
@@ -193,9 +176,8 @@ export default function CbatTrace2({ traceModeSelector }) {
     setScoreSaved(false)
     setQueued(false)
     startedAtRef.current = performance.now()
-    testStartedRef.current = false
     setPhase('watch')
-  }, [startTracking, cbat])
+  }, [startTracking])
 
   const submitScore = useCallback((correct) => {
     setScoreSaved(false)
@@ -222,11 +204,10 @@ export default function CbatTrace2({ traceModeSelector }) {
   const handleAnswer = (optIndex) => {
     if (answered || !round) return
     const correct = round.question.options[optIndex]?.correct
-    // Practice rounds are not scored but always reveal the answer
-    if (!round.practice && correct) { correctRef.current += 1; setCorrectCount(correctRef.current) }
+    if (correct) { correctRef.current += 1; setCorrectCount(correctRef.current) }
     // The real test gives no right/wrong mid-run; under the Real CBAT theme
-    // a scored round moves straight on, with no reveal and no replay.
-    if (cbat && !round.practice) {
+    // a round moves straight on, with no reveal and no replay.
+    if (cbat) {
       advanceFrom(roundIndex)
       return
     }
@@ -250,13 +231,6 @@ export default function CbatTrace2({ traceModeSelector }) {
   }
   const advanceRound = () => advanceFrom(roundIndex)
 
-  // Escape is the real keyboard's green "Go": skip what's left of practice
-  // and begin the test.
-  const skipPractice = () => {
-    if (!isPractice) return
-    advanceFrom(practiceCount - 1)
-  }
-
   // Keyboard answering: 1-4 pick an option (marked under the Real CBAT theme
   // and committed with Enter; committed at once otherwise). Enter continues
   // past the reveal.
@@ -268,14 +242,13 @@ export default function CbatTrace2({ traceModeSelector }) {
     resetKey: roundIndex,
   })
   useCbatAnswerKeys({ enabled: phase === 'question' && answered && !replaying, count: 0, onEnter: advanceRound })
-  useCbatAnswerKeys({ enabled: isPractice && (phase === 'watch' || phase === 'question'), count: 0, onEscape: skipPractice })
 
   const testBar = (phase === 'watch' || phase === 'question') && round ? {
-    stage: isPractice ? 'Practice' : 'Testing',
-    item: isPractice ? roundIndex + 1 : testIdx + 1,
-    total: isPractice ? practiceCount : TRACE2_ROUNDS,
+    stage: 'Testing',
+    item: roundIndex + 1,
+    total: TRACE2_ROUNDS,
     timeFrac: null,
-    progressFrac: isPractice ? 0 : (testIdx + (answered ? 1 : 0)) / TRACE2_ROUNDS,
+    progressFrac: (roundIndex + (answered ? 1 : 0)) / TRACE2_ROUNDS,
   } : null
 
   const startReplay = () => { setReplayStage('rewind'); setReplayKey(k => k + 1); setReplaying(true) }
@@ -342,7 +315,7 @@ export default function CbatTrace2({ traceModeSelector }) {
 
       {(phase === 'watch' || phase === 'question') && round && (
         <div className="w-full max-w-md lg:max-w-none lg:w-[min(42rem,calc(100vh_-_14rem))]">
-          {!cbat && <Trace2HUD round={testIdx} score={correctCount} phase={phase} />}
+          {!cbat && <Trace2HUD round={roundIndex} score={correctCount} phase={phase} />}
 
           <div
             className="relative border-2 border-[#3a7bbf] rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)]"
@@ -378,7 +351,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                   className="absolute top-3 inset-x-0 z-20 flex justify-center pointer-events-none"
                 >
                   <span className="px-4 py-1.5 rounded-full bg-game-panel/85 border border-brand-500 text-brand-800 text-xs font-extrabold uppercase tracking-[0.2em] backdrop-blur">
-                    {isPractice ? 'Practice' : 'Round'} {isPractice ? roundIndex + 1 : testIdx + 1} · {round.tier === 'easy' ? 'Watch' : 'Watch closely'}
+                    Round {roundIndex + 1} · {round.tier === 'easy' ? 'Watch' : 'Watch closely'}
                   </span>
                 </motion.div>
               )}
@@ -394,7 +367,7 @@ export default function CbatTrace2({ traceModeSelector }) {
                   animate={{ opacity: 1 }}
                   className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 lg:gap-6 p-4 bg-game-arena overflow-y-auto"
                 >
-                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-widest">{isPractice ? 'Practice' : 'Round'} {isPractice ? roundIndex + 1 : testIdx + 1} · Question</p>
+                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-widest">Round {roundIndex + 1} · Question</p>
                   <p className="text-base sm:text-lg lg:text-2xl font-bold text-game-text text-center leading-snug max-w-sm lg:max-w-lg">
                     {round.question.prompt}
                   </p>
@@ -497,21 +470,13 @@ export default function CbatTrace2({ traceModeSelector }) {
               : 'Pick the aircraft (or pair) that matches'}
           </p>}
 
-          {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+          {/* Real CBAT theme: the instruction strip */}
           <CbatFooterStrip
             text={phase === 'watch' ? 'Watch the aircraft. A question follows.' : undefined}
             answer={phase === 'question' ? (answered ? (chosen == null ? null : chosen + 1) : (pending != null ? pending + 1 : null)) : undefined}
             onSubmit={phase === 'question' ? (answered ? advanceRound : commit) : undefined}
             canSubmit={answered || pending != null}
-            hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
           />
-          {cbat && isPractice && (
-            <div className="text-center mt-2">
-              <button type="button" onClick={skipPractice} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-                Skip practice and begin the test
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>

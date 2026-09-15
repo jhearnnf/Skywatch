@@ -2,9 +2,9 @@ import { render, screen, fireEvent, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import CbatAngles from '../CbatAngles'
 
-// The Real CBAT theme turns Angles into the real screen flow: three unscored
-// practice items ("Practice 1 of 3"), then "Testing (n of 20)" with no
-// right/wrong shown, answered by number key + Enter. The SkyWatch theme is
+// The Real CBAT theme turns Angles into the real screen flow: "Testing (n of
+// 20)" in the title bar with no right/wrong shown, answered by number key +
+// Enter. No practice items: the tutorials cover that. The SkyWatch theme is
 // untouched apart from number keys answering.
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
@@ -41,30 +41,22 @@ const optionButtons = () => screen.getAllByRole('button').filter(b => /°$/.test
 describe('CbatAngles under the Real CBAT theme', () => {
   beforeEach(() => { vi.useRealTimers(); setupUser('cbat') })
 
-  it('runs three practice items with feedback, then the scored test without', () => {
+  it('starts straight on the scored test, with no practice items and no feedback', () => {
     render(<CbatAngles />)
     fireEvent.click(screen.getByText('Start'))
 
-    // Practice first, labelled in the real title bar
-    expect(screen.getByTestId('cbat-testbar')).toHaveTextContent('Angles, Bearings and Degrees - Practice (1 of 3)')
+    // No practice: the first item is Testing 1 of 20
+    expect(screen.getByTestId('cbat-testbar')).toHaveTextContent('Angles, Bearings and Degrees - Testing (1 of 20)')
+    expect(screen.queryByText(/Skip practice/)).toBeNull()
     expect(screen.getByTestId('cbat-footer-strip')).toHaveTextContent('Your Answer [ ]')
 
-    // Number key marks, footer shows it, Enter commits; practice shows the answer
+    // Number key marks, footer shows it, Enter commits
     press('2')
     expect(screen.getByTestId('cbat-footer-strip')).toHaveTextContent('Your Answer [ 2 ]')
     expect(optionButtons()[1]).toHaveClass('cbat-option-pending')
     press('Enter')
-    expect(screen.getByText(/Correct|It was/)).toBeInTheDocument()
-    press('Enter') // Next
-    expect(screen.getByTestId('cbat-testbar')).toHaveTextContent('Practice (2 of 3)')
 
-    // Esc is "Go": straight to the test
-    press('Escape')
-    expect(screen.getByTestId('cbat-testbar')).toHaveTextContent('Testing (1 of 20)')
-
-    // A scored item: no feedback, straight on to the next
-    press('1')
-    press('Enter')
+    // No feedback, straight on to the next
     expect(screen.queryByText(/Correct|It was/)).toBeNull()
     expect(screen.getByTestId('cbat-testbar')).toHaveTextContent('Testing (2 of 20)')
   })
@@ -72,7 +64,6 @@ describe('CbatAngles under the Real CBAT theme', () => {
   it('clicking an option only marks it until Enter or the arrow key', () => {
     render(<CbatAngles />)
     fireEvent.click(screen.getByText('Start'))
-    fireEvent.click(screen.getByText('Skip practice and begin the test'))
     expect(screen.getByTestId('cbat-testbar')).toHaveTextContent('Testing (1 of 20)')
     fireEvent.click(optionButtons()[3])
     expect(screen.getByTestId('cbat-testbar')).toHaveTextContent('Testing (1 of 20)')

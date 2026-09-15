@@ -29,7 +29,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import { CbatGameHeader, CbatFooterStrip, PRACTICE_SKIP_HINT } from '../components/cbat/CbatTestChrome'
+import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatGameOver from '../components/CbatGameOver'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
@@ -77,10 +77,6 @@ const BOARD_WIDTH = `calc(${LABEL_SIZE} * 2 + ${CELL_SIZE} * ${VIGILANCE_GRID})`
 // How long a clear effect lives. Must outlast the longest animation in the set
 // (the score readout, at 560ms) or the burst is yanked off screen mid-flight.
 export const CLEAR_EFFECT_MS = 620
-// Real CBAT theme only: a short unscored practice run before the test. The
-// real software opens with a practice session on the same grid, and the
-// corpus advice is to use it to learn the keying.
-const PRACTICE_MS = 20_000
 
 // A quick confirming pulse and the number it paid, and nothing else. An earlier
 // cut threw six sparks and a glow on every clear, which on a board where hits
@@ -297,9 +293,6 @@ export default function CbatVigilance() {
   const [clears, setClears] = useState([])
   const [finalStats, setFinalStats] = useState(null)
   const cbat = useCbatTheme()
-  // True while the unscored practice run is on the board
-  const [isPractice, setIsPractice] = useState(false)
-  const isPracticeRef = useRef(false)
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
@@ -383,28 +376,6 @@ export default function CbatVigilance() {
   // whichever version of `finishRun` existed on the first frame — so a run that
   // ended would submit through a stale closure. Scoping the frame function to
   // the effect makes that impossible and gives the cleanup for free.
-  // Put a fresh board up: the short practice run, or the scored test. `runId`
-  // re-arms the rAF loop below when the practice board hands over to the test
-  // without the phase ever leaving 'playing'.
-  const [runId, setRunId] = useState(0)
-  const beginRun = useCallback((practice) => {
-    cancelAnimationFrame(rafRef.current)
-    const sim = createVigilanceSim(practice ? { durationMs: PRACTICE_MS } : {})
-    simRef.current = sim
-    lastTsRef.current = null
-    pendingRowRef.current = null
-    isPracticeRef.current = practice
-    setIsPractice(practice)
-    setPendingRow(null)
-    setLastEvent(null)
-    setClears([])
-    setFinalStats(null)
-    setSnapshot(sim.snapshot())
-    if (!practice) startTracking('vigilance')
-    setRunId(n => n + 1)
-    setPhase('playing')
-  }, [startTracking])
-
   useEffect(() => {
     if (phase !== 'playing') return undefined
     let raf
@@ -418,19 +389,14 @@ export default function CbatVigilance() {
       lastTsRef.current = ts
       sim.step(dt)
       setSnapshot(sim.snapshot())
-      if (sim.state.finished) {
-        // Practice hands straight over to the scored run
-        if (isPracticeRef.current) beginRun(false)
-        else finishRun()
-        return
-      }
+      if (sim.state.finished) { finishRun(); return }
       raf = requestAnimationFrame(step)
       rafRef.current = raf
     }
     raf = requestAnimationFrame(step)
     rafRef.current = raf
     return () => cancelAnimationFrame(raf)
-  }, [phase, runId, finishRun, beginRun])
+  }, [phase, finishRun])
 
   // `d` is a LABEL (1–9); the sim works in 0-based indices, so every digit is
   // converted on the way in. Row first, then column.
@@ -474,8 +440,6 @@ export default function CbatVigilance() {
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
       if (/^[1-9]$/.test(e.key)) { submitDigit(Number(e.key)); e.preventDefault(); return }
-      // Escape is the real keyboard's green "Go" during practice: skip to the test
-      if (e.key === 'Escape' && isPracticeRef.current) { beginRun(false); e.preventDefault(); return }
       if (e.key === 'Backspace' || e.key === 'Escape' || e.key === 'Delete') {
         clearPending()
         e.preventDefault()
@@ -483,11 +447,22 @@ export default function CbatVigilance() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [phase, submitDigit, clearPending, beginRun])
+  }, [phase, submitDigit, clearPending])
 
   const startGame = useCallback(() => {
-    beginRun(cbat)
-  }, [cbat, beginRun])
+    const sim = createVigilanceSim({})
+    simRef.current = sim
+    lastTsRef.current = null
+    pendingRowRef.current = null
+    setPendingRow(null)
+    setLastEvent(null)
+    setClears([])
+    setFinalStats(null)
+    setSnapshot(sim.snapshot())
+    startTracking('vigilance')
+    // The rAF loop starts itself off the phase change — see the effect above.
+    setPhase('playing')
+  }, [startTracking])
 
   const goToIntro = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
@@ -511,9 +486,9 @@ export default function CbatVigilance() {
         onQuit={goToIntro}
         confirmNeeded={phase === 'playing'}
         test={phase === 'playing' && snapshot ? {
-          stage: isPractice ? 'Practice' : 'Testing',
-          timeFrac: snapshot.remainingMs / (isPractice ? PRACTICE_MS : VIGILANCE_DURATION_MS),
-          progressFrac: isPractice ? 0 : 1 - snapshot.remainingMs / VIGILANCE_DURATION_MS,
+          stage: 'Testing',
+          timeFrac: snapshot.remainingMs / VIGILANCE_DURATION_MS,
+          progressFrac: 1 - snapshot.remainingMs / VIGILANCE_DURATION_MS,
         } : null}
       />
 
@@ -620,20 +595,12 @@ export default function CbatVigilance() {
                 <Keypad onDigit={submitDigit} onClear={clearPending} pendingRow={pendingRow} />
               </div>
 
-              {/* Real CBAT theme: the instruction strip, and the way out of practice */}
+              {/* Real CBAT theme: the instruction strip */}
               <CbatFooterStrip
                 className="w-full"
                 text="Enter Row and Col to clear ALL stars"
                 answer={pendingRow == null ? null : `${pendingRow + 1} ,`}
-                hint={isPractice ? PRACTICE_SKIP_HINT : undefined}
               />
-              {cbat && isPractice && (
-                <div className="text-center mt-2">
-                  <button type="button" onClick={() => beginRun(false)} className="text-xs text-brand-600 hover:text-brand-700 transition-colors">
-                    Skip practice and begin the test
-                  </button>
-                </div>
-              )}
             </div>
           )}
 

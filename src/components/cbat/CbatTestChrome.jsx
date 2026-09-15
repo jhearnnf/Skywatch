@@ -117,11 +117,6 @@ export function CbatFooterStrip({ text = FOOTER_ANSWER_TEXT, answer, onSubmit, c
   )
 }
 
-// The practice phase's footer hint. The real keyboard has a green "Go" key
-// that begins the test at once; here that is Escape (and the button below
-// the practice item).
-export const PRACTICE_SKIP_HINT = 'Practice answers are not scored. Press Esc (Go) to skip practice and begin the test.'
-
 // The grey key beside an option. Renders nothing under the SkyWatch theme, so
 // games can drop it into any option button unconditionally.
 export function CbatKeyCap({ label, className = '' }) {
