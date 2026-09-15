@@ -63,6 +63,19 @@ describe('DM header: last online', () => {
     expect(res.body.data.conversation).not.toHaveProperty('otherLastSeen');
   });
 
+  // Who the DM is with, for the header name to open their card. Not gated on
+  // admin: it is the id of someone the viewer is already in a thread with, and
+  // a DM with no messages has no senders the client could take it from.
+  it('names the other party by id, even before the first message', async () => {
+    const a = await createUser({ displayName: 'Falcon' });
+    const b = await createUser({ displayName: 'Viper' });
+
+    const res = await thread(await openDm(a, b), a);
+    expect(res.status).toBe(200);
+    expect(res.body.data.messages).toHaveLength(0);
+    expect(res.body.data.conversation.otherUserId).toBe(String(b._id));
+  });
+
   it('is not attached to channels', async () => {
     const admin = await createUser({ isAdmin: true, displayName: 'Control' });
     const channel = await ChatConversation.create({
@@ -73,5 +86,6 @@ describe('DM header: last online', () => {
     const res = await thread(channel._id, admin);
     expect(res.status).toBe(200);
     expect(res.body.data.conversation).not.toHaveProperty('otherLastSeen');
+    expect(res.body.data.conversation).not.toHaveProperty('otherUserId');
   });
 });

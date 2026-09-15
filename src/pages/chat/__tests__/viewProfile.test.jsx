@@ -75,3 +75,13 @@ describe('UserCard — View profile', () => {
     expect(mockApiFetch).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('UserCard — opened from a DM header', () => {
+  it('keeps View profile and Block but drops Message, since you are already in the thread', async () => {
+    mockUser.current = { isAdmin: false }
+    renderCard({}, { inDm: true })
+    expect(await screen.findByRole('button', { name: /View profile/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Block$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Message$/ })).not.toBeInTheDocument()
+  })
+})

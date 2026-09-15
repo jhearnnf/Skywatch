@@ -1216,6 +1216,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
         const other = await User.findById(otherId).select('displayName agentNumber lastSeen').lean();
         if (!other) return null;
         return {
+          // Their id, so the header name can open the same card a name in a
+          // channel does (profile, block). A DM with no messages yet has no
+          // senders the client could take the id from.
+          userId: other._id,
           title: other.displayName
             || (other.agentNumber ? `Agent #${other.agentNumber}` : null),
           lastSeen: req.user.isAdmin ? (other.lastSeen ?? null) : undefined,
@@ -1251,6 +1255,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
         postPolicy: convo.channel?.postPolicy ?? 'everyone',
         adminOnly:  (convo.channel?.postPolicy ?? 'everyone') !== 'everyone',
         title:      convo.type === 'channel' ? channelTitle(convo) : (dmOther?.title ?? null),
+        ...(dmOther?.userId ? { otherUserId: dmOther.userId } : {}),
         // Admin-only, DM-only; the key is absent for everyone else rather than
         // null, so a client cannot distinguish "never seen" from "not for you".
         ...(dmOther?.lastSeen !== undefined ? { otherLastSeen: dmOther.lastSeen } : {}),

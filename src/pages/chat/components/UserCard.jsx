@@ -6,11 +6,13 @@ import { agentLabel } from '../format'
 
 // Tapping a name in a channel opens this. It is the only route into a DM, by
 // design: you can message someone you have actually seen posting, rather than
-// searching the user base for strangers.
+// searching the user base for strangers. The DM header opens it too (`inDm`),
+// for the profile and block actions; Message is dropped there since you are
+// already in the thread.
 //
 // Overlay portals to document.body, so the chat panel's `overflow-hidden`
 // cannot clip the card.
-export default function UserCard({ userId, onClose, onOpenDm, onViewProfile, onBlockChanged }) {
+export default function UserCard({ userId, onClose, onOpenDm, onViewProfile, onBlockChanged, inDm = false }) {
   const { API, apiFetch } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -135,7 +137,7 @@ export default function UserCard({ userId, onClose, onOpenDm, onViewProfile, onB
               </div>
             ) : (
               <div className="mt-4 space-y-2">
-                {!profile.isSelf && !profile.isBlocked && (
+                {!profile.isSelf && !profile.isBlocked && !inDm && (
                   <button
                     type="button"
                     onClick={startDm}

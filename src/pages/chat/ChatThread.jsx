@@ -395,7 +395,22 @@ export default function ChatThread({
             ← Back
           </button>
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-700 truncate">{heading}</p>
+            {/* In a DM the name is the other person, so it opens the same card
+                a name in a channel does: profile, block. The server sends
+                their id even before the first message, when there are no
+                senders to take it from. */}
+            {type === 'dm' && conversation?.otherUserId ? (
+              <button
+                type="button"
+                onClick={() => setCardUserId(conversation.otherUserId)}
+                className="block max-w-full text-left text-sm font-bold text-slate-700 hover:text-brand-600 truncate transition-colors"
+                aria-label={`Options for ${heading}`}
+              >
+                {heading}
+              </button>
+            ) : (
+              <p className="text-sm font-bold text-slate-700 truncate">{heading}</p>
+            )}
             <p className="text-[11px] text-slate-400">
               {isArchived ? 'Archived channel'
                 : isClosed ? 'This chat is closed'
@@ -568,6 +583,9 @@ export default function ChatThread({
       {cardUserId && (
         <UserCard
           userId={cardUserId}
+          // Opened on the person this DM is with: no Message button, you are
+          // already in it.
+          inDm={type === 'dm' && cardUserId === conversation?.otherUserId}
           onClose={() => setCardUserId(null)}
           onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`); onChanged?.() }}
           // Carries the thread it was opened from so the profile's Back button
