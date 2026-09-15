@@ -283,7 +283,7 @@ export default function ChatSidebar({
               aria-current={String(activeId) === String(support._id) ? 'page' : undefined}
               active={String(activeId) === String(support._id)}
             >
-              <CardIcon>🛟</CardIcon>
+              <CardIcon>🎧</CardIcon>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className={`text-sm truncate ${support.unread ? 'font-extrabold text-slate-900' : 'font-bold text-slate-800'}`}>
@@ -313,7 +313,7 @@ export default function ChatSidebar({
             <p className="text-[11px] text-slate-400 px-1 pb-1">Loading…</p>
           ) : (
             <ResourceCard as="button" type="button" tone="brand" onClick={onStartSupport}>
-              <CardIcon>🛟</CardIcon>
+              <CardIcon>🎧</CardIcon>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-slate-800 truncate">{SUPPORT_LABEL}</p>
                 <p className="text-[11px] text-slate-500 truncate mt-0.5">

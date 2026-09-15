@@ -176,7 +176,7 @@ function Avatar({ profile, show, support, presence = null }) {
         style={{ width: AVATAR_PX, height: AVATAR_PX }}
         title={SUPPORT_LABEL}
       >
-        🛟
+        🎧
       </span>
     )
   }
