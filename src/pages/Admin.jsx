@@ -762,17 +762,31 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
               ? `${fmtNum(users.cbatThemeUsers ?? 0)} of ${fmtNum(users.totalUsers)} accounts`
               : 'no accounts yet'}
           />
-          <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate"   {...slimStat} />
+          {/* Who is here, and how much of them we are allowed to show. Accounts that chose
+              "Leave me out" under Profile › Score Sharing, so their scores are off every
+              shared surface (boards, feed, medals, profile, homepage). A share for the same
+              reason as the theme tile: the count alone says nothing without the total.
+
+              Live in slim mode too: the option ships on native, and the boards it hides
+              from are the CBAT boards slim mode keeps. */}
+          <StatCard
+            label="Scores Private"
+            value={users.totalUsers ? pct(users.privateScoreUsers ?? 0, users.totalUsers) : '—'}
+            color="amber"
+            sub={users.totalUsers
+              ? `${fmtNum(users.privateScoreUsers ?? 0)} of ${fmtNum(users.totalUsers)} accounts`
+              : 'no accounts yet'}
+          />
         </div>
-        {/* The tier trio stays together in reading order: Free closes the row above and
-            Trial and Paying Subscribers open this one. */}
+        {/* The tier trio opens this row in reading order: Free, Trial, Paying Subscribers. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+          <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate"   {...slimStat} />
           <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber"   {...slimStat} />
           <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)} color="emerald" {...slimStat} />
           <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate"   {...slimStat} />
-          <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate"   {...slimStat} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+          <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate"   {...slimStat} />
           <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate"   {...slimStat} />
           <button
             type="button"
@@ -788,6 +802,10 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           >
             <StatCard label="Emails Failed" value={fmtNum(users.emailsFailed)} color="red" sub="delivery failed" icon={<EnvelopeGlyph color="#f87171" />} />
           </button>
+        </div>
+        {/* Outreach and money share a row: the questionnaire and the donation asks are both
+            "of the people we asked, how many did the thing". */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           {/* The outreach questionnaire, as a response rate rather than a bare count: 12 replies
               is a triumph out of 20 sends and a dud out of 400, and the tile has to say which.
               Counts finished runs, because "filled in" means reached the end.
@@ -817,22 +835,20 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
                 : 'nobody emailed yet'}
             />
           </button>
-        </div>
-        {/* Donations. Two tiles, because at a glance there are only two questions: how much
-            came in, and how many of the people we asked pressed the button. Everything else
-            — which of the three asks each click came from, and who — is a drill-down, and
-            lives in the panel below rather than as four ratio tiles you have to divide in
-            your head.
+          {/* Donations. Two tiles, because at a glance there are only two questions: how much
+              came in, and how many of the people we asked pressed the button. Everything else
+              — which of the three asks each click came from, and who — is a drill-down, and
+              lives in the panel below rather than as four ratio tiles you have to divide in
+              your head.
 
-            "Received" is the only figure here that is money rather than intent. Every other
-            count stops at a click, and a started Checkout session is not a payment; this one
-            is written by Stripe's webhook.
+              "Received" is the only figure here that is money rather than intent. Every other
+              count stops at a click, and a started Checkout session is not a payment; this one
+              is written by Stripe's webhook.
 
-            The asks are counted in people, not events — one enthusiast opening the link five
-            times is one conversion, not five — and the denominator is people who actually saw
-            an ask (each reports its own impression), so the rate is a real click-through rate
-            rather than clicks over everyone who merely earned a milestone. */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+              The asks are counted in people, not events — one enthusiast opening the link five
+              times is one conversion, not five — and the denominator is people who actually saw
+              an ask (each reports its own impression), so the rate is a real click-through rate
+              rather than clicks over everyone who merely earned a milestone. */}
           <StatCard
             label="Donations Received"
             value={fmtGBP(donation.received.totalPence)}

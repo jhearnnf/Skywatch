@@ -206,6 +206,26 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.cbatThemeUsers).toBe(2);
   });
 
+  // The Stats tile shows the share of accounts that keep their scores private
+  // (Profile › Score Sharing › "Leave me out"). The field is the opt-out with a
+  // `false` default, so only an explicit `true` counts; `false` and missing
+  // both mean "in the showcase".
+  it('counts accounts that keep their scores private, treating a missing flag as shared', async () => {
+    const admin = await createAdminUser();
+    await createUser({ hideFromShowcase: true });
+    await createUser({ hideFromShowcase: true });
+    await createUser({ hideFromShowcase: true });
+    await createUser({ hideFromShowcase: false });
+    await createUser();
+    await User.updateOne({ _id: (await createUser())._id }, { $unset: { hideFromShowcase: 1 } });
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.privateScoreUsers).toBe(3);
+  });
+
   it('counts users by subscription tier — only paying Stripe subscribers', async () => {
     const admin = await createAdminUser();
     await createUser({ subscriptionTier: 'free' });

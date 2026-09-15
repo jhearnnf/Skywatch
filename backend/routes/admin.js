@@ -454,6 +454,7 @@ router.get('/stats', async (_req, res) => {
       easyPlayers, mediumPlayers,
       androidAppUsers,
       cbatThemeUsers,
+      privateScoreUsers,
       totalBrifsRead, totalBrifsOpened, readTimeAgg,
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
@@ -506,6 +507,11 @@ router.get('/stats', async (_req, res) => {
       // so counting the one non-default value is the whole answer — the share
       // is taken against `totalUsers` on the client, not against a second count.
       User.countDocuments({ uiTheme: 'cbat' }),
+      // Accounts that chose "Leave me out" under Profile › Score Sharing. The field
+      // is stored as the opt-OUT with a `false` default, so an account from before
+      // the option existed is in the showcase and is not counted here — the one
+      // `true` value is the whole answer, like the theme count above.
+      User.countDocuments({ hideFromShowcase: true }),
       IntelligenceBriefRead.countDocuments({ completed: true }),
       IntelligenceBriefRead.countDocuments({ completed: false }),
       IntelligenceBriefRead.aggregate([{ $group: { _id: null, total: { $sum: '$timeSpentSeconds' } } }]),
@@ -665,6 +671,7 @@ router.get('/stats', async (_req, res) => {
           easyPlayers, mediumPlayers,
           androidAppUsers,
           cbatThemeUsers,
+          privateScoreUsers,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
           // The donate page is reported alongside the asks rather than added into them. It is

@@ -66,6 +66,7 @@ const MOCK_STATS = {
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     androidAppUsers: 4,
     cbatThemeUsers: 3,
+    privateScoreUsers: 2,
     emailsSent: 42, emailsFailed: 7,
     questionnaire: { sent: 20, started: 8, completed: 5 },
     donation: {
@@ -280,6 +281,39 @@ describe('Admin — Stats tab: Android app users', () => {
     const row = (label) => screen.getByText(label).closest('.grid')
     expect(row('Real CBAT Theme')).toBe(row('Android App Users'))
     const card = screen.getByText('Real CBAT Theme').closest('[class*="rounded-2xl"]')
+    expect(within(card).getByText('0%')).toBeInTheDocument()
+    expect(within(card).getByText('0 of 10 accounts')).toBeInTheDocument()
+  })
+
+  // Scores Private is the Profile › Score Sharing opt-out. Same shape as the theme tile: the
+  // share leads, the count against the total goes on the sub line.
+  it('shows the share of accounts that keep their scores private, with the count underneath', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Scores Private')).toBeInTheDocument())
+    const card = screen.getByText('Scores Private').closest('[class*="rounded-2xl"]')
+    expect(within(card).getByText('20%')).toBeInTheDocument()
+    expect(within(card).getByText('2 of 10 accounts')).toBeInTheDocument()
+  })
+
+  // It closes the "who is here" row, and an older backend without the field reads as 0%.
+  it('sits in the Users Online row and reads 0% when the backend has no count', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({
+          status: 'success',
+          data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, privateScoreUsers: undefined } },
+        }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Scores Private')).toBeInTheDocument())
+    const row = (label) => screen.getByText(label).closest('.grid')
+    expect(row('Scores Private')).toBe(row('Users Online'))
+    const card = screen.getByText('Scores Private').closest('[class*="rounded-2xl"]')
     expect(within(card).getByText('0%')).toBeInTheDocument()
     expect(within(card).getByText('0 of 10 accounts')).toBeInTheDocument()
   })
