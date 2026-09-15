@@ -1209,12 +1209,12 @@ describe('who said it', () => {
     expect(screen.queryByTestId('user-card')).toBeNull()
   })
 
-  it('sends an admin to the profile with a way back to the hub', async () => {
+  it('sends the viewer to the profile with a way back to the hub', async () => {
     stubFetch()
     renderOpen()
     fireEvent.click(await screen.findByRole('button', { name: 'Viper' }))
     fireEvent.click(screen.getByText('view profile'))
-    expect(mockNavigate).toHaveBeenCalledWith('/admin/agent/u2', {
+    expect(mockNavigate).toHaveBeenCalledWith('/agent/u2', {
       state: { backTo: '/cbat', backLabel: 'Back to CBAT' },
     })
     expect(screen.queryByTestId('user-card')).toBeNull()

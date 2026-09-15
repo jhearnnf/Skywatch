@@ -24,7 +24,9 @@ const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { BATTERY_BY_KEY } = require('../constants/cbatBatteries');
 const { UI_THEMES } = require('../constants/uiThemes.json');
-const { withSelectedBadge } = require('../utils/selectedBadge');
+const { withSelectedBadge, resolveSelectedBadge } = require('../utils/selectedBadge');
+const { cbatRecordFor } = require('../utils/cbatRecord');
+const mongoose = require('mongoose');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
 const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
@@ -373,6 +375,57 @@ router.get('/leaderboard', async (req, res) => {
       .limit(20);
 
     res.json({ status: 'success', data: { agents } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/users/:id/profile — the player profile any signed-in agent can open.
+//
+// The public half of the agent profile page (/agent/:id). Everything here is
+// something the site already shows beside their name on a leaderboard or in
+// chat: who they are, the badge they wear, and their best score on each test.
+// Nothing about the account (email, joined, streak, level, airstars), and no
+// counts of how much they have played: those stay on the admin endpoint
+// (GET /api/admin/users/:id/profile) and are drawn under an "Admin only" mark.
+//
+// Board places are left off on purpose. Each one is an aggregation over a whole
+// score collection, and a page any player can open must not pay for twenty.
+//
+// Score Sharing (hideFromShowcase) is the opt-out. It is the same objection
+// that keeps a player off the homepage progress wall: one switch under
+// Profile > Settings covers every place their scores leave the boards. An
+// opted-out profile still opens (the name and badge are what chat shows
+// anyway) but carries no scores and says so.
+router.get('/:id/profile', protect, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const target = await User.findById(req.params.id)
+      .select('displayName agentNumber isBot botKey cbatPassed selectedBadgeBriefId hideFromShowcase')
+      .lean();
+    if (!target) return res.status(404).json({ message: 'User not found' });
+
+    const scoresHidden = Boolean(target.hideFromShowcase);
+    const [selectedBadge, record] = await Promise.all([
+      resolveSelectedBadge(target.selectedBadgeBriefId),
+      scoresHidden ? [] : cbatRecordFor(target._id),
+    ]);
+
+    res.json({ status: 'success', data: {
+      user: {
+        _id:         target._id,
+        displayName: target.displayName ?? null,
+        agentNumber: target.agentNumber ?? null,
+        isBot:       Boolean(target.isBot),
+        botKey:      target.botKey ?? null,
+        cbatPassed:  Boolean(target.cbatPassed),
+        selectedBadge,
+      },
+      scoresHidden,
+      cbatGames: record.map(g => ({ gameKey: g.gameKey, label: g.label, best: g.best })),
+    } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

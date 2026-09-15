@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { HelmetProvider } from 'react-helmet-async'
 import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
@@ -104,7 +104,7 @@ import NotFound       from './pages/NotFound'
 
 // v2 admin
 import Admin          from './pages/Admin'
-import AdminAgentProfile from './pages/AdminAgentProfile'
+import AgentProfile from './pages/AgentProfile'
 import CbatAwardPreview from './pages/CbatAwardPreview'
 import OpenRouterUsage from './pages/OpenRouterUsage'
 import Clipper        from './pages/Clipper'
@@ -191,6 +191,13 @@ function RequireAuth({ children }) {
 //   2. useIsPresent() is false during AnimatePresence exit — no redirect fires then
 //   3. sw_post_login_destination: if navigate lost the race and we DO redirect here,
 //      we send the user to the brief/deep-link they were heading to rather than /home
+// /admin/agent/:id → /agent/:id, keeping the Back-button state the opener sent.
+function LegacyAgentProfileRedirect() {
+  const { id } = useParams()
+  const location = useLocation()
+  return <Navigate to={`/agent/${id}`} replace state={location.state} />
+}
+
 function LoginRoute() {
   const { user, loading } = useAuth()
   const isPresent = useIsPresent()
@@ -393,10 +400,13 @@ function AppRoutes() {
           {/* Clipper — admin-only short-form video tool. The page itself checks
               isAdmin; every /api/clipper route is adminOnly server-side too. */}
           <Route path="/clipper"           element={<RequireAuth><PageWrapper><Clipper /></PageWrapper></RequireAuth>} />
-          {/* Read-only view of one agent, opened from the user card in Community.
-              Admin-only: the page checks isAdmin and the endpoint behind it is
-              adminOnly. Under /admin so it inherits the slim-mode allowlist. */}
-          <Route path="/admin/agent/:id"   element={<RequireAuth><PageWrapper><AdminAgentProfile /></PageWrapper></RequireAuth>} />
+          {/* Another player's profile, opened from the user card in Community and
+              from a name in the recent-scores feed. Any signed-in agent may read
+              it; the admin-only cards are gated on isAdmin and marked as such.
+              The old /admin/agent/:id address still resolves, state and all,
+              for links pasted before the page was made public. */}
+          <Route path="/agent/:id"         element={<RequireAuth><PageWrapper><AgentProfile /></PageWrapper></RequireAuth>} />
+          <Route path="/admin/agent/:id"   element={<LegacyAgentProfileRedirect />} />
           <Route path="/admin/openrouter-usage" element={<RequireAuth><PageWrapper><OpenRouterUsage /></PageWrapper></RequireAuth>} />
           <Route path="/admin/cbat-questionnaire" element={<RequireAuth><PageWrapper><CbatQuestionnaireResults /></PageWrapper></RequireAuth>} />
           {/* Admin-only preview of the post-game progress-award flow. Under /admin so it inherits

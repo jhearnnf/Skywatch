@@ -241,9 +241,10 @@ export default function Profile() {
     finally { setDiffBusy(false) }
   }
 
-  // Opt in or out of the landing page's progress wall. Stored server-side as an
-  // objection (hideFromShowcase), so `visible` is its inverse — see
-  // backend/utils/cbatShowcase.js.
+  // Opt in or out of score sharing: the landing page's progress wall AND the
+  // scores on their player profile. Stored server-side as one objection
+  // (hideFromShowcase), so `visible` is its inverse — see
+  // backend/utils/cbatShowcase.js and GET /api/users/:id/profile.
   const showcaseVisible = !(user?.hideFromShowcase ?? false)
   const changeShowcase = async (visible) => {
     if (showcaseBusy || visible === showcaseVisible) return
@@ -626,16 +627,19 @@ export default function Profile() {
               them. See BlockedAgents. */}
           {appSettings?.chatEnabled !== false && <BlockedAgents />}
 
-          {/* Homepage feature — the opt-out for the landing page's progress wall.
+          {/* Score sharing — one opt-out for every place their scores leave the
+              boards: the landing page's progress wall and their player profile.
               Worded so the choice can be made without reading a policy: it says
-              exactly what appears (agent number) and exactly what does not (name,
-              dates). Shown on native too, since the wall renders in the app. */}
+              exactly where scores appear and exactly what does not (name, dates
+              on the homepage). Shown on native too, since both render in the app. */}
           <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Homepage Feature</p>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Score Sharing</p>
             <p className="text-[11px] text-slate-400 mb-3">
-              We sometimes show a player's score progress on the SkyWatch homepage as an example of
-              how practice pays off. You appear as your agent number only — never your display name,
-              and never the date/time you played.
+              Other signed-in players can open your player profile from your name in chat or in the
+              recent scores feed. It shows your best score on each test. We also sometimes show a
+              player's score progress on the SkyWatch homepage as an example of how practice pays
+              off. On the homepage you appear as your agent number only, never your display name,
+              and never the date or time you played.
             </p>
             <div className="flex gap-2">
               <button
@@ -663,7 +667,8 @@ export default function Profile() {
             </div>
             {!showcaseVisible && (
               <p className="text-[11px] text-slate-400 mt-2">
-                Your scores will not appear on the homepage. This takes effect straight away.
+                Your scores will not appear on the homepage or on your player profile. This takes
+                effect straight away.
               </p>
             )}
           </div>

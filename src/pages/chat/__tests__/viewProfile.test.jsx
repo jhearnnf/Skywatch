@@ -1,13 +1,12 @@
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-// The admin-only route from a name in Community into that agent's profile.
+// The route from a name in Community into that agent's profile.
 //
-// The button carries an "Admin only" mark on purpose. Everything else on this
-// card is a control every agent has, so an extra unlabelled button would read
-// as a feature the whole community can see. The gate itself is the point of
-// these tests: nobody but an admin is offered it, and it never appears on a
-// bot or on the viewer's own card.
+// Every signed-in agent is offered it: the profile behind it is public (name,
+// badge, best scores), with the admin-only cards gated on the page itself. What
+// these tests hold is where the button must NOT appear: on a bot, which has no
+// profile to report on, and on the viewer's own card.
 const mockApiFetch = vi.hoisted(() => vi.fn())
 const mockUser     = vi.hoisted(() => ({ current: null }))
 
@@ -44,18 +43,11 @@ describe('UserCard — View profile', () => {
     expect(await screen.findByRole('button', { name: /View profile/ })).toBeInTheDocument()
   })
 
-  it('marks it as admin only, so it does not read as a feature everyone has', async () => {
-    mockUser.current = { isAdmin: true }
-    renderCard()
-    const btn = await screen.findByRole('button', { name: /View profile/ })
-    expect(btn).toHaveTextContent('Admin only')
-  })
-
-  it('hides it from an ordinary agent', async () => {
+  it('offers it to an ordinary agent, without an admin mark', async () => {
     mockUser.current = { isAdmin: false }
     renderCard()
-    await screen.findByText('Viper')
-    expect(screen.queryByRole('button', { name: /View profile/ })).not.toBeInTheDocument()
+    const btn = await screen.findByRole('button', { name: /View profile/ })
+    expect(btn).not.toHaveTextContent('Admin only')
   })
 
   it('hides it on a bot, which has no profile to report on', async () => {

@@ -82,7 +82,7 @@ export default function Privacy() {
             show examples of how players improve on our public pages. These show an agent number, a
             run-by-run score history, and roughly how long that history spans. They never include
             your display name, your email address, or the dates and times you played. You can opt
-            out at any time under Profile → Settings → Homepage Feature, and it takes effect
+            out at any time under Profile → Settings → Score Sharing, and it takes effect
             immediately.
           </p>
           <p>
@@ -134,6 +134,15 @@ export default function Privacy() {
               the weekly boards and the recent-scores feed. These require a signed-in account to view.
             </li>
             <li>
+              <span className="text-slate-700 font-medium">Player profile</span> — your display name
+              or agent number, the badge you have chosen to wear and your best score on each aptitude
+              game, opened from your name in chat or in the recent-scores feed. It requires a signed-in
+              account to view. Your streak, level, airstars, how many times you have played and your
+              account details are not shown to other players. You can keep your scores off your
+              profile under Profile → Settings → Score Sharing, the same switch that keeps you off
+              the homepage; your name and badge still show, as they do in chat.
+            </li>
+            <li>
               <span className="text-slate-700 font-medium">CBAT pass mark</span> — if you have told us
               you passed the CBAT and an administrator has recorded it on your account, a green
               "Passed" mark is shown beside your name across the site, including on leaderboards and
@@ -142,7 +151,8 @@ export default function Privacy() {
             </li>
             <li>
               <span className="text-slate-700 font-medium">Homepage progress examples</span> — your
-              agent number only, never your display name. See section 4, including how to opt out.
+              agent number only, never your display name. See section 4, including how to opt out
+              under Profile → Settings → Score Sharing.
             </li>
             <li>
               <span className="text-slate-700 font-medium">Medal announcements</span> — if you take

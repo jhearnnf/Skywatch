@@ -11,19 +11,23 @@ import ProfileBadge from '../components/ProfileBadge'
 import CbatPassedBadge from '../components/CbatPassedBadge'
 import SEO from '../components/SEO'
 
-// One agent, read-only, for an admin who has just met a name in Community.
+// One agent, read-only, for anyone who has just met a name in Community or in
+// the recent-scores feed.
 //
 // The user card in a channel answers "who is this" with a display name and an
-// agent number, which is nowhere near enough to judge a post. This page is the
-// rest of the answer: how far in they are, what they have collected, and how
-// much CBAT they have actually sat. It deliberately changes NOTHING — every
-// moderation control (ban, tier, award, delete) stays on Admin ▸ Users, where
-// it is guarded by a written reason. A profile you can read without arming
-// anything is a profile you open freely.
+// agent number, which is nowhere near enough to place a post. This page is the
+// rest of the answer. What every signed-in agent gets is what the site already
+// shows beside a name elsewhere: who they are, the badge they wear, and their
+// best score on each test. An admin gets the rest on top — how far in they
+// are, what they have collected, how much CBAT they have actually sat, and the
+// account facts — and every one of those cards carries an ADMIN ONLY mark, so
+// an admin reading the page always knows which half of it the player can see.
 //
-// Admin-only, and it says so twice: the ADMIN VIEW pill here, and the ADMIN
-// mark on the button in Community that opens it. Nothing about this page is
-// reachable by, or visible to, the agent it describes.
+// Two endpoints back it, chosen by who is asking: the public one carries only
+// the public fields, so nothing admin-only is ever sent to a browser that
+// should not have it. The page deliberately changes NOTHING — every moderation
+// control (ban, tier, award, delete) stays on Admin ▸ Users, where it is
+// guarded by a written reason.
 
 // Locked badges are shown, not hidden. "12 of 30" only means something if you
 // can see the 18 — and the shape of what someone has NOT collected is the more
@@ -139,6 +143,29 @@ function Flag({ children, tone = 'slate' }) {
   )
 }
 
+// The same mark the user card wore on its View profile button while this page
+// was admin only. On a card here it means "the player cannot see this card".
+function AdminOnly() {
+  return (
+    <span className="text-[9px] font-extrabold uppercase tracking-wide bg-brand-600 text-white px-1.5 py-px rounded shrink-0">
+      Admin only
+    </span>
+  )
+}
+
+// Card heading with the admin mark beside it.
+function AdminCardTitle({ children, right }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 mb-1">
+      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+        {children}
+        <AdminOnly />
+      </p>
+      {right}
+    </div>
+  )
+}
+
 const fmtDate = (iso) => (iso
   ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
   : '—')
@@ -147,18 +174,20 @@ const fmtDateTime = (iso) => (iso
   ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : 'Never')
 
-export default function AdminAgentProfile() {
+export default function AgentProfile() {
   const { id } = useParams()
   const { user, API, apiFetch } = useAuth()
   const { levels } = useAppSettings()
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Where "Back" goes. Community sends the thread it was opened from, so an
-  // admin who tapped a name mid-conversation lands back in that conversation
-  // rather than in the admin panel they were never in.
-  const backTo    = location.state?.backTo    ?? '/admin'
-  const backLabel = location.state?.backLabel ?? 'Back to Admin'
+  const isAdmin = Boolean(user?.isAdmin)
+
+  // Where "Back" goes. Community sends the thread it was opened from, so someone
+  // who tapped a name mid-conversation lands back in that conversation. With
+  // nothing sent, an admin goes to Admin ▸ Users and a player to the CBAT hub.
+  const backTo    = location.state?.backTo    ?? (isAdmin ? '/admin' : '/cbat')
+  const backLabel = location.state?.backLabel ?? (isAdmin ? 'Back to Admin' : 'Back to CBAT')
   const backState = location.state?.backState ?? (backTo === '/admin' ? { tab: 'users' } : undefined)
 
   const [data,     setData]     = useState(null)
@@ -167,16 +196,15 @@ export default function AdminAgentProfile() {
   const [showAllBadges, setShowAllBadges] = useState(false)
   const [progressOpen,  setProgressOpen]  = useState(false)
 
+  // Two endpoints, chosen by who is asking. The admin one carries the account
+  // facts and the play counts; the public one never does, so a player's
+  // browser is never sent a field the page would have to hide.
   useEffect(() => {
-    if (!user) { navigate('/login'); return }
-    if (!user.isAdmin) { navigate('/'); return }
-  }, [user, navigate])
-
-  useEffect(() => {
-    if (!user?.isAdmin) return
+    if (!user) return
     let cancelled = false
     setLoading(true); setError('')
-    apiFetch(`${API}/api/admin/users/${id}/profile`, { credentials: 'include' })
+    const url = isAdmin ? `${API}/api/admin/users/${id}/profile` : `${API}/api/users/${id}/profile`
+    apiFetch(url, { credentials: 'include' })
       .then(async res => {
         const body = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(body.message || 'Could not load that agent')
@@ -185,11 +213,14 @@ export default function AdminAgentProfile() {
       .then(body => { if (!cancelled) { setData(body.data ?? null); setLoading(false) } })
       .catch(err => { if (!cancelled) { setError(err.message); setLoading(false) } })
     return () => { cancelled = true }
-  }, [API, apiFetch, id, user?.isAdmin])
+  }, [API, apiFetch, id, user, isAdmin])
 
   const agent = data?.user ?? null
   const stats = data?.stats ?? {}
   const label = agent?.displayName || agent?.email || `Agent #${agent?.agentNumber ?? '———'}`
+  // The admin cards render off fields only the admin endpoint sends. Gating on
+  // both means a stale admin flag can never draw an empty "Admin only" card.
+  const showAdmin = isAdmin && Boolean(data?.stats)
 
   const levelInfo = useMemo(
     () => getLevelInfo(agent?.cycleAirstars ?? 0, levels),
@@ -211,7 +242,7 @@ export default function AdminAgentProfile() {
   const historyState = {
     adminUserId: id,
     adminUserName: label,
-    backTo: `/admin/agent/${id}`,
+    backTo: `/agent/${id}`,
     backLabel: 'Back to Profile',
     backState: location.state,
   }
@@ -222,7 +253,7 @@ export default function AdminAgentProfile() {
 
   return (
     <div className="max-w-lg mx-auto pb-8">
-      <SEO title="Agent Profile" description="Admin view of one agent." noIndex={true} />
+      <SEO title="Agent Profile" description="One agent's profile." noIndex={true} />
 
       <div className="mb-4">
         <button
@@ -231,12 +262,16 @@ export default function AdminAgentProfile() {
         >
           ← {backLabel}
         </button>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
-            Admin View
-          </span>
-          <span className="text-[10px] text-slate-400">Read only. Nothing here is visible to the agent.</span>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Admin View
+            </span>
+            <span className="text-[10px] text-slate-400">
+              Read only. Cards marked Admin only are not visible to players.
+            </span>
+          </div>
+        )}
       </div>
 
       {loading && <p className="text-sm text-slate-400 py-8 text-center">Loading agent…</p>}
@@ -248,8 +283,9 @@ export default function AdminAgentProfile() {
 
       {!loading && !error && agent && (
         <>
-          {/* Identity — same card the agent sees on their own Profile, so an
-              admin reading it is reading what the agent reads. */}
+          {/* Identity — the public half: the badge they wear, their name and
+              their agent number. Rank, streak and level are account standing,
+              and sit on the admin card below. */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -267,10 +303,19 @@ export default function AdminAgentProfile() {
                   </p>
                   {agent.cbatPassed && <CbatPassedBadge />}
                 </div>
-                <p className="text-slate-600 text-sm">{rankLine}</p>
                 <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{agent.agentNumber ?? '———'}</p>
               </div>
-              <div className="text-right shrink-0">
+            </div>
+          </motion.div>
+
+          {showAdmin && (<>
+          {/* Standing: rank, streak, level. What the agent sees on their own
+              Profile card, admin only here until it is decided otherwise. */}
+          <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
+            <AdminCardTitle>Standing</AdminCardTitle>
+            <div className="flex items-center gap-4 mt-2">
+              <p className="flex-1 min-w-0 text-slate-600 text-sm">{rankLine}</p>
+              <div className="shrink-0 flex items-center gap-1.5">
                 <p className="text-xs text-slate-500 intel-mono">Streak</p>
                 <p className="text-2xl font-extrabold text-brand-700">{agent.loginStreak ?? 0}</p>
                 <p className="text-lg flame-blue">🔥</p>
@@ -278,7 +323,7 @@ export default function AdminAgentProfile() {
             </div>
 
             {levelInfo && (
-              <div className="mt-4">
+              <div className="mt-3">
                 <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
                   <span>Level {levelInfo.level}</span>
                   <span>{levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Airstars</span>
@@ -293,16 +338,18 @@ export default function AdminAgentProfile() {
                 </div>
               </div>
             )}
-          </motion.div>
+          </div>
 
           {/* Account facts an admin needs and the agent never sees on a card. */}
           <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            <AdminCardTitle>Account</AdminCardTitle>
+            <div className="flex flex-wrap gap-1.5 mb-3 mt-2">
               {agent.isAdmin   && <Flag tone="brand">Admin</Flag>}
               {agent.isBot     && <Flag tone="brand">Bot</Flag>}
               {agent.isTester  && <Flag tone="amber">Tester</Flag>}
               {agent.isBanned  && <Flag tone="red">Banned</Flag>}
               {agent.chatBannedAt && <Flag tone="red">Chat banned</Flag>}
+              {agent.hideFromShowcase && <Flag tone="amber">Scores private</Flag>}
               <Flag tone={agent.subscriptionTier === 'free' ? 'slate' : 'emerald'}>
                 {agent.subscriptionTier}
               </Flag>
@@ -330,6 +377,10 @@ export default function AdminAgentProfile() {
 
           {/* Stats. The three that have a history page behind them are buttons,
               and say so — the same route Admin ▸ Users takes. */}
+          <div className="flex items-center gap-2 mb-1.5">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Activity</p>
+            <AdminOnly />
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <StatTile label="Airstars" value={(agent.totalAirstars ?? 0).toLocaleString()} />
             <StatTile
@@ -383,12 +434,11 @@ export default function AdminAgentProfile() {
               once the brief is read, whereas these move the moment someone is
               overtaken. */}
           <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
-            <div className="flex items-baseline justify-between gap-3 mb-1">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Leaderboard medals</p>
-              {medals.length > 0 && (
-                <p className="text-xs font-bold text-slate-700">{medals.length}</p>
-              )}
-            </div>
+            <AdminCardTitle right={medals.length > 0 && (
+              <p className="text-xs font-bold text-slate-700">{medals.length}</p>
+            )}>
+              Leaderboard medals
+            </AdminCardTitle>
             <p className="text-[11px] text-slate-400 mb-3">
               Top three on an all time board right now. These are the same medals shown on their
               avatar in Community, and they are lost the moment someone overtakes them.
@@ -406,12 +456,13 @@ export default function AdminAgentProfile() {
 
           {/* Trophy cabinet */}
           <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
-            <div className="flex items-baseline justify-between gap-3 mb-1">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Aircraft badges</p>
+            <AdminCardTitle right={(
               <p className="text-xs font-bold text-slate-700">
                 {earned.length} <span className="text-slate-400 font-semibold">of {collectable}</span>
               </p>
-            </div>
+            )}>
+              Aircraft badges
+            </AdminCardTitle>
             <p className="text-[11px] text-slate-400 mb-3">
               One per Aircraft brief they have finished reading. The worn badge replaces their rank
               badge everywhere their avatar appears.
@@ -462,23 +513,40 @@ export default function AdminAgentProfile() {
               every line on the player's own card names a game for them to go and play, and an
               admin cannot play it for them. */}
           <div className="mb-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Aptitude report</p>
+            <AdminCardTitle>Aptitude report</AdminCardTitle>
             <p className="text-[11px] text-slate-400 mb-2">
               What their practice would score against the role they are aiming for. Opens the full
               report as them.
             </p>
             <AptitudeReportCard userId={id} />
           </div>
+          </>)}
 
-          {/* CBAT record — the personal best on every game they have finished. */}
+          {/* CBAT record — the personal best on every game they have finished.
+              Public. How many times, when, and where it sits on the board are
+              admin only, so a player sees the score and nothing under it. */}
           <div className="bg-surface border border-slate-200 rounded-2xl p-4 card-shadow">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">CBAT record</p>
             <p className="text-[11px] text-slate-400 mb-3">
-              Their best score on every test they have finished, most played first. The chip beside
-              a name is where that score currently sits on the all time board, blank if it is
-              outside the top 20.
+              Their best score on every test they have finished, most played first.
+              {showAdmin && (
+                <>
+                  {' '}The chip beside a name is where that score currently sits on the all time board,
+                  blank if it is outside the top 20.
+                </>
+              )}
             </p>
-            {!data?.cbatGames?.length ? (
+            {showAdmin && (
+              <p className="text-[11px] text-slate-400 mb-3 flex items-center gap-1.5">
+                <AdminOnly /> attempts, last played and board place.
+              </p>
+            )}
+            {data?.scoresHidden ? (
+              // Opted out under Profile > Settings > Score Sharing. The public
+              // endpoint sends no rows for them, and an empty list must not read
+              // as "never played".
+              <p className="text-sm text-slate-400 py-3 text-center">This player keeps their scores private.</p>
+            ) : !data?.cbatGames?.length ? (
               <p className="text-sm text-slate-400 py-3 text-center">They have never finished a CBAT test.</p>
             ) : (
               <ul className="divide-y divide-slate-100">
@@ -493,11 +561,13 @@ export default function AdminAgentProfile() {
                           <span className="truncate">
                             {cfg.title ? cbatTitleWithDifficulty(g.gameKey, cfg.title) : g.label}
                           </span>
-                          <BoardRankChip rank={g.boardRank} />
+                          {showAdmin && <BoardRankChip rank={g.boardRank} />}
                         </p>
-                        <p className="text-[10px] text-slate-400">
-                          {g.attempts} finished · last {fmtDate(g.lastPlayedAt)}
-                        </p>
+                        {showAdmin && (
+                          <p className="text-[10px] text-slate-400">
+                            {g.attempts} finished · last {fmtDate(g.lastPlayedAt)}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-extrabold text-slate-800">
@@ -514,7 +584,7 @@ export default function AdminAgentProfile() {
         </>
       )}
 
-      {progressOpen && agent && (
+      {progressOpen && showAdmin && agent && (
         <UserCbatProgressModal
           user={{ _id: agent._id, displayName: agent.displayName, email: agent.email }}
           API={API}

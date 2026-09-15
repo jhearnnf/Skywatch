@@ -47,6 +47,7 @@ const SLIM_ALLOWED_PREFIXES = [
   '/immerse',            // Hangar game — see note below
   '/case-files',         // investigative scenarios — see note below
   '/chat',               // channels + DMs — see note below
+  '/agent',              // another player's profile, opened from chat and the recent-scores feed
   '/survey',             // emailed CBAT outcome questionnaire — see note below
 ]
 

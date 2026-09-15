@@ -2,14 +2,16 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
-// The read-only agent profile an admin reaches from a name in Community.
+// The agent profile anyone reaches from a name in Community or the score feed.
 //
-// Two things earn their tests here. First the gate: a non-admin who guesses the
-// URL must be sent away, not shown a stripped-down page. Second the trophy
-// area, whose whole point is that "12 of 30" is only meaningful next to the 18
-// they have not collected, so the locked half has to be reachable.
+// Three things earn their tests here. First the split: a player gets the
+// public cards (name, badge, best scores) from the public endpoint and nothing
+// else, while an admin gets the whole account with every extra card marked
+// "Admin only". Second the trophy area, whose whole point is that "12 of 30"
+// is only meaningful next to the 18 they have not collected, so the locked
+// half has to be reachable. Third the routes onward, which must come back here.
 const mockApiFetch = vi.hoisted(() => vi.fn())
-const mockUser     = vi.hoisted(() => ({ current: { isAdmin: true } }))
+const mockUser     = vi.hoisted(() => ({ current: { _id: 'admin1', isAdmin: true } }))
 const mockNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('../../context/AuthContext', () => ({
@@ -30,7 +32,7 @@ vi.mock('../../components/admin/UserCbatProgressModal', () => ({
   default: () => <div>progress modal</div>,
 }))
 
-import AdminAgentProfile from '../AdminAgentProfile'
+import AgentProfile from '../AgentProfile'
 
 const badge = (title) => ({
   briefId: `b-${title}`, title, cutoutUrl: `/cutouts/${title}.png`,
@@ -67,56 +69,152 @@ const payload = (over = {}) => ({
   },
 })
 
+// What the public endpoint sends a player: no stats, badges or medals, and
+// the record rows carry a best score and nothing else.
+const publicPayload = () => ({
+  status: 'success',
+  data: {
+    user: {
+      _id: 'u2', displayName: 'Viper', agentNumber: '1000042', isBot: false, cbatPassed: true,
+      selectedBadge: badge('Typhoon'),
+    },
+    cbatGames: [
+      { gameKey: 'flag', label: 'FLAG (Hard)', best: 386 },
+      { gameKey: 'angles', label: 'Angles', best: 18 },
+    ],
+  },
+})
+
 const ok = (body) => ({ ok: true, json: () => Promise.resolve(body) })
 
 const renderPage = (state) => render(
-  <MemoryRouter initialEntries={[{ pathname: '/admin/agent/u2', state }]}>
+  <MemoryRouter initialEntries={[{ pathname: '/agent/u2', state }]}>
     <Routes>
-      <Route path="/admin/agent/:id" element={<AdminAgentProfile />} />
+      <Route path="/agent/:id" element={<AgentProfile />} />
     </Routes>
   </MemoryRouter>,
 )
 
+const asPlayer = () => {
+  mockUser.current = { _id: 'me', isAdmin: false }
+  mockApiFetch.mockResolvedValue(ok(publicPayload()))
+}
+
 beforeEach(() => {
   mockApiFetch.mockReset()
   mockNavigate.mockReset()
-  mockUser.current = { isAdmin: true }
+  mockUser.current = { _id: 'admin1', isAdmin: true }
   mockApiFetch.mockResolvedValue(ok(payload()))
 })
 afterEach(() => cleanup())
 
-describe('AdminAgentProfile — the gate', () => {
-  it('sends a non-admin away rather than rendering anything', async () => {
-    mockUser.current = { isAdmin: false }
+describe('AgentProfile — who fetches what', () => {
+  it('asks the admin endpoint for an admin', async () => {
     renderPage()
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/'))
-    expect(mockApiFetch).not.toHaveBeenCalled()
+    await screen.findByText('Viper')
+    expect(mockApiFetch).toHaveBeenCalledWith('/api/admin/users/u2/profile', expect.anything())
   })
 
-  it('says on the page that it is an admin view, not just on the button that opened it', async () => {
+  it('asks the public endpoint for a player, never the admin one', async () => {
+    asPlayer()
+    renderPage()
+    await screen.findByText('Viper')
+    expect(mockApiFetch).toHaveBeenCalledWith('/api/users/u2/profile', expect.anything())
+    expect(mockApiFetch).not.toHaveBeenCalledWith('/api/admin/users/u2/profile', expect.anything())
+  })
+
+  it('says on the page that it is an admin view, and only to an admin', async () => {
     renderPage()
     expect(await screen.findByText('Admin View')).toBeInTheDocument()
+    cleanup()
+    asPlayer()
+    renderPage()
+    await screen.findByText('Viper')
+    expect(screen.queryByText('Admin View')).not.toBeInTheDocument()
   })
 })
 
-describe('AdminAgentProfile — identity', () => {
-  it('shows the name, agent number, rank and streak', async () => {
+describe('AgentProfile — what a player sees', () => {
+  beforeEach(asPlayer)
+
+  it('shows the name, agent number, worn badge and best scores', async () => {
     renderPage()
     expect(await screen.findByText('Viper')).toBeInTheDocument()
     expect(screen.getByText('#1000042')).toBeInTheDocument()
-    expect(screen.getByText('Sergeant (Sgt)')).toBeInTheDocument()
-    expect(screen.getByText('6')).toBeInTheDocument()
+    expect(screen.getByText('FLAG (Hard)')).toBeInTheDocument()
+    expect(screen.getByText('386')).toBeInTheDocument()
+    expect(screen.getByText('18/20')).toBeInTheDocument()
   })
 
-  it('shows the account facts an agent never sees on their own card', async () => {
+  it('shows none of the admin cards, and no "Admin only" mark at all', async () => {
+    renderPage()
+    await screen.findByText('Viper')
+    expect(screen.queryByText('Admin only')).not.toBeInTheDocument()
+    for (const label of ['Standing', 'Account', 'Activity', 'Leaderboard medals', 'Aircraft badges', 'Aptitude report']) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText(/Streak/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Level \d/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Briefs read/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\d+ finished/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'CBAT game history' })).not.toBeInTheDocument()
+  })
+
+  it('says the scores are private when the player has opted out, rather than "never played"', async () => {
+    mockApiFetch.mockResolvedValue(ok({ status: 'success', data: {
+      ...publicPayload().data, scoresHidden: true, cbatGames: [],
+    } }))
+    renderPage()
+    expect(await screen.findByText('This player keeps their scores private.')).toBeInTheDocument()
+    expect(screen.queryByText('They have never finished a CBAT test.')).not.toBeInTheDocument()
+    // The name and badge still show, as they do in chat.
+    expect(screen.getByText('Viper')).toBeInTheDocument()
+  })
+
+  it('goes back to the CBAT hub when nothing said where it came from', async () => {
+    renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: '← Back to CBAT' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/cbat', undefined)
+  })
+})
+
+describe('AgentProfile — what an admin sees on top', () => {
+  it('shows rank, streak and level, marked admin only', async () => {
+    renderPage()
+    expect(await screen.findByText('Viper')).toBeInTheDocument()
+    expect(screen.getByText('Sergeant (Sgt)')).toBeInTheDocument()
+    expect(screen.getByText('6')).toBeInTheDocument()
+    expect(screen.getByText('Standing').parentElement).toHaveTextContent('Admin only')
+  })
+
+  it('flags a player who has opted out of score sharing, and still shows their record', async () => {
+    const p = payload(); p.data.user.hideFromShowcase = true
+    mockApiFetch.mockResolvedValue(ok(p))
+    renderPage()
+    expect(await screen.findByText('Scores private')).toBeInTheDocument()
+    expect(screen.getByText('386')).toBeInTheDocument()
+  })
+
+  it('shows the account facts a player never sees, marked admin only', async () => {
     renderPage()
     expect(await screen.findByText('viper@test.com')).toBeInTheDocument()
     expect(screen.getByText('gold')).toBeInTheDocument()
     expect(screen.getByText('hard')).toBeInTheDocument()
+    expect(screen.getByText('Account').parentElement).toHaveTextContent('Admin only')
+  })
+
+  it('marks every admin card, so an admin can tell which half a player sees', async () => {
+    renderPage()
+    await screen.findByText('Viper')
+    for (const label of ['Standing', 'Account', 'Leaderboard medals', 'Aircraft badges', 'Aptitude report']) {
+      expect(screen.getByText(label).parentElement).toHaveTextContent('Admin only')
+    }
+    // The activity tiles share one mark above the row.
+    expect(screen.getByText('Activity').parentElement).toHaveTextContent('Admin only')
   })
 })
 
-describe('AdminAgentProfile — trophy area', () => {
+describe('AgentProfile — trophy area', () => {
   it('counts the collection against what can be collected', async () => {
     renderPage()
     await screen.findByText('Viper')
@@ -141,7 +239,7 @@ describe('AdminAgentProfile — trophy area', () => {
   })
 })
 
-describe('AdminAgentProfile — leaderboard medals', () => {
+describe('AgentProfile — leaderboard medals', () => {
   it('names each podium place and the board it is held on', async () => {
     renderPage()
     await screen.findByText('Viper')
@@ -165,7 +263,7 @@ describe('AdminAgentProfile — leaderboard medals', () => {
   })
 })
 
-describe('AdminAgentProfile — board position on each record row', () => {
+describe('AgentProfile — board position on each record row', () => {
   it('shows a plain place for a score below the podium', async () => {
     renderPage()
     await screen.findByText('Viper')
@@ -183,8 +281,8 @@ describe('AdminAgentProfile — board position on each record row', () => {
   })
 })
 
-describe('AdminAgentProfile — CBAT record', () => {
-  it('lists each test with the attempts and the personal best', async () => {
+describe('AgentProfile — CBAT record', () => {
+  it('lists each test with the attempts and the personal best for an admin', async () => {
     renderPage()
     await screen.findByText('Viper')
     // Named twice now: once on its medal, once on this row.
@@ -194,6 +292,19 @@ describe('AdminAgentProfile — CBAT record', () => {
     expect(screen.getByText(/6 finished/)).toBeInTheDocument()
   })
 
+  it('never draws a board place for a player, even if a row carried one', async () => {
+    asPlayer()
+    // A defensive check: the public endpoint sends no boardRank, but the chip
+    // must be gated on the viewer too, not just on the field being absent.
+    mockApiFetch.mockResolvedValue(ok({ status: 'success', data: {
+      ...publicPayload().data,
+      cbatGames: [{ gameKey: 'symbols', label: 'Symbols', best: 9, boardRank: 7 }],
+    } }))
+    renderPage()
+    await screen.findByText('Symbols')
+    expect(screen.queryByText('#7')).not.toBeInTheDocument()
+  })
+
   it('says so plainly when they have never finished one', async () => {
     mockApiFetch.mockResolvedValue(ok(payload({ cbatGames: [] })))
     renderPage()
@@ -201,7 +312,7 @@ describe('AdminAgentProfile — CBAT record', () => {
   })
 })
 
-describe('AdminAgentProfile — routes onward', () => {
+describe('AgentProfile — routes onward', () => {
   it('opens their CBAT history in admin mode, and tells it to come back here', async () => {
     renderPage()
     await screen.findByText('Viper')
@@ -211,7 +322,7 @@ describe('AdminAgentProfile — routes onward', () => {
       state: expect.objectContaining({
         adminUserId: 'u2',
         adminUserName: 'Viper',
-        backTo: '/admin/agent/u2',
+        backTo: '/agent/u2',
         backLabel: 'Back to Profile',
       }),
     })
@@ -246,7 +357,7 @@ describe('AdminAgentProfile — routes onward', () => {
 // thread actually has. It is the agent's own card, fetched for them: the one
 // thing it must never do is show the reading admin their own numbers under
 // somebody else's name.
-describe('AdminAgentProfile — the aptitude report', () => {
+describe('AgentProfile — the aptitude report', () => {
   const REPORT = {
     targetBattery: 'pilot',
     batteries: [{ key: 'pilot', label: 'Pilot', cutoff: 112, score: 128, margin: 16, status: 'pass', coverage: 74 }],

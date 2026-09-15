@@ -25,7 +25,7 @@ function mockFetch(recent) {
 
 function setupAuth({ userId = 'me', isAdmin = false, apiFetch }) {
   mockUseAuth.mockReturnValue({
-    user: { _id: userId, isAdmin },
+    user: userId ? { _id: userId, isAdmin } : null,
     API: '',
     apiFetch,
   })
@@ -88,7 +88,7 @@ describe('RecentCbatScores — row links to the all-time leaderboard', () => {
   })
 })
 
-describe('RecentCbatScores — admin username → agent profile', () => {
+describe('RecentCbatScores — username → agent profile', () => {
   beforeEach(() => vi.clearAllMocks())
 
   // A name in a feed prompts "who is this", so the click lands on the profile —
@@ -104,8 +104,8 @@ describe('RecentCbatScores — admin username → agent profile', () => {
     render(<RecentCbatScores />)
     const btn = await screen.findByRole('button', { name: /Maverick/ })
     await userEvent.click(btn)
-    // Back returns to the hub the click came from, not to the admin panel.
-    expect(mockNavigate).toHaveBeenCalledWith('/admin/agent/other', {
+    // Back returns to the hub the click came from.
+    expect(mockNavigate).toHaveBeenCalledWith('/agent/other', {
       state: { backTo: '/cbat', backLabel: 'Back to CBAT' },
     })
   })
@@ -120,12 +120,27 @@ describe('RecentCbatScores — admin username → agent profile', () => {
     })
     render(<RecentCbatScores />)
     await userEvent.click(await screen.findByRole('button', { name: /nobody@test.com/ }))
-    expect(mockNavigate).toHaveBeenCalledWith('/admin/agent/other', expect.anything())
+    expect(mockNavigate).toHaveBeenCalledWith('/agent/other', expect.anything())
   })
 
-  it('does not expose a username button to non-admins', async () => {
+  // The profile is public to every signed-in agent now, so the name is a
+  // button for a player too.
+  it('offers the profile to an ordinary signed-in player', async () => {
     setupAuth({
       userId: 'me',
+      isAdmin: false,
+      apiFetch: mockFetch([
+        { _id: 'r1', userId: 'other', gameKey: 'angles', gameLabel: 'Angles', rank: 2, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },
+      ]),
+    })
+    render(<RecentCbatScores />)
+    await userEvent.click(await screen.findByRole('button', { name: /Maverick/ }))
+    expect(mockNavigate).toHaveBeenCalledWith('/agent/other', expect.anything())
+  })
+
+  it('does not offer a username button when signed out, because the profile needs a sign-in', async () => {
+    setupAuth({
+      userId: null,
       isAdmin: false,
       apiFetch: mockFetch([
         { _id: 'r1', userId: 'other', gameKey: 'angles', gameLabel: 'Angles', rank: 2, agentNumber: 'A999', displayName: 'Maverick', achievedAt: new Date().toISOString() },

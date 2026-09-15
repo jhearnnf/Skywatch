@@ -570,12 +570,11 @@ export default function ChatThread({
           userId={cardUserId}
           onClose={() => setCardUserId(null)}
           onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`); onChanged?.() }}
-          // Admin only. Carries the thread it was opened from so the profile's
-          // Back button returns to this conversation rather than to the admin
-          // panel, which is not where the admin was.
+          // Carries the thread it was opened from so the profile's Back button
+          // returns to this conversation.
           onViewProfile={(id) => {
             setCardUserId(null)
-            navigate(`/admin/agent/${id}`, {
+            navigate(`/agent/${id}`, {
               state: { backTo: location.pathname, backLabel: 'Back to Community' },
             })
           }}

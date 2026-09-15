@@ -1080,11 +1080,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
           onClose={() => setCardUserId(null)}
           // A DM has no home on the hub, so it opens in Community.
           onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`) }}
-          // Admin only. Carries the hub so the profile's Back button returns
-          // here rather than to the admin panel, which is not where they were.
+          // Carries the hub so the profile's Back button returns here.
           onViewProfile={(id) => {
             setCardUserId(null)
-            navigate(`/admin/agent/${id}`, {
+            navigate(`/agent/${id}`, {
               state: { backTo: location.pathname, backLabel: 'Back to CBAT' },
             })
           }}

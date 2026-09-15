@@ -54,7 +54,7 @@ function AgentLink({ userId, name, className = '', children }) {
   return (
     <button
       type="button"
-      onClick={() => navigate(`/admin/agent/${userId}`, {
+      onClick={() => navigate(`/agent/${userId}`, {
         state: { backTo: '/admin/cbat-questionnaire', backLabel: 'Back to results' },
       })}
       title={name ? `View ${name}'s profile` : 'View their profile'}

@@ -122,6 +122,15 @@ describe('GET /api/admin/users/:id/profile — identity and standing', () => {
     expect(res.body.data.user.email).toBeTruthy();
   });
 
+  it('reports the Score Sharing objection, and still sends the record an admin needs', async () => {
+    await User_update({ hideFromShowcase: true });
+    await seedRun('flag', 300);
+
+    const res = await get();
+    expect(res.body.data.user.hideFromShowcase).toBe(true);
+    expect(res.body.data.cbatGames.find(g => g.gameKey === 'flag').best).toBe(300);
+  });
+
   it('resolves the worn badge rather than returning a bare brief id', async () => {
     const brief = await aircraftBrief('Typhoon');
     await markRead(brief);

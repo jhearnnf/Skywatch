@@ -45,10 +45,8 @@ export default function RecentCbatScores({ fill = false }) {
   const navigate = useNavigate()
   const location = useLocation()
   // Agent view is the hub toggle asking for the board a player would get, so it
-  // drops the admin affordances here too — emails, and the click-through into
-  // that user's CBAT history.
+  // drops the admin affordances here too (the emails the feed sends an admin).
   const adminView = useCbatAdminView()
-  const isAdmin = !!user?.isAdmin && adminView
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -158,15 +156,13 @@ export default function RecentCbatScores({ fill = false }) {
             const rankBadge = r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : `#${r.rank}`
             const isMe = user && r.userId && r.userId === user._id
             const agentLabel = r.displayName || r.email || `Agent ${r.agentNumber || '???'}`
-            // Admins get a distinct username click target: the read-only agent
-            // profile, which is the whole picture of the account (medals, badges,
-            // CBAT record) and carries a button onward to their history. Landing
-            // straight on the history answered one question about a name; the
-            // profile answers "who is this" first, which is what a name in a feed
-            // actually prompts.
+            // The username is its own click target: that agent's profile, which
+            // answers "who is this" (name, badge, best scores; the whole account
+            // for an admin) before anything else, which is what a name in a feed
+            // actually prompts. Signed-in only, because the profile behind it is.
             // The button sits above the stretched row link, so a normal click on the
             // name opens the profile while a click anywhere else opens the leaderboard.
-            const canOpenProfile = isAdmin && r.userId
+            const canOpenProfile = Boolean(user && r.userId)
             return (
               <div
                 key={r._id}
@@ -184,9 +180,8 @@ export default function RecentCbatScores({ fill = false }) {
                 {canOpenProfile ? (
                   <button
                     type="button"
-                    onClick={() => navigate(`/admin/agent/${r.userId}`, {
-                      // Back returns to the hub this was opened from, filter and
-                      // all, rather than to the admin panel nobody was in.
+                    onClick={() => navigate(`/agent/${r.userId}`, {
+                      // Back returns to the hub this was opened from, filter and all.
                       state: {
                         backTo: `${location.pathname}${location.search}`,
                         backLabel: 'Back to CBAT',

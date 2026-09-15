@@ -86,6 +86,10 @@ describe('appMode', () => {
       expect(isSlimAllowed('/chat/507f1f77bcf86cd799439011')).toBe(true)
     })
 
+    it("allows another agent's profile, which chat and the score feed open", () => {
+      expect(isSlimAllowed('/agent/507f1f77bcf86cd799439011')).toBe(true)
+    })
+
     it('does not let /cbat swallow /cbat-game-history via prefix', () => {
       // /cbat-game-history is allowed on its own merit, not because it starts
       // with /cbat — guard against a regression to a bare startsWith.

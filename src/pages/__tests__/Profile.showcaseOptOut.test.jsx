@@ -2,8 +2,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Profile from '../Profile'
 
-// The GDPR right-to-object control for the landing page's progress wall
-// (backend/utils/cbatShowcase.js). Mirrors the harness in Profile.displayName.test.jsx.
+// The GDPR right-to-object control for score sharing: the landing page's
+// progress wall (backend/utils/cbatShowcase.js) and the scores on the player
+// profile (GET /api/users/:id/profile). One switch for both, on purpose.
+// Mirrors the harness in Profile.displayName.test.jsx.
 
 const mockNavigate = vi.hoisted(() => vi.fn())
 const mockUseAuth  = vi.hoisted(() => vi.fn())
@@ -81,25 +83,27 @@ async function goToSettings() {
   fireEvent.click(await screen.findByText(/⚙️ Settings/))
 }
 
-describe('Profile — homepage feature opt-out', () => {
+describe('Profile — score sharing opt-out', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('defaults to included, so the wall works without anyone opting in', async () => {
     mountWith({ user: { ...BASE_USER }, apiFetch: fetchWith() })
     await goToSettings()
 
-    expect(await screen.findByText('Homepage Feature')).toBeInTheDocument()
+    expect(await screen.findByText('Score Sharing')).toBeInTheDocument()
     // No "will not appear" note while included.
     expect(screen.queryByText(/will not appear on the homepage/i)).toBeNull()
   })
 
-  it('says what is shown and what is not, without needing the privacy policy', async () => {
+  it('says where scores are shown and what is not, without needing the privacy policy', async () => {
     mountWith({ user: { ...BASE_USER }, apiFetch: fetchWith() })
     await goToSettings()
 
     const blurb = await screen.findByText(/agent number only/i)
+    expect(blurb.textContent).toMatch(/player profile/i)
+    expect(blurb.textContent).toMatch(/homepage/i)
     expect(blurb.textContent).toMatch(/never your display name/i)
-    expect(blurb.textContent).toMatch(/never the date\/time you played/i)
+    expect(blurb.textContent).toMatch(/never the date or time you played/i)
   })
 
   it('sends the objection when the player opts out', async () => {
@@ -122,11 +126,12 @@ describe('Profile — homepage feature opt-out', () => {
     expect(setUser).toHaveBeenCalledWith(expect.objectContaining({ hideFromShowcase: true }))
   })
 
-  it('confirms the opt-out is already in force, not queued', async () => {
+  it('confirms the opt-out is already in force, not queued, and names both places', async () => {
     mountWith({ user: { ...BASE_USER, hideFromShowcase: true }, apiFetch: fetchWith() })
     await goToSettings()
 
-    expect(await screen.findByText(/takes effect straight away/i)).toBeInTheDocument()
+    const note = await screen.findByText(/takes effect straight away/i)
+    expect(note.textContent).toMatch(/homepage or on your player profile/i)
   })
 
   it('lets an opted-out player opt back in', async () => {

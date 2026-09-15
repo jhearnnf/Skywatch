@@ -11,7 +11,7 @@ import { agentLabel } from '../format'
 // Overlay portals to document.body, so the chat panel's `overflow-hidden`
 // cannot clip the card.
 export default function UserCard({ userId, onClose, onOpenDm, onViewProfile, onBlockChanged }) {
-  const { user, API, apiFetch } = useAuth()
+  const { API, apiFetch } = useAuth()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [busy,    setBusy]    = useState(false)
@@ -145,20 +145,16 @@ export default function UserCard({ userId, onClose, onOpenDm, onViewProfile, onB
                     Message
                   </button>
                 )}
-                {/* Admin-only, and marked as such: this is the one button on
-                    the card that opens something no ordinary agent can see, and
-                    an unlabelled extra button would read as a feature everyone
-                    has. Hidden for bots, which have no profile to report on. */}
-                {user?.isAdmin && !profile.isSelf && !profile.isBot && onViewProfile && (
+                {/* Their profile: name, badge and best score on each test, plus
+                    the admin cards for an admin. Hidden for bots, which have no
+                    profile to report on, and on your own card. */}
+                {!profile.isSelf && !profile.isBot && onViewProfile && (
                   <button
                     type="button"
                     onClick={() => onViewProfile(userId)}
-                    className="w-full px-4 py-2 flex items-center justify-center gap-2 text-brand-600 hover:text-brand-700 border border-slate-200 hover:bg-slate-100 font-bold rounded-xl text-sm transition-colors"
+                    className="w-full px-4 py-2 text-brand-600 hover:text-brand-700 border border-slate-200 hover:bg-slate-100 font-bold rounded-xl text-sm transition-colors"
                   >
                     View profile
-                    <span className="text-[9px] font-extrabold uppercase tracking-wide bg-brand-600 text-white px-1.5 py-px rounded">
-                      Admin only
-                    </span>
                   </button>
                 )}
                 {profile.canBlock && (

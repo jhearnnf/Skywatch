@@ -25,7 +25,7 @@ const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
 const { resolveSelectedBadge } = require('../utils/selectedBadge');
-const { boardPositionFor } = require('../utils/cbatBoardRank');
+const { cbatRecordFor, withBoardRanks, medalsFrom } = require('../utils/cbatRecord');
 const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
 const { deleteUserAndData } = require('../services/deleteUserData');
 const Rank  = require('../models/Rank');
@@ -2419,11 +2419,9 @@ router.get('/users/:id/profile', protect, adminOnly, async (req, res) => {
       status:   'published',
     }).select('title media').populate('media').sort({ title: 1 }).lean();
 
-    const cbatEntries = Object.entries(CBAT_GAMES);
-
     const [
       briefsRead, aircraftReads, quizAgg, booAgg, wtaCount, whereCount, flashCount,
-      cbatStartAgg, selectedBadge, ...cbatPerGame
+      cbatStartAgg, selectedBadge, cbatGames,
     ] = await Promise.all([
       IntelligenceBriefRead.countDocuments({ userId: uid, completed: true }),
       IntelligenceBriefRead.find({
@@ -2449,28 +2447,9 @@ router.get('/users/:id/profile', protect, adminOnly, async (req, res) => {
         { $group: { _id: null, count: { $sum: 1 }, lastAt: { $max: '$startedAt' } } },
       ]),
       resolveSelectedBadge(target.selectedBadgeBriefId),
-      // Attempts, personal best and last play per registry entry. One $group per
-      // entry rather than per Model: two entries can share a collection and each
-      // needs its own modeFilter (see CBAT_GAMES).
-      ...cbatEntries.map(async ([gameKey, cfg]) => {
-        const [row] = await cfg.Model.aggregate([
-          { $match: { ...(cfg.modeFilter ?? {}), userId: uid } },
-          { $group: {
-            _id: null,
-            attempts:     { $sum: 1 },
-            best:         { [cfg.bestOp]: `$${cfg.primaryField}` },
-            lastPlayedAt: { $max: '$createdAt' },
-          } },
-        ]);
-        if (!row?.attempts) return null;
-        return {
-          gameKey,
-          label:        cbatLabelWithDifficulty(gameKey),
-          attempts:     row.attempts,
-          best:         row.best ?? null,
-          lastPlayedAt: row.lastPlayedAt ?? null,
-        };
-      }),
+      // Attempts, personal best and last play per registry entry, most played
+      // first. Shared with the public profile (GET /api/users/:id/profile).
+      cbatRecordFor(uid),
     ]);
 
     const readSet = new Set(aircraftReads.map(r => String(r.intelBriefId)));
@@ -2488,34 +2467,12 @@ router.get('/users/:id/profile', protect, adminOnly, async (req, res) => {
       (hasRead ? badges.earned : badges.locked).push(entry);
     }
 
-    const cbatGames = cbatPerGame.filter(Boolean)
-      .sort((a, b) => b.attempts - a.attempts);
     const cbatFinished = cbatGames.reduce((sum, g) => sum + g.attempts, 0);
 
-    // Where they currently stand on each of those all-time boards, ranked
-    // against the SAME padded board a player sees — best-per-user, with the
-    // demo agents padLeaderboard injects into thin games counted as the places
-    // they visibly occupy. Telling an admin someone is 2nd while the board
-    // shows them 5th would make the page worse than silent.
-    //
-    // Only for games they have actually finished: an unplayed board has no
-    // position to report and each one costs an aggregation.
-    await Promise.all(cbatGames.map(async (g) => {
-      try {
-        g.boardRank = await boardPositionFor(g.gameKey, CBAT_GAMES[g.gameKey], uid);
-      } catch {
-        // One unrankable board must not cost the page every other number on it.
-        g.boardRank = null;
-      }
-    }));
-
-    // The podium places, best first — the same medals chat hangs off their
-    // avatar. Derived from the boards just ranked rather than read from the
-    // medal cache, so the page is never up to five minutes behind itself.
-    const medals = cbatGames
-      .filter(g => g.boardRank && g.boardRank <= 3)
-      .map(g => ({ gameKey: g.gameKey, gameLabel: g.label, rank: g.boardRank }))
-      .sort((a, b) => a.rank - b.rank);
+    // Board places and the podium medals derived from them. Admin only: each
+    // board place costs an aggregation, which the public profile does not pay.
+    await withBoardRanks(cbatGames, uid);
+    const medals = medalsFrom(cbatGames);
 
     res.json({ status: 'success', data: {
       user: {
@@ -2530,6 +2487,7 @@ router.get('/users/:id/profile', protect, adminOnly, async (req, res) => {
         isTester:          Boolean(target.isTester),
         cbatPassed:        Boolean(target.cbatPassed),
         chatBannedAt:      target.chatBannedAt ?? null,
+        hideFromShowcase:  Boolean(target.hideFromShowcase),
         createdAt:         target.createdAt,
         lastSeen:          target.lastSeen ?? null,
         loginStreak:       target.loginStreak ?? 0,

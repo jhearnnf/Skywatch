@@ -334,7 +334,7 @@ describe('CbatQuestionnaireResults — opening a profile', () => {
       <MemoryRouter initialEntries={['/admin/cbat-questionnaire']}>
         <Routes>
           <Route path="/admin/cbat-questionnaire" element={<CbatQuestionnaireResults />} />
-          <Route path="/admin/agent/:id" element={<ProfileProbe />} />
+          <Route path="/agent/:id" element={<ProfileProbe />} />
         </Routes>
       </MemoryRouter>,
     )
@@ -348,7 +348,7 @@ describe('CbatQuestionnaireResults — opening a profile', () => {
 
     fireEvent.click(await screen.findByText('Agent 777'))
     expect((await screen.findByTestId('profile-probe')).textContent)
-      .toBe('/admin/agent/u1 · Back to results')
+      .toBe('/agent/u1 · Back to results')
   })
 
   it('opens it from the email too, because that is the half an admin may recognise', async () => {
@@ -359,7 +359,7 @@ describe('CbatQuestionnaireResults — opening a profile', () => {
 
     fireEvent.click(await screen.findByText('a@example.com'))
     expect((await screen.findByTestId('profile-probe')).textContent)
-      .toBe('/admin/agent/u1 · Back to results')
+      .toBe('/agent/u1 · Back to results')
   })
 
   it('opens it from the name under a piece of free text', async () => {
@@ -369,7 +369,7 @@ describe('CbatQuestionnaireResults — opening a profile', () => {
 
     fireEvent.click(await screen.findByText('Agent 777'))
     expect((await screen.findByTestId('profile-probe')).textContent)
-      .toBe('/admin/agent/u7 · Back to results')
+      .toBe('/agent/u7 · Back to results')
   })
 
   it('leaves the name as plain text when the account behind it is gone', async () => {
