@@ -135,8 +135,10 @@ export default function ChatGuidesEditor({ API, Toast }) {
 
   const inputClass = 'w-full px-3 py-2 rounded-xl border border-slate-300 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm bg-transparent text-slate-800'
 
+  // Five actions per row is too many to sit beside the title on a phone, so
+  // below sm the button group takes its own line and wraps as needed.
   const row = (g) => (
-    <div key={g._id} className={`rounded-xl border border-slate-300 px-3 py-2 flex items-center gap-3 ${g.isHidden ? 'opacity-80' : ''}`}>
+    <div key={g._id} className={`rounded-xl border border-slate-300 px-3 py-2 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 ${g.isHidden ? 'opacity-80' : ''}`}>
       <span className="text-lg shrink-0">{g.emoji || '📖'}</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -152,7 +154,7 @@ export default function ChatGuidesEditor({ API, Toast }) {
           {g.url}{g.description ? ` · ${g.description}` : ''} · order {g.order}
         </p>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:shrink-0">
         <a
           href={g.url}
           target="_blank"
