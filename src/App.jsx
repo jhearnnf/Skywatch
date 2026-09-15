@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Capacitor } from '@capacitor/core'
 import { HelmetProvider } from 'react-helmet-async'
 import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
 
@@ -23,6 +22,7 @@ import CbatMenuMusic                          from './components/CbatMenuMusic'
 import CommunityMusic                         from './components/CommunityMusic'
 import AppShell                            from './components/layout/AppShell'
 import UiThemeSync                         from './components/layout/UiThemeSync'
+import { useNativeBackButton }             from './hooks/useNativeBackButton'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
 import LevelUpNotification                 from './components/LevelUpNotification'
@@ -239,21 +239,9 @@ function AppRoutes() {
   // See src/utils/routeTrail.js.
   useEffect(() => { recordPath(location.pathname) }, [location.pathname])
 
-  // Android hardware back button — navigate back or exit on home
-  useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return
-    let listener
-    import('@capacitor/app').then(({ App }) => {
-      listener = App.addListener('backButton', ({ canGoBack }) => {
-        if (canGoBack) {
-          window.history.back()
-        } else {
-          App.exitApp()
-        }
-      })
-    })
-    return () => { listener?.then(l => l.remove()) }
-  }, [])
+  // Android hardware back button. Its own hook: see useNativeBackButton for
+  // why it must stay out of the /embed/ frames.
+  useNativeBackButton()
 
   if (loading) return <LoadingScreen />
 
