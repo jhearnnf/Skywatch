@@ -12,6 +12,7 @@ const landingEnabled = vi.hoisted(() => ({ value: true }))
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: '/cbat', state: null, search: '', hash: '' }),
   Link: ({ children, to }) => <a href={to}>{children}</a>,
 }))
 vi.mock('../../../context/AuthContext', () => ({

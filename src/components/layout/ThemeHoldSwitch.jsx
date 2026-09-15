@@ -16,17 +16,23 @@ import ThemeFlash from './ThemeFlash'
 // Pointer events so mouse and touch share one path; the pointer is captured
 // so a thumb drifting off the label mid-hold still counts, and the long-press
 // context menu is suppressed.
+//
+// While a CBAT test is being played the control is locked: a press then
+// does nothing but show "Locked during test" for a moment, so a switch can't
+// reskin the test under the player. (Under 600px the bar is off-screen
+// during play anyway; between there and the desktop breakpoint it is not.)
 
 export const HOLD_MS = 1200
 const TICK_MS = 16
 const TIP_MS = 1800
 export const TIP_LABEL = 'Hold to switch'
+export const LOCKED_LABEL = 'Locked during test'
 
 export default function ThemeHoldSwitch() {
   const [announced, setAnnounced] = useState(null) // theme being flashed, or 'tip'
   const onRevert = useCallback(() => setAnnounced(null), [])
   const clearAnnounced = useCallback(() => setAnnounced(null), [])
-  const { user, current, busy, choose } = useUiThemeChoice({ onRevert })
+  const { user, current, busy, locked, choose } = useUiThemeChoice({ onRevert })
   const [holdT, setHoldT] = useState(0)          // 0..1 while the thumb is down
   const holdingRef = useRef(false)
   const startRef = useRef(0)
@@ -59,10 +65,17 @@ export default function ThemeHoldSwitch() {
     })
   }
 
+  const showTip = () => {
+    setAnnounced('tip')
+    clearTimeout(tipTimerRef.current)
+    tipTimerRef.current = setTimeout(() => setAnnounced(a => (a === 'tip' ? null : a)), TIP_MS)
+  }
+
   const onPointerDown = (e) => {
     if (busy || holdingRef.current) return
     if (e.button != null && e.button !== 0) return
     e.preventDefault()
+    if (locked) { showTip(); return }
     // Capture so a thumb drifting off the label mid-hold still counts. Can
     // throw for a pointer the browser is not tracking; the hold works without it.
     try { e.currentTarget.setPointerCapture?.(e.pointerId) } catch { /* not a live pointer */ }
@@ -86,11 +99,10 @@ export default function ThemeHoldSwitch() {
     setHoldT(0)
     // Let go early: a tap, or a hold that gave up. Either way the label says
     // how it works for a moment, then goes back to normal.
-    setAnnounced('tip')
-    clearTimeout(tipTimerRef.current)
-    tipTimerRef.current = setTimeout(() => setAnnounced(a => (a === 'tip' ? null : a)), TIP_MS)
+    showTip()
   }
   const showingTip = announced === 'tip'
+  const tipLabel = locked ? LOCKED_LABEL : TIP_LABEL
 
   return (
     <>
@@ -102,14 +114,15 @@ export default function ThemeHoldSwitch() {
         onPointerCancel={release}
         onContextMenu={(e) => e.preventDefault()}
         disabled={busy}
-        aria-label={`Hold to switch theme to ${UI_THEME_LABELS[other]}`}
-        title={`Press and hold to switch to the ${UI_THEME_LABELS[other]} theme`}
+        aria-label={locked ? 'Theme is locked while a test is running' : `Hold to switch theme to ${UI_THEME_LABELS[other]}`}
+        aria-disabled={locked || undefined}
+        title={locked ? 'Theme is locked while a test is running. Finish or quit the test to change it.' : `Press and hold to switch to the ${UI_THEME_LABELS[other]} theme`}
         data-testid="theme-hold-switch"
         className={`theme-hold-switch text-[11px] font-semibold transition-opacity whitespace-nowrap outline-none focus:outline-none ${
-          holdT > 0 ? 'opacity-100 text-text-muted' : showingTip ? 'opacity-90 text-brand-600' : 'opacity-50 text-text-muted'
+          holdT > 0 ? 'opacity-100 text-text-muted' : showingTip ? 'opacity-90 text-brand-600' : locked ? 'opacity-30 text-text-muted' : 'opacity-50 text-text-muted'
         }`}
       >
-        {showingTip ? TIP_LABEL : 'Switch theme'}
+        {showingTip ? tipLabel : 'Switch theme'}
       </button>
       {holdT > 0 && createPortal(
         <div className="theme-hold-bar" style={{ transform: `scaleX(${holdT})` }} aria-hidden="true" data-testid="theme-hold-bar" />,

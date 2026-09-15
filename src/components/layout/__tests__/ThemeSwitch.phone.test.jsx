@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import TopBar from '../TopBar'
-import ThemeHoldSwitch, { HOLD_MS } from '../ThemeHoldSwitch'
+import ThemeHoldSwitch, { HOLD_MS, LOCKED_LABEL } from '../ThemeHoldSwitch'
 import ThemeSelector from '../ThemeSelector'
 import { UI_THEME_TAGLINES } from '../../../lib/uiTheme'
 import { FLASH_MS } from '../ThemeFlash'
@@ -21,10 +21,15 @@ const auth = vi.hoisted(() => ({
   logout: vi.fn(),
 }))
 const transition = vi.hoisted(() => ({ animate: vi.fn() }))
+const inProgress = vi.hoisted(() => ({ value: false }))
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: '/cbat', state: null, search: '', hash: '' }),
   Link: ({ children, to }) => <a href={to}>{children}</a>,
+}))
+vi.mock('../../../hooks/useCbatGameInProgress', () => ({
+  useCbatGameInProgress: () => inProgress.value,
 }))
 vi.mock('../../../context/AuthContext', () => ({ useAuth: () => auth }))
 vi.mock('../../../hooks/useSlimMode', () => ({
@@ -62,8 +67,30 @@ describe('ThemeHoldSwitch', () => {
     auth.setUser.mockReset()
     auth.apiFetch.mockReset()
     transition.animate.mockReset()
+    inProgress.value = false
   })
   afterEach(() => { vi.useRealTimers() })
+
+  describe('while a CBAT test is running', () => {
+    beforeEach(() => { inProgress.value = true })
+
+    it('a full hold changes nothing and the label says the theme is locked', async () => {
+      render(<ThemeHoldSwitch />)
+      const btn = screen.getByTestId('theme-hold-switch')
+      expect(btn.getAttribute('aria-disabled')).toBe('true')
+      fireEvent.pointerDown(btn, { button: 0, pointerId: 1 })
+      expect(btn).toHaveTextContent(LOCKED_LABEL)
+      hold(HOLD_MS + 50)
+      // No fill bar, no sweep, no flip, no save
+      expect(screen.queryByTestId('theme-hold-bar')).toBeNull()
+      expect(transition.animate).not.toHaveBeenCalled()
+      fireEvent.pointerUp(btn, { pointerId: 1 })
+      await settle()
+      expect(auth.setUser).not.toHaveBeenCalled()
+      expect(auth.apiFetch).not.toHaveBeenCalled()
+      expect(btn).toHaveTextContent(LOCKED_LABEL)
+    })
+  })
 
   it('a plain tap changes nothing and turns the label into the hint for a moment', () => {
     render(<ThemeHoldSwitch />)

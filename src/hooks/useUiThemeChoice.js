@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { resolveUiTheme } from '../lib/uiTheme'
+import { useCbatGameInProgress } from './useCbatGameInProgress'
 
 // Choosing the account's theme, shared by the desktop selector and the
 // phone's hold-to-switch control.
@@ -13,13 +14,18 @@ import { resolveUiTheme } from '../lib/uiTheme'
 //
 // `apply` lets the caller wrap the optimistic flip (the phone runs it inside a
 // page transition); by default it just runs.
+//
+// `locked` is true while a CBAT test is being played. Switching then would
+// reskin the test mid-run (the chrome, key caps and colours all follow the
+// theme), so `choose` refuses and the controls show why.
 export function useUiThemeChoice({ onRevert } = {}) {
   const { user, setUser, API, apiFetch } = useAuth()
   const [busy, setBusy] = useState(false)
   const current = resolveUiTheme(user)
+  const locked = useCbatGameInProgress()
 
   const choose = useCallback(async (theme, { apply } = {}) => {
-    if (busy || theme === current) return false
+    if (busy || locked || theme === current) return false
     const previous = current
     setBusy(true)
     const commit = () => setUser(prev => (prev ? { ...prev, uiTheme: theme } : prev))
@@ -45,9 +51,9 @@ export function useUiThemeChoice({ onRevert } = {}) {
     } finally {
       setBusy(false)
     }
-  }, [busy, current, setUser, apiFetch, API, onRevert])
+  }, [busy, locked, current, setUser, apiFetch, API, onRevert])
 
-  return { user, current, busy, choose }
+  return { user, current, busy, locked, choose }
 }
 
 export default useUiThemeChoice

@@ -14,8 +14,12 @@ const auth = vi.hoisted(() => ({
 vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => auth,
 }))
+const inProgress = vi.hoisted(() => ({ value: false }))
+vi.mock('../../../hooks/useCbatGameInProgress', () => ({
+  useCbatGameInProgress: () => inProgress.value,
+}))
 
-import ThemeSelector from '../ThemeSelector'
+import ThemeSelector, { LOCKED_TITLE } from '../ThemeSelector'
 
 // setUser is called with updater functions; apply them to a copy of the user
 // so the test can read what the optimistic state would have been.
@@ -35,6 +39,7 @@ describe('ThemeSelector', () => {
     auth.user = { _id: 'u1', uiTheme: 'skywatch' }
     auth.setUser.mockReset()
     auth.apiFetch.mockReset()
+    inProgress.value = false
   })
 
   it('renders nothing for a guest', () => {
@@ -101,5 +106,29 @@ describe('ThemeSelector', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SkyWatch' }))
     expect(auth.apiFetch).not.toHaveBeenCalled()
     expect(auth.setUser).not.toHaveBeenCalled()
+  })
+
+  describe('while a CBAT test is running', () => {
+    beforeEach(() => { inProgress.value = true })
+
+    it('locks both options and says why', () => {
+      render(<ThemeSelector />)
+      const sky  = screen.getByRole('button', { name: 'SkyWatch' })
+      const cbat = screen.getByRole('button', { name: 'Real CBAT' })
+      expect(sky).toBeDisabled()
+      expect(cbat).toBeDisabled()
+      expect(cbat.getAttribute('title')).toBe(LOCKED_TITLE)
+      expect(screen.getByRole('group', { name: 'Theme' }).getAttribute('aria-disabled')).toBe('true')
+      // The current theme still reads as the pressed one
+      expect(sky.getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('neither reskins nor saves on a click', async () => {
+      render(<ThemeSelector />)
+      fireEvent.click(screen.getByRole('button', { name: 'Real CBAT' }))
+      await Promise.resolve()
+      expect(auth.setUser).not.toHaveBeenCalled()
+      expect(auth.apiFetch).not.toHaveBeenCalled()
+    })
   })
 })
