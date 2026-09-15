@@ -12,7 +12,18 @@ beforeAll(() => {
   })
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  delete window.matchMedia
+})
+
+// Stand in for the pointer media query: coarse is a phone, fine is a mouse.
+const pointer = (kind) => {
+  window.matchMedia = vi.fn(q => ({ matches: q === `(pointer: ${kind})` }))
+}
+const phoneWidth = () => {
+  window.matchMedia = vi.fn(q => ({ matches: q === '(max-width: 600px)' }))
+}
 
 const box = () => screen.getByPlaceholderText('Type a message…')
 
@@ -25,10 +36,17 @@ describe('ComposeBox', () => {
     expect(box().style.height).toBe(`${LINE * 3}px`)
   })
 
-  it('stops growing past the cap so the composer cannot eat the thread', () => {
+  it('on a phone stops growing past the cap so the composer cannot eat the thread', () => {
+    phoneWidth()
     render(<ComposeBox onSend={vi.fn()} />)
     fireEvent.change(box(), { target: { value: Array(20).fill('line').join('\n') } })
     expect(box().style.height).toBe('160px')
+  })
+
+  it('on desktop keeps growing so a long message never scrolls inside the box', () => {
+    render(<ComposeBox onSend={vi.fn()} />)
+    fireEvent.change(box(), { target: { value: Array(20).fill('line').join('\n') } })
+    expect(box().style.height).toBe(`${LINE * 20}px`)
   })
 
   it('shrinks back to one line after sending', () => {
@@ -36,5 +54,44 @@ describe('ComposeBox', () => {
     fireEvent.change(box(), { target: { value: 'one\ntwo\nthree' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(box().style.height).toBe(`${LINE}px`)
+  })
+
+  it('adds the border back so the box never scrolls by a couple of pixels', () => {
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'offsetHeight', { configurable: true, get() { return 2 } })
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'clientHeight', { configurable: true, get() { return 0 } })
+    try {
+      render(<ComposeBox onSend={vi.fn()} />)
+      expect(box().style.height).toBe(`${LINE + 2}px`)
+    } finally {
+      delete HTMLTextAreaElement.prototype.offsetHeight
+      delete HTMLTextAreaElement.prototype.clientHeight
+    }
+  })
+
+  describe('Enter', () => {
+    it('sends from a physical keyboard, and Shift+Enter breaks the line', () => {
+      pointer('fine')
+      const onSend = vi.fn()
+      render(<ComposeBox onSend={onSend} />)
+      fireEvent.change(box(), { target: { value: 'hello' } })
+      fireEvent.keyDown(box(), { key: 'Enter', shiftKey: true })
+      expect(onSend).not.toHaveBeenCalled()
+      fireEvent.keyDown(box(), { key: 'Enter' })
+      expect(onSend).toHaveBeenCalledWith('hello')
+      expect(box().value).toBe('')
+    })
+
+    it('starts a new line on a touch keyboard; only the Send button sends', () => {
+      pointer('coarse')
+      const onSend = vi.fn()
+      render(<ComposeBox onSend={onSend} />)
+      fireEvent.change(box(), { target: { value: 'hello' } })
+      const evt = fireEvent.keyDown(box(), { key: 'Enter' })
+      expect(evt).toBe(true) // not prevented, so the newline goes in
+      expect(onSend).not.toHaveBeenCalled()
+      expect(box().value).toBe('hello')
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+      expect(onSend).toHaveBeenCalledWith('hello')
+    })
   })
 })

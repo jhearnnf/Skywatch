@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { vi, describe, it, expect } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import MessageList from '../components/MessageList'
 import { formatStamp, formatTime } from '../format'
 
@@ -334,6 +334,82 @@ describe('MessageList — edited messages', () => {
       expect.objectContaining({ body: 'somethign' }),
       'something',
     )
+  })
+
+  it('grows the edit box to show the whole message rather than scrolling', () => {
+    // jsdom has no layout: stand in for scrollHeight with a line-based height.
+    const LINE = 20
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() { return this.value.split('\n').length * LINE },
+    })
+    try {
+      renderList([msg('u1', 'one\ntwo\nthree\nfour\nfive\nsix')], { onEdit: vi.fn() })
+      fireEvent.click(screen.getByTitle('Edit'))
+      const box = screen.getByLabelText('Edit message')
+      expect(box.style.height).toBe(`${LINE * 6}px`)
+      fireEvent.change(box, { target: { value: 'one\ntwo' } })
+      expect(box.style.height).toBe(`${LINE * 2}px`)
+    } finally {
+      delete HTMLTextAreaElement.prototype.scrollHeight
+    }
+  })
+
+  describe('staying at the bottom while the content grows', () => {
+    // jsdom has neither layout nor ResizeObserver. Stand in for both: a fixed
+    // viewport, a content height the test can raise, and an observer whose
+    // callback the test fires by hand.
+    let fire
+    const geometry = { scrollHeight: 1000 }
+    const list = () => screen.getByText('hello').closest('.overflow-y-auto')
+    beforeEach(() => {
+      fire = null
+      globalThis.ResizeObserver = class {
+        constructor(cb) { fire = cb }
+        observe() {}
+        disconnect() {}
+      }
+      Object.defineProperty(HTMLDivElement.prototype, 'clientHeight', { configurable: true, get() { return 400 } })
+      Object.defineProperty(HTMLDivElement.prototype, 'scrollHeight', { configurable: true, get() { return geometry.scrollHeight } })
+    })
+    afterEach(() => {
+      delete globalThis.ResizeObserver
+      delete HTMLDivElement.prototype.clientHeight
+      delete HTMLDivElement.prototype.scrollHeight
+      geometry.scrollHeight = 1000
+    })
+
+    it('follows the bottom when the viewer was already there', () => {
+      renderList([msg('u1', 'hello')])
+      const el = list()
+      expect(el.scrollTop).toBe(1000)
+      geometry.scrollHeight = 1300 // the edit box opened on the last message
+      fire()
+      expect(el.scrollTop).toBe(1300)
+    })
+
+    it('leaves the viewer alone once they have scrolled up', () => {
+      renderList([msg('u1', 'hello')])
+      const el = list()
+      el.scrollTop = 100
+      fireEvent.scroll(el)
+      geometry.scrollHeight = 1300
+      fire()
+      expect(el.scrollTop).toBe(100)
+    })
+  })
+
+  it('brings Save and Cancel into view when the edit box opens', () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView')
+    try {
+      renderList([msg('u1', 'hello')], { onEdit: vi.fn() })
+      expect(scrollIntoView).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByTitle('Edit'))
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+      expect(scrollIntoView.mock.instances[0].contains(screen.getByText('Save'))).toBe(true)
+    } finally {
+      scrollIntoView.mockRestore()
+    }
   })
 
   it('cancels without calling out', () => {

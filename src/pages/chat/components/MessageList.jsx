@@ -1,10 +1,12 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import ProfileBadge from '../../../components/ProfileBadge'
 import { formatTime, formatStamp, SUPPORT_LABEL } from '../format'
 import { nameColour } from '../nameColour'
 import { REACTION_EMOJI } from '../reactionEmoji'
 import { splitMentions, mentionsMe } from '../mentions'
 import { senderName } from '../senderName'
+import { enterShouldSend } from '../enterSends'
+import { useAutoGrow } from '../autoGrow'
 import { PresenceDot } from './PresenceStrip'
 import CbatPassedBadge from '../../../components/CbatPassedBadge'
 
@@ -338,6 +340,16 @@ function MessageRow({
   // does not re-render the whole thread on every keystroke.
   const [draft,  setDraft]  = useState(null)   // null = not editing
   const [saving, setSaving] = useState(false)
+  const editRef = useRef(null)
+  useAutoGrow(editRef, draft)
+  // Opening the edit box makes the row taller than the message was, which on
+  // the last message pushes Save and Cancel below the fold. Bring them into
+  // view once the box has been sized (the auto-grow effect above runs first).
+  const editActionsRef = useRef(null)
+  const editing = draft !== null
+  useLayoutEffect(() => {
+    if (editing) editActionsRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [editing])
 
   const saveEdit = async () => {
     const next = draft.trim()
@@ -396,19 +408,20 @@ function MessageRow({
         {draft !== null ? (
           <div className="mt-0.5">
             <textarea
+              ref={editRef}
               value={draft}
               onChange={e => setDraft(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Escape') { e.preventDefault(); setDraft(null) }
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit() }
+                if (enterShouldSend(e)) { e.preventDefault(); saveEdit() }
               }}
               rows={2}
               autoFocus
               maxLength={4000}
-              className="w-full text-sm text-slate-800 bg-slate-100 border border-slate-300 rounded-lg px-2 py-1.5 resize-y focus:outline-none focus:border-brand-400"
+              className="w-full text-sm text-slate-800 bg-slate-100 border border-slate-300 rounded-lg px-2 py-1.5 resize-none overflow-y-auto focus:outline-none focus:border-brand-400"
               aria-label="Edit message"
             />
-            <div className="flex items-center gap-2 mt-1">
+            <div ref={editActionsRef} className="flex items-center gap-2 mt-1">
               <button
                 type="button"
                 onClick={saveEdit}
@@ -587,6 +600,28 @@ export default function MessageList({
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, typingName])
 
+  // Whether the viewer is at the bottom of the thread. While they are, the
+  // list stays there whenever its content gets taller for a reason other than
+  // a new message: opening the edit box on the last message, or that box
+  // growing as they type. Otherwise the Save and Cancel buttons land below
+  // the fold. Scrolling up releases the pin until they come back down.
+  const contentRef = useRef(null)
+  const pinnedRef = useRef(true)
+  const trackPinned = () => {
+    const el = scrollRef.current
+    if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8
+  }
+  useEffect(() => {
+    const el = scrollRef.current
+    const content = contentRef.current
+    if (!el || !content || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => {
+      if (pinnedRef.current) el.scrollTop = el.scrollHeight
+    })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [])
+
   const collapseAdmins = conversationType === 'support' && !viewerIsAdmin
 
   // Removed messages leave no trace for users — the server withholds them, and
@@ -609,7 +644,8 @@ export default function MessageList({
     : null
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
+    <div ref={scrollRef} onScroll={trackPinned} className="flex-1 overflow-y-auto px-4 py-3">
+      <div ref={contentRef}>
       {visible.length === 0 && (
         <p className="text-center text-xs text-slate-400 py-8">{emptyLabel}</p>
       )}
@@ -691,6 +727,7 @@ export default function MessageList({
         )
       })}
       {typingName && <TypingIndicator name={typingName} />}
+      </div>
     </div>
   )
 }

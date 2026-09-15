@@ -1,10 +1,9 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import MentionPicker from './MentionPicker'
 import { activeMention } from '../mentions'
 import { senderName } from '../senderName'
-
-// Roughly eight lines of the composer's text size, after which it scrolls.
-const MAX_HEIGHT = 160
+import { enterShouldSend } from '../enterSends'
+import { useAutoGrow } from '../autoGrow'
 
 export default function ComposeBox({
   disabled, busy, onSend, placeholder, replyTo, onCancelReply,
@@ -25,15 +24,7 @@ export default function ComposeBox({
   const mention = mentionConversationId ? activeMention(body, caret) : null
   const showPicker = Boolean(mention) && mention.start !== dismissed
 
-  // A one-row textarea hides everything above the last line once the message
-  // wraps, so grow the box to fit what has been typed. Past MAX_HEIGHT it stops
-  // growing and scrolls instead, so the composer can never eat the thread.
-  useLayoutEffect(() => {
-    const el = inputRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`
-  }, [body])
+  useAutoGrow(inputRef, body)
 
   const syncCaret = (e) => setCaret(e.target.selectionStart ?? 0)
 
@@ -106,7 +97,7 @@ export default function ComposeBox({
           // rather than sending a half-typed name. See its capture-phase
           // listener, which runs before this.
           if (showPicker && ['Enter', 'Tab', 'ArrowUp', 'ArrowDown', 'Escape'].includes(e.key)) return
-          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+          if (enterShouldSend(e)) { e.preventDefault(); handleSend() }
         }}
         placeholder={placeholder ?? (disabled ? 'This chat is closed.' : 'Type a message…')}
         className="flex-1 resize-none overflow-y-auto px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm disabled:opacity-50"
