@@ -64,6 +64,32 @@ function EmptyState({ height = 200 }) {
   )
 }
 
+// Legend rendered *outside* the chart, for bar charts with many series.
+//
+// Recharts' own <Legend> lives inside the ResponsiveContainer and its height
+// is taken out of the plot. With ~30 series (every game plus tutorials, as on
+// Daily CBAT Sessions) that legend wraps to ten-plus rows on a phone and the
+// bars are squeezed to nothing. Drawing it here, below the container, leaves
+// the plot at its full height at every width; the card simply grows.
+function SeriesLegend({ items }) {
+  if (!items.length) return null
+  return (
+    <ul
+      className="flex flex-wrap justify-center gap-x-2.5 gap-y-1 mt-1 px-1 list-none m-0 p-0"
+      style={{ fontSize: 11, color: COLORS.axis }}
+    >
+      {items.map(it => (
+        <li key={it.label} className="inline-flex items-center gap-1" style={{ opacity: it.dim ? DIM_LABEL_OPACITY : 1 }}>
+          {it.line
+            ? <span aria-hidden className="inline-block w-3.5 border-t border-dashed" style={{ borderColor: it.color }} />
+            : <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-[2px]" style={{ background: it.color }} />}
+          <span>{it.label}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function ChartSkeleton({ height = 220 }) {
   return (
     <div
@@ -161,12 +187,6 @@ export default function ReportChart({
       </text>
     )
   }
-  // Legend entry formatter — greys practice game series names.
-  const legendFormatter = dimLabelSet
-    ? (value) => (
-        <span style={{ color: COLORS.axis, opacity: dimLabelSet.has(String(value)) ? DIM_LABEL_OPACITY : 1 }}>{value}</span>
-      )
-    : undefined
 
   if (type === 'donut') {
     const palette = colors ?? [COLORS.brand, COLORS.amber, COLORS.emerald, COLORS.red, COLORS.slate]
@@ -218,7 +238,19 @@ export default function ReportChart({
     // ComposedChart so the comparison Line can sit over the Bars; it renders the
     // bars identically to BarChart, so non-compare charts are visually unchanged.
     const Chart = compareKey ? ComposedChart : BarChart
+    // Series legend drawn beneath the chart (see SeriesLegend); the compare
+    // line joins it so there is one legend, not two.
+    const legendItems = showLegend
+      ? [
+          ...keys.map((k, i) => {
+            const label = labels?.[k] ?? k
+            return { label, color: seriesColors[i], dim: !!dimLabelSet && dimLabelSet.has(String(label)) }
+          }),
+          ...(compareKey ? [{ label: compareLabel, color: COLORS.slate, line: true }] : []),
+        ]
+      : []
     return (
+      <>
       <ResponsiveContainer width="100%" height={height}>
         <Chart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
           <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
@@ -233,7 +265,7 @@ export default function ReportChart({
           />
           <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
           <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
-          {(showLegend || compareKey) && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} formatter={legendFormatter} />}
+          {!showLegend && compareKey && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
           {keys.map((k, i) => (
             <Bar
               key={k}
@@ -253,6 +285,8 @@ export default function ReportChart({
           {compareLine}
         </Chart>
       </ResponsiveContainer>
+      <SeriesLegend items={legendItems} />
+      </>
     )
   }
 
