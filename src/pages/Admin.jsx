@@ -4519,6 +4519,84 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// DISPLAY NAME ROW (Admin › Users)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Rename a user, or clear the name back to "Agent N". Goes through the reason
+// modal like the tier buttons do, because renaming someone is an action against
+// their account, not a fact being written down. The list reloads after the
+// modal confirms, so the field follows the row's stored name rather than
+// tracking the save itself.
+//
+// Defined at module level, never inside UsersTab: an inline component would
+// remount on every parent render and the field would lose focus on each
+// keystroke.
+function UserDisplayNameRow({ u, action }) {
+  const saved = u.displayName ?? ''
+  const [value, setValue] = useState(saved)
+  useEffect(() => { setValue(saved) }, [saved])
+
+  const next  = value.trim()
+  const dirty = next !== saved
+
+  const submit = () => {
+    if (!dirty) return
+    action(
+      next
+        ? `Rename Agent ${u.agentNumber} → ${next}`
+        : `Clear display name — Agent ${u.agentNumber}`,
+      `/api/admin/users/${u._id}/display-name`,
+      'PATCH',
+      { displayName: next },
+    )
+  }
+
+  return (
+    <div className="px-4 py-3 border-b border-slate-100">
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Display name</p>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={e => { e.preventDefault(); submit() }}
+      >
+        <input
+          type="text"
+          value={value}
+          maxLength={20}
+          onChange={e => setValue(e.target.value)}
+          placeholder={`Agent ${u.agentNumber}`}
+          aria-label="Display name"
+          className="px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-transparent outline-none focus:ring-2 focus:ring-brand-200"
+        />
+        <button
+          type="submit"
+          disabled={!dirty}
+          aria-label="Save display name"
+          className="text-xs px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-700 text-white font-semibold transition-colors disabled:opacity-40"
+        >
+          Rename
+        </button>
+        {saved && (
+          <button
+            type="button"
+            aria-label="Clear display name"
+            onClick={() => action(
+              `Clear display name — Agent ${u.agentNumber}`,
+              `/api/admin/users/${u._id}/display-name`,
+              'PATCH',
+              { displayName: '' },
+            )}
+            className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors"
+          >
+            Clear
+          </button>
+        )}
+        <span className="text-xs text-slate-400">3 to 20 characters. Starts their 30 day rename cooldown.</span>
+      </form>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CBAT DATE ROW (Admin › Users)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -5845,6 +5923,11 @@ function UsersTab({ API, onViewEmailHistory }) {
                 <SubscriptionTierRow u={u} action={action} />
               </div>
             )}
+
+            {/* Display name — rename or clear it. Always shown once the row is
+                open, next to the CBAT date, so a name that needs dealing with
+                can be dealt with without hunting for a button. */}
+            <UserDisplayNameRow u={u} action={action} />
 
             {/* CBAT date — when they sit the real thing. Always shown once the
                 row is open, unlike the Reddit and results panels, because it is

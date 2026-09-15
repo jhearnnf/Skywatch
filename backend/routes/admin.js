@@ -25,6 +25,7 @@ const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
 const { resolveSelectedBadge } = require('../utils/selectedBadge');
+const { validateDisplayName } = require('../utils/displayName');
 const { cbatRecordFor, withBoardRanks, medalsFrom } = require('../utils/cbatRecord');
 const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
 const { deleteUserAndData } = require('../services/deleteUserData');
@@ -1835,6 +1836,56 @@ router.patch('/users/:id/cbat-date', async (req, res) => {
     if (!updated) return res.status(404).json({ message: 'User not found.' });
     res.json({ status: 'success', data: { cbatDate: updated.cbatDate } });
   } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/users/:id/display-name — rename a user, or clear their
+// display name back to "Agent N". Unlike the fact-recording fields above this
+// is an action taken against the account (usually because the name they chose
+// is one we do not want on the leaderboards), so it takes a reason and writes
+// an AdminAction like ban and change_subscription do.
+//
+// Same validation and case-insensitive uniqueness as the self-service rename
+// in routes/users.js, validated as a plain user rather than as the admin so a
+// renamed account can never end up carrying a reserved prefix. The 30-day
+// cooldown stamp is written too: without it the user could put the old name
+// straight back the moment they noticed.
+router.patch('/users/:id/display-name', requireReason, async (req, res) => {
+  try {
+    const result = validateDisplayName(req.body?.displayName);
+    if (!result.ok) return res.status(400).json({ message: result.reason });
+
+    const nextValue = result.value;
+    const nextLower = nextValue ? nextValue.toLowerCase() : null;
+
+    if (nextLower) {
+      const existing = await User.findOne({ displayNameLower: nextLower, _id: { $ne: req.params.id } })
+        .select('_id').lean();
+      if (existing) return res.status(409).json({ message: 'That display name is already taken.' });
+    }
+
+    // Clearing $unsets the lowercase mirror rather than writing null — see the
+    // matching route in routes/users.js for the index reason.
+    const update = nextValue
+      ? { $set: { displayName: nextValue, displayNameLower: nextLower, displayNameChangedAt: new Date() } }
+      : { $set: { displayName: null, displayNameChangedAt: new Date() }, $unset: { displayNameLower: 1 } };
+    const updated = await User.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' })
+      .select('displayName');
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+
+    await AdminAction.create({
+      userId:       req.user._id,
+      actionType:   'rename_user',
+      reason:       req.body.reason,
+      targetUserId: req.params.id,
+    });
+
+    res.json({ status: 'success', data: { displayName: updated.displayName ?? null } });
+  } catch (err) {
+    if (err && err.code === 11000) {
+      return res.status(409).json({ message: 'That display name is already taken.' });
+    }
     res.status(500).json({ message: err.message });
   }
 });

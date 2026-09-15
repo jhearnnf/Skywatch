@@ -19,6 +19,7 @@ const ACTION_TYPES = [
   'regenerate_description_cascade',
   'award_test_coins',
   'change_subscription',
+  'rename_user',
   'reset_leads',
   'change_beta_settings',
   'update_economy_levels',
