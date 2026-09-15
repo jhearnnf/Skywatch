@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import CbatSymbols, { pickUniqueSymbols, collisionKey } from '../CbatSymbols'
+import CbatSymbols, { pickUniqueSymbols, collisionKey, entryTileIndex, CBAT_SYMBOL_POOL } from '../CbatSymbols'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -389,5 +389,158 @@ describe('CbatSymbols — total time consistency', () => {
 
     expect(screen.getByText('total time')).toBeDefined()
     expect(screen.getAllByText(`${payload.totalTime.toFixed(2)}s`).length).toBeGreaterThan(0)
+  })
+})
+
+// ── Real CBAT theme — the Visual Search screen ────────────────────────────
+
+function setupCbatUser(apiFetch = mockApiFetch()) {
+  mockUseAuth.mockReturnValue({
+    user:     { _id: 'u1', email: 'a@b.com', uiTheme: 'cbat' },
+    API:      '',
+    apiFetch,
+  })
+}
+
+const CBAT_GLYPHS = new Set(CBAT_SYMBOL_POOL.map(cp => String.fromCodePoint(cp)))
+
+function startCbatRound() {
+  fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
+  const grid = screen.getByTestId('cbat-vs-grid')
+  const tiles = Array.from(grid.querySelectorAll('[data-testid="cbat-vs-tile"]'))
+  const target = screen.getByTestId('cbat-vs-target').querySelector('.cbat-vs-glyph').textContent
+  const targetIdx = tiles.findIndex(t => t.querySelector('.cbat-vs-glyph').textContent === target)
+  return { grid, tiles, target, targetIdx }
+}
+
+const typeKeys = (...keys) => keys.forEach(key => fireEvent.keyDown(window, { key }))
+
+describe('entryTileIndex', () => {
+  it('maps a two-digit answer onto the tile numbered from 10', () => {
+    expect(entryTileIndex('10', 12)).toBe(0)
+    expect(entryTileIndex('21', 12)).toBe(11)
+  })
+
+  it('names no tile for a short, empty or out-of-range answer', () => {
+    expect(entryTileIndex('', 12)).toBe(-1)
+    expect(entryTileIndex('1', 12)).toBe(-1)
+    expect(entryTileIndex('09', 12)).toBe(-1)
+    expect(entryTileIndex('22', 12)).toBe(-1)
+  })
+})
+
+describe('CbatSymbols — Real CBAT theme', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('draws numbered grey tiles from 10, none of them clickable, and a "??" target tile', () => {
+    setupCbatUser()
+    render(<CbatSymbols />)
+    const { grid, tiles } = startCbatRound()
+
+    expect(tiles.length).toBeGreaterThanOrEqual(12)
+    expect(grid.querySelectorAll('button').length).toBe(0)
+    tiles.forEach((t, i) => {
+      expect(t.querySelector('.cbat-vs-num').textContent).toBe(String(10 + i))
+    })
+    expect(screen.getByTestId('cbat-vs-target').querySelector('.cbat-vs-num').textContent).toBe('??')
+    // The SkyWatch cards are gone
+    expect(screen.queryByText(/Find the target symbol/i)).toBeNull()
+    expect(screen.getByText('Visual Search - Testing (1 of 15)')).toBeDefined()
+  })
+
+  it('uses the red-capital pool: every tile is a capital letter or a simple symbol', () => {
+    setupCbatUser()
+    render(<CbatSymbols />)
+    const { tiles, target } = startCbatRound()
+    tiles.forEach(t => {
+      expect(CBAT_GLYPHS.has(t.querySelector('.cbat-vs-glyph').textContent)).toBe(true)
+    })
+    expect(CBAT_GLYPHS.has(target)).toBe(true)
+  })
+
+  it('typing the target tile number and pressing Enter records a correct answer and moves on', () => {
+    setupCbatUser()
+    render(<CbatSymbols />)
+    const { targetIdx } = startCbatRound()
+    const number = String(10 + targetIdx)
+
+    typeKeys(number[0])
+    expect(document.querySelector('.cbat-footer-answer b').textContent).toBe(number[0])
+    typeKeys(number[1], 'Enter')
+
+    expect(screen.getByText('Visual Search - Testing (2 of 15)')).toBeDefined()
+    // No feedback phase under the theme: straight to the next board, answer box cleared
+    expect(screen.queryByText(/Missed|Found in/)).toBeNull()
+    expect(document.querySelector('.cbat-footer-answer b').textContent).toBe('')
+  })
+
+  it('a wrong number moves on too, and is scored as a miss at the end', async () => {
+    setupCbatUser()
+    render(<CbatSymbols />)
+    const { tiles, targetIdx } = startCbatRound()
+    const wrongIdx = targetIdx === 0 ? 1 : 0
+    typeKeys(...String(10 + wrongIdx), 'Enter')
+    expect(screen.getByText('Visual Search - Testing (2 of 15)')).toBeDefined()
+    expect(tiles.length).toBeGreaterThan(0)
+
+    // Play out the remaining 14 rounds with tile 10 each time
+    for (let r = 2; r <= 15; r++) typeKeys('1', '0', 'Enter')
+    await waitFor(() => expect(mockSubmitCbatResult).toHaveBeenCalled())
+    const body = mockSubmitCbatResult.mock.calls[0][1]
+    expect(body.correctCount).toBeLessThan(15)
+  })
+
+
+  it('Enter does nothing until the answer names a tile on the board', () => {
+    setupCbatUser()
+    render(<CbatSymbols />)
+    const { tiles } = startCbatRound()
+
+    // One digit
+    typeKeys('1', 'Enter')
+    expect(screen.getByText('Visual Search - Testing (1 of 15)')).toBeDefined()
+    expect(screen.getByTestId('cbat-footer-submit').disabled).toBe(true)
+    // A number past the last tile
+    typeKeys(...String(10 + tiles.length), 'Enter')
+    expect(screen.getByText('Visual Search - Testing (1 of 15)')).toBeDefined()
+    expect(screen.getByTestId('cbat-footer-submit').disabled).toBe(true)
+  })
+
+  it('a third digit starts the answer over; Backspace erases one', () => {
+    setupCbatUser()
+    render(<CbatSymbols />)
+    startCbatRound()
+    const readout = () => document.querySelector('.cbat-footer-answer b').textContent
+
+    typeKeys('1', '2', '3')
+    expect(readout()).toBe('3')
+    typeKeys('Backspace')
+    expect(readout()).toBe('')
+  })
+
+  it('the on-screen numpad types digits and submits like the keyboard', () => {
+    setupCbatUser()
+    render(<CbatSymbols />)
+    const { targetIdx } = startCbatRound()
+    const number = String(10 + targetIdx)
+    const pad = screen.getByTestId('cbat-vs-numpad')
+
+    fireEvent.click(pad.querySelector(`button:not([aria-label])`)) // sanity: a digit key exists
+    fireEvent.click(screen.getByRole('button', { name: 'Erase' }))
+    fireEvent.click(Array.from(pad.querySelectorAll('button')).find(b => b.textContent === number[0]))
+    fireEvent.click(Array.from(pad.querySelectorAll('button')).find(b => b.textContent === number[1]))
+    fireEvent.click(pad.querySelector('[aria-label="Submit answer"]'))
+
+    expect(screen.getByText('Visual Search - Testing (2 of 15)')).toBeDefined()
+  })
+
+  it('ignores the number keys while the SkyWatch theme is on', () => {
+    setupUser()
+    render(<CbatSymbols />)
+    fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
+    typeKeys('1', '0', 'Enter')
+    expect(screen.getByText(/Round/)).toBeDefined()
+    expect(screen.queryByTestId('cbat-vs-grid')).toBeNull()
+    expect(screen.queryByTestId('cbat-vs-numpad')).toBeNull()
   })
 })

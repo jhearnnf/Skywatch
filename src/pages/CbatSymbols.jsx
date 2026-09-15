@@ -66,6 +66,26 @@ function buildSymbolPool() {
 
 const SYMBOL_POOL = buildSymbolPool()
 
+// ── Real CBAT pool — red capital letters and simple symbols ─────────────────
+// The real Visual Search screen (rafcbat.wordpress.com, vst1.png) shows red
+// capitals on grey tiles: A, E, K, R, B, S, T, H, G, P… Letters plus a set of
+// plain Latin-1 symbols, so tier 3's 25 unique tiles still draw without a
+// repeat. Code points, like SYMBOL_POOL, so the same picker serves both.
+export const CBAT_SYMBOL_POOL = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', ...'!#$%&*+=?@£¥§¶±÷×']
+  .map(c => c.codePointAt(0))
+
+// The real tiles are numbered from 10, so every answer is exactly two digits.
+export const CBAT_FIRST_TILE_NUMBER = 10
+export const tileNumber = (i) => i + CBAT_FIRST_TILE_NUMBER
+
+// The tile index a typed answer names, or -1 when it names none: fewer than
+// two digits, or a number no tile on this grid carries.
+export function entryTileIndex(entry, size) {
+  if (!/^\d{2}$/.test(entry)) return -1
+  const idx = Number(entry) - CBAT_FIRST_TILE_NUMBER
+  return idx >= 0 && idx < size ? idx : -1
+}
+
 // Case-fold key so a round never draws both the uppercase and lowercase of the
 // same base letter. Many Cyrillic lowercase forms are just scaled-down copies of
 // the capital (e.g. И vs и, Н vs н), so showing both makes them near-identical.
@@ -77,11 +97,11 @@ export function collisionKey(codePoint) {
   return codePoint
 }
 
-export function pickUniqueSymbols(count) {
+export function pickUniqueSymbols(count, pool = SYMBOL_POOL) {
   // Full Fisher-Yates shuffle, then greedily take symbols while skipping any
-  // whose case-folded key is already in the selection. The pool (hundreds of
-  // entries) dwarfs the largest tier size, so `count` is always satisfiable.
-  const arr = [...SYMBOL_POOL]
+  // whose case-folded key is already in the selection. Either pool dwarfs the
+  // largest tier size, so `count` is always satisfiable.
+  const arr = [...pool]
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
@@ -98,21 +118,68 @@ export function pickUniqueSymbols(count) {
   return out
 }
 
-function randomSymbol() {
-  return String.fromCodePoint(SYMBOL_POOL[Math.floor(Math.random() * SYMBOL_POOL.length)])
+function randomSymbol(pool = SYMBOL_POOL) {
+  return String.fromCodePoint(pool[Math.floor(Math.random() * pool.length)])
 }
 
-function buildRounds() {
+function buildRounds(pool = SYMBOL_POOL) {
   const rounds = []
   for (let i = 0; i < TOTAL_ROUNDS; i++) {
     const tier = tierFor(i)
     const { min, max } = TIERS[tier]
     const size = min + Math.floor(Math.random() * (max - min + 1))
-    const symbols = pickUniqueSymbols(size)
+    const symbols = pickUniqueSymbols(size, pool)
     const targetIdx = Math.floor(Math.random() * size)
     rounds.push({ symbols, target: symbols[targetIdx], tier })
   }
   return rounds
+}
+
+// ── Real CBAT board ──────────────────────────────────────────────────────────
+// The Visual Search screen as the test software draws it: grey tiles in rows
+// of four on the navy, each with its red glyph top-left and a black two-digit
+// number bottom-right, and the target tile alone underneath with "??" where
+// its number would be. Nothing here is clickable — the answer is the number,
+// typed. Styles in main.css ("Real CBAT test chrome").
+function CbatSearchTile({ sym, label }) {
+  return (
+    <div className="cbat-vs-tile" data-testid="cbat-vs-tile">
+      <span className="cbat-vs-glyph">{sym}</span>
+      <span className="cbat-vs-num">{label}</span>
+    </div>
+  )
+}
+
+function CbatSearchBoard({ symbols, target, dim = false }) {
+  return (
+    <div className={`cbat-vs-board${dim ? ' opacity-40' : ''}`} aria-hidden={dim || undefined}>
+      <div className="cbat-vs-grid" data-testid="cbat-vs-grid">
+        {symbols.map((sym, i) => (
+          <CbatSearchTile key={i} sym={sym} label={String(tileNumber(i))} />
+        ))}
+      </div>
+      <div className="cbat-vs-target" data-testid="cbat-vs-target">
+        <CbatSearchTile sym={target} label="??" />
+      </div>
+    </div>
+  )
+}
+
+// Touch fallback for the typed answer: the real keyboard's number pad, drawn
+// as key caps. Hidden by CSS wherever a physical keyboard is the norm.
+const CBAT_NUMPAD_KEYS = ['7', '8', '9', '4', '5', '6', '1', '2', '3']
+
+function CbatSymbolsNumpad({ onDigit, onErase, onSubmit, canSubmit }) {
+  return (
+    <div className="cbat-vs-numpad" data-testid="cbat-vs-numpad">
+      {CBAT_NUMPAD_KEYS.map(d => (
+        <button key={d} type="button" className="cbat-keycap" onClick={() => onDigit(d)}>{d}</button>
+      ))}
+      <button type="button" className="cbat-keycap" onClick={onErase} aria-label="Erase">&#9003;</button>
+      <button type="button" className="cbat-keycap" onClick={() => onDigit('0')}>0</button>
+      <button type="button" className="cbat-keycap cbat-keycap-arrow" onClick={onSubmit} disabled={!canSubmit} aria-label="Submit answer">&#10140;</button>
+    </div>
+  )
 }
 
 // ── Fast-restart countdown ───────────────────────────────────────────────────
@@ -123,8 +190,9 @@ function buildRounds() {
 // The layout deliberately mirrors the play screen element for element — HUD row,
 // progress bar, grid card, target card — so when the round takes over, nothing
 // moves. Only the scrim lifts and the real symbols fade in over the scatter.
-function CountdownScreen({ count, tileCount }) {
-  const [tiles, setTiles] = useState(() => pickUniqueSymbols(tileCount))
+function CountdownScreen({ count, tileCount, cbat = false }) {
+  const pool = cbat ? CBAT_SYMBOL_POOL : SYMBOL_POOL
+  const [tiles, setTiles] = useState(() => pickUniqueSymbols(tileCount, pool))
   const [selected, setSelected] = useState(() => Math.floor(Math.random() * tileCount))
 
   useEffect(() => {
@@ -133,16 +201,50 @@ function CountdownScreen({ count, tileCount }) {
       setTiles(prev => {
         const next = [...prev]
         for (let k = 0; k < SCATTER_SWAPS_PER_TICK; k++) {
-          next[Math.floor(Math.random() * next.length)] = randomSymbol()
+          next[Math.floor(Math.random() * next.length)] = randomSymbol(pool)
         }
         return next
       })
     }, SCATTER_TICK_MS)
     return () => clearInterval(id)
-  }, [tileCount])
+  }, [tileCount, pool])
 
   const isGo = count <= 0
   const spotlit = tiles[selected] || tiles[0]
+
+  const beat = (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+      data-testid="symbols-countdown-beat"
+    >
+      <motion.div
+        key={count}
+        initial={{ scale: 1.7, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        transition={{ duration: 0.22 }}
+        className={`font-mono font-extrabold drop-shadow-[0_0_18px_rgba(6,16,26,0.9)] ${
+          isGo ? 'text-5xl sm:text-6xl lg:text-8xl text-green-400' : 'text-7xl sm:text-8xl lg:text-9xl text-brand-600'
+        }`}
+      >
+        {isGo ? 'GO' : count}
+      </motion.div>
+      <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] mt-2 drop-shadow-[0_0_10px_rgba(6,16,26,0.9)]">
+        {isGo ? 'Find the target' : 'Get ready'}
+      </p>
+    </div>
+  )
+
+  // Real CBAT theme: the same board the round will draw, dimmed, with the
+  // count over it — so, as below, nothing moves at the handoff.
+  if (cbat) {
+    return (
+      <div className="relative w-full" data-testid="symbols-countdown">
+        <CbatSearchBoard symbols={tiles} target={spotlit} dim />
+        {beat}
+      </div>
+    )
+  }
 
   return (
     <div className="w-full max-w-md lg:max-w-none lg:w-[min(48rem,calc(100vh_-_30rem))]" data-testid="symbols-countdown">
@@ -184,26 +286,7 @@ function CountdownScreen({ count, tileCount }) {
         <div className="absolute inset-0 bg-game-arena/55 pointer-events-none" />
 
         {/* Count */}
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-          data-testid="symbols-countdown-beat"
-        >
-          <motion.div
-            key={count}
-            initial={{ scale: 1.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className={`font-mono font-extrabold drop-shadow-[0_0_18px_rgba(6,16,26,0.9)] ${
-              isGo ? 'text-5xl sm:text-6xl lg:text-8xl text-green-400' : 'text-7xl sm:text-8xl lg:text-9xl text-brand-600'
-            }`}
-          >
-            {isGo ? 'GO' : count}
-          </motion.div>
-          <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] mt-2 drop-shadow-[0_0_10px_rgba(6,16,26,0.9)]">
-            {isGo ? 'Find the target' : 'Get ready'}
-          </p>
-        </div>
+        {beat}
       </div>
 
       {/* Target card — same box the round uses, cycling with the selector */}
@@ -391,7 +474,15 @@ export default function CbatSymbols() {
   }, [apiFetch, API])
 
   const cbat = useCbatTheme()
+
+  // Under the Real CBAT theme the tiles carry red capitals and simple symbols,
+  // as the real screen does, instead of the mixed-script pool.
+  const symbolPool = cbat ? CBAT_SYMBOL_POOL : SYMBOL_POOL
   const currentRound = rounds[currentIdx] || null
+
+  // Real CBAT theme: the answer is the target tile's two-digit number, typed
+  // on the keyboard (or the on-screen pad) and committed with Enter.
+  const [entry, setEntry] = useState('')
 
   // True elapsed since the run began. The clock is anchored to a single
   // start timestamp (set in startGame) rather than re-based on each phase
@@ -425,7 +516,7 @@ export default function CbatSymbols() {
     startTracking('symbols')
     // The countdown builds the run ahead of time so its scatter can be sized to
     // round 1 exactly; fall back to a fresh build for a normal start.
-    const built = pendingRoundsRef.current || buildRounds()
+    const built = pendingRoundsRef.current || buildRounds(symbolPool)
     setRounds(built)
     pendingRoundsRef.current = null
     setCurrentIdx(0)
@@ -439,7 +530,7 @@ export default function CbatSymbols() {
     startTimeRef.current = Date.now()
     roundStartRef.current = 0
     setPhase('playing')
-  }, [apiFetch, API, setDebugUsed])
+  }, [apiFetch, API, setDebugUsed, symbolPool])
 
   // ?round=N — open on a harder tier instead of playing up to it. Moving the
   // cursor is the whole jump here: the rounds are pre-built, so round N is
@@ -462,12 +553,12 @@ export default function CbatSymbols() {
   const startCountdown = useCallback(() => {
     clearInterval(timerRef.current)
     if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current)
-    const built = buildRounds()
+    const built = buildRounds(symbolPool)
     pendingRoundsRef.current = built
     setScatterSize(built[0].symbols.length)
     setCountdown(COUNTDOWN_FROM)
     setPhase('countdown')
-  }, [])
+  }, [symbolPool])
 
   // Drive the countdown: COUNTDOWN_FROM..1, then a short GO flash at 0.
   useEffect(() => {
@@ -551,6 +642,44 @@ export default function CbatSymbols() {
       advance(currentIdx, newAnswers)
     }, FEEDBACK_MS)
   }
+
+  // ── Real CBAT theme: typed answer ──────────────────────────────────────────
+  // Two digits name a tile. A third digit starts the answer over rather than
+  // being dropped, so a mistyped answer is corrected by just typing it again.
+  const entryIdx = currentRound ? entryTileIndex(entry, currentRound.symbols.length) : -1
+  const typeDigit = (d) => setEntry(prev => (prev.length >= 2 ? d : prev + d))
+  const eraseDigit = () => setEntry(prev => prev.slice(0, -1))
+  const commitEntry = () => {
+    if (phase !== 'playing' || !currentRound || entryIdx < 0) return
+    handlePick(currentRound.symbols[entryIdx])
+  }
+
+  // A fresh round starts with an empty answer box.
+  useEffect(() => { setEntry('') }, [currentIdx, phase])
+
+  // The number row and the numeric keypad both report '0'-'9' through e.key,
+  // and both Enters report 'Enter', so one branch serves either. Handlers ride
+  // in a ref so the listener is attached once per round rather than per
+  // keystroke, and never sees a stale round. Modifier chords are left alone
+  // for browser shortcuts; typing targets and the quit dialog are left alone
+  // the same way useCbatAnswerKeys leaves them.
+  const entryHandlersRef = useRef(null)
+  entryHandlersRef.current = { typeDigit, eraseDigit, commitEntry }
+  useEffect(() => {
+    if (!cbat || phase !== 'playing') return undefined
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return
+      if (document.querySelector('[role="dialog"]')) return
+      const h = entryHandlersRef.current
+      if (/^[0-9]$/.test(e.key)) { h.typeDigit(e.key); e.preventDefault(); return }
+      if (e.key === 'Backspace' || e.key === 'Delete') { h.eraseDigit(); e.preventDefault(); return }
+      if (e.key === 'Enter') { h.commitEntry(); e.preventDefault() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cbat, phase])
 
   const testBar = (phase === 'playing' || phase === 'feedback') && currentRound ? {
     stage: 'Testing',
@@ -642,7 +771,11 @@ export default function CbatSymbols() {
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'\u26A0\uFE0F'}</span>
-                  <span className="pt-0.5">{'A wrong click counts as missed \u2014 round skips automatically'}</span>
+                  <span className="pt-0.5">
+                    {cbat
+                      ? 'Type the number of the matching tile, then press Enter'
+                      : 'A wrong click counts as missed \u2014 round skips automatically'}
+                  </span>
                 </div>
               </div>
 
@@ -675,14 +808,33 @@ export default function CbatSymbols() {
           )}
 
           {/* Fast-restart countdown */}
-          {phase === 'countdown' && <CountdownScreen count={countdown} tileCount={scatterSize} />}
+          {phase === 'countdown' && <CountdownScreen count={countdown} tileCount={scatterSize} cbat={cbat} />}
+
+          {/* Playing — Real CBAT theme: the Visual Search screen. The title
+              bar carries the round count, the board is the numbered tiles,
+              and the footer strip is the answer box. No feedback phase. */}
+          {cbat && phase === 'playing' && currentRound && (
+            <div className="w-full">
+              <CbatSearchBoard key={currentIdx} symbols={currentRound.symbols} target={currentRound.target} />
+              <CbatSymbolsNumpad
+                onDigit={typeDigit}
+                onErase={eraseDigit}
+                onSubmit={commitEntry}
+                canSubmit={entryIdx >= 0}
+              />
+              <CbatFooterStrip
+                answer={entry || null}
+                onSubmit={commitEntry}
+                canSubmit={entryIdx >= 0}
+              />
+            </div>
+          )}
 
           {/* Playing / Feedback */}
-          {(phase === 'playing' || phase === 'feedback') && currentRound && (
+          {!cbat && (phase === 'playing' || phase === 'feedback') && currentRound && (
             <div className="w-full max-w-md lg:max-w-none lg:w-[min(48rem,calc(100vh_-_30rem))]">
               {/* HUD */}
-              {/* HUD — under the Real CBAT theme the title bar carries this */}
-              {!cbat && <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
+              <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
                 <span className="text-slate-400">
                   Round <span className="text-brand-600">{currentIdx + 1}</span>/{TOTAL_ROUNDS}
                   {/* Same badge as DPT and ACT: an admin who jumped a round
@@ -699,17 +851,17 @@ export default function CbatSymbols() {
                 <span className="text-slate-400">
                   {'\u23F1'} <span className="text-brand-600">{elapsed.toFixed(1)}s</span>
                 </span>
-              </div>}
+              </div>
 
               {/* Progress bar */}
-              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
+              <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <motion.div
                   className="h-full bg-brand-600 rounded-full"
                   initial={false}
                   animate={{ width: `${((currentIdx + (phase === 'feedback' ? 1 : 0)) / TOTAL_ROUNDS) * 100}%` }}
                   transition={{ duration: 0.3 }}
                 />
-              </div>}
+              </div>
 
               {/* Symbol grid */}
               <motion.div
@@ -785,9 +937,6 @@ export default function CbatSymbols() {
                   )}
                 </AnimatePresence>
               </div>
-
-              {/* Real CBAT theme: the instruction strip */}
-              <CbatFooterStrip text="Find the target symbol in the grid and click it" />
 
               {/* Tier transition indicator */}
               <AnimatePresence>
