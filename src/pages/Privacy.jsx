@@ -131,16 +131,19 @@ export default function Privacy() {
             <li>
               <span className="text-slate-700 font-medium">Game leaderboards</span> — your display name
               or agent number, your scores and your completion times on each aptitude game, including
-              the weekly boards and the recent-scores feed. These require a signed-in account to view.
+              the weekly boards, the recent-scores feed and the medals shown next to your name for a
+              top three place. These require a signed-in account to view. You can keep your scores
+              off all of them under Profile → Settings → Score Sharing; you can still see your own
+              best and where it would rank, but nobody else can.
             </li>
             <li>
               <span className="text-slate-700 font-medium">Player profile</span> — your display name
-              or agent number, the badge you have chosen to wear and your best score on each aptitude
-              game, opened from your name in chat or in the recent-scores feed. It requires a signed-in
-              account to view. Your streak, level, airstars, how many times you have played and your
-              account details are not shown to other players. You can keep your scores off your
-              profile under Profile → Settings → Score Sharing, the same switch that keeps you off
-              the homepage; your name and badge still show, as they do in chat.
+              or agent number, the badge you have chosen to wear, any leaderboard medals you currently
+              hold and your best score on each aptitude game, opened from your name in chat or in the
+              recent-scores feed. It requires a signed-in account to view. Your streak, level,
+              airstars, how many times you have played and your account details are not shown to
+              other players. The same Score Sharing switch keeps your scores and medals off your
+              profile; your name and badge still show, as they do in chat.
             </li>
             <li>
               <span className="text-slate-700 font-medium">CBAT pass mark</span> — if you have told us

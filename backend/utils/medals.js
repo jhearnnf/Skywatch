@@ -24,6 +24,7 @@
 const User = require('../models/User');
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { rankOnPaddedBoard, isBetterScore } = require('./cbatBoardRank');
+const { isScoreHidden } = require('./cbatScoreSharing');
 
 const MEDALS = {
   1: { emoji: '🥇', word: 'Gold' },
@@ -103,6 +104,10 @@ async function detectCbatMedal(Model, doc) {
     if (previousBest && !isBetterScore(cfg, score, time, previousBest[cfg.primaryField], previousBest.totalTime)) {
       return null; // not a personal best — their board row is unchanged
     }
+
+    // Score Sharing: an opted-out player is not on the board, so there is no
+    // place to announce. Checked before the ranking, which is the costly half.
+    if (await isScoreHidden(doc.userId)) return null;
 
     const rank = await rankOnPaddedBoard(gameKey, cfg, { score, time, excludeUserId: doc.userId });
     const medal = MEDALS[rank];

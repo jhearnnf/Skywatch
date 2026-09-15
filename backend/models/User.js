@@ -211,8 +211,9 @@ const userSchema = new mongoose.Schema(
     // shipped list without editing code and redeploying.
     researchEmailExcluded: { type: Boolean, default: null },
 
-    // Opt-OUT of the public progress wall on the landing page (see
-    // utils/cbatShowcase.js). Stored as the objection rather than as consent so
+    // Score Sharing opt-OUT: off the homepage progress wall, the leaderboards,
+    // the Recent Scores feed, the medals and the public profile's scores (see
+    // utils/cbatScoreSharing.js). Stored as the objection rather than as consent so
     // the default — included, anonymised behind an agent number — needs no
     // backfill, and so a `false` here can never be mistaken for a recorded
     // "yes". Set from Profile › Settings; honoured immediately (the route

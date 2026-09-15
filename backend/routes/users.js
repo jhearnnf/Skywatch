@@ -3,6 +3,7 @@ const { protect } = require('../middleware/auth');
 const User = require('../models/User');
 const { effectiveTier } = require('../utils/subscription');
 const { clearShowcaseCache } = require('../utils/cbatShowcase');
+const { clearScoreSharingCache } = require('../utils/cbatScoreSharing');
 const { locationLabel, cbatCardKey } = require('../constants/presenceLocations');
 const GameSessionQuizResult              = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt             = require('../models/GameSessionQuizAttempt');
@@ -26,6 +27,7 @@ const { BATTERY_BY_KEY } = require('../constants/cbatBatteries');
 const { UI_THEMES } = require('../constants/uiThemes.json');
 const { withSelectedBadge, resolveSelectedBadge } = require('../utils/selectedBadge');
 const { cbatRecordFor } = require('../utils/cbatRecord');
+const { medalsForUsers, resetMedalHoldersCache } = require('../utils/cbatMedalHolders');
 const mongoose = require('mongoose');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
@@ -214,14 +216,15 @@ router.patch('/me/theme', protect, async (req, res) => {
   }
 });
 
-// PATCH /api/users/me/showcase — opt in or out of the public progress wall on
-// the landing page. Body { visible: boolean }.
+// PATCH /api/users/me/showcase — Score Sharing: opt in or out of every shared
+// surface at once (homepage progress wall, leaderboards, Recent Scores feed,
+// medals, public profile scores). Body { visible: boolean }.
 //
 // This is the GDPR right-to-object route (Art. 21) for the one processing we do
 // on a legitimate-interests basis that leaves the members-only side of the app.
-// It clears the showcase cache on the way out: the wall memoises its candidate
-// pool for five minutes, and "your objection takes effect shortly" is a worse
-// answer than simply making it true immediately.
+// It clears every cache on the way out: the wall memoises its candidate pool
+// and the medal sweep its podiums for five minutes, and "your objection takes
+// effect shortly" is a worse answer than simply making it true immediately.
 router.patch('/me/showcase', protect, async (req, res) => {
   try {
     const { visible } = req.body ?? {};
@@ -235,7 +238,12 @@ router.patch('/me/showcase', protect, async (req, res) => {
       { returnDocument: 'after' }
     ).populate('rank');
 
+    // Honoured immediately on every surface the switch covers: the homepage
+    // wall, the boards and feed, and the podium medals (see
+    // utils/cbatScoreSharing.js).
     clearShowcaseCache();
+    clearScoreSharingCache();
+    resetMedalHoldersCache();
 
     const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
     res.json({ status: 'success', data: { user } });

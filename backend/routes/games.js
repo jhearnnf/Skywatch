@@ -31,6 +31,7 @@ const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgress
 const { buildAptitudeReport, buildAllBatteryScores, buildCbatUserList } = require('../utils/cbatAptitudeReport');
 const { tierToAward, donationPromptDue } = require('../utils/cbatProgressAward');
 const { buildCbatShowcase } = require('../utils/cbatShowcase');
+const { scoreSharingMatch } = require('../utils/cbatScoreSharing');
 const { buildCbatActivityStats } = require('../utils/cbatActivityStats');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
@@ -2888,11 +2889,14 @@ async function cbatLeaderboard(req, res, gameKey) {
   if (req.query.period === 'weekly') return cbatWeeklyLeaderboard(req, res, gameKey, cfg);
 
   const isAdmin = cbatAdminView(req);
-  const modeFilter = cfg.modeFilter ?? null;
+  const modeFilter = cfg.modeFilter ?? {};
 
   try {
+    // Score Sharing: opted-out players are off the board and out of the
+    // ranking, for everyone including admins. See utils/cbatScoreSharing.js.
+    const hidden = await scoreSharingMatch();
     const pipeline = [
-      ...(modeFilter ? [{ $match: modeFilter }] : []),
+      { $match: { ...modeFilter, ...hidden } },
       // Sort first so the $group's $first keeps each user's best session.
       { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
       {
@@ -2964,7 +2968,7 @@ async function cbatLeaderboard(req, res, gameKey) {
       if (myEntry) {
         myBest = myEntry;
       } else {
-        const [best] = await cfg.Model.find({ ...(modeFilter ?? {}), userId: req.user._id })
+        const [best] = await cfg.Model.find({ ...modeFilter, userId: req.user._id })
           .sort({ [cfg.primaryField]: cfg.sortDir, totalTime: 1 })
           .limit(1)
           .lean();
@@ -2972,9 +2976,11 @@ async function cbatLeaderboard(req, res, gameKey) {
           const scoreVal = best[cfg.primaryField];
           const timeVal = best.totalTime;
           // Count distinct users whose *best* session beats this one, so the
-          // out-of-top-20 rank matches the deduped leaderboard above.
+          // out-of-top-20 rank matches the deduped leaderboard above. The
+          // viewer's own row is private to them, so an opted-out player still
+          // gets a rank here even though the board above never lists them.
           const betterAgg = await cfg.Model.aggregate([
-            ...(modeFilter ? [{ $match: modeFilter }] : []),
+            { $match: { ...modeFilter, ...hidden } },
             { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
             {
               $group: {
@@ -3050,9 +3056,11 @@ function weeklyValueExpr(cfg) {
 // lower. Games that can't go negative are unaffected ($max:[0,x] === x).
 async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
   const isAdmin = cbatAdminView(req);
-  const modeFilter = cfg.modeFilter ?? null;
+  const modeFilter = cfg.modeFilter ?? {};
   const weekStart = startOfWeekUTC();
   const valueExpr = weeklyValueExpr(cfg);
+  // Score Sharing, as on the all-time board.
+  const hidden = await scoreSharingMatch();
 
   const groupStage = {
     $group: {
@@ -3072,7 +3080,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
 
   try {
     const pipeline = [
-      { $match: { ...(modeFilter ?? {}), createdAt: { $gte: weekStart } } },
+      { $match: { ...modeFilter, ...hidden, createdAt: { $gte: weekStart } } },
       groupStage,
       { $sort: { weekTotal: -1, lastPlayed: -1 } },
       // Over-fetch, drop deleted accounts, then trim — same reason as the
@@ -3119,7 +3127,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
         myWeekly = inView;
       } else {
         const [mine] = await cfg.Model.aggregate([
-          { $match: { ...(modeFilter ?? {}), userId: req.user._id, createdAt: { $gte: weekStart } } },
+          { $match: { ...modeFilter, userId: req.user._id, createdAt: { $gte: weekStart } } },
           {
             $group: {
               _id: '$userId',
@@ -3132,7 +3140,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
         ]);
         if (mine) {
           const betterAgg = await cfg.Model.aggregate([
-            { $match: { ...(modeFilter ?? {}), createdAt: { $gte: weekStart } } },
+            { $match: { ...modeFilter, ...hidden, createdAt: { $gte: weekStart } } },
             { $group: { _id: '$userId', weekTotal: { $sum: valueExpr } } },
             { $match: { weekTotal: { $gt: mine.weekTotal } } },
             // Deleted accounts are off the board, so they don't rank ahead of
@@ -3185,9 +3193,13 @@ async function cbatWeeklyMe(req, res, gameKey) {
   const valueExpr = weeklyValueExpr(cfg);
 
   try {
+    // Score Sharing: other opted-out players are off this board too. The
+    // player asking stays on it whatever their own setting, because this is
+    // their own post-game reveal and nobody else sees it.
+    const hidden = await scoreSharingMatch(req.user._id);
     const [board, lastRunRow] = await Promise.all([
       cfg.Model.aggregate([
-        { $match: { ...modeFilter, createdAt: { $gte: weekStart } } },
+        { $match: { ...modeFilter, ...hidden, createdAt: { $gte: weekStart } } },
         {
           $group: {
             _id: '$userId',
@@ -3398,11 +3410,13 @@ router.get('/cbat/activity', protect, async (req, res) => {
 // so retries don't spam the feed. Each row's `rank` is computed against the same demo-padded
 // all-time board the row links to (real sessions + the same injected demo rows), so the badge
 // matches what the user sees on the leaderboard. Emails are only surfaced to admins; everyone
-// else sees displayName / agentNumber.
+// else sees displayName / agentNumber. Players who have opted out of Score Sharing never
+// appear here, and are not counted as ahead of anyone who does.
 router.get('/cbat/recent', protect, async (req, res) => {
   const isAdmin = cbatAdminView(req);
   const limit = Math.min(parseInt(req.query.limit, 10) || 30, 100);
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const hidden = await scoreSharingMatch();
 
   // Same comparator the leaderboard uses: primary field by cfg.sortDir, totalTime as tiebreaker
   // (lower totalTime always wins ties). Returns true when `next` is strictly better than `prev`.
@@ -3420,7 +3434,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
     // we need the full 24h window so dedupe can pick the true best per (user, game, mode).
     const perGame = await Promise.all(
       Object.entries(CBAT_GAMES).map(async ([gameKey, cfg]) => {
-        const sessions = await cfg.Model.find({ ...(cfg.modeFilter ?? {}), createdAt: { $gte: cutoff } })
+        const sessions = await cfg.Model.find({ ...(cfg.modeFilter ?? {}), ...hidden, createdAt: { $gte: cutoff } })
           .sort({ createdAt: -1 })
           .lean();
         return sessions.map(s => ({ session: s, gameKey, cfg }));
@@ -3464,6 +3478,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
 
       const countBetter = await cfg.Model.countDocuments({
         ...modeFilter,
+        ...hidden,
         ...(cfg.sortDir === 1
           ? {
               $or: [

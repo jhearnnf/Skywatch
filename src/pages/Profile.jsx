@@ -627,19 +627,22 @@ export default function Profile() {
               them. See BlockedAgents. */}
           {appSettings?.chatEnabled !== false && <BlockedAgents />}
 
-          {/* Score sharing — one opt-out for every place their scores leave the
-              boards: the landing page's progress wall and their player profile.
-              Worded so the choice can be made without reading a policy: it says
-              exactly where scores appear and exactly what does not (name, dates
-              on the homepage). Shown on native too, since both render in the app. */}
+          {/* Score sharing — one opt-out for every place their scores are shown
+              to anyone else: the leaderboards, the Recent Scores feed, the
+              medals, their player profile and the landing page's progress wall
+              (backend/utils/cbatScoreSharing.js). Worded so the choice can be
+              made without reading a policy: it says exactly where scores appear
+              and exactly what does not (name, dates on the homepage). Shown on
+              native too, since all of it renders in the app. */}
           <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Score Sharing</p>
             <p className="text-[11px] text-slate-400 mb-3">
-              Other signed-in players can open your player profile from your name in chat or in the
-              recent scores feed. It shows your best score on each test. We also sometimes show a
-              player's score progress on the SkyWatch homepage as an example of how practice pays
-              off. On the homepage you appear as your agent number only, never your display name,
-              and never the date or time you played.
+              Other signed-in players can see your scores on the leaderboards, in the recent scores
+              feed and on your player profile, which opens from your name in chat or in that feed.
+              A top three score on any all time board also earns a medal shown next to your name.
+              We also sometimes show a player's score progress on the SkyWatch homepage as an
+              example of how practice pays off. On the homepage you appear as your agent number only,
+              never your display name, and never the date or time you played.
             </p>
             <div className="flex gap-2">
               <button
@@ -667,8 +670,9 @@ export default function Profile() {
             </div>
             {!showcaseVisible && (
               <p className="text-[11px] text-slate-400 mt-2">
-                Your scores will not appear on the homepage or on your player profile. This takes
-                effect straight away.
+                Your scores will not appear on the leaderboards, in the recent scores feed, on your
+                player profile or on the homepage, and you will not hold any medals. You can still
+                see your own best and where it would rank. This takes effect straight away.
               </p>
             )}
           </div>

@@ -2,9 +2,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Profile from '../Profile'
 
-// The GDPR right-to-object control for score sharing: the landing page's
-// progress wall (backend/utils/cbatShowcase.js) and the scores on the player
-// profile (GET /api/users/:id/profile). One switch for both, on purpose.
+// The GDPR right-to-object control for score sharing: the leaderboards, the
+// Recent Scores feed, the medals, the player profile and the landing page's
+// progress wall (backend/utils/cbatScoreSharing.js). One switch for all of
+// them, on purpose.
 // Mirrors the harness in Profile.displayName.test.jsx.
 
 const mockNavigate = vi.hoisted(() => vi.fn())
@@ -100,6 +101,9 @@ describe('Profile — score sharing opt-out', () => {
     await goToSettings()
 
     const blurb = await screen.findByText(/agent number only/i)
+    expect(blurb.textContent).toMatch(/leaderboards/i)
+    expect(blurb.textContent).toMatch(/recent scores feed/i)
+    expect(blurb.textContent).toMatch(/medal/i)
     expect(blurb.textContent).toMatch(/player profile/i)
     expect(blurb.textContent).toMatch(/homepage/i)
     expect(blurb.textContent).toMatch(/never your display name/i)
@@ -126,12 +130,16 @@ describe('Profile — score sharing opt-out', () => {
     expect(setUser).toHaveBeenCalledWith(expect.objectContaining({ hideFromShowcase: true }))
   })
 
-  it('confirms the opt-out is already in force, not queued, and names both places', async () => {
+  it('confirms the opt-out is already in force, not queued, and names every place it covers', async () => {
     mountWith({ user: { ...BASE_USER, hideFromShowcase: true }, apiFetch: fetchWith() })
     await goToSettings()
 
     const note = await screen.findByText(/takes effect straight away/i)
-    expect(note.textContent).toMatch(/homepage or on your player profile/i)
+    for (const place of [/leaderboards/i, /recent scores feed/i, /player profile/i, /homepage/i, /medals/i]) {
+      expect(note.textContent).toMatch(place)
+    }
+    // What they keep: their own view of their best.
+    expect(note.textContent).toMatch(/still see your own best/i)
   })
 
   it('lets an opted-out player opt back in', async () => {

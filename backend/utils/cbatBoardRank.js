@@ -14,6 +14,7 @@
 // announcing at all, so the medal broadcaster ranks through here.
 
 const { padLeaderboard } = require('./cbatFakeLeaderboard');
+const { scoreSharingMatch } = require('./cbatScoreSharing');
 
 // The visible all-time board's own pipeline: one row per user, their best,
 // top 20. Mirrors cbatLeaderboard's real-board query so padLeaderboard's
@@ -24,9 +25,13 @@ const { padLeaderboard } = require('./cbatFakeLeaderboard');
 // deriving them twice is a second full aggregation over the score collection for
 // an answer already in hand.
 async function bestPerUserTop20(cfg) {
-  const modeFilter = cfg.modeFilter ?? null;
+  const modeFilter = cfg.modeFilter ?? {};
+  // Opted-out players (Score Sharing) are off the board entirely, so they are
+  // filtered before the $group rather than after: a hidden player must not
+  // push everyone below them down a place on a board that does not show them.
+  const hidden = await scoreSharingMatch();
   return cfg.Model.aggregate([
-    ...(modeFilter ? [{ $match: modeFilter }] : []),
+    { $match: { ...modeFilter, ...hidden } },
     { $sort: { [cfg.primaryField]: cfg.sortDir, totalTime: 1 } },
     {
       $group: {
@@ -109,12 +114,14 @@ function betterThanMatch(cfg, score, time) {
 // their own old bests would count a row that isn't on the board.
 async function rankOnPaddedBoard(gameKey, cfg, { score, time, excludeUserId = null, isAdmin = false }) {
   const modeFilter = cfg.modeFilter ?? {};
+  const hidden = await scoreSharingMatch();
 
   const [realBetter, fakes] = await Promise.all([
     cfg.Model.aggregate([
       {
         $match: {
           ...modeFilter,
+          ...hidden,
           ...(excludeUserId ? { userId: { $ne: excludeUserId } } : {}),
         },
       },
