@@ -10,7 +10,9 @@
 // The trailing Input column is opt-in via `cfg.showInput` (only ACT, RTT and
 // SMA carry the field — see cbatGames.js) and is dropped from the compact
 // variant regardless, because the post-game chase window has no width to
-// spare for a fifth track.
+// spare for a fifth track. The Theme column (`cfg.showTheme`, Symbols — whose
+// Real CBAT variant is a different screen) is the same kind of icon-only
+// track and follows the same rules.
 //
 // Name precedence matches everywhere: a precomputed `entry.name` (reveal
 // neighbours) wins, else displayName → admin email → agent number.
@@ -18,6 +20,8 @@
 import { motion } from 'framer-motion'
 import CbatPassedBadge from './CbatPassedBadge'
 import { INPUT_METHOD_ICON, INPUT_METHOD_LABEL, normalizeInputMethod } from '../utils/cbat/inputMethod'
+import UiThemeMark from './UiThemeMark'
+import { UI_THEME_LABELS, normalizeUiTheme } from '../lib/uiTheme'
 
 // `compact` narrows the fixed columns for constrained containers (the post-game
 // weekly-chase window, which is nested inside several layers of padding on a
@@ -33,26 +37,32 @@ import { INPUT_METHOD_ICON, INPUT_METHOD_LABEL, normalizeInputMethod } from '../
 // template literal (`grid-cols-[…${extra}]`) leaves the grid with no rule at
 // all and every cell stacks into one column.
 //
-// The Input column never appears compact — the post-game chase window is
-// already width-starved without a fifth track. The cell is icon-only (the
-// name is the hover tooltip), so the track is 2.5rem and 3.5rem on `sm:`,
-// enough for a "Mixed" week's two or three icons side by side.
+// The Input and Theme columns never appear compact — the post-game chase
+// window is already width-starved without a fifth track. Each cell is
+// icon-only (the name is the hover tooltip), so a track is 2.5rem and 3.5rem
+// on `sm:`, enough for a "Mixed" week's two or three icons side by side. The
+// two are the same width, so the layout only cares how many trailing icon
+// tracks there are (0, 1 or 2), and every combination is still a full
+// literal string below.
+export const iconTrackCount = (cfg, compact = false) =>
+  compact ? 0 : (cfg?.showInput ? 1 : 0) + (cfg?.showTheme ? 1 : 0)
+
 export const rowCols = (variant, cfg, compact = false) => {
-  const input = !!cfg?.showInput && !compact
+  const icons = iconTrackCount(cfg, compact)
   if (variant === 'weekly') {
     if (compact) return 'grid-cols-[2.25rem_1fr_3.25rem_2.25rem]'
-    return input
-      ? 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4rem_3.5rem]'
-      : 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem] sm:grid-cols-[3rem_1fr_5rem_4rem]'
+    if (icons === 2) return 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem_2.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4rem_3.5rem_3.5rem]'
+    if (icons === 1) return 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4rem_3.5rem]'
+    return 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem] sm:grid-cols-[3rem_1fr_5rem_4rem]'
   }
   if (cfg?.hideTime) {
-    return input
-      ? 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_3.5rem]'
-      : 'grid-cols-[2.5rem_1fr_3.5rem] sm:grid-cols-[3rem_1fr_5rem]'
+    if (icons === 2) return 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_3.5rem_3.5rem]'
+    if (icons === 1) return 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_3.5rem]'
+    return 'grid-cols-[2.5rem_1fr_3.5rem] sm:grid-cols-[3rem_1fr_5rem]'
   }
-  return input
-    ? 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem_3.5rem]'
-    : 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem]'
+  if (icons === 2) return 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem_2.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem_3.5rem_3.5rem]'
+  if (icons === 1) return 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem_3.5rem]'
+  return 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem]'
 }
 
 // Row padding/gutter shrink alongside the columns on mobile for the same reason.
@@ -128,6 +138,30 @@ function InputMethodCell({ variant, entry }) {
   )
 }
 
+// The Theme column's cell, the Input cell's twin: all-time carries one
+// `entry.uiTheme` (the run that set the best score), weekly carries
+// `entry.uiThemes`, the distinct non-null themes across the week's plays. A
+// week played under both shows both marks, because the Real CBAT variant of
+// the game is a different screen and the total is not comparable to a
+// single-theme rival's. No recorded theme (a score older than the field)
+// shows the muted "?" the Input cell uses, for the same reason.
+function UiThemeCell({ variant, entry }) {
+  const themes = variant === 'weekly'
+    ? (entry.uiThemes || []).map(normalizeUiTheme).filter(Boolean)
+    : (normalizeUiTheme(entry.uiTheme) ? [entry.uiTheme] : [])
+
+  const cellClass = 'flex items-center justify-end gap-0.5 text-right text-xs text-slate-400 whitespace-nowrap cursor-help'
+  const label = themes.length ? themes.map(t => UI_THEME_LABELS[t]).join(', ') : 'Not recorded'
+
+  return (
+    <span className={cellClass} data-testid="ui-theme" data-themes={themes.join(' ')} title={label} aria-label={label}>
+      {themes.length
+        ? themes.map(t => <UiThemeMark key={t} theme={t} />)
+        : '?'}
+    </span>
+  )
+}
+
 // `layout` opts a row into framer's FLIP reordering (used only during the
 // leaderboard's post-game rank slide). `delta` is the change in position for the
 // user's own row during that slide (positive = climbed) and renders a small
@@ -181,6 +215,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           <GainCell value={entry.weekTotal} gain={gains?.points} pulse={pulse} tone="text-brand-600" className="font-bold" />
           <GainCell value={entry.plays} gain={gains?.plays} pulse={pulse} tone="text-slate-400" />
           {cfg?.showInput && !compact && <InputMethodCell variant={variant} entry={entry} />}
+          {cfg?.showTheme && !compact && <UiThemeCell variant={variant} entry={entry} />}
         </>
       ) : (
         <>
@@ -189,6 +224,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           </span>
           {!cfg.hideTime && <span className="text-right font-mono text-slate-400">{entry.bestTime.toFixed(cfg.timeDecimals ?? 1)}s</span>}
           {cfg?.showInput && !compact && <InputMethodCell variant={variant} entry={entry} />}
+          {cfg?.showTheme && !compact && <UiThemeCell variant={variant} entry={entry} />}
         </>
       )}
     </motion.div>

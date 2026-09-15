@@ -484,6 +484,20 @@ function fakeInputMethodFor(gameKey, offset, i) {
   return INPUT_METHOD_PATTERN[(offset + i) % INPUT_METHOD_PATTERN.length];
 }
 
+// Which theme a demo row on a theme-recording board (Symbols — see
+// CBAT_GAMES[key].uiTheme) is shown playing under. Same fixed-pattern idea as
+// the controls above: mostly SkyWatch, with Real CBAT at exactly 1/4, indexed
+// by the per-game offset plus row index.
+const UI_THEME_PATTERN = [
+  'skywatch', 'skywatch', 'cbat', 'skywatch',
+  'skywatch', 'cbat', 'skywatch', 'skywatch',
+  'cbat', 'skywatch', 'skywatch', 'skywatch',
+];
+
+function fakeUiThemeFor(gameKey, offset, i) {
+  return UI_THEME_PATTERN[(offset + i) % UI_THEME_PATTERN.length];
+}
+
 function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
   const offset = GAME_OFFSET[gameKey] ?? 0;
   const fakes = [];
@@ -518,6 +532,7 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
     };
     if (isAdmin) entry.email = 'demo';
     if (CBAT_GAMES[gameKey]?.inputMethod) entry.inputMethod = fakeInputMethodFor(gameKey, offset, i);
+    if (CBAT_GAMES[gameKey]?.uiTheme) entry.uiTheme = fakeUiThemeFor(gameKey, offset, i);
     fakes.push(entry);
   }
   return fakes;
@@ -668,6 +683,7 @@ function generateWeeklyFakes(gameKey, perPlay, isAdmin) {
     // rolled-up total, not individual sessions, so there is no real per-run
     // control to vary within one row the way a genuine week's $addToSet can.
     if (CBAT_GAMES[gameKey]?.inputMethod) entry.inputMethods = [fakeInputMethodFor(gameKey, offset, i)];
+    if (CBAT_GAMES[gameKey]?.uiTheme) entry.uiThemes = [fakeUiThemeFor(gameKey, offset, i)];
     fakes.push(entry);
   }
   return fakes;

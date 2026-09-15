@@ -35,6 +35,11 @@ describe('leaderboard column budget', () => {
     // mobile — budgets widen by exactly that much, not more.
     ['weekly with Input', 'weekly', { ...cfg, showInput: true }, 10.5],
     ['all-time without Time, with Input', 'alltime', { hideTime: true, showInput: true }, 8.5],
+    // The Theme column (Symbols) is the same 2.5rem icon-only track; both
+    // together are two such tracks, never a wider one.
+    ['all-time with Theme', 'alltime', { ...cfg, showTheme: true }, 12],
+    ['all-time with Input and Theme', 'alltime', { ...cfg, showInput: true, showTheme: true }, 14.5],
+    ['weekly with Input and Theme', 'weekly', { ...cfg, showInput: true, showTheme: true }, 13],
   ])('keeps %s fixed columns within the mobile budget', (_label, variant, c, budget) => {
     expect(mobileFixedRem(rowCols(variant, c))).toBeLessThanOrEqual(budget)
   })
@@ -77,6 +82,21 @@ describe('leaderboard column budget', () => {
       expect(withInput).toEqual(base.map(n => n + 1))
     }
   })
+
+  // showTheme is the same kind of track, and the two stack rather than share.
+  it('adds one track for showTheme and two for showInput + showTheme', () => {
+    for (const variant of ['weekly', 'alltime']) {
+      for (const c of [cfg, { hideTime: true }]) {
+        const base = trackCounts(rowCols(variant, c))
+        expect(trackCounts(rowCols(variant, { ...c, showTheme: true }))).toEqual(base.map(n => n + 1))
+        expect(trackCounts(rowCols(variant, { ...c, showInput: true, showTheme: true }))).toEqual(base.map(n => n + 2))
+      }
+    }
+  })
+
+  it('ignores showTheme on the compact variant', () => {
+    expect(rowCols('weekly', { ...cfg, showTheme: true }, true)).toBe(rowCols('weekly', cfg, true))
+  })
 })
 
 // Tailwind emits CSS only for class names it can find written out in the
@@ -92,6 +112,8 @@ describe('rowCols classes are literal in the source', () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'LeaderboardRow.jsx'), 'utf8')
   const configs = [
     {}, { hideTime: true }, { showInput: true }, { hideTime: true, showInput: true },
+    { showTheme: true }, { hideTime: true, showTheme: true },
+    { showInput: true, showTheme: true }, { hideTime: true, showInput: true, showTheme: true },
   ]
   it.each(['weekly', 'alltime'])('every %s variant is written out in full', (variant) => {
     for (const c of configs) {

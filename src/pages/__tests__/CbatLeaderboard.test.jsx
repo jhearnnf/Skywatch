@@ -672,6 +672,69 @@ describe('CbatLeaderboard — Input column', () => {
   })
 })
 
+// Symbols is the game whose config sets `showTheme` — its Real CBAT variant is
+// a different screen, so the board says which one each score came from. Same
+// conditional-column rule as Input: everything else carries no uiTheme field.
+describe('CbatLeaderboard — Theme column', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('shows a Theme header and the Real CBAT mark on the Symbols all-time board', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 14, bestTime: 30, agentNumber: 'A001', uiTheme: 'cbat' },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    await waitFor(() => expect(screen.getByText('Theme')).toBeDefined())
+    const cell = screen.getByTestId('ui-theme')
+    expect(cell.getAttribute('title')).toBe('Real CBAT')
+    expect(cell.getAttribute('data-themes')).toBe('cbat')
+    // Mark only in the cell; the name is the tooltip.
+    expect(cell.querySelectorAll('svg').length).toBe(1)
+    expect(screen.queryByText('Real CBAT')).toBeNull()
+  })
+
+  it('shows both marks for a weekly row played under both themes this week', async () => {
+    setupAuth(mockApi({ weekly: { leaderboard: [
+      { _id: 'w1', userId: 'u1', rank: 1, weekTotal: 40, plays: 3, agentNumber: 'A001', uiThemes: ['skywatch', 'cbat'] },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+    const cell = screen.getByTestId('ui-theme')
+    expect(cell.getAttribute('title')).toBe('SkyWatch, Real CBAT')
+    expect(cell.querySelectorAll('svg').length).toBe(2)
+  })
+
+  it('shows the "not recorded" marker for an older score with no theme', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 14, bestTime: 30, agentNumber: 'A001', uiTheme: null },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    const cell = await waitFor(() => screen.getByTestId('ui-theme'))
+    expect(cell.getAttribute('title')).toBe('Not recorded')
+    expect(cell.textContent).toBe('?')
+  })
+
+  it('shows no Theme column on a board that does not carry the field', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', uiTheme: 'cbat' },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'rtt' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+    expect(screen.queryByText('Theme')).toBeNull()
+    expect(screen.queryByTestId('ui-theme')).toBeNull()
+  })
+})
+
 // FLAG is the only difficulty-split game: 'flag' (Hard) and 'flag-easier' each
 // have their own board, and the pill pair beside the title is how a user moves
 // between them.

@@ -27,3 +27,10 @@ export function applyUiTheme(theme, root = document.documentElement) {
   else root.setAttribute(THEME_ATTR, resolved)
   return resolved
 }
+
+// A theme name a score row carries, or null for anything else — an older row
+// with no field, or a value the enum no longer knows. Mirrors the backend's
+// normalizeUiTheme (constants/cbatUiThemes.js).
+export function normalizeUiTheme(value) {
+  return UI_THEMES.includes(value) ? value : null
+}

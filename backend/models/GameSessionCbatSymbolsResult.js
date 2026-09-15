@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { UI_THEMES } = require('../constants/cbatUiThemes');
 
 const schema = new mongoose.Schema({
   userId:        { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -8,6 +9,9 @@ const schema = new mongoose.Schema({
   tier3Correct:  { type: Number },
   totalTime:     { type: Number, required: true },
   grade:         { type: String, enum: ['Outstanding', 'Good', 'Needs Work', 'Failed', null], default: null },
+  // Which site theme the run was played under (constants/cbatUiThemes.js).
+  // Null for scores that predate the field, or that arrived without one.
+  uiTheme:       { type: String, enum: [...UI_THEMES, null], default: null },
   createdAt:     { type: Date, default: Date.now },
 });
 

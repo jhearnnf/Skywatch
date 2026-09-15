@@ -60,6 +60,14 @@ const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSma
 // surface it per row. Every other game leaves the flag off and its payloads
 // are unaffected.
 //
+// `uiTheme` (optional, boolean), when true, marks a registry entry whose Real
+// CBAT theme variant plays materially differently from the SkyWatch one
+// (Symbols: numbered tiles answered by typing, a different glyph pool). Its
+// result rows carry a `uiTheme` field (see constants/cbatUiThemes.js) and both
+// boards surface it per row, the same way `inputMethod` is surfaced. The
+// frontend's matching `showTheme: true` in src/data/cbatGames.js draws the
+// column; the two must be added and removed together.
+//
 // `weeklyExpr` (optional) is the per-session MongoDB aggregation expression
 // summed into a user's weekly total on the weekly leaderboard. When omitted the
 // weekly value is just the primaryField (so each replay adds its score — e.g.
@@ -139,6 +147,7 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Symbols',
+    uiTheme: true,
   },
   'target': {
     Model: GameSessionCbatTargetResult,

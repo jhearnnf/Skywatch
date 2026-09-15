@@ -141,7 +141,13 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'trace-2':         { title: 'Trace 2',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/trace',          hideTime: true },
   'angles':          { title: 'Angles',            emoji: '📐',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 20, formatScore: (s) => `${s}/20`,  backPath: '/cbat/angles' },
   'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
-  'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols', timeDecimals: 2 },
+  // showTheme adds the leaderboard's Theme column (SkyWatch / Real CBAT mark).
+  // Symbols is the one game whose Real CBAT variant is a different screen —
+  // numbered tiles answered by typing, a different glyph pool — so a score has
+  // to say which one it came from. Half of the wiring, like showInput: the
+  // backend registry's matching `uiTheme: true` is what makes rows carry the
+  // field, so the two must be added and removed together.
+  'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols', timeDecimals: 2, showTheme: true },
   'target':          { title: 'Target',            emoji: '🎯',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/target',         hideTime: true },
   'instruments':     { title: 'Instruments',       emoji: '🛫',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/instruments',    hideTime: true },
   // ANT's two halves are two different games, not one game at two loads, so

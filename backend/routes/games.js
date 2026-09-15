@@ -22,6 +22,7 @@ const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/Ga
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { normalizeInputMethod } = require('../constants/cbatInputMethods');
+const { normalizeUiTheme } = require('../constants/cbatUiThemes');
 const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
@@ -2631,7 +2632,7 @@ router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
 // POST /api/games/cbat/symbols/result
 router.post('/cbat/symbols/result', protect, async (req, res) => {
   try {
-    const { correctCount, tier1Correct, tier2Correct, tier3Correct, totalTime, grade } = req.body;
+    const { correctCount, tier1Correct, tier2Correct, tier3Correct, totalTime, grade, uiTheme } = req.body;
     const result = await saveCbatResult(GameSessionCbatSymbolsResult, req, {
       correctCount,
       tier1Correct,
@@ -2639,6 +2640,10 @@ router.post('/cbat/symbols/result', protect, async (req, res) => {
       tier3Correct,
       totalTime,
       grade,
+      // The theme the run was played under: the Real CBAT variant of this
+      // game is a different screen (typed answers, a different glyph pool),
+      // so a score has to say which one it came from.
+      uiTheme: normalizeUiTheme(uiTheme),
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2897,6 +2902,8 @@ async function cbatLeaderboard(req, res, gameKey) {
           // session first, so $first here is the control that best run was
           // flown on.
           ...(cfg.inputMethod ? { inputMethod: { $first: '$inputMethod' } } : {}),
+          // Likewise the theme that best run was played under.
+          ...(cfg.uiTheme ? { uiTheme: { $first: '$uiTheme' } } : {}),
         },
       },
       // $group doesn't preserve order — re-sort the deduped rows.
@@ -2932,6 +2939,7 @@ async function cbatLeaderboard(req, res, gameKey) {
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
           ...(cfg.inputMethod ? { inputMethod: 1 } : {}),
+          ...(cfg.uiTheme ? { uiTheme: 1 } : {}),
         },
       },
     ];
@@ -3003,6 +3011,7 @@ async function cbatLeaderboard(req, res, gameKey) {
             bestTime: timeVal,
             rank: countBetter + 1,
             ...(cfg.inputMethod ? { inputMethod: best.inputMethod ?? null } : {}),
+            ...(cfg.uiTheme ? { uiTheme: best.uiTheme ?? null } : {}),
           };
         }
       }
@@ -3051,6 +3060,8 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
       // filtered to non-null in the $project below (a run predating this
       // feature, or with an unrecognised value, contributes nothing here).
       ...(cfg.inputMethod ? { inputMethods: { $addToSet: '$inputMethod' } } : {}),
+      // Same shape for the theme: every distinct theme played under this week.
+      ...(cfg.uiTheme ? { uiThemes: { $addToSet: '$uiTheme' } } : {}),
     },
   };
 
@@ -3082,6 +3093,11 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
               $filter: { input: '$inputMethods', as: 'm', cond: { $ne: ['$$m', null] } },
             },
           } : {}),
+          ...(cfg.uiTheme ? {
+            uiThemes: {
+              $filter: { input: '$uiThemes', as: 't', cond: { $ne: ['$$t', null] } },
+            },
+          } : {}),
         },
       },
     ];
@@ -3105,6 +3121,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
               weekTotal: { $sum: valueExpr },
               plays: { $sum: 1 },
               ...(cfg.inputMethod ? { inputMethods: { $addToSet: '$inputMethod' } } : {}),
+              ...(cfg.uiTheme ? { uiThemes: { $addToSet: '$uiTheme' } } : {}),
             },
           },
         ]);
@@ -3129,6 +3146,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
             plays: mine.plays,
             rank: (betterAgg[0]?.n || 0) + 1,
             ...(cfg.inputMethod ? { inputMethods: (mine.inputMethods || []).filter(m => m != null) } : {}),
+            ...(cfg.uiTheme ? { uiThemes: (mine.uiThemes || []).filter(t => t != null) } : {}),
           };
         }
       }

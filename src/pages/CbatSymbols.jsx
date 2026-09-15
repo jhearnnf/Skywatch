@@ -395,6 +395,7 @@ function ResultsScreen({ answers, totalTime }) {
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function CbatSymbols() {
   const { user, apiFetch, API } = useAuth()
+  const cbat = useCbatTheme()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | countdown | playing | feedback | results
@@ -461,6 +462,10 @@ export default function CbatSymbols() {
         tier3Correct: tier3,
         totalTime: finalTime,
         grade,
+        // Which screen this was played on: the Real CBAT variant is a
+        // different game (typed answers, red capitals), and the leaderboard
+        // marks each score with it.
+        uiTheme: cbat ? 'cbat' : 'skywatch',
       }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
@@ -471,9 +476,7 @@ export default function CbatSymbols() {
           .catch(() => {})
       })
       .catch(() => {})
-  }, [apiFetch, API])
-
-  const cbat = useCbatTheme()
+  }, [apiFetch, API, cbat])
 
   // Under the Real CBAT theme the tiles carry red capitals and simple symbols,
   // as the real screen does, instead of the mixed-script pool.

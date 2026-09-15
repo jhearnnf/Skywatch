@@ -488,8 +488,23 @@ describe('CbatSymbols — Real CBAT theme', () => {
     await waitFor(() => expect(mockSubmitCbatResult).toHaveBeenCalled())
     const body = mockSubmitCbatResult.mock.calls[0][1]
     expect(body.correctCount).toBeLessThan(15)
+    // The score says which screen it was set on: this is the typed-answer one.
+    expect(body.uiTheme).toBe('cbat')
   })
 
+  it('a SkyWatch-theme run is submitted as skywatch', async () => {
+    setupUser()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    render(<CbatSymbols />)
+    fireEvent.click(screen.getByRole('button', { name: /^start$/i }))
+    for (let r = 0; r < 15; r++) {
+      fireEvent.click(document.querySelector('.grid button'))
+      await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
+    }
+    await waitFor(() => expect(mockSubmitCbatResult).toHaveBeenCalled())
+    expect(mockSubmitCbatResult.mock.calls[0][1].uiTheme).toBe('skywatch')
+    vi.useRealTimers()
+  })
 
   it('Enter does nothing until the answer names a tile on the board', () => {
     setupCbatUser()
