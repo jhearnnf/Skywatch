@@ -10,6 +10,7 @@ import AptitudeReportCard from '../components/AptitudeReportCard'
 import ProfileBadge from '../components/ProfileBadge'
 import CbatPassedBadge from '../components/CbatPassedBadge'
 import SEO from '../components/SEO'
+import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // One agent, read-only, for anyone who has just met a name in Community or in
 // the recent-scores feed.
@@ -17,8 +18,8 @@ import SEO from '../components/SEO'
 // The user card in a channel answers "who is this" with a display name and an
 // agent number, which is nowhere near enough to place a post. This page is the
 // rest of the answer. What every signed-in agent gets is what the site already
-// shows beside a name elsewhere: who they are, the badge they wear, and their
-// best score on each test. An admin gets the rest on top — how far in they
+// shows beside a name elsewhere: who they are, the badge they wear, the
+// medals on their avatar, and their best score on each test. An admin gets the rest on top — how far in they
 // are, what they have collected, how much CBAT they have actually sat, and the
 // account facts — and every one of those cards carries an ADMIN ONLY mark, so
 // an admin reading the page always knows which half of it the player can see.
@@ -28,6 +29,12 @@ import SEO from '../components/SEO'
 // should not have it. The page deliberately changes NOTHING — every moderation
 // control (ban, tier, award, delete) stays on Admin ▸ Users, where it is
 // guarded by a written reason.
+//
+// For an admin the page is three columns on a wide screen: the public half
+// stays in the middle, exactly where a player sees it, and every ADMIN ONLY
+// card sits in a rail on the right, so the split the marks describe is also
+// the split on screen. The left column is empty for now. Below the xl
+// breakpoint the rail stacks under the public cards.
 
 // Locked badges are shown, not hidden. "12 of 30" only means something if you
 // can see the 18 — and the shape of what someone has NOT collected is the more
@@ -251,10 +258,32 @@ export default function AgentProfile() {
     ? `${agent.rank.rankName} (${agent.rank.rankAbbreviation})`
     : 'Unranked'
 
+  // AppShell caps every route at max-w-3xl, which is one column's worth; the
+  // body class lifts that on xl so the admin rail has room beside the public
+  // column instead of under it. Players keep the single centred column.
+  useGameBodyClass('agent-profile-wide', isAdmin)
+
+  // One column's worth of width, centred while the page is a single column.
+  const colClass = 'max-w-lg mx-auto w-full min-w-0 xl:max-w-none xl:mx-0'
+  // On xl the page is a grid of two rows: the header and identity card fill
+  // the first, and the CBAT record and admin rail share the second, so the
+  // rail's first card starts level with the top of the record.
+  const midTop    = `${colClass} xl:col-start-2 xl:row-start-1`
+  const midBottom = `${colClass} xl:col-start-2 xl:row-start-2`
+  const railClass = `${colClass} mt-4 xl:mt-0 xl:col-start-3 xl:row-start-2`
+
   return (
-    <div className="max-w-lg mx-auto pb-8">
+    <div className={isAdmin
+      ? 'pb-8 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)_minmax(0,1fr)] xl:grid-rows-[auto_auto] xl:gap-x-6 xl:items-start'
+      : 'max-w-lg mx-auto pb-8'}
+    >
       <SEO title="Agent Profile" description="One agent's profile." noIndex={true} />
 
+      {/* Left column: nothing here yet. It exists so the public column sits in
+          the middle of the page, not against the sidebar. */}
+      {isAdmin && <div className="hidden xl:block xl:col-start-1 xl:row-span-2" aria-hidden="true" />}
+
+      <div className={isAdmin ? midTop : undefined}>
       <div className="mb-4">
         <button
           onClick={() => navigate(backTo, backState ? { state: backState } : undefined)}
@@ -285,7 +314,7 @@ export default function AgentProfile() {
         <>
           {/* Identity — the public half: the badge they wear, their name and
               their agent number. Rank, streak and level are account standing,
-              and sit on the admin card below. */}
+              and sit on the admin card in the rail. */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -307,7 +336,109 @@ export default function AgentProfile() {
               </div>
             </div>
           </motion.div>
+        </>
+      )}
+      </div>
 
+      {!loading && !error && agent && (
+        <div className={isAdmin ? midBottom : undefined}>
+          {/* Medals. Public: they are the same podium places already hanging
+              off their avatar in Community, and a podium place can be lost the
+              moment someone overtakes them, which is the thing worth reading
+              first. */}
+          <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
+            <div className="flex items-baseline justify-between gap-3 mb-1">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Leaderboard medals</p>
+              {medals.length > 0 && (
+                <p className="text-xs font-bold text-slate-700">{medals.length}</p>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Top three on an all time board right now. These are the same medals shown on their
+              avatar in Community, and they are lost the moment someone overtakes them.
+            </p>
+            {data?.scoresHidden ? (
+              // Opted out of Score Sharing: they are off every board, so
+              // "not in the top three" would be true but misleading.
+              <p className="text-sm text-slate-400 py-3 text-center">This player keeps their scores private.</p>
+            ) : medals.length === 0 ? (
+              <p className="text-sm text-slate-400 py-3 text-center">
+                Not in the top three on any all time board right now.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {medals.map(m => <MedalRow key={`${m.gameKey}-${m.rank}`} medal={m} />)}
+              </div>
+            )}
+          </div>
+
+          {/* CBAT record — the personal best on every game they have finished.
+              Public. How many times, when, and where it sits on the board are
+              admin only, so a player sees the score and nothing under it. */}
+          <div className="bg-surface border border-slate-200 rounded-2xl p-4 card-shadow">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">CBAT record</p>
+            <p className="text-[11px] text-slate-400 mb-3">
+              Their best score on every test they have finished, most played first.
+              {showAdmin && (
+                <>
+                  {' '}The chip beside a name is where that score currently sits on the all time board,
+                  blank if it is outside the top 20.
+                </>
+              )}
+            </p>
+            {showAdmin && (
+              <p className="text-[11px] text-slate-400 mb-3 flex items-center gap-1.5">
+                <AdminOnly /> attempts, last played and board place.
+              </p>
+            )}
+            {data?.scoresHidden ? (
+              // Opted out under Profile > Settings > Score Sharing. The public
+              // endpoint sends no rows for them, and an empty list must not read
+              // as "never played".
+              <p className="text-sm text-slate-400 py-3 text-center">This player keeps their scores private.</p>
+            ) : !data?.cbatGames?.length ? (
+              <p className="text-sm text-slate-400 py-3 text-center">They have never finished a CBAT test.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {data.cbatGames.map(g => {
+                  const cfg = CBAT_LEADERBOARD_CONFIG[g.gameKey] ?? {}
+                  const format = cfg.formatScore ?? ((s) => `${s}`)
+                  return (
+                    <li key={g.gameKey} className="flex items-center gap-3 py-2">
+                      <span className="text-base shrink-0" aria-hidden="true">{cfg.emoji ?? '🎯'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-slate-700 truncate flex items-center gap-1.5">
+                          <span className="truncate">
+                            {cfg.title ? cbatTitleWithDifficulty(g.gameKey, cfg.title) : g.label}
+                          </span>
+                          {showAdmin && <BoardRankChip rank={g.boardRank} />}
+                        </p>
+                        {showAdmin && (
+                          <p className="text-[10px] text-slate-400">
+                            {g.attempts} finished · last {fmtDate(g.lastPlayedAt)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-extrabold text-slate-800">
+                          {g.best == null ? '—' : format(g.best)}
+                        </p>
+                        <p className="text-[10px] text-slate-400">best</p>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Admin rail. Every card here carries the ADMIN ONLY mark; a player is
+          never sent the fields behind them. Empty until the admin endpoint has
+          answered, so nothing admin-only ever draws off a stale flag. */}
+      {isAdmin && (
+        <aside className={railClass} aria-label="Admin only">
           {showAdmin && (<>
           {/* Standing: rank, streak, level. What the agent sees on their own
               Profile card, admin only here until it is decided otherwise. */}
@@ -381,7 +512,7 @@ export default function AgentProfile() {
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Activity</p>
             <AdminOnly />
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-2 gap-2 mb-4">
             <StatTile label="Airstars" value={(agent.totalAirstars ?? 0).toLocaleString()} />
             <StatTile
               label="Briefs read"
@@ -429,32 +560,7 @@ export default function AgentProfile() {
             </button>
           </div>
 
-          {/* Medals. Above the aircraft badges because a podium place is the
-              rarer thing and the one that can be lost: a badge is kept forever
-              once the brief is read, whereas these move the moment someone is
-              overtaken. */}
-          <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
-            <AdminCardTitle right={medals.length > 0 && (
-              <p className="text-xs font-bold text-slate-700">{medals.length}</p>
-            )}>
-              Leaderboard medals
-            </AdminCardTitle>
-            <p className="text-[11px] text-slate-400 mb-3">
-              Top three on an all time board right now. These are the same medals shown on their
-              avatar in Community, and they are lost the moment someone overtakes them.
-            </p>
-            {medals.length === 0 ? (
-              <p className="text-sm text-slate-400 py-3 text-center">
-                Not in the top three on any all time board right now.
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {medals.map(m => <MedalRow key={`${m.gameKey}-${m.rank}`} medal={m} />)}
-              </div>
-            )}
-          </div>
-
-          {/* Trophy cabinet */}
+          {/* Trophy cabinet. Kept forever once the brief is read, unlike a medal. */}
           <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
             <AdminCardTitle right={(
               <p className="text-xs font-bold text-slate-700">
@@ -505,7 +611,7 @@ export default function AgentProfile() {
             )}
           </div>
 
-          {/* Aptitude Report. The record below says how much CBAT they have sat; this says what it
+          {/* Aptitude Report. The CBAT record says how much CBAT they have sat; this says what it
               would be worth, which is the question an admin reading a support thread actually has.
               It is the same card the agent sees on /cbat, fetched for them and pointing at the
               report page's admin view of them, so what an admin reads here and what the agent
@@ -521,67 +627,7 @@ export default function AgentProfile() {
             <AptitudeReportCard userId={id} />
           </div>
           </>)}
-
-          {/* CBAT record — the personal best on every game they have finished.
-              Public. How many times, when, and where it sits on the board are
-              admin only, so a player sees the score and nothing under it. */}
-          <div className="bg-surface border border-slate-200 rounded-2xl p-4 card-shadow">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">CBAT record</p>
-            <p className="text-[11px] text-slate-400 mb-3">
-              Their best score on every test they have finished, most played first.
-              {showAdmin && (
-                <>
-                  {' '}The chip beside a name is where that score currently sits on the all time board,
-                  blank if it is outside the top 20.
-                </>
-              )}
-            </p>
-            {showAdmin && (
-              <p className="text-[11px] text-slate-400 mb-3 flex items-center gap-1.5">
-                <AdminOnly /> attempts, last played and board place.
-              </p>
-            )}
-            {data?.scoresHidden ? (
-              // Opted out under Profile > Settings > Score Sharing. The public
-              // endpoint sends no rows for them, and an empty list must not read
-              // as "never played".
-              <p className="text-sm text-slate-400 py-3 text-center">This player keeps their scores private.</p>
-            ) : !data?.cbatGames?.length ? (
-              <p className="text-sm text-slate-400 py-3 text-center">They have never finished a CBAT test.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {data.cbatGames.map(g => {
-                  const cfg = CBAT_LEADERBOARD_CONFIG[g.gameKey] ?? {}
-                  const format = cfg.formatScore ?? ((s) => `${s}`)
-                  return (
-                    <li key={g.gameKey} className="flex items-center gap-3 py-2">
-                      <span className="text-base shrink-0" aria-hidden="true">{cfg.emoji ?? '🎯'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-700 truncate flex items-center gap-1.5">
-                          <span className="truncate">
-                            {cfg.title ? cbatTitleWithDifficulty(g.gameKey, cfg.title) : g.label}
-                          </span>
-                          {showAdmin && <BoardRankChip rank={g.boardRank} />}
-                        </p>
-                        {showAdmin && (
-                          <p className="text-[10px] text-slate-400">
-                            {g.attempts} finished · last {fmtDate(g.lastPlayedAt)}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-extrabold text-slate-800">
-                          {g.best == null ? '—' : format(g.best)}
-                        </p>
-                        <p className="text-[10px] text-slate-400">best</p>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
-        </>
+        </aside>
       )}
 
       {progressOpen && showAdmin && agent && (

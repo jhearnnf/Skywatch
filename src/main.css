@@ -967,6 +967,18 @@ body.cbat-dpt-fullwidth .app-shell-content {
   }
 }
 
+/* Agent profile, admin view: three columns on xl — empty left, the public
+   cards in the middle where a player sees them, the ADMIN ONLY cards in a rail
+   on the right. Toggled from src/pages/AgentProfile.jsx for admins only; a
+   player's single column keeps the default cap. */
+@media (min-width: 1280px) {
+  body.agent-profile-wide .app-shell-content {
+    max-width: none;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
 /* Clipper: the admin video tool is a two-column authoring surface (fact ledger
    or idea list beside the script), which does not fit inside max-w-3xl.
    Toggled from src/pages/Clipper.jsx. */

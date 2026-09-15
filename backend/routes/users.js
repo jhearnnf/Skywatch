@@ -399,12 +399,16 @@ router.get('/leaderboard', async (req, res) => {
 //
 // Board places are left off on purpose. Each one is an aggregation over a whole
 // score collection, and a page any player can open must not pay for twenty.
+// The podium medals are the exception: chat already hangs them off every
+// avatar, so they come from the same cached sweep (cbatMedalHolders) at no
+// extra cost, and a profile can never show a medal the avatar does not.
 //
-// Score Sharing (hideFromShowcase) is the opt-out. It is the same objection
-// that keeps a player off the homepage progress wall: one switch under
-// Profile > Settings covers every place their scores leave the boards. An
-// opted-out profile still opens (the name and badge are what chat shows
-// anyway) but carries no scores and says so.
+// Score Sharing (hideFromShowcase) is the opt-out. One switch under
+// Profile > Settings covers every shared surface — the homepage wall, the
+// boards, the feed, the medals — see utils/cbatScoreSharing.js. An opted-out
+// profile still opens (the name and badge are what chat shows anyway) but
+// carries no scores and says so. Medals come out empty by construction: an
+// opted-out player is not on any board, so holds no place on one.
 router.get('/:id/profile', protect, async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -416,9 +420,10 @@ router.get('/:id/profile', protect, async (req, res) => {
     if (!target) return res.status(404).json({ message: 'User not found' });
 
     const scoresHidden = Boolean(target.hideFromShowcase);
-    const [selectedBadge, record] = await Promise.all([
+    const [selectedBadge, record, medalsById] = await Promise.all([
       resolveSelectedBadge(target.selectedBadgeBriefId),
       scoresHidden ? [] : cbatRecordFor(target._id),
+      medalsForUsers([target._id]),
     ]);
 
     res.json({ status: 'success', data: {
@@ -432,6 +437,7 @@ router.get('/:id/profile', protect, async (req, res) => {
         selectedBadge,
       },
       scoresHidden,
+      medals: medalsById[String(target._id)] ?? [],
       cbatGames: record.map(g => ({ gameKey: g.gameKey, label: g.label, best: g.best })),
     } });
   } catch (err) {

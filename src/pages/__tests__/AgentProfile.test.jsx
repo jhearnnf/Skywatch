@@ -78,6 +78,9 @@ const publicPayload = () => ({
       _id: 'u2', displayName: 'Viper', agentNumber: '1000042', isBot: false, cbatPassed: true,
       selectedBadge: badge('Typhoon'),
     },
+    medals: [
+      { gameKey: 'flag', gameLabel: 'FLAG (Hard)', rank: 1 },
+    ],
     cbatGames: [
       { gameKey: 'flag', label: 'FLAG (Hard)', best: 386 },
       { gameKey: 'angles', label: 'Angles', best: 18 },
@@ -141,7 +144,8 @@ describe('AgentProfile — what a player sees', () => {
     renderPage()
     expect(await screen.findByText('Viper')).toBeInTheDocument()
     expect(screen.getByText('#1000042')).toBeInTheDocument()
-    expect(screen.getByText('FLAG (Hard)')).toBeInTheDocument()
+    // Named twice: once on the medal, once on the record row.
+    expect(screen.getAllByText('FLAG (Hard)').length).toBeGreaterThan(0)
     expect(screen.getByText('386')).toBeInTheDocument()
     expect(screen.getByText('18/20')).toBeInTheDocument()
   })
@@ -150,7 +154,7 @@ describe('AgentProfile — what a player sees', () => {
     renderPage()
     await screen.findByText('Viper')
     expect(screen.queryByText('Admin only')).not.toBeInTheDocument()
-    for (const label of ['Standing', 'Account', 'Activity', 'Leaderboard medals', 'Aircraft badges', 'Aptitude report']) {
+    for (const label of ['Standing', 'Account', 'Activity', 'Aircraft badges', 'Aptitude report']) {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
     expect(screen.queryByText(/Streak/)).not.toBeInTheDocument()
@@ -165,7 +169,8 @@ describe('AgentProfile — what a player sees', () => {
       ...publicPayload().data, scoresHidden: true, cbatGames: [],
     } }))
     renderPage()
-    expect(await screen.findByText('This player keeps their scores private.')).toBeInTheDocument()
+    // Once on the medals card and once on the record card.
+    expect(await screen.findAllByText('This player keeps their scores private.')).toHaveLength(2)
     expect(screen.queryByText('They have never finished a CBAT test.')).not.toBeInTheDocument()
     // The name and badge still show, as they do in chat.
     expect(screen.getByText('Viper')).toBeInTheDocument()
@@ -206,11 +211,42 @@ describe('AgentProfile — what an admin sees on top', () => {
   it('marks every admin card, so an admin can tell which half a player sees', async () => {
     renderPage()
     await screen.findByText('Viper')
-    for (const label of ['Standing', 'Account', 'Leaderboard medals', 'Aircraft badges', 'Aptitude report']) {
+    for (const label of ['Standing', 'Account', 'Aircraft badges', 'Aptitude report']) {
       expect(screen.getByText(label).parentElement).toHaveTextContent('Admin only')
     }
+    expect(screen.getByText('Leaderboard medals').parentElement).not.toHaveTextContent('Admin only')
     // The activity tiles share one mark above the row.
     expect(screen.getByText('Activity').parentElement).toHaveTextContent('Admin only')
+  })
+})
+
+describe('AgentProfile — the admin rail', () => {
+  // The public half stays in the middle of the page, where a player sees it;
+  // every admin-only card sits in its own column to the right of it.
+  it('puts every admin card in the rail and the public cards outside it', async () => {
+    renderPage()
+    await screen.findByText('Viper')
+    const rail = screen.getByRole('complementary', { name: 'Admin only' })
+    for (const label of ['Standing', 'Account', 'Activity', 'Aircraft badges', 'Aptitude report']) {
+      expect(rail).toContainElement(screen.getByText(label))
+    }
+    expect(rail).not.toContainElement(screen.getByText('Viper'))
+    expect(rail).not.toContainElement(screen.getByText('Leaderboard medals'))
+    expect(rail).not.toContainElement(screen.getByText('CBAT record'))
+  })
+
+  it('widens the app shell for an admin, and only an admin', async () => {
+    renderPage()
+    await screen.findByText('Viper')
+    expect(document.body.classList.contains('agent-profile-wide')).toBe(true)
+    cleanup()
+    expect(document.body.classList.contains('agent-profile-wide')).toBe(false)
+
+    asPlayer()
+    renderPage()
+    await screen.findByText('Viper')
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    expect(document.body.classList.contains('agent-profile-wide')).toBe(false)
   })
 })
 
@@ -260,6 +296,25 @@ describe('AgentProfile — leaderboard medals', () => {
     renderPage()
     await screen.findByText('Viper')
     expect(screen.getByText(/lost the moment someone overtakes them/)).toBeInTheDocument()
+  })
+
+  it('says the scores are private rather than "not in the top three" when they have opted out', async () => {
+    asPlayer()
+    const p = publicPayload(); p.data.scoresHidden = true; p.data.medals = []; p.data.cbatGames = []
+    mockApiFetch.mockResolvedValue(ok(p))
+    renderPage()
+    await screen.findByText('Viper')
+    expect(screen.getAllByText('This player keeps their scores private.')).toHaveLength(2)
+    expect(screen.queryByText(/Not in the top three/)).not.toBeInTheDocument()
+  })
+
+  it('shows them to a player too: they already hang off the avatar in Community', async () => {
+    asPlayer()
+    renderPage()
+    await screen.findByText('Viper')
+    expect(screen.getByText('Leaderboard medals')).toBeInTheDocument()
+    expect(screen.getByText('Gold')).toBeInTheDocument()
+    expect(screen.queryByText('Admin only')).not.toBeInTheDocument()
   })
 })
 

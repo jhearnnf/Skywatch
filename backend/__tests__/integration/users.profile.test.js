@@ -10,6 +10,7 @@
  *   auth guard (401 signed out, 404 unknown/malformed id), open to non-admins
  *   identity — name, agent number, resolved worn badge, pass mark
  *   CBAT record — best in both score directions, most played first, played only
+ *   leaderboard medals — the same podium places chat hangs off the avatar
  *   the fields that must stay admin only are absent
  *   Score Sharing opt-out (hideFromShowcase) empties the record and says so
  */
@@ -22,17 +23,21 @@ const { createUser, createBrief, createSettings, authCookie } = require('../help
 const { CBAT_GAMES } = require('../../constants/cbatGames');
 const Media = require('../../models/Media');
 const User  = require('../../models/User');
+const { resetMedalHoldersCache } = require('../../utils/cbatMedalHolders');
+const { clearScoreSharingCache } = require('../../utils/cbatScoreSharing');
 
 let viewer, cookie, user;
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => {
   await createSettings();
+  resetMedalHoldersCache();
+  clearScoreSharingCache();
   viewer = await createUser();
   cookie = authCookie(viewer._id);
   user   = await createUser({ agentNumber: '1000042', displayName: 'Viper' });
 });
-afterEach(async () => db.clearDatabase());
+afterEach(async () => { await db.clearDatabase(); resetMedalHoldersCache(); clearScoreSharingCache(); });
 afterAll(async () => db.closeDatabase());
 
 const get = () => request(app)
@@ -166,6 +171,45 @@ describe('GET /api/users/:id/profile — Score Sharing opt-out', () => {
   });
 });
 
+describe('GET /api/users/:id/profile — leaderboard medals', () => {
+  // Public because they already are: the same podium places hang off the
+  // avatar in every chat channel. Ranked against the padded board a player
+  // sees, so a medal here is one the leaderboard shows too.
+  it('reports a top score as the gold medal', async () => {
+    await seedRun('flag', 500);
+    const res = await get();
+    expect(res.body.data.medals).toEqual([
+      { gameKey: 'flag', gameLabel: 'FLAG (Hard)', rank: 1 },
+    ]);
+  });
+
+  it('counts the demo agents above them as the places they visibly occupy', async () => {
+    // Angles' demo board opens 18, 17, 15. A real 16 sits third, not first.
+    await seedRun('angles', 16);
+    const res = await get();
+    expect(res.body.data.medals).toEqual([
+      { gameKey: 'angles', gameLabel: 'Angles', rank: 3 },
+    ]);
+  });
+
+  it('returns no medals for a score off the podium, and none for an agent who has finished nothing', async () => {
+    expect((await get()).body.data.medals).toEqual([]);
+    await seedRun('flag', 50);
+    resetMedalHoldersCache();
+    expect((await get()).body.data.medals).toEqual([]);
+  });
+
+  it('reports no medals for a player who has opted out of Score Sharing: they are off the boards', async () => {
+    await seedRun('flag', 500);
+    await User.updateOne({ _id: user._id }, { hideFromShowcase: true });
+    clearScoreSharingCache(); resetMedalHoldersCache();
+    const res = await get();
+    expect(res.body.data.scoresHidden).toBe(true);
+    expect(res.body.data.cbatGames).toEqual([]);
+    expect(res.body.data.medals).toEqual([]);
+  });
+});
+
 describe('GET /api/users/:id/profile — what stays admin only', () => {
   it('carries no account facts', async () => {
     const res = await get();
@@ -180,7 +224,6 @@ describe('GET /api/users/:id/profile — what stays admin only', () => {
     await seedRun('flag', 500);
     const res = await get();
     expect(res.body.data).not.toHaveProperty('stats');
-    expect(res.body.data).not.toHaveProperty('medals');
     expect(res.body.data).not.toHaveProperty('badges');
     const flag = res.body.data.cbatGames.find(g => g.gameKey === 'flag');
     expect(flag).toEqual({ gameKey: 'flag', label: 'FLAG (Hard)', best: 500 });
