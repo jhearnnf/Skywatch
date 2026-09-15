@@ -452,6 +452,7 @@ router.get('/stats', async (_req, res) => {
       totalUsers, onlineUsers, activeUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
       androidAppUsers,
+      cbatThemeUsers,
       totalBrifsRead, totalBrifsOpened, readTimeAgg,
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
@@ -499,6 +500,11 @@ router.get('/stats', async (_req, res) => {
       // Never cleared once written, so this stays a lifetime count even for a
       // tester who has since gone back to the browser.
       User.countDocuments({ 'lastClients.android.lastSeenAt': { $ne: null } }),
+      // Accounts whose site theme is set to Real CBAT. The default is SkyWatch,
+      // and accounts from before the selector existed carry no `uiTheme` at all,
+      // so counting the one non-default value is the whole answer — the share
+      // is taken against `totalUsers` on the client, not against a second count.
+      User.countDocuments({ uiTheme: 'cbat' }),
       IntelligenceBriefRead.countDocuments({ completed: true }),
       IntelligenceBriefRead.countDocuments({ completed: false }),
       IntelligenceBriefRead.aggregate([{ $group: { _id: null, total: { $sum: '$timeSpentSeconds' } } }]),
@@ -657,6 +663,7 @@ router.get('/stats', async (_req, res) => {
           subscribedUsers: silverUsers + goldUsers,
           easyPlayers, mediumPlayers,
           androidAppUsers,
+          cbatThemeUsers,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
           // The donate page is reported alongside the asks rather than added into them. It is

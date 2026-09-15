@@ -747,18 +747,33 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
               ? `${pct(users.androidAppUsers ?? 0, users.totalUsers)} of all accounts`
               : 'nobody has installed it yet'}
           />
+          {/* Same question again, one layer in: of the people here, how many have switched
+              the site to the Real CBAT look. Reported as the share rather than the count,
+              because the count on its own says nothing — 30 accounts is most of the site or
+              a rounding error depending on the total. The count goes on the sub line.
+
+              Not greyed in slim mode either: the theme changes the CBAT games, which are
+              exactly what slim mode keeps. */}
+          <StatCard
+            label="Real CBAT Theme"
+            value={users.totalUsers ? pct(users.cbatThemeUsers ?? 0, users.totalUsers) : '—'}
+            color="brand"
+            sub={users.totalUsers
+              ? `${fmtNum(users.cbatThemeUsers ?? 0)} of ${fmtNum(users.totalUsers)} accounts`
+              : 'no accounts yet'}
+          />
           <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate"   {...slimStat} />
-          <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber"   {...slimStat} />
         </div>
-        {/* The tier trio stays together in reading order: this row opens on Paying
-            Subscribers, which the row above ends one card short of. */}
+        {/* The tier trio stays together in reading order: Free closes the row above and
+            Trial and Paying Subscribers open this one. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+          <StatCard label="Trial"            value={fmtNum(users.trialUsers)}        color="amber"   {...slimStat} />
           <StatCard label="Paying Subscribers" value={fmtNum(users.subscribedUsers)} color="emerald" {...slimStat} />
           <StatCard label="Easy Mode"        value={fmtNum(users.easyPlayers)}       color="slate"   {...slimStat} />
           <StatCard label="Medium Mode"      value={fmtNum(users.mediumPlayers)}     color="slate"   {...slimStat} />
-          <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate"   {...slimStat} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+          <StatCard label="Combined Streaks" value={fmtNum(users.combinedStreaks)}   color="slate"   {...slimStat} />
           <button
             type="button"
             onClick={() => onViewEmailLog?.('sent')}

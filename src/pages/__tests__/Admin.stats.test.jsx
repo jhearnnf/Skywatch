@@ -65,6 +65,7 @@ const MOCK_STATS = {
     totalUsers: 10, onlineUsers: 3, activeUsers: 1, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     androidAppUsers: 4,
+    cbatThemeUsers: 3,
     emailsSent: 42, emailsFailed: 7,
     questionnaire: { sent: 20, started: 8, completed: 5 },
     donation: {
@@ -247,6 +248,40 @@ describe('Admin — Stats tab: Android app users', () => {
     await waitFor(() => expect(screen.getByText('Users Online')).toBeInTheDocument())
     const row = (label) => screen.getByText(label).closest('.grid')
     expect(row('Android App Users')).toBe(row('Users Online'))
+  })
+
+  // The theme tile leads with the share, not the count: the count means nothing without the
+  // total, so the total goes on the sub line where the count is spelt out against it.
+  it('shows the share of accounts on the Real CBAT theme, with the count underneath', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Real CBAT Theme')).toBeInTheDocument())
+    const card = screen.getByText('Real CBAT Theme').closest('[class*="rounded-2xl"]')
+    expect(within(card).getByText('30%')).toBeInTheDocument()
+    expect(within(card).getByText('3 of 10 accounts')).toBeInTheDocument()
+  })
+
+  // Same question as the Android tile, one layer in — who is here and on what — so it sits
+  // in that row, and an older backend without the field reads as 0% rather than NaN.
+  it('sits beside Android App Users and reads 0% when the backend has no count', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({
+          status: 'success',
+          data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, cbatThemeUsers: undefined } },
+        }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Real CBAT Theme')).toBeInTheDocument())
+    const row = (label) => screen.getByText(label).closest('.grid')
+    expect(row('Real CBAT Theme')).toBe(row('Android App Users'))
+    const card = screen.getByText('Real CBAT Theme').closest('[class*="rounded-2xl"]')
+    expect(within(card).getByText('0%')).toBeInTheDocument()
+    expect(within(card).getByText('0 of 10 accounts')).toBeInTheDocument()
   })
 
   // Drawn, not typed: 🤖 is a generic grey robot on Windows rather than the Android mascot.

@@ -23,6 +23,7 @@ const GameSessionQuizAttempt          = require('../../models/GameSessionQuizAtt
 const GameSessionOrderOfBattleResult  = require('../../models/GameSessionOrderOfBattleResult');
 const GameSessionWhereAircraftResult  = require('../../models/GameSessionWhereAircraftResult');
 const IntelligenceBriefRead           = require('../../models/IntelligenceBriefRead');
+const User                            = require('../../models/User');
 const EmailLog                        = require('../../models/EmailLog');
 const SurveyInvite                    = require('../../models/SurveyInvite');
 const SurveyResponse                  = require('../../models/SurveyResponse');
@@ -185,6 +186,24 @@ describe('GET /api/admin/stats — users section', () => {
       .set('Cookie', authCookie(admin._id));
 
     expect(res.body.data.users.androidAppUsers).toBe(0);
+  });
+
+  // The Stats tile shows the share on the Real CBAT theme. Only the one
+  // non-default value is counted: the default is SkyWatch, and an account from
+  // before the selector existed has no `uiTheme` at all, which means the same.
+  it('counts accounts on the Real CBAT theme, treating a missing theme as SkyWatch', async () => {
+    const admin = await createAdminUser();
+    await createUser({ uiTheme: 'cbat' });
+    await createUser({ uiTheme: 'cbat' });
+    await createUser({ uiTheme: 'skywatch' });
+    await createUser();
+    await User.updateOne({ _id: (await createUser())._id }, { $unset: { uiTheme: 1 } });
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.cbatThemeUsers).toBe(2);
   });
 
   it('counts users by subscription tier — only paying Stripe subscribers', async () => {
