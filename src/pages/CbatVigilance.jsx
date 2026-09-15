@@ -4,10 +4,13 @@
 // that appear once the job has gone quiet. The simulation and the reasoning
 // behind the scoring live in utils/cbat/vigilanceSim.js.
 //
-// ONE difficulty, deliberately. Every other CBAT game with a split lowers the
-// load and keeps the clock; here the clock is the load, and a shorter Vigilance
-// test would not be measuring vigilance. That is why this page has no
-// difficulty pair under its title while its four siblings do.
+// Two difficulties. Hard is the full three minutes at the original points with
+// stars appearing far more often; Easier is one minute at the original pace
+// with every clear paying triple. Plain `vigilance` is the Easier key (every
+// score ever set on it still ranks); `vigilance-hard` is new. On both, a star
+// stays put until it is keyed correctly. The table and the reasoning are in
+// utils/cbat/vigilanceDifficulty.js — the clock, cadence and points all come
+// from there, so nothing on this page assumes a run length.
 //
 // The grid carries its labels on ALL FOUR edges. That is not decoration: the
 // corpus's technique — "edge squares can be entered without checking the grid
@@ -32,11 +35,17 @@ import SEO from '../components/SEO'
 import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatGameOver from '../components/CbatGameOver'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { useCbatDemo } from '../utils/cbat/demoMode'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
+import { createVigilanceSim, VIGILANCE_GRID, MISKEY_PENALTY } from '../utils/cbat/vigilanceSim'
 import {
-  createVigilanceSim, VIGILANCE_GRID, VIGILANCE_DURATION_MS,
-  STAR_POINTS, PRIORITY_BASE_POINTS, MISKEY_PENALTY,
-} from '../utils/cbat/vigilanceSim'
+  VIGILANCE_DIFFICULTIES, VIGILANCE_LAUNCH_MS, vigilanceTuning, computeGrade,
+  readStoredVigilanceDifficulty, storeVigilanceDifficulty,
+} from '../utils/cbat/vigilanceDifficulty'
 
 // Cell indices, 0-based. The LABEL drawn for index i is i + 1, so the axes read
 // 1–9 and every coordinate is two keystrokes off a pad with no zero on it.
@@ -222,7 +231,8 @@ function Keypad({ onDigit, onClear, pendingRow }) {
   )
 }
 
-function ResultsScreen({ stats, grade }) {
+function ResultsScreen({ stats, tuning }) {
+  const grade = computeGrade(stats.score, tuning)
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '⭐' : grade === 'Needs Work' ? '🔧' : '💥'
   const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
@@ -230,7 +240,7 @@ function ResultsScreen({ stats, grade }) {
     <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${color}`}>{grade}</p>
-      <p className="text-sm text-slate-400 mb-6">Vigilance Test Complete</p>
+      <p className="text-sm text-slate-400 mb-6">Vigilance Test Complete · {tuning.label}</p>
 
       <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Score</p>
@@ -261,19 +271,22 @@ function ResultsScreen({ stats, grade }) {
   )
 }
 
-function computeGrade(score) {
-  if (score >= 800) return 'Outstanding'
-  if (score >= 550) return 'Good'
-  if (score >= 300) return 'Needs Work'
-  return 'Failed'
-}
-
 // ── Main component ───────────────────────────────────────────────────────────
 export default function CbatVigilance() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
+  const isDemo = !!useCbatDemo()
 
-  const [phase, setPhase] = useState('intro') // intro | playing | results
+  const [phase, setPhase] = useState('intro') // intro | launching | playing | results
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredVigilanceDifficulty))
+  const tuning = vigilanceTuning(difficulty)
+  // The difficulty the run on screen is being played at. Pinned at launch so a
+  // mid-results switch can't relabel or misfile a finished run. Held twice on
+  // purpose: the ref is what the frame loop reads, the state is what the render
+  // tree reads (reading a ref during render trips react-hooks/refs).
+  const runTuningRef = useRef(tuning)
+  const [runDifficulty, setRunDifficulty] = useState(difficulty)
+  const runTuning = vigilanceTuning(runDifficulty)
   // The board is the test, and at 22px a cell it is a 200px square to hold
   // attention on for three minutes. See the rule in main.css — the app shell
   // caps every route at max-w-3xl, so this page cannot widen itself alone.
@@ -293,9 +306,13 @@ export default function CbatVigilance() {
   const [clears, setClears] = useState([])
   const [finalStats, setFinalStats] = useState(null)
   const cbat = useCbatTheme()
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
+
+  // Keyed by board, so flipping mode never shows one board's score under
+  // another's name and never blanks the panel while the new one loads.
+  const { best: personalBest, loading: bestLoading, refresh: fetchBest } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
 
   // The sim is stepped from a rAF loop and read through a snapshot each frame —
   // the same pattern CUT uses. React never renders off the live simulation.
@@ -307,15 +324,6 @@ export default function CbatVigilance() {
   // Every retirement timer, so a run that ends mid-animation does not leave one
   // pending — and so quitting cannot land a setState on an unmounted page.
   const clearTimersRef = useRef(new Set())
-
-  const fetchBest = useCallback(() => {
-    apiFetch(`${API}/api/games/cbat/vigilance/personal-best`)
-      .then(r => r.json())
-      .then(d => setPersonalBest(d?.data ?? null))
-      .catch(() => {})
-  }, [apiFetch, API])
-
-  useEffect(() => { if (user) fetchBest() }, [user, fetchBest])
 
   useEffect(() => () => cancelAnimationFrame(rafRef.current), [])
   useEffect(() => () => {
@@ -343,6 +351,7 @@ export default function CbatVigilance() {
     cancelAnimationFrame(rafRef.current)
     const sim = simRef.current
     if (!sim) return
+    const playedTuning = runTuningRef.current
     const stats = {
       score: sim.finalScore(),
       starsCleared: sim.state.starsCleared,
@@ -355,17 +364,17 @@ export default function CbatVigilance() {
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: stats.score })
-    submitCbatResult('vigilance', {
+    submitCbatResult(playedTuning.gameKey, {
       totalScore: stats.score,
       starsCleared: stats.starsCleared,
       prioritiesCleared: stats.prioritiesCleared,
       misKeyed: stats.misKeyed,
-      totalTime: VIGILANCE_DURATION_MS / 1000,
+      totalTime: playedTuning.load.durationMs / 1000,
     }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        fetchBest()
+        fetchBest(playedTuning.gameKey)
       })
       .catch(() => {})
   }, [apiFetch, API, markGameCompleted, fetchBest])
@@ -450,7 +459,8 @@ export default function CbatVigilance() {
   }, [phase, submitDigit, clearPending])
 
   const startGame = useCallback(() => {
-    const sim = createVigilanceSim({})
+    const played = runTuningRef.current
+    const sim = createVigilanceSim({ load: played.load })
     simRef.current = sim
     lastTsRef.current = null
     pendingRowRef.current = null
@@ -459,10 +469,35 @@ export default function CbatVigilance() {
     setClears([])
     setFinalStats(null)
     setSnapshot(sim.snapshot())
-    startTracking('vigilance')
+    startTracking(played.gameKey)
     // The rAF loop starts itself off the phase change — see the effect above.
     setPhase('playing')
   }, [startTracking])
+
+  // Pressing Start doesn't drop straight into the game: the chosen difficulty
+  // button flashes on a greyed-out card first. A demo tile skips it.
+  const beginLaunch = useCallback(() => {
+    runTuningRef.current = tuning
+    setRunDifficulty(tuning.key)
+    if (isDemo) startGame()
+    else setPhase('launching')
+  }, [tuning, isDemo, startGame])
+
+  // Keyed to `phase` alone. Depending on startGame meant any re-render that
+  // changed its identity cleared the pending timeout and started a fresh one,
+  // so an unrelated render could quietly extend the flash.
+  const startGameRef = useRef(startGame)
+  useEffect(() => { startGameRef.current = startGame })
+  useEffect(() => {
+    if (phase !== 'launching') return undefined
+    const t = setTimeout(() => startGameRef.current(), VIGILANCE_LAUNCH_MS)
+    return () => clearTimeout(t)
+  }, [phase])
+
+  const chooseDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeVigilanceDifficulty(key)
+  }, [])
 
   const goToIntro = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
@@ -475,22 +510,28 @@ export default function CbatVigilance() {
     setScoreSaved(false)
   }, [])
 
+  const launching = phase === 'launching'
+  const dim = launching ? ' cbat-launch-dim' : ''
+
   return (
     <div>
-      <SEO title="Vigilance Test (CBAT)" description="The star grid. Three minutes of clearing coordinates, with priority tasks that appear when the job has gone quiet." />
+      <SEO title="Vigilance Test (CBAT)" description="The star grid. Three minutes of clearing coordinates, with priority tasks that appear when the job has gone quiet. Hard is the same grid with stars appearing much more often." />
 
       <CbatGameHeader
         title="Vigilance Test"
         fullTitle="Vigilance"
-        intro={phase === 'intro'}
+        intro={phase === 'intro' || launching}
         onQuit={goToIntro}
         confirmNeeded={phase === 'playing'}
+        className={dim.trim()}
         test={phase === 'playing' && snapshot ? {
           stage: 'Testing',
-          timeFrac: snapshot.remainingMs / VIGILANCE_DURATION_MS,
-          progressFrac: 1 - snapshot.remainingMs / VIGILANCE_DURATION_MS,
+          timeFrac: snapshot.remainingMs / runTuning.load.durationMs,
+          progressFrac: 1 - snapshot.remainingMs / runTuning.load.durationMs,
         } : null}
-      />
+      >
+        {phase === 'playing' && <ModeMarker mode={runTuning} />}
+      </CbatGameHeader>
 
       {!user && (
         <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
@@ -504,26 +545,33 @@ export default function CbatVigilance() {
       {user && (
         <div className="flex flex-col items-center">
 
-          {phase === 'intro' && (
+          {(phase === 'intro' || launching) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className="text-4xl lg:text-5xl mb-3">⭐</p>
-              <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Vigilance Test</p>
-              <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
-                Stars appear on a 9 by 9 grid. Clear each one by keying its coordinates: the row number first, then the column. It is the simplest thing on the battery, and it runs for three minutes, which is the point of it.
+              <p className={`text-4xl lg:text-5xl mb-3${dim}`}>⭐</p>
+              <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Vigilance Test</p>
+              <CbatModeRow
+                modes={VIGILANCE_DIFFICULTIES}
+                value={difficulty}
+                onSelect={chooseDifficulty}
+                launching={launching}
+              />
+              <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
+              <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
+                Stars appear on a 9 by 9 grid. Clear each one by keying its coordinates: the row number first, then the column. It is the simplest thing on the battery, and it runs for {tuning.key === 'hard' ? 'three minutes, which is the point of it' : 'one minute on Easier'}.
               </p>
 
-              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text">
+              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'★'}</span>
-                  <span className="pt-0.5">A star is worth {STAR_POINTS} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
+                  <span className="pt-0.5">A star is worth {tuning.load.starPoints} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 w-8 text-center text-amber-300 lg:text-lg" aria-hidden>{'◆'}</span>
-                  <span className="pt-0.5">A priority task is worth {PRIORITY_BASE_POINTS} and up to {PRIORITY_BASE_POINTS + 30} if you break off for it straight away. Deal with it the moment it appears.</span>
+                  <span className="pt-0.5">A priority task is worth {tuning.load.priorityBasePoints} and up to {tuning.load.priorityBasePoints + tuning.load.priorityBonusPoints} if you break off for it straight away. Deal with it the moment it appears.</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 w-8 text-center text-red-400 lg:text-lg" aria-hidden>{'−'}</span>
@@ -539,28 +587,30 @@ export default function CbatVigilance() {
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span>
-                  <span className="pt-0.5">{VIGILANCE_DURATION_MS / 1000} seconds. One difficulty, because a shorter version would not be testing the same thing.</span>
+                  <span className="pt-0.5">
+                    {tuning.load.durationMs / 1000} seconds.{' '}
+                    {tuning.key === 'hard'
+                      ? 'The full test at the standard points, with far more stars appearing. A star stays where it is until you key it.'
+                      : 'A one-minute run at the original pace, with every clear paying triple. Hard is the full three minutes at standard points with far more stars appearing. A star stays where it is until you key it.'}
+                  </span>
                 </div>
               </div>
 
-              {personalBest && (
-                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
-                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">{personalBest.bestScore}</p>
-                  <p className="text-[10px] lg:text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-                </div>
-              )}
+              <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
+                {best => best.bestScore}
+              </CbatPersonalBest>
 
-              <div className="text-center mb-4">
-                <Link to="/cbat/vigilance/leaderboard" className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
+              <div className={`text-center mb-4${dim}`}>
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
 
               <button
-                onClick={startGame}
+                onClick={beginLaunch}
+                disabled={launching}
                 data-demo-start
-                className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
+                className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
               >
                 Start
               </button>
@@ -583,7 +633,7 @@ export default function CbatVigilance() {
               {!cbat && <div className="w-full max-w-md h-1 bg-game-line rounded-full mb-3 overflow-hidden">
                 <div
                   className="h-full bg-brand-600 rounded-full transition-[width] duration-100"
-                  style={{ width: `${100 - (snapshot.remainingMs / VIGILANCE_DURATION_MS) * 100}%` }}
+                  style={{ width: `${100 - (snapshot.remainingMs / runTuning.load.durationMs) * 100}%` }}
                 />
               </div>}
 
@@ -606,15 +656,15 @@ export default function CbatVigilance() {
 
           {phase === 'results' && finalStats && (
             <CbatGameOver
-              gameKey="vigilance"
+              gameKey={runTuning.gameKey}
               score={finalStats.score}
-              time={VIGILANCE_DURATION_MS / 1000}
+              time={runTuning.load.durationMs / 1000}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}
               onPlayAgain={() => { setScoreSaved(false); startGame() }}
             >
-              <ResultsScreen stats={finalStats} grade={computeGrade(finalStats.score)} />
+              <ResultsScreen stats={finalStats} tuning={runTuning} />
             </CbatGameOver>
           )}
         </div>

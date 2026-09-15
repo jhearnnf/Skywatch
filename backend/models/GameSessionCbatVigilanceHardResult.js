@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 
-// Vigilance Test, Easier — under the original key, so every score ever set on
-// the original single-difficulty board still ranks here. Since 2026-09-15 the
-// Easier run is 60 seconds at the original pace with every clear paying triple
-// (a clean minute lands where a strong old three-minute run did). Hard is the
-// full clock with far more stars — see GameSessionCbatVigilanceHardResult.js.
+// Vigilance Test, Hard. Its own collection, ranking from zero — nothing
+// converts between this board and the Easier one (a 60-second run at triple
+// points). Hard keeps the original clock and points — the full 180 seconds at
+// 10 a star — with stars appearing far more often. Same rules too: a star
+// stays until it is keyed correctly. See GameSessionCbatVigilanceResult.js
+// for the Easier half, which sits under the original key.
 const schema = new mongoose.Schema({
   userId:            { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   totalScore:        { type: Number },
@@ -18,4 +19,4 @@ const schema = new mongoose.Schema({
 schema.index({ userId: 1, createdAt: -1 });
 schema.index({ totalScore: -1, totalTime: 1 });
 
-module.exports = mongoose.model('GameSessionCbatVigilanceResult', schema);
+module.exports = mongoose.model('GameSessionCbatVigilanceHardResult', schema);

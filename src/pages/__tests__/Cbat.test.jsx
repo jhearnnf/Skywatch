@@ -488,19 +488,19 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('points at DPT, which has gained a tutorial', () => {
-    // DPT's controls (a side, then three digits that are an absolute compass
-    // bearing) are the thing nothing on screen explains, and the tutorial that
-    // now teaches them lives behind a button on the select card that a
-    // returning player has no reason to look for. Drop this once it has been
-    // true long enough to stop being news.
+  it('points at Vigilance, which has gained a Hard mode', () => {
+    // Vigilance shipped single-difficulty on purpose and a player reported it
+    // as too easy; Hard is the answer, and a returning player who last saw a
+    // card with no mode row has no reason to look for one. Drop this once it
+    // has been true long enough to stop being news.
     //
-    // One badge at a time, or the slot stops meaning "look here" — ANT's "New
-    // Hard Mode" and the earlier practise badge each gave the slot up in turn.
+    // One badge at a time, or the slot stops meaning "look here" — DPT's "New
+    // Tutorial", ANT's "New Hard Mode" and the earlier practise badge each gave
+    // the slot up in turn.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['dpt'])
-    expect(screen.getByText('New Tutorial')).toBeTruthy()
-    expect(screen.queryByText('New Hard Mode')).toBeNull()
+    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['vigilance'])
+    expect(screen.getByText('New Hard Mode')).toBeTruthy()
+    expect(screen.queryByText('New Tutorial')).toBeNull()
     expect(screen.queryByText('New Practise Mode')).toBeNull()
   })
 

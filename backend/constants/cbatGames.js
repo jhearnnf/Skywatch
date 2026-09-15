@@ -35,6 +35,7 @@ const GameSessionCbatVltEasierResult     = require('../models/GameSessionCbatVlt
 const GameSessionCbatMatfResult          = require('../models/GameSessionCbatMatfResult');
 const GameSessionCbatMatfEasierResult    = require('../models/GameSessionCbatMatfEasierResult');
 const GameSessionCbatVigilanceResult     = require('../models/GameSessionCbatVigilanceResult');
+const GameSessionCbatVigilanceHardResult = require('../models/GameSessionCbatVigilanceHardResult');
 const GameSessionCbatSmaResult           = require('../models/GameSessionCbatSmaResult');
 const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSmaEasierResult');
 
@@ -454,15 +455,31 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Table Reading Test (Easier)',
   },
-  // Deliberately has NO Easier key. The test measures sustained attention on a
-  // dull task over a fixed stretch; shortening or lightening it would remove
-  // what is being measured. See GameSessionCbatVigilanceResult.js.
+  // Vigilance's split is ANT's way round: plain 'vigilance' IS the Easier half,
+  // keeping the key every score ever set on it sits on, and Hard is a new
+  // board from zero. Neither is the original game: Hard keeps the full 180s
+  // and the 10-a-star points with stars appearing far more often; Easier keeps
+  // the original pace but runs 60s at triple points, which lands a clean run
+  // in the same region as the old full one (so the existing scores still make
+  // sense beside the new ones). See the two models.
+  //
+  // `hardKey` is what marks the plain key as an Easier board (see
+  // cbatHardKeyFor / isCbatEasierKey); its label stays bare and
+  // cbatLabelWithDifficulty appends "(Easier)", as it does for 'ant'.
   'vigilance': {
     Model: GameSessionCbatVigilanceResult,
     primaryField: 'totalScore',
     sortDir: -1,           // higher is better (accumulating score)
     bestOp: '$max',
     label: 'Vigilance Test',
+    hardKey: 'vigilance-hard',
+  },
+  'vigilance-hard': {
+    Model: GameSessionCbatVigilanceHardResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Vigilance Test',   // cbatLabelWithDifficulty appends "(Hard)"
   },
   'sma': {
     Model: GameSessionCbatSmaResult,
@@ -507,8 +524,9 @@ function cbatHardKeyFor(easierKey) {
 }
 
 // Easier boards. Normally the key carries the suffix; a board that names a
-// `hardKey` declares itself one without it, which is how plain 'ant' can be the
-// Easier half of ANT's split while keeping the key its existing scores sit on.
+// `hardKey` declares itself one without it, which is how plain 'ant' and plain
+// 'vigilance' can be the Easier half of their splits while keeping the key
+// their existing scores sit on.
 function isCbatEasierKey(gameKey) {
   return gameKey.endsWith(EASIER_SUFFIX) || Boolean(CBAT_GAMES[gameKey]?.hardKey);
 }
@@ -526,8 +544,11 @@ function cbatLabelWithDifficulty(gameKey) {
     // Most Easier boards spell it out in their own label because nothing else
     // reads that label. ANT's cannot: `ant` is also the key its tutorial files
     // under, and a tutorial row on the admin report is deliberately bare (one
-    // tutorial, both difficulties). So its label stays plain and the suffix is
-    // added here instead.
+    // tutorial, both difficulties). Vigilance's stays bare for a different
+    // reason: `vigilance` is the key the Aptitude Report scores, and the report
+    // reads the raw label then names the difficulty itself — "Vigilance Test
+    // (Easier) on Easier" would read twice. So both stay plain and the suffix
+    // is added here instead.
     return cfg.label.includes('(Easier)') ? cfg.label : `${cfg.label} (Easier)`;
   }
   return HARD_KEYS.has(gameKey) ? `${cfg.label} (Hard)` : cfg.label;

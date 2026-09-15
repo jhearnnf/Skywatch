@@ -131,9 +131,9 @@ describe('rendering', () => {
   });
 
   it('drops a game an admin has switched off', () => {
-    const block = renderGameCatalogue({ isEnabled: (k) => k !== 'vigilance' });
-    expect(block).not.toContain('Vigilance Test');
-    expect(block).toContain('Target');
+    const block = renderGameCatalogue({ isEnabled: (k) => k !== 'target' });
+    expect(block).not.toContain('- Target |');
+    expect(block).toContain('Vigilance Test');
   });
 
   // Turning off one difficulty must not hide the game: FLAG with only its

@@ -27,9 +27,16 @@
 //      collapses: a player could cycle through every coordinate on a loop and
 //      clear the board without ever looking at it.
 //
-// Deliberately ONE difficulty. Every other CBAT game with a split lowers the
-// load and keeps the clock; here the clock IS the load, and a shorter or gentler
-// Vigilance test would not be a Vigilance test.
+// Two difficulties (see vigilanceDifficulty.js for the table and the
+// reasoning). Hard is the full three minutes at the original points with stars
+// appearing far more often; Easier is one minute at the original pace with
+// every clear paying triple. A star, on either board, stays exactly where it
+// is until its coordinate is keyed correctly — nothing times out, nothing
+// moves, nothing is taken off the board for you.
+//
+// The load is passed in — clock, cadence and points all live in it — and the
+// defaults below are the ORIGINAL board's values, so a sim built with no load
+// is the game as it first shipped.
 //
 // Pure and deterministic: pass a seeded `rng` (() => [0,1)) to reproduce a run.
 // The sim owns no timers — the page steps it — so tests drive it directly.
@@ -39,30 +46,55 @@
 // the pad is a plain 3×3 with no zero on it — which is the shape of the Stream
 // Deck the real test is keyed on.
 export const VIGILANCE_GRID = 9
+// The original clock, and Hard's. Easier runs shorter — see its load.
 export const VIGILANCE_DURATION_MS = 180000
 
+// The original board's load, and the sim's defaults. Kept here rather than
+// only in the difficulty table so the sim stands on its own in tests.
+//
 // Spawn cadence eases in over the run: a slow opening that gives the player
 // nothing much to do is the test working, not the test being broken.
-const SPAWN_START_MS = 2600
-const SPAWN_END_MS = 1300
-const MAX_STARS = 14
-
+//
 // A priority task is a star that is worth clearing NOW. The first lands late
 // enough that the routine job has become routine, which is when breaking off for
 // something is hardest.
-const PRIORITY_FIRST_MS = 24000
-const PRIORITY_INTERVAL_MS = 28000
-const PRIORITY_WINDOW_MS = 8000
-
+//
+// `spawnRampMs` is the stretch the cadence eases over, and it is deliberately
+// NOT the clock: a board with a shorter clock plays the FIRST part of the
+// original ramp, not a compressed copy of the whole of it, so "the original
+// pace" stays literally true however long the run is.
 export const STAR_POINTS = 10
 export const PRIORITY_BASE_POINTS = 30
 export const PRIORITY_BONUS_POINTS = 30
 export const MISKEY_PENALTY = 5
 
-export function createVigilanceSim({ rng = Math.random, durationMs = VIGILANCE_DURATION_MS } = {}) {
+export const VIGILANCE_BASE_LOAD = Object.freeze({
+  durationMs: VIGILANCE_DURATION_MS,
+  spawnStartMs: 2600,
+  spawnEndMs: 1300,
+  spawnRampMs: VIGILANCE_DURATION_MS,
+  maxStars: 14,
+  priorityFirstMs: 24000,
+  priorityIntervalMs: 28000,
+  priorityWindowMs: 8000,
+  starPoints: STAR_POINTS,
+  priorityBasePoints: PRIORITY_BASE_POINTS,
+  priorityBonusPoints: PRIORITY_BONUS_POINTS,
+})
+
+// `durationMs` as its own option still wins over the load's, for the tests
+// that run a short clock against the default board.
+export function createVigilanceSim({ rng = Math.random, durationMs, load = {} } = {}) {
+  const {
+    spawnStartMs, spawnEndMs, spawnRampMs, maxStars,
+    priorityFirstMs, priorityIntervalMs, priorityWindowMs,
+    starPoints, priorityBasePoints, priorityBonusPoints,
+    durationMs: loadDurationMs,
+  } = { ...VIGILANCE_BASE_LOAD, ...load }
+
   const state = {
     elapsedMs: 0,
-    durationMs,
+    durationMs: durationMs ?? loadDurationMs,
     // Map of "row,col" → { row, col, priority, spawnedAt }. Keyed row-first for
     // the same reason the input is: one reading order throughout.
     stars: new Map(),
@@ -75,13 +107,13 @@ export function createVigilanceSim({ rng = Math.random, durationMs = VIGILANCE_D
     // re-deriving it. Consumed and cleared by the page each frame.
     lastEvent: null,
     _nextSpawnAt: 900,
-    _nextPriorityAt: PRIORITY_FIRST_MS,
+    _nextPriorityAt: priorityFirstMs,
   }
 
   const key = (row, col) => `${row},${col}`
 
   function spawn(priority) {
-    if (state.stars.size >= MAX_STARS) return
+    if (state.stars.size >= maxStars) return
     // Try a handful of cells rather than scanning the whole grid — at the sizes
     // involved a free cell is found immediately, and a bounded loop cannot hang
     // if the board is nearly full.
@@ -96,8 +128,8 @@ export function createVigilanceSim({ rng = Math.random, durationMs = VIGILANCE_D
   }
 
   function spawnIntervalAt(ms) {
-    const t = Math.min(1, ms / state.durationMs)
-    return SPAWN_START_MS + (SPAWN_END_MS - SPAWN_START_MS) * t
+    const t = Math.min(1, ms / spawnRampMs)
+    return spawnStartMs + (spawnEndMs - spawnStartMs) * t
   }
 
   function step(dtMs) {
@@ -111,7 +143,7 @@ export function createVigilanceSim({ rng = Math.random, durationMs = VIGILANCE_D
 
     while (state.elapsedMs >= state._nextPriorityAt) {
       spawn(true)
-      state._nextPriorityAt += PRIORITY_INTERVAL_MS
+      state._nextPriorityAt += priorityIntervalMs
     }
 
     if (state.elapsedMs >= state.durationMs) state.finished = true
@@ -134,14 +166,14 @@ export function createVigilanceSim({ rng = Math.random, durationMs = VIGILANCE_D
     }
 
     state.stars.delete(k)
-    let delta = STAR_POINTS
+    let delta = starPoints
     if (star.priority) {
       // Bonus decays linearly across the window and never goes negative — a
       // priority task dealt with late is still worth more than a routine star,
       // just not much more.
       const age = state.elapsedMs - star.spawnedAt
-      const remaining = Math.max(0, 1 - age / PRIORITY_WINDOW_MS)
-      delta = PRIORITY_BASE_POINTS + Math.round(PRIORITY_BONUS_POINTS * remaining)
+      const remaining = Math.max(0, 1 - age / priorityWindowMs)
+      delta = priorityBasePoints + Math.round(priorityBonusPoints * remaining)
       state.prioritiesCleared += 1
     }
     state.starsCleared += 1

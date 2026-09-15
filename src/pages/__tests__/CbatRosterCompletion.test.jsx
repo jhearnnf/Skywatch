@@ -9,13 +9,16 @@ import { press } from '../../components/landingGames/demoDriver'
 import { submitCbatResult } from '../../lib/cbatOutbox'
 import { SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP } from '../../utils/cbat/sitDifficulty'
 import { VIGILANCE_GRID } from '../../utils/cbat/vigilanceSim'
+import { VIGILANCE_LAUNCH_MS } from '../../utils/cbat/vigilanceDifficulty'
 import { SLT_QUESTIONS } from '../../utils/cbat/sltDifficulty'
 import { VLT_QUESTIONS } from '../../utils/cbat/vltDifficulty'
 
 // Page-level wiring for the five tests that completed the RAF roster. The thing
-// worth pinning on four of them is the same thing SAT and CUT pin: a run only
-// ever reaches the board belonging to the difficulty it was actually played at.
-// On Vigilance it is the opposite — that no difficulty selector exists at all.
+// worth pinning on all five is the same thing SAT and CUT pin: a run only ever
+// reaches the board belonging to the difficulty it was actually played at.
+// Vigilance shipped single-difficulty and gained a Hard mode later, the ANT way
+// round — plain `vigilance` is the Easier half — so its block below checks the
+// pair the same way but with the keys reversed.
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
 
@@ -125,30 +128,100 @@ describe.each(SPLIT_PAGES)('%s — difficulty wiring', (name, Component, key) =>
   })
 })
 
-describe('Vigilance — deliberately single-difficulty', () => {
+// Start flashes the chosen difficulty for VIGILANCE_LAUNCH_MS before the board
+// appears, the same as every other split game.
+const startVigilance = () => {
+  act(() => { press(screen.getByText('Start')) })
+  act(() => { vi.advanceTimersByTime(VIGILANCE_LAUNCH_MS + 100) })
+}
+
+describe('Vigilance — difficulty wiring, with the Easier half on the plain key', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.useFakeTimers({ shouldAdvanceTime: true })
   })
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 
-  it('offers no difficulty selector at all', () => {
-    // The test measures whether you can hold attention on a dull task for a
-    // fixed stretch. A shorter or lighter variant would remove what is being
-    // measured, so the absence of this control is a design decision worth
-    // pinning rather than an omission.
+  it('opens on Easier with both difficulties offered', () => {
     const { container } = renderPage(CbatVigilance)
-    expect(container.querySelector('[data-difficulty]')).toBeNull()
+    expect(difficultyButton(container, 'easier').getAttribute('aria-pressed')).toBe('true')
+    expect(difficultyButton(container, 'hard').getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('points at the single Vigilance board', () => {
-    renderPage(CbatVigilance)
+  it('points the leaderboard link at the selected board — plain key for Easier, -hard for Hard', () => {
+    // The reverse of the four above. `vigilance` is the ORIGINAL board, renamed
+    // Easier so every score ever set on it keeps ranking; Hard is the new one.
+    const { container } = renderPage(CbatVigilance)
     expect(screen.getByText(/View Leaderboard/).getAttribute('href')).toBe('/cbat/vigilance/leaderboard')
+
+    act(() => { press(difficultyButton(container, 'hard')) })
+    expect(screen.getByText(/View Leaderboard/).getAttribute('href')).toBe('/cbat/vigilance-hard/leaderboard')
   })
 
-  it('says the run length up front, since the length is the test', () => {
+  it('remembers the last difficulty chosen', () => {
+    const { container, unmount } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'hard')) })
+    startVigilance()
+    unmount()
+
+    const second = renderPage(CbatVigilance)
+    expect(difficultyButton(second.container, 'hard').getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('puts the difficulty pair BELOW the title, where every other split game has it', () => {
+    const { container } = renderPage(CbatVigilance)
+    const title = container.querySelector('.text-xl.font-extrabold')
+    expect(title.textContent).toBe('Vigilance Test')
+    const pair = difficultyButton(container, 'easier')
+    expect(title.compareDocumentPosition(pair) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('states each difficulty\'s clock and points on its own card', () => {
+    // Easier is a minute at triple points; Hard is the full three minutes at
+    // the standard 10. The card must say which it is showing — a player who
+    // read "10 points" and was paid 30 would think the game was broken.
+    const { container } = renderPage(CbatVigilance)
+    expect(screen.getByText(/^60 seconds\./)).toBeTruthy()
+    expect(screen.getByText(/A star is worth 30 points/)).toBeTruthy()
+    expect(screen.getByText(/worth 90 and up to 180/)).toBeTruthy()
+    expect(screen.getByText(/paying triple/)).toBeTruthy()
+
+    act(() => { press(difficultyButton(container, 'hard')) })
+    expect(screen.getByText(/^180 seconds\./)).toBeTruthy()
+    expect(screen.getByText(/A star is worth 10 points/)).toBeTruthy()
+    expect(screen.getByText(/worth 30 and up to 60/)).toBeTruthy()
+    expect(screen.queryByText(/paying triple/)).toBeNull()
+  })
+
+  it('submits the clock the run was actually played on', async () => {
     renderPage(CbatVigilance)
-    expect(screen.getByText(/180 seconds/)).toBeTruthy()
+    startVigilance()
+    await act(async () => { vi.advanceTimersByTime(70000) })
+    expect(submitCbatResult).toHaveBeenCalled()
+    expect(submitCbatResult.mock.calls[0][0]).toBe('vigilance')
+    expect(submitCbatResult.mock.calls[0][1].totalTime).toBe(60)
+  })
+
+  it('says a star stays put until keyed, on both difficulties', () => {
+    // The rule the user was explicit about: Hard is more stars, not a
+    // different test. Nothing on the card may suggest a star can go by itself.
+    const { container } = renderPage(CbatVigilance)
+    expect(screen.getByText(/A star stays where it is until you key it/)).toBeTruthy()
+    act(() => { press(difficultyButton(container, 'hard')) })
+    expect(screen.getByText(/A star stays where it is until you key it/)).toBeTruthy()
+    expect(screen.queryByText(/times out/)).toBeNull()
+  })
+
+  it('files a Hard run under vigilance-hard and an Easier run under vigilance', async () => {
+    const { container } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'hard')) })
+    startVigilance()
+    expect(container.querySelector('[data-difficulty-marker="hard"]')).toBeTruthy()
+    await act(async () => { vi.advanceTimersByTime(190000) })
+
+    expect(submitCbatResult).toHaveBeenCalled()
+    expect(submitCbatResult.mock.calls[0][0]).toBe('vigilance-hard')
+    expect(container.querySelector('[data-game-key="vigilance-hard"]')).toBeTruthy()
   })
 
   it('pins the grid to a fixed layout, so stars cannot reflow the cells', () => {
@@ -161,7 +234,7 @@ describe('Vigilance — deliberately single-difficulty', () => {
     // jsdom does no layout, so the jitter itself cannot be measured here; what
     // is checked is the one property that prevents it.
     const { container } = renderPage(CbatVigilance)
-    act(() => { press(screen.getByText('Start')) })
+    startVigilance()
 
     const table = container.querySelector('table')
     expect(table).toBeTruthy()
@@ -189,7 +262,7 @@ describe('Vigilance — deliberately single-difficulty', () => {
     // effect rather than decoration: a priority task's bonus decays every second
     // it is left, so the number differs every time.
     const { container } = renderPage(CbatVigilance)
-    act(() => { press(screen.getByText('Start')) })
+    startVigilance()
     act(() => { vi.advanceTimersByTime(12000) })
 
     // Find a star the sim has actually spawned, and key its coordinates.
@@ -217,7 +290,7 @@ describe('Vigilance — deliberately single-difficulty', () => {
     // An effect that occupied space in its cell would undo that, and the symptom
     // would look like the original bug rather than like a new one.
     const { container } = renderPage(CbatVigilance)
-    act(() => { press(screen.getByText('Start')) })
+    startVigilance()
     act(() => { vi.advanceTimersByTime(12000) })
 
     const occupied = [...container.querySelectorAll('td[data-cell]')].find(td => td.querySelector('span'))
@@ -240,7 +313,7 @@ describe('Vigilance — deliberately single-difficulty', () => {
     // games should not have to relearn where a digit is, and the real test's
     // Stream Deck is itself a 3×3 pad — muscle memory built here has to carry.
     const { container } = renderPage(CbatVigilance)
-    act(() => { press(screen.getByText('Start')) })
+    startVigilance()
 
     const pad = [...container.querySelectorAll('.grid.grid-cols-3 button')]
       .map(b => b.textContent.trim())
@@ -255,7 +328,7 @@ describe('Vigilance — deliberately single-difficulty', () => {
     // so the number row / numeric keypad is the primary input on desktop and the
     // on-screen pad is the touch fallback — not the other way round.
     renderPage(CbatVigilance)
-    act(() => { press(screen.getByText('Start')) })
+    startVigilance()
 
     // Row first, then column — the order the corpus states.
     expect(screen.getByText(/Enter row/)).toBeTruthy()
@@ -270,7 +343,7 @@ describe('Vigilance — deliberately single-difficulty', () => {
     // Ctrl+1 / Cmd+2 switch browser tabs. Swallowing them as coordinates would
     // half-enter a cell the player never meant to touch.
     renderPage(CbatVigilance)
-    act(() => { press(screen.getByText('Start')) })
+    startVigilance()
 
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: '3', ctrlKey: true })) })
     expect(screen.getByText(/Enter row/)).toBeTruthy()
@@ -468,7 +541,7 @@ describe('submitCbatResult targeting', () => {
 
   it('sends a Vigilance run to the vigilance key', async () => {
     renderPage(CbatVigilance)
-    act(() => { press(screen.getByText('Start')) })
+    startVigilance()
     // Run the clock out. The sim is stepped from rAF, which the fake timers
     // drive here.
     await act(async () => { vi.advanceTimersByTime(190000) })

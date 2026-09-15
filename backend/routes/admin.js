@@ -1038,7 +1038,7 @@ router.patch('/settings', requireReason, async (req, res) => {
       'dpt', 'dpt-hard', 'dpt-easier', 'act', 'numerical-ops', 'numerical-ops-easier', 'dad', 'sat', 'sat-easier', 'cut', 'cut-easier',
       'rtt', 'rtt-easier',
       'sit', 'sit-easier', 'slt', 'slt-easier', 'vlt', 'vlt-easier',
-      'matf', 'matf-easier', 'vigilance', 'sma', 'sma-easier',
+      'matf', 'matf-easier', 'vigilance', 'vigilance-hard', 'sma', 'sma-easier',
     ]);
     const CBAT_UNIMPLEMENTED = new Set();
     if ('cbatGameEnabled' in updates) {

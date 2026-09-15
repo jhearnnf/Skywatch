@@ -56,6 +56,7 @@ const GAME_OFFSET = {
   'dpt-hard':        37,
   'ant-practise':    38,
   'ant-hard':        39,
+  'vigilance-hard':  40,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -427,10 +428,20 @@ const FAKE_TUNING = {
     scoreSequence: [28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 10, 9, 7],
   },
   'vigilance': {
-    // Accumulating score over a fixed 180s, so no ceiling and near-identical
-    // times. One difficulty only — see backend/models/GameSessionCbatVigilanceResult.js.
-    floor: 250, ceiling: 800, seedTime: 180.2, timeStep: 0.1,
+    // The Easier board, under the original key: a fixed 60s at triple points
+    // (30 a star), so a clean minute is ~1,100 and the band below sits where
+    // the old three-minute runs did. Fixed clock, so near-identical times.
+    floor: 250, ceiling: 800, seedTime: 60.2, timeStep: 0.1,
     scoreSequence: [780, 745, 715, 690, 660, 635, 610, 585, 560, 535, 510, 485, 455, 430, 405, 375, 350, 320, 290, 255],
+  },
+  'vigilance-hard': {
+    // Same 180s, ~1.7x the stars, so a strong run pays more than Easier's
+    // ceiling. No production history yet: the band is set from the spawn
+    // budget (~160 stars + 11 priority tasks) against a strong keying rate of
+    // about a star a second, with the tail where a slower keyer lands once the
+    // board is full. Reseat once real runs exist.
+    floor: 250, ceiling: 1300, seedTime: 180.2, timeStep: 0.1,
+    scoreSequence: [1240, 1170, 1105, 1040, 980, 920, 860, 800, 745, 690, 640, 590, 540, 495, 450, 405, 360, 320, 285, 255],
   },
 
   // ── Sensory Motor Apparatus Test ────────────────────────────────────────────
@@ -649,7 +660,10 @@ const WEEKLY_PER_PLAY = {
   'vlt-easier':        4,  // correctCount /6
   'matf':             22,  // speeded correctCount — no ceiling, so this is a rate
   'matf-easier':      28,  // smaller grid, longer clock, so more answers land
-  'vigilance':       540,  // accumulating totalScore over the fixed 180s
+  'vigilance':       540,  // accumulating totalScore over the fixed 60s at triple points
+  // No production history yet — set from the demo band's middle. Reseat once
+  // real runs exist.
+  'vigilance-hard':  700,
   'sma':             280,  // accumulating totalScore over 60 scored seconds (max 600)
   'sma-easier':      155,  // 30 scored seconds, but a wider ring pays more per second
 };

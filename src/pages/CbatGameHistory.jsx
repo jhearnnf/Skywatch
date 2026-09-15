@@ -48,8 +48,8 @@ export const GAME_LABELS = {
   'vlt-easier':       'Verbal Logic Test (Easier)',
   'matf':             'Table Reading Test (Hard)',
   'matf-easier':      'Table Reading Test (Easier)',
-  // No difficulty suffix — Vigilance ships one difficulty on purpose.
-  'vigilance':        'Vigilance Test',
+  'vigilance':        'Vigilance Test (Easier)',
+  'vigilance-hard':   'Vigilance Test (Hard)',
   'sma':              'Sensory Motor Apparatus Test (Hard)',
   'sma-easier':       'Sensory Motor Apparatus Test (Easier)',
 }

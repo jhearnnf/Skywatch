@@ -241,10 +241,11 @@ const CBAT_GAME_CATALOGUE = [
   },
   {
     name: 'Vigilance Test',
-    registryKeys: ['vigilance'],
+    registryKeys: ['vigilance', 'vigilance-hard'],
     simulates: 'VIG1',
     aliases: ['vigilance', 'vig', 'the star grid'],
-    what: 'three minutes clearing coordinates off a nine by nine grid, row first then column, with priority tasks that appear once the job has gone quiet. Deliberately has no Easier mode - shortening it would remove the thing it measures.',
+    what: 'clearing coordinates off a nine by nine grid, row first then column, with priority tasks that appear once the job has gone quiet. On both modes a star stays until you key it. Easier is one minute at the original pace with every clear paying triple; Hard is the full three minutes at standard points with stars appearing much more often.',
+    difficulties: ['Easier', 'Hard'],
   },
   {
     name: 'Sensory Motor Apparatus Test',

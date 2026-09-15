@@ -44,7 +44,7 @@ export const CBAT_GAMES = [
   { key: 'plane-turn',      emoji: '🗺️', title: 'Trace 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png', estMinutes: [1, 2] },
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png', estMinutes: 1 },
   { key: 'visualisation',    emoji: '🧊', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png', estMinutes: [1, 2] },
-  { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png', estMinutes: [7, 11], badge: 'New Tutorial' },
+  { key: 'dpt',              emoji: '🛩️', title: 'DPT',              desc: 'Dynamic Projection Test — vector multiple aircraft through gates and intercept enemy contacts using compass bearings.', path: '/cbat/dpt',             image: '/images/DPT.png', estMinutes: [7, 11] },
   { key: 'act',              emoji: '🎧', title: 'ACT',              desc: 'Auditory Capacity Test — track callsigns, steer through the right gates, react to bleeps.', path: '/cbat/act',             image: '/images/ACT.png', estMinutes: 5 },
   { key: 'numerical-ops',    emoji: '🧮', title: 'Numerical Operations', desc: 'Two-number arithmetic against the clock — +, −, ×, ÷ across four escalating rounds.', path: '/cbat/numerical-ops',  image: '/images/Numerical Operations.png', estMinutes: [1, 2] },
   { key: 'dad',              emoji: '🧭', title: 'DAD',              desc: 'Directions and Distances — track a journey of relative turns from text alone, then name the direction back to the start.', path: '/cbat/dad',             image: '/images/DAD.png', estMinutes: 5 },
@@ -58,7 +58,9 @@ export const CBAT_GAMES = [
   { key: 'slt',              emoji: '⚙️', title: 'SLT',              desc: 'System Logic Test. An index of fifteen tabs, two readable at once. No single tab answers a question, so find both figures before the search eats the time.', path: '/cbat/slt',             image: '/images/SLT.png', estMinutes: [5, 6] },
   { key: 'vlt',              emoji: '📖', title: 'VLT',              desc: 'Verbal Logic Test. Eight tabs of briefing prose, two readable at once. Every answer needs two of them joined, and the plainly-stated one is the trap.', path: '/cbat/vlt',             image: '/images/VLT.png', estMinutes: [10, 20] },
   { key: 'matf',             emoji: '📋', title: 'MATF',             desc: 'Table Reading Test. A coordinate grid running minus 17 to plus 17, then a wind sheet read in three steps, both against the clock.', path: '/cbat/matf',            image: '/images/MATF.png', estMinutes: [3, 4] },
-  { key: 'vigilance',        emoji: '⭐', title: 'Vigilance',        desc: 'The star grid. Three minutes of clearing coordinates off a 9 by 9, row first then column, with priority tasks that appear when the job has gone quiet.', path: '/cbat/vigilance',       image: '/images/Vigilance.png', estMinutes: 3 },
+  // Easier is a one-minute run at triple points; Hard is the full three minutes
+  // with far more stars. Hence the range.
+  { key: 'vigilance',        emoji: '⭐', title: 'Vigilance',        desc: 'The star grid. Clear coordinates off a 9 by 9, row first then column, with priority tasks that appear when the job has gone quiet. Easier is one minute at triple points; Hard is the full three minutes with far more stars.', path: '/cbat/vigilance',       image: '/images/Vigilance.png', estMinutes: [1, 3], badge: 'New Hard Mode' },
   // The psychomotor test the Aptitude Report had no game for. SMA carries 15% of
   // the Pilot battery and 12% of Pilot ISR (RPAS) through the Psychomotor domain,
   // so it was the largest single uncovered weight left on the report.
@@ -205,8 +207,13 @@ export const CBAT_LEADERBOARD_CONFIG = {
   // both parts always run their full clock, so every real time is identical.
   'matf':            { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
   'matf-easier':     { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
-  // No difficultyGroup — Vigilance ships one difficulty on purpose.
-  'vigilance':       { title: 'Vigilance Test', emoji: '⭐', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/vigilance', hideTime: true },
+  // Like ANT, plain 'vigilance' IS the Easier half, keeping the key every score
+  // ever set on it sits on (a minute at triple points lands in the same region
+  // as the old full run). Hard is a new board from zero: three minutes with
+  // stars appearing far more often. Each board's clock is fixed, so the time
+  // column is hidden on both; neither has a ceiling.
+  'vigilance':       { title: 'Vigilance Test', emoji: '⭐', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/vigilance', hideTime: true, difficultyGroup: 'vigilance' },
+  'vigilance-hard':  { title: 'Vigilance Test', emoji: '⭐', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/vigilance', hideTime: true, difficultyGroup: 'vigilance' },
   // Accumulating score over a fixed clock, so no "/N" — and the clock is the
   // same every run, so the time column is hidden for RTT's and CUT's reason.
   // The two difficulties do NOT share a ceiling (1500 against 1000) and are not
@@ -276,8 +283,12 @@ export const CBAT_DIFFICULTY_GROUPS = {
     { gameKey: 'dpt-easier', label: 'Easier' },
     { gameKey: 'dpt-hard',   label: 'Hard' },
   ],
-  // Vigilance is absent on purpose — it ships one difficulty. See
-  // backend/models/GameSessionCbatVigilanceResult.js for the reasoning.
+  // Vigilance's Easier half is the plain key, ANT's way round: the original
+  // board kept its key so its scores stay on it, and Hard is the new board.
+  vigilance: [
+    { gameKey: 'vigilance',      label: 'Easier' },
+    { gameKey: 'vigilance-hard', label: 'Hard' },
+  ],
 }
 
 // gameKey → 'Easier' | 'Hard' for the games that ship a difficulty split;

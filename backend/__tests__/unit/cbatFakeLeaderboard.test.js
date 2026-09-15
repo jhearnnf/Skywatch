@@ -45,6 +45,7 @@ const GAME_MAX = {
   'matf':            null,   // speeded — answer as many as you can, no ceiling
   'matf-easier':     null,
   'vigilance':       null,   // accumulating score, no fixed ceiling
+  'vigilance-hard':  null,
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 

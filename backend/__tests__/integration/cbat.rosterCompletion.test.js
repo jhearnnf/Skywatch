@@ -4,7 +4,9 @@
 // One file rather than five because the wiring is identical and the interesting
 // assertions are the cross-cutting ones — that each difficulty lands in its OWN
 // collection (a run leaking into the sibling board is the failure that would be
-// hardest to notice in production), and that Vigilance has no Easier key at all.
+// hardest to notice in production). Vigilance shipped single-difficulty and
+// gained a Hard board later, the ANT way round: plain `vigilance` is the
+// Easier half. Its Hard wiring is in games.cbat-vigilance-hard.test.js.
 
 process.env.JWT_SECRET = 'test_secret';
 
@@ -54,10 +56,13 @@ describe('CBAT roster completion — SIT / SLT / VLT / MATF / Vigilance', () => 
     }
   });
 
-  it('ships Vigilance with no Easier sibling, on purpose', () => {
-    // The test measures sustained attention over a fixed stretch; a shorter or
-    // lighter variant would not be measuring it. See the model for the full note.
+  it('keeps Vigilance\'s original board on its original key, as the Easier half', () => {
+    // The board that shipped single-difficulty is now Easier under the key
+    // every score ever set on it sits on. There is no '-easier' key and never
+    // will be; Hard is the new board, on 'vigilance-hard'.
     expect(CBAT_GAMES['vigilance-easier']).toBeUndefined();
+    expect(CBAT_GAMES['vigilance'].hardKey).toBe('vigilance-hard');
+    expect(CBAT_GAMES['vigilance-hard']).toBeTruthy();
   });
 
   it.each(ALL_KEYS)('accepts a result on %s and reads it back as a personal best', async (gameKey) => {

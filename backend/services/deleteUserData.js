@@ -58,6 +58,7 @@ const OWNED_BY_USER = [
   'GameSessionCbatTrace2Result',
   'GameSessionCbatTutorial',
   'GameSessionCbatVigilanceResult',
+  'GameSessionCbatVigilanceHardResult',
   'GameSessionCbatVisualisation2DResult',
   'GameSessionCbatVisualisation3DResult',
   'GameSessionCbatVltResult',

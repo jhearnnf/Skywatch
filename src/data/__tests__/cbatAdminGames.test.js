@@ -163,9 +163,14 @@ describe('frontend ↔ backend registry coverage', () => {
     expect(CBAT_LEADERBOARD_CONFIG.dpt.difficultyGroup).toBeUndefined()
   })
 
-  it('leaves Vigilance unlabelled — it ships one difficulty on purpose', () => {
+  it('splits Vigilance the ANT way round — the plain key is Easier, -hard is Hard', () => {
+    // Vigilance shipped single-difficulty and the original board kept its key
+    // when Hard arrived, so there is no '-easier' key and never will be.
     expect(BACKEND_CBAT_GAMES['vigilance-easier']).toBeUndefined()
-    expect(CBAT_DIFFICULTY_BY_KEY.vigilance).toBeUndefined()
+    expect(isCbatEasierKey('vigilance')).toBe(true)
+    expect(cbatHardKeyFor('vigilance')).toBe('vigilance-hard')
+    expect(CBAT_DIFFICULTY_BY_KEY.vigilance).toBe('Easier')
+    expect(CBAT_DIFFICULTY_BY_KEY['vigilance-hard']).toBe('Hard')
   })
 
   it('gives every hub tile a backend key or a documented fan-out', () => {

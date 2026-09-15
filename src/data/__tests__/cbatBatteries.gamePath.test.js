@@ -28,10 +28,10 @@ describe('gameHasDifficulties', () => {
     }
   })
 
-  // Vigilance ships one difficulty on purpose, so nothing on the report may tell
-  // a player to go and find a Hard button on its card.
-  it('is false for Vigilance', () => {
-    expect(gameHasDifficulties('vigilance')).toBe(false)
+  // Target ships one difficulty, so nothing on the report may tell a player to
+  // go and find a Hard button on its card.
+  it('is false for Target', () => {
+    expect(gameHasDifficulties('target')).toBe(false)
   })
 })
 
@@ -48,7 +48,15 @@ describe('gamePath', () => {
 
   it('leaves a game with no split alone', () => {
     expect(gamePath('target')).toBe('/cbat/target')
-    expect(gamePath('vigilance')).toBe('/cbat/vigilance')
+    expect(gamePath('symbols')).toBe('/cbat/symbols')
+  })
+
+  it('asks for Easier where the battery scores the Easier half', () => {
+    // ANT and Vigilance both score on the plain key, which is their Easier
+    // board. A link that forced Hard would send the player to a board whose
+    // runs the report does not count.
+    expect(gamePath('ant')).toBe('/cbat/ant?difficulty=easier')
+    expect(gamePath('vigilance')).toBe('/cbat/vigilance?difficulty=easier')
   })
 
   it('falls back to the games hub for a key with no board', () => {
