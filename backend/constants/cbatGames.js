@@ -4,6 +4,7 @@ const GameSessionCbatCodeDuplicatesResult = require('../models/GameSessionCbatCo
 const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSymbolsResult');
 const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTargetResult');
 const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
+const GameSessionCbatInstrumentsOrientationResult = require('../models/GameSessionCbatInstrumentsOrientationResult');
 const GameSessionCbatAntResult            = require('../models/GameSessionCbatAntResult');
 const GameSessionCbatAntPractiseResult    = require('../models/GameSessionCbatAntPractiseResult');
 const GameSessionCbatAntHardResult        = require('../models/GameSessionCbatAntHardResult');
@@ -154,12 +155,24 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Target',
   },
+  // The Instruments tile holds two different tests, the Visualisation 2D/3D
+  // way rather than an Easier/Hard pair: Reading is the original board on the
+  // original key (dials → statement, as many as you can in 90s), Orientation
+  // is the picture-matching half (attitude indicator + compass → which of
+  // four aircraft), ten questions on its own collection.
   'instruments': {
     Model: GameSessionCbatInstrumentsResult,
     primaryField: 'correctCount',
     sortDir: -1,
     bestOp: '$max',
-    label: 'Instruments',
+    label: 'Instruments Reading',
+  },
+  'instruments-orientation': {
+    Model: GameSessionCbatInstrumentsOrientationResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Instruments Orientation',
   },
   // ANT's split is the only one where the two halves are different GAMES rather
   // than one game at two loads. Easier is the original eight-round board — this

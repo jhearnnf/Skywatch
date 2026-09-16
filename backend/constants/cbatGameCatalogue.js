@@ -97,10 +97,10 @@ const CBAT_GAME_CATALOGUE = [
   },
   {
     name: 'Instruments',
-    registryKeys: ['instruments'],
+    registryKeys: ['instruments', 'instruments-orientation'],
     simulates: 'INSC',
-    aliases: ['instruments', 'insc', 'instrument comprehension', 'dials'],
-    what: 'read cockpit instruments against the clock and say what the aircraft is doing.',
+    aliases: ['instruments', 'insc', 'instrument comprehension', 'dials', 'instruments reading', 'instruments orientation', 'orientation', 'artificial horizon'],
+    what: 'two modes on one tile. Reading: read six cockpit dials against the clock and pick the statement that says what the aircraft is doing. Orientation: read an attitude indicator and a compass and pick which of four aircraft pictures is flying that way, seen from behind an aircraft heading north.',
   },
   {
     name: 'Trace Practise 2D',

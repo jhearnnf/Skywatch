@@ -327,6 +327,7 @@ function AppRoutes() {
           <Route path="/cbat/symbols"          element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="symbols"           gameTitle="Symbols"         ><CbatSymbols         /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/target"           element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="target"            gameTitle="Target"          ><CbatTarget          /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/instruments"      element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="instruments"       gameTitle="Instruments"     ><CbatInstruments     /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/instruments-orientation" element={<Navigate to="/cbat/instruments?mode=orientation" replace />} />
           <Route path="/cbat/ant"              element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="ant"               gameTitle="ANT"             ><CbatAnt             /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/flag"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="flag"              gameTitle="FLAG"            ><CbatFlag            /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/visualisation"    element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="visualisation"     gameTitle="Visualisation 2D/3D"><CbatVisualisation /></CbatGameGuard></PageWrapper></RequireAuth>} />

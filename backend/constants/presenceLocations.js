@@ -154,6 +154,7 @@ const CBAT_SEGMENT_TO_CARD = {
   'visualisation-2d': 'visualisation',
   'visualisation-3d': 'visualisation',
   'ant-practise':     'ant',
+  'instruments-orientation': 'instruments',
 };
 
 // Difficulty is a leaderboard split, not a card split: 'cut-easier' and 'cut'

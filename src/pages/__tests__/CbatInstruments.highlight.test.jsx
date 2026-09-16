@@ -8,9 +8,11 @@ const mockUseAuth = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
+  useSearchParams: () => [new URLSearchParams('')],
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: {} }) }))
 vi.mock('../../context/GameChromeContext', () => ({
   useGameChrome: () => ({ enterImmersive: vi.fn(), exitImmersive: vi.fn() }),
 }))

@@ -52,7 +52,7 @@ export const GAME_DEMO_POOL = [
   { id: 'flag',             label: 'FLAG',               gameKey: 'flag',             path: '/cbat/flag',          poster: '/images/FLAG.png',                                              heavy: true,  answerIntervalMs: 900  },
   { id: 'target',           label: 'Target',             gameKey: 'target',           path: '/cbat/target',        poster: '/images/Target.png',                                            heavy: true,  answerIntervalMs: 1500 },
   { id: 'act',              label: 'ACT',                gameKey: 'act',              path: '/cbat/act',           poster: '/images/ACT.png',                                               heavy: true,  answerIntervalMs: 2600, focus: ACT_FOCUS },
-  { id: 'instruments',      label: 'Instruments',        gameKey: 'instruments',      path: '/cbat/instruments',   poster: '/images/Instruments.png',                                       heavy: false, answerIntervalMs: 2400 },
+  { id: 'instruments',      label: 'Instruments',        gameKey: 'instruments',      path: '/cbat/instruments',   poster: '/images/Instruments.png',      props: { forcedMode: 'reading' }, heavy: false, answerIntervalMs: 2400 },
 ]
 
 // Fisher-Yates, on a copy.

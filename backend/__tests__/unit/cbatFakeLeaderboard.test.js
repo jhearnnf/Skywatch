@@ -10,6 +10,7 @@ const GAME_MAX = {
   'symbols':         15,
   'target':          null,   // accumulating score, no fixed ceiling (≥400 = Outstanding)
   'instruments':     null,   // time-limited, no fixed max
+  'instruments-orientation': 10,  // 10 questions, one point each
   'ant':             80,
   'ant-practise':    80,    // 8 questions × 10 points
   'flag':            null,   // accumulating score, no fixed ceiling

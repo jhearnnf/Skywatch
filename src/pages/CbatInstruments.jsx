@@ -12,6 +12,18 @@ import { useCbatMcq } from '../hooks/useCbatAnswerKeys'
 import InstrumentPanel from '../components/cbat/InstrumentPanel'
 import CbatGameOver from '../components/CbatGameOver'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { useAppSettings } from '../context/AppSettingsContext'
+import { useModeFromSearch } from '../hooks/useModeFromSearch'
+import { CbatModeRow } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import InstrumentsOrientationRun from '../components/cbat/InstrumentsOrientationRun'
+import {
+  INSTRUMENTS_MODES, instrumentsMode, instrumentsModes, readStoredInstrumentsMode, storeInstrumentsMode,
+} from '../utils/cbat/instrumentsModes'
+import { orientationGrade, ORIENTATION_QUESTIONS, ORIENTATION_TIME_LIMIT } from '../utils/cbat/instrumentsOrientation'
+
+const MODE_KEYS = INSTRUMENTS_MODES.map(m => m.key)
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TIME_LIMIT = 90          // seconds
@@ -131,11 +143,10 @@ function gradeFor(correct) {
 }
 
 // ── Results screen ───────────────────────────────────────────────────────────
-function ResultsScreen({ answers, totalTime }) {
+function ResultsScreen({ answers, totalTime, grade, outOf, title }) {
   const correct = answers.filter(a => a.correct).length
-  const rounds = answers.length
+  const rounds = outOf ?? answers.length
   const pct = rounds ? Math.round((correct / rounds) * 100) : 0
-  const grade = gradeFor(correct)
   const gradeStyle =
     grade === 'Outstanding' ? { emoji: '\u{1F396}\uFE0F', color: 'text-green-400' }
     : grade === 'Good' ? { emoji: '\u2708\uFE0F', color: 'text-brand-600' }
@@ -150,7 +161,7 @@ function ResultsScreen({ answers, totalTime }) {
     <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{gradeStyle.emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${gradeStyle.color}`}>{grade}</p>
-      <p className="text-sm text-slate-400 mb-6">Instrument Read Complete</p>
+      <p className="text-sm text-slate-400 mb-6">{title}</p>
 
       <div className="bg-game-arena rounded-lg border border-game-line p-4 sm:p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
@@ -195,11 +206,40 @@ function ResultsScreen({ answers, totalTime }) {
 }
 
 // ── Main Component ───────────────────────────────────────────────────────────
-export default function CbatInstruments() {
+export default function CbatInstruments({ forcedMode = null }) {
   const { user, apiFetch, API } = useAuth()
+  const { settings } = useAppSettings()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
-  const [phase, setPhase] = useState('intro') // intro | calibrating | playing | feedback | results
+  // Which board the tile is on: Reading (the original dials) or Orientation.
+  // `forcedMode` pins one and bypasses the remembered choice, for the landing
+  // page's live game wall. See CbatVisualisation for the same prop.
+  const [storedMode, setStoredMode] = useState(readStoredInstrumentsMode)
+  const setMode = useCallback((next) => { if (!forcedMode) setStoredMode(storeInstrumentsMode(next)) }, [forcedMode])
+  useModeFromSearch(MODE_KEYS, forcedMode ? null : setMode)
+
+  // Per-board admin gating. Admins always see both; everyone else only a
+  // board whose flag isn't explicitly off. A remembered board that has been
+  // switched off reads as whichever is still on, without overwriting the
+  // remembered choice.
+  const isAdmin = !!user?.isAdmin
+  const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
+  const isModeEnabled = (m) => isAdmin || cbatGameEnabled[m.gameKey] !== false
+  const chosenMode = forcedMode ?? storedMode
+  const mode = (forcedMode || isModeEnabled(instrumentsMode(chosenMode)))
+    ? chosenMode
+    : (INSTRUMENTS_MODES.find(isModeEnabled)?.key ?? chosenMode)
+
+  const tuning = instrumentsMode(mode)
+  const gameKey = tuning.gameKey
+  const isOrientation = mode === 'orientation'
+
+  const [phase, setPhase] = useState('intro') // intro | calibrating | playing | feedback | orientation | results
+  // The board the answers on screen were played on. Set when a run starts, so
+  // the results and the score post go to the board that was PLAYED even if
+  // the row is flipped afterwards.
+  const [resultKey, setResultKey] = useState('instruments')
+  const [resultTime, setResultTime] = useState(0)
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     if (phase === 'calibrating' || phase === 'playing' || phase === 'feedback') enterImmersive()
@@ -220,7 +260,8 @@ export default function CbatInstruments() {
   const advanceTimeoutRef = useRef(null)
   const calibrationTimeoutRef = useRef(null)
   const answersRef = useRef([])
-  const [personalBest, setPersonalBest] = useState(null)
+  const { best: personalBest, loading: bestLoading, refresh: refreshBest } =
+    useCbatPersonalBest(gameKey, { user, apiFetch, API })
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
   const [highlightedKey, setHighlightedKey] = useState(null)
@@ -240,22 +281,14 @@ export default function CbatInstruments() {
   // Keep latest answers in a ref for use inside timer callback (avoids stale closure)
   useEffect(() => { answersRef.current = answers }, [answers])
 
-  // Fetch personal best
-  useEffect(() => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/instruments/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user])
-
-  const submitScore = useCallback((finalAnswers, finalTime) => {
+  // Both boards post the same shape; only the key and the grade bands differ.
+  const submitScore = useCallback((finalAnswers, finalTime, key = 'instruments') => {
     const correct = finalAnswers.filter(a => a.correct).length
-    const grade = gradeFor(correct)
+    const grade = key === 'instruments-orientation' ? orientationGrade(correct) : gradeFor(correct)
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: correct, round: finalAnswers.length })
-    submitCbatResult(`instruments`, {
+    submitCbatResult(key, {
         correctCount: correct,
         roundsPlayed: finalAnswers.length,
         totalTime: finalTime,
@@ -264,13 +297,10 @@ export default function CbatInstruments() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/instruments/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        refreshBest(key)
       })
       .catch(() => {})
-  }, [apiFetch, API])
+  }, [apiFetch, API, markGameCompleted, refreshBest])
 
   // True elapsed since the run began, read from the single start timestamp set
   // in startGame. Deliberately not derived from the `elapsed` state: endGame
@@ -335,6 +365,7 @@ export default function CbatInstruments() {
 
   const startGame = useCallback(() => {
     startTracking('instruments')
+    setResultKey('instruments')
     setAnswers([])
     answersRef.current = []
     setElapsed(0)
@@ -342,7 +373,27 @@ export default function CbatInstruments() {
     setRoundIndex(0)
     startTimeRef.current = Date.now()
     startCalibration()
-  }, [startCalibration, apiFetch, API])
+  }, [startCalibration, startTracking])
+
+  // Orientation runs in its own component; the page just holds the door.
+  const startOrientation = useCallback(() => {
+    startTracking('instruments-orientation')
+    setResultKey('instruments-orientation')
+    setAnswers([])
+    answersRef.current = []
+    setScoreSaved(false)
+    setPhase('orientation')
+  }, [startTracking])
+
+  const finishOrientation = useCallback((finalAnswers, finalTime) => {
+    setAnswers(finalAnswers)
+    answersRef.current = finalAnswers
+    setResultTime(finalTime)
+    submitScore(finalAnswers, finalTime, 'instruments-orientation')
+    setPhase('results')
+  }, [submitScore])
+
+  const startSelected = isOrientation ? startOrientation : startGame
 
   const goToIntro = useCallback(() => {
     if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current)
@@ -415,15 +466,17 @@ export default function CbatInstruments() {
     <div className="cbat-instruments-page">
       <SEO title="Instruments — CBAT" description="Read cockpit instruments under time pressure." />
 
-      {/* Header */}
-      <CbatGameHeader
-        title="Instruments"
-        fullTitle="Instrument Comprehension"
-        intro={phase === 'intro'}
-        onQuit={goToIntro}
-        confirmNeeded={['calibrating', 'playing', 'feedback'].includes(phase)}
-        test={testBar}
-      />
+      {/* Header. The Orientation run renders its own with its own clock. */}
+      {phase !== 'orientation' && (
+        <CbatGameHeader
+          title="Instruments"
+          fullTitle="Instrument Comprehension"
+          intro={phase === 'intro'}
+          onQuit={goToIntro}
+          confirmNeeded={['calibrating', 'playing', 'feedback'].includes(phase)}
+          test={testBar}
+        />
+      )}
 
       {/* Not logged in */}
       {!user && (
@@ -449,45 +502,63 @@ export default function CbatInstruments() {
               className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
               <p className="text-4xl lg:text-5xl mb-3">{'\u{1F6EB}'}</p>
-              <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Instrument Read</p>
+              <p className="text-xl lg:text-2xl font-extrabold text-white mb-1">Instruments</p>
+              <CbatModeRow
+                modes={instrumentsModes(isModeEnabled)}
+                value={mode}
+                onSelect={setMode}
+              />
+              <p className="text-[11px] text-brand-600 mb-3">{tuning.blurb}</p>
               <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
-                Read the six cockpit instruments and pick the statement that correctly
-                describes the flight state. As many rounds as you can in 90 seconds.
+                {isOrientation
+                  ? 'You are shown an attitude indicator and a heading indicator. Pick the one aircraft picture out of four that is flying the way they show.'
+                  : 'Read the six cockpit instruments and pick the statement that correctly describes the flight state. As many rounds as you can in 90 seconds.'}
               </p>
 
-              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
-                  <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
-                  <span className="pt-0.5">90-second total time limit</span>
+              {isOrientation ? (
+                <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
+                    <span className="pt-0.5">{ORIENTATION_QUESTIONS} questions, {ORIENTATION_TIME_LIMIT} seconds for all of them</span>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9ED}'}</span>
+                    <span className="pt-0.5">Every picture is seen from behind an aircraft flying north, so an aircraft heading north shows you its tail and one heading south shows its nose</span>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2713'}</span>
+                    <span className="pt-0.5">Read bank off the roll scale at the top of the attitude indicator. An aircraft flying towards you drops its left wing on your right</span>
+                  </div>
                 </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
-                  <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9ED}'}</span>
-                  <span className="pt-0.5">Needles calibrate each round — wait for them to settle, then choose</span>
-                </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
-                  <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2713'}</span>
-                  <span className="pt-0.5">One correct statement, four distractors — variables swapped subtly</span>
-                </div>
-              </div>
-
-              {personalBest && (
-                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
-                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">
-                    {personalBest.bestScore} correct
-                  </p>
-                  <p className="text-[10px] lg:text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
+              ) : (
+                <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
+                    <span className="pt-0.5">90-second total time limit</span>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F9ED}'}</span>
+                    <span className="pt-0.5">Needles calibrate each round — wait for them to settle, then choose</span>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2713'}</span>
+                    <span className="pt-0.5">One correct statement, four distractors — variables swapped subtly</span>
+                  </div>
                 </div>
               )}
 
+              <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading}>
+                {best => isOrientation ? `${best.bestScore}/${ORIENTATION_QUESTIONS}` : `${best.bestScore} correct`}
+              </CbatPersonalBest>
+
               <div className="text-center mb-4">
-                <Link to="/cbat/instruments/leaderboard" className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
+                <Link to={`/cbat/${gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   {'View Leaderboard \u2192'}
                 </Link>
               </div>
 
               <button
-                onClick={startGame}
+                onClick={startSelected}
                 data-demo-start
                 className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
               >
@@ -666,20 +737,37 @@ export default function CbatInstruments() {
             </div>
           )}
 
+          {/* Orientation run */}
+          {phase === 'orientation' && (
+            <InstrumentsOrientationRun onFinish={finishOrientation} onQuit={goToIntro} />
+          )}
+
           {/* Results */}
           {phase === 'results' && (
             <CbatGameOver
-              gameKey="instruments"
+              gameKey={resultKey}
               score={answers.filter(a => a.correct).length}
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}
-              onPlayAgain={startGame}
+              onPlayAgain={resultKey === 'instruments-orientation' ? startOrientation : startGame}
             >
-              <ResultsScreen
-                answers={answers}
-                totalTime={Math.min(elapsed, TIME_LIMIT)}
-              />
+              {resultKey === 'instruments-orientation' ? (
+                <ResultsScreen
+                  answers={answers}
+                  totalTime={resultTime}
+                  grade={orientationGrade(answers.filter(a => a.correct).length)}
+                  outOf={ORIENTATION_QUESTIONS}
+                  title="Instrument Orientation Complete"
+                />
+              ) : (
+                <ResultsScreen
+                  answers={answers}
+                  totalTime={Math.min(elapsed, TIME_LIMIT)}
+                  grade={gradeFor(answers.filter(a => a.correct).length)}
+                  title="Instrument Read Complete"
+                />
+              )}
             </CbatGameOver>
           )}
         </div>

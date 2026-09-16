@@ -40,7 +40,7 @@ export const CBAT_GAMES = [
   { key: 'symbols',         emoji: '🔣', title: 'Symbols',          desc: 'Spot the target symbol in a growing grid, round by round.', path: '/cbat/symbols',         image: '/images/Symbols.png', estMinutes: 1 },
   { key: 'code-duplicates', emoji: '🧩', title: 'Code Duplicates',  desc: 'Memorise a sequence of digits, then count how many times one appeared.', path: '/cbat/code-duplicates', image: '/images/Code Duplicates.png', estMinutes: 2 },
   { key: 'angles',          emoji: '📐', title: 'Angles',           desc: 'Judge angles quickly and accurately.',                  path: '/cbat/angles',          image: '/images/Angles.png', estMinutes: 1 },
-  { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit instruments under time pressure.',         path: '/cbat/instruments',     image: '/images/Instruments.png', estMinutes: 1.5 },
+  { key: 'instruments',     emoji: '🛫', title: 'Instruments',      desc: 'Read cockpit dials against the clock, or match an attitude indicator and compass to the right aircraft.', path: '/cbat/instruments', image: '/images/Instruments.png', estMinutes: [1.5, 2] },
   { key: 'plane-turn',      emoji: '🗺️', title: 'Trace 1/2',         desc: 'Practise your turn and heading, or take the Trace recall test.',             path: '/cbat/trace',           image: '/images/Plane Turn.png', estMinutes: [1, 2] },
   { key: 'flag',             emoji: '🚩', title: 'FLAG',             desc: 'Track aircraft, answer maths and identification questions, hit target shapes — all in 60 seconds.', path: '/cbat/flag',            image: '/images/FLAG.png', estMinutes: 1 },
   { key: 'visualisation',    emoji: '🧊', title: 'Visualisation 2D/3D', desc: 'Mentally weld 2D shapes or mentally rotate 3D composites to spot the matching figure.', path: '/cbat/visualisation',    image: '/images/Visualisation 2D.png', estMinutes: [1, 2] },
@@ -145,7 +145,11 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
   'symbols':         { title: 'Symbols',           emoji: '🔣',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/symbols', timeDecimals: 2 },
   'target':          { title: 'Target',            emoji: '🎯',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/target',         hideTime: true },
-  'instruments':     { title: 'Instruments',       emoji: '🛫',  scoreLabel: 'Correct',   lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/instruments',    hideTime: true },
+  // The Instruments tile holds two different tests, the Visualisation 2D/3D
+  // way rather than an Easier/Hard pair, so neither carries a difficultyGroup
+  // and each names itself. Reading keeps the original key and board.
+  'instruments':     { title: 'Instruments Reading', emoji: '🛫', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/instruments', hideTime: true },
+  'instruments-orientation': { title: 'Instruments Orientation', emoji: '🛫', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 10, formatScore: (s) => `${s}/10`, backPath: '/cbat/instruments' },
   // ANT's two halves are two different games, not one game at two loads, so
   // they do not share a ceiling: Easier is the original eight-round board out
   // of 80 and Hard is twelve rounds out of 120. Plain 'ant' IS the Easier
@@ -339,6 +343,15 @@ export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
     return [
       { ...g, key: 'visualisation-2d', title: 'Visualisation 2D' },
       { ...g, key: 'visualisation-3d', title: 'Visualisation 3D' },
+    ]
+  }
+  // Reading IS the tile's own key, so its toggle gates the whole page (ANT's
+  // arrangement); Orientation is the second board behind it, with its own
+  // toggle like Visualisation's modes.
+  if (g.key === 'instruments') {
+    return [
+      { ...g, key: 'instruments',             title: 'Instruments Reading' },
+      { ...g, key: 'instruments-orientation', title: 'Instruments Orientation' },
     ]
   }
   return [g]

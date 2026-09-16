@@ -40,6 +40,7 @@ const GameSessionCbatCodeDuplicatesResult = CBAT_GAMES['code-duplicates'].Model;
 const GameSessionCbatSymbolsResult        = CBAT_GAMES['symbols'].Model;
 const GameSessionCbatTargetResult         = CBAT_GAMES['target'].Model;
 const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
+const GameSessionCbatInstrumentsOrientationResult = CBAT_GAMES['instruments-orientation'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatAntPractiseResult    = CBAT_GAMES['ant-practise'].Model;
 const GameSessionCbatAntHardResult        = CBAT_GAMES['ant-hard'].Model;
@@ -2652,11 +2653,14 @@ router.post('/cbat/symbols/result', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/cbat/instruments/result
-router.post('/cbat/instruments/result', protect, async (req, res) => {
+// POST /api/games/cbat/instruments/result and /instruments-orientation/result
+// Identical payloads: both boards count correct answers against a clock. The
+// collection is fixed by the route, never read from the body, so a run can
+// only land on the board it was played for.
+async function submitInstrumentsResult(req, res, Model) {
   try {
     const { correctCount, roundsPlayed, totalTime, grade } = req.body;
-    const result = await saveCbatResult(GameSessionCbatInstrumentsResult, req, {
+    const result = await saveCbatResult(Model, req, {
       correctCount,
       roundsPlayed,
       totalTime,
@@ -2666,7 +2670,9 @@ router.post('/cbat/instruments/result', protect, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-});
+}
+router.post('/cbat/instruments/result', protect, (req, res) => submitInstrumentsResult(req, res, GameSessionCbatInstrumentsResult));
+router.post('/cbat/instruments-orientation/result', protect, (req, res) => submitInstrumentsResult(req, res, GameSessionCbatInstrumentsOrientationResult));
 
 // POST /api/games/cbat/ant/result, /ant-hard/result and /ant-practise/result
 // Identical payloads — Practise is the same four calculations as plain
@@ -3310,6 +3316,7 @@ router.get('/cbat/code-duplicates/leaderboard', protect, (req, res) => cbatLeade
 router.get('/cbat/symbols/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'symbols'));
 router.get('/cbat/target/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'target'));
 router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments'));
+router.get('/cbat/instruments-orientation/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments-orientation'));
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
 router.get('/cbat/ant-hard/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant-hard'));
 router.get('/cbat/ant-practise/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant-practise'));
@@ -3530,6 +3537,7 @@ router.get('/cbat/code-duplicates/personal-best', protect, (req, res) => cbatPer
 router.get('/cbat/symbols/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'symbols'));
 router.get('/cbat/target/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'target'));
 router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments'));
+router.get('/cbat/instruments-orientation/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments-orientation'));
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
 router.get('/cbat/ant-hard/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant-hard'));
 router.get('/cbat/ant-practise/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant-practise'));

@@ -57,6 +57,7 @@ const GAME_OFFSET = {
   'ant-practise':    38,
   'ant-hard':        39,
   'vigilance-hard':  40,
+  'instruments-orientation': 41,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -123,6 +124,14 @@ const FAKE_TUNING = {
     // Top fake sits at the low end of "Good" (≥10); most of the roster is
     // "Needs Work" (5–9) or "Failed" (<5). Grade bands: 15+ / 10+ / 5+.
     scoreSequence: [10, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 3, 3, 2, 2, 1, 1, 1],
+  },
+  'instruments-orientation': {
+    // Ten questions on a 120s clock, so scores are out of 10 and a finished
+    // run's time is however long the ten took. No production history yet:
+    // the band is a guess at where a first-timer lands on the bank trap
+    // (mirror-image wings on a nose view). Reseat once real runs exist.
+    floor: 2, ceiling: 10, seedTime: 74.5, timeStep: 3.1,
+    scoreSequence: [9, 9, 8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 2],
   },
   'ant': {
     floor: 15, ceiling: 75, seedTime: 210.6, timeStep: 9.3,
@@ -616,6 +625,9 @@ const WEEKLY_PER_PLAY = {
   'symbols':          13,  // real med 15
   'target':          520,  // real med 602
   'instruments':       4,  // real med 3
+  // No production history yet — set from the demo band's middle (6/10).
+  // Reseat once real runs exist.
+  'instruments-orientation': 6,
   'ant':              45,  // real med 50
   // No production history yet — the board starts empty. Set from the demo
   // band's middle (65/120), which is the same share of the ceiling as ANT's 45
