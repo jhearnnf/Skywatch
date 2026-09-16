@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { listPads, pickPad } from './gamepad'
+import { listPads, pickPad, loadPedalProfile } from './gamepad'
 
 // Is a joystick plugged in right now?
 //
@@ -27,6 +27,25 @@ export function useStickPresence(pollMs = STICK_POLL_MS) {
     const id = setInterval(() => {
       const pad = pickPad(listPads())
       setConnected(prev => (prev === !!pad ? prev : !!pad))
+    }, pollMs)
+    return () => clearInterval(id)
+  }, [pollMs])
+
+  return connected
+}
+
+
+// Are calibrated pedals plugged in right now? Same poll, same reasons. Pedals
+// can only be told apart from any other second device by the profile the
+// player calibrated (pedals.js), so "present" means a connected pad that has
+// one. SMA uses this to decide whether to keep recommending a set.
+export function usePedalPresence(pollMs = STICK_POLL_MS) {
+  const [connected, setConnected] = useState(false)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const found = listPads().some(p => !!loadPedalProfile(p.id))
+      setConnected(prev => (prev === found ? prev : found))
     }, pollMs)
     return () => clearInterval(id)
   }, [pollMs])

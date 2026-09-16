@@ -38,7 +38,7 @@ const WAKE_HINT = 'Not seeing it? Click this page, then press a button on the st
 const LED_SEGMENTS = 17
 const LED_CENTRE = (LED_SEGMENTS - 1) / 2
 
-function AxisBar({ label, value }) {
+export function AxisBar({ label, value }) {
   const clamped = Math.max(-1, Math.min(1, value))
   const target = Math.round(LED_CENTRE + clamped * LED_CENTRE)
   const lo = Math.min(LED_CENTRE, target)

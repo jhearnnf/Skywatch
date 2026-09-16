@@ -2,12 +2,12 @@
 //
 // The real SMA is flown on two limbs at once: the joystick owns the vertical
 // axis and a pair of foot pedals own the lateral one, worked with forward ankle
-// pressure rather than by pressing down. Nobody sitting at a laptop has pedals,
-// and a browser cannot tell a rudder axis from a throttle lever without being
-// shown, so SMA puts BOTH axes on whatever single two-axis control the player
-// has. The instructions card says so plainly rather than implying the hand and
-// foot split has been reproduced — it has not, and pretending otherwise would be
-// the one claim about this test worth not making.
+// pressure rather than by pressing down. Most people sitting at a laptop have
+// no pedals, so by default SMA puts BOTH axes on whatever single two-axis
+// control the player has. A player who does have pedals calibrates them once
+// (pedals.js; a browser cannot tell a rudder axis from a throttle lever without
+// being shown) and from then on the pedals own the lateral axis and whatever
+// else is flying keeps the vertical one, which is the real split.
 //
 // Four sources feed one pair of numbers, and nothing downstream can tell them
 // apart:
@@ -40,8 +40,9 @@
 
 import {
   createStickReader, applyCurve, clamp1, loadProfile, defaultProfile, listPads,
-  STICK_DEAD_ZONE, STICK_EXPO,
+  loadPedalProfile, STICK_DEAD_ZONE, STICK_EXPO,
 } from './gamepad'
+import { createPedalReader } from './pedals'
 import { pointerAxes } from './rttInput'
 import {
   createInputTally, addInput, dominantInput,
@@ -130,10 +131,22 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
   const stick = createStickReader({
     profileFor: (id) => ({ ...(loadProfile(id) || defaultProfile(id)), deadZone, expo }),
   })
+  // The pedals, if the player has calibrated a set. No profile, no pedals.
+  const pedals = createPedalReader({
+    profileFor: (id) => {
+      const p = loadPedalProfile(id)
+      return p ? { ...p, deadZone, expo } : null
+    },
+  })
 
   const state = {
     source: 'pointer',
     axes: { x: 0, y: 0 },
+    // Once calibrated pedals have been pushed they own the lateral axis for
+    // the rest of the run, whatever else is flying: the same latch as the
+    // stick's, for the same reason (feet resting on centred pedals are a
+    // command to hold, not an absence of input). Released only by unplugging.
+    pedalsEngaged: false,
 
     // Pointer is tracked in client coordinates on the window, not on the arena.
     // Flinging the mouse past the edge should peg the control in that direction,
@@ -233,6 +246,52 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     return { x: clamp1(target.x), y: clamp1(target.y) }
   }
 
+  // Which of the four sources has the job this frame, and the pair it produces.
+  // Pure with respect to the tally: poll() adds one entry per frame after the
+  // pedals have had their say, so a frame flown on pedals plus a mouse is not
+  // counted twice.
+  const pickBase = (now) => {
+    // A finger on the pad outranks everything for as long as it is down — it
+    // is an unambiguous, deliberate gesture, and on a hybrid laptop it should
+    // win over a mouse that happens to be sitting off-centre.
+    if (state.padOrigin) {
+      return { source: 'pad', axes: state.padAxes, method: INPUT_TOUCH }
+    }
+
+    if (state.source === 'gamepad' && stick.connected()) {
+      const a = stick.axes()
+      // A centred stick would come out as -0 from the multiply. Nothing here
+      // flies differently on it, but it compares unequal to 0 and would put a
+      // baffling minus sign in front of a HUD readout.
+      return {
+        source: 'gamepad',
+        axes: { x: a.x, y: a.y === 0 ? 0 : a.y * STICK_PITCH_SIGN },
+        method: INPUT_JOYSTICK,
+      }
+    }
+
+    // Keys beat the mouse while anything is held or still winding down, so a
+    // player using the keyboard is not fighting a stationary pointer parked
+    // halfway to the bezel.
+    if (state.keysHeld.size || state.keyAxes.x !== 0 || state.keyAxes.y !== 0) {
+      return { source: 'keyboard', axes: state.keyAxes, method: INPUT_KEYBOARD_MOUSE }
+    }
+
+    // Nothing else is claiming it, so the mouse has the job — and the HUD
+    // readout has to say so. A source left reading 'pad' or 'keyboard' after
+    // the finger lifted or the key wound down would be telling the player
+    // they are flying on something they let go of.
+    const rect = readRect(now)
+    if (!rect || !state.pointer) {
+      return { source: 'pointer', axes: { x: 0, y: 0 }, method: null }
+    }
+    return {
+      source: 'pointer',
+      axes: pointerAxes(state.pointer.x, state.pointer.y, rect, { deadZone, expo }),
+      method: INPUT_KEYBOARD_MOUSE,
+    }
+  }
+
   return {
     // ── Pad, driven by the page's pointer handlers on the pad element ────────
     // The page owns the element and its rect; this owns what a gesture means.
@@ -283,65 +342,43 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
       if (stick.connected() && stick.awake()) state.source = 'gamepad'
       else if (!stick.connected() && state.source === 'gamepad') state.source = 'pointer'
 
-      // A finger on the pad outranks everything for as long as it is down — it
-      // is an unambiguous, deliberate gesture, and on a hybrid laptop it should
-      // win over a mouse that happens to be sitting off-centre.
-      if (state.padOrigin) {
-        state.source = 'pad'
-        state.axes = state.padAxes
-        addInput(state.inputTally, INPUT_TOUCH)
-        return
-      }
+      pedals.poll()
+      if (pedals.connected() && pedals.awake()) state.pedalsEngaged = true
+      else if (!pedals.connected()) state.pedalsEngaged = false
 
-      if (state.source === 'gamepad' && stick.connected()) {
-        const a = stick.axes()
-        // A centred stick would come out as -0 from the multiply. Nothing here
-        // flies differently on it, but it compares unequal to 0 and would put a
-        // baffling minus sign in front of a HUD readout.
-        state.axes = { x: a.x, y: a.y === 0 ? 0 : a.y * STICK_PITCH_SIGN }
-        addInput(state.inputTally, INPUT_JOYSTICK)
-        return
-      }
+      const base = pickBase(now)
+      state.source = base.source
+      state.axes = base.axes
+      let method = base.method
 
-      // Keys beat the mouse while anything is held or still winding down, so a
-      // player using the keyboard is not fighting a stationary pointer parked
-      // halfway to the bezel.
-      if (state.keysHeld.size || state.keyAxes.x !== 0 || state.keyAxes.y !== 0) {
-        state.source = 'keyboard'
-        state.axes = state.keyAxes
-        addInput(state.inputTally, INPUT_KEYBOARD_MOUSE)
-        return
+      // Engaged pedals own the lateral axis, whatever is flying the vertical
+      // one. The stick's own roll goes unread, as on the apparatus. A run
+      // flown on pedals is a run flown on hardware for the board's purposes,
+      // whichever device happened to hold the other axis.
+      if (state.pedalsEngaged) {
+        state.axes = { x: pedals.x(), y: state.axes.y }
+        method = INPUT_JOYSTICK
       }
-
-      // Nothing else is claiming it, so the mouse has the job — and the HUD
-      // readout has to say so. A source left reading 'pad' or 'keyboard' after
-      // the finger lifted or the key wound down would be telling the player
-      // they are flying on something they let go of.
-      if (state.source !== 'pointer') state.source = 'pointer'
-
-      const rect = readRect(now)
-      if (!rect || !state.pointer) {
-        state.axes = { x: 0, y: 0 }
-        return
-      }
-      addInput(state.inputTally, INPUT_KEYBOARD_MOUSE)
-      state.axes = pointerAxes(state.pointer.x, state.pointer.y, rect, { deadZone, expo })
+      if (method) addInput(state.inputTally, method)
     },
 
     axes() { return state.axes },
     source() { return state.source },
     // Which physical device is flying, for the HUD's source readout.
     stickId() { return stick.padId() },
+    pedalsId() { return pedals.padId() },
+    pedalsEngaged() { return state.pedalsEngaged },
     // What the run was flown on, by frames — 'joystick', 'keyboard-mouse',
     // 'touch', or null before anything has steered. Read once at the end of a
     // run and sent with the score.
     inputMethod() { return dominantInput(state.inputTally) },
     inputTally() { return { ...state.inputTally } },
-    // Lets the stick pick up a fresh calibration without a remount.
-    refresh() { stick.refresh() },
+    // Lets the stick and pedals pick up a fresh calibration without a remount.
+    refresh() { stick.refresh(); pedals.refresh() },
 
     dispose() {
       stick.dispose()
+      pedals.dispose()
       if (typeof window !== 'undefined') {
         window.removeEventListener('pointermove', onPointerMove)
         window.removeEventListener('pointerout', onPointerOut)

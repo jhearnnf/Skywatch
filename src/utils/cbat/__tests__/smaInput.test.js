@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { savePedalProfile, PEDAL_PROFILE_VERSION } from '../gamepad'
 import {
   createSmaInput, padAxes, padRadius, clampPadOrigin, rampAxis,
   KEY_RAMP_MS, KEY_RELEASE_MS, PAD_RADIUS_FRACTION, SMA_SOURCE_LABEL,
@@ -326,6 +327,96 @@ describe('createSmaInput source priority', () => {
     for (const key of ['pad', 'pointer', 'gamepad', 'keyboard']) {
       expect([key, !!SMA_SOURCE_LABEL[key]]).toEqual([key, true])
     }
+  })
+
+  // The real split: pedals own the lateral axis, whatever holds the vertical
+  // one. Pedals only ever come from a calibration, and only take the axis once
+  // they have actually been pushed.
+  describe('pedals', () => {
+    const pedalProfile = (sign = 1) => savePedalProfile({
+      id: 'Pedals', version: PEDAL_PROFILE_VERSION, calibrated: true,
+      axis: { index: 2, centre: 0, min: -1, max: 1, sign },
+    })
+    beforeEach(() => localStorage.clear())
+    afterEach(() => localStorage.clear())
+
+    it('leaves uncalibrated pedals unread, even when they are the only device', () => {
+      const pedals = { id: 'Pedals', connected: true, axes: [0, 0, 0.9], buttons: [] }
+      navigator.getGamepads = () => [pedals]
+      input = createSmaInput({ el: arena() })
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 200, clientY: 300 }))
+      input.poll(16)
+      // No pedal profile, so the device is a stick candidate on axes 0/1 —
+      // which are centred — and the mouse keeps the job.
+      expect(input.pedalsEngaged()).toBe(false)
+      expect(input.source()).toBe('pointer')
+      expect(input.axes().x).toBe(0)
+    })
+
+    it('takes the lateral axis from calibrated pedals once pushed, and keeps the stick on vertical', () => {
+      pedalProfile(-1)
+      const stick = { id: 'Sidestick', connected: true, axes: [0, 0], buttons: Array(12).fill({ pressed: false, value: 0 }) }
+      const pedals = { id: 'Pedals', connected: true, axes: [0, 0, 0], buttons: [] }
+      navigator.getGamepads = () => [pedals, stick]
+      input = createSmaInput({ el: arena() })
+
+      // Stick pushed away, feet resting: stick flies both, as before.
+      stick.axes = [0.9, -0.9]
+      input.poll(16)
+      expect(input.source()).toBe('gamepad')
+      expect(input.pedalsEngaged()).toBe(false)
+      expect(input.axes().x).toBeGreaterThan(0.5)
+
+      // Right pedal forward (negative on this driver) → +x, and the stick's
+      // own roll is no longer read.
+      pedals.axes = [0, 0, -0.9]
+      stick.axes = [-0.9, -0.9]
+      input.poll(16)
+      expect(input.pedalsEngaged()).toBe(true)
+      expect(input.pedalsId()).toBe('Pedals')
+      expect(input.axes().x).toBeGreaterThan(0.5)
+      expect(input.axes().y).toBeGreaterThan(0.5)
+
+      // Feet back to rest: pedals still own x (a centred pedal is a command).
+      pedals.axes = [0, 0, 0]
+      input.poll(16)
+      expect(input.pedalsEngaged()).toBe(true)
+      expect(input.axes().x).toBe(0)
+      expect(Object.is(input.axes().x, 0)).toBe(true)
+      expect(input.inputMethod()).toBe('joystick')
+    })
+
+    it('pairs pedals with a mouse on the vertical axis when there is no stick', () => {
+      pedalProfile()
+      const pedals = { id: 'Pedals', connected: true, axes: [0, 0, 0], buttons: [] }
+      navigator.getGamepads = () => [pedals]
+      input = createSmaInput({ el: arena() })
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 200, clientY: 350 }))
+      pedals.axes = [0, 0, 0.9]
+      input.poll(16)
+      // Calibrated pedals are never the stick, so the mouse keeps vertical.
+      expect(input.source()).toBe('pointer')
+      expect(input.pedalsEngaged()).toBe(true)
+      expect(input.axes().x).toBeGreaterThan(0.5)
+      expect(input.axes().y).toBeGreaterThan(0.5)
+      // And the run counts as flown on hardware, once per frame, not twice.
+      expect(input.inputTally()).toEqual({ joystick: 1, 'keyboard-mouse': 0, touch: 0 })
+    })
+
+    it('lets the pedals go when they are unplugged', () => {
+      pedalProfile()
+      const pedals = { id: 'Pedals', connected: true, axes: [0, 0, 0.9], buttons: [] }
+      let pads = [pedals]
+      navigator.getGamepads = () => pads
+      input = createSmaInput({ el: arena() })
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400, clientY: 200 }))
+      input.poll(16)
+      expect(input.pedalsEngaged()).toBe(true)
+      pads = []
+      input.poll(16)
+      expect(input.pedalsEngaged()).toBe(false)
+      expect(input.axes().x).toBeGreaterThan(0.9)   // the mouse has x back
+    })
   })
 
   // What the score gets labelled with. Four sources fold into three labels:

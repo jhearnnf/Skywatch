@@ -6,10 +6,10 @@
 // utils/cbat/smaSim.js; the four ways to fly it live in utils/cbat/smaInput.js.
 //
 // The real test splits the axes across a joystick (vertical) and foot pedals
-// (lateral). Ours puts both on one control, and the instructions card says so in
-// as many words. Reproducing the hand-and-foot split would need pedals nobody
-// has, and a version that quietly implied it had would be making the one claim
-// about this test that is not worth making.
+// (lateral). Ours puts both on one control unless the player has calibrated a
+// set of pedals (components/cbat/PedalSetup.jsx, utils/cbat/pedals.js), in
+// which case the pedals take the lateral axis and the split is the real one.
+// The instructions card says which of the two it is doing, in as many words.
 //
 // Nothing re-renders during a run. The dot moves at 60 Hz, and a React render
 // per frame would cost more than the whole simulation does — so the frame loop
@@ -27,6 +27,7 @@ import SEO from '../components/SEO'
 import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import StickSetup from '../components/cbat/StickSetup'
+import PedalSetup from '../components/cbat/PedalSetup'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
 import { useStickPresence } from '../utils/cbat/useStickPresence'
@@ -361,7 +362,7 @@ export default function CbatSma() {
         score: `${snap.score}`,
         onTarget: snap.onTarget ? 'ON' : 'OFF',
         err: `${Math.round(snap.error * 100)}%`,
-        source: SMA_SOURCE_LABEL[input.source()] || '—',
+        source: (SMA_SOURCE_LABEL[input.source()] || '—') + (input.pedalsEngaged() ? ' + pedals' : ''),
         gesture: input.padGesture(),
       })
 
@@ -500,11 +501,14 @@ export default function CbatSma() {
           {/* Intro */}
           {(phase === 'intro' || launching) && (
             <CbatStickLayout
-              stick={(
+              stick={(<>
                 <StickSetup title="Joystick" mockActive={mockStick}>
                   {stickConnected ? sensitivityControl : null}
                 </StickSetup>
-              )}
+                {/* SMA is the one test flown on pedals too, so it is the one
+                    page with a pedal panel. */}
+                <PedalSetup />
+              </>)}
             >
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -534,11 +538,12 @@ export default function CbatSma() {
                   <div className="flex items-start gap-3"><CbatIntroLabel>Keys</CbatIntroLabel><span className="pt-0.5">arrow keys or WASD, if you have neither a mouse nor a touchscreen</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Scoring</CbatIntroLabel><span className="pt-0.5">you earn points for every second the dot is inside the ring, and the most for holding it dead centre</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">{Math.round(tuning.durationMs / 1000)} seconds, after {LEAD_IN_MS / 1000} seconds to get hold of it. A perfect run is {maxSmaScore(tuning)}.</span></div>
-                  {/* Never imply we have reproduced the apparatus. The real test
-                      is flown on a stick and a set of foot pedals; this is one
-                      control doing both jobs, and a player comparing notes with
-                      someone who has sat it should know that going in. */}
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center" aria-hidden>{'ℹ️'}</span><span className="pt-0.5">On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. Here both axes are on one control, because nobody has the pedals at home.</span></div>
+                  {/* Say plainly which of the two this is doing. The real test
+                      is flown on a stick and a set of foot pedals; without
+                      pedals this is one control doing both jobs, and a player
+                      comparing notes with someone who has sat it should know
+                      that going in. */}
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center" aria-hidden>{'ℹ️'}</span><span className="pt-0.5">On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. Here both axes are on one control unless you have pedals: calibrate them in the Pedals panel and they take the left and right axis, exactly as on the test.</span></div>
                 </div>
 
                 {/* On the card only while there is no stick. With one plugged

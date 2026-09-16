@@ -176,30 +176,75 @@ export function listPads() {
   return out
 }
 
-// Prefer the device the player last calibrated. Falling back to the first
-// connected pad matters for the split Airbus setups where the throttle quadrant
-// enumerates as its own gamepad: without a remembered id, whichever one the
-// driver happened to list first would silently become the stick.
+// Which connected pad is THE STICK.
+//
+// An explicit preference (the setup screen pinning the device it is calibrating)
+// always wins. After that the order matters for the split setups where more
+// than one device enumerates — an Airbus throttle quadrant, or a set of rudder
+// pedals on their own USB lead — because whichever one the driver happened to
+// list first would otherwise silently become the stick:
+//
+//   1. a device that is known ONLY as pedals is never the stick. A pedal
+//      profile on the same id as a stick profile is pedals daisy-chained into
+//      the stick's own port, and that device stays a stick.
+//   2. a device with a calibrated stick profile beats one without.
+//   3. a device with more buttons beats one with fewer. Rudder pedals have
+//      none and a flight stick has a dozen, so this is what keeps uncalibrated
+//      pedals from being handed to the joystick calibration as the stick and
+//      failing it with "no axis moved left and right". It is a property of the
+//      device in front of us, not a table of known devices.
+//
+// Ties keep the driver's order.
 export function pickPad(pads, preferredId) {
   if (!pads || !pads.length) return null
   if (preferredId) {
     const match = pads.find(p => p.id === preferredId)
     if (match) return match
   }
-  return pads[0]
+  const sticks = loadProfiles()
+  const pedals = loadPedalProfiles()
+  let best = null
+  let bestRank = null
+  for (const p of pads) {
+    const isStick = !!sticks[p.id]?.calibrated
+    if (pedals[p.id] && !sticks[p.id]) continue
+    const rank = [isStick ? 1 : 0, p.buttons ? p.buttons.length : 0]
+    if (!best || rank[0] > bestRank[0] || (rank[0] === bestRank[0] && rank[1] > bestRank[1])) {
+      best = p
+      bestRank = rank
+    }
+  }
+  return best
 }
 
 // ── Persistence ──────────────────────────────────────────────────────────────
 // Keyed by gamepad id rather than by index, because the index moves when
 // anything else is plugged in and the id does not.
 
-export function loadProfiles() {
+// Both stores are read on every frame now that pickPad consults them, so the
+// parse is memoised on the raw string: localStorage.getItem is cheap, JSON.parse
+// sixty times a second is not. A write from this tab goes through saveProfile
+// below and changes the string, so the cache can never be stale for longer than
+// one read.
+const storeCache = new Map()
+function readStore(key) {
   try {
-    const raw = localStorage.getItem(PROFILE_STORE_KEY)
+    const raw = localStorage.getItem(key)
     if (!raw) return {}
+    const hit = storeCache.get(key)
+    if (hit && hit.raw === raw) return hit.parsed
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' ? parsed : {}
+    const out = parsed && typeof parsed === 'object' ? parsed : {}
+    storeCache.set(key, { raw, parsed: out })
+    return out
   } catch { return {} }
+}
+function writeStore(key, all) {
+  try { localStorage.setItem(key, JSON.stringify(all)) } catch { /* storage unavailable */ }
+}
+
+export function loadProfiles() {
+  return readStore(PROFILE_STORE_KEY)
 }
 
 export function loadProfile(id) {
@@ -216,19 +261,50 @@ export function loadProfile(id) {
 
 export function saveProfile(profile) {
   if (!profile || !profile.id) return
-  try {
-    const all = loadProfiles()
-    all[profile.id] = profile
-    localStorage.setItem(PROFILE_STORE_KEY, JSON.stringify(all))
-  } catch { /* storage unavailable */ }
+  writeStore(PROFILE_STORE_KEY, { ...loadProfiles(), [profile.id]: profile })
 }
 
 export function clearProfile(id) {
-  try {
-    const all = loadProfiles()
-    delete all[id]
-    localStorage.setItem(PROFILE_STORE_KEY, JSON.stringify(all))
-  } catch { /* storage unavailable */ }
+  const all = { ...loadProfiles() }
+  delete all[id]
+  writeStore(PROFILE_STORE_KEY, all)
+}
+
+// ── Pedal profiles ───────────────────────────────────────────────────────────
+// Rudder pedals are one learned axis on some device: { id, axis, ... } where
+// `axis` has the same { index, centre, min, max, sign } shape as a stick axis
+// and RIGHT pedal forward is the positive end. Their own store rather than a
+// field on the stick profile because the pedals are usually their OWN gamepad
+// (the T.Flight pedals on a USB lead enumerate separately) and only sometimes
+// an extra axis on the stick's (the same pedals daisy-chained into a HOTAS).
+// Keyed by gamepad id like the stick store, and for the same reason. The
+// calibration that fills it lives in pedals.js; the store is here so pickPad
+// can consult it without a circular import.
+
+const PEDAL_STORE_KEY = 'sw_cbat_pedal_profiles'
+export const PEDAL_PROFILE_VERSION = 1
+
+export function loadPedalProfiles() {
+  return readStore(PEDAL_STORE_KEY)
+}
+
+export function loadPedalProfile(id) {
+  if (!id) return null
+  const p = loadPedalProfiles()[id]
+  if (!p || !p.axis || typeof p.axis.index !== 'number') return null
+  if (p.version !== PEDAL_PROFILE_VERSION) return null
+  return p
+}
+
+export function savePedalProfile(profile) {
+  if (!profile || !profile.id) return
+  writeStore(PEDAL_STORE_KEY, { ...loadPedalProfiles(), [profile.id]: profile })
+}
+
+export function clearPedalProfile(id) {
+  const all = { ...loadPedalProfiles() }
+  delete all[id]
+  writeStore(PEDAL_STORE_KEY, all)
 }
 
 // ── Calibration ──────────────────────────────────────────────────────────────
