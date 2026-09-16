@@ -16,6 +16,7 @@ vi.mock('../offlineStore', () => ({
 import { submitCbatResult, flushOutbox } from '../cbatOutbox'
 import { setOutboxOwner } from '../outboxOwner'
 import { isOnline } from '../net'
+import { applyUiTheme } from '../uiTheme'
 
 const API = 'http://x'
 const okRes = { ok: true, status: 201 }
@@ -24,7 +25,7 @@ const ctx = (apiFetch) => ({ apiFetch, API })
 // Queues are now ownership-filtered — nothing flushes unless someone is signed
 // in, so these cases need an owner. Ownership itself is covered in
 // outboxOwner.test.js; here it's just setup.
-beforeEach(() => { mem.clear(); vi.clearAllMocks(); isOnline.mockReturnValue(true); setOutboxOwner('test-user') })
+beforeEach(() => { mem.clear(); vi.clearAllMocks(); isOnline.mockReturnValue(true); setOutboxOwner('test-user'); applyUiTheme('skywatch') })
 
 describe('submitCbatResult', () => {
   it('posts immediately when online and does not queue', async () => {
@@ -38,6 +39,36 @@ describe('submitCbatResult', () => {
     expect(body.playedAt).toBeTruthy()
     expect(body.clientResultId).toBeTruthy()
     expect(apiFetch.mock.calls[0][0]).toBe(`${API}/api/games/cbat/angles/result`)
+  })
+
+  // Every board shows which theme a score was played under, so every
+  // submission says — from the look on screen at game end, not from the game.
+  it('stamps the theme on screen as uiTheme', async () => {
+    const apiFetch = vi.fn().mockResolvedValue(okRes)
+    await submitCbatResult('angles', { correctCount: 5 }, ctx(apiFetch))
+    expect(JSON.parse(apiFetch.mock.calls[0][1].body).uiTheme).toBe('skywatch')
+
+    applyUiTheme('cbat')
+    await submitCbatResult('angles', { correctCount: 5 }, ctx(apiFetch))
+    expect(JSON.parse(apiFetch.mock.calls[1][1].body).uiTheme).toBe('cbat')
+  })
+
+  it('lets a payload that already carries uiTheme win', async () => {
+    const apiFetch = vi.fn().mockResolvedValue(okRes)
+    applyUiTheme('cbat')
+    await submitCbatResult('symbols', { correctCount: 5, uiTheme: 'skywatch' }, ctx(apiFetch))
+    expect(JSON.parse(apiFetch.mock.calls[0][1].body).uiTheme).toBe('skywatch')
+  })
+
+  it('keeps the theme a queued score was played under, not the one at flush time', async () => {
+    isOnline.mockReturnValue(false)
+    applyUiTheme('cbat')
+    await submitCbatResult('target', { totalScore: 10 }, ctx(vi.fn()))
+    applyUiTheme('skywatch')
+    isOnline.mockReturnValue(true)
+    const apiFetch = vi.fn().mockResolvedValue(okRes)
+    await flushOutbox(ctx(apiFetch))
+    expect(JSON.parse(apiFetch.mock.calls[0][1].body).uiTheme).toBe('cbat')
   })
 
   it('queues when offline', async () => {

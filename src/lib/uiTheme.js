@@ -28,6 +28,16 @@ export function applyUiTheme(theme, root = document.documentElement) {
   return resolved
 }
 
+// The theme the page is showing right now, read back off <html> so it is the
+// look the player actually saw rather than whatever the account says (the two
+// only differ mid-transition). Scores are stamped with it as they are
+// submitted (lib/cbatOutbox.js) so every leaderboard can say which theme a
+// run was played under. Outside a document (tests, SSR) it is the default.
+export function currentUiTheme(root = typeof document !== 'undefined' ? document.documentElement : null) {
+  const t = root?.getAttribute?.(THEME_ATTR)
+  return UI_THEMES.includes(t) ? t : DEFAULT_UI_THEME
+}
+
 // A theme name a score row carries, or null for anything else — an older row
 // with no field, or a value the enum no longer knows. Mirrors the backend's
 // normalizeUiTheme (constants/cbatUiThemes.js).

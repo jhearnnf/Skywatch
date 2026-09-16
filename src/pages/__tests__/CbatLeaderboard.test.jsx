@@ -672,9 +672,9 @@ describe('CbatLeaderboard — Input column', () => {
   })
 })
 
-// Symbols is the game whose config sets `showTheme` — its Real CBAT variant is
-// a different screen, so the board says which one each score came from. Same
-// conditional-column rule as Input: everything else carries no uiTheme field.
+// Every board carries the Theme column (which site theme a score was played
+// under), so a SkyWatch score and a Real CBAT score can be told apart at a
+// glance. Unlike Input it is never conditional on the game.
 describe('CbatLeaderboard — Theme column', () => {
   beforeEach(() => vi.clearAllMocks())
 
@@ -721,17 +721,33 @@ describe('CbatLeaderboard — Theme column', () => {
     expect(cell.textContent).toBe('?')
   })
 
-  it('shows no Theme column on a board that does not carry the field', async () => {
+  it('shows the Theme column on a steered board too, after the Input column', async () => {
     setupAuth(mockApi({ allTime: { leaderboard: [
-      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', uiTheme: 'cbat' },
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', inputMethod: 'joystick', uiTheme: 'cbat' },
     ] } }))
     mockUseParams.mockReturnValue({ gameKey: 'rtt' })
     render(<CbatLeaderboard />)
     await selectAllTime()
 
-    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
-    expect(screen.queryByText('Theme')).toBeNull()
-    expect(screen.queryByTestId('ui-theme')).toBeNull()
+    await waitFor(() => expect(screen.getByText('Theme')).toBeDefined())
+    expect(screen.getByText('Input')).toBeDefined()
+    const cell = screen.getByTestId('ui-theme')
+    expect(cell.getAttribute('data-themes')).toBe('cbat')
+    // Input then Theme, matching the header order.
+    const input = screen.getByTestId('input-method')
+    expect(input.compareDocumentPosition(cell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows the Theme column on a weekly board with no Input column', async () => {
+    setupAuth(mockApi({ weekly: { leaderboard: [
+      { _id: 'w1', userId: 'u1', rank: 1, weekTotal: 40, plays: 3, agentNumber: 'A001', uiThemes: ['skywatch'] },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'angles' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('Theme')).toBeDefined())
+    expect(screen.queryByText('Input')).toBeNull()
+    expect(screen.getByTestId('ui-theme').getAttribute('title')).toBe('SkyWatch')
   })
 })
 

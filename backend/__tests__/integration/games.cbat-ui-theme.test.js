@@ -1,9 +1,11 @@
-// Which site theme a Symbols run was played under (constants/cbatUiThemes.js
-// and CBAT_GAMES[key].uiTheme). The Real CBAT variant of Symbols is a
-// different screen — numbered tiles answered by typing, a different glyph
-// pool — so the board says which one a score came from. Covers the result
-// route, both leaderboards surfacing it only for flagged games, and the demo
-// padding that keeps the board looking real.
+// Which site theme a run was played under (constants/cbatUiThemes.js). Every
+// result row carries it (utils/cbatResult.js stamps it from the body) and
+// every board shows it per row, so a SkyWatch score and a Real CBAT score can
+// be told apart at a glance. Symbols is the worked example (its Real CBAT
+// variant is a different screen — numbered tiles answered by typing); Angles
+// stands in for the games whose route never mentions the field. Covers the
+// result route, both leaderboards surfacing it, and the demo padding that
+// keeps the board looking real.
 
 process.env.JWT_SECRET = 'test_secret';
 
@@ -110,23 +112,52 @@ describe('CBAT ui theme — weekly leaderboard (symbols)', () => {
   });
 });
 
-describe('CBAT ui theme — unflagged games are unaffected', () => {
+// Angles' result route never reads uiTheme itself — the shared save helper
+// stamps it — so it proves the field reaches every game, not just the ones
+// whose Real CBAT variant is a different task.
+describe('CBAT ui theme — every game carries it (angles)', () => {
   const ANGLES_URL = '/api/games/cbat/angles/result';
   const sample = { correctCount: 15, totalTime: 60, grade: 'Good' };
 
-  it('carries no uiTheme key on the all-time board', async () => {
-    await request(app).post(ANGLES_URL).set('Cookie', cookie).send({ ...sample, uiTheme: 'cbat' });
-    const res = await request(app).get('/api/games/cbat/angles/leaderboard').set('Cookie', cookie);
-    const row = res.body.data.leaderboard.find(e => e.agentNumber === '1000001');
-    expect(row).not.toHaveProperty('uiTheme');
-    expect(res.body.data.myBest).not.toHaveProperty('uiTheme');
+  it.each(UI_THEMES)('stores uiTheme "%s" on a result', async (theme) => {
+    const res = await request(app).post(ANGLES_URL).set('Cookie', cookie).send({ ...sample, uiTheme: theme });
+    expect(res.status).toBe(201);
+    expect(res.body.data.uiTheme).toBe(theme);
   });
 
-  it('carries no uiThemes key on the weekly board', async () => {
+  it('normalises a missing or unknown uiTheme to null', async () => {
+    const a = await request(app).post(ANGLES_URL).set('Cookie', cookie).send(sample);
+    expect(a.body.data.uiTheme).toBeNull();
+    const b = await request(app).post(ANGLES_URL).set('Cookie', cookie).send({ ...sample, uiTheme: 'neon' });
+    expect(b.body.data.uiTheme).toBeNull();
+  });
+
+  it("shows the BEST run's uiTheme on the all-time board, for me and in the list", async () => {
+    await request(app).post(ANGLES_URL).set('Cookie', cookie).send({ ...sample, correctCount: 10, uiTheme: 'skywatch' });
+    await request(app).post(ANGLES_URL).set('Cookie', cookie).send({ ...sample, correctCount: 18, uiTheme: 'cbat' });
+    const res = await request(app).get('/api/games/cbat/angles/leaderboard').set('Cookie', cookie);
+    const row = res.body.data.leaderboard.find(e => e.agentNumber === '1000001');
+    expect(row.uiTheme).toBe('cbat');
+    expect(res.body.data.myBest.uiTheme).toBe('cbat');
+  });
+
+  it('lists the distinct themes on the weekly board and pads demo rows with one', async () => {
     await request(app).post(ANGLES_URL).set('Cookie', cookie).send({ ...sample, uiTheme: 'cbat', playedAt: inWeek });
+    await request(app).post(ANGLES_URL).set('Cookie', cookie).send({ ...sample, uiTheme: 'skywatch', playedAt: inWeek });
     const res = await request(app).get('/api/games/cbat/angles/leaderboard?period=weekly').set('Cookie', cookie);
     const row = res.body.data.leaderboard.find(e => e.agentNumber === '1000001') || res.body.data.myBest;
-    expect(row).not.toHaveProperty('uiThemes');
+    expect([...row.uiThemes].sort()).toEqual(['cbat', 'skywatch']);
+    res.body.data.leaderboard.filter(e => e.isFake).forEach(e => {
+      expect(e.uiThemes.length).toBe(1);
+      expect(UI_THEMES).toContain(e.uiThemes[0]);
+    });
+  });
+
+  it('pads the all-time board with demo rows that carry a theme', async () => {
+    const res = await request(app).get('/api/games/cbat/angles/leaderboard').set('Cookie', cookie);
+    const { leaderboard } = res.body.data;
+    expect(leaderboard.length).toBe(20);
+    leaderboard.forEach(e => expect(UI_THEMES).toContain(e.uiTheme));
   });
 });
 
@@ -158,6 +189,40 @@ describe('CBAT ui theme — code-duplicates', () => {
     expect(row.uiTheme).toBe('cbat');
     expect(all.body.data.myBest.uiTheme).toBe('cbat');
     const weekly = await request(app).get('/api/games/cbat/code-duplicates/leaderboard?period=weekly').set('Cookie', cookie);
+    const mine = weekly.body.data.leaderboard.find(e => e.agentNumber === '1000001') || weekly.body.data.myBest;
+    expect([...mine.uiThemes].sort()).toEqual(['cbat', 'skywatch']);
+  });
+});
+
+// CUT: under the Real CBAT theme its Mission display is the real one (field
+// entry + dispenser) rather than the station drop, so both its boards say
+// which variant a score came from. Both difficulties, since each has its own
+// collection.
+describe.each(['cut', 'cut-easier'])('CBAT ui theme — %s', (key) => {
+  const url = `/api/games/cbat/${key}/result`;
+  const sample = { totalScore: 640, totalTime: 180, tasksCompleted: 12, tasksMissed: 2, warningSeconds: 9 };
+
+  it.each(UI_THEMES)('stores uiTheme "%s" on a result', async (theme) => {
+    const res = await request(app).post(url).set('Cookie', cookie).send({ ...sample, uiTheme: theme });
+    expect(res.status).toBe(201);
+    expect(res.body.data.uiTheme).toBe(theme);
+  });
+
+  it('normalises a missing or unknown uiTheme to null', async () => {
+    const a = await request(app).post(url).set('Cookie', cookie).send(sample);
+    expect(a.body.data.uiTheme).toBeNull();
+    const b = await request(app).post(url).set('Cookie', cookie).send({ ...sample, uiTheme: 'neon' });
+    expect(b.body.data.uiTheme).toBeNull();
+  });
+
+  it("shows the BEST run's uiTheme on the all-time board and the set on the weekly one", async () => {
+    await request(app).post(url).set('Cookie', cookie).send({ ...sample, totalScore: 500, uiTheme: 'skywatch', playedAt: inWeek });
+    await request(app).post(url).set('Cookie', cookie).send({ ...sample, totalScore: 900, uiTheme: 'cbat', playedAt: inWeek });
+    const all = await request(app).get(`/api/games/cbat/${key}/leaderboard`).set('Cookie', cookie);
+    const row = all.body.data.leaderboard.find(e => e.agentNumber === '1000001');
+    expect(row.uiTheme).toBe('cbat');
+    expect(all.body.data.myBest.uiTheme).toBe('cbat');
+    const weekly = await request(app).get(`/api/games/cbat/${key}/leaderboard?period=weekly`).set('Cookie', cookie);
     const mine = weekly.body.data.leaderboard.find(e => e.agentNumber === '1000001') || weekly.body.data.myBest;
     expect([...mine.uiThemes].sort()).toEqual(['cbat', 'skywatch']);
   });

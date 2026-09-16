@@ -527,14 +527,14 @@ export default function CbatLeaderboard() {
                     <span className="text-right">Points</span>
                     <span className="text-right">Plays</span>
                     {cfg.showInput && <span className="text-right">Input</span>}
-                    {cfg.showTheme && <span className="text-right">Theme</span>}
+                    <span className="text-right">Theme</span>
                   </>
                 ) : (
                   <>
                     <span className="text-right">{cfg.scoreLabel}</span>
                     {!cfg.hideTime && <span className="text-right">Time</span>}
                     {cfg.showInput && <span className="text-right">Input</span>}
-                    {cfg.showTheme && <span className="text-right">Theme</span>}
+                    <span className="text-right">Theme</span>
                   </>
                 )}
               </div>

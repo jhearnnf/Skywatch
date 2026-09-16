@@ -13,6 +13,7 @@ import { isOnline } from './net'
 import { outboxPut, outboxDelete, outboxAll, outboxCount } from './offlineStore'
 import { makeClientId } from './clientId'
 import { getOutboxOwner, ownsQueuedItem } from './outboxOwner'
+import { currentUiTheme } from './uiTheme'
 
 const resultUrl = (API, gameKey) => `${API}/api/games/cbat/${gameKey}/result`
 
@@ -55,10 +56,15 @@ export async function pendingCount(userId) {
 //   payload — the game-specific result body (the same object you used to POST)
 //   ctx     — { apiFetch, API } from useAuth()
 // Returns { synced, queued, res }.
+//
+// Every score is stamped with the theme it was played under (uiTheme), read
+// here at game end so a queued score keeps the theme it was actually played in
+// rather than whatever is on screen when it finally syncs. A game that knows
+// better (its payload already carries uiTheme) wins.
 export async function submitCbatResult(gameKey, payload, { apiFetch, API }) {
   const clientResultId = makeClientId()
   const playedAt = new Date().toISOString()
-  const body = { ...payload, clientResultId, playedAt }
+  const body = { uiTheme: currentUiTheme(), ...payload, clientResultId, playedAt }
   // userId stamps who this score belongs to, so a later flush can't post it as
   // somebody else on a shared device. See lib/outboxOwner.js.
   const item = { clientResultId, gameKey, body, queuedAt: Date.now(), userId: getOutboxOwner() }

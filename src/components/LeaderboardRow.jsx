@@ -4,15 +4,15 @@
 // preview of the destination — same medals, same "you" highlight, same columns.
 //
 // Two variants:
-//   weekly   — Rank · Agent · Points (weekTotal) · Plays [· Input]
-//   all-time — Rank · Agent · <scoreLabel> · Time [· Input]
+//   weekly   — Rank · Agent · Points (weekTotal) · Plays [· Input] · Theme
+//   all-time — Rank · Agent · <scoreLabel> · Time [· Input] · Theme
 //
 // The trailing Input column is opt-in via `cfg.showInput` (only ACT, RTT and
-// SMA carry the field — see cbatGames.js) and is dropped from the compact
-// variant regardless, because the post-game chase window has no width to
-// spare for a fifth track. The Theme column (`cfg.showTheme`, Symbols — whose
-// Real CBAT variant is a different screen) is the same kind of icon-only
-// track and follows the same rules.
+// SMA carry the field — see cbatGames.js). The Theme column (which site theme
+// the run was played under: SkyWatch or Real CBAT) is on every board, so a
+// score set under either look can be told apart at a glance. Both are dropped
+// from the compact variant regardless, because the post-game chase window has
+// no width to spare for another track.
 //
 // Name precedence matches everywhere: a precomputed `entry.name` (reveal
 // neighbours) wins, else displayName → admin email → agent number.
@@ -42,27 +42,24 @@ import { UI_THEME_LABELS, normalizeUiTheme } from '../lib/uiTheme'
 // icon-only (the name is the hover tooltip), so a track is 2.5rem and 3.5rem
 // on `sm:`, enough for a "Mixed" week's two or three icons side by side. The
 // two are the same width, so the layout only cares how many trailing icon
-// tracks there are (0, 1 or 2), and every combination is still a full
-// literal string below.
+// tracks there are: one (Theme, every board) or two (Input as well), and
+// every combination is still a full literal string below.
 export const iconTrackCount = (cfg, compact = false) =>
-  compact ? 0 : (cfg?.showInput ? 1 : 0) + (cfg?.showTheme ? 1 : 0)
+  compact ? 0 : 1 + (cfg?.showInput ? 1 : 0)
 
 export const rowCols = (variant, cfg, compact = false) => {
   const icons = iconTrackCount(cfg, compact)
   if (variant === 'weekly') {
     if (compact) return 'grid-cols-[2.25rem_1fr_3.25rem_2.25rem]'
     if (icons === 2) return 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem_2.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4rem_3.5rem_3.5rem]'
-    if (icons === 1) return 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4rem_3.5rem]'
-    return 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem] sm:grid-cols-[3rem_1fr_5rem_4rem]'
+    return 'grid-cols-[2.5rem_1fr_3.25rem_2.25rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4rem_3.5rem]'
   }
   if (cfg?.hideTime) {
     if (icons === 2) return 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_3.5rem_3.5rem]'
-    if (icons === 1) return 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_3.5rem]'
-    return 'grid-cols-[2.5rem_1fr_3.5rem] sm:grid-cols-[3rem_1fr_5rem]'
+    return 'grid-cols-[2.5rem_1fr_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_3.5rem]'
   }
   if (icons === 2) return 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem_2.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem_3.5rem_3.5rem]'
-  if (icons === 1) return 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem_3.5rem]'
-  return 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem]'
+  return 'grid-cols-[2.5rem_1fr_3.5rem_3.5rem_2.5rem] sm:grid-cols-[3rem_1fr_5rem_4.5rem_3.5rem]'
 }
 
 // Row padding/gutter shrink alongside the columns on mobile for the same reason.
@@ -141,8 +138,8 @@ function InputMethodCell({ variant, entry }) {
 // The Theme column's cell, the Input cell's twin: all-time carries one
 // `entry.uiTheme` (the run that set the best score), weekly carries
 // `entry.uiThemes`, the distinct non-null themes across the week's plays. A
-// week played under both shows both marks, because the Real CBAT variant of
-// the game is a different screen and the total is not comparable to a
+// week played under both shows both marks, because on the games whose Real
+// CBAT variant is a different screen the total is not comparable to a
 // single-theme rival's. No recorded theme (a score older than the field)
 // shows the muted "?" the Input cell uses, for the same reason.
 function UiThemeCell({ variant, entry }) {
@@ -215,7 +212,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           <GainCell value={entry.weekTotal} gain={gains?.points} pulse={pulse} tone="text-brand-600" className="font-bold" />
           <GainCell value={entry.plays} gain={gains?.plays} pulse={pulse} tone="text-slate-400" />
           {cfg?.showInput && !compact && <InputMethodCell variant={variant} entry={entry} />}
-          {cfg?.showTheme && !compact && <UiThemeCell variant={variant} entry={entry} />}
+          {!compact && <UiThemeCell variant={variant} entry={entry} />}
         </>
       ) : (
         <>
@@ -224,7 +221,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           </span>
           {!cfg.hideTime && <span className="text-right font-mono text-slate-400">{entry.bestTime.toFixed(cfg.timeDecimals ?? 1)}s</span>}
           {cfg?.showInput && !compact && <InputMethodCell variant={variant} entry={entry} />}
-          {cfg?.showTheme && !compact && <UiThemeCell variant={variant} entry={entry} />}
+          {!compact && <UiThemeCell variant={variant} entry={entry} />}
         </>
       )}
     </motion.div>

@@ -7,7 +7,7 @@
 // again without a separate `sm:` override.
 
 import { describe, it, expect } from 'vitest'
-import { rowCols, rowPad } from '../LeaderboardRow'
+import { iconTrackCount, rowCols, rowPad } from '../LeaderboardRow'
 
 // Sum the rem widths of the non-`1fr` tracks in the base (unprefixed) class.
 const mobileFixedRem = (classes) => {
@@ -26,20 +26,17 @@ describe('leaderboard column budget', () => {
   // leaves roughly 18rem of row, so the fixed columns are what's left to spend.
   // Budgets are per-variant because the columns carry different content — the
   // widest score string is 5 mono characters ("12/40") and the widest time is
-  // 6 ("12.34s"), where weekly's Plays is only ever 1-2 digits.
+  // 6 ("12.34s"), where weekly's Plays is only ever 1-2 digits. Every board
+  // carries the Theme column, a 2.5rem icon-only track, so it is in every
+  // budget; the Input column (steered games only) is the same kind of track
+  // and widens the budget by exactly that much, not more.
   it.each([
-    ['weekly', 'weekly', cfg, 8],
-    ['all-time', 'alltime', cfg, 9.5],
-    ['all-time without the Time column', 'alltime', { hideTime: true }, 6],
-    // The Input column (steered games only) adds a 2rem icon-only track on
-    // mobile — budgets widen by exactly that much, not more.
-    ['weekly with Input', 'weekly', { ...cfg, showInput: true }, 10.5],
-    ['all-time without Time, with Input', 'alltime', { hideTime: true, showInput: true }, 8.5],
-    // The Theme column (Symbols) is the same 2.5rem icon-only track; both
-    // together are two such tracks, never a wider one.
-    ['all-time with Theme', 'alltime', { ...cfg, showTheme: true }, 12],
-    ['all-time with Input and Theme', 'alltime', { ...cfg, showInput: true, showTheme: true }, 14.5],
-    ['weekly with Input and Theme', 'weekly', { ...cfg, showInput: true, showTheme: true }, 13],
+    ['weekly', 'weekly', cfg, 10.5],
+    ['all-time', 'alltime', cfg, 12],
+    ['all-time without the Time column', 'alltime', { hideTime: true }, 8.5],
+    ['weekly with Input', 'weekly', { ...cfg, showInput: true }, 13],
+    ['all-time with Input', 'alltime', { ...cfg, showInput: true }, 14.5],
+    ['all-time without Time, with Input', 'alltime', { hideTime: true, showInput: true }, 11],
   ])('keeps %s fixed columns within the mobile budget', (_label, variant, c, budget) => {
     expect(mobileFixedRem(rowCols(variant, c))).toBeLessThanOrEqual(budget)
   })
@@ -63,10 +60,17 @@ describe('leaderboard column budget', () => {
     expect(rowPad(true)).toBe('gap-1.5 px-2.5')
   })
 
-  // showInput's extra track exists only where there's room for it — the compact
-  // variant (the post-game chase window) is already fighting for width.
+  // The icon tracks exist only where there's room for them — the compact
+  // variant (the post-game chase window) is already fighting for width, so it
+  // carries neither Input nor Theme.
   it('ignores showInput on the compact variant', () => {
     expect(rowCols('weekly', { ...cfg, showInput: true }, true)).toBe(rowCols('weekly', cfg, true))
+  })
+
+  it('drops the Theme track on the compact variant', () => {
+    expect(iconTrackCount(cfg, true)).toBe(0)
+    expect(iconTrackCount({ ...cfg, showInput: true }, true)).toBe(0)
+    expect(trackCounts(rowCols('weekly', cfg, true))).toEqual([4])
   })
 
   // Sum of tracks per bracket ("grid-cols-[...]" appears twice: the unprefixed
@@ -77,25 +81,23 @@ describe('leaderboard column budget', () => {
 
   it('adds exactly one extra track (mobile and sm:) when showInput is set', () => {
     for (const variant of ['weekly', 'alltime']) {
-      const base = trackCounts(rowCols(variant, cfg))
-      const withInput = trackCounts(rowCols(variant, { ...cfg, showInput: true }))
-      expect(withInput).toEqual(base.map(n => n + 1))
-    }
-  })
-
-  // showTheme is the same kind of track, and the two stack rather than share.
-  it('adds one track for showTheme and two for showInput + showTheme', () => {
-    for (const variant of ['weekly', 'alltime']) {
       for (const c of [cfg, { hideTime: true }]) {
         const base = trackCounts(rowCols(variant, c))
-        expect(trackCounts(rowCols(variant, { ...c, showTheme: true }))).toEqual(base.map(n => n + 1))
-        expect(trackCounts(rowCols(variant, { ...c, showInput: true, showTheme: true }))).toEqual(base.map(n => n + 2))
+        const withInput = trackCounts(rowCols(variant, { ...c, showInput: true }))
+        expect(withInput).toEqual(base.map(n => n + 1))
       }
     }
   })
 
-  it('ignores showTheme on the compact variant', () => {
-    expect(rowCols('weekly', { ...cfg, showTheme: true }, true)).toBe(rowCols('weekly', cfg, true))
+  // The Theme track is on every non-compact board: one icon track by default,
+  // two with Input, in both the base and the sm: bracket.
+  it('always carries the Theme track outside compact mode', () => {
+    expect(iconTrackCount(cfg)).toBe(1)
+    expect(iconTrackCount({ ...cfg, showInput: true })).toBe(2)
+    expect(trackCounts(rowCols('weekly', cfg))).toEqual([5, 5])
+    expect(trackCounts(rowCols('alltime', cfg))).toEqual([5, 5])
+    expect(trackCounts(rowCols('alltime', { hideTime: true }))).toEqual([4, 4])
+    expect(trackCounts(rowCols('alltime', { hideTime: true, showInput: true }))).toEqual([5, 5])
   })
 })
 
@@ -112,8 +114,6 @@ describe('rowCols classes are literal in the source', () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'LeaderboardRow.jsx'), 'utf8')
   const configs = [
     {}, { hideTime: true }, { showInput: true }, { hideTime: true, showInput: true },
-    { showTheme: true }, { hideTime: true, showTheme: true },
-    { showInput: true, showTheme: true }, { hideTime: true, showInput: true, showTheme: true },
   ]
   it.each(['weekly', 'alltime'])('every %s variant is written out in full', (variant) => {
     for (const c of configs) {
