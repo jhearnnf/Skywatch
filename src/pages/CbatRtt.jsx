@@ -20,6 +20,7 @@ import { createRttInput } from '../utils/cbat/rttInput'
 import { useMockStick } from '../utils/cbat/useMockStick'
 import StickSetup from '../components/cbat/StickSetup'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import CbatStickRecommendation from '../components/cbat/CbatStickRecommendation'
 import { useStickPresence } from '../utils/cbat/useStickPresence'
 import {
   RTT_DIFFICULTIES, RTT_LAUNCH_MS, rttTuning,
@@ -412,11 +413,14 @@ export default function CbatRtt() {
           {/* Intro */}
           {(phase === 'intro' || launching) && (
             <CbatStickLayout
-              stick={(
+              stick={(<>
                 <StickSetup title="Joystick" mockActive={mockStick}>
                   {stickConnected ? sensitivityControl : null}
                 </StickSetup>
-              )}
+                {/* The stick we recommend, under the panel that has just said
+                    there is no stick. Gone the moment one is plugged in. */}
+                {!stickConnected && <CbatStickRecommendation />}
+              </>)}
             >
               <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}

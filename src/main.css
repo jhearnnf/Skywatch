@@ -1257,6 +1257,15 @@ body.cbat-dpt-fullwidth .app-shell-content {
   animation: cbat-stick-detected 1.8s ease-in-out infinite;
 }
 
+/* The hardware recommendation under the joystick panel borrows the same pulse.
+   It is the reply to the amber attract blink above it, and the player has to
+   read it and click it, so it gets the calm blue rather than the snap. Its
+   own class so a change to the detected banner is a decision, not a side
+   effect. See components/cbat/CbatStickRecommendation.jsx. */
+.cbat-stick-recommend {
+  animation: cbat-stick-detected 1.8s ease-in-out infinite;
+}
+
 /* Attract mode — the cabinet trying to get your attention across the arcade.
    A hard STEPPED blink, not a fade: arcade attract text snaps on and off, and
    that snap is most of why it catches the eye from the other side of the room.

@@ -48,6 +48,7 @@ import {
 import { useMockStick } from '../utils/cbat/useMockStick'
 import StickSetup from '../components/cbat/StickSetup'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import CbatStickRecommendation from '../components/cbat/CbatStickRecommendation'
 import CbatArcadeNotice from '../components/cbat/CbatArcadeNotice'
 import { useStickPresence } from '../utils/cbat/useStickPresence'
 import ActCraftPicker from '../components/cbat/ActCraftPicker'
@@ -1902,7 +1903,7 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
   return (
     <CbatStickLayout
       aside={headphonesNotice}
-      stick={
+      stick={<>
         <StickSetup title="Joystick" mockActive={mockStick}>
           {stickConnected && (<>
           <label htmlFor="act-stick-rate" className="flex items-center justify-between text-[10px] text-slate-500 uppercase tracking-wide mb-2">
@@ -1922,7 +1923,10 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
           <p className="mt-1 text-[10px] text-game-muted">How fast the ball turns with the stick hard over.</p>
           </>)}
         </StickSetup>
-      }
+        {/* The stick we recommend, under the panel that has just said there
+            is no stick. Gone the moment one is plugged in. */}
+        {!stickConnected && <CbatStickRecommendation />}
+      </>}
     >
     <motion.div
       initial={{ opacity: 0, y: 10 }}

@@ -30,7 +30,8 @@ import StickSetup from '../components/cbat/StickSetup'
 import PedalSetup from '../components/cbat/PedalSetup'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
-import { useStickPresence } from '../utils/cbat/useStickPresence'
+import CbatStickRecommendation from '../components/cbat/CbatStickRecommendation'
+import { useStickPresence, usePedalPresence } from '../utils/cbat/useStickPresence'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
@@ -224,6 +225,7 @@ export default function CbatSma() {
   // moves into the joystick panel. With no stick it still scales the mouse,
   // touch pad and keys, so it stays on the card.
   const stickConnected = useStickPresence() || mockStick
+  const pedalsConnected = usePedalPresence()
 
   const simRef = useRef(null)
   const inputRef = useRef(null)
@@ -508,6 +510,10 @@ export default function CbatSma() {
                 {/* SMA is the one test flown on pedals too, so it is the one
                     page with a pedal panel. */}
                 <PedalSetup />
+                {/* The kit we recommend, under the panels that have just said
+                    what is missing. Each item goes the moment its device is
+                    plugged in, and the cabinet with it once both are. */}
+                <CbatStickRecommendation stick={!stickConnected} pedals={!pedalsConnected} />
               </>)}
             >
               <motion.div
