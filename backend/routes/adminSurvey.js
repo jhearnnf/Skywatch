@@ -23,6 +23,8 @@ const {
   resolveVariant,
   EMAIL_VARIANTS,
 } = require('../utils/surveyEmail');
+const { summariseCbatForUsers } = require('../utils/cbatAptitudeReport');
+const surveyRoles = require('../constants/surveyRoles.json');
 const {
   SURVEY_CAMPAIGN,
   SURVEY_TEST_CAMPAIGN,
@@ -32,6 +34,13 @@ const {
 } = require('../constants/survey');
 
 router.use(protect, adminOnly);
+
+// Which Aptitude Report battery a questionnaire role answer scores against. Only the RAF roles
+// carry one (their keys ARE the battery keys — see surveyRoles.json); every other service's role
+// is the respondent's own description and has no sheet behind it.
+const BATTERY_BY_ROLE = Object.fromEntries(
+  surveyRoles.groups.flatMap(g => g.roles.filter(r => r.battery).map(r => [r.key, r.battery])),
+);
 
 // Thresholds come from AppSettings when set, the query string when an admin is
 // experimenting with the sliders, and constants/survey.js otherwise. Query wins
@@ -392,8 +401,24 @@ router.get('/responses', async (_req, res) => {
   try {
     const responses = await SurveyResponse.find({ campaign: SURVEY_CAMPAIGN })
       .sort({ updatedAt: -1 })
-      .populate('userId', 'agentNumber displayName email cbatPassed')
+      .populate('userId', 'agentNumber displayName email cbatPassed cbatTargetBattery')
       .lean();
+
+    // How much of the roster each respondent played here, and what the report would have
+    // estimated for the role they sat — the two things an admin reads an outcome against.
+    // Scored against the role they answered with; someone whose role has no battery (a non-RAF
+    // service, "other") falls back to the role they picked on /cbat/report, and with neither the
+    // estimate is left off rather than scored against a role they never named.
+    const respondentBattery = new Map(responses
+      .filter(r => r.userId?._id)
+      .map(r => [String(r.userId._id), BATTERY_BY_ROLE[r.role] ?? r.userId.cbatTargetBattery ?? null]));
+    const cbatByUser = await summariseCbatForUsers(
+      [...respondentBattery.keys()],
+      (id) => respondentBattery.get(id),
+    );
+    for (const r of responses) {
+      r.cbat = r.userId?._id ? cbatByUser[String(r.userId._id)] ?? null : null;
+    }
 
     const answered = (v) => v !== null && v !== undefined;
     const mean = (nums) => (nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null);

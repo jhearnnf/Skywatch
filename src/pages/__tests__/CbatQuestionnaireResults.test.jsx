@@ -136,6 +136,51 @@ describe('CbatQuestionnaireResults — answers', () => {
     expect(screen.getByText('Did not pass')).toBeInTheDocument()
   })
 
+  // What they did here before they sat it, beside what they told us about it.
+  it('shows how much of the roster they played and the estimate for their role', async () => {
+    mount(payload({ responses: [{
+      _id: 'r3', userId: { agentNumber: '555' },
+      satTest: true, role: 'pilot', passedForRole: 'yes',
+      cbat: {
+        runs: 47, gamesPlayed: 12, gamesTotal: 23,
+        aptitude: { battery: 'pilot', label: 'Pilot', cutoff: 112, maxScore: 180, score: 128, status: 'pass', coverage: 91 },
+      },
+    }] }))
+
+    const row = within(await screen.findByTestId('results-cbat-summary'))
+    expect(row.getByText('12 / 23')).toBeInTheDocument()
+    expect(row.getByText('128 / 180')).toBeInTheDocument()
+    expect(row.getByText(/for Pilot/)).toBeInTheDocument()
+    expect(row.getByText('Pass')).toBeInTheDocument()
+  })
+
+  it('leaves the estimate off when no role could be scored, and never invents one', async () => {
+    mount(payload({ responses: [{
+      _id: 'r4', userId: { agentNumber: '556' },
+      satTest: true, role: 'rn-pilot', passedForRole: 'no',
+      cbat: { runs: 3, gamesPlayed: 1, gamesTotal: 23, aptitude: null },
+    }] }))
+
+    const row = within(await screen.findByTestId('results-cbat-summary'))
+    expect(row.getByText('1 / 23')).toBeInTheDocument()
+    expect(row.queryByText(/Est\. score/)).toBeNull()
+  })
+
+  it('shows a dash rather than a number when the role has no Hard runs behind it', async () => {
+    mount(payload({ responses: [{
+      _id: 'r5', userId: { agentNumber: '557' },
+      satTest: true, role: 'wso', passedForRole: 'waiting',
+      cbat: {
+        runs: 6, gamesPlayed: 2, gamesTotal: 23,
+        aptitude: { battery: 'wso', label: 'WSO', cutoff: 100, maxScore: 180, score: null, status: 'unscored', coverage: 0 },
+      },
+    }] }))
+
+    const row = within(await screen.findByTestId('results-cbat-summary'))
+    expect(row.getByText('— / 180')).toBeInTheDocument()
+    expect(row.queryByText('No score')).toBeNull()
+  })
+
   it('reports a load failure instead of an empty page', async () => {
     global.fetch = vi.fn(async () => ({ ok: false, json: async () => ({ message: 'nope' }) }))
     render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)

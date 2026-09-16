@@ -874,6 +874,94 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
   }));
 }
 
+// ── Admin: one line per person ───────────────────────────────────────────────────────────────
+// The questionnaire results page lists people who have just told us how the real test went, and
+// wants two numbers beside each of them: how much of the roster they played here, and what the
+// report would have estimated for the role they sat. Both for many users in a couple of queries.
+//
+// "Games played" is counted over the SCORED roster — the games a battery can draw on — and a game
+// counts as played on EITHER difficulty. That is a different question from the score, which stays
+// Hard-only: here we are asking whether they used the game at all, not whether the runs are
+// admissible evidence. Someone who played ten games on Easier has engaged with ten games, and a
+// "0 / 23" beside them would be a lie about what they did.
+//
+// Every registry key folds onto the scored key it is a variant of (`cut-easier` → `cut`, `ant-hard`
+// → `ant`, `dpt-easier` → `dpt-hard`); keys with no scored counterpart — the Trace practise boards,
+// ANT practise, the retired eight-round DPT — still count as runs but not as a game.
+const SCORED_FAMILY_BY_KEY = (() => {
+  const map = {};
+  for (const key of Object.keys(CBAT_GAMES)) {
+    const family = SCORED_GAME_KEYS.find(k =>
+      key === k
+      || key === `${k}${EASIER_SUFFIX}`
+      || CBAT_GAMES[key]?.hardKey === k
+      || CBAT_GAMES[k]?.hardKey === key,
+    );
+    if (family) map[key] = family;
+  }
+  return map;
+})();
+
+// One $unionWith aggregation across every result collection, the same shape buildCbatUserList
+// uses to rank players, with a per-game tag on each leg so the group can count distinct games as
+// well as runs. Returns { [userId]: { runs, gamesPlayed } } for the users that have any.
+async function countCbatPlaysForUsers(userIds) {
+  if (!userIds.length) return {};
+  const keys = Object.keys(CBAT_GAMES);
+  const leg = (gameKey) => {
+    const cfg = CBAT_GAMES[gameKey];
+    return [
+      { $match: { ...(cfg.modeFilter ?? {}), userId: { $in: userIds } } },
+      { $project: { _id: 0, userId: 1, game: { $literal: SCORED_FAMILY_BY_KEY[gameKey] ?? null } } },
+    ];
+  };
+  const [head, ...tail] = keys;
+  const rows = await CBAT_GAMES[head].Model.aggregate([
+    ...leg(head),
+    ...tail.map(k => ({ $unionWith: { coll: CBAT_GAMES[k].Model.collection.name, pipeline: leg(k) } })),
+    { $group: { _id: { userId: '$userId', game: '$game' }, runs: { $sum: 1 } } },
+    { $group: {
+      _id: '$_id.userId',
+      runs: { $sum: '$runs' },
+      gamesPlayed: { $sum: { $cond: [{ $eq: ['$_id.game', null] }, 0, 1] } },
+    } },
+  ]);
+  return Object.fromEntries(rows.map(r => [String(r._id), { runs: r.runs, gamesPlayed: r.gamesPlayed }]));
+}
+
+// The two numbers above plus the estimate for one battery per user, or null where the caller could
+// not name one. `batteryKeyFor(userId)` decides which role each person is scored against; the
+// questionnaire page passes the role they answered with, falling back to the one they chose on
+// /cbat/report. Scoring is the same buildBatteryReport the report page runs, so the figure here is
+// the figure they would have seen.
+async function summariseCbatForUsers(userIds, batteryKeyFor = () => null) {
+  const ids = userIds.map(id => new mongoose.Types.ObjectId(String(id)));
+  const [plays, form] = await Promise.all([
+    countCbatPlaysForUsers(ids),
+    loadFormForUsers(ids),
+  ]);
+
+  return Object.fromEntries(ids.map((id) => {
+    const key = String(id);
+    const played = plays[key] ?? { runs: 0, gamesPlayed: 0 };
+    const battery = BATTERY_BY_KEY[batteryKeyFor(key)] ?? null;
+    let aptitude = null;
+    if (battery) {
+      const report = played.runs ? buildBatteryReport(battery, form[key] ?? {}) : null;
+      aptitude = {
+        battery:  battery.key,
+        label:    battery.label,
+        cutoff:   battery.cutoff,
+        maxScore: MAX_SCORE,
+        score:    report?.score ?? null,
+        status:   report?.status ?? 'unscored',
+        coverage: report?.coverage ?? 0,
+      };
+    }
+    return [key, { ...played, gamesTotal: SCORED_GAME_KEYS.length, aptitude }];
+  }));
+}
+
 async function buildAptitudeReport(userId, batteryKey) {
   const battery = BATTERY_BY_KEY[batteryKey];
   if (!battery) return null;
@@ -886,6 +974,7 @@ module.exports = {
   buildAllBatteryScores,
   buildCbatUserList,
   loadFormForUsers,
+  summariseCbatForUsers,
   USER_LIST_LIMIT,
   buildBatteryReport,
   buildGaps,

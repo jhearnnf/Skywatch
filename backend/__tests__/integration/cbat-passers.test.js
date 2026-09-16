@@ -38,6 +38,9 @@ const {
 
 const GameSessionCbatTargetResult = require('../../models/GameSessionCbatTargetResult');
 const GameSessionCbatStart        = require('../../models/GameSessionCbatStart');
+const GameSessionCbatCutEasierResult = require('../../models/GameSessionCbatCutEasierResult');
+const cutEasierRun = { totalScore: 300, totalTime: 180 };
+const { SCORED_GAME_KEYS }        = require('../../constants/cbatBatteries');
 const SurveyInvite                = require('../../models/SurveyInvite');
 const SurveyResponse              = require('../../models/SurveyResponse');
 const { SURVEY_CAMPAIGN }         = require('../../constants/survey');
@@ -823,6 +826,45 @@ describe('comments on the results endpoint', () => {
     await request(app).post(`/api/survey/${invite.token}/opt-out`);
     res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
     expect(res.body.data.optedOut[0].userId).toBe(String(waiting._id));
+  });
+
+  // What they did here, beside what they told us. Games played counts either
+  // difficulty over the scored roster; the estimate is the report's own
+  // arithmetic for the role they answered with.
+  it('carries how much of the roster they played and the estimate for their role', async () => {
+    const u = await candidate({ completions: 5 });   // five Hard Target runs
+    await GameSessionCbatCutEasierResult.create({ userId: u._id, ...cutEasierRun });
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    const invite = await SurveyInvite.findOne({ userId: u._id });
+    await request(app).patch(`/api/survey/${invite.token}`).send({ satTest: true, role: 'pilot', passedForRole: 'yes' });
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    const { cbat } = res.body.data.responses[0];
+    expect(cbat.runs).toBe(6);
+    expect(cbat.gamesPlayed).toBe(2);          // Target, and CUT on Easier
+    expect(cbat.gamesTotal).toBe(SCORED_GAME_KEYS.length);
+    expect(cbat.aptitude).toEqual(expect.objectContaining({
+      battery: 'pilot', cutoff: 112, maxScore: 180,
+    }));
+    expect(cbat.aptitude.score).toEqual(expect.any(Number));
+    expect(cbat.aptitude.score).toBeLessThanOrEqual(180);
+  });
+
+  it('falls back to the role they picked on the report, and to nothing at all', async () => {
+    const rn = await candidate();
+    await User.updateOne({ _id: rn._id }, { cbatTargetBattery: 'wso' });
+    const none = await candidate();
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    for (const [u, role] of [[rn, 'rn-pilot'], [none, 'raaf-pilot']]) {
+      const invite = await SurveyInvite.findOne({ userId: u._id });
+      await request(app).patch(`/api/survey/${invite.token}`).send({ satTest: true, role, passedForRole: 'yes' });
+    }
+
+    const res = await request(app).get('/api/admin/cbat-passers/responses').set('Cookie', cookie);
+    const byId = Object.fromEntries(res.body.data.responses.map(r => [String(r.userId._id), r.cbat]));
+    expect(byId[String(rn._id)].aptitude.battery).toBe('wso');
+    expect(byId[String(none._id)].aptitude).toBeNull();
+    expect(byId[String(none._id)].gamesPlayed).toBe(1);
   });
 
   it('leaves comments empty when nobody wrote one', async () => {

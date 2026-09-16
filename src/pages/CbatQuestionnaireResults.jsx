@@ -433,6 +433,11 @@ function AnswersTable({ rows, highlightUserId, onOpenSheets }) {
             {r.playReviewClicked && <span className="text-brand-700 font-semibold">Opened Play Store</span>}
           </div>
 
+          {/* What they did here before they sat it. Games played is over the
+              roster the report scores and counts either difficulty; the
+              estimate is Hard runs only, for the role they answered with. */}
+          {r.cbat && <CbatSummary cbat={r.cbat} />}
+
           {/* What they wrote is printed in full above, under "What we did not
               prepare them for" and "What they said". The row only says that
               there is something up there with this person's name on it. */}
@@ -446,6 +451,42 @@ function AnswersTable({ rows, highlightUserId, onOpenSheets }) {
         </div>
         )
       })}
+    </div>
+  )
+}
+
+// The same words the Aptitude Report uses for a verdict, so an admin reading
+// "provisional" here knows it means the coverage floor, not a maybe.
+const APTITUDE_STATUS = {
+  pass:        { label: 'Pass',        className: 'text-emerald-700' },
+  fail:        { label: 'Short',       className: 'text-rose-700' },
+  provisional: { label: 'Provisional', className: 'text-amber-700' },
+  unscored:    { label: 'No score',    className: 'text-slate-400' },
+}
+
+// How much of the roster a respondent played, and what the report would have
+// estimated for the role they sat. The estimate is left off when we cannot
+// name a battery for them, which is every non-RAF role with no target picked
+// on /cbat/report; guessing a role would print a number nobody asked for.
+function CbatSummary({ cbat }) {
+  const a = cbat.aptitude
+  const status = a ? APTITUDE_STATUS[a.status] ?? APTITUDE_STATUS.unscored : null
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-600" data-testid="results-cbat-summary">
+      <span title={`${cbat.runs} ${cbat.runs === 1 ? 'run' : 'runs'} in total, either difficulty`}>
+        Played <span className="font-semibold text-slate-800">{cbat.gamesPlayed} / {cbat.gamesTotal}</span> games
+      </span>
+      {a && (
+        <span title={a.score == null
+          ? `No Hard runs to score against ${a.label}`
+          : `${a.label}, pass mark ${a.cutoff}, ${a.coverage}% of the battery measured`}
+        >
+          Est. score{' '}
+          <span className="font-semibold text-slate-800">{a.score ?? '—'} / {a.maxScore}</span>
+          {' '}for {a.label}
+          {a.score != null && <span className={`ml-1 font-semibold ${status.className}`}>{status.label}</span>}
+        </span>
+      )}
     </div>
   )
 }
