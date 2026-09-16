@@ -1,4 +1,5 @@
-import { RECOMMENDED_STICK, RECOMMENDED_PEDALS } from '../../utils/cbat/recommendedStick'
+import { RECOMMENDED_STICK, RECOMMENDED_PEDALS, storeLink } from '../../utils/cbat/recommendedStick'
+import { useHardwareStore } from '../../utils/cbat/hardwareStore'
 
 // The hardware recommendation: a third arcade cabinet that stacks under the
 // joystick panel while no stick is plugged in.
@@ -24,8 +25,13 @@ import { RECOMMENDED_STICK, RECOMMENDED_PEDALS } from '../../utils/cbat/recommen
 // The Amazon links are affiliate links, and the disclosure line under them
 // is not optional: Amazon's programme requires it on the page the links are
 // on, and a reader is owed it anyway.
+//
+// Which Amazon depends on where the player is. Nearly everyone gets the UK
+// store; a player in Canada gets the amazon.ca listing instead, because the
+// UK one will not ship to them and we are enrolled there separately.
 
 export default function CbatStickRecommendation({ stick = true, pedals = false, className = '' }) {
+  const store = useHardwareStore()
   const items = [stick && RECOMMENDED_STICK, pedals && RECOMMENDED_PEDALS].filter(Boolean)
   if (!items.length) return null
 
@@ -38,6 +44,7 @@ export default function CbatStickRecommendation({ stick = true, pedals = false, 
   return (
     <div
       data-stick-recommendation
+      data-hardware-store={store}
       className={[
         'cbat-arcade-panel rounded-lg border-2 border-brand-600/40 p-3 text-left',
         className,
@@ -72,7 +79,7 @@ export default function CbatStickRecommendation({ stick = true, pedals = false, 
                 {item.edition}
               </span>
               <a
-                href={item.url}
+                href={storeLink(item, store)}
                 target="_blank"
                 rel="sponsored noopener noreferrer"
                 className="cbat-arcade-btn shrink-0 rounded bg-brand-600 hover:bg-brand-700 border-b-[#1f5da8] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white cursor-pointer"

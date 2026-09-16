@@ -1,22 +1,38 @@
-import { render, screen, within } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, within, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import CbatStickRecommendation from '../CbatStickRecommendation'
 import { RECOMMENDED_STICK, RECOMMENDED_PEDALS } from '../../../utils/cbat/recommendedStick'
+import { __resetGeoHint } from '../../../utils/geoHint'
+
+vi.mock('../../../utils/isNative', () => ({ isNative: false }))
+
+// Where the player is, as the cabinet sees it: the heartbeat's country lookup
+// plus the device's own signals. British by default; a test that wants a
+// Canadian says so.
+function playerIn(country, timeZone = 'Europe/London', language = 'en-GB') {
+  __resetGeoHint()
+  globalThis.fetch = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ country }) }))
+  vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(() => ({ resolvedOptions: () => ({ timeZone }) }))
+  Object.defineProperty(navigator, 'language', { value: language, configurable: true })
+}
 
 // Each item is a named row with its own button: a new tab, and the rel
 // Amazon's programme and the browser both want (sponsored so crawlers know it
 // is paid, noopener so the shop cannot reach back into the game tab).
-function expectItem(container, item) {
+function expectItem(container, item, href = item.url) {
   const row = container.querySelector(`[data-hardware-item="${item.key}"]`)
   expect(row).toBeInTheDocument()
   expect(within(row).getByText(item.name)).toBeInTheDocument()
   const link = within(row).getByRole('link', { name: /view on amazon/i })
-  expect(link).toHaveAttribute('href', item.url)
+  expect(link).toHaveAttribute('href', href)
   expect(link).toHaveAttribute('target', '_blank')
   expect(link.getAttribute('rel').split(' ')).toEqual(expect.arrayContaining(['sponsored', 'noopener']))
 }
 
 describe('CbatStickRecommendation', () => {
+  beforeEach(() => { playerIn('GB') })
+  afterEach(() => { vi.restoreAllMocks() })
+
   it('recommends the stick alone by default, with a disclosed affiliate link', () => {
     const { container } = render(<CbatStickRecommendation />)
 
@@ -64,5 +80,27 @@ describe('CbatStickRecommendation', () => {
     const headline = screen.getByText(/practise like the real thing/i)
     expect(headline.className).toContain('cbat-stick-recommend')
     expect(headline.className).not.toContain('cbat-stick-attract')
+  })
+
+  // Two Associates programmes, one cabinet. The UK links are the default for
+  // everyone; a player in Canada gets the amazon.ca listing for each item
+  // instead, because the UK one will not ship to them.
+  it('links to amazon.ca for a player in Canada', async () => {
+    playerIn('CA', 'America/Toronto', 'en-CA')
+    const { container } = render(<CbatStickRecommendation pedals />)
+    await waitFor(() => expect(container.querySelector('[data-stick-recommendation]')).toHaveAttribute('data-hardware-store', 'ca'))
+    expectItem(container, RECOMMENDED_STICK, RECOMMENDED_STICK.links.ca)
+    expectItem(container, RECOMMENDED_PEDALS, RECOMMENDED_PEDALS.links.ca)
+    // The disclosure is the same either way.
+    expect(screen.getByText(/affiliate link/i)).toBeInTheDocument()
+  })
+
+  it('keeps the UK links for a player anywhere else', async () => {
+    playerIn('AU', 'Australia/Sydney', 'en-AU')
+    const { container } = render(<CbatStickRecommendation pedals />)
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
+    expect(container.querySelector('[data-stick-recommendation]')).toHaveAttribute('data-hardware-store', 'uk')
+    expectItem(container, RECOMMENDED_STICK, RECOMMENDED_STICK.links.uk)
+    expectItem(container, RECOMMENDED_PEDALS, RECOMMENDED_PEDALS.links.uk)
   })
 })
