@@ -500,6 +500,136 @@ body::before {
   border-radius: 0;
 }
 
+/* ── CUT under the Real CBAT theme ──────────────────────────────────────
+   The real Cognitive Updating Test's controls (reference screenshot in
+   APPLICATION_INFO): bevelled pill buttons, red at rest and green for the
+   selected state (the MFD index, the pump, a live tank), a grey bevelled pill
+   for RELEASE, grey key caps on the comms keypad, and a blue round button
+   to confirm each Mission field. The classes are inert under SkyWatch — no
+   rule outside this block mentions them — so the arcade look is unchanged. */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-pill {
+  /* A short wide pill whatever its slot: the index slot is a tenth of the
+     arena tall, and a full-height pill there is a circle. */
+  height: 1.7rem;
+  max-height: 1.7rem;
+  min-width: 3.25rem;
+  padding: 0 0.75rem;
+  line-height: 1;
+  align-self: center;
+  border-radius: 9999px;
+  border: 1px solid #4a0808;
+  /* Glossy: a pale top half over a saturated bottom half, hard edge between */
+  background: linear-gradient(#ffb0b0 0%, #ff7070 48%, #e02828 52%, #c81c1c 100%);
+  color: #ffffff;
+  font-weight: 700;
+  text-transform: none;
+  text-align: center;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-pill[data-on="true"] {
+  border-color: #063a06;
+  background: linear-gradient(#c0ffb8 0%, #70f070 48%, #22c822 52%, #18a018 100%);
+}
+/* The index row centres its pills in the slot instead of stretching them */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-index {
+  align-items: center;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-index > span {
+  align-items: center;
+}
+/* On lg+ the index is the real "Multifunction Display Index": a titled,
+   outlined box with the six keys in two rows of three. The slot stops being
+   a fixed share of the arena and takes the box's own height (the inline
+   `flex: 5 1 0` is what !important is beating); the panel below absorbs the
+   difference. The title bar is red on the left display, green on the right,
+   as on the real screen. */
+@media (min-width: 64rem) {
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-slot:has(.cbat-mfd-boxed) {
+    flex: 0 0 auto !important;
+  }
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.35rem 0.6rem;
+    height: auto;
+    padding: 0 0.6rem 0.45rem;
+    border: 1px solid var(--color-game-line);
+    background: var(--color-game-panel);
+  }
+  /* Keys sit centred in their cells with air around them, as on the real
+     index, rather than filling the cell edge to edge */
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed > span {
+    justify-content: center;
+  }
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed .cbat-pill {
+    width: auto;
+    min-width: 6.5rem;
+  }
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed .cbat-mfd-title {
+    display: block;
+    grid-column: 1 / -1;
+    margin: 0 -0.6rem 0.1rem;
+    padding: 0.15rem 0;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+    background: linear-gradient(90deg, #5a0000, #c00000 50%, #5a0000);
+  }
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed[data-stack="2"] .cbat-mfd-title {
+    background: linear-gradient(90deg, #004a00, #00a000 50%, #004a00);
+  }
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-pill:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-pill:disabled {
+  filter: grayscale(0.6) brightness(0.65);
+}
+/* Grey bevelled keys: the keypad, OK, the button at zero. RELEASE is the
+   same key as a pill. Disabled keys go dull rather than vanish, as a dead
+   key on the real panel would. */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-key {
+  background: linear-gradient(#e6e6e6, #b4b4b4);
+  color: #000000;
+  font-weight: 700;
+  box-shadow: inset -1px -1px 0 #606060, inset 1px 1px 0 #ffffff;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-key:hover:not(:disabled) {
+  background: linear-gradient(#f4f4f4, #cacaca);
+  color: #000000;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-key:disabled {
+  background: #6e6e7c;
+  color: #2a2a2a;
+  box-shadow: none;
+  opacity: 1;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-key.cbat-round {
+  border-radius: 9999px;
+}
+/* The blue confirm dot beside each Mission field */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-confirm {
+  border-radius: 9999px;
+  border: 1px solid #101060;
+  background: radial-gradient(circle at 35% 30%, #a0c0ff, #3050e0 45%, #182890);
+  color: #ffffff;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-confirm:hover {
+  filter: brightness(1.15);
+}
+/* The comms code digits read as white calculator cells with black figures */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-code-cells {
+  color: #000000;
+  background: #ffffff;
+  padding: 0 0.3rem;
+  border: 1px solid #808080;
+}
+
 /* ── Real CBAT test chrome ──────────────────────────────────────────────
    The title bar, footer strip and key caps of the real test software
    (components/cbat/CbatTestChrome.jsx). Only ever rendered under the Real

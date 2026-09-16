@@ -24,6 +24,9 @@ import {
   FUEL_MAX_SPREAD, SPEED_TOL, SPEED_STEP, SENSOR_ARM_WINDOW,
   AIR_INTERVAL, GROUND_INTERVAL, LOAD_RELEASE_WINDOW, LOAD_POINTS, stationName,
   PRESS_LOW, PRESS_HIGH, CODE_WINDOW, CODE_SUBMIT_WINDOW,
+  MISSION_FIELDS, MISSION_FIELD_BY_KEY, DISPENSER_LIGHTS, RELEASE_WINDOW,
+  CAMERA_WINDOW, CAMERA_EARLY_TOL, CODE_ACK_WINDOW,
+  orderMissionField, orderCamera, resetDispenser, fmtFieldValue,
 } from '../utils/cbat/cutSim'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatDemo } from '../utils/cbat/demoMode'
@@ -54,7 +57,7 @@ function Panel({ title, accent = 'var(--color-game-accent)', children, pad = tru
 // line to point at, and which token of the lit line to call out — 'time' for
 // its HH:MM:SS, 'station' for its "Station N". All default off, so a run
 // renders exactly as before.
-const EMPHASIS_RE = { time: /(\d{2}:\d{2}:\d{2})/, station: /(Station \d)/, code: /(\b\d{3}\b)/ }
+const EMPHASIS_RE = { time: /(\d{2}:\d{2}:\d{2})/, station: /(Station \d)/, code: /(\b\d{3}\b)/, value: /(\S+)$/ }
 
 function emphasise(text, emphasis) {
   const re = EMPHASIS_RE[emphasis]
@@ -122,7 +125,8 @@ function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false }) 
               <button
                 onClick={() => onToggle(i)}
                 data-demo-answer
-                className={`relative mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
+                data-on={f.on}
+                className={`cbat-pill relative mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
                   f.on ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
                 }`}
               >
@@ -163,11 +167,11 @@ function NavigationPanel({ speed, requiredSpeed, onAdjust, arrowPlus = false, ar
         </div>
         <p className="text-[10px] text-slate-400">Hold within ±{SPEED_TOL} kts (aim for required + {SPEED_TOL})</p>
         <div className="flex gap-3">
-          <button onClick={() => onAdjust(-SPEED_STEP)} className="relative px-4 py-2 bg-game-fill hover:bg-game-fill-strong text-white text-lg font-bold rounded cursor-pointer">
+          <button onClick={() => onAdjust(-SPEED_STEP)} className="cbat-pill relative px-4 py-2 bg-game-fill hover:bg-game-fill-strong text-white text-lg font-bold rounded cursor-pointer">
             {arrowMinus && <GuideArrow dir="up" urgent={arrowUrgent} />}
             −
           </button>
-          <button onClick={() => onAdjust(SPEED_STEP)} className="relative px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold rounded cursor-pointer">
+          <button onClick={() => onAdjust(SPEED_STEP)} className="cbat-pill relative px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold rounded cursor-pointer">
             {arrowPlus && <GuideArrow dir="up" urgent={arrowUrgent} />}
             +
           </button>
@@ -189,8 +193,8 @@ function SensorRow({ label, rem, kind, onActivate, arrow = false, urgent = false
       <span className={`text-[11px] font-mono ${overdue ? 'text-red-400 font-bold' : armed ? 'text-amber-400' : 'text-slate-400'}`}>
         {overdue ? 'OVERDUE' : `${Math.ceil(rem)}s`}
       </span>
-      <button onClick={() => onActivate(kind)} data-demo-answer
-        className={`relative px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+      <button onClick={() => onActivate(kind)} data-demo-answer data-on={armed || overdue}
+        className={`cbat-pill relative px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
           armed || overdue ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
         }`}>
         {arrow && <GuideArrow dir="down" urgent={urgent} />}
@@ -201,18 +205,20 @@ function SensorRow({ label, rem, kind, onActivate, arrow = false, urgent = false
 }
 
 // `arrowCamera` / `arrowSensor` / `arrowUrgent` are tutorial-only and default off.
-function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt, onCamera, onActivate, arrowCamera = null, arrowSensor = null, arrowUrgent = false }) {
+// `hideOrder` is the Real CBAT variant: the order names a camera AND a Clock
+// time, and the panel shows neither — like the drop order, it lives in Message.
+function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt, onCamera, onActivate, hideOrder = false, arrowCamera = null, arrowSensor = null, arrowUrgent = false }) {
   const airRem = (airDueAt - elapsedMs) / 1000
   const groundRem = (groundDueAt - elapsedMs) / 1000
   return (
     <Panel title="Sensor">
       <div className="space-y-2">
         <div>
-          <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">Camera {requiredCamera && <span className="text-amber-400">— order: {requiredCamera}</span>}</p>
+          <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">Camera {requiredCamera && !hideOrder && <span className="text-amber-400">— order: {requiredCamera}</span>}</p>
           <div className="flex gap-2">
             {['Alpha', 'Bravo'].map(c => (
-              <button key={c} onClick={() => onCamera(c)} data-demo-answer
-                className={`relative flex-1 px-2 py-1.5 text-[11px] font-bold rounded cursor-pointer transition-colors ${
+              <button key={c} onClick={() => onCamera(c)} data-demo-answer data-on={camera === c}
+                className={`cbat-pill relative flex-1 px-2 py-1.5 text-[11px] font-bold rounded cursor-pointer transition-colors ${
                   camera === c ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
                 }`}>
                 {c === arrowCamera && <GuideArrow dir="down" urgent={arrowUrgent} />}
@@ -258,14 +264,120 @@ function MissionPanel({ onRelease, litStation = null, arrowStation = null }) {
   )
 }
 
+// ── Real CBAT Mission display ────────────────────────────────────────────────
+// The real test's Mission display, per the TMI screenshot: a Load Drop
+// Interface (Time / Latitude / Longitude), the Load Drop Dispenser (six lights
+// and RELEASE) and a Video Recording Interface (Magnification / Latitude /
+// Longitude / Duration). Each field is a row of digit boxes with a confirm
+// button beside it; Message orders one value at a time. Nothing on the panel
+// says which field is wanted or what goes in it.
+//
+// A field is a real (visually hidden) numeric input under the boxes, so a
+// phone brings up its number keyboard and a desktop types straight in, and the
+// boxes render from its digits. Enter confirms, as does the button.
+//
+// `arrowField` / `arrowRelease` / `arrowUrgent` are tutorial-only, default off.
+function MissionField({ field, state, onType, onConfirm, arrow = false, urgent = false }) {
+  const inputRef = useRef(null)
+  const digits = state.entry
+  // Boxes read HH:MM:SS for six-digit fields, plain digits otherwise.
+  const groups = field.digits === 6 ? [2, 2, 2] : [field.digits]
+  let idx = 0
+  return (
+    <div className="flex items-center gap-1.5 min-w-0" data-cbat-field={field.key}>
+      <span className="w-[5.2rem] shrink-0 text-[10px] text-game-text truncate">{field.label}</span>
+      <div className="relative flex items-center gap-0.5 cursor-text" onClick={() => inputRef.current?.focus()}>
+        {groups.map((n, g) => (
+          <span key={g} className="flex items-center gap-0.5">
+            {g > 0 && <span className="text-[10px] text-game-muted px-px">:</span>}
+            {Array.from({ length: n }, () => {
+              const i = idx++
+              return (
+                <span key={i} className="w-4 h-5 flex items-center justify-center bg-game-arena border border-game-line text-[11px] font-mono text-game-text">
+                  {digits[i] ?? ''}
+                </span>
+              )
+            })}
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          aria-label={field.order}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          value={digits}
+          onChange={(e) => onType(field.key, e.target.value.replace(/\D/g, '').slice(0, field.digits))}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onConfirm(field.key) } }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+        />
+      </div>
+      <button
+        onClick={() => onConfirm(field.key)}
+        aria-label={`Confirm ${field.order}`}
+        data-demo-answer
+        className={`cbat-confirm relative shrink-0 w-5 h-5 rounded-full border border-game-line-strong bg-brand-600 hover:bg-brand-700 cursor-pointer${arrow ? ' cbat-triple-pulse' : ''}`}
+      >
+        {arrow && <GuideArrow dir="down" urgent={urgent} />}
+      </button>
+    </div>
+  )
+}
+
+function CbatMissionPanel({ mission, onType, onConfirm, onRelease, arrowField = null, arrowRelease = false, arrowUrgent = false }) {
+  const full = mission.lights >= DISPENSER_LIGHTS
+  const section = (title, keys) => (
+    <div className="bg-game-panel border border-game-line rounded p-1.5">
+      <p className="text-[9px] uppercase tracking-wide text-game-accent mb-1">{title}</p>
+      <div className="space-y-1">
+        {keys.map(k => (
+          <MissionField key={k} field={MISSION_FIELD_BY_KEY[k]} state={mission.fields[k]}
+            onType={onType} onConfirm={onConfirm} arrow={arrowField === k} urgent={arrowUrgent} />
+        ))}
+      </div>
+    </div>
+  )
+  return (
+    <Panel title="Mission">
+      <div className="space-y-1.5" data-cbat-mission>
+        {section('Load Drop Interface', ['loadTime', 'loadLat', 'loadLon'])}
+        <div className="bg-game-panel border border-game-line rounded p-1.5 flex items-center gap-2">
+          <p className="text-[9px] uppercase tracking-wide text-game-accent shrink-0">Load Drop Dispenser</p>
+          <div className="flex items-center gap-1 ml-auto" aria-label={`${mission.lights} of ${DISPENSER_LIGHTS} lights`}>
+            {Array.from({ length: DISPENSER_LIGHTS }, (_, i) => (
+              <span key={i} data-light={i < mission.lights ? 'on' : 'off'}
+                className={`w-3 h-3 rounded-full border ${i < mission.lights ? 'bg-green-500 border-green-300' : 'bg-game-arena border-game-line'}`} />
+            ))}
+          </div>
+          <button onClick={onRelease} data-demo-answer disabled={!full}
+            className={`cbat-key cbat-round relative shrink-0 px-2 py-1 text-[10px] font-extrabold rounded cursor-pointer transition-colors disabled:cursor-not-allowed ${
+              full ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-game-fill text-game-muted'
+            }${arrowRelease ? ' cbat-triple-pulse' : ''}`}>
+            {arrowRelease && <GuideArrow dir="down" urgent={arrowUrgent} />}
+            RELEASE
+          </button>
+        </div>
+        {section('Video Recording Interface', ['vidMag', 'vidLat', 'vidLon', 'vidDur'])}
+      </div>
+    </Panel>
+  )
+}
+
 // `arrowPump` / `arrowKey` / `holdOk` / `arrowUrgent` are tutorial-only and
 // default off. `arrowKey` is a digit, 'CLR' or 'OK'; the key also pulses, since
 // an arrow hanging above a keypad key overlaps the key above it and the pulse
 // is what says which one is meant. `holdOk` marks pressure as fine where it is.
 // `waitHint` is the moment between the last digit and OK going live: the arrow
 // moves to the countdown and it says so in words, or a disabled OK looks broken.
-function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode, arrowPump = false, arrowKey = null, holdOk = false, waitHint = false, arrowUrgent = false }) {
+// `codeAck` / `onAckCode` are the Real CBAT variant's button at zero: when the
+// countdown runs out a button appears where it was and has to be pressed at
+// once. `code.entered` (same variant) is a code already accepted whose timer is
+// still running down — the keypad locks and the countdown keeps going.
+// `pumpPair` (Real CBAT variant) draws the pump as the real ON | OFF pair with
+// the live state lit, instead of one toggle showing its state.
+function SystemPanel({ pressure, pump, code, codeEntry, codeAck = null, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode, onAckCode, pumpPair = false, arrowPump = false, arrowKey = null, holdOk = false, waitHint = false, arrowUrgent = false }) {
   const keyCls = (k) => (arrowKey === k ? ' cbat-triple-pulse' : '')
+  const keysLive = !!code && !code.entered
   const zone = pressure < PRESS_LOW ? 'LOW' : pressure > PRESS_HIGH ? 'HIGH' : 'CORRECT'
   const zoneCol = zone === 'CORRECT' ? 'text-green-400' : 'text-red-400'
   // Gauge fill 60–140 mapped to 0–100%.
@@ -298,21 +410,45 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
           </p>
           <p className="text-[10px] font-mono text-slate-500">{PRESS_LOW}–{PRESS_HIGH}</p>
           <p className={`text-[9px] font-bold ${zoneCol}`}>{zone}</p>
-          <button onClick={onPump} data-demo-answer
-            className={`relative mt-1 px-3 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+          {pumpPair ? (
+            <div className="mt-1 flex gap-1">
+              {[true, false].map(on => (
+                <button key={String(on)} onClick={() => { if (pump !== on) onPump() }} data-demo-answer data-on={pump === on}
+                  aria-label={`Pump ${on ? 'ON' : 'OFF'}`}
+                  className={`cbat-pill relative px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+                    pump === on ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
+                  }`}>
+                  {/* The arrow sits on the state to press, never the live one. */}
+                  {arrowPump && pump !== on && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                  {on ? 'ON' : 'OFF'}
+                </button>
+              ))}
+            </div>
+          ) : (
+          <button onClick={onPump} data-demo-answer data-on={pump}
+            className={`cbat-pill relative mt-1 px-3 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
               pump ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
             }`}>
             {arrowPump && <GuideArrow dir="down" urgent={arrowUrgent} />}
             Pump {pump ? 'ON' : 'OFF'}
           </button>
+          )}
         </div>
         {/* Comms code keypad — fills the panel height so the keys are thumb-sized */}
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
           <p className="text-[9px] uppercase tracking-wide text-slate-500">Comms Code</p>
           <div className="flex items-center justify-between mb-1">
-            <span className="font-mono text-lg text-game-text tracking-widest">{codeEntry.padEnd(3, '·')}</span>
-            {code
-              ? submitOpen
+            <span className="cbat-code-cells font-mono text-lg text-game-text tracking-widest">{codeEntry.padEnd(3, '·')}</span>
+            {codeAck
+              ? <button onClick={onAckCode} data-demo-answer
+                  className={`cbat-key relative px-2 py-0.5 text-[10px] font-extrabold rounded bg-brand-600 hover:bg-brand-700 text-white cursor-pointer${keyCls('ACK')}`}>
+                  {arrowKey === 'ACK' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                  Confirm
+                </button>
+              : code
+              ? code.entered
+                ? <span className="text-[10px] font-mono text-green-400">accepted · {codeRem}s</span>
+              : submitOpen
                 ? <span className={`text-[10px] font-mono ${codeRem <= 5 ? 'text-red-400' : 'text-amber-400'}`}>{codeRem}s</span>
                 : waitHint
                   ? <span className="flex items-center text-[10px] font-mono text-amber-400 font-bold" data-guide-wait>
@@ -325,22 +461,22 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
           {/* Keypad is inert until a code is actually issued. */}
           {/* Below sm the keys grow to a chunky 4:3 tile; sm+ keeps the original
               flat keypad. The keys are never stretched to fill the panel. */}
-          <div className={`grid grid-cols-3 gap-1 ${code ? '' : 'opacity-40 pointer-events-none'}`} aria-disabled={!code}>
+          <div className={`grid grid-cols-3 gap-1 ${keysLive ? '' : 'opacity-40 pointer-events-none'}`} aria-disabled={!keysLive}>
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
-              <button key={d} onClick={() => onDigit(d)} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
+              <button key={d} onClick={() => onDigit(d)} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
                 {arrowKey === d && <GuideArrow dir="down" urgent={arrowUrgent} />}
                 {d}
               </button>
             ))}
-            <button onClick={onClearCode} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-fill hover:bg-game-fill-strong text-game-text text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
+            <button onClick={onClearCode} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-fill hover:bg-game-fill-strong text-game-text text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
               {arrowKey === 'CLR' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               CLR
             </button>
-            <button onClick={() => onDigit('0')} disabled={!code} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
+            <button onClick={() => onDigit('0')} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
               {arrowKey === '0' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               0
             </button>
-            <button onClick={onSubmitCode} disabled={!submitOpen} className={`relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40${keyCls('OK')}`}>
+            <button onClick={onSubmitCode} disabled={!submitOpen || !keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40${keyCls('OK')}`}>
               {arrowKey === 'OK' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               OK
             </button>
@@ -358,16 +494,23 @@ function SystemPanel({ pressure, pump, code, codeEntry, elapsedMs, onPump, onDig
 // `arrowActive` is tutorial-only and defaults off: hang a guide arrow under the
 // selected key, pointing up at it. Buttons are overflow-hidden to clip their
 // labels, so the arrow lives in a wrapper around each one instead of inside it.
-function NavButtons({ active, onSelect, arrowActive = false }) {
+//
+// `boxed` is the Real CBAT variant: on lg+ the row becomes the real
+// "Multifunction Display Index" — a titled box with the six keys in two rows
+// of three, the title bar red on the left display and green on the right
+// (`stack`). Below lg it stays a single row; the title is hidden. The rules
+// live in main.css under the theme, so nothing changes under SkyWatch.
+function NavButtons({ active, onSelect, arrowActive = false, boxed = false, stack = 1 }) {
   return (
-    <div className="w-full h-full flex gap-1">
+    <div className={`cbat-mfd-index w-full h-full flex gap-1${boxed ? ' cbat-mfd-boxed' : ''}`} data-stack={stack}>
+      {boxed && <div className="cbat-mfd-title hidden">Multifunction Display Index</div>}
       {SYSTEMS.map(k => (
         // Swapping displays is the game — a demo card that never presses these
         // shows the same two panels for its whole run.
         <span key={k} className="relative flex-1 min-w-0 flex">
           {arrowActive && active === k && <GuideArrow dir="up" />}
-          <button onClick={() => onSelect(k)} data-demo-answer
-            className={`w-full min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
+          <button onClick={() => onSelect(k)} data-demo-answer data-on={active === k}
+            className={`cbat-pill w-full min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
               active === k ? 'bg-green-600 text-white' : 'bg-game-raised text-game-text hover:bg-[#163055] hover:text-white'
             }`}>
             {SYSTEM_LABELS[k]}
@@ -496,6 +639,13 @@ const TUTORIAL_LOAD_DUE_MS = 15_000
 // drop is due, then jumps to the ordered station and gets urgent.
 const TUTORIAL_READ_MS = 5_000
 
+// Real CBAT variant: a camera order on the Sensor step is for this far ahead;
+// a field order on the Mission step has this long; the dispenser lights come
+// on this far apart, so RELEASE arrives while the step is still on screen.
+const TUTORIAL_CAMERA_DUE_MS = 8_000
+const TUTORIAL_FIELD_WINDOW_MS = 40_000
+const TUTORIAL_LIGHT_MS = 2_000
+
 // On the System step the first comms code arrives this long after entry, so the
 // pump has the board to itself for a moment before the second job starts.
 const TUTORIAL_CODE_AT_MS = 6_000
@@ -563,15 +713,28 @@ function resetForStep(sim, focus) {
   sim.pressure = focus === 'system' ? TUTORIAL_PRESSURE_START : 100
   sim.pump = false
   sim.camera = 'Alpha'
-  sim.requiredCamera = 'Bravo'
+  // cbat: a camera order carries a time, so it is only issued on the Sensor
+  // step, through Message, rather than standing on every step.
+  sim.requiredCamera = sim.cbat ? null : 'Bravo'
+  sim.cameraDueAt = null
+  if (sim.cbat && focus === 'sensor') orderCamera(sim, TUTORIAL_CAMERA_DUE_MS)
   sim.airDueAt = sim.elapsedMs + (focus === 'sensor' ? TUTORIAL_AIR_DUE_MS : AIR_INTERVAL)
   sim.groundDueAt = sim.elapsedMs + (focus === 'sensor' ? TUTORIAL_GROUND_DUE_MS : GROUND_INTERVAL)
   // No code until the System step issues one through Message. Seeding a live
   // code silently left the keypad pointing at digits nobody had been told.
   sim.code = null
   sim.codeEntry = ''
+  sim.codeAck = null
   sim.nextCodeAt = sim.elapsedMs + TUTORIAL_CODE_AT_MS
   sim.warnings = []
+  // cbat: the Mission display's orders and dispenser only run on its own step.
+  if (sim.cbat) {
+    for (const f of MISSION_FIELDS) Object.assign(sim.mission.fields[f.key], { entry: '', order: null })
+    sim.mission.lights = 0
+    sim.mission.fullAt = null
+    sim.mission.nextLightAt = focus === 'mission' ? sim.elapsedMs + TUTORIAL_LIGHT_MS : Infinity
+    if (focus === 'mission') orderMissionField(sim, TUTORIAL_FIELD_WINDOW_MS)
+  }
   // A drop is only ever live on the Mission step. The one makeSim scheduled is
   // discarded: its time was fixed at t=0 and may already have passed by the time
   // the user gets here, which would leave a step that asks for a press nothing
@@ -581,8 +744,15 @@ function resetForStep(sim, focus) {
   if (focus === 'mission') scheduleTutorialLoad(sim)
 }
 
-function makeTutorialSim() {
-  const sim = makeSim('easier')
+function makeTutorialSim(cbat = false) {
+  const sim = makeSim('easier', { cbat })
+  // cbat: the Message step points at an order in the log, and this variant's
+  // sim starts without one. Put a sample there, then withdraw it, so the log
+  // shows what an order looks like without a field waiting on it.
+  if (cbat) {
+    const field = orderMissionField(sim, Infinity)
+    if (field) sim.mission.fields[field.key].order = null
+  }
   resetForStep(sim, CUT_TUTORIAL_STEPS[0].focus)
   return sim
 }
@@ -607,12 +777,51 @@ function tickTutorial(sim, dt, focus) {
   if (focus === 'system') {
     sim.pressure += (sim.pump ? t.pressRisePerSec : -t.pressDropPerSec) * secs
     sim.pressure = Math.max(60, Math.min(140, sim.pressure))
-    if (!sim.code && sim.elapsedMs >= sim.nextCodeAt) issueTutorialCode(sim)
+    if (!sim.code && !sim.codeAck && sim.elapsedMs >= sim.nextCodeAt) issueTutorialCode(sim)
     // Let it lapse and a run would penalise it; here it says so and issues
     // another, so the keypad never sits dead for the rest of the step.
     if (sim.code && sim.elapsedMs > sim.code.dueAt) {
-      pushMessage(sim, 'COMMS: code window missed. A new code is on its way')
+      if (sim.cbat) {
+        // Zero brings up the button whether the code went in or not; the next
+        // code waits until it has been pressed (or given up on).
+        if (!sim.code.entered) pushMessage(sim, 'COMMS: code window missed. Press Confirm now the timer has run out')
+        sim.codeAck = { since: sim.code.dueAt }
+        sim.code = null
+        sim.codeEntry = ''
+      } else {
+        pushMessage(sim, 'COMMS: code window missed. A new code is on its way')
+        issueTutorialCode(sim)
+      }
+    }
+    if (sim.codeAck && sim.elapsedMs > sim.codeAck.since + CODE_ACK_WINDOW) {
+      pushMessage(sim, 'COMMS: button not pressed. A new code is on its way')
+      sim.codeAck = null
       issueTutorialCode(sim)
+    }
+  }
+  if (focus === 'sensor' && sim.cbat && sim.requiredCamera && sim.elapsedMs > sim.cameraDueAt + CAMERA_WINDOW) {
+    pushMessage(sim, `SENSOR: camera ${sim.requiredCamera} order missed. New order on its way`)
+    orderCamera(sim, TUTORIAL_CAMERA_DUE_MS)
+  }
+  if (focus === 'mission' && sim.cbat) {
+    const m = sim.mission
+    for (const f of MISSION_FIELDS) {
+      const st = m.fields[f.key]
+      if (st.order && sim.elapsedMs > st.dueAt) {
+        pushMessage(sim, `MISSION: ${f.order} order missed. New order on its way`)
+        st.order = null
+        orderMissionField(sim, TUTORIAL_FIELD_WINDOW_MS)
+      }
+    }
+    if (m.lights < DISPENSER_LIGHTS) {
+      if (sim.elapsedMs >= m.nextLightAt) {
+        m.lights += 1
+        m.nextLightAt = sim.elapsedMs + TUTORIAL_LIGHT_MS
+        if (m.lights === DISPENSER_LIGHTS) m.fullAt = sim.elapsedMs
+      }
+    } else if (sim.elapsedMs > m.fullAt + RELEASE_WINDOW) {
+      pushMessage(sim, 'MISSION: release window missed. The dispenser is filling again')
+      resetDispenser(sim, TUTORIAL_LIGHT_MS)
     }
   }
   if (focus === 'mission' && sim.loadArmed) {
@@ -646,6 +855,7 @@ const CUT_TUTORIAL_STEPS = [
     focus: 'message',
     title: 'Message',
     body: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. The one to watch for is the drop order, which gives you a station and a time. The Mission display never shows it, so this log is the only place you can check it.',
+    bodyCbat: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. Mission orders name one field and the value to put in it. The Mission display never repeats them, so this log is the only place you can check what was asked.',
   },
   {
     focus: 'engine',
@@ -661,16 +871,19 @@ const CUT_TUTORIAL_STEPS = [
     focus: 'sensor',
     title: 'Sensor',
     body: 'Three jobs on one display. A camera order tells you to switch to Alpha or Bravo. The air sensor needs re-activating every 45 seconds and the ground sensor every 90. Each one shows a countdown to when it is next due.',
+    bodyCbat: 'Three jobs on one display. A camera order in Message names a camera and a Clock time. Do not press it until the clock reaches that time. The air sensor needs re-activating every 45 seconds and the ground sensor every 90. Each one shows a countdown to when it is next due.',
   },
   {
     focus: 'mission',
     title: 'Mission',
     body: 'The panel never says which station or when. A drop order has just arrived in Message, open in your other window, giving a station and a time. Watch the clock and press that station when the time comes. In a run you will usually have to remember it, because that window is needed elsewhere.',
+    bodyCbat: 'Three jobs on one display. Message orders one value at a time, such as a latitude for the load drop or a magnification for the video. An order has just arrived in your other window: type the value into that field and press the button beside it. The dispenser lights fill from left to right on their own. The moment all six are green, press RELEASE.',
   },
   {
     focus: 'system',
     title: 'System',
     body: 'Two jobs again. The pump holds hydraulic pressure between 90 and 110: on to raise it, off to let it fall. Comms codes arrive in Message. Type the 3 digits on the keypad as soon as you see one, then press OK when it lights up, which is only in the last 15 seconds.',
+    bodyCbat: 'Two jobs again. The pump holds hydraulic pressure between 90 and 110: on to raise it, off to let it fall. Comms codes arrive in Message. Type the 3 digits on the keypad as soon as you see one, then press OK when it lights up, which is only in the last 15 seconds. When the timer reaches zero a Confirm button appears. Press it straight away.',
   },
 ]
 
@@ -697,14 +910,16 @@ function TutorialComplete({ onExit }) {
   )
 }
 
-function CutTutorial({ onExit, onProgress }) {
+// `cbat` is the Real CBAT variant: the board it walks is that variant's board
+// (field-entry Mission display, timed camera orders, the button at zero).
+function CutTutorial({ onExit, onProgress, cbat = false }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [done, setDone] = useState(false)
   const [runId] = useState(makeTutorialRunId)
 
   // Same simRef + snapshot split the live game uses, minus the tick loop. The
   // tick loop is `tickTutorial` rather than `advanceSim` — see the header.
-  const [initialSim] = useState(makeTutorialSim)
+  const [initialSim] = useState(() => makeTutorialSim(cbat))
   const simRef = useRef(initialSim)
   const [view, setView] = useState(initialSim)
   const sync = useCallback(() => setView({ ...simRef.current }), [])
@@ -766,10 +981,46 @@ function CutTutorial({ onExit, onProgress }) {
   const onPump = () => act(sim => { sim.pump = !sim.pump })
   const onCamera = (c) => act(sim => {
     sim.camera = c
-    if (sim.requiredCamera === c) {
-      sim.requiredCamera = null
-      pushMessage(sim, `SENSOR: camera ${c} selected. Well done`)
+    if (sim.requiredCamera !== c) return
+    if (sim.cbat && sim.elapsedMs < sim.cameraDueAt - CAMERA_EARLY_TOL) {
+      pushMessage(sim, `SENSOR: too early. Camera ${c} is ordered for ${tutorialClockAt(sim, sim.cameraDueAt)}`)
+      return
     }
+    sim.requiredCamera = null
+    sim.cameraDueAt = null
+    pushMessage(sim, `SENSOR: camera ${c} selected. Well done`)
+  })
+  // Real CBAT Mission display. Nothing scores; a confirmed order is answered in
+  // Message and another is issued, so the step keeps offering the moment.
+  const onTypeField = (key, digits) => act(sim => { sim.mission.fields[key].entry = digits })
+  const onConfirmField = (key) => act(sim => {
+    const field = MISSION_FIELD_BY_KEY[key]
+    const st = sim.mission.fields[key]
+    if (!st.entry.length) return
+    if (st.order) {
+      if (st.entry === st.order) {
+        pushMessage(sim, `MISSION: ${field.order} set. Well done`)
+        st.order = null
+        orderMissionField(sim, TUTORIAL_FIELD_WINDOW_MS)
+      } else {
+        pushMessage(sim, `MISSION: wrong ${field.order}. Check Message and try again`)
+      }
+    }
+    st.value = st.entry
+  })
+  const onReleaseLoad = () => act(sim => {
+    if (sim.mission.lights >= DISPENSER_LIGHTS) {
+      pushMessage(sim, 'MISSION: load released. Well done')
+      resetDispenser(sim, TUTORIAL_LIGHT_MS)
+    } else {
+      pushMessage(sim, 'MISSION: too early. Wait for all six lights')
+    }
+  })
+  const onAckCode = () => act(sim => {
+    if (!sim.codeAck) return
+    sim.codeAck = null
+    pushMessage(sim, 'COMMS: confirmed. Well done')
+    issueTutorialCode(sim)
   })
   // Re-armed on the short tutorial intervals, so the moment comes round again
   // while the step is still on screen.
@@ -800,6 +1051,12 @@ function CutTutorial({ onExit, onProgress }) {
   const onSubmitCode = () => act(sim => {
     if (!sim.code) return
     if (sim.codeEntry === sim.code.digits) {
+      if (sim.cbat) {
+        // The timer runs on to zero, when the Confirm button appears.
+        pushMessage(sim, `COMMS: code ${sim.code.digits} accepted. Press Confirm when the timer reaches zero`)
+        sim.code.entered = true
+        return
+      }
       pushMessage(sim, `COMMS: code ${sim.code.digits} accepted. Well done`)
       issueTutorialCode(sim)
       return
@@ -826,8 +1083,9 @@ function CutTutorial({ onExit, onProgress }) {
           ? { lit: 'strip', warning: true }
           : { lit: 'strip', clock: true }
       case 'message': {
-        // The latest drop order in the log — the line the card says to watch for.
-        const order = [...v.messages].reverse().find(m => m.text.startsWith('MISSION: drop'))
+        // The latest order in the log — the line the card says to watch for.
+        const prefix = v.cbat ? 'MISSION: set' : 'MISSION: drop'
+        const order = [...v.messages].reverse().find(m => m.text.startsWith(prefix))
         return { lit: 'panel1', messageId: order?.id ?? null }
       }
       case 'engine': {
@@ -853,6 +1111,13 @@ function CutTutorial({ onExit, onProgress }) {
         return { lit: 'panel1', ok: true }
       }
       case 'sensor': {
+        // cbat: the order is for a time. Read it, watch the clock, then press.
+        if (v.cbat && v.requiredCamera) {
+          const line = { messageLit: v.cameraMessageId }
+          if (v.elapsedMs < v.stepEnteredAt + TUTORIAL_READ_MS) return { lit: 'panel2', messageId: v.cameraMessageId, ...line, messageEmph: 'time' }
+          if (v.elapsedMs < v.cameraDueAt - CAMERA_EARLY_TOL) return { lit: 'strip', clock: true, ...line, messageEmph: 'time' }
+          return { lit: 'panel1', camera: v.requiredCamera, urgent: true, ...line }
+        }
         if (v.requiredCamera) return { lit: 'panel1', camera: v.requiredCamera }
         const airRem = v.airDueAt - v.elapsedMs
         const groundRem = v.groundDueAt - v.elapsedMs
@@ -862,6 +1127,16 @@ function CutTutorial({ onExit, onProgress }) {
         return { lit: 'panel1', sensor: soonest, urgent: rem <= SENSOR_ARM_WINDOW }
       }
       case 'mission': {
+        if (v.cbat) {
+          // RELEASE outranks an order: its window is short and it will not wait.
+          if (v.mission.lights >= DISPENSER_LIGHTS) return { lit: 'panel1', release: true, urgent: true }
+          const key = MISSION_FIELDS.map(f => f.key).find(k => v.mission.fields[k].order)
+          if (!key) return { lit: 'panel1' }
+          const st = v.mission.fields[key]
+          const line = { messageLit: st.messageId, messageEmph: 'value' }
+          if (v.elapsedMs < st.orderedAt + TUTORIAL_READ_MS) return { lit: 'panel2', messageId: st.messageId, ...line }
+          return { lit: 'panel1', field: key, ...line }
+        }
         if (!v.loadArmed) return { lit: 'panel1' }
         // The token called out in the order line follows the phase: the time
         // while the clock is being watched, the station once it is time to press.
@@ -880,7 +1155,11 @@ function CutTutorial({ onExit, onProgress }) {
         // About to leave the band in the direction it is moving: toggle now.
         const nearEdge = (!v.pump && v.pressure <= PRESS_LOW + TUTORIAL_PRESSURE_MARGIN)
           || (v.pump && v.pressure >= PRESS_HIGH - TUTORIAL_PRESSURE_MARGIN)
+        // cbat: the button at zero. Press it before anything else.
+        if (v.codeAck) return { lit: 'panel1', key: 'ACK', urgent: true }
         if (!v.code) return nearEdge ? { lit: 'panel1', pump: true } : { lit: 'panel1', pressureOk: true }
+        // cbat: a code already in — nothing to press until the timer hits zero.
+        if (v.code.entered) return nearEdge ? { lit: 'panel1', pump: true } : { lit: 'panel1', pressureOk: true }
         // A code has arrived. Read it first: the line in Message, digits called out.
         const codeLine = { messageLit: v.codeMessageId, messageEmph: 'code' }
         if (v.elapsedMs < v.codeOrderedAt + TUTORIAL_READ_MS) {
@@ -905,9 +1184,11 @@ function CutTutorial({ onExit, onProgress }) {
       case 'message':    return <MessagePanel messages={sim.messages} litId={guide.messageLit ?? guide.messageId ?? null} arrowId={guide.messageId ?? null} emphasis={guide.messageEmph ?? null} />
       case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} arrowTank={guide.tank ?? null} arrowUrgent={!!guide.urgent} />
       case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} arrowPlus={!!guide.plus} arrowMinus={!!guide.minus} holdOk={!!guide.ok} arrowUrgent={!!guide.urgent} />
-      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} arrowCamera={guide.camera ?? null} arrowSensor={guide.sensor ?? null} arrowUrgent={!!guide.urgent} />
-      case 'mission':    return <MissionPanel onRelease={onRelease} litStation={guide.mission === 'press' ? sim.loadTarget : null} arrowStation={guide.mission === 'press' ? sim.loadTarget : null} />
-      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
+      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} arrowCamera={guide.camera ?? null} arrowSensor={guide.sensor ?? null} arrowUrgent={!!guide.urgent} />
+      case 'mission':    return sim.cbat
+        ? <CbatMissionPanel mission={sim.mission} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} arrowField={guide.field ?? null} arrowRelease={!!guide.release} arrowUrgent={!!guide.urgent} />
+        : <MissionPanel onRelease={onRelease} litStation={guide.mission === 'press' ? sim.loadTarget : null} arrowStation={guide.mission === 'press' ? sim.loadTarget : null} />
+      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
       default:           return null
     }
   }
@@ -968,7 +1249,7 @@ function CutTutorial({ onExit, onProgress }) {
             transition={{ duration: 0.2 }}
           >
             <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
-            <p className="text-sm text-game-text leading-relaxed">{step.body}</p>
+            <p className="text-sm text-game-text leading-relaxed">{(cbat && step.bodyCbat) || step.body}</p>
           </motion.div>
         </AnimatePresence>
         <div className="flex items-center gap-3 mt-4">
@@ -1018,15 +1299,15 @@ function CutTutorial({ onExit, onProgress }) {
 
         <div className="flex flex-col lg:flex-row gap-1.5" style={{ flex: '90 1 0', minHeight: 0 }}>
           <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
-            <div className={cls('nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}>
-              <NavButtons active={sel1} onSelect={setSel1} arrowActive={!!guide.nav} />
+            <div className={`cbat-mfd-slot ${cls('nav').trim()}`} style={{ flex: '5 1 0', minHeight: 0 }}>
+              <NavButtons active={sel1} onSelect={setSel1} arrowActive={!!guide.nav} boxed={sim.cbat} stack={1} />
             </div>
             <div className={cls('panel1', missionStep).trim()} style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel1)}</div>
           </div>
 
           <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
-            <div className={cls('nav').trim()} style={{ flex: '5 1 0', minHeight: 0 }}>
-              <NavButtons active={sel2} onSelect={setSel2} arrowActive={!!guide.nav} />
+            <div className={`cbat-mfd-slot ${cls('nav').trim()}`} style={{ flex: '5 1 0', minHeight: 0 }}>
+              <NavButtons active={sel2} onSelect={setSel2} arrowActive={!!guide.nav} boxed={sim.cbat} stack={2} />
             </div>
             <div className={cls('panel2', feedbackStep).trim()} style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel2)}</div>
           </div>
@@ -1105,7 +1386,9 @@ export default function CbatCut() {
   const [finalStats, setFinalStats] = useState(null)
 
   // One stable initial sim seeds both the mutable ref and the render snapshot.
-  const [initialSim] = useState(() => makeSim(initialDifficulty(readStoredCutDifficulty)))
+  // The theme is read once per sim (startGame reads it again), so a run is
+  // one variant from start to finish even if the account theme changes.
+  const [initialSim] = useState(() => makeSim(initialDifficulty(readStoredCutDifficulty), { cbat }))
   const simRef = useRef(initialSim)
   const lastTsRef = useRef(0)
   // Render from an immutable snapshot of the sim, never the live ref (reading a
@@ -1177,6 +1460,10 @@ export default function CbatCut() {
       tasksCompleted: stats.tasksCompleted,
       tasksMissed: stats.tasksMissed,
       warningSeconds: stats.warningSeconds,
+      // Which Mission display this was played on: the Real CBAT variant is a
+      // different task (field entry + dispenser), and the leaderboard marks
+      // each score with it.
+      uiTheme: sim.cbat ? 'cbat' : 'skywatch',
     }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
@@ -1206,8 +1493,10 @@ export default function CbatCut() {
     return () => clearInterval(id)
   }, [phase, doFinish, sync])
 
+  const cbatRef = useRef(cbat)
+  useEffect(() => { cbatRef.current = cbat })
   const startGame = useCallback(() => {
-    simRef.current = makeSim(runTuningRef.current.key)
+    simRef.current = makeSim(runTuningRef.current.key, { cbat: cbatRef.current })
     setView(simRef.current)
     setSel1('message')
     setSel2('engine')
@@ -1255,13 +1544,59 @@ export default function CbatCut() {
 
   const onCamera = (c) => act(sim => {
     sim.camera = c
-    if (sim.requiredCamera && c === sim.requiredCamera) {
-      award(sim, SCORE.camera, `camera ${c} selected`)
-      sim.tasksCompleted += 1
-      sim.requiredCamera = null
-    } else if (sim.requiredCamera && c !== sim.requiredCamera) {
+    if (!sim.requiredCamera) return
+    if (c !== sim.requiredCamera) {
       award(sim, SCORE.cameraWrong, 'wrong camera selected')
+      return
     }
+    // cbat: the order is for a Clock time. Early is a fault and the order
+    // stands (press it again when the time comes); the sim expires it late.
+    if (sim.cbat && sim.elapsedMs < sim.cameraDueAt - CAMERA_EARLY_TOL) {
+      award(sim, SCORE.cameraEarly, `camera ${c} selected before its time`)
+      return
+    }
+    award(sim, SCORE.camera, sim.cbat ? `camera ${c} selected on time` : `camera ${c} selected`)
+    sim.tasksCompleted += 1
+    sim.requiredCamera = null
+    sim.cameraDueAt = null
+  })
+
+  // Real CBAT Mission display — typing into a field, confirming it, RELEASE.
+  const onTypeField = (key, digits) => act(sim => { sim.mission.fields[key].entry = digits })
+  const onConfirmField = (key) => act(sim => {
+    const field = MISSION_FIELD_BY_KEY[key]
+    const st = sim.mission.fields[key]
+    if (!st.entry.length) return
+    if (st.order) {
+      if (st.entry === st.order) {
+        const bonus = Math.max(0, Math.round(SCORE.fieldSpeedBonus * (st.dueAt - sim.elapsedMs) / (st.dueAt - st.orderedAt)))
+        award(sim, SCORE.field + bonus, `${field.order} set to ${fmtFieldValue(field, st.entry)}`)
+        sim.tasksCompleted += 1
+        st.order = null
+      } else {
+        award(sim, SCORE.fieldWrong, `wrong ${field.order}`)
+      }
+    }
+    // Confirmed digits stay on the interface either way, like the real one.
+    st.value = st.entry
+  })
+  const onReleaseLoad = () => act(sim => {
+    const m = sim.mission
+    if (m.lights >= DISPENSER_LIGHTS) {
+      const bonus = Math.max(0, Math.round(SCORE.releaseSpeedBonus * (1 - Math.min(1, (sim.elapsedMs - m.fullAt) / RELEASE_WINDOW))))
+      award(sim, SCORE.release + bonus, 'load released')
+      sim.tasksCompleted += 1
+      resetDispenser(sim, randRange(...sim.tuning.dispenserGapMs))
+    } else {
+      award(sim, SCORE.releasePremature, 'release pressed before the lights were full')
+    }
+  })
+  const onAckCode = () => act(sim => {
+    if (!sim.codeAck) return
+    const bonus = Math.max(0, Math.round(SCORE.codeAckSpeedBonus * (1 - Math.min(1, (sim.elapsedMs - sim.codeAck.since) / CODE_ACK_WINDOW))))
+    award(sim, SCORE.codeAck + bonus, 'comms button pressed')
+    sim.tasksCompleted += 1
+    sim.codeAck = null
   })
 
   const onActivate = (kind) => act(sim => {
@@ -1311,9 +1646,14 @@ export default function CbatCut() {
       const speedBonus = Math.max(0, Math.round(SCORE.codeSpeedBonus * (sim.code.dueAt - sim.elapsedMs) / CODE_SUBMIT_WINDOW))
       award(sim, SCORE.code + speedBonus, 'comms code entered correctly')
       sim.tasksCompleted += 1
-      sim.code = null
-      sim.codeEntry = ''
-      sim.nextCodeAt = sim.elapsedMs + randRange(...sim.tuning.codeGapMs)
+      if (sim.cbat) {
+        // The timer keeps running to zero, when the button appears (advanceSim).
+        sim.code.entered = true
+      } else {
+        sim.code = null
+        sim.codeEntry = ''
+        sim.nextCodeAt = sim.elapsedMs + randRange(...sim.tuning.codeGapMs)
+      }
     } else {
       award(sim, SCORE.codeWrong, 'wrong comms code')
       sim.codeEntry = ''
@@ -1327,9 +1667,11 @@ export default function CbatCut() {
       case 'message':    return <MessagePanel messages={sim.messages} />
       case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} />
       case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
-      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} />
-      case 'mission':    return <MissionPanel onRelease={onRelease} />
-      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} />
+      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} />
+      case 'mission':    return sim.cbat
+        ? <CbatMissionPanel mission={sim.mission} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} />
+        : <MissionPanel onRelease={onRelease} />
+      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} />
       default:           return null
     }
   }
@@ -1414,9 +1756,9 @@ export default function CbatCut() {
                 <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Engine</CbatIntroLabel><span className="pt-0.5">keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Nav</CbatIntroLabel><span className="pt-0.5">hold airspeed within ±{SPEED_TOL} kts of required</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Sensor</CbatIntroLabel><span className="pt-0.5">re-activate Air &amp; Ground sensors on time; select the ordered camera</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Mission</CbatIntroLabel><span className="pt-0.5">drop the ordered station at its scheduled Clock time (from Message)</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">keep hydraulic pressure 90–110; enter comms codes in 15s</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Sensor</CbatIntroLabel><span className="pt-0.5">{cbat ? 're-activate Air & Ground sensors on time; select the ordered camera at its Clock time' : 're-activate Air & Ground sensors on time; select the ordered camera'}</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Mission</CbatIntroLabel><span className="pt-0.5">{cbat ? 'enter the load drop and video values ordered in Message; press RELEASE when all six dispenser lights are green' : 'drop the ordered station at its scheduled Clock time (from Message)'}</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">{cbat ? 'keep hydraulic pressure 90–110; enter comms codes in the last 15s, then press Confirm when the timer hits zero' : 'keep hydraulic pressure 90–110; enter comms codes in 15s'}</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'🕑'}</span><span className="pt-0.5">The Clock shows in-game time — some tasks are scheduled to it</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">3 minutes — the Message display feeds every task</span></div>
                 </div>
@@ -1478,13 +1820,13 @@ export default function CbatCut() {
               <div className="flex flex-col lg:flex-row gap-1.5" style={{ flex: '90 1 0', minHeight: 0 }}>
                 {/* Display 1 — nav (5%) + selected panel (40%) */}
                 <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
-                  <div style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel1} onSelect={setSel1} /></div>
+                  <div className="cbat-mfd-slot" style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel1} onSelect={setSel1} boxed={sim.cbat} stack={1} /></div>
                   <div style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel1)}</div>
                 </div>
 
                 {/* Display 2 — nav (5%) + selected panel (40%) */}
                 <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
-                  <div style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel2} onSelect={setSel2} /></div>
+                  <div className="cbat-mfd-slot" style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel2} onSelect={setSel2} boxed={sim.cbat} stack={2} /></div>
                   <div style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel2)}</div>
                 </div>
               </div>
@@ -1499,7 +1841,7 @@ export default function CbatCut() {
               Always exits back to the briefing rather than straight into a run,
               so starting a scored game is still a deliberate press. */}
           {phase === 'tutorial' && (
-            <CutTutorial onExit={closeTutorial} onProgress={reportTutorialProgress} />
+            <CutTutorial onExit={closeTutorial} onProgress={reportTutorialProgress} cbat={cbat} />
           )}
 
           {/* Results */}
