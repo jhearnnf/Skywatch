@@ -45,18 +45,20 @@ export const CUT_TUNING = {
     speedChangeMs: [52_000, 68_000],
     cameraFirstMs: [62_000, 80_000],
     cameraNextMs: [65_000, 95_000],
-    loadGapMs: [30_000, 42_000],
-    firstLoadMs: 30_000,
     firstCodeMs: 16_000,
     codeGapMs: [14_000, 24_000],
 
-    // Real CBAT theme only (see cutSim's "Real CBAT Mission" block). Field
-    // orders replace the station drops; the dispenser fills one light at a
-    // time; camera orders carry a time this far ahead.
-    fieldFirstMs: 14_000,
-    fieldGapMs: [16_000, 24_000],
-    lightGapMs: [5_000, 9_000],
-    dispenserGapMs: [12_000, 20_000],
+    // Mission display (cutSim's "Mission display" block). A load drop is
+    // ordered this far ahead of its time, its three values this far apart,
+    // and the next drop follows this long after; video values are ordered on
+    // their own cadence.
+    firstDropMs: 12_000,
+    dropLeadMs: [40_000, 55_000],
+    dropOrderGapMs: [5_000, 9_000],
+    dropGapMs: [14_000, 22_000],
+    fieldFirstMs: 20_000,
+    fieldGapMs: [22_000, 32_000],
+    // Real CBAT theme only: camera orders carry a time this far ahead.
     cameraLeadMs: [12_000, 20_000],
 
     // Fewer tasks in the same 180s means a lower achievable total, so the grade
@@ -78,15 +80,15 @@ export const CUT_TUNING = {
     speedChangeMs: [32_000, 42_000],
     cameraFirstMs: [40_000, 55_000],
     cameraNextMs: [40_000, 60_000],
-    loadGapMs: [18_000, 26_000],
-    firstLoadMs: 22_000,
     firstCodeMs: 10_000,
     codeGapMs: [8_000, 14_000],
 
-    fieldFirstMs: 10_000,
-    fieldGapMs: [10_000, 15_000],
-    lightGapMs: [3_500, 6_500],
-    dispenserGapMs: [8_000, 14_000],
+    firstDropMs: 8_000,
+    dropLeadMs: [30_000, 40_000],
+    dropOrderGapMs: [4_000, 7_000],
+    dropGapMs: [8_000, 14_000],
+    fieldFirstMs: 14_000,
+    fieldGapMs: [14_000, 20_000],
     cameraLeadMs: [10_000, 18_000],
 
     grades: { outstanding: 1100, good: 700, needsWork: 350 },

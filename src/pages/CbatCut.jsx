@@ -20,13 +20,13 @@ import {
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import {
   GAME_MS, TICK_MS, SYSTEMS, SYSTEM_LABELS, SCORE, grade, award,
-  makeSim, advanceSim, computeWarnings, scheduleNextLoad, pushMessage, rand, randRange, code3, fmtWall, fmtClock,
+  makeSim, advanceSim, computeWarnings, pushMessage, randRange, code3, fmtWall, fmtClock,
   FUEL_MAX_SPREAD, SPEED_TOL, SPEED_STEP, SENSOR_ARM_WINDOW,
-  AIR_INTERVAL, GROUND_INTERVAL, LOAD_RELEASE_WINDOW, LOAD_POINTS, stationName,
+  AIR_INTERVAL, GROUND_INTERVAL,
   PRESS_LOW, PRESS_HIGH, CODE_WINDOW, CODE_SUBMIT_WINDOW,
-  MISSION_FIELDS, MISSION_FIELD_BY_KEY, DISPENSER_LIGHTS, RELEASE_WINDOW,
+  MISSION_FIELDS, MISSION_FIELD_BY_KEY, LOAD_ORDER, DISPENSER_LIGHTS, RELEASE_WINDOW, RELEASE_EARLY_TOL,
   CAMERA_WINDOW, CAMERA_EARLY_TOL, CODE_ACK_WINDOW,
-  orderMissionField, orderCamera, resetDispenser, fmtFieldValue,
+  orderMissionField, orderCamera, startDrop, orderLoadField, clearDrop, dispenserLights, dispenserArmed, clockAt, fmtFieldValue,
 } from '../utils/cbat/cutSim'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatDemo } from '../utils/cbat/demoMode'
@@ -55,9 +55,9 @@ function Panel({ title, accent = 'var(--color-game-accent)', children, pad = tru
 //
 // `litId` / `arrowId` / `emphasis` are tutorial-only: the line to light up, the
 // line to point at, and which token of the lit line to call out — 'time' for
-// its HH:MM:SS, 'station' for its "Station N". All default off, so a run
-// renders exactly as before.
-const EMPHASIS_RE = { time: /(\d{2}:\d{2}:\d{2})/, station: /(Station \d)/, code: /(\b\d{3}\b)/, value: /(\S+)$/ }
+// its HH:MM:SS, 'value' for the ordered value at its end. All default off, so a
+// run renders exactly as before.
+const EMPHASIS_RE = { time: /(\d{2}:\d{2}:\d{2})/, code: /(\b\d{3}\b)/, value: /(\S+)$/ }
 
 function emphasise(text, emphasis) {
   const re = EMPHASIS_RE[emphasis]
@@ -234,50 +234,26 @@ function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt,
   )
 }
 
-// `litStation` / `arrowStation` are tutorial-only and default off. A run must
-// never light a station — the panel giving nothing away is the whole task, and
-// CbatCut.mission.test.jsx holds it to that.
-function MissionPanel({ onRelease, litStation = null, arrowStation = null }) {
-  return (
-    <Panel title="Mission">
-      <div className="flex flex-col items-center justify-center gap-3 h-full">
-        <p className="text-[10px] text-slate-400 text-center">
-          Release the <b className="text-game-text">package</b> at its scheduled time — read the ordered station in Message and watch the Clock.
-        </p>
-        {/* Three drop stations — the panel says neither which one nor when. Both
-            the station and its time live only in Message, so the release is a
-            pure memory-updating task with no cue on the panel itself. */}
-        <div className="flex gap-2">
-          {/* No wrapper element: a run's panel must contain the three buttons and
-              nothing else, and the mission test counts. The arrow, when there is
-              one, lives inside the button it points at. */}
-          {Array.from({ length: LOAD_POINTS }, (_, i) => (
-            <button key={i} onClick={() => onRelease(i)} data-demo-answer
-              className={`relative px-4 py-3 text-xs font-extrabold rounded cursor-pointer transition-colors bg-game-fill text-game-text hover:bg-game-fill-strong${i === litStation ? ' cbat-triple-pulse' : ''}`}>
-              {i === arrowStation && <GuideArrow dir="down" urgent />}
-              {stationName(i)}
-            </button>
-          ))}
-        </div>
-      </div>
-    </Panel>
-  )
-}
-
-// ── Real CBAT Mission display ────────────────────────────────────────────────
+// ── Mission display ──────────────────────────────────────────────────────────
 // The real test's Mission display, per the TMI screenshot: a Load Drop
 // Interface (Time / Latitude / Longitude), the Load Drop Dispenser (six lights
 // and RELEASE) and a Video Recording Interface (Magnification / Latitude /
 // Longitude / Duration). Each field is a row of digit boxes with a confirm
 // button beside it; Message orders one value at a time. Nothing on the panel
-// says which field is wanted or what goes in it.
+// says which field is wanted or what goes in it. The same display under both
+// themes: a sitter confirmed the three-station drop it replaced was the one
+// place this game differed from the real thing. CbatCut.mission.test.jsx holds
+// the panel to giving nothing away.
 //
 // A field is a real (visually hidden) numeric input under the boxes, so a
 // phone brings up its number keyboard and a desktop types straight in, and the
 // boxes render from its digits. Enter confirms, as does the button.
 //
 // `arrowField` / `arrowRelease` / `arrowUrgent` are tutorial-only, default off.
-function MissionField({ field, state, onType, onConfirm, arrow = false, urgent = false }) {
+// `arrow` on a field is where in the row the tutorial is pointing: 'boxes'
+// while the value is still being typed (the digit boxes pulse and take the
+// arrow), then 'confirm' once every digit is in and the button is the press.
+function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = false }) {
   const inputRef = useRef(null)
   const digits = state.entry
   // Boxes read HH:MM:SS for six-digit fields, plain digits otherwise.
@@ -286,7 +262,8 @@ function MissionField({ field, state, onType, onConfirm, arrow = false, urgent =
   return (
     <div className="flex items-center gap-1.5 min-w-0" data-cbat-field={field.key}>
       <span className="w-[5.2rem] shrink-0 text-[10px] text-game-text truncate">{field.label}</span>
-      <div className="relative flex items-center gap-0.5 cursor-text" onClick={() => inputRef.current?.focus()}>
+      <div className={`relative flex items-center gap-0.5 cursor-text${arrow === 'boxes' ? ' cbat-triple-pulse' : ''}`} onClick={() => inputRef.current?.focus()}>
+        {arrow === 'boxes' && <GuideArrow dir="down" urgent={urgent} />}
         {groups.map((n, g) => (
           <span key={g} className="flex items-center gap-0.5">
             {g > 0 && <span className="text-[10px] text-game-muted px-px">:</span>}
@@ -316,23 +293,25 @@ function MissionField({ field, state, onType, onConfirm, arrow = false, urgent =
         onClick={() => onConfirm(field.key)}
         aria-label={`Confirm ${field.order}`}
         data-demo-answer
-        className={`cbat-confirm relative shrink-0 w-5 h-5 rounded-full border border-game-line-strong bg-brand-600 hover:bg-brand-700 cursor-pointer${arrow ? ' cbat-triple-pulse' : ''}`}
+        className={`cbat-confirm relative shrink-0 w-5 h-5 rounded-full border border-game-line-strong bg-brand-600 hover:bg-brand-700 cursor-pointer${arrow === 'confirm' ? ' cbat-triple-pulse' : ''}`}
       >
-        {arrow && <GuideArrow dir="down" urgent={urgent} />}
+        {arrow === 'confirm' && <GuideArrow dir="down" urgent={urgent} />}
       </button>
     </div>
   )
 }
 
-function CbatMissionPanel({ mission, onType, onConfirm, onRelease, arrowField = null, arrowRelease = false, arrowUrgent = false }) {
-  const full = mission.lights >= DISPENSER_LIGHTS
+// `lights` is how many dispenser lamps are lit (two per load value on the
+// interface); RELEASE is live only with all six.
+function MissionPanel({ mission, lights, onType, onConfirm, onRelease, arrowField = null, arrowAt = 'confirm', arrowRelease = false, arrowUrgent = false }) {
+  const full = lights >= DISPENSER_LIGHTS
   const section = (title, keys) => (
     <div className="bg-game-panel border border-game-line rounded p-1.5">
       <p className="text-[9px] uppercase tracking-wide text-game-accent mb-1">{title}</p>
       <div className="space-y-1">
         {keys.map(k => (
           <MissionField key={k} field={MISSION_FIELD_BY_KEY[k]} state={mission.fields[k]}
-            onType={onType} onConfirm={onConfirm} arrow={arrowField === k} urgent={arrowUrgent} />
+            onType={onType} onConfirm={onConfirm} arrow={arrowField === k ? arrowAt : null} urgent={arrowUrgent} />
         ))}
       </div>
     </div>
@@ -343,10 +322,10 @@ function CbatMissionPanel({ mission, onType, onConfirm, onRelease, arrowField = 
         {section('Load Drop Interface', ['loadTime', 'loadLat', 'loadLon'])}
         <div className="bg-game-panel border border-game-line rounded p-1.5 flex items-center gap-2">
           <p className="text-[9px] uppercase tracking-wide text-game-accent shrink-0">Load Drop Dispenser</p>
-          <div className="flex items-center gap-1 ml-auto" aria-label={`${mission.lights} of ${DISPENSER_LIGHTS} lights`}>
+          <div className="flex items-center gap-1 ml-auto" aria-label={`${lights} of ${DISPENSER_LIGHTS} lights`}>
             {Array.from({ length: DISPENSER_LIGHTS }, (_, i) => (
-              <span key={i} data-light={i < mission.lights ? 'on' : 'off'}
-                className={`w-3 h-3 rounded-full border ${i < mission.lights ? 'bg-green-500 border-green-300' : 'bg-game-arena border-game-line'}`} />
+              <span key={i} data-light={i < lights ? 'on' : 'off'}
+                className={`w-3 h-3 rounded-full border ${i < lights ? 'bg-green-500 border-green-300' : 'bg-game-arena border-game-line'}`} />
             ))}
           </div>
           <button onClick={onRelease} data-demo-answer disabled={!full}
@@ -631,20 +610,19 @@ function makeTutorialRunId() {
 // rather than staring at "45s" for a step that lasts fifteen.
 const TUTORIAL_AIR_DUE_MS = 8_000
 const TUTORIAL_GROUND_DUE_MS = 20_000
-// On the Mission step a drop is ordered this far out: long enough to read the
-// card and find the clock, short enough that the moment actually arrives.
-const TUTORIAL_LOAD_DUE_MS = 15_000
-// The Mission step walks the eye through the order in three moves: the arrow
-// sits on the Message line for this long, then moves to the clock until the
-// drop is due, then jumps to the ordered station and gets urgent.
+// A step that reads an order out of Message keeps the arrow on the line for
+// this long before moving it to the thing the order is about.
 const TUTORIAL_READ_MS = 5_000
 
-// Real CBAT variant: a camera order on the Sensor step is for this far ahead;
-// a field order on the Mission step has this long; the dispenser lights come
-// on this far apart, so RELEASE arrives while the step is still on screen.
+// On the Mission step a drop is due this far out, its three orders this far
+// apart, and the next drop follows this soon after one is released or missed:
+// long enough to read each card and find the clock, short enough that the
+// moment actually arrives while the step is on screen.
+const TUTORIAL_DROP_LEAD_MS = 30_000
+const TUTORIAL_DROP_ORDER_GAP_MS = 6_000
+const TUTORIAL_DROP_GAP_MS = 4_000
+// Real CBAT variant: a camera order on the Sensor step is for this far ahead.
 const TUTORIAL_CAMERA_DUE_MS = 8_000
-const TUTORIAL_FIELD_WINDOW_MS = 40_000
-const TUTORIAL_LIGHT_MS = 2_000
 
 // On the System step the first comms code arrives this long after entry, so the
 // pump has the board to itself for a moment before the second job starts.
@@ -667,20 +645,6 @@ function issueTutorialCode(sim) {
   sim.codeOrderedAt = sim.elapsedMs
   pushMessage(sim, `COMMS: code ${sim.code.digits}. Enter it in System`)
   sim.codeMessageId = sim.messages[sim.messages.length - 1].id
-}
-
-// Order a drop for the Mission step, through Message, the way a run would. The
-// step's whole point is that the order lives in Message and nowhere else, so
-// the demonstration has to put it there rather than describe it.
-function scheduleTutorialLoad(sim) {
-  sim.loadOrderedAt = sim.elapsedMs
-  sim.loadDueAt = sim.elapsedMs + TUTORIAL_LOAD_DUE_MS
-  sim.loadTarget = rand(LOAD_POINTS)
-  sim.loadArmed = true
-  sim.loadReady = false
-  pushMessage(sim, `MISSION: drop ${stationName(sim.loadTarget)} at ${tutorialClockAt(sim, sim.loadDueAt)}`)
-  // So the Mission step can light this exact line and point at it.
-  sim.loadMessageId = sim.messages[sim.messages.length - 1].id
 }
 
 // Put every display back in tolerance, then arm the one this step teaches.
@@ -727,32 +691,30 @@ function resetForStep(sim, focus) {
   sim.codeAck = null
   sim.nextCodeAt = sim.elapsedMs + TUTORIAL_CODE_AT_MS
   sim.warnings = []
-  // cbat: the Mission display's orders and dispenser only run on its own step.
-  if (sim.cbat) {
-    for (const f of MISSION_FIELDS) Object.assign(sim.mission.fields[f.key], { entry: '', order: null })
-    sim.mission.lights = 0
-    sim.mission.fullAt = null
-    sim.mission.nextLightAt = focus === 'mission' ? sim.elapsedMs + TUTORIAL_LIGHT_MS : Infinity
-    if (focus === 'mission') orderMissionField(sim, TUTORIAL_FIELD_WINDOW_MS)
-  }
-  // A drop is only ever live on the Mission step. The one makeSim scheduled is
-  // discarded: its time was fixed at t=0 and may already have passed by the time
-  // the user gets here, which would leave a step that asks for a press nothing
-  // can ever answer.
-  sim.loadArmed = false
-  sim.loadReady = false
-  if (focus === 'mission') scheduleTutorialLoad(sim)
+  // A load drop only ever runs on the Mission step. The step's whole point is
+  // that the orders live in Message and nowhere else, so the demonstration
+  // puts them there rather than describing them.
+  for (const f of MISSION_FIELDS) Object.assign(sim.mission.fields[f.key], { entry: '', value: '', order: null })
+  sim.mission.drop = null
+  sim.mission.nextDropAt = Infinity
+  if (focus === 'mission') startTutorialDrop(sim)
+}
+
+// Order a drop the way a run would: due in half a minute, latitude first, the
+// other two values following on the short tutorial interval.
+function startTutorialDrop(sim) {
+  startDrop(sim, TUTORIAL_DROP_LEAD_MS)
+  orderLoadField(sim)
+  sim.mission.drop.nextOrderAt = sim.elapsedMs + TUTORIAL_DROP_ORDER_GAP_MS
 }
 
 function makeTutorialSim(cbat = false) {
   const sim = makeSim('easier', { cbat })
-  // cbat: the Message step points at an order in the log, and this variant's
-  // sim starts without one. Put a sample there, then withdraw it, so the log
-  // shows what an order looks like without a field waiting on it.
-  if (cbat) {
-    const field = orderMissionField(sim, Infinity)
-    if (field) sim.mission.fields[field.key].order = null
-  }
+  // The Message step points at an order in the log, and a fresh sim starts
+  // without one. Put a sample there, then withdraw it, so the log shows what
+  // an order looks like without a field waiting on it.
+  const field = orderMissionField(sim, Infinity)
+  if (field) sim.mission.fields[field.key].order = null
   resetForStep(sim, CUT_TUTORIAL_STEPS[0].focus)
   return sim
 }
@@ -803,34 +765,18 @@ function tickTutorial(sim, dt, focus) {
     pushMessage(sim, `SENSOR: camera ${sim.requiredCamera} order missed. New order on its way`)
     orderCamera(sim, TUTORIAL_CAMERA_DUE_MS)
   }
-  if (focus === 'mission' && sim.cbat) {
+  if (focus === 'mission') {
     const m = sim.mission
-    for (const f of MISSION_FIELDS) {
-      const st = m.fields[f.key]
-      if (st.order && sim.elapsedMs > st.dueAt) {
-        pushMessage(sim, `MISSION: ${f.order} order missed. New order on its way`)
-        st.order = null
-        orderMissionField(sim, TUTORIAL_FIELD_WINDOW_MS)
-      }
+    if (!m.drop && sim.elapsedMs >= m.nextDropAt) startTutorialDrop(sim)
+    if (m.drop && m.drop.issued < LOAD_ORDER.length && sim.elapsedMs >= m.drop.nextOrderAt) {
+      orderLoadField(sim)
+      m.drop.nextOrderAt = sim.elapsedMs + TUTORIAL_DROP_ORDER_GAP_MS
     }
-    if (m.lights < DISPENSER_LIGHTS) {
-      if (sim.elapsedMs >= m.nextLightAt) {
-        m.lights += 1
-        m.nextLightAt = sim.elapsedMs + TUTORIAL_LIGHT_MS
-        if (m.lights === DISPENSER_LIGHTS) m.fullAt = sim.elapsedMs
-      }
-    } else if (sim.elapsedMs > m.fullAt + RELEASE_WINDOW) {
-      pushMessage(sim, 'MISSION: release window missed. The dispenser is filling again')
-      resetDispenser(sim, TUTORIAL_LIGHT_MS)
-    }
-  }
-  if (focus === 'mission' && sim.loadArmed) {
-    sim.loadReady = sim.elapsedMs >= sim.loadDueAt
     // Missed it: say so in Message, where a run would, and order another so
     // the step keeps offering the moment rather than going quiet.
-    if (sim.elapsedMs > sim.loadDueAt + LOAD_RELEASE_WINDOW) {
-      pushMessage(sim, `MISSION: ${stationName(sim.loadTarget)} drop at ${tutorialClockAt(sim, sim.loadDueAt)} missed. New drop ordered`)
-      scheduleTutorialLoad(sim)
+    if (m.drop && sim.elapsedMs > m.drop.dueAt + RELEASE_WINDOW) {
+      pushMessage(sim, `MISSION: load drop at ${clockAt(sim, m.drop.dueAt)} missed. New drop ordered`)
+      clearDrop(sim, TUTORIAL_DROP_GAP_MS)
     }
   }
   // The Sensor countdowns read elapsedMs directly, so they tick on their own.
@@ -849,13 +795,12 @@ const CUT_TUTORIAL_STEPS = [
   {
     focus: 'strip',
     title: 'Warnings and the clock',
-    body: 'Any system that is out of tolerance is listed on the left, and you lose points for every second a warning is showing. Keeping this strip empty is the main job. On the right is the aircraft clock. It is not a countdown, it is the time of day, and the Mission drop is scheduled to it.',
+    body: 'Any system that is out of tolerance is listed on the left, and you lose points for every second a warning is showing. Keeping this strip empty is the main job. On the right is the aircraft clock. It is not a countdown, it is the time of day, and the load drop is timed to it.',
   },
   {
     focus: 'message',
     title: 'Message',
-    body: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. The one to watch for is the drop order, which gives you a station and a time. The Mission display never shows it, so this log is the only place you can check it.',
-    bodyCbat: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. Mission orders name one field and the value to put in it. The Mission display never repeats them, so this log is the only place you can check what was asked.',
+    body: 'Every order arrives here and nowhere else. There is nothing to click, you just read it. Mission orders name one field and the value to put in it. The Mission display never repeats them, so this log is the only place you can check what was asked.',
   },
   {
     focus: 'engine',
@@ -876,8 +821,7 @@ const CUT_TUTORIAL_STEPS = [
   {
     focus: 'mission',
     title: 'Mission',
-    body: 'The panel never says which station or when. A drop order has just arrived in Message, open in your other window, giving a station and a time. Watch the clock and press that station when the time comes. In a run you will usually have to remember it, because that window is needed elsewhere.',
-    bodyCbat: 'Three jobs on one display. Message orders one value at a time, such as a latitude for the load drop or a magnification for the video. An order has just arrived in your other window: type the value into that field and press the button beside it. The dispenser lights fill from left to right on their own. The moment all six are green, press RELEASE.',
+    body: 'Three jobs on one display. A load drop is ordered one value at a time in Message: latitude, longitude, then the time. Type each into its boxes, then press the round button beside it to confirm. Once all three are in, the dispenser lights go green. Then watch the Clock and press RELEASE the moment it reaches the time you were given. Video values are ordered the same way, one at a time.',
   },
   {
     focus: 'system',
@@ -911,7 +855,7 @@ function TutorialComplete({ onExit }) {
 }
 
 // `cbat` is the Real CBAT variant: the board it walks is that variant's board
-// (field-entry Mission display, timed camera orders, the button at zero).
+// (timed camera orders, the button at zero).
 function CutTutorial({ onExit, onProgress, cbat = false }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [done, setDone] = useState(false)
@@ -990,8 +934,8 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
     sim.cameraDueAt = null
     pushMessage(sim, `SENSOR: camera ${c} selected. Well done`)
   })
-  // Real CBAT Mission display. Nothing scores; a confirmed order is answered in
-  // Message and another is issued, so the step keeps offering the moment.
+  // Mission display. Nothing scores; a confirmed order is answered in Message,
+  // and the drop's next order follows on its own timer.
   const onTypeField = (key, digits) => act(sim => { sim.mission.fields[key].entry = digits })
   const onConfirmField = (key) => act(sim => {
     const field = MISSION_FIELD_BY_KEY[key]
@@ -1001,20 +945,23 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
       if (st.entry === st.order) {
         pushMessage(sim, `MISSION: ${field.order} set. Well done`)
         st.order = null
-        orderMissionField(sim, TUTORIAL_FIELD_WINDOW_MS)
       } else {
         pushMessage(sim, `MISSION: wrong ${field.order}. Check Message and try again`)
       }
     }
     st.value = st.entry
   })
+  // Answers back the way a run scores it, then orders the next drop so the
+  // step keeps offering the moment.
   const onReleaseLoad = () => act(sim => {
-    if (sim.mission.lights >= DISPENSER_LIGHTS) {
-      pushMessage(sim, 'MISSION: load released. Well done')
-      resetDispenser(sim, TUTORIAL_LIGHT_MS)
-    } else {
-      pushMessage(sim, 'MISSION: too early. Wait for all six lights')
+    const drop = sim.mission.drop
+    if (!drop) return
+    if (sim.elapsedMs < drop.dueAt - RELEASE_EARLY_TOL) {
+      pushMessage(sim, `MISSION: too early. The drop is at ${clockAt(sim, drop.dueAt)}`)
+      return
     }
+    pushMessage(sim, 'MISSION: load released on time. Well done')
+    clearDrop(sim, TUTORIAL_DROP_GAP_MS)
   })
   const onAckCode = () => act(sim => {
     if (!sim.codeAck) return
@@ -1029,22 +976,6 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
     const onTime = sim[dueKey] - sim.elapsedMs <= SENSOR_ARM_WINDOW
     if (onTime) pushMessage(sim, `SENSOR: ${kind} sensor activated on time. Well done`)
     sim[dueKey] = sim.elapsedMs + (kind === 'air' ? TUTORIAL_AIR_DUE_MS : TUTORIAL_GROUND_DUE_MS)
-  })
-  // The one tutorial handler that answers back. Nothing scores, but the result
-  // goes to Message so the user sees whether they read the order right, in the
-  // place a run would tell them.
-  const onRelease = (station) => act(sim => {
-    if (!sim.loadArmed) return
-    if (sim.loadReady && sim.elapsedMs <= sim.loadDueAt + LOAD_RELEASE_WINDOW) {
-      if (station === sim.loadTarget) {
-        pushMessage(sim, `MISSION: ${stationName(station)} dropped on time. Well done`)
-      } else {
-        pushMessage(sim, `MISSION: wrong station. ${stationName(sim.loadTarget)} was ordered`)
-      }
-      scheduleTutorialLoad(sim)
-    } else {
-      pushMessage(sim, `MISSION: too early. ${stationName(sim.loadTarget)} is due at ${tutorialClockAt(sim, sim.loadDueAt)}`)
-    }
   })
   const onDigit = (d) => act(sim => { if (sim.codeEntry.length < 3) sim.codeEntry += d })
   const onClearCode = () => act(sim => { sim.codeEntry = '' })
@@ -1070,8 +1001,8 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
   // the board does. Each step points at one concrete thing to look at or press;
   // `urgent` marks a press that will not wait. `lit` names the region whose
   // window carries the highlight, which follows the guide rather than the step:
-  // on the Mission step that is Message while the order is being read, the
-  // strip while the clock is being watched, and Mission only when it is time.
+  // on the Mission step that is Message while the order is being read, and
+  // Mission once it has been.
   const guide = (() => {
     const v = view
     const since = v.elapsedMs - (v.stepEnteredAt ?? 0)
@@ -1084,8 +1015,7 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
           : { lit: 'strip', clock: true }
       case 'message': {
         // The latest order in the log — the line the card says to watch for.
-        const prefix = v.cbat ? 'MISSION: set' : 'MISSION: drop'
-        const order = [...v.messages].reverse().find(m => m.text.startsWith(prefix))
+        const order = [...v.messages].reverse().find(m => m.text.startsWith('MISSION: set'))
         return { lit: 'panel1', messageId: order?.id ?? null }
       }
       case 'engine': {
@@ -1127,26 +1057,24 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
         return { lit: 'panel1', sensor: soonest, urgent: rem <= SENSOR_ARM_WINDOW }
       }
       case 'mission': {
-        if (v.cbat) {
-          // RELEASE outranks an order: its window is short and it will not wait.
-          if (v.mission.lights >= DISPENSER_LIGHTS) return { lit: 'panel1', release: true, urgent: true }
-          const key = MISSION_FIELDS.map(f => f.key).find(k => v.mission.fields[k].order)
-          if (!key) return { lit: 'panel1' }
+        // Each order in turn: the Message line first, value called out, then
+        // its boxes until every digit is in, then its confirm button. With the
+        // three values in, the clock until the time comes, then RELEASE,
+        // urgently: it will not wait.
+        const drop = v.mission.drop
+        const armed = dispenserArmed(v)
+        const timeLine = { messageLit: drop?.timeMessageId, messageEmph: 'time' }
+        if (drop && armed && v.elapsedMs >= drop.dueAt - RELEASE_EARLY_TOL) return { lit: 'panel1', release: true, urgent: true, ...timeLine }
+        const key = LOAD_ORDER.find(k => v.mission.fields[k].order)
+        if (key) {
           const st = v.mission.fields[key]
           const line = { messageLit: st.messageId, messageEmph: 'value' }
           if (v.elapsedMs < st.orderedAt + TUTORIAL_READ_MS) return { lit: 'panel2', messageId: st.messageId, ...line }
-          return { lit: 'panel1', field: key, ...line }
+          const typed = st.entry.length >= MISSION_FIELD_BY_KEY[key].digits
+          return { lit: 'panel1', field: key, fieldAt: typed ? 'confirm' : 'boxes', ...line }
         }
-        if (!v.loadArmed) return { lit: 'panel1' }
-        // The token called out in the order line follows the phase: the time
-        // while the clock is being watched, the station once it is time to press.
-        if (v.loadReady && v.elapsedMs <= v.loadDueAt + LOAD_RELEASE_WINDOW) {
-          return { lit: 'panel1', mission: 'press', messageLit: v.loadMessageId, messageEmph: 'station' }
-        }
-        if (v.elapsedMs < v.loadOrderedAt + TUTORIAL_READ_MS) {
-          return { lit: 'panel2', mission: 'read', messageLit: v.loadMessageId, messageId: v.loadMessageId }
-        }
-        return { lit: 'strip', mission: 'watch', messageLit: v.loadMessageId, clock: true, messageEmph: 'time' }
+        if (drop && armed) return { lit: 'strip', clock: true, ...timeLine }
+        return { lit: 'panel1' }
       }
       case 'system': {
         // Pressure outranks everything: out of band is a warning bleeding score.
@@ -1185,9 +1113,7 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
       case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} arrowTank={guide.tank ?? null} arrowUrgent={!!guide.urgent} />
       case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} arrowPlus={!!guide.plus} arrowMinus={!!guide.minus} holdOk={!!guide.ok} arrowUrgent={!!guide.urgent} />
       case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} arrowCamera={guide.camera ?? null} arrowSensor={guide.sensor ?? null} arrowUrgent={!!guide.urgent} />
-      case 'mission':    return sim.cbat
-        ? <CbatMissionPanel mission={sim.mission} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} arrowField={guide.field ?? null} arrowRelease={!!guide.release} arrowUrgent={!!guide.urgent} />
-        : <MissionPanel onRelease={onRelease} litStation={guide.mission === 'press' ? sim.loadTarget : null} arrowStation={guide.mission === 'press' ? sim.loadTarget : null} />
+      case 'mission':    return <MissionPanel mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} arrowField={guide.field ?? null} arrowAt={guide.fieldAt ?? 'confirm'} arrowRelease={!!guide.release} arrowUrgent={!!guide.urgent} />
       case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
       default:           return null
     }
@@ -1460,9 +1386,9 @@ export default function CbatCut() {
       tasksCompleted: stats.tasksCompleted,
       tasksMissed: stats.tasksMissed,
       warningSeconds: stats.warningSeconds,
-      // Which Mission display this was played on: the Real CBAT variant is a
-      // different task (field entry + dispenser), and the leaderboard marks
-      // each score with it.
+      // Which variant this was played on: the Real CBAT variant times its
+      // camera orders and adds the Confirm-at-zero press, and the leaderboard
+      // marks each score with it.
       uiTheme: sim.cbat ? 'cbat' : 'skywatch',
     }, { apiFetch, API })
       .then((r) => {
@@ -1561,7 +1487,7 @@ export default function CbatCut() {
     sim.cameraDueAt = null
   })
 
-  // Real CBAT Mission display — typing into a field, confirming it, RELEASE.
+  // Mission display — typing into a field, confirming it, RELEASE.
   const onTypeField = (key, digits) => act(sim => { sim.mission.fields[key].entry = digits })
   const onConfirmField = (key) => act(sim => {
     const field = MISSION_FIELD_BY_KEY[key]
@@ -1580,16 +1506,28 @@ export default function CbatCut() {
     // Confirmed digits stay on the interface either way, like the real one.
     st.value = st.entry
   })
+  // RELEASE is judged against the ordered Clock second: early is a fault and
+  // the drop stands (press again when the time comes); the points fall with
+  // every fraction of a second late; the sim expires it after the window.
   const onReleaseLoad = () => act(sim => {
-    const m = sim.mission
-    if (m.lights >= DISPENSER_LIGHTS) {
-      const bonus = Math.max(0, Math.round(SCORE.releaseSpeedBonus * (1 - Math.min(1, (sim.elapsedMs - m.fullAt) / RELEASE_WINDOW))))
-      award(sim, SCORE.release + bonus, 'load released')
-      sim.tasksCompleted += 1
-      resetDispenser(sim, randRange(...sim.tuning.dispenserGapMs))
-    } else {
-      award(sim, SCORE.releasePremature, 'release pressed before the lights were full')
+    const drop = sim.mission.drop
+    if (!dispenserArmed(sim)) return
+    if (!drop) {
+      // Values on the interface nobody ordered. The press is a fault and the
+      // dispenser disarms.
+      award(sim, SCORE.releasePremature, 'load released with no drop ordered')
+      for (const k of LOAD_ORDER) Object.assign(sim.mission.fields[k], { entry: '', value: '' })
+      return
     }
+    if (sim.elapsedMs < drop.dueAt - RELEASE_EARLY_TOL) {
+      award(sim, SCORE.releasePremature, `load released before ${clockAt(sim, drop.dueAt)}`)
+      return
+    }
+    const late = Math.min(1, Math.max(0, sim.elapsedMs - drop.dueAt) / RELEASE_WINDOW)
+    const points = Math.round(SCORE.releaseLate + (SCORE.release - SCORE.releaseLate) * (1 - late))
+    award(sim, points, `load released at ${clockAt(sim, drop.dueAt)}`)
+    sim.tasksCompleted += 1
+    clearDrop(sim, randRange(...sim.tuning.dropGapMs))
   })
   const onAckCode = () => act(sim => {
     if (!sim.codeAck) return
@@ -1609,31 +1547,6 @@ export default function CbatCut() {
       sim.tasksCompleted += 1
     }
     sim[dueKey] = sim.elapsedMs + interval
-  })
-
-  const onRelease = (station) => act(sim => {
-    if (!sim.loadArmed) return
-    if (sim.loadReady && sim.elapsedMs <= sim.loadDueAt + LOAD_RELEASE_WINDOW) {
-      if (station === sim.loadTarget) {
-        // Right station, on time — bonus for hitting close to the scheduled second.
-        const off = Math.abs(sim.elapsedMs - sim.loadDueAt)
-        const bonus = Math.max(0, Math.round(10 * (1 - Math.min(1, off / LOAD_RELEASE_WINDOW))))
-        award(sim, SCORE.load + bonus, `${stationName(station)} dropped on time`)
-        sim.tasksCompleted += 1
-        scheduleNextLoad(sim)
-      } else {
-        // Wrong station — the drop is consumed, no second chance. Same as a
-        // successful release: schedule the next drop so the stations go inactive
-        // until then (loadReady false), rather than leaving this one pending.
-        award(sim, SCORE.loadWrong, `wrong station (${stationName(station)})`)
-        sim.tasksMissed += 1
-        pushMessage(sim, `MISSION: wrong station — ${stationName(sim.loadTarget)} drop lost`)
-        scheduleNextLoad(sim)
-      }
-    } else {
-      // Released before the scheduled drop time — the load is still pending.
-      award(sim, SCORE.loadPremature, `${stationName(station)} released early`)
-    }
   })
 
   const onDigit = (d) => act(sim => { if (sim.codeEntry.length < 3) sim.codeEntry += d })
@@ -1668,9 +1581,7 @@ export default function CbatCut() {
       case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} />
       case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
       case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} />
-      case 'mission':    return sim.cbat
-        ? <CbatMissionPanel mission={sim.mission} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} />
-        : <MissionPanel onRelease={onRelease} />
+      case 'mission':    return <MissionPanel mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} />
       case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} />
       default:           return null
     }
@@ -1757,7 +1668,7 @@ export default function CbatCut() {
                   <div className="flex items-start gap-3"><CbatIntroLabel>Engine</CbatIntroLabel><span className="pt-0.5">keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Nav</CbatIntroLabel><span className="pt-0.5">hold airspeed within ±{SPEED_TOL} kts of required</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Sensor</CbatIntroLabel><span className="pt-0.5">{cbat ? 're-activate Air & Ground sensors on time; select the ordered camera at its Clock time' : 're-activate Air & Ground sensors on time; select the ordered camera'}</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Mission</CbatIntroLabel><span className="pt-0.5">{cbat ? 'enter the load drop and video values ordered in Message; press RELEASE when all six dispenser lights are green' : 'drop the ordered station at its scheduled Clock time (from Message)'}</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Mission</CbatIntroLabel><span className="pt-0.5">enter the load drop latitude, longitude and time ordered in Message, then press RELEASE as the Clock reaches that time; set the video values as ordered</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">{cbat ? 'keep hydraulic pressure 90–110; enter comms codes in the last 15s, then press Confirm when the timer hits zero' : 'keep hydraulic pressure 90–110; enter comms codes in 15s'}</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'🕑'}</span><span className="pt-0.5">The Clock shows in-game time — some tasks are scheduled to it</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">3 minutes — the Message display feeds every task</span></div>

@@ -1,6 +1,7 @@
 import { render, screen, act, fireEvent, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatCut from '../CbatCut'
+import { MISSION_FIELD_BY_KEY, DISPENSER_LIGHTS } from '../../utils/cbat/cutSim'
 
 // CUT's tutorial exists because of a measured problem, not a hunch: mean score by
 // run number across players with 5+ runs goes 298, 403, 460, 552, 623, 645, 708
@@ -70,6 +71,19 @@ const seenPatches = () =>
 
 // The primary button reads "Next" until the last step, where it reads "Finish".
 const next = () => fireEvent.click(screen.getByRole('button', { name: /^(next|finish)$/i }))
+const tick = (ms) => act(async () => { vi.advanceTimersByTime(ms) })
+
+// A lit Message line is split into parts (the called-out token is its own
+// element), so lines are found by their <li>'s full text, not by getByText.
+const lines = (re) => [...document.querySelectorAll('li')].filter(li => re.test(li.textContent))
+
+// The latest field order in the log, parsed back to its field and digits.
+function latestOrder() {
+  const line = lines(/MISSION: set /).at(-1)
+  const m = line.textContent.match(/MISSION: set (.+) to (\S+)$/)
+  const field = Object.values(MISSION_FIELD_BY_KEY).find(f => f.order === m[1])
+  return { line, field, digits: m[2].replace(/:/g, '') }
+}
 
 beforeEach(() => { vi.useFakeTimers({ shouldAdvanceTime: true }) })
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
@@ -229,76 +243,103 @@ describe('CUT tutorial — only the taught display moves', () => {
   })
 
   // The Mission step is the one that cannot be taught by a frozen panel: the
-  // panel shows nothing by design, so the step has to order a drop for real and
-  // let the moment come.
-  it('orders a drop on the Mission step, through Message, and answers a press', async () => {
-    mount()
-    await settle()
-    for (let i = 0; i < 6; i++) next()   // 7: Mission, with Message in the other window
-
-    // Newest order is the last line of the log.
-    const order = screen.getAllByText(/MISSION: drop Station \d at/).at(-1)
-    const station = order.textContent.match(/Station (\d)/)[1]
-    const press = () => fireEvent.click(screen.getByRole('button', { name: `Station ${station}` }))
-
-    press()
-    expect(screen.getByText(/too early/i)).toBeInTheDocument()
-
-    await act(async () => { vi.advanceTimersByTime(15_000) })
-    press()
-    expect(screen.getByText(/dropped on time/i)).toBeInTheDocument()
-  })
-
-  // The arrow walks the eye through the order in three moves, on the drop's own
-  // clock: the Message line first, then the time, then the station, urgently,
-  // once the release window opens.
-  it('points at the order, then the clock, then the station when it is time', async () => {
+  // panel shows nothing by design, so the step has to order a drop for real,
+  // walk the eye from each order to its field, then to the clock, and let the
+  // moment come.
+  it('Mission step walks the three orders to their fields, then the clock, then RELEASE', async () => {
     const { container } = mount()
     await settle()
-    for (let i = 0; i < 6; i++) next()   // 7: Mission
-
+    for (let i = 0; i < 6; i++) next()   // 7: Mission, with Message in the other window
     const arrows = () => [...container.querySelectorAll('[data-guide-arrow]')]
-    const order = screen.getAllByText(/MISSION: drop Station \d at/).at(-1)
-    const station = order.textContent.match(/Station (\d)/)[1]
-
-    // 1. On the order line, which is lit, and nowhere else.
-    expect(arrows()).toHaveLength(1)
-    expect(order.closest('li').querySelector('[data-guide-arrow]')).not.toBeNull()
-    expect(order.className).toMatch(/cbat-word-lit/)
-
-    // 2. After a few seconds, on the clock. The line stays lit; the arrow leaves
-    //    it; and the TIME in the line is now the called-out token.
-    await act(async () => { vi.advanceTimersByTime(6_000) })
-    expect(arrows()).toHaveLength(1)
-    expect(order.closest('li').querySelector('[data-guide-arrow]')).toBeNull()
-    const emph = () => order.closest('li').querySelector('.cbat-tutorial-emph')
-    expect(emph()).not.toBeNull()
-    expect(emph().textContent).toMatch(/^\d{2}:\d{2}:\d{2}$/)
-    expect(container.querySelector('.whitespace-nowrap.tabular-nums').className).toMatch(/cbat-word-lit/)
-    expect(container.querySelector('.whitespace-nowrap.tabular-nums').previousSibling?.dataset?.guideArrow).toBe('right')
-
-    // 3. When the time comes: on the ordered station, urgent, and the button pulses.
-    await act(async () => { vi.advanceTimersByTime(10_000) })
-    const button = screen.getByRole('button', { name: `Station ${station}` })
-    const inButton = button.querySelector('[data-guide-arrow]')
-    expect(inButton).not.toBeNull()
-    expect(inButton.dataset.guideUrgent).toBe('true')
-    expect(button.className).toMatch(/cbat-triple-pulse/)
-    expect(arrows()).toHaveLength(1)
-    // And the called-out token moves from the time to the station.
-    expect(emph().textContent).toBe(`Station ${station}`)
-    // And not the other two.
-    for (const other of screen.getAllByRole('button', { name: /^Station \d$/ })) {
-      if (other !== button) expect(other.querySelector('[data-guide-arrow]')).toBeNull()
+    const lit = () => document.querySelectorAll('[data-light="on"]').length
+    const clock = () => container.querySelector('.whitespace-nowrap.tabular-nums')
+    const release = () => screen.getByRole('button', { name: 'RELEASE' })
+    // Reads the line, then confirms the value; the arrow has to be on each.
+    const enter = async ({ line, field, digits }, wrongFirst = false) => {
+      expect(arrows()).toHaveLength(1)
+      expect(line.querySelector('[data-guide-arrow]')).not.toBeNull()
+      expect(line.querySelector('.cbat-tutorial-emph').textContent).toBe(
+        `${digits.slice(0, 2)}:${digits.slice(2, 4)}:${digits.slice(4, 6)}`)
+      await tick(5_100)
+      // On the digit boxes while there is typing to do, not the button.
+      const confirm = screen.getByRole('button', { name: `Confirm ${field.order}` })
+      const input = screen.getByLabelText(field.order)
+      const boxes = input.parentElement
+      expect(arrows()).toHaveLength(1)
+      expect(boxes.querySelector('[data-guide-arrow]')).not.toBeNull()
+      expect(boxes.className).toMatch(/cbat-triple-pulse/)
+      expect(confirm.querySelector('[data-guide-arrow]')).toBeNull()
+      // Half typed: still the boxes. Fully typed: the button.
+      fireEvent.change(input, { target: { value: digits.slice(0, 3) } })
+      expect(boxes.querySelector('[data-guide-arrow]')).not.toBeNull()
+      fireEvent.change(input, { target: { value: digits } })
+      expect(arrows()).toHaveLength(1)
+      expect(boxes.querySelector('[data-guide-arrow]')).toBeNull()
+      expect(confirm.querySelector('[data-guide-arrow]')).not.toBeNull()
+      expect(confirm.className).toMatch(/cbat-triple-pulse/)
+      if (wrongFirst) {
+        fireEvent.change(input, { target: { value: digits.replace(/\d$/, d => String((Number(d) + 1) % 10)) } })
+        fireEvent.click(confirm)
+        expect(screen.getByText(new RegExp(`wrong ${field.order}`))).toBeInTheDocument()
+      }
+      fireEvent.change(input, { target: { value: digits } })
+      fireEvent.click(confirm)
+      expect(screen.getByText(new RegExp(`${field.order} set. Well done`))).toBeInTheDocument()
     }
+
+    // 1. Latitude straight away; a wrong value answers back.
+    const lat = latestOrder()
+    expect(lat.field.key).toBe('loadLat')
+    await enter(lat, true)
+    expect(lit()).toBe(2)
+
+    // 2. Longitude follows on the step's interval (ordered at 6s, read for 5).
+    await tick(1_000)
+    const lon = latestOrder()
+    expect(lon.field.key).toBe('loadLon')
+    await enter(lon)
+    expect(lit()).toBe(4)
+
+    // 3. Then the time (ordered at 12s), and with all three in the dispenser is armed.
+    await tick(1_000)
+    const time = latestOrder()
+    expect(time.field.key).toBe('loadTime')
+    await enter(time)
+    expect(lit()).toBe(DISPENSER_LIGHTS)
+    expect(release()).toBeEnabled()
+
+    // 4. Now the clock: the arrow leaves the panel for the strip, the time line
+    //    stays lit with its time called out, and an early press answers back.
+    expect(clock().previousSibling?.dataset?.guideArrow).toBe('right')
+    expect(clock().className).toMatch(/cbat-word-lit/)
+    expect(time.line.querySelector('.cbat-tutorial-emph').textContent).toBe(
+      `${time.digits.slice(0, 2)}:${time.digits.slice(2, 4)}:${time.digits.slice(4, 6)}`)
+    fireEvent.click(release())
+    expect(screen.getByText(/too early. The drop is at/)).toBeInTheDocument()
+
+    // 5. When the time comes: RELEASE, urgent, and the press is thanked.
+    const when = `${time.digits.slice(0, 2)}:${time.digits.slice(2, 4)}:${time.digits.slice(4, 6)}`
+    for (let i = 0; i < 40 && clock().textContent !== when; i++) await tick(1_000)
+    expect(clock().textContent).toBe(when)
+    const inRelease = release().querySelector('[data-guide-arrow]')
+    expect(inRelease).not.toBeNull()
+    expect(inRelease.dataset.guideUrgent).toBe('true')
+    fireEvent.click(release())
+    expect(screen.getByText(/load released on time. Well done/)).toBeInTheDocument()
+    expect(lit()).toBe(0)
+    expect(release()).toBeDisabled()
   })
 
-  it('does not leave a drop running on the steps after Mission', async () => {
+  it('does not run a drop on the steps after Mission', async () => {
     mount()
     await settle()
     for (let i = 0; i < 7; i++) next()   // 8: System
-    await act(async () => { vi.advanceTimersByTime(30_000) })
-    expect(screen.queryByText(/drop .* missed/i)).not.toBeInTheDocument()
+    const before = screen.getAllByText(/^MISSION: set /).length
+    await tick(30_000)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Mission' })[0])
+    expect(document.querySelectorAll('[data-light="on"]')).toHaveLength(0)
+    expect(screen.getAllByText(/^MISSION: set /).length).toBe(before)
+    expect(screen.queryByText(/missed/)).toBeNull()
   })
 
   it('still lets a control be pressed, so the user can see what it does', async () => {
@@ -351,11 +392,12 @@ describe('CUT tutorial — every step points at something', () => {
     expect(arrows(container)).toHaveLength(1)
   })
 
-  it('step 3 points at the drop order in the log', async () => {
+  it('step 3 points at a field order in the log', async () => {
     mount()
     await settle()
     goTo(3)
-    const order = screen.getAllByText(/MISSION: drop Station \d at/).at(-1)
+    // A sample order is in the log to point at, with nothing waiting on it.
+    const order = screen.getAllByText(/^MISSION: set /).at(-1)
     expect(arrowInside(order.closest('li'))).not.toBeNull()
     expect(order.className).toMatch(/cbat-word-lit/)
   })
@@ -533,8 +575,7 @@ describe('CUT tutorial — every step points at something', () => {
 
   // The window highlight belongs to whatever the arrow is pointing into, not to
   // the step's own panel. On the Mission step that means Message while the
-  // order is being read, the strip while the clock is being watched, and the
-  // Mission panel only once it is time to press.
+  // order is being read, and the Mission panel once it is time to type.
   it('moves the highlight with the arrow on the Mission step', async () => {
     const { container } = mount()
     await settle()
@@ -545,16 +586,14 @@ describe('CUT tutorial — every step points at something', () => {
     // Reading: the Message window pulses, the Mission panel does not.
     expect(pulsing()).toHaveLength(1)
     expect(holds('ul')).toBe(true)                       // the log
-    expect(holds('[class*="MISSION"], .cbat-triple-pulse')).toBe(false)
+    expect(holds('[data-cbat-mission], .cbat-triple-pulse')).toBe(false)
 
-    // Watching: the strip pulses.
+    // Typing: the Mission panel pulses, with the ordered field's digit boxes.
     await act(async () => { vi.advanceTimersByTime(6_000) })
     expect(pulsing()).toHaveLength(1)
-    expect(holds('.whitespace-nowrap.tabular-nums')).toBe(true)
-
-    // Pressing: the Mission panel pulses.
-    await act(async () => { vi.advanceTimersByTime(10_000) })
-    expect(pulsing().some(el => el.querySelector('.cbat-triple-pulse'))).toBe(true)
+    expect(holds('ul')).toBe(false)
+    expect(holds('[data-cbat-mission]')).toBe(true)
+    expect(pulsing().some(el => el.querySelector('[data-cbat-field] .cbat-triple-pulse input'))).toBe(true)
   })
 })
 

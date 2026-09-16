@@ -56,25 +56,27 @@ describe('CUT — difficulty tuning', () => {
 
     // Every one of these announces itself in Message, so longer gaps = fewer
     // messages, which is the other half of what Easier means.
-    for (const key of ['speedChangeMs', 'cameraFirstMs', 'cameraNextMs', 'loadGapMs', 'codeGapMs',
-      // Real CBAT variant cadences (field orders, dispenser lights, camera lead).
-      'fieldGapMs', 'lightGapMs', 'dispenserGapMs', 'cameraLeadMs']) {
+    for (const key of ['speedChangeMs', 'cameraFirstMs', 'cameraNextMs', 'codeGapMs',
+      // Mission display cadences (load drops and their orders, video orders)
+      // and the Real CBAT variant's camera lead.
+      'dropLeadMs', 'dropOrderGapMs', 'dropGapMs', 'fieldGapMs', 'cameraLeadMs']) {
       expect(e[key][0]).toBeGreaterThan(h[key][0])
       expect(e[key][1]).toBeGreaterThan(h[key][1])
     }
-    expect(e.firstLoadMs).toBeGreaterThan(h.firstLoadMs)
     expect(e.firstCodeMs).toBeGreaterThan(h.firstCodeMs)
     expect(e.fieldFirstMs).toBeGreaterThan(h.fieldFirstMs)
+    expect(e.firstDropMs).toBeGreaterThan(h.firstDropMs)
   })
 
   it('carries no knobs beyond drift, cadence and the derived grade bands', () => {
     const allowed = [
       'key', 'label', 'gameKey', 'bars', 'blurb',
       'fuelDrainPerSec', 'speedDriftPerSec', 'pressRisePerSec', 'pressDropPerSec',
-      'speedChangeMs', 'cameraFirstMs', 'cameraNextMs', 'loadGapMs',
-      'firstLoadMs', 'firstCodeMs', 'codeGapMs', 'grades',
+      'speedChangeMs', 'cameraFirstMs', 'cameraNextMs',
+      'firstCodeMs', 'codeGapMs', 'grades',
+      'firstDropMs', 'dropLeadMs', 'dropOrderGapMs', 'dropGapMs', 'fieldFirstMs', 'fieldGapMs',
       // Real CBAT variant only (cutSim's "Real CBAT variant" block).
-      'fieldFirstMs', 'fieldGapMs', 'lightGapMs', 'dispenserGapMs', 'cameraLeadMs',
+      'cameraLeadMs',
     ]
     for (const t of [CUT_TUNING.easier, CUT_TUNING.hard]) {
       expect(Object.keys(t).sort()).toEqual([...allowed].sort())

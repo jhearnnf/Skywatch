@@ -34,14 +34,6 @@ export const AIR_INTERVAL = 45_000
 export const GROUND_INTERVAL = 90_000
 export const SENSOR_ARM_WINDOW = 6_000   // activating within this of due earns points
 
-// Mission — a release window opens at the scheduled time. Each drop names one of
-// three stations; the player must release the ORDERED station (read from Message)
-// at the scheduled Clock time. The Mission panel gives no cue at all — neither
-// which station nor when — so it's a genuine memory-updating task.
-export const LOAD_RELEASE_WINDOW = 6_000
-export const LOAD_POINTS = 3
-export const stationName = (i) => `Station ${i + 1}`
-
 // System — hydraulic pressure band + comms-code entry.
 export const PRESS_LOW = 90
 export const PRESS_HIGH = 110
@@ -51,20 +43,28 @@ export const PRESS_HIGH = 110
 export const CODE_WINDOW = 30_000
 export const CODE_SUBMIT_WINDOW = 15_000
 
-// ── Real CBAT variant (account theme 'cbat') ─────────────────────────────────
+// ── Mission display ──────────────────────────────────────────────────────────
 // Modelled on the real test's Mission display (screenshot on the RAF CBAT TMI
 // guide, confirmed by sitters): a Load Drop Interface (Time / Latitude /
-// Longitude), a Load Drop Dispenser (six lights that turn green one at a time
-// over a random interval, then RELEASE) and a Video Recording Interface
-// (Magnification / Latitude / Longitude / Duration). Message orders ONE field
-// value at a time ("set video magnification to 6"); the player types it into
-// that field and confirms it. Under the SkyWatch theme none of this exists —
-// the Mission display is the three-station drop — so every branch below is
-// keyed on `sim.cbat`.
+// Longitude), a Load Drop Dispenser (six lights and RELEASE) and a Video
+// Recording Interface (Magnification / Latitude / Longitude / Duration).
 //
-// Two smaller fidelity points ride on the same flag: camera orders carry a
-// Clock time and must not be pressed early, and a comms code's timer reaching
-// zero brings up a button that has to be pressed straight away.
+// A load drop is three orders through Message, one value each — latitude,
+// longitude, then a Clock time — typed into the interface and confirmed. The
+// dispenser arms (all six lights green) once the three values are in, and the
+// load is RELEASED as the Clock reaches the ordered time: early is a fault,
+// and the window after it is short. Two sitters described it exactly this way
+// (enter the three boxes, then drop at the time said, watching the clock).
+// Video values are ordered one at a time as separate tasks. This is the
+// Mission display under BOTH themes: it began as the Real CBAT variant, and a
+// sitter confirmed the three-station drop it replaced was the one place
+// SkyWatch's CUT differed from the real thing, so the stations went
+// (2026-09-16).
+//
+// ── Real CBAT variant (account theme 'cbat') ─────────────────────────────────
+// Two smaller fidelity points are still keyed on `sim.cbat`: camera orders
+// carry a Clock time and must not be pressed early, and a comms code's timer
+// reaching zero brings up a button that has to be pressed straight away.
 export const MISSION_FIELDS = [
   { key: 'loadTime', panel: 'load',  label: 'Time',          digits: 6, order: 'load drop time' },
   { key: 'loadLat',  panel: 'load',  label: 'Latitude',      digits: 6, order: 'load drop latitude' },
@@ -75,9 +75,16 @@ export const MISSION_FIELDS = [
   { key: 'vidDur',   panel: 'video', label: 'Duration',      digits: 2, order: 'video duration' },
 ]
 export const MISSION_FIELD_BY_KEY = Object.fromEntries(MISSION_FIELDS.map(f => [f.key, f]))
-export const FIELD_WINDOW = 30_000       // confirm an ordered value within this
+export const LOAD_FIELDS = MISSION_FIELDS.filter(f => f.panel === 'load')
+export const VIDEO_FIELDS = MISSION_FIELDS.filter(f => f.panel === 'video')
+// The order a drop's three values are asked for: the time comes last, so the
+// countdown only starts once the rest is in.
+export const LOAD_ORDER = ['loadLat', 'loadLon', 'loadTime']
+export const FIELD_WINDOW = 30_000       // confirm an ordered video value within this
 export const DISPENSER_LIGHTS = 6
-export const RELEASE_WINDOW = 6_000      // press RELEASE within this of the sixth light
+export const LIGHTS_PER_LOAD_FIELD = DISPENSER_LIGHTS / LOAD_FIELDS.length
+export const RELEASE_WINDOW = 10_000     // press RELEASE within this of the ordered second
+export const RELEASE_EARLY_TOL = 500     // a press this close before it still counts
 export const CAMERA_WINDOW = 6_000       // press the ordered camera within this of its time
 export const CAMERA_EARLY_TOL = 1_000    // a press this close before the time still counts
 export const CODE_ACK_WINDOW = 8_000     // press the button that appears at zero within this
@@ -94,11 +101,12 @@ export const MONITORED_SYSTEMS = 5
 export const SCORE = {
   code: 25, codeSpeedBonus: 10, codeWrong: -3, codeMissed: -10,
   sensor: 15, sensorGround: 20,
-  load: 40, loadPremature: -3, loadWrong: -5, loadMissed: -8,
   camera: 15, cameraWrong: -3,
-  // Real CBAT variant only.
   field: 25, fieldSpeedBonus: 10, fieldWrong: -3, fieldMissed: -8,
-  release: 30, releaseSpeedBonus: 10, releasePremature: -3, releaseMissed: -8,
+  // A release scores `release` on the ordered second, falling straight down
+  // to `releaseLate` by the end of RELEASE_WINDOW.
+  release: 50, releaseLate: 10, releasePremature: -3, releaseMissed: -8,
+  // Real CBAT variant only.
   cameraEarly: -3, cameraMissed: -5,
   codeAck: 8, codeAckSpeedBonus: 4, codeAckMissed: -5,
   greenPerSec: 0.4,      // per system currently IN tolerance, per second
@@ -179,46 +187,75 @@ export function fmtWall(totalSec) {
 // The in-game clock time a given elapsed offset maps to.
 export const clockAt = (sim, elapsedMs) => fmtWall(sim.clockStartSec + elapsedMs / 1000)
 
-// Schedule the next load drop — a station + an in-game clock time — and announce
-// it. The panel never shows the station/time, so the order lives only in Message.
-export function scheduleNextLoad(sim) {
-  sim.loadDueAt = sim.elapsedMs + randRange(...sim.tuning.loadGapMs)
-  sim.loadTarget = rand(LOAD_POINTS)
-  sim.loadArmed = true
-  sim.loadReady = false
-  pushMessage(sim, `MISSION: drop ${stationName(sim.loadTarget)} at ${clockAt(sim, sim.loadDueAt)}`)
+// Order a value for one Mission field through Message. Returns the id of the
+// Message line, so a caller can point at it.
+export function orderField(sim, field, value, dueAt) {
+  const state = sim.mission.fields[field.key]
+  state.order = value
+  state.orderedAt = sim.elapsedMs
+  state.dueAt = dueAt
+  pushMessage(sim, `MISSION: set ${field.order} to ${fmtFieldValue(field, value)}`)
+  state.messageId = sim.messages[sim.messages.length - 1].id
+  return state.messageId
 }
 
-// Real CBAT variant — order a value for one Mission field that has no order
-// outstanding, through Message. Returns the field, or null if every field is
-// already waiting on a value (then nothing is ordered this time round).
+// Order a value for one video field that has no order outstanding. Returns the
+// field, or null if every video field is already waiting on a value (then
+// nothing is ordered this time round).
 export function orderMissionField(sim, windowMs = FIELD_WINDOW) {
-  const free = MISSION_FIELDS.filter(f => !sim.mission.fields[f.key].order)
+  const free = VIDEO_FIELDS.filter(f => !sim.mission.fields[f.key].order)
   if (!free.length) return null
   const field = pick(free)
-  const state = sim.mission.fields[field.key]
-  state.order = fieldValue(field)
-  state.orderedAt = sim.elapsedMs
-  state.dueAt = sim.elapsedMs + windowMs
-  pushMessage(sim, `MISSION: set ${field.order} to ${fmtFieldValue(field, state.order)}`)
-  state.messageId = sim.messages[sim.messages.length - 1].id
+  orderField(sim, field, fieldValue(field), sim.elapsedMs + windowMs)
   return field
 }
 
+// Begin a load drop due `leadMs` from now, on a whole Clock second: the order
+// names HH:MM:SS, and the press is judged against the moment the Clock shows
+// it, not some point inside that second. Its three orders follow through
+// orderLoadField, the first straight away.
+export function startDrop(sim, leadMs) {
+  const dueAt = Math.ceil((sim.elapsedMs + leadMs) / 1000) * 1000
+  sim.mission.drop = { dueAt, issued: 0, nextOrderAt: sim.elapsedMs, timeMessageId: null }
+  return sim.mission.drop
+}
+
+// Order the drop's next value (latitude, longitude, then the time). Every load
+// value is wanted by the drop time itself. Returns the field ordered.
+export function orderLoadField(sim) {
+  const drop = sim.mission.drop
+  const field = MISSION_FIELD_BY_KEY[LOAD_ORDER[drop.issued]]
+  const value = field.key === 'loadTime'
+    ? clockAt(sim, drop.dueAt).replace(/:/g, '')
+    : fieldValue(field)
+  const messageId = orderField(sim, field, value, drop.dueAt)
+  if (field.key === 'loadTime') drop.timeMessageId = messageId
+  drop.issued += 1
+  return field
+}
+
+// How many dispenser lights are lit: two per load value on the interface. All
+// six is "armed", and only then is RELEASE live.
+export function dispenserLights(sim) {
+  return LOAD_FIELDS.filter(f => sim.mission.fields[f.key].value).length * LIGHTS_PER_LOAD_FIELD
+}
+export const dispenserArmed = (sim) => dispenserLights(sim) >= DISPENSER_LIGHTS
+
+// The drop is over (released or missed): withdraw any load order still
+// standing, clear the interface so the dispenser disarms, and book the next.
+export function clearDrop(sim, gapMs) {
+  for (const f of LOAD_FIELDS) Object.assign(sim.mission.fields[f.key], { entry: '', value: '', order: null })
+  sim.mission.drop = null
+  sim.mission.nextDropAt = sim.elapsedMs + gapMs
+}
+
 // Real CBAT variant — a camera order names the camera AND the Clock time to
-// press it at. Always the camera that isn't live, as in the SkyWatch variant.
+// press it at. Always the camera that isn't live, as under SkyWatch.
 export function orderCamera(sim, leadMs) {
   sim.requiredCamera = sim.camera === 'Alpha' ? 'Bravo' : 'Alpha'
   sim.cameraDueAt = sim.elapsedMs + leadMs
   pushMessage(sim, `SENSOR: select camera ${sim.requiredCamera} at ${clockAt(sim, sim.cameraDueAt)}`)
   sim.cameraMessageId = sim.messages[sim.messages.length - 1].id
-}
-
-// Real CBAT variant — empty the dispenser and start the next slow fill.
-export function resetDispenser(sim, gapMs) {
-  sim.mission.lights = 0
-  sim.mission.fullAt = null
-  sim.mission.nextLightAt = sim.elapsedMs + gapMs
 }
 
 function freshMissionFields() {
@@ -240,8 +277,6 @@ export function makeSim(difficulty, { cbat = false } = {}) {
   const tuning = cutTuning(difficulty)
   const requiredSpeed = randRange(360, 480)
   const clockStartSec = randRange(0, 86_399)   // in-game wall-clock start
-  const loadDueAt = tuning.firstLoadMs          // first scheduled load drop (elapsed ms)
-  const loadTarget = rand(LOAD_POINTS)          // which station the first drop wants
   return {
     tuning,
     // Real CBAT variant (account theme). Fixed for the life of the sim.
@@ -275,19 +310,12 @@ export function makeSim(difficulty, { cbat = false } = {}) {
     airDueAt: AIR_INTERVAL,
     groundDueAt: GROUND_INTERVAL,
 
-    // Mission — load drop scheduled to an in-game clock time (announced via Message)
-    loadDueAt,
-    loadTarget,
-    loadArmed: !cbat,
-    loadReady: false,
-
-    // Mission — Real CBAT variant: field orders + the dispenser.
+    // Mission — the load drop in progress (null between drops) + video orders.
     mission: {
       fields: freshMissionFields(),
+      drop: null,          // { dueAt, issued, nextOrderAt, timeMessageId }
+      nextDropAt: tuning.firstDropMs,
       nextOrderAt: tuning.fieldFirstMs,
-      lights: 0,
-      nextLightAt: randRange(...tuning.lightGapMs),
-      fullAt: null,        // when the sixth light came on (RELEASE live)
     },
 
     // System — hydraulic pressure + comms code
@@ -300,7 +328,6 @@ export function makeSim(difficulty, { cbat = false } = {}) {
 
     messages: [
       { id: mid(), t: 0, wall: fmtWall(clockStartSec), text: 'MISSION: hold all systems in tolerance. Keep the warning panel clear.' },
-      ...(cbat ? [] : [{ id: mid(), t: 0, wall: fmtWall(clockStartSec), text: `MISSION: drop ${stationName(loadTarget)} at ${fmtWall(clockStartSec + loadDueAt / 1000)}` }]),
     ],
     warnings: [],
   }
@@ -359,49 +386,35 @@ export function advanceSim(sim, dt) {
     sim.cameraDueAt = null
   }
 
-  // Mission — the release window opens at the scheduled drop time. Nothing on
-  // the panel announces it; the player has to be watching the Clock. Miss the
-  // window and it's a fault.
-  if (sim.loadArmed) {
-    sim.loadReady = sim.elapsedMs >= sim.loadDueAt
-    if (sim.elapsedMs > sim.loadDueAt + LOAD_RELEASE_WINDOW) {
-      award(sim, SCORE.loadMissed, `${stationName(sim.loadTarget)} load drop missed`)
-      sim.tasksMissed += 1
-      pushMessage(sim, `MISSION: ${stationName(sim.loadTarget)} drop at ${clockAt(sim, sim.loadDueAt)} missed`)
-      scheduleNextLoad(sim)
-    }
+  // Mission — a load drop is ordered a value at a time (latitude, longitude,
+  // then the time), the load values lapsing at the drop time itself; the
+  // RELEASE press is expected as the Clock reaches it, within RELEASE_WINDOW.
+  // Video values are ordered on their own cadence and lapse after FIELD_WINDOW.
+  const m = sim.mission
+  if (!m.drop && sim.elapsedMs >= m.nextDropAt) {
+    startDrop(sim, randRange(...tuning.dropLeadMs))
   }
-
-  // Mission — Real CBAT variant. One field value is ordered at a time through
-  // Message; an unconfirmed order lapses after FIELD_WINDOW. The dispenser
-  // lights come on one by one at random intervals; once all six are lit the
-  // RELEASE press is expected within RELEASE_WINDOW.
-  if (sim.cbat) {
-    const m = sim.mission
-    if (sim.elapsedMs >= m.nextOrderAt) {
-      orderMissionField(sim)
-      m.nextOrderAt = sim.elapsedMs + randRange(...tuning.fieldGapMs)
-    }
-    for (const f of MISSION_FIELDS) {
-      const st = m.fields[f.key]
-      if (st.order && sim.elapsedMs > st.dueAt) {
-        award(sim, SCORE.fieldMissed, `${f.order} not set`)
-        sim.tasksMissed += 1
-        pushMessage(sim, `MISSION: ${f.order} order missed`)
-        st.order = null
-      }
-    }
-    if (m.lights < DISPENSER_LIGHTS) {
-      if (sim.elapsedMs >= m.nextLightAt) {
-        m.lights += 1
-        m.nextLightAt = sim.elapsedMs + randRange(...tuning.lightGapMs)
-        if (m.lights === DISPENSER_LIGHTS) m.fullAt = sim.elapsedMs
-      }
-    } else if (sim.elapsedMs > m.fullAt + RELEASE_WINDOW) {
-      award(sim, SCORE.releaseMissed, 'load not released')
+  if (m.drop && m.drop.issued < LOAD_ORDER.length && sim.elapsedMs >= m.drop.nextOrderAt) {
+    orderLoadField(sim)
+    m.drop.nextOrderAt = sim.elapsedMs + randRange(...tuning.dropOrderGapMs)
+  }
+  if (m.drop && sim.elapsedMs > m.drop.dueAt + RELEASE_WINDOW) {
+    award(sim, SCORE.releaseMissed, `load drop at ${clockAt(sim, m.drop.dueAt)} missed`)
+    sim.tasksMissed += 1
+    pushMessage(sim, `MISSION: load drop at ${clockAt(sim, m.drop.dueAt)} missed`)
+    clearDrop(sim, randRange(...tuning.dropGapMs))
+  }
+  if (sim.elapsedMs >= m.nextOrderAt) {
+    orderMissionField(sim)
+    m.nextOrderAt = sim.elapsedMs + randRange(...tuning.fieldGapMs)
+  }
+  for (const f of MISSION_FIELDS) {
+    const st = m.fields[f.key]
+    if (st.order && sim.elapsedMs > st.dueAt) {
+      award(sim, SCORE.fieldMissed, `${f.order} not set`)
       sim.tasksMissed += 1
-      pushMessage(sim, 'MISSION: release window missed')
-      resetDispenser(sim, randRange(...tuning.dispenserGapMs))
+      pushMessage(sim, `MISSION: ${f.order} order missed`)
+      st.order = null
     }
   }
 

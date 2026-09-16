@@ -2,12 +2,13 @@ import { render, screen, act, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatCut from '../CbatCut'
 import { CUT_TUNING } from '../../utils/cbat/cutDifficulty'
-import { MISSION_FIELD_BY_KEY, DISPENSER_LIGHTS, fmtFieldValue } from '../../utils/cbat/cutSim'
+import { MISSION_FIELD_BY_KEY, fmtFieldValue } from '../../utils/cbat/cutSim'
 
-// Under the Real CBAT theme the Mission display is the real one: a Load Drop
+// The Mission display is the real one under both themes: a Load Drop
 // Interface, a Load Drop Dispenser and a Video Recording Interface, with
-// Message ordering one field value at a time. Under SkyWatch it is the
-// three-station drop, untouched. The score records which one it came from.
+// Message ordering one field value at a time. What the Real CBAT theme adds
+// is timed camera orders and the Confirm button when a code timer reaches
+// zero. The score records which variant it came from.
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
 const mockSubmit = vi.hoisted(() => vi.fn(() => Promise.resolve({ synced: true })))
@@ -59,13 +60,12 @@ describe('CUT — Real CBAT theme Mission display', () => {
   beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); vi.useFakeTimers({ shouldAdvanceTime: true }) })
   afterEach(() => vi.useRealTimers())
 
-  it('shows the three interfaces and no stations under the Real CBAT theme', async () => {
+  it('shows the three interfaces under the Real CBAT theme', async () => {
     await startRun('cbat')
     showMission()
     expect(screen.getByText('Load Drop Interface')).toBeInTheDocument()
     expect(screen.getByText('Load Drop Dispenser')).toBeInTheDocument()
     expect(screen.getByText('Video Recording Interface')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Station \d$/ })).toBeNull()
     // Every field of the real interface, each with its own confirm button.
     for (const f of Object.values(MISSION_FIELD_BY_KEY)) {
       expect(screen.getByLabelText(f.order)).toBeInTheDocument()
@@ -74,16 +74,16 @@ describe('CUT — Real CBAT theme Mission display', () => {
     // The dispenser starts empty and RELEASE is not live.
     expect(screen.getByRole('button', { name: 'RELEASE' })).toBeDisabled()
     expect(document.querySelectorAll('[data-light="on"]')).toHaveLength(0)
-    // No station drop was ever ordered.
-    expect(screen.queryByText(/^MISSION: drop/)).toBeNull()
   })
 
-  it('keeps the three-station drop under the SkyWatch theme', async () => {
+  it('shows the same Mission display under the SkyWatch theme', async () => {
     await startRun('skywatch')
     showMission()
-    expect(screen.getAllByRole('button', { name: /^Station \d$/ })).toHaveLength(3)
-    expect(screen.queryByText('Load Drop Interface')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'RELEASE' })).toBeNull()
+    expect(screen.getByText('Load Drop Interface')).toBeInTheDocument()
+    expect(screen.getByText('Load Drop Dispenser')).toBeInTheDocument()
+    expect(screen.getByText('Video Recording Interface')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^Confirm / })).toHaveLength(7)
+    expect(screen.getByRole('button', { name: 'RELEASE' })).toBeDisabled()
   })
 
   it('scores a value typed into the ordered field and confirmed', async () => {
@@ -113,31 +113,6 @@ describe('CUT — Real CBAT theme Mission display', () => {
     fireEvent.change(input, { target: { value: digits } })
     fireEvent.click(screen.getByRole('button', { name: `Confirm ${field.order}` }))
     expect(screen.getByText(new RegExp(`^${field.order} set to`))).toBeInTheDocument()
-  })
-
-  it('lights the dispenser one lamp at a time and RELEASE goes live on the sixth', async () => {
-    await startRun('cbat')
-    showMission()
-    const release = () => screen.getByRole('button', { name: 'RELEASE' })
-    // Pressing early is a fault, not a release.
-    fireEvent.click(release())
-    expect(screen.queryByText('load released')).toBeNull()
-    // A second at a time: the sixth light opens a short release window, and a
-    // coarser step could sail past it and watch the dispenser reset.
-    const [, hi] = CUT_TUNING.easier.lightGapMs
-    let lit = 0
-    for (let i = 0; i < DISPENSER_LIGHTS * hi / 1000 + 5 && lit < DISPENSER_LIGHTS; i++) {
-      await advance(1_000)
-      const now = document.querySelectorAll('[data-light="on"]').length
-      expect(now - lit).toBeLessThanOrEqual(1)   // one lamp at a time
-      lit = now
-    }
-    expect(lit).toBe(DISPENSER_LIGHTS)
-    expect(release()).toBeEnabled()
-    fireEvent.click(release())
-    expect(screen.getByText('load released')).toBeInTheDocument()
-    expect(document.querySelectorAll('[data-light="on"]')).toHaveLength(0)
-    expect(release()).toBeDisabled()
   })
 
   it('hides the camera order on the Sensor display under the Real CBAT theme', async () => {
