@@ -1485,6 +1485,17 @@ body.community-selectable .app-shell-content * {
   }
 }
 
+/* Instruments Reading: the "tap a dial" hint under the dials pulses slowly
+   once a round has sat unanswered for a while. Slow on purpose: a nudge, not
+   an alarm. */
+@keyframes cbat-hint-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.cbat-hint-pulse {
+  animation: cbat-hint-pulse 2.4s ease-in-out infinite;
+}
+
 /* Instruments Orientation, SkyWatch theme: the Typhoon pictures get the
    site's electric-blue treatment — a glow around the jet, faint scanlines and
    a vignette — over the neon horizon drawn in OrientationAircraft.jsx. The

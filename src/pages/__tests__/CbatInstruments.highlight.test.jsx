@@ -24,7 +24,8 @@ vi.mock('framer-motion', () => ({
     div:    ({ children, className, style }) => <div className={className} style={style}>{children}</div>,
     button: ({ children, className, onClick, disabled }) =>
       <button className={className} onClick={onClick} disabled={disabled}>{children}</button>,
-    p:      ({ children, className }) => <p className={className}>{children}</p>,
+    p:      ({ children, className, 'data-testid': testId, 'data-stuck': stuck }) =>
+      <p className={className} data-testid={testId} data-stuck={stuck}>{children}</p>,
   },
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
@@ -139,12 +140,27 @@ describe('CbatInstruments — dial-press answer highlighting', () => {
     expect(texts.filter(t => turnPhrases.test(t)).length).toBe(5)
   }, 10000)
 
-  it('shows the hint until the first dial press, then hides it persistently', async () => {
+  it('keeps the dial hint under the dials for the whole round, even after a press', async () => {
     await startAndWaitForPlaying()
 
-    expect(screen.queryByText(/tap an instrument/i)).not.toBeNull()
+    expect(screen.getByTestId('dial-hint').textContent).toMatch(/tap a dial/i)
     fireEvent.click(screen.getByTestId('dial-turn'))
-    expect(screen.queryByText(/tap an instrument/i)).toBeNull()
-    expect(localStorage.getItem('cbat.instruments.highlightHint')).toBe('1')
+    expect(screen.getByTestId('dial-hint').textContent).toMatch(/tap a dial/i)
+    expect(localStorage.getItem('cbat.instruments.highlightHint')).toBeNull()
   }, 10000)
+
+  it('pulses the hint once a round has sat unanswered, and a dial press calms it', async () => {
+    await startAndWaitForPlaying()
+    const hint = () => screen.getByTestId('dial-hint')
+    expect(hint().dataset.stuck).toBe('0')
+
+    // Sit on the round without answering or touching a dial.
+    await new Promise(r => setTimeout(r, 0))
+    await waitFor(() => expect(hint().dataset.stuck).toBe('1'), { timeout: 12000 })
+    expect(hint().className).toContain('cbat-hint-pulse')
+
+    fireEvent.click(screen.getByTestId('dial-turn'))
+    expect(hint().dataset.stuck).toBe('0')
+    expect(hint().className).not.toContain('cbat-hint-pulse')
+  }, 20000)
 })

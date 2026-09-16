@@ -31,6 +31,9 @@ const FEEDBACK_MS = 2000
 const CALIBRATION_MIN_MS = 1000
 const CALIBRATION_MAX_MS = 3000
 
+// How long a round can sit unanswered before the dial hint starts pulsing.
+const STUCK_MS = 10000
+
 const HEADINGS = ['N', 'E', 'S', 'W']
 const VS_STATES = ['Level', 'Ascend', 'Descend']
 const TURN_STATES = ['None', 'Standard', 'Non-standard']
@@ -266,20 +269,32 @@ export default function CbatInstruments({ forcedMode = null }) {
   const [queued, setQueued] = useState(false)
   const [highlightedKey, setHighlightedKey] = useState(null)
   const cbat = useCbatTheme()
-  const [hintDismissed, setHintDismissed] = useState(
-    () => typeof localStorage !== 'undefined' && localStorage.getItem('cbat.instruments.highlightHint') === '1'
-  )
+  // The dial hint sits under the dials for the whole run. It starts pulsing
+  // when a round has gone STUCK_MS without an answer or a dial press, which
+  // is when someone has forgotten the dials are there to help.
+  // `stuckRound` names the round the timer fired on, so moving to the next
+  // round un-sticks the hint without anything having to reset it.
+  const [stuckRound, setStuckRound] = useState(null)
+  const stuckTimerRef = useRef(null)
 
   const toggleHighlight = useCallback((key) => {
     setHighlightedKey(prev => (prev === key ? null : key))
-    if (!hintDismissed) {
-      setHintDismissed(true)
-      try { localStorage.setItem('cbat.instruments.highlightHint', '1') } catch {}
-    }
-  }, [hintDismissed])
+    setStuckRound(null)
+    if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current)
+  }, [])
 
   // Keep latest answers in a ref for use inside timer callback (avoids stale closure)
   useEffect(() => { answersRef.current = answers }, [answers])
+
+  // Arm the stuck timer when a round opens for answering; a dial press or
+  // the next round disarms it.
+  useEffect(() => {
+    if (phase !== 'playing') return
+    const round = roundIndex
+    stuckTimerRef.current = setTimeout(() => setStuckRound(round), STUCK_MS)
+    return () => clearTimeout(stuckTimerRef.current)
+  }, [phase, roundIndex])
+  const stuck = phase === 'playing' && stuckRound === roundIndex
 
   // Both boards post the same shape; only the key and the grade bands differ.
   const submitScore = useCallback((finalAnswers, finalTime, key = 'instruments') => {
@@ -614,7 +629,7 @@ export default function CbatInstruments({ forcedMode = null }) {
                 {/* Fixed-height slot reserves space for the calibrating /
                     hint message so the panel doesn't grow/shrink as messages
                     appear, which would otherwise shove the answers below. */}
-                <div className="relative mt-2 h-[1.75rem]">
+                <div className="relative mt-1 h-[1.25rem]">
                   <AnimatePresence mode="wait">
                     {phase === 'calibrating' && (
                       <motion.p
@@ -629,16 +644,21 @@ export default function CbatInstruments({ forcedMode = null }) {
                         Calibrating instruments…
                       </motion.p>
                     )}
-                    {(phase === 'playing' || phase === 'feedback') && !hintDismissed && (
+                    {(phase === 'playing' || phase === 'feedback') && (
                       <motion.p
                         key="hint"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.35, ease: 'easeOut' }}
-                        className="absolute inset-0 flex items-center justify-center text-[10px] lg:text-xs text-slate-500"
+                        data-testid="dial-hint"
+                        data-stuck={stuck ? '1' : '0'}
+                        className={`absolute inset-0 flex items-center justify-center gap-1 text-[10px] lg:text-xs ${
+                          stuck ? 'text-brand-600 cbat-hint-pulse' : 'text-slate-500'
+                        }`}
                       >
-                        Tap an instrument to highlight it in the answers
+                        <span aria-hidden="true">{'↑'}</span>
+                        Tap a dial to see what it refers to in the answers
                       </motion.p>
                     )}
                   </AnimatePresence>
