@@ -1524,16 +1524,71 @@ export default function CbatAct() {
       .catch(() => {})
   }, [user])
 
-  const initAudio = useCallback(async () => {
-    if (audioRef.current) return
-    const eng = new ActAudioEngine()
-    await eng.init()
-    audioRef.current = eng
-    setAudioReady(true)
+  // One engine per page visit, shared by every caller. The load takes a few
+  // seconds (28 clips, two of them long), and before this a second tap on
+  // Start during that window built a second engine and a second
+  // AudioContext, orphaning the first: Safari caps how many a page may hold,
+  // so a couple of impatient starts could kill audio until reload.
+  const audioInitRef = useRef(null)
+  const initAudio = useCallback(() => {
+    if (!audioInitRef.current) {
+      const eng = new ActAudioEngine()
+      audioInitRef.current = eng.init().then(() => {
+        audioRef.current = eng
+        setAudioReady(true)
+        return eng
+      })
+    }
+    return audioInitRef.current
   }, [])
 
-  const startGame = useCallback(async () => {
-    await initAudio()
+  // Intro-screen audio status: 'loading' while the clips fetch, then either
+  // 'load' (a clip never arrived), 'blocked' (the browser kept the context
+  // suspended, Safari's speciality) or null when everything is ready. Both
+  // failures keep the player on the intro with a retry; a silent ACT run is
+  // worthless and used to start anyway.
+  const [audioStatus, setAudioStatus] = useState(null)
+
+  // Make sure the engine is loaded and audible. Returns true when it is safe
+  // to start a round. Must run inside the tap that started it: Safari only
+  // honours resume() from a user gesture.
+  const prepareAudio = useCallback(async ({ allowSilent = false } = {}) => {
+    setAudioStatus('loading')
+    let eng
+    try {
+      eng = await initAudio()
+    } catch (err) {
+      // The context itself could not be built (Safari's per-page cap, say).
+      // Drop the memo so the next tap tries again from scratch.
+      console.warn('[ACT] Audio init failed:', err?.message)
+      audioInitRef.current = null
+      if (allowSilent) {
+        // A bare engine (no context) makes every play call a no-op, which is
+        // exactly what a silent run wants; ActRound needs an engine to mount.
+        if (!audioRef.current) audioRef.current = new ActAudioEngine()
+        setAudioStatus(null)
+        return true
+      }
+      setAudioStatus('blocked')
+      return false
+    }
+    // A demo mount never builds a context: nothing to load, nothing to wake.
+    if (!eng.ctx) { setAudioStatus(null); return true }
+    if (!eng.loadOk) {
+      // Second time round only the missing clips are refetched.
+      await eng.loadClips()
+    }
+    const running = await eng.ensureRunning()
+    if (allowSilent) { setAudioStatus(null); return true }
+    if (!eng.loadOk) { setAudioStatus('load'); return false }
+    if (!running) { setAudioStatus('blocked'); return false }
+    setAudioStatus(null)
+    return true
+  }, [initAudio])
+
+  const startGame = useCallback(async ({ allowSilent = false } = {}) => {
+    const ready = await prepareAudio({ allowSilent })
+    if (!ready) return
     startTracking('act')
     setRoundIdx(0)
     setAllRoundStats([])
@@ -1544,14 +1599,15 @@ export default function CbatAct() {
     setCodeResult(null)
     setDebugUsed(false)
     setPhase('callsign')
-  }, [apiFetch, API, initAudio])
+  }, [prepareAudio, startTracking])
 
   // ── Admin round-skip ───────────────────────────────────────────────────────
   // Jump straight into a round without playing the ones before it. Wipes the
   // run's stats (the earlier rounds never happened) and flags it as debug, so
   // the score is never submitted.
   const jumpToRound = useCallback(async (roundNum) => {
-    await initAudio()
+    // Admin debug path: never block on audio, just wake it if it is there.
+    await prepareAudio({ allowSilent: true })
     if (phase === 'intro') startTracking('act')
     setDebugUsed(true)
     setRoundIdx(roundNum - 1)
@@ -1566,7 +1622,7 @@ export default function CbatAct() {
     // nothing and reads as a broken cheat.
     setJumpNonce(n => n + 1)
     setPhase('callsign')
-  }, [initAudio, phase, startTracking])
+  }, [prepareAudio, phase, startTracking])
 
   // Typed cheat codes, DPT-style: 111 → round 1 … 555 → round 5. Admin +
   // desktop only, and never while the memory-code pad is up — those digit
@@ -1638,6 +1694,11 @@ export default function CbatAct() {
     if (roundIdx + 1 >= TOTAL_ROUNDS) {
       setPhase('results')
     } else {
+      // The callsign card auto-advances after a timer, so this tap is the
+      // only gesture the next round gets. If the browser suspended the
+      // context between rounds (output device change, AirPods reconnecting)
+      // this is where it gets woken; the timer could not do it on Safari.
+      audioRef.current?.ensureRunning()
       setRoundIdx(i => i + 1)
       setPhase('callsign')
     }
@@ -1697,8 +1758,14 @@ export default function CbatAct() {
       .catch(() => {})
   }, [phase, allRoundStats, scoreSaved, codeResult, debugUsed, apiFetch, API])
 
-  // Cleanup audio on unmount
-  useEffect(() => () => { audioRef.current?.dispose() }, [])
+  // Cleanup audio on unmount. The engine may still be loading when the page
+  // is left, so tear it down off the init promise rather than the ref, which
+  // is only set once the load resolves.
+  useEffect(() => () => {
+    const pending = audioInitRef.current
+    if (pending) pending.then(eng => eng.dispose()).catch(() => {})
+    else audioRef.current?.dispose()
+  }, [])
 
   // Bail out of an in-progress run back to the intro / instructions screen.
   // Tutorial flag is NOT reset here — tutorial fires once per page mount,
@@ -1746,7 +1813,9 @@ export default function CbatAct() {
           {phase === 'intro' && (
             <IntroScreen
               personalBest={personalBest}
-              onStart={startGame}
+              onStart={() => startGame()}
+              onStartSilent={() => startGame({ allowSilent: true })}
+              audioStatus={audioStatus}
               mockStick={mockStick}
               craftOptions={craftOptions}
               craftId={craftId}
@@ -1791,7 +1860,7 @@ export default function CbatAct() {
               scoreSaved={scoreSaved}
               queued={queued}
               personalBest={personalBest}
-              onPlayAgain={startGame}
+              onPlayAgain={() => startGame()}
             >
               <FinalResults
                 allRoundStats={allRoundStats}
@@ -1807,7 +1876,9 @@ export default function CbatAct() {
 }
 
 // ── Intro screen ─────────────────────────────────────────────────────────────
-function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, onCraftChange, craftLoading }) {
+function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockStick, craftOptions, craftId, onCraftChange, craftLoading }) {
+  const audioLoading = audioStatus === 'loading'
+  const audioFailed  = audioStatus === 'load' || audioStatus === 'blocked'
   const [stickRate, setStickRate] = useState(readStoredActStickRate)
   // The steer rate only means anything with a stick attached — on a mouse the
   // drag distance is the rate — so it appears when there is one to steer with.
@@ -1914,14 +1985,43 @@ function IntroScreen({ personalBest, onStart, mockStick, craftOptions, craftId, 
         </Link>
       </div>
 
+      {audioFailed && (
+        <div
+          role="alert"
+          className="bg-rose-50 border border-rose-300 rounded-lg px-4 py-3 mb-4 max-w-sm text-left"
+        >
+          <p className="text-sm font-bold text-rose-700 mb-1">
+            {audioStatus === 'load' ? 'Audio failed to load' : 'Your browser blocked the audio'}
+          </p>
+          <p className="text-xs text-slate-600">
+            {audioStatus === 'load'
+              ? 'Some sound clips did not download. Check your connection and tap Retry.'
+              : 'Tap Retry to allow sound. If it keeps happening, check that this site is allowed to play audio in your browser settings.'}
+          </p>
+        </div>
+      )}
+
       <button
         onClick={onStart}
+        disabled={audioLoading}
         data-demo-start
-        className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
+        className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-60 disabled:cursor-wait text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
       >
-        Start Mission
+        {audioLoading ? 'Loading audio...' : audioFailed ? 'Retry' : 'Start Mission'}
       </button>
-      <p className="text-[10px] text-slate-500 mt-3">Tap to enable audio.</p>
+      {audioFailed ? (
+        <button
+          type="button"
+          onClick={onStartSilent}
+          className="block mx-auto text-[11px] text-slate-500 hover:text-slate-700 underline mt-3"
+        >
+          Start without audio
+        </button>
+      ) : (
+        <p className="text-[10px] text-slate-500 mt-3">
+          {audioLoading ? 'Fetching the voice clips.' : 'Tap to enable audio.'}
+        </p>
+      )}
     </motion.div>
     </CbatStickLayout>
   )

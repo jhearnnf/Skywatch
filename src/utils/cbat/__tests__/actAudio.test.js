@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
   CALLSIGNS,
   VOICES,
@@ -476,5 +476,176 @@ describe('ActAudioEngine suspend/resume', () => {
     engine.resume()
     await Promise.resolve()
     expect(engine.ctx.suspend).toHaveBeenCalled()
+  })
+})
+
+// ── Safari-shaped failures: suspended contexts, dropped decodes, double init ──
+describe('ActAudioEngine ensureRunning', () => {
+  function makeCtx(state, { resumeBehaviour = 'resolve' } = {}) {
+    const ctx = {
+      state,
+      currentTime: 0,
+      destination: {},
+      resume: vi.fn(function () {
+        if (resumeBehaviour === 'resolve') { this.state = 'running'; return Promise.resolve() }
+        if (resumeBehaviour === 'reject')  return Promise.reject(new Error('not allowed'))
+        // 'hang' — Safari outside a gesture: the promise never settles
+        return new Promise(() => {})
+      }),
+    }
+    return ctx
+  }
+
+  it('resumes a suspended context and reports running', async () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeCtx('suspended')
+    await expect(engine.ensureRunning()).resolves.toBe(true)
+    expect(engine.ctx.resume).toHaveBeenCalledTimes(1)
+    expect(engine.isRunning()).toBe(true)
+  })
+
+  it('does not call resume on a context that is already running', async () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeCtx('running')
+    await expect(engine.ensureRunning()).resolves.toBe(true)
+    expect(engine.ctx.resume).not.toHaveBeenCalled()
+  })
+
+  it('reports false when the browser refuses the resume', async () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeCtx('suspended', { resumeBehaviour: 'reject' })
+    await expect(engine.ensureRunning()).resolves.toBe(false)
+  })
+
+  it('gives up after the timeout when resume() never settles (Safari outside a gesture)', async () => {
+    const engine = new ActAudioEngine()
+    engine.ctx = makeCtx('suspended', { resumeBehaviour: 'hang' })
+    await expect(engine.ensureRunning({ timeoutMs: 10 })).resolves.toBe(false)
+  })
+
+  it('is false with no context or a closed one', async () => {
+    const engine = new ActAudioEngine()
+    await expect(engine.ensureRunning()).resolves.toBe(false)
+    engine.ctx = makeCtx('closed')
+    await expect(engine.ensureRunning()).resolves.toBe(false)
+    expect(engine.ctx.resume).not.toHaveBeenCalled()
+  })
+
+  it('init() kicks the context awake in the same call stack as creation', async () => {
+    const resume = vi.fn(function () { this.state = 'running'; return Promise.resolve() })
+    const decodeAudioData = vi.fn(() => Promise.resolve({ duration: 0.3 }))
+    class FakeCtx {
+      constructor() { this.state = 'suspended'; this.currentTime = 0; this.destination = {} }
+      resume() { return resume.call(this) }
+      decodeAudioData(buf) { return decodeAudioData(buf) }
+    }
+    vi.stubGlobal('AudioContext', FakeCtx)
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) })))
+    try {
+      const engine = new ActAudioEngine()
+      const p = engine.init()
+      // resume() must have been called synchronously — before init's first
+      // await — so a Safari tap still counts for it.
+      expect(resume).toHaveBeenCalledTimes(1)
+      await p
+      expect(engine.isRunning()).toBe(true)
+      expect(engine.loadOk).toBe(true)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('ActAudioEngine clip loading', () => {
+  function stubLoadEnvironment({ failUrls = new Set(), failOnce = new Set() } = {}) {
+    const attempts = new Map()
+    const fetchMock = vi.fn((url) => {
+      const n = (attempts.get(url) || 0) + 1
+      attempts.set(url, n)
+      if (failUrls.has(url) || (failOnce.has(url) && n === 1)) {
+        return Promise.resolve({ ok: false, status: 500 })
+      }
+      return Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    class FakeCtx {
+      constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {} }
+      resume() { return Promise.resolve() }
+      decodeAudioData() { return Promise.resolve({ duration: 0.3 }) }
+    }
+    vi.stubGlobal('AudioContext', FakeCtx)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    return { attempts }
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('loads every clip and reports loadOk', async () => {
+    stubLoadEnvironment()
+    const engine = new ActAudioEngine()
+    await engine.init()
+    expect(engine.missingClips()).toEqual([])
+    expect(engine.loadOk).toBe(true)
+  })
+
+  it('retries a clip that fails once and still ends up loaded', async () => {
+    const url = '/sounds/act/male_alpha.mp3'
+    const { attempts } = stubLoadEnvironment({ failOnce: new Set([url]) })
+    const engine = new ActAudioEngine()
+    await engine.init()
+    expect(attempts.get(url)).toBe(2)
+    expect(engine.buffers.has('male:alpha')).toBe(true)
+    expect(engine.loadOk).toBe(true)
+  })
+
+  it('names the clip that never arrived and flags the load as not ok', async () => {
+    stubLoadEnvironment({ failUrls: new Set(['/sounds/act/female_bravo.mp3']) })
+    const engine = new ActAudioEngine()
+    await engine.init()
+    expect(engine.missingClips()).toEqual(['female:bravo'])
+    expect(engine.loadOk).toBe(false)
+  })
+
+  it('a missing chatter file does not make the load not ok', async () => {
+    stubLoadEnvironment({ failUrls: new Set(['/sounds/act/distractions_male.mp3']) })
+    const engine = new ActAudioEngine()
+    await engine.init()
+    expect(engine.loadOk).toBe(true)
+    expect(engine.distractionBuffers.has('male')).toBe(false)
+  })
+
+  it('loadClips() after a failure refetches only the missing clip', async () => {
+    const url = '/sounds/act/1.mp3'
+    const { attempts } = stubLoadEnvironment({ failUrls: new Set([url]) })
+    const engine = new ActAudioEngine()
+    await engine.init()
+    expect(engine.loadOk).toBe(false)
+    const before = new Map(attempts)
+    // Let the file come good, then retry.
+    globalThis.fetch.mockImplementation(() => Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) }))
+    await engine.loadClips()
+    expect(engine.loadOk).toBe(true)
+    // Nothing else was fetched again.
+    for (const [u, n] of before) {
+      if (u !== url) expect(globalThis.fetch.mock.calls.filter(([c]) => c === u)).toHaveLength(n)
+    }
+  })
+
+  it('calling init() twice keeps the same context', async () => {
+    stubLoadEnvironment()
+    const engine = new ActAudioEngine()
+    await engine.init()
+    const ctx = engine.ctx
+    await engine.init()
+    expect(engine.ctx).toBe(ctx)
+  })
+
+  it('a demo engine reports loadOk with nothing loaded', () => {
+    const engine = new ActAudioEngine()
+    expect(engine.ctx).toBeNull()
+    expect(engine.loadOk).toBe(true)
   })
 })

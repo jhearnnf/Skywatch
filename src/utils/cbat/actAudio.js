@@ -110,6 +110,13 @@ const DEFAULT_VOLUMES = {
   code:         0.85,
 };
 
+// Clip loading: one retry per file, backing off a little between goes.
+const LOAD_ATTEMPTS = 2;
+const LOAD_RETRY_DELAY_MS = 300;
+
+// How long ensureRunning() waits for resume() before reading the state back.
+const ENSURE_RUNNING_TIMEOUT_MS = 1500;
+
 export class ActAudioEngine {
   constructor() {
     this.ctx = null;
@@ -151,14 +158,34 @@ export class ActAudioEngine {
   }
 
   // Lazy-init AudioContext on first user gesture (browsers block autoplay).
+  //
+  // Must be called synchronously from the gesture handler: the context is
+  // created AND nudged awake before the first await, because Safari only
+  // credits the tap to work done in the same call stack. Safe to call again
+  // after a failed load — the context is kept and only the missing clips are
+  // fetched.
   async init() {
-    if (this.ctx) return;
     // Demo mounts (the landing page's live game wall) run ACT silently: with no
     // AudioContext every play method below short-circuits on `!this.ctx`, so
     // nothing is fetched and nothing is heard.
     if (isDemoActive()) return;
-    const Ctor = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new Ctor();
+    if (!this.ctx) {
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new Ctor();
+    }
+    // Safari hands back a suspended context in far more situations than
+    // Chrome (no sticky activation, stricter gesture crediting), and a
+    // suspended context swallows every start() without a sound. Kick it
+    // while the gesture is still live; the clips load in parallel.
+    const wake = this.ensureRunning();
+    await Promise.all([wake, this.loadClips()]);
+  }
+
+  // Fetch + decode every clip that isn't already in the buffer map. Each
+  // loader skips keys it already holds, so a retry after a partial failure
+  // only refetches what is missing.
+  async loadClips() {
+    if (!this.ctx) return;
     const jobs = [];
     for (const voice of VOICES) {
       for (const name of CHUNK_FILES) jobs.push(this._loadBuffer(voice, name));
@@ -168,36 +195,89 @@ export class ActAudioEngine {
     await Promise.all(jobs);
   }
 
+  // Keys of the instruction and code clips that failed to load. Chatter is
+  // deliberately excluded: a missing distraction file makes the round quieter,
+  // a missing callsign makes it unplayable.
+  missingClips() {
+    const missing = [];
+    for (const voice of VOICES) {
+      for (const name of CHUNK_FILES) {
+        if (!this.buffers.has(bufferKey(voice, name))) missing.push(bufferKey(voice, name));
+      }
+    }
+    for (const name of CODE_FILES) {
+      if (!this.buffers.has(bufferKey(CODE_VOICE, name))) missing.push(bufferKey(CODE_VOICE, name));
+    }
+    return missing;
+  }
+
+  // True once every clip the game needs is decoded. A demo engine (no
+  // context) reports true: it has nothing to load and nothing to play.
+  get loadOk() {
+    if (!this.ctx) return true;
+    return this.missingClips().length === 0;
+  }
+
+  // Is the context actually producing sound right now?
+  isRunning() {
+    return !!this.ctx && this.ctx.state === 'running';
+  }
+
+  // Wake a suspended context. Resolves true when the context is running.
+  //
+  // Call this from a user gesture (Start, Continue, Resume): Safari refuses a
+  // resume() from anywhere else, and its promise can then sit pending for
+  // ever rather than reject, so the wait is capped and the answer read back
+  // from `state` instead of trusting the promise.
+  async ensureRunning({ timeoutMs = ENSURE_RUNNING_TIMEOUT_MS } = {}) {
+    if (!this.ctx || this.ctx.state === 'closed') return false;
+    if (this.ctx.state === 'running') return true;
+    let resumed;
+    try { resumed = this.ctx.resume(); } catch { return false; }
+    const timeout = new Promise(resolve => setTimeout(resolve, timeoutMs));
+    try {
+      await Promise.race([Promise.resolve(resumed).catch(() => {}), timeout]);
+    } catch { /* fall through to the state check */ }
+    return this.ctx.state === 'running';
+  }
+
+  // Shared fetch + decode with one retry. Safari's decoder drops the odd file
+  // when it is handed a burst of concurrent decodes, and a flaky connection
+  // drops the odd fetch; either used to leave a permanently silent clip.
+  async _fetchAndDecode(url, { attempts = LOAD_ATTEMPTS } = {}) {
+    let lastErr;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const arrayBuffer = await res.arrayBuffer();
+        return await this.ctx.decodeAudioData(arrayBuffer);
+      } catch (err) {
+        lastErr = err;
+        if (attempt < attempts) await new Promise(r => setTimeout(r, LOAD_RETRY_DELAY_MS * attempt));
+      }
+    }
+    console.warn(`[ACT] Failed to load ${url}:`, lastErr?.message);
+    return null;
+  }
+
   // Code clips are bare filenames (no voice prefix), keyed under CODE_VOICE so
   // playSequence can walk them like any other chunk list.
   async _loadCodeBuffer(name) {
     const key = bufferKey(CODE_VOICE, name);
     if (this.buffers.has(key)) return;
     const url = `/sounds/act/${encodeURIComponent(name)}.mp3`;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const arrayBuffer = await res.arrayBuffer();
-      const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-      this.buffers.set(key, audioBuffer);
-    } catch (err) {
-      console.warn(`[ACT] Failed to load ${url}:`, err.message);
-    }
+    const audioBuffer = await this._fetchAndDecode(url);
+    if (audioBuffer) this.buffers.set(key, audioBuffer);
   }
 
   async _loadDistractionBuffer(voice) {
     if (this.distractionBuffers.has(voice)) return;
     const url = `/sounds/act/distractions_${voice}.mp3`;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const arrayBuffer = await res.arrayBuffer();
-      const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-      this.distractionBuffers.set(voice, audioBuffer);
-      this._distractionSegments.set(voice, computeDistractionSegments(audioBuffer.duration));
-    } catch (err) {
-      console.warn(`[ACT] Failed to load ${url}:`, err.message);
-    }
+    const audioBuffer = await this._fetchAndDecode(url);
+    if (!audioBuffer) return;
+    this.distractionBuffers.set(voice, audioBuffer);
+    this._distractionSegments.set(voice, computeDistractionSegments(audioBuffer.duration));
   }
 
   async _loadBuffer(voice, name) {
@@ -205,15 +285,8 @@ export class ActAudioEngine {
     if (this.buffers.has(key)) return;
     const filename = `${voice}_${chunkKeyToFilename(name)}`;
     const url = `/sounds/act/${encodeURIComponent(filename)}.mp3`;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const arrayBuffer = await res.arrayBuffer();
-      const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-      this.buffers.set(key, audioBuffer);
-    } catch (err) {
-      console.warn(`[ACT] Failed to load ${url}:`, err.message);
-    }
+    const audioBuffer = await this._fetchAndDecode(url);
+    if (audioBuffer) this.buffers.set(key, audioBuffer);
   }
 
   // Pick a voice for a fresh sequence. Random by default; overridable in tests.
