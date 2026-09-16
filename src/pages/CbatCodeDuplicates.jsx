@@ -85,16 +85,16 @@ function ResultsScreen({ rounds, totalTime }) {
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Code Duplicates Assessment Complete</p>
 
-      <div className="bg-game-arena rounded-lg border border-game-line p-5 mb-4">
+      <div className="bg-game-arena rounded-lg border border-game-line p-4 sm:p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
-        <div className="flex justify-center gap-8 items-end">
+        <div className="flex flex-wrap justify-center gap-4 sm:gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
+            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">{correct} / {TOTAL_ROUNDS} correct</p>
           </div>
           <div className="w-px h-12 bg-game-line" />
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
+            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
         </div>

@@ -305,9 +305,9 @@ function ResultsScreen({ answers, totalTime, totalScore }) {
       <p className="text-sm text-slate-400 mb-6">ANT Complete</p>
 
       <div className="bg-game-arena rounded-lg border border-game-line p-4 mb-4">
-        <div className="flex justify-center gap-8 items-end">
+        <div className="flex flex-wrap justify-center gap-4 sm:gap-8 items-end">
           <div>
-            <p className="text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
+            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{pct}%</p>
             <p className="text-sm text-slate-400">accuracy</p>
           </div>
         </div>
