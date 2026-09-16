@@ -693,6 +693,38 @@ button.cbat-keycap:disabled { background: #6e6e7c; color: #1a1a1a; box-shadow: n
   .cbat-vs-numpad { display: none; }
 }
 
+/* Code Duplicates under the Real CBAT theme: the Digit Recognition screen
+   (pages/CbatCodeDuplicates.jsx). No panel: the number alone, large and
+   centred on the navy for the five seconds, then the question with its five
+   numbered counts stacked beneath it. */
+.cbat-drt-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 14rem;
+  padding: 1.5rem 0;
+  color: #ffffff;
+  text-align: center;
+}
+.cbat-drt-digits {
+  margin: 0;
+  font-size: clamp(2.5rem, 9vw, 4.5rem);
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.cbat-drt-question {
+  margin: 0 0 1.25rem;
+  font-size: 1.2rem;
+  letter-spacing: 0.05em;
+}
+@media (min-width: 640px) {
+  .cbat-drt-stage { min-height: 18rem; }
+  .cbat-drt-question { font-size: 1.4rem; }
+}
+
 @media (max-width: 600px) {
   .cbat-testbar {
     grid-template-columns: 1fr;

@@ -141,6 +141,10 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Code Duplicates',
+    // The Real CBAT theme makes this a five-way choice over a 5-to-15 digit
+    // ramp rather than a typed count — a different task, so rows say which
+    // they came from.
+    uiTheme: true,
   },
   'symbols': {
     Model: GameSessionCbatSymbolsResult,

@@ -6,9 +6,9 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
-import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
+import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
-import { useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
+import { useCbatAnswerKeys, useCbatMcq } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
@@ -19,11 +19,35 @@ const TOTAL_ROUNDS = 15
 const DISPLAY_TIME = 5000 // ms to show the sequence
 const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
+// Real CBAT theme: the Digit Recognition screen asks "How many fours were
+// there?" and offers five numbered answers, and the number grows from ~5 to
+// ~15 digits across the run rather than stepping through three tiers.
+export const DIGIT_WORDS = ['zeros', 'ones', 'twos', 'threes', 'fours', 'fives', 'sixes', 'sevens', 'eights', 'nines']
+export const CBAT_OPTION_COUNT = 5
+export const CBAT_MIN_LENGTH = 5
+export const CBAT_MAX_LENGTH = 15
+
 // ── Sequence generation ─────────────────────────────────────────────────────
 function getSequenceLength(round) {
   if (round <= 5) return 7 + Math.floor(Math.random() * 4)       // 7–10
   if (round <= 10) return 8 + Math.floor(Math.random() * 5)      // 8–12
   return 12 + Math.floor(Math.random() * 4)                       // 12–15
+}
+
+// Linear ramp, round 1 = CBAT_MIN_LENGTH digits, round TOTAL_ROUNDS = CBAT_MAX_LENGTH.
+export function cbatSequenceLength(round) {
+  const step = (CBAT_MAX_LENGTH - CBAT_MIN_LENGTH) / (TOTAL_ROUNDS - 1)
+  return Math.round(CBAT_MIN_LENGTH + (round - 1) * step)
+}
+
+// Five consecutive counts with the real one somewhere among them, never below
+// zero and never above what the number could hold. The window's start is
+// random so the answer's position gives nothing away.
+export function cbatCountOptions(actual, length, rand = Math.random) {
+  const lo = Math.max(0, actual - (CBAT_OPTION_COUNT - 1))
+  const hi = Math.max(lo, Math.min(actual, length - (CBAT_OPTION_COUNT - 1)))
+  const start = lo + Math.floor(rand() * (hi - lo + 1))
+  return Array.from({ length: CBAT_OPTION_COUNT }, (_, i) => start + i)
 }
 
 function generateSequence(length) {
@@ -123,6 +147,7 @@ export default function CbatCodeDuplicates() {
   const [sequence, setSequence] = useState([])
   const [queryDigit, setQueryDigit] = useState(null)
   const [actualCount, setActualCount] = useState(0)
+  const [options, setOptions] = useState([]) // Real CBAT theme: the five counts on offer
   const [userAnswer, setUserAnswer] = useState('')
   const [isCorrect, setIsCorrect] = useState(null)
   const [roundResults, setRoundResults] = useState([])
@@ -180,6 +205,10 @@ export default function CbatCodeDuplicates() {
         hardCorrect,
         totalTime: finalTime,
         grade,
+        // Which screen this was played on: the Real CBAT variant is a
+        // different task (five-way choice, 5-to-15 digit ramp), and the
+        // leaderboard marks each score with it.
+        uiTheme: cbat ? 'cbat' : 'skywatch',
       }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
@@ -190,7 +219,7 @@ export default function CbatCodeDuplicates() {
           .catch(() => {})
       })
       .catch(() => {})
-  }, [apiFetch, API])
+  }, [apiFetch, API, cbat])
 
   // Timer — runs during displaying, answering, feedback phases
   useEffect(() => {
@@ -207,7 +236,7 @@ export default function CbatCodeDuplicates() {
   }, [phase])
 
   const startRound = useCallback((roundNum) => {
-    const len = getSequenceLength(roundNum)
+    const len = cbat ? cbatSequenceLength(roundNum) : getSequenceLength(roundNum)
     const seq = generateSequence(len)
     const qDigit = pickQueryDigit(seq)
     const count = countOccurrences(seq, qDigit)
@@ -216,6 +245,7 @@ export default function CbatCodeDuplicates() {
     setSequence(seq)
     setQueryDigit(qDigit)
     setActualCount(count)
+    setOptions(cbat ? cbatCountOptions(count, len) : [])
     setUserAnswer('')
     setIsCorrect(null)
     setDisplayCountdown(5)
@@ -238,7 +268,7 @@ export default function CbatCodeDuplicates() {
       clearInterval(countdownRef.current)
       setPhase('answering')
     }, DISPLAY_TIME)
-  }, [])
+  }, [cbat])
 
   // Focus input when answering phase starts
   useEffect(() => {
@@ -293,9 +323,8 @@ export default function CbatCodeDuplicates() {
     setScoreSaved(false)
   }, [])
 
-  const handleSubmit = () => {
-    if (phase !== 'answering' || userAnswer === '') return
-    const answer = parseInt(userAnswer, 10)
+  const submitAnswer = (answer) => {
+    if (phase !== 'answering') return
     const correct = answer === actualCount
 
     const nextResults = [...roundResults, {
@@ -316,6 +345,22 @@ export default function CbatCodeDuplicates() {
     setIsCorrect(correct)
     setPhase('feedback')
   }
+
+  // SkyWatch theme: the typed count.
+  const handleSubmit = () => {
+    if (userAnswer === '') return
+    submitAnswer(parseInt(userAnswer, 10))
+  }
+
+  // Real CBAT theme: one of the five numbered counts. A key or click marks
+  // it, Enter or the footer's arrow key commits.
+  const { pending, select, commit } = useCbatMcq({
+    enabled: cbat && phase === 'answering',
+    count: CBAT_OPTION_COUNT,
+    kind: 'number',
+    onCommit: (i) => submitAnswer(options[i]),
+    resetKey: round,
+  })
 
   // Desktop: a 15-digit sequence in a 448px column is 27px per cell. Give the
   // row the width of the screen instead (shell widened via main.css).
@@ -395,18 +440,33 @@ export default function CbatCodeDuplicates() {
               </p>
 
               <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
-                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
-                  <CbatIntroLabel>1–5</CbatIntroLabel>
-                  <span className="pt-0.5">Easy — 7 to 10 digits</span>
-                </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
-                  <CbatIntroLabel>6–10</CbatIntroLabel>
-                  <span className="pt-0.5">Medium — 8 to 12 digits</span>
-                </div>
-                <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
-                  <CbatIntroLabel>11–15</CbatIntroLabel>
-                  <span className="pt-0.5">Hard — 12 to 15 digits</span>
-                </div>
+                {cbat ? (
+                  <>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                      <CbatIntroLabel>Digits</CbatIntroLabel>
+                      <span className="pt-0.5">The number grows from 5 to 15 digits across the run</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                      <CbatIntroLabel>Answer</CbatIntroLabel>
+                      <span className="pt-0.5">Pick the count from five numbered answers, then press Enter</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                      <CbatIntroLabel>1–5</CbatIntroLabel>
+                      <span className="pt-0.5">Easy — 7 to 10 digits</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                      <CbatIntroLabel>6–10</CbatIntroLabel>
+                      <span className="pt-0.5">Medium — 8 to 12 digits</span>
+                    </div>
+                    <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                      <CbatIntroLabel>11–15</CbatIntroLabel>
+                      <span className="pt-0.5">Hard — 12 to 15 digits</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
                   <span className="pt-0.5">Each sequence is shown for 5 seconds</span>
@@ -474,8 +534,35 @@ export default function CbatCodeDuplicates() {
                 />
               </div>}
 
+              {/* Real CBAT theme: the Digit Recognition screen. The number
+                  alone, large on the navy, then the question with five
+                  numbered counts beneath it. */}
+              {cbat && phase === 'displaying' && (
+                <div className="cbat-drt-stage" data-testid="cbat-drt-number">
+                  <p className="cbat-drt-digits">{sequence.join('')}</p>
+                </div>
+              )}
+              {cbat && phase === 'answering' && (
+                <div className="cbat-drt-stage">
+                  <p className="cbat-drt-question">How many {DIGIT_WORDS[queryDigit]} were there?</p>
+                  <div className="flex flex-col gap-2 lg:gap-2.5 w-40 lg:w-48">
+                    {options.map((opt, i) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => select(i)}
+                        data-demo-answer
+                        className={`flex items-center gap-3 px-4 py-2.5 lg:py-3 rounded-lg border-2 font-mono font-bold text-lg lg:text-xl text-left transition-all cursor-pointer bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised${pending === i ? ' cbat-option-pending' : ''}`}
+                      >
+                        <CbatKeyCap label={i + 1} />{opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Main display area */}
-              <motion.div
+              {!cbat && <motion.div
                 key={round}
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -590,7 +677,7 @@ export default function CbatCodeDuplicates() {
                     </motion.div>
                   </div>
                 )}
-              </motion.div>
+              </motion.div>}
 
               {/* Next button (feedback phase) */}
               <AnimatePresence>
@@ -613,15 +700,15 @@ export default function CbatCodeDuplicates() {
 
               {/* Real CBAT theme: the instruction strip */}
               <CbatFooterStrip
-                answer={phase === 'answering' ? (userAnswer === '' ? null : userAnswer) : undefined}
+                answer={phase === 'answering' ? (pending != null ? pending + 1 : null) : undefined}
                 text={phase === 'displaying' ? 'Remember this number.' : undefined}
-                onSubmit={phase === 'answering' ? handleSubmit : phase === 'feedback' ? handleNext : undefined}
-                canSubmit={phase === 'feedback' || userAnswer !== ''}
+                onSubmit={phase === 'answering' ? commit : undefined}
+                canSubmit={pending != null}
               />
 
-              {/* Tier transition indicator */}
+              {/* Tier transition indicator — the Real CBAT ramp has no tiers */}
               <AnimatePresence>
-                {phase === 'displaying' && (round === 6 || round === 11) && (
+                {!cbat && phase === 'displaying' && (round === 6 || round === 11) && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}

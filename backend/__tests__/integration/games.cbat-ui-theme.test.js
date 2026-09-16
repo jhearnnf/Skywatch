@@ -129,3 +129,36 @@ describe('CBAT ui theme — unflagged games are unaffected', () => {
     expect(row).not.toHaveProperty('uiThemes');
   });
 });
+
+// Code Duplicates too: under the Real CBAT theme the count is picked from five
+// numbered options over a 5-to-15 digit ramp rather than typed, so a score
+// says which task it came from.
+describe('CBAT ui theme — code-duplicates', () => {
+  const url = '/api/games/cbat/code-duplicates/result';
+  const sample = { correctCount: 9, easyCorrect: 4, mediumCorrect: 3, hardCorrect: 2, totalTime: 120, grade: 'Good' };
+
+  it.each(UI_THEMES)('stores uiTheme "%s" on a result', async (theme) => {
+    const res = await request(app).post(url).set('Cookie', cookie).send({ ...sample, uiTheme: theme });
+    expect(res.status).toBe(201);
+    expect(res.body.data.uiTheme).toBe(theme);
+  });
+
+  it('normalises a missing or unknown uiTheme to null', async () => {
+    const a = await request(app).post(url).set('Cookie', cookie).send(sample);
+    expect(a.body.data.uiTheme).toBeNull();
+    const b = await request(app).post(url).set('Cookie', cookie).send({ ...sample, uiTheme: 'neon' });
+    expect(b.body.data.uiTheme).toBeNull();
+  });
+
+  it("shows the BEST run's uiTheme on the all-time board and the set on the weekly one", async () => {
+    await request(app).post(url).set('Cookie', cookie).send({ ...sample, correctCount: 7, uiTheme: 'skywatch', playedAt: inWeek });
+    await request(app).post(url).set('Cookie', cookie).send({ ...sample, correctCount: 13, uiTheme: 'cbat', playedAt: inWeek });
+    const all = await request(app).get('/api/games/cbat/code-duplicates/leaderboard').set('Cookie', cookie);
+    const row = all.body.data.leaderboard.find(e => e.agentNumber === '1000001');
+    expect(row.uiTheme).toBe('cbat');
+    expect(all.body.data.myBest.uiTheme).toBe('cbat');
+    const weekly = await request(app).get('/api/games/cbat/code-duplicates/leaderboard?period=weekly').set('Cookie', cookie);
+    const mine = weekly.body.data.leaderboard.find(e => e.agentNumber === '1000001') || weekly.body.data.myBest;
+    expect([...mine.uiThemes].sort()).toEqual(['cbat', 'skywatch']);
+  });
+});

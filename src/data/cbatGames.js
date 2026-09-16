@@ -142,7 +142,9 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'trace-1':         { title: 'Trace 1',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 40, formatScore: (s) => `${s}/40`,  backPath: '/cbat/trace',          hideTime: true },
   'trace-2':         { title: 'Trace 2',           emoji: '🛩️', scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/trace',          hideTime: true },
   'angles':          { title: 'Angles',            emoji: '📐',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 20, formatScore: (s) => `${s}/20`,  backPath: '/cbat/angles' },
-  'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates' },
+  // Code Duplicates carries showTheme too: under the Real CBAT theme it is a
+  // five-way choice over a 5-to-15 digit ramp rather than a typed count.
+  'code-duplicates': { title: 'Code Duplicates',   emoji: '🧩',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`,  backPath: '/cbat/code-duplicates', showTheme: true },
   // showTheme adds the leaderboard's Theme column (SkyWatch / Real CBAT mark).
   // Symbols is the one game whose Real CBAT variant is a different screen —
   // numbered tiles answered by typing, a different glyph pool — so a score has

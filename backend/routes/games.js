@@ -2620,7 +2620,7 @@ router.post('/cbat/trace-2/result', protect, async (req, res) => {
 // POST /api/games/cbat/code-duplicates/result
 router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
   try {
-    const { correctCount, easyCorrect, mediumCorrect, hardCorrect, totalTime, grade } = req.body;
+    const { correctCount, easyCorrect, mediumCorrect, hardCorrect, totalTime, grade, uiTheme } = req.body;
     const result = await saveCbatResult(GameSessionCbatCodeDuplicatesResult, req, {
       correctCount,
       easyCorrect,
@@ -2628,6 +2628,10 @@ router.post('/cbat/code-duplicates/result', protect, async (req, res) => {
       hardCorrect,
       totalTime,
       grade,
+      // The theme the run was played under: the Real CBAT variant of this
+      // game is a different task (a five-way choice rather than a typed
+      // count), so a score has to say which one it came from.
+      uiTheme: normalizeUiTheme(uiTheme),
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
