@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 /**
- * Right-click anywhere = BLEEP.
+ * Right-click anywhere or press Space = BLEEP.
  *
  * On a mouse you steer ACT by dragging the tunnel, so the cursor is out in the
  * arena at exactly the moment a bleep sounds. Travelling to the button costs
@@ -34,6 +34,22 @@ export function useRightClickBleep({ onBleep, onRelease, disabled = false }) {
 
     const onContextMenu = (e) => e.preventDefault()
 
+    const isSpace = (e) => e.code === 'Space' || e.key === ' '
+    const isEditable = (e) => e.target instanceof Element && (
+      e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+    )
+    const onKeyDown = (e) => {
+      if (!isSpace(e) || isEditable(e)) return
+      // Prevent scrolling and native button activation, including on repeats.
+      e.preventDefault()
+      if (!e.repeat && !disabled) onBleep?.()
+    }
+    const onKeyUp = (e) => {
+      if (!isSpace(e) || isEditable(e)) return
+      e.preventDefault()
+      onRelease?.()
+    }
+
     const onPointerDown = (e) => {
       if (e.button !== 2) return
       press(e)
@@ -60,11 +76,17 @@ export function useRightClickBleep({ onBleep, onRelease, disabled = false }) {
     }
 
     window.addEventListener('contextmenu', onContextMenu)
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    window.addEventListener('blur', onRelease)
     window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener('pointerup', onPointerUp)
     window.addEventListener('pointermove', onPointerMove)
     return () => {
       window.removeEventListener('contextmenu', onContextMenu)
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      window.removeEventListener('blur', onRelease)
       window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('pointermove', onPointerMove)

@@ -33,6 +33,55 @@ const move = () => {
 afterEach(() => vi.clearAllMocks())
 
 describe('useRightClickBleep', () => {
+  const space = (type = 'keydown', options = {}, target = window) => {
+    const event = new KeyboardEvent(type, {
+      key: ' ', code: 'Space', bubbles: true, cancelable: true, ...options,
+    })
+    target.dispatchEvent(event)
+    return event
+  }
+
+  it('scores Space once per press and reports release for button feedback', () => {
+    const onBleep = vi.fn()
+    const onRelease = vi.fn()
+    renderHook(() => useRightClickBleep({ onBleep, onRelease }))
+    expect(space().defaultPrevented).toBe(true)
+    expect(space('keydown', { repeat: true }).defaultPrevented).toBe(true)
+    expect(onBleep).toHaveBeenCalledTimes(1)
+    expect(onRelease).not.toHaveBeenCalled()
+    expect(space('keyup').defaultPrevented).toBe(true)
+    expect(onRelease).toHaveBeenCalledTimes(1)
+    space()
+    expect(onBleep).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not score Space while paused or showing the callsign', () => {
+    const onBleep = vi.fn()
+    renderHook(() => useRightClickBleep({ onBleep, disabled: true }))
+    expect(space().defaultPrevented).toBe(true)
+    expect(onBleep).not.toHaveBeenCalled()
+  })
+
+  it('leaves typing alone and removes keyboard listeners when the round ends', () => {
+    const onBleep = vi.fn()
+    const { unmount } = renderHook(() => useRightClickBleep({ onBleep }))
+    const input = document.createElement('input')
+    document.body.append(input)
+    expect(space('keydown', {}, input).defaultPrevented).toBe(false)
+    input.remove()
+    unmount()
+    expect(space().defaultPrevented).toBe(false)
+    expect(onBleep).not.toHaveBeenCalled()
+  })
+
+  it('releases keyboard press feedback when the window loses focus', () => {
+    const onRelease = vi.fn()
+    renderHook(() => useRightClickBleep({ onBleep: vi.fn(), onRelease }))
+    space()
+    window.dispatchEvent(new Event('blur'))
+    expect(onRelease).toHaveBeenCalledTimes(1)
+  })
+
   it('fires the bleep on a right-button press anywhere', () => {
     const onBleep = vi.fn()
     renderHook(() => useRightClickBleep({ onBleep }))

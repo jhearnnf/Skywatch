@@ -2136,7 +2136,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flashBleepOnce])
 
-  // Right-click anywhere is a second way to hit BLEEP, for the mouse player
+  // Right-click anywhere or Space hits BLEEP, for the mouse/trackpad player
   // whose cursor is out on the tunnel steering when the bleep sounds. See
   // useRightClickBleep for why the right button specifically. Gated on the
   // same two conditions that disable the button — the callsign overlay and
@@ -2146,12 +2146,12 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
   // object literal every render, which would re-subscribe the window
   // listeners on every HUD tick.
   const onBleepTap = state.onBleepTap
-  const onRightClickBleep = useCallback(() => {
+  const onShortcutBleep = useCallback(() => {
     onBleepTap()
     showBleepPress()
   }, [onBleepTap, showBleepPress])
   useRightClickBleep({
-    onBleep: onRightClickBleep,
+    onBleep: onShortcutBleep,
     onRelease: handleBleepPointerUp,
     disabled: showCallsignOverlay || state.paused,
   })
@@ -2206,14 +2206,9 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
               <p className="text-2xl sm:text-3xl font-extrabold text-amber-300">
                 Press the button below when you hear a bleep
               </p>
-              {/* Only worth saying on a mouse, where the button is somewhere
-                  else on screen. On touch the button is right under a thumb
-                  that isn't steering, so there is nothing to solve. */}
-              {!isTouch && (
-                <p className="text-sm text-amber-200/80 mt-3">
-                  You can also right-click anywhere, so you do not have to stop steering.
-                </p>
-              )}
+              <p className="text-base sm:text-lg font-semibold text-amber-800 mt-4">
+                Press Spacebar or right-click anywhere to activate BLEEP without stopping steering.
+              </p>
             </div>
           </motion.div>
         )}
@@ -2287,10 +2282,10 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
         />
       )}
 
-      <p className="text-[10px] text-slate-500 text-center mt-2">
+      <p className="text-xs sm:text-sm text-slate-800 text-center mt-2">
         {isTouch
           ? 'Tap on bleep • Drag the pad to steer • You can also drag on the tunnel'
-          : 'Click BLEEP or right-click anywhere • Drag canvas to steer • Arrow keys also work'}
+          : 'BLEEP: Spacebar, right-click anywhere or click the button • Drag canvas to steer • Arrow keys also work'}
       </p>
     </div>
   )
