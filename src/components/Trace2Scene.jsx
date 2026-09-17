@@ -3,9 +3,10 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF, Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { TRACE2_TURN_DEFS } from '../utils/cbat/trace2Generator'
+import { trace2ClimbFeet } from '../utils/cbat/trace2Flight'
 import { useCbatDemoCanvas } from '../utils/cbat/demoMode'
 
-// Trace 2 scene: four colour-tinted Hawk T2 aircraft, each flown with the EXACT
+// Trace 2 scene: four colour-tinted Hawk T2 aircraft using the
 // same motion model as Trace 1's SmoothFlightAircraft — continuous flight along
 // the nose with smooth quaternion banking. Each plane records its flight during
 // the watch phase so the round can be replayed: rewound fast, then played back
@@ -18,8 +19,6 @@ const MODEL_UP    = new THREE.Vector3(0, 1, 0)
 const MODEL_RIGHT = new THREE.Vector3(0, 0, -1)
 const MODEL_NOSE  = new THREE.Vector3(-1, 0, 0)
 const AXIS = { up: MODEL_UP, right: MODEL_RIGHT }
-const CAM_Z = 10
-const HALF_TAN = Math.tan((55 / 2) * Math.PI / 180)
 
 // Live per-aircraft replay counters — each a function of the scrub time `t`, so
 // they count up during forward playback and down while rewinding.
@@ -28,27 +27,6 @@ function turnsLRUpTo(turns, t) {
   let r = 0, l = 0
   for (const tr of turns) if (tr.tMs <= t) { if (tr.turnKey === 'yawR') r++; else if (tr.turnKey === 'yawL') l++ }
   return [r, l]
-}
-// How much the plane has CLIMBED, shown as a plausible height in feet. Under the
-// hood it's the largest rise above an earlier low point (running-minimum
-// draw-up) as a fraction of the half-screen at entry depth — mirroring the
-// generator's `climbGain`, so the counter agrees with the "climbed the most /
-// did not climb" answers. It rises whenever the plane gains altitude (even after
-// a dive) and is 0 only if it never climbed at all. Scaled: a full half-screen
-// climb ≈ 10,000 ft.
-const CLIMB_FT_PER_UNIT = 10000     // feet per 1.0 of normalised climb-gain
-function climbFtUpTo(rec, t) {
-  let started = false, entryHalf = 1, minY = Infinity, mx = 0
-  for (const s of rec) {
-    if (s.t > t) break
-    const half = HALF_TAN * (CAM_Z - s.p[2])
-    const onScreen = Math.abs((s.p[1] - ARENA_Y) / half) < 1
-    if (!started) { if (onScreen) { started = true; entryHalf = half } else continue }
-    if (s.p[1] < minY) minY = s.p[1]
-    const gain = (s.p[1] - minY) / entryHalf
-    if (gain > mx) mx = gain
-  }
-  return Math.round(Math.max(0, mx) * CLIMB_FT_PER_UNIT / 100) * 100   // nearest 100 ft
 }
 function invertedSecUpTo(rec, t) {
   let ms = 0
@@ -63,7 +41,6 @@ const TURN_L_COLOR = '#fbbf24'
 function counterText(kind, spec, rec, t) {
   if (kind === 'turns')    return '↻ ' + turnsUpTo(spec.turns, t)
   if (kind === 'turnsLR')  { const [r, l] = turnsLRUpTo(spec.turns, t); return `R ${r}  L ${l}` }
-  if (kind === 'height')   return '↑ ' + climbFtUpTo(rec, t).toLocaleString('en-US') + ' ft'
   if (kind === 'inverted') return '⟲ ' + invertedSecUpTo(rec, t).toFixed(1) + 's'
   return ''
 }
@@ -145,11 +122,12 @@ function Trace2Aircraft({ url, hex, spec, active, replaying, replayStat, scrubRe
   useFrame((_, dt) => {
     if (!groupRef.current || !meshRef.current) return
 
-    // ── Replay: drive straight from the recording at the scrub time ──
-    if (replaying) {
-      const r = rec.current
+    // Climb rounds also use the scoring recording during live flight.
+    if (replaying || spec.flight) {
+      const r = spec.flight || rec.current
+      if (!replaying && active) elapsed.current += dt * 1000
       if (!r.length) { groupRef.current.visible = false; return }
-      const t = Math.max(r[0].t, Math.min(r[r.length - 1].t, scrubRef.current.t))
+      const t = Math.max(r[0].t, Math.min(r[r.length - 1].t, (replaying ? scrubRef.current.t : elapsed.current)))
       let lo = 0, hi = r.length - 1
       while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (r[mid].t <= t) lo = mid; else hi = mid }
       const a = r[lo], b = r[hi]
@@ -164,7 +142,11 @@ function Trace2Aircraft({ url, hex, spec, active, replaying, replayStat, scrubRe
       qb.current.set(b.q[0], b.q[1], b.q[2], b.q[3])
       qa.current.slerp(qb.current, u)
       meshRef.current.quaternion.copy(qa.current)
-      if (replayStat && labelRef.current) writeCounter(labelRef.current, replayStat, spec, r, t)
+      if (replayStat && labelRef.current) {
+        if (spec.flight && replayStat === 'height') {
+          labelRef.current.textContent = '\u2191 ' + trace2ClimbFeet(a.climbGain + (b.climbGain - a.climbGain) * u).toLocaleString('en-US') + ' ft'
+        } else writeCounter(labelRef.current, replayStat, spec, r, t)
+      }
       return
     }
 

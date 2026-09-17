@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
+import { recordTrace2Flight, trace2ClimbFeet } from '../trace2Flight'
 import { generateTrace2Game, TRACE2_ROUNDS, TRACE2_COLORS, TRACE2_TURN_DEFS } from '../trace2Generator'
 
 // Re-derive an aircraft's upside-down time straight from its rendered spec
@@ -178,5 +179,58 @@ describe('trace2Generator', () => {
         for (const t of a.turns) expect(validKeys).toContain(t.turnKey)
       }
     }
+  })
+})
+
+
+describe('Trace 2 climb playback agreement', () => {
+  it('scores blue above green in the reported mismatch flight, including onward flight', () => {
+    const common = { speed: 2000 / 1929, startDelayMs: 0 }
+    const blue = { ...common, initialQuat: [0, 1, 0, 0],
+      startPos: [-5.972763224634669, 5.3441639713536055, 1.6],
+      turns: [{ tMs: 5787, turnKey: 'pitchD' }, { tMs: 7716, turnKey: 'yawL' }, { tMs: 9645, turnKey: 'yawL' }] }
+    const green = { ...common, initialQuat: [-Math.SQRT1_2, Math.SQRT1_2, 0, 0],
+      startPos: [1.0557581138907062, -1.1604229943036213, 2.2],
+      turns: [{ tMs: 5787, turnKey: 'yawL' }, { tMs: 7716, turnKey: 'pitchU' }, { tMs: 9645, turnKey: 'yawL' }] }
+    const b = recordTrace2Flight(blue, 15432, TRACE2_TURN_DEFS)
+    const g = recordTrace2Flight(green, 15432, TRACE2_TURN_DEFS)
+    expect(trace2ClimbFeet(b.at(-1).climbGain)).toBe(13600)
+    expect(trace2ClimbFeet(g.at(-1).climbGain)).toBe(11100)
+    expect(b.at(-1).climbGain).toBeGreaterThan(g.at(-1).climbGain)
+    expect(b.at(-1).climbGain).toBeGreaterThan(b.find(s => s.t >= 6 * 1929).climbGain)
+  })
+
+  it('chooses climb answers from the same full-duration flight shown in playback', () => {
+    let seen = 0
+    for (let seed = 1; seed <= 40; seed++) {
+      for (const r of generateTrace2Game(mulberry32(seed)).rounds) {
+        if (!['climbed-highest', 'did-not-climb'].includes(r.question.id)) continue
+        seen++
+        const measured = r.aircraft.map(a => {
+          expect(a.flight[0].t).toBe(0)
+          expect(a.flight.at(-1).t).toBe(r.durationMs)
+          // Independently measure the rise from recorded positions.
+          let minY = Infinity, gain = 0, half = null
+          for (const s of a.flight) {
+            const h = Math.tan(55 * Math.PI / 360) * (10 - s.p[2])
+            if (half === null && Math.abs((s.p[1] - 4.5) / h) < 1) half = h
+            if (half === null) continue
+            minY = Math.min(minY, s.p[1])
+            gain = Math.max(gain, (s.p[1] - minY) / half)
+          }
+          expect(r.stats.find(s => s.colorKey === a.colorKey).climbGain).toBeCloseTo(gain, 10)
+          expect(a.flight.at(-1).climbGain).toBeCloseTo(gain, 10)
+          return { color: a.colorKey, feet: trace2ClimbFeet(gain) }
+        }).sort((a, b) => b.feet - a.feet)
+        const answer = r.question.options[r.question.correctIndex].colors[0]
+        if (r.question.id === 'climbed-highest') {
+          expect(answer).toBe(measured[0].color)
+          expect(measured[0].feet).toBeGreaterThan(measured[1].feet)
+        } else {
+          expect(measured.filter(s => s.feet === 0).map(s => s.color)).toEqual([answer])
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(0)
   })
 })

@@ -15,6 +15,7 @@
 // per tier. Speed ramps up each round (round 8 = the base pace).
 
 import * as THREE from 'three'
+import { recordTrace2Flight } from './trace2Flight.js'
 
 export const TRACE2_ROUNDS = 8
 // Ticks of onward flight the round renders past the last turn (planes never stop
@@ -213,8 +214,8 @@ function simulatePlane(edge, z, nSeg, entryHold, tickMs, rng, opts = {}, onwardT
   // only ever descended or held level) — so a plane that dives then pulls up
   // still counts as having climbed, matching what the player sees. NOT measured
   // relative to the entry height (a high top-entry that dives then climbs back
-  // used to read as 0). The live replay counter (Trace2Scene.climbFtUpTo)
-  // mirrors this exactly.
+  // used to read as 0). Climb questions replace this planning estimate with
+  // the shared smooth-flight recording in sampleSet before choosing an answer.
   const onSamples = traj.filter(s => onScreen(s.pos, 1))
   const entrySample = onSamples[0] ?? traj[0]
   const entryHalf = HALF_TAN * (CAM_Z - entrySample.pos.z)
@@ -409,6 +410,12 @@ function sampleSet(rng, nSeg, seed, tickMs) {
     else if (builders[i] === 'facingB') r = facingPair[1]
     else r = simulatePlane(edges[i], zs[i], nSeg, holds[i], tickMs, rng, opts[i], onwardTicks)
     if (!r) return null
+    if (seed === 'climbed-highest' || seed === 'did-not-climb') {
+      const flight = recordTrace2Flight(r.spec, (nSeg + onwardTicks) * tickMs, TRACE2_TURN_DEFS)
+      r.spec.flight = flight
+      r.climbGain = flight[flight.length - 1].climbGain
+      r.climbed = r.climbGain > 0.18
+    }
     planes.push({
       colorKey: COLOR_KEYS[i], hex: HEX[COLOR_KEYS[i]], z: zs[i], entryHold: holds[i], ...r,
     })
