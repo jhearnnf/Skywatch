@@ -1433,6 +1433,46 @@ body.community-selectable .app-shell-content * {
   }
 }
 
+/* Keep ACT's live round inside the viewport. The arena takes the space left
+   after the header and controls, including the touch steering pad. This body
+   class is removed between rounds and is never applied by landing-page demos. */
+html:has(body.cbat-act-wide),
+body.cbat-act-wide {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+body.cbat-act-wide .app-shell {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+body.cbat-act-wide .app-shell-body,
+body.cbat-act-wide .app-shell-main,
+body.cbat-act-wide .app-shell-content,
+body.cbat-act-wide .cbat-act-page,
+body.cbat-act-wide .cbat-act-body,
+body.cbat-act-wide .cbat-act-round {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+body.cbat-act-wide .app-shell-main,
+body.cbat-act-wide .app-shell-content,
+body.cbat-act-wide .cbat-act-page,
+body.cbat-act-wide .cbat-act-round {
+  flex-direction: column;
+}
+body.cbat-act-wide .app-shell-content { width: 100%; }
+body.cbat-act-wide .cbat-act-round > * { flex-shrink: 0; }
+body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+@media (min-width: 768px) {
+  body.cbat-act-wide .app-shell-main { padding-bottom: env(safe-area-inset-bottom); }
+}
+
 /* Table Reading gameplay: the reference is a 17×17 grid of two-digit values, and
    the whole test is how fast you can land on a cell. Capped at max-w-3xl the
    cells shrink to the point where the eye loses its row on the way across, which

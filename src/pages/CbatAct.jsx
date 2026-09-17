@@ -1810,7 +1810,7 @@ export default function CbatAct() {
       )}
 
       {user && (
-        <div className="flex flex-col items-center">
+        <div className="cbat-act-body flex flex-col items-center">
           {phase === 'intro' && (
             <IntroScreen
               personalBest={personalBest}
@@ -2165,7 +2165,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
     // `max(42rem, …)` keeps a short window from making the arena any smaller
     // than it is today; `min(100%, …)` keeps it inside the shell on a tall
     // narrow one. Everything below lg is unchanged.
-    <div className={`w-full max-w-2xl${isDemo ? '' : ' lg:max-w-none lg:w-[min(100%,max(42rem,calc((100vh_-_280px)_*_4_/_3)))]'}`}>
+    <div className={`cbat-act-round w-full max-w-2xl${isDemo ? '' : ' lg:max-w-none lg:w-[min(100%,max(42rem,calc((100vh_-_280px)_*_4_/_3)))]'}`}>
       <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
         <span className="text-slate-400">Round <span className="text-brand-600">{roundIdx + 1}</span>/{TOTAL_ROUNDS}</span>
         <span className="text-slate-400">
@@ -2174,7 +2174,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
         </span>
       </div>
 
-      <div className="relative aspect-square sm:aspect-[4/3] bg-[#020812] border border-game-line rounded-xl overflow-hidden">
+      <div className="cbat-act-arena relative aspect-square sm:aspect-[4/3] bg-[#020812] border border-game-line rounded-xl overflow-hidden">
         <ActScene state={state} craftUrl={craftUrl} />
 
         {showCallsignOverlay && (
