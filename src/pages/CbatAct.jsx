@@ -13,6 +13,8 @@ import usePagePresence from '../hooks/usePagePresence'
 import { useCbatDemo, useCbatDemoCanvas } from '../utils/cbat/demoMode'
 import { pickAim, steerInput, wobbleAt } from '../utils/cbat/actDemoPilot'
 import SEO from '../components/SEO'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import './CbatAct/realCbat.css'
 import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import {
@@ -221,7 +223,38 @@ const WALL_WARN_FRAGMENT = `
   float warnIntensity = max(warn, uScraping) * falloff;
 `
 
-function TunnelMesh({ curve, proximityRef, ballPosRef }) {
+// A deterministic, tiled stone texture follows the tube UVs as the player moves.
+function createCbatTunnelTexture() {
+  const size = 256
+  const data = new Uint8Array(size * size * 4)
+  let seed = 17
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      const grain = (seed / 4294967296) * 0.5
+      const streak = Math.sin(x * 0.22 + Math.sin(y * 0.12) * 2) * 0.12
+      const value = 0.45 + grain + streak
+      const i = (y * size + x) * 4
+      data[i] = 65 * value
+      data[i + 1] = 100 * value
+      data[i + 2] = 140 * value
+      data[i + 3] = 255
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size)
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(45, 4)
+  texture.magFilter = THREE.LinearFilter
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.generateMipmaps = true
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.needsUpdate = true
+  return texture
+}
+
+function TunnelMesh({ curve, proximityRef, ballPosRef, realCbat = false }) {
+  const texture = useMemo(() => realCbat ? createCbatTunnelTexture() : null, [realCbat])
+  useEffect(() => () => texture?.dispose(), [texture])
   const geometry = useMemo(
     () => new THREE.TubeGeometry(curve, 200, TUNNEL_RADIUS, 24, false),
     [curve]
@@ -236,7 +269,11 @@ function TunnelMesh({ curve, proximityRef, ballPosRef }) {
     // through the wall. Going opaque restores correct depth occlusion;
     // the warning glow still works because it's emissive, not alpha-based.
     const mat = new THREE.MeshStandardMaterial({
-      color: '#0c2a4a',
+      color: realCbat ? '#ffffff' : '#0c2a4a',
+      map: texture,
+      emissive: realCbat ? '#607d9b' : '#000000',
+      emissiveMap: texture,
+      emissiveIntensity: realCbat ? 0.7 : 0,
       side: THREE.BackSide,
     })
     mat.onBeforeCompile = (shader) => {
@@ -266,7 +303,8 @@ function TunnelMesh({ curve, proximityRef, ballPosRef }) {
       shaderRef.current = shader
     }
     return mat
-  }, [])
+  }, [realCbat, texture])
+  useEffect(() => () => material.dispose(), [material])
 
   useFrame(() => {
     const shader = shaderRef.current
@@ -334,7 +372,7 @@ function TunnelStripes({ curve, proximityRef, ballPosRef }) {
   return <mesh geometry={geometry} material={material} />
 }
 
-function ShapeGate({ event, curve, ballT }) {
+function ShapeGate({ event, curve, ballT, realCbat = false }) {
   // Compute world position + orientation along the curve at this event's t.
   // Lateral offset (event.offsetU/V) is in the shape's local cross-section
   // frame — applying the quaternion rotates it into world space so shapes
@@ -353,7 +391,7 @@ function ShapeGate({ event, curve, ballT }) {
   // Shapes ahead of the ball glow brighter; ones behind dim out.
   const passed = ballT > event.t
   const opacity = passed ? 0.15 : 1
-  const color = SHAPE_COLORS[event.colorIdx % SHAPE_COLORS.length]
+  const color = (realCbat ? [0x0000ee, 0xcc0000, 0xffff00, 0x00bb00] : SHAPE_COLORS)[event.colorIdx % SHAPE_COLORS.length]
 
   // All three shapes are pure 3D borders (no inner fill / no invisible black
   // panel), rendered with an emissive standard material so the player sees the
@@ -365,7 +403,7 @@ function ShapeGate({ event, curve, ballT }) {
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={passed ? 0.15 : 0.55}
+          emissiveIntensity={passed ? 0.15 : realCbat ? 0.2 : 0.55}
           transparent
           opacity={opacity}
         />
@@ -398,7 +436,7 @@ function ShapeGate({ event, curve, ballT }) {
             <meshStandardMaterial
               color={color}
               emissive={color}
-              emissiveIntensity={passed ? 0.15 : 0.55}
+              emissiveIntensity={passed ? 0.15 : realCbat ? 0.2 : 0.55}
               transparent
               opacity={opacity}
             />
@@ -423,7 +461,7 @@ function ShapeGate({ event, curve, ballT }) {
           <meshStandardMaterial
             color={color}
             emissive={color}
-            emissiveIntensity={passed ? 0.15 : 0.55}
+            emissiveIntensity={passed ? 0.15 : realCbat ? 0.2 : 0.55}
             transparent
             opacity={opacity}
           />
@@ -441,7 +479,7 @@ function ShapeGate({ event, curve, ballT }) {
 // However, the raw "behind-the-ball" position can land outside the tube on
 // sharp bends, so we clamp the camera laterally to the nearest cross-section
 // of the curve.
-function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve }) {
+function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve, realCbat = false }) {
   const { camera } = useThree()
   useFrame(() => {
     const pos = ballPosRef.current
@@ -458,7 +496,7 @@ function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve }) {
 
     const desiredPos = pos.clone()
       .addScaledVector(fwd,   -1.6)              // 1.6 units behind the ball
-      .addScaledVector(camUp,  0.45)             // 0.45 units above
+      .addScaledVector(camUp,  realCbat ? 0 : 0.45) // Real CBAT keeps the ball centred in the sights.
 
     // Sample the curve backward from ballT to find the nearest cross-section
     // for the camera, then clamp the camera's lateral offset to keep it safely
@@ -540,6 +578,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   const ballPosRef     = useRef(new THREE.Vector3())
   const ballForwardRef = useRef(new THREE.Vector3(0, 0, 1))
   const lastTickRef    = useRef(performance.now())
+  const elapsedRef = useRef(0)
   const roundStartedAtRef = useRef(performance.now())
   // dx/dy here are in pixel-equivalent units; converted to rotations via TURN_RATE.
   const inputRef       = useRef({ dx: 0, dy: 0 })
@@ -1182,6 +1221,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
       // End of round? Either the ball reached the curve end OR the safety
       // timer fired (something pathological glued the ball to a wall — bail
       // gracefully so the player isn't stuck on a dead level).
+      elapsedRef.current += dt
       const elapsedRoundS = (now - roundStartedAtRef.current) / 1000
       const forceEnd = elapsedRoundS > MAX_ROUND_DURATION_S
       if (forceEnd) ballTRef.current = 1
@@ -1223,6 +1263,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     ballForwardRef,
     proximityRef,
     statsRef,
+    elapsedRef,
     pendingBleepRef,
     onPointerDown,
     onPointerMove,
@@ -1240,7 +1281,7 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
 
 // Wraps the canvas + ball/camera/shape components so they share the live
 // refs without forcing top-level re-renders every frame.
-function ActScene({ state, craftUrl }) {
+function ActScene({ state, craftUrl, realCbat }) {
   // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
   // for real players.
   const demoCanvas = useCbatDemoCanvas()
@@ -1264,13 +1305,13 @@ function ActScene({ state, craftUrl }) {
       onPointerCancel={state.onPointerUp}
       style={{ touchAction: 'none' }}
     >
-      <color attach="background" args={['#020812']} />
-      <fog attach="fog" args={['#020812', 12, 60]} />
-      <ambientLight intensity={0.5} />
+      <color attach="background" args={[realCbat ? '#203954' : '#020812']} />
+      <fog attach="fog" args={[realCbat ? '#203954' : '#020812', 12, 60]} />
+      <ambientLight intensity={realCbat ? 1.4 : 0.5} />
       <directionalLight position={[5, 10, 5]} intensity={0.6} />
 
-      <TunnelMesh    curve={state.curve} proximityRef={state.proximityRef} ballPosRef={state.ballPosRef} />
-      <TunnelStripes curve={state.curve} proximityRef={state.proximityRef} ballPosRef={state.ballPosRef} />
+      <TunnelMesh realCbat={realCbat} curve={state.curve} proximityRef={state.proximityRef} ballPosRef={state.ballPosRef} />
+      {!realCbat && <TunnelStripes curve={state.curve} proximityRef={state.proximityRef} ballPosRef={state.ballPosRef} />}
 
       {/* Render only the just-passed shape (for smooth fade-out) + the next
           3 upcoming shapes. Anything further ahead is hidden so the player
@@ -1284,21 +1325,22 @@ function ActScene({ state, craftUrl }) {
         const startIdx = Math.max(0, firstUpcoming - 1)
         const endIdx   = Math.min(events.length, firstUpcoming + 3)
         return events.slice(startIdx, endIdx).map(ev => (
-          <ShapeGate key={ev.id} event={ev} curve={state.curve} ballT={ballT} />
+          <ShapeGate realCbat={realCbat} key={ev.id} event={ev} curve={state.curve} ballT={ballT} />
         ))
       })()}
 
       <ActPlayerCraft
         ballPosRef={state.ballPosRef}
         ballForwardRef={state.ballForwardRef}
-        modelUrl={craftUrl}
-        radius={BALL_RADIUS}
+        modelUrl={realCbat ? null : craftUrl}
+        radius={realCbat ? BALL_RADIUS * 0.6 : BALL_RADIUS}
       />
       <ChaseCamera
         ballPosRef={state.ballPosRef}
         ballForwardRef={state.ballForwardRef}
         ballTRef={state.ballTRef}
         curve={state.curve}
+        realCbat={realCbat}
       />
     </Canvas>
   )
@@ -1878,6 +1920,7 @@ export default function CbatAct() {
 
 // ── Intro screen ─────────────────────────────────────────────────────────────
 function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockStick, craftOptions, craftId, onCraftChange, craftLoading }) {
+  const realCbat = useCbatTheme()
   const audioLoading = audioStatus === 'loading'
   const audioFailed  = audioStatus === 'load' || audioStatus === 'blocked'
   const [stickRate, setStickRate] = useState(readStoredActStickRate)
@@ -1968,12 +2011,12 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
         </div>
       </div>
 
-      <ActCraftPicker
+      {!realCbat && <ActCraftPicker
         options={craftOptions}
         value={craftId}
         onChange={onCraftChange}
         loading={craftLoading}
-      />
+      />}
 
       {personalBest && (
         <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4">
@@ -2033,6 +2076,7 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
 
 // ── Round wrapper (mounts game-state hook + canvas + HUD) ────────────────────
 function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutorialDone, onTutorialFired, memoryCode, debug, craftUrl }) {
+  const realCbat = useCbatTheme()
   const state = useActRoundState(roundIdx, audio, onRoundComplete, memoryCode)
   const stats = state.statsRef.current
 
@@ -2165,8 +2209,8 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
     // `max(42rem, …)` keeps a short window from making the arena any smaller
     // than it is today; `min(100%, …)` keeps it inside the shell on a tall
     // narrow one. Everything below lg is unchanged.
-    <div className={`cbat-act-round w-full max-w-2xl${isDemo ? '' : ' lg:max-w-none lg:w-[min(100%,max(42rem,calc((100vh_-_280px)_*_4_/_3)))]'}`}>
-      <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
+    <div className={`cbat-act-round ${realCbat ? 'act-real-cbat' : ''} w-full max-w-2xl${isDemo ? '' : ' lg:max-w-none lg:w-[min(100%,max(42rem,calc((100vh_-_280px)_*_4_/_3)))]'}`}>
+      <div className="act-score-row flex items-center justify-between text-xs font-mono mb-2 px-1">
         <span className="text-slate-400">Round <span className="text-brand-600">{roundIdx + 1}</span>/{TOTAL_ROUNDS}</span>
         <span className="text-slate-400">
           Score <span className="text-brand-600">{Math.round(stats.score)}</span>
@@ -2175,7 +2219,14 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
       </div>
 
       <div className="cbat-act-arena relative aspect-square sm:aspect-[4/3] bg-[#020812] border border-game-line rounded-xl overflow-hidden">
-        <ActScene state={state} craftUrl={craftUrl} />
+        {realCbat && <div className="act-test-title">Auditory Capacity Test - Part 2 - Testing ({roundIdx + 1} of {TOTAL_ROUNDS})</div>}
+        <ActScene state={state} craftUrl={craftUrl} realCbat={realCbat} />
+        {realCbat && <div className="act-instruments" aria-hidden="true">
+          <div className="act-crosshair-horizontal" />
+          <div className="act-crosshair-vertical" />
+          <div className="act-seconds">Seconds<br />{Math.floor(state.elapsedRef.current)}</div>
+          <div className="act-progress"><div style={{ width: `${Math.min(100, state.ballTRef.current * 100)}%` }} /></div>
+        </div>}
 
         {showCallsignOverlay && (
           <motion.div

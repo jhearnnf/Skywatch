@@ -1,0 +1,68 @@
+.act-real-cbat .act-score-row { display: none; }
+
+.act-real-cbat .cbat-act-arena {
+  border: 1px solid #eee;
+  border-radius: 0;
+  padding: 33px 10px 14px;
+  background: #00005b;
+  font-family: Arial, sans-serif;
+}
+
+.act-real-cbat .cbat-act-arena > div:has(> canvas) {
+  outline: 1px solid #8d9699;
+}
+
+.act-test-title {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 24px;
+  border-bottom: 1px solid #b7bcc4;
+  color: white;
+  text-align: center;
+  font: 12px/23px Arial, sans-serif;
+}
+
+.act-instruments {
+  position: absolute;
+  inset: 33px 10px 14px;
+  pointer-events: none;
+  color: #eee;
+}
+
+.act-crosshair-horizontal, .act-crosshair-vertical {
+  position: absolute;
+  background: rgb(166 39 47 / 55%);
+}
+.act-crosshair-horizontal { top: 50%; width: 100%; height: 1px; }
+.act-crosshair-vertical { left: 50%; height: 100%; width: 1px; }
+
+.act-seconds {
+  position: absolute;
+  top: 3%;
+  right: 2%;
+  width: 27%;
+  padding: 7px 0;
+  border-radius: 12px;
+  background: rgb(103 105 104 / 65%);
+  text-align: center;
+  font-size: clamp(14px, 2vw, 20px);
+  line-height: 1.15;
+}
+
+.act-progress {
+  position: absolute;
+  right: 2%;
+  bottom: 2.5%;
+  width: 24%;
+  height: 27px;
+  border: 8px solid rgb(112 117 118 / 80%);
+  border-radius: 11px;
+  background: #292f35;
+  overflow: hidden;
+}
+.act-progress > div { height: 100%; background: #b3b8bc; }
+
+.act-real-cbat > button {
+  border-radius: 2px;
+  font-family: Arial, sans-serif;
+}
