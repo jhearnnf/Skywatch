@@ -1435,7 +1435,11 @@ body.community-selectable .app-shell-content * {
 
 /* Keep ACT's live round inside the viewport. The arena takes the space left
    after the header and controls, including the touch steering pad. This body
-   class is removed between rounds and is never applied by landing-page demos. */
+   class is removed between rounds and is never applied by landing-page demos.
+   Every wrapper between the shell and the arena has to be in this flex chain,
+   including the .app-page transition div App.jsx wraps each route in: leave
+   one out and the round collapses to its content height in a full-height
+   column, which is exactly the tiny arena over a screen of empty space. */
 html:has(body.cbat-act-wide),
 body.cbat-act-wide {
   overflow: hidden;
@@ -1449,6 +1453,7 @@ body.cbat-act-wide .app-shell {
 body.cbat-act-wide .app-shell-body,
 body.cbat-act-wide .app-shell-main,
 body.cbat-act-wide .app-shell-content,
+body.cbat-act-wide .app-page,
 body.cbat-act-wide .cbat-act-page,
 body.cbat-act-wide .cbat-act-body,
 body.cbat-act-wide .cbat-act-round {
@@ -1458,6 +1463,7 @@ body.cbat-act-wide .cbat-act-round {
 }
 body.cbat-act-wide .app-shell-main,
 body.cbat-act-wide .app-shell-content,
+body.cbat-act-wide .app-page,
 body.cbat-act-wide .cbat-act-page,
 body.cbat-act-wide .cbat-act-round {
   flex-direction: column;
