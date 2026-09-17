@@ -2,7 +2,8 @@ import { useEffect, useMemo } from 'react'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 
-const MODEL_URL = '/models/scene.glb'
+// Version the URL so cached artwork cannot outlive its generated collision shapes.
+const MODEL_URL = '/models/scene.glb?v=c30c9b2bc843'
 
 // Target footprint: the model's longest horizontal dimension is normalised to
 // this many world units, regardless of the units it was authored in. 67 units

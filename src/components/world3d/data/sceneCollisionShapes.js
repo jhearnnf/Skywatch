@@ -6,21 +6,24 @@
 // head — rasterised onto a 0.1-unit grid, then fitted with discs where the art is
 // round and covered with rectangles that are at least 92% solid everywhere else.
 //
-// Covers 98.8% of that geometry. 1.7% of the shapes' area falls on open
+// Covers 98.6% of that geometry. 1.7% of the shapes' area falls on open
 // floor further than a player-radius from anything solid — i.e. floor that is
 // genuinely walkable and wrongly denied. Re-run the script to regenerate.
 
 export const PROP_CIRCLES = [
-  { x: 5.08, z: 3.42, r: 0.82 }, // material.004
+  { x: 5.07, z: 3.44, r: 0.72 }, // material.004
   { x: 7.5, z: 8.52, r: 0.64 }, // material.010
   { x: 6.79, z: 8.09, r: 0.53 }, // material.009
-  { x: 5.75, z: 3.32, r: 0.39 }, // material.005
-  { x: 4.37, z: 9.2, r: 0.38 }, // material.008
-  { x: 2.83, z: 9.04, r: 0.37 }, // material.006
-  { x: 3.63, z: 8.96, r: 0.37 }, // material.007
+  { x: 0.85, z: 8.39, r: 0.49 }, // material.001
+  { x: 0, z: 8.11, r: 0.49 }, // material
+  { x: 1.77, z: 8.61, r: 0.48 }, // material.002
+  { x: 5.76, z: 3.31, r: 0.38 }, // material.005
   { x: 3.7, z: -4.4, r: 0.36 }, // Object_7
   { x: 3.55, z: -4.58, r: 0.35 }, // Object_4.001
+  { x: 2.81, z: 9.04, r: 0.32 }, // material.006
+  { x: 3.62, z: 8.95, r: 0.31 }, // material.007
   { x: 3.92, z: -4.39, r: 0.3 }, // Object_11
+  { x: 4.4, z: 9.2, r: 0.3 }, // material.008
   { x: 4.67, z: -4.25, r: 0.28 }, // Object_3
   { x: 4.33, z: -4.35, r: 0.27 }, // Object_2
 ]
@@ -48,42 +51,23 @@ export const PROP_BOXES = [
   { minX: -9.4, maxX: -7.4, minZ: -9, maxZ: -8 },
   { minX: -3.6, maxX: -2.2, minZ: -9.2, maxZ: -7.9 },
   { minX: -0.1, maxX: 1, minZ: 0.2, maxZ: 1.8 },
-  { minX: -0.1, maxX: 1.4, minZ: 8.9, maxZ: 9.6 },
-  { minX: 0, maxX: 1.3, minZ: 7.9, maxZ: 8.5 },
-  { minX: 0.1, maxX: 2, minZ: 8.1, maxZ: 8.5 },
-  { minX: 0.4, maxX: 1.1, minZ: 8.7, maxZ: 9.6 },
   { minX: 3.3, maxX: 4.4, minZ: -4.1, maxZ: -3.6 },
-  { minX: 1.5, maxX: 2.2, minZ: 8.1, maxZ: 8.7 },
-  { minX: 1.5, maxX: 2.2, minZ: 8.2, maxZ: 8.8 },
-  { minX: 0.9, maxX: 2.3, minZ: 8.3, maxZ: 8.6 },
-  { minX: -0.3, maxX: 0.5, minZ: 7.7, maxZ: 8.2 },
-  { minX: -0.4, maxX: 0.9, minZ: 7.8, maxZ: 8.1 },
-  { minX: -0.2, maxX: 0.4, minZ: 7.6, maxZ: 8.2 },
-  { minX: -0.1, maxX: 1.6, minZ: 8.9, maxZ: 9.1 },
-  { minX: 1, maxX: 1.2, minZ: 8, maxZ: 9.6 },
-  { minX: 0.1, maxX: 0.5, minZ: 7.8, maxZ: 8.6 },
+  { minX: -0.1, maxX: 1, minZ: 9, maxZ: 9.5 },
   { minX: -2, maxX: -1.2, minZ: -9.1, maxZ: -8.7 },
   { minX: 3.5, maxX: 4.1, minZ: -4, maxZ: -3.5 },
   { minX: -2.1, maxX: -1.1, minZ: -9.1, maxZ: -8.8 },
-  { minX: 1.3, maxX: 2.2, minZ: 8.4, maxZ: 8.7 },
   { minX: 3.7, maxX: 4, minZ: -4, maxZ: -3.3 },
-  { minX: 0.3, maxX: 0.5, minZ: 7.8, maxZ: 8.7 },
-  { minX: 1.9, maxX: 2.1, minZ: 8.2, maxZ: 9 },
   { minX: -0.9, maxX: -0.4, minZ: -8.6, maxZ: -8.3 },
-  { minX: 1.5, maxX: 1.7, minZ: 8, maxZ: 8.7 },
-  { minX: -0.2, maxX: 0, minZ: 7.5, maxZ: 8.2 },
   { minX: 3.8, maxX: 4.5, minZ: -4.1, maxZ: -3.9 },
   { minX: -2, maxX: -1.8, minZ: -9.1, maxZ: -8.4 },
   { minX: -1.7, maxX: -1.5, minZ: -9.3, maxZ: -8.7 },
   { minX: -1.3, maxX: -1.2, minZ: -9.2, maxZ: -8.1 },
-  { minX: -1.1, maxX: -0.6, minZ: 9.4, maxZ: 9.6 },
   { minX: -2.4, maxX: -1.9, minZ: 6.9, maxZ: 7.1 },
   { minX: -2, maxX: -1.5, minZ: 6.7, maxZ: 6.9 },
   { minX: -6, maxX: -5.5, minZ: -0.6, maxZ: -0.4 },
   { minX: -1.4, maxX: -1.2, minZ: -9.1, maxZ: -8.6 },
   { minX: -2, maxX: -1.9, minZ: -9.1, maxZ: -8.1 },
   { minX: -2.2, maxX: -1.7, minZ: 6.8, maxZ: 7 },
-  { minX: -1.1, maxX: -0.6, minZ: 8.9, maxZ: 9.1 },
   { minX: -5.8, maxX: -5.4, minZ: -0.7, maxZ: -0.5 },
   { minX: -6.4, maxX: -6, minZ: -0.4, maxZ: -0.2 },
   { minX: -5.6, maxX: -5.2, minZ: -0.8, maxZ: -0.6 },
@@ -93,8 +77,7 @@ export const PROP_BOXES = [
   { minX: -1.3, maxX: -1.1, minZ: -8.5, maxZ: -8.1 },
   { minX: -6.2, maxX: -5.8, minZ: -0.5, maxZ: -0.3 },
   { minX: -5.5, maxX: -5.1, minZ: 0.6, maxZ: 0.8 },
-  { minX: -1.1, maxX: -1, minZ: 8.9, maxZ: 9.6 },
-  { minX: -0.7, maxX: -0.6, minZ: 8.9, maxZ: 9.6 },
+  { minX: -0.8, maxX: -0.4, minZ: 9.3, maxZ: 9.5 },
   { minX: -5.3, maxX: -5, minZ: -0.2, maxZ: 0 },
   { minX: -5.8, maxX: -5.5, minZ: 0, maxZ: 0.2 },
   { minX: -2.9, maxX: -2.6, minZ: 7.2, maxZ: 7.4 },
@@ -115,16 +98,16 @@ export const PROP_BOXES = [
   { minX: -5.6, maxX: -5.3, minZ: -0.1, maxZ: 0.1 },
   { minX: -5.4, maxX: -5.1, minZ: -0.9, maxZ: -0.7 },
   { minX: -5.7, maxX: -5.4, minZ: 0.7, maxZ: 0.9 },
+  { minX: 0.9, maxX: 1, minZ: 8.9, maxZ: 9.5 },
   { minX: -1.4, maxX: -1.1, minZ: 5.8, maxZ: 6 },
   { minX: 4.1, maxX: 4.2, minZ: -4.2, maxZ: -3.6 },
-  { minX: 1.2, maxX: 1.4, minZ: 8.7, maxZ: 9 },
   { minX: -1.8, maxX: -1.3, minZ: 6, maxZ: 6.1 },
   { minX: -2.1, maxX: -2, minZ: -8.4, maxZ: -7.9 },
   { minX: -5.2, maxX: -4.7, minZ: -0.3, maxZ: -0.2 },
   { minX: -4.7, maxX: -4.2, minZ: -0.5, maxZ: -0.4 },
+  { minX: -0.8, maxX: -0.7, minZ: 9, maxZ: 9.5 },
+  { minX: -0.5, maxX: -0.4, minZ: 9, maxZ: 9.5 },
   { minX: -2.1, maxX: -1.6, minZ: 6.1, maxZ: 6.2 },
-  { minX: 1.5, maxX: 2, minZ: 9, maxZ: 9.1 },
-  { minX: 1.8, maxX: 2, minZ: 9, maxZ: 9.2 },
   { minX: -5.4, maxX: -5, minZ: -0.9, maxZ: -0.8 },
   { minX: -5.8, maxX: -5.6, minZ: 0.8, maxZ: 1 },
   { minX: -4.9, maxX: -4.5, minZ: -0.4, maxZ: -0.3 },
@@ -134,16 +117,12 @@ export const PROP_BOXES = [
   { minX: -1.1, maxX: -0.9, minZ: 0.3, maxZ: 0.5 },
   { minX: -2.4, maxX: -2.2, minZ: 6.3, maxZ: 6.5 },
   { minX: -6.5, maxX: -6.3, minZ: -0.3, maxZ: -0.1 },
-  { minX: -0.6, maxX: -0.4, minZ: 8.2, maxZ: 8.4 },
+  { minX: -0.8, maxX: -0.4, minZ: 9, maxZ: 9.1 },
   { minX: -3, maxX: -2.6, minZ: 7.3, maxZ: 7.4 },
-  { minX: -0.1, maxX: 0.2, minZ: 8.6, maxZ: 8.7 },
-  { minX: -0.5, maxX: -0.4, minZ: 8.1, maxZ: 8.4 },
   { minX: -4.1, maxX: -3.8, minZ: -0.8, maxZ: -0.7 },
   { minX: -0.7, maxX: -0.4, minZ: 0.1, maxZ: 0.2 },
-  { minX: -0.4, maxX: -0.1, minZ: 8.4, maxZ: 8.5 },
-  { minX: -0.6, maxX: -0.3, minZ: 8.3, maxZ: 8.4 },
   { minX: -1, maxX: -0.7, minZ: 5.6, maxZ: 5.7 },
   { minX: -2.2, maxX: -2, minZ: -8, maxZ: -7.9 },
-  { minX: -0.2, maxX: 0, minZ: 8.5, maxZ: 8.6 },
   { minX: -3.1, maxX: -2.9, minZ: 7.4, maxZ: 7.5 },
+  { minX: 1, maxX: 1.1, minZ: 8.8, maxZ: 8.9 },
 ]
