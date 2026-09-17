@@ -202,7 +202,7 @@ export function orderField(sim, field, value, dueAt) {
 // Order a value for one video field that has no order outstanding. Returns the
 // field, or null if every video field is already waiting on a value (then
 // nothing is ordered this time round).
-export function orderMissionField(sim, windowMs = FIELD_WINDOW) {
+export function orderMissionField(sim, windowMs = sim.tuning.fieldWindowMs) {
   const free = VIDEO_FIELDS.filter(f => !sim.mission.fields[f.key].order)
   if (!free.length) return null
   const field = pick(free)
@@ -392,7 +392,14 @@ export function advanceSim(sim, dt) {
   // Video values are ordered on their own cadence and lapse after FIELD_WINDOW.
   const m = sim.mission
   if (!m.drop && sim.elapsedMs >= m.nextDropAt) {
-    startDrop(sim, randRange(...tuning.dropLeadMs))
+    // Never issue a drop whose full release window could run past the round.
+    // Include rounding to the next whole Clock second in the time budget.
+    const latestDueAt = Math.ceil((sim.elapsedMs + tuning.dropLeadMs[1]) / 1000) * 1000
+    if (latestDueAt + RELEASE_WINDOW < tuning.gameMs) {
+      startDrop(sim, randRange(...tuning.dropLeadMs))
+    } else {
+      m.nextDropAt = Infinity
+    }
   }
   if (m.drop && m.drop.issued < LOAD_ORDER.length && sim.elapsedMs >= m.drop.nextOrderAt) {
     orderLoadField(sim)
@@ -424,9 +431,9 @@ export function advanceSim(sim, dt) {
 
   // System — comms code lifecycle.
   if (!sim.code && sim.elapsedMs >= sim.nextCodeAt) {
-    sim.code = { digits: code3(), dueAt: sim.elapsedMs + CODE_WINDOW }
+    sim.code = { digits: code3(), dueAt: sim.elapsedMs + tuning.codeWindowMs }
     sim.codeEntry = ''
-    pushMessage(sim, `COMMS: code ${sim.code.digits} — enter in System, submit in the final ${CODE_SUBMIT_WINDOW / 1000}s`)
+    pushMessage(sim, `COMMS: code ${sim.code.digits} — enter in System, submit in the final ${tuning.codeSubmitWindowMs / 1000}s`)
   }
   if (sim.code && sim.elapsedMs > sim.code.dueAt) {
     // cbat: a correctly entered code stays on the panel until its timer runs

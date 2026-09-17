@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -19,7 +19,7 @@ import {
 } from '../utils/cbat/cutDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import {
-  GAME_MS, TICK_MS, SYSTEMS, SYSTEM_LABELS, SCORE, grade, award,
+  TICK_MS, SYSTEMS, SYSTEM_LABELS, SCORE, grade, award,
   makeSim, advanceSim, computeWarnings, pushMessage, randRange, code3, fmtWall, fmtClock,
   FUEL_MAX_SPREAD, SPEED_TOL, SPEED_STEP, SENSOR_ARM_WINDOW,
   AIR_INTERVAL, GROUND_INTERVAL,
@@ -256,13 +256,33 @@ function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt,
 function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = false }) {
   const inputRef = useRef(null)
   const digits = state.entry
+  const [selectedDigit, setSelectedDigit] = useState(null)
+  const pendingSelection = useRef(null)
+  const selectDigit = (index) => {
+    const input = inputRef.current
+    if (!input) return
+    const next = Math.max(0, Math.min(index, digits.length, field.digits - 1))
+    input.focus()
+    input.setSelectionRange(next, Math.min(next + 1, digits.length))
+    setSelectedDigit(next)
+  }
+  // Restore selection after React applies the controlled input's new value.
+  // Selecting the next character gives native typing (including mobile input)
+  // overwrite behaviour instead of inserting and truncating the trailing digit.
+  useLayoutEffect(() => {
+    if (pendingSelection.current === null) return
+    const input = inputRef.current
+    const next = Math.min(pendingSelection.current, digits.length, field.digits - 1)
+    pendingSelection.current = null
+    input?.setSelectionRange(next, Math.min(next + 1, digits.length))
+  })
   // Boxes read HH:MM:SS for six-digit fields, plain digits otherwise.
   const groups = field.digits === 6 ? [2, 2, 2] : [field.digits]
   let idx = 0
   return (
     <div className="flex items-center gap-1.5 min-w-0" data-cbat-field={field.key}>
       <span className="w-[5.2rem] shrink-0 text-[10px] text-game-text truncate">{field.label}</span>
-      <div className={`relative flex items-center gap-0.5 cursor-text${arrow === 'boxes' ? ' cbat-triple-pulse' : ''}`} onClick={() => inputRef.current?.focus()}>
+      <div className={`relative flex items-center gap-0.5 cursor-text${arrow === 'boxes' ? ' cbat-triple-pulse' : ''}`} onClick={() => selectDigit(Math.min(digits.length, field.digits - 1))}>
         {arrow === 'boxes' && <GuideArrow dir="down" urgent={urgent} />}
         {groups.map((n, g) => (
           <span key={g} className="flex items-center gap-0.5">
@@ -270,7 +290,11 @@ function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = 
             {Array.from({ length: n }, () => {
               const i = idx++
               return (
-                <span key={i} className="w-4 h-5 flex items-center justify-center bg-game-arena border border-game-line text-[11px] font-mono text-game-text">
+                <span key={i} data-digit-index={i} data-selected={selectedDigit === i ? 'true' : undefined}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => { e.stopPropagation(); selectDigit(i) }}
+                  style={selectedDigit === i ? { backgroundColor: 'var(--color-game-accent)', color: 'var(--color-game-arena)', outline: '2px solid var(--color-game-accent)' } : undefined}
+                  className="w-4 h-5 flex items-center justify-center bg-game-arena border border-game-line text-[11px] font-mono text-game-text">
                   {digits[i] ?? ''}
                 </span>
               )
@@ -284,9 +308,24 @@ function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = 
           pattern="[0-9]*"
           autoComplete="off"
           value={digits}
-          onChange={(e) => onType(field.key, e.target.value.replace(/\D/g, '').slice(0, field.digits))}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onConfirm(field.key) } }}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-text"
+          onFocus={() => selectDigit(Math.min(digits.length, field.digits - 1))}
+          onBlur={() => { setSelectedDigit(null); pendingSelection.current = null }}
+          onChange={(e) => {
+            const value = e.target.value.replace(/\D/g, '').slice(0, field.digits)
+            const next = Math.min(e.target.value.slice(0, e.target.selectionStart).replace(/\D/g, '').length, value.length, field.digits - 1)
+            pendingSelection.current = next
+            setSelectedDigit(next)
+            onType(field.key, value)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onConfirm(field.key) }
+            if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+              e.preventDefault()
+              const current = e.currentTarget.selectionStart ?? 0
+              selectDigit(e.key === 'Home' ? 0 : e.key === 'End' ? digits.length : current + (e.key === 'ArrowLeft' ? -1 : 1))
+            }
+          }}
+          className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
         />
       </div>
       <button
@@ -354,7 +393,7 @@ function MissionPanel({ mission, lights, onType, onConfirm, onRelease, arrowFiel
 // still running down — the keypad locks and the countdown keeps going.
 // `pumpPair` (Real CBAT variant) draws the pump as the real ON | OFF pair with
 // the live state lit, instead of one toggle showing its state.
-function SystemPanel({ pressure, pump, code, codeEntry, codeAck = null, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode, onAckCode, pumpPair = false, arrowPump = false, arrowKey = null, holdOk = false, waitHint = false, arrowUrgent = false }) {
+function SystemPanel({ codeSubmitWindowMs = CODE_SUBMIT_WINDOW, pressure, pump, code, codeEntry, codeAck = null, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode, onAckCode, pumpPair = false, arrowPump = false, arrowKey = null, holdOk = false, waitHint = false, arrowUrgent = false }) {
   const keyCls = (k) => (arrowKey === k ? ' cbat-triple-pulse' : '')
   const keysLive = !!code && !code.entered
   const zone = pressure < PRESS_LOW ? 'LOW' : pressure > PRESS_HIGH ? 'HIGH' : 'CORRECT'
@@ -364,8 +403,8 @@ function SystemPanel({ pressure, pump, code, codeEntry, codeAck = null, elapsedM
   const fillPct = gaugePct(pressure)
   const codeRem = code ? Math.ceil((code.dueAt - elapsedMs) / 1000) : null
   // OK only accepts in the final CODE_SUBMIT_WINDOW; before that, count down to it.
-  const submitOpen = !!code && elapsedMs >= code.dueAt - CODE_SUBMIT_WINDOW
-  const armRem = code ? Math.ceil((code.dueAt - CODE_SUBMIT_WINDOW - elapsedMs) / 1000) : null
+  const submitOpen = !!code && elapsedMs >= code.dueAt - codeSubmitWindowMs
+  const armRem = code ? Math.ceil((code.dueAt - codeSubmitWindowMs - elapsedMs) / 1000) : null
   return (
     <Panel title="System">
       <div className="flex gap-2 sm:gap-3 h-full min-h-0">
@@ -709,7 +748,13 @@ function startTutorialDrop(sim) {
 }
 
 function makeTutorialSim(cbat = false) {
-  const sim = makeSim('easier', { cbat })
+  const sim = makeSim('hard', { cbat })
+  // Keep the guided lesson's established pace independent of live difficulties.
+  sim.tuning = {
+    ...sim.tuning, codeSubmitWindowMs: CODE_SUBMIT_WINDOW,
+    fuelDrainPerSec: 2.5, speedDriftPerSec: 0.28,
+    pressRisePerSec: 0.4, pressDropPerSec: 0.3,
+  }
   // The Message step points at an order in the log, and a fresh sim starts
   // without one. Put a sample there, then withdraw it, so the log shows what
   // an order looks like without a field waiting on it.
@@ -843,7 +888,7 @@ function TutorialComplete({ onExit }) {
     >
       <p className="text-5xl mb-3">✅</p>
       <p className="text-2xl font-extrabold text-white mb-1">Tutorial Complete</p>
-      <p className="text-sm text-slate-400 mb-6">That is every display. A full run lasts 3 minutes, and all six displays keep changing at the same time.</p>
+      <p className="text-sm text-slate-400 mb-6">That is every display. A full run lasts 3 minutes on either difficulty, and all six displays keep changing at the same time.</p>
       <button
         onClick={onExit}
         className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
@@ -1096,7 +1141,7 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
         if (nearEdge) return { lit: 'panel1', pump: true, ...codeLine }
         // Then the keys, one at a time, then OK — urgent only once OK is live.
         const next = v.codeEntry.length < 3 ? v.code.digits[v.codeEntry.length] : 'OK'
-        const submitOpen = v.elapsedMs >= v.code.dueAt - CODE_SUBMIT_WINDOW
+        const submitOpen = v.elapsedMs >= v.code.dueAt - v.tuning.codeSubmitWindowMs
         // Digits in, OK not yet live: nothing to press. Say "wait" at the countdown.
         if (next === 'OK' && !submitOpen) return { lit: 'panel1', wait: true, ...codeLine }
         return { lit: 'panel1', key: next, urgent: next === 'OK', ...codeLine }
@@ -1114,7 +1159,7 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
       case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} arrowPlus={!!guide.plus} arrowMinus={!!guide.minus} holdOk={!!guide.ok} arrowUrgent={!!guide.urgent} />
       case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} arrowCamera={guide.camera ?? null} arrowSensor={guide.sensor ?? null} arrowUrgent={!!guide.urgent} />
       case 'mission':    return <MissionPanel mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} arrowField={guide.field ?? null} arrowAt={guide.fieldAt ?? 'confirm'} arrowRelease={!!guide.release} arrowUrgent={!!guide.urgent} />
-      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
+      case 'system':     return <SystemPanel codeSubmitWindowMs={sim.tuning.codeSubmitWindowMs} pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
       default:           return null
     }
   }
@@ -1382,7 +1427,7 @@ export default function CbatCut() {
     markGameCompleted({ score: stats.totalScore })
     submitCbatResult(playedTuning.gameKey, {
       totalScore: stats.totalScore,
-      totalTime: GAME_MS / 1000,
+      totalTime: playedTuning.gameMs / 1000,
       tasksCompleted: stats.tasksCompleted,
       tasksMissed: stats.tasksMissed,
       warningSeconds: stats.warningSeconds,
@@ -1408,8 +1453,8 @@ export default function CbatCut() {
       const now = performance.now()
       const dt = Math.min(250, now - lastTsRef.current)  // clamp long gaps (tab blur)
       lastTsRef.current = now
-      advanceSim(simRef.current, dt)
-      if (simRef.current.elapsedMs >= GAME_MS) {
+      advanceSim(simRef.current, Math.min(dt, simRef.current.tuning.gameMs - simRef.current.elapsedMs))
+      if (simRef.current.elapsedMs >= simRef.current.tuning.gameMs) {
         clearInterval(id)
         doFinish()
         return
@@ -1553,10 +1598,10 @@ export default function CbatCut() {
   const onClearCode = () => act(sim => { sim.codeEntry = '' })
   const onSubmitCode = () => act(sim => {
     if (!sim.code) return
-    // OK only accepts once the submission window has opened (final 15s).
-    if (sim.elapsedMs < sim.code.dueAt - CODE_SUBMIT_WINDOW) return
+    // OK only accepts once the submission window has opened for this difficulty.
+    if (sim.elapsedMs < sim.code.dueAt - sim.tuning.codeSubmitWindowMs) return
     if (sim.codeEntry === sim.code.digits) {
-      const speedBonus = Math.max(0, Math.round(SCORE.codeSpeedBonus * (sim.code.dueAt - sim.elapsedMs) / CODE_SUBMIT_WINDOW))
+      const speedBonus = Math.max(0, Math.round(SCORE.codeSpeedBonus * (sim.code.dueAt - sim.elapsedMs) / sim.tuning.codeSubmitWindowMs))
       award(sim, SCORE.code + speedBonus, 'comms code entered correctly')
       sim.tasksCompleted += 1
       if (sim.cbat) {
@@ -1582,13 +1627,13 @@ export default function CbatCut() {
       case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
       case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} />
       case 'mission':    return <MissionPanel mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} />
-      case 'system':     return <SystemPanel pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} />
+      case 'system':     return <SystemPanel codeSubmitWindowMs={sim.tuning.codeSubmitWindowMs} pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} />
       default:           return null
     }
   }
 
   const sim = view
-  const remainingMs = Math.max(0, GAME_MS - sim.elapsedMs)
+  const remainingMs = Math.max(0, sim.tuning.gameMs - sim.elapsedMs)
   const launching = phase === 'launching'
   // During the launch flash everything on the card except the chosen difficulty
   // button greys out, so the flashing button is the only thing left alive.
@@ -1624,8 +1669,8 @@ export default function CbatCut() {
             className={phase === 'launching' ? 'cbat-launch-dim' : ''}
             test={phase === 'playing' ? {
               stage: 'Testing',
-              timeFrac: remainingMs / GAME_MS,
-              progressFrac: 1 - remainingMs / GAME_MS,
+              timeFrac: remainingMs / sim.tuning.gameMs,
+              progressFrac: 1 - remainingMs / sim.tuning.gameMs,
             } : phase === 'tutorial' ? { stage: 'Instructions' } : null}
           >
             {phase === 'playing' && <ModeMarker mode={runTuning} />}
@@ -1669,9 +1714,9 @@ export default function CbatCut() {
                   <div className="flex items-start gap-3"><CbatIntroLabel>Nav</CbatIntroLabel><span className="pt-0.5">hold airspeed within ±{SPEED_TOL} kts of required</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Sensor</CbatIntroLabel><span className="pt-0.5">{cbat ? 're-activate Air & Ground sensors on time; select the ordered camera at its Clock time' : 're-activate Air & Ground sensors on time; select the ordered camera'}</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Mission</CbatIntroLabel><span className="pt-0.5">enter the load drop latitude, longitude and time ordered in Message, then press RELEASE as the Clock reaches that time; set the video values as ordered</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">{cbat ? 'keep hydraulic pressure 90–110; enter comms codes in the last 15s, then press Confirm when the timer hits zero' : 'keep hydraulic pressure 90–110; enter comms codes in 15s'}</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">{cbat ? 'keep hydraulic pressure 90–110; type comms codes, submit when OK lights up, then press Confirm at zero' : 'keep hydraulic pressure 90–110; type comms codes and submit when OK lights up'}</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'🕑'}</span><span className="pt-0.5">The Clock shows in-game time — some tasks are scheduled to it</span></div>
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">3 minutes — the Message display feeds every task</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">{tuning.gameMs / 60_000} {tuning.gameMs === 60_000 ? 'minute' : 'minutes'} — the Message display feeds every task</span></div>
                 </div>
 
                 <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>

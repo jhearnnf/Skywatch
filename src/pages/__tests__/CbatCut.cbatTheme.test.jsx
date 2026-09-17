@@ -173,7 +173,7 @@ describe('CUT — Real CBAT theme System display', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'System' })[1])
     await advance(CUT_TUNING.easier.firstCodeMs + 200)
     expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
-    await advance(30_000)
+    await advance(CUT_TUNING.easier.codeWindowMs)
     const confirm = screen.getByRole('button', { name: 'Confirm' })
     fireEvent.click(confirm)
     expect(screen.getByText('comms button pressed')).toBeInTheDocument()
@@ -183,7 +183,7 @@ describe('CUT — Real CBAT theme System display', () => {
   it('never shows Confirm under the SkyWatch theme', async () => {
     await startRun('skywatch')
     fireEvent.click(screen.getAllByRole('button', { name: 'System' })[1])
-    await advance(CUT_TUNING.easier.firstCodeMs + 30_200)
+    await advance(CUT_TUNING.easier.firstCodeMs + CUT_TUNING.easier.codeWindowMs + 200)
     expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
   })
 })

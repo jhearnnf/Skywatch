@@ -1,4 +1,5 @@
 import { render, screen, act, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatCut from '../CbatCut'
 import { CUT_TUNING } from '../../utils/cbat/cutDifficulty'
@@ -150,8 +151,8 @@ describe('CUT Mission panel — the load drop', () => {
   })
 
   it('pays less the later RELEASE is pressed inside the window', async () => {
-    const t = CUT_TUNING.easier
-    await missionPanel('Easier', 'skywatch')
+    const t = CUT_TUNING.hard
+    await missionPanel('Hard', 'skywatch')
     await advance(t.firstDropMs + 2 * t.dropOrderGapMs[1] + 400)
     const orders = loadOrders()
     for (const key of LOAD_ORDER) {
@@ -177,9 +178,59 @@ describe('CUT Mission panel — the load drop', () => {
       fireEvent.click(screen.getByRole('button', { name: `Confirm ${orders[key].field.order}` }))
     }
     expect(lit()).toBe(DISPENSER_LIGHTS)
-    await advance(t.dropLeadMs[1] + 1_000 + RELEASE_WINDOW + 200)
+    for (let i = 0; i < 60 && clock() !== orders.loadTime.value; i++) await advance(1_000)
+    expect(clock()).toBe(orders.loadTime.value)
+    await advance(RELEASE_WINDOW + 200)
     expect(screen.getByText(`load drop at ${orders.loadTime.value} missed`)).toBeInTheDocument()
     expect(lit()).toBe(0)
     expect(release()).toBeDisabled()
+  })
+})
+
+
+describe.each(['skywatch', 'cbat'])('CUT Mission digit editing (%s)', (theme) => {
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); vi.useFakeTimers({ shouldAdvanceTime: true }) })
+  afterEach(() => vi.useRealTimers())
+
+  it('selects the clicked digit and overwrites consecutive digits without shifting the rest', async () => {
+    await missionPanel('Hard', theme)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const input = screen.getByLabelText('video latitude')
+    fireEvent.change(input, { target: { value: '123456' } })
+    const boxes = document.querySelectorAll('[data-cbat-field="vidLat"] [data-digit-index]')
+    await user.click(boxes[2])
+    expect(input).toHaveFocus()
+    expect(input.selectionStart).toBe(2)
+    expect(input.selectionEnd).toBe(3)
+    expect(boxes[2]).toHaveAttribute('data-selected', 'true')
+    await user.keyboard('98')
+    expect(input).toHaveValue('129856')
+    expect(boxes[4]).toHaveAttribute('data-selected', 'true')
+    expect(input.selectionStart).toBe(4)
+    expect(input.selectionEnd).toBe(5)
+    await user.keyboard('{ArrowLeft}7')
+    expect(input).toHaveValue('129756')
+    await user.keyboard('{End}0')
+    expect(input).toHaveValue('129750')
+    await user.click(screen.getByRole('button', { name: 'Confirm video latitude' }))
+    expect(document.querySelector('[data-cbat-field="vidLat"] [data-selected="true"]')).toBeNull()
+  })
+
+  it('types into an empty field and supports one-digit, two-digit and load fields', async () => {
+    await missionPanel('Hard', theme)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    for (const [key, initial, replacement, expected] of [
+      ['vidMag', '3', '8', '8'],
+      ['vidDur', '12', '9', '92'],
+      ['loadLat', '123456', '98', '983456'],
+    ]) {
+      const input = screen.getByLabelText(MISSION_FIELD_BY_KEY[key].order)
+      await user.click(document.querySelector(`[data-cbat-field="${key}"] [data-digit-index="0"]`))
+      await user.keyboard(initial)
+      expect(input).toHaveValue(initial)
+      await user.click(document.querySelector(`[data-cbat-field="${key}"] [data-digit-index="0"]`))
+      await user.keyboard(replacement)
+      expect(input).toHaveValue(expected)
+    }
   })
 })

@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
-  makeSim, advanceSim, orderMissionField, startDrop, orderLoadField, clearDrop, dispenserLights, dispenserArmed,
+  makeSim, advanceSim, orderField, orderMissionField, startDrop, orderLoadField, clearDrop, dispenserLights, dispenserArmed,
   fieldValue, fmtFieldValue, clockAt,
-  MISSION_FIELDS, MISSION_FIELD_BY_KEY, LOAD_FIELDS, VIDEO_FIELDS, LOAD_ORDER, FIELD_WINDOW, DISPENSER_LIGHTS,
+  MISSION_FIELDS, MISSION_FIELD_BY_KEY, LOAD_FIELDS, VIDEO_FIELDS, LOAD_ORDER, DISPENSER_LIGHTS,
   RELEASE_WINDOW, SCORE,
 } from '../../utils/cbat/cutSim'
 import { CUT_TUNING } from '../../utils/cbat/cutDifficulty'
@@ -114,7 +114,7 @@ describe('CUT sim — load drop', () => {
     const sim = makeSim('hard')
     run(sim, 180_000)
     const times = setLines(sim).filter(m => m.text.includes('set load drop time'))
-    expect(times.length).toBeGreaterThanOrEqual(3)
+    expect(times.length).toBeGreaterThanOrEqual(2)
     expect(times.every(m => /to \d\d:\d\d:\d\d$/.test(m.text))).toBe(true)
   })
 })
@@ -136,7 +136,7 @@ describe('CUT sim — video orders', () => {
     const sim = makeSim('hard')
     sim.mission.nextDropAt = Infinity
     const field = orderMissionField(sim)
-    run(sim, FIELD_WINDOW + 200)
+    run(sim, sim.tuning.fieldWindowMs + 200)
     expect(sim.mission.fields[field.key].order).toBeNull()
     expect(sim.tasksMissed).toBeGreaterThanOrEqual(1)
     const fault = logged(sim, `${field.order} not set`)
@@ -174,5 +174,54 @@ describe('CUT sim — video orders', () => {
       }
     }
     expect(MISSION_FIELD_BY_KEY.vidDur.digits).toBe(2)
+  })
+})
+
+
+it('keeps the last video setting visible when a new order arrives for that field', () => {
+  const sim = makeSim('hard')
+  const field = MISSION_FIELD_BY_KEY.vidLat
+  Object.assign(sim.mission.fields.vidLat, { entry: '123456', value: '123456' })
+  orderField(sim, field, '654321', 50_000)
+  expect(sim.mission.fields.vidLat).toMatchObject({
+    entry: '123456', value: '123456', order: '654321', dueAt: 50_000,
+  })
+})
+
+
+describe.each(['easier', 'hard'])('CUT complete drop schedule: %s', (difficulty) => {
+  it.each([
+    [false, 0, 100], [false, 0.999999, 250],
+    [true, 0, 100], [true, 0.999999, 250],
+  ])('fits every drop window (CBAT %s, random %s, tick %s)', (cbat, random, step) => {
+    const rng = vi.spyOn(Math, 'random').mockReturnValue(random)
+    try {
+      for (const outcome of ['on time', 'last moment', 'missed']) {
+        const sim = makeSim(difficulty, { cbat })
+        const drops = new Set()
+        const fullyOrdered = new Set()
+        while (sim.elapsedMs < sim.tuning.gameMs) {
+          advanceSim(sim, step)
+          const drop = sim.mission.drop
+          if (!drop) continue
+          drops.add(drop)
+          expect(drop.dueAt + RELEASE_WINDOW).toBeLessThan(sim.tuning.gameMs)
+          if (drop.issued === LOAD_ORDER.length && !fullyOrdered.has(drop)) {
+            fullyOrdered.add(drop)
+            // At least 15 seconds to finish entry after the last detail arrives.
+            expect(drop.dueAt - sim.elapsedMs).toBeGreaterThanOrEqual(15_000)
+          }
+          const releaseAt = drop.dueAt + (outcome === 'last moment' ? RELEASE_WINDOW : 0)
+          if (outcome !== 'missed' && sim.elapsedMs >= releaseAt) {
+            clearDrop(sim, sim.tuning.dropGapMs[1])
+          }
+        }
+        expect(drops.size).toBeGreaterThanOrEqual(difficulty === 'easier' ? 2 : 3)
+        expect(fullyOrdered.size).toBe(drops.size)
+        expect(sim.mission.drop).toBeNull()
+      }
+    } finally {
+      rng.mockRestore()
+    }
   })
 })

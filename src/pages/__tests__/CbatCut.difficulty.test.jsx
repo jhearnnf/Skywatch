@@ -45,7 +45,7 @@ describe('CUT — difficulty tuning', () => {
   // Easier is the same test at a lower load — slower drift on the three systems
   // that wander on their own, and a thinner task/message cadence. Nothing about
   // the tolerances, the scoring or the 180s length changes.
-  it('slows only the drift rates and the task cadence', () => {
+  it('slows drift and task cadence and extends entry windows', () => {
     const e = CUT_TUNING.easier
     const h = CUT_TUNING.hard
 
@@ -56,24 +56,28 @@ describe('CUT — difficulty tuning', () => {
 
     // Every one of these announces itself in Message, so longer gaps = fewer
     // messages, which is the other half of what Easier means.
-    for (const key of ['speedChangeMs', 'cameraFirstMs', 'cameraNextMs', 'codeGapMs',
+    for (const key of ['speedChangeMs', 'cameraNextMs', 'codeGapMs',
       // Mission display cadences (load drops and their orders, video orders)
       // and the Real CBAT variant's camera lead.
-      'dropLeadMs', 'dropOrderGapMs', 'dropGapMs', 'fieldGapMs', 'cameraLeadMs']) {
+      'dropGapMs', 'fieldGapMs', 'cameraLeadMs']) {
       expect(e[key][0]).toBeGreaterThan(h[key][0])
       expect(e[key][1]).toBeGreaterThan(h[key][1])
     }
-    expect(e.firstCodeMs).toBeGreaterThan(h.firstCodeMs)
-    expect(e.fieldFirstMs).toBeGreaterThan(h.fieldFirstMs)
-    expect(e.firstDropMs).toBeGreaterThan(h.firstDropMs)
+    for (const key of ['codeWindowMs', 'codeSubmitWindowMs', 'fieldWindowMs']) {
+      expect(e[key]).toBeGreaterThan(h[key])
+    }
+    expect(e.firstCodeMs + e.codeWindowMs).toBeLessThan(e.gameMs)
+    expect(e.fieldFirstMs + e.fieldWindowMs).toBeLessThan(e.gameMs)
+    expect(e.firstDropMs + e.dropLeadMs[1]).toBeLessThan(e.gameMs)
   })
 
-  it('carries no knobs beyond drift, cadence and the derived grade bands', () => {
+  it('carries no knobs beyond drift, cadence, entry windows and grade bands', () => {
     const allowed = [
-      'key', 'label', 'gameKey', 'bars', 'blurb',
+      'key', 'label', 'gameKey', 'bars', 'blurb', 'gameMs',
       'fuelDrainPerSec', 'speedDriftPerSec', 'pressRisePerSec', 'pressDropPerSec',
       'speedChangeMs', 'cameraFirstMs', 'cameraNextMs',
       'firstCodeMs', 'codeGapMs', 'grades',
+      'codeWindowMs', 'codeSubmitWindowMs', 'fieldWindowMs',
       'firstDropMs', 'dropLeadMs', 'dropOrderGapMs', 'dropGapMs', 'fieldFirstMs', 'fieldGapMs',
       // Real CBAT variant only (cutSim's "Real CBAT variant" block).
       'cameraLeadMs',
@@ -83,11 +87,11 @@ describe('CUT — difficulty tuning', () => {
     }
   })
 
-  it('hard keeps the original constants (unchanged for existing scores)', () => {
+  it('hard uses the former easier pacing', () => {
     expect(CUT_TUNING.hard).toMatchObject({
-      fuelDrainPerSec: 4.5, speedDriftPerSec: 0.5,
-      pressRisePerSec: 0.7, pressDropPerSec: 0.5,
-      grades: { outstanding: 1100, good: 700, needsWork: 350 },
+      fuelDrainPerSec: 1.5, speedDriftPerSec: 0.17,
+      pressRisePerSec: 0.24, pressDropPerSec: 0.18,
+      grades: { outstanding: 650, good: 400, needsWork: 200 },
     })
   })
 
@@ -173,17 +177,23 @@ describe('CUT — difficulty selection on the instructions card', () => {
     expect(marker.textContent).toContain('Hard')
   })
 
-  it('submits a finished run to the board it was played on', async () => {
+  it.each(['easier', 'hard'])('finishes %s at its duration and saves the correct time and board', async (difficulty) => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const { submitCbatResult } = await import('../../lib/cbatOutbox')
     setup()
     render(<CbatCut />)
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${difficulty}$`, 'i') }))
     fireEvent.click(startBtn())
     await act(async () => { vi.advanceTimersByTime(LAUNCH_MS + 100) })
-    // Run the full 180s.
-    await act(async () => { vi.advanceTimersByTime(181_000) })
+    const duration = CUT_TUNING[difficulty].gameMs
+    await act(async () => { vi.advanceTimersByTime(duration - 500) })
+    expect(submitCbatResult).not.toHaveBeenCalled()
+    expect(screen.getByText('Warning')).toBeInTheDocument()
+    await act(async () => { vi.advanceTimersByTime(600) })
 
     await waitFor(() => expect(submitCbatResult).toHaveBeenCalled())
-    expect(submitCbatResult.mock.calls[0][0]).toBe('cut-easier')
+    expect(submitCbatResult).toHaveBeenCalledTimes(1)
+    expect(submitCbatResult.mock.calls[0][0]).toBe(CUT_TUNING[difficulty].gameKey)
+    expect(submitCbatResult.mock.calls[0][1].totalTime).toBe(duration / 1000)
   })
 })

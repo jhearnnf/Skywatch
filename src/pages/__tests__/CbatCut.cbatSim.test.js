@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   makeSim, advanceSim, orderCamera,
-  MISSION_FIELDS, CAMERA_WINDOW, CODE_WINDOW, CODE_ACK_WINDOW, SCORE,
+  MISSION_FIELDS, CAMERA_WINDOW, CODE_ACK_WINDOW, SCORE,
 } from '../../utils/cbat/cutSim'
 import { CUT_TUNING } from '../../utils/cbat/cutDifficulty'
 
@@ -67,7 +67,7 @@ describe('CUT sim — Real CBAT variant', () => {
     expect(sim.code).not.toBeNull()
     // The player got the code in: no miss at zero, but the button still appears.
     sim.code.entered = true
-    run(sim, CODE_WINDOW)
+    run(sim, sim.tuning.codeWindowMs)
     expect(sim.code).toBeNull()
     expect(logged(sim, 'comms code window missed')).toHaveLength(0)
     expect(sim.codeAck).not.toBeNull()
@@ -81,7 +81,7 @@ describe('CUT sim — Real CBAT variant', () => {
   it('still faults a code that was never entered, and brings up the button anyway', () => {
     const sim = makeSim('hard', { cbat: true })
     run(sim, CUT_TUNING.hard.firstCodeMs + 100)
-    run(sim, CODE_WINDOW)
+    run(sim, sim.tuning.codeWindowMs)
     expect(sim.code).toBeNull()
     expect(logged(sim, 'comms code window missed')).toHaveLength(1)
     expect(sim.codeAck).not.toBeNull()

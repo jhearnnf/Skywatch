@@ -50,8 +50,8 @@ describe('CUT simulation', () => {
 
   it('penalises a missed comms code once its window lapses', () => {
     const sim = makeSim('hard')
-    // First code is issued ~10s in and closes 30s later; run past ~45s.
-    for (let i = 0; i < 450; i++) advanceSim(sim, 100)
+    // First code is issued 20s in and closes 45s later; run past 65s.
+    for (let i = 0; i < 660; i++) advanceSim(sim, 100)
     expect(sim.tasksMissed).toBeGreaterThan(0)
     // The miss is recorded as a negative commentary line (score itself may stay
     // positive under the lenient model — the point is the fault is penalised).
@@ -68,7 +68,7 @@ describe('CUT simulation', () => {
 
   it('logs warning bleed lines while a breach is active (at most one per second per breach)', () => {
     const sim = makeSim('hard')
-    for (let i = 0; i < 300; i++) advanceSim(sim, 100)  // ~30s, several breaches accrue
+    for (let i = 0; i < 600; i++) advanceSim(sim, 100)  // ~30s, several breaches accrue
     const bleedLines = sim.log.filter(e => e.delta < 0 && /ENGINE|SENSOR|SYSTEM|NAVIGATION/.test(e.text))
     expect(bleedLines.length).toBeGreaterThan(0)
     // Never more bleed lines than elapsed whole-seconds × active breaches — i.e.
@@ -78,7 +78,7 @@ describe('CUT simulation', () => {
 
   it('accrues warning time only while a breach is active', () => {
     const sim = makeSim('hard')
-    for (let i = 0; i < 300; i++) advanceSim(sim, 100)
+    for (let i = 0; i < 600; i++) advanceSim(sim, 100)
     expect(sim.warningMs).toBeGreaterThan(0)
     expect(sim.warningMs).toBeLessThanOrEqual(sim.elapsedMs)
   })
@@ -109,9 +109,9 @@ describe('CUT simulation — Easier difficulty', () => {
   it('takes longer to break the fuel tolerance with no player action', () => {
     const easy = makeSim('easier')
     const hard = makeSim('hard')
-    runFor(easy, 20_000)
-    runFor(hard, 20_000)
-    // Hard has already broken the 50 L spread at 20s; Easier hasn't.
+    runFor(easy, 50_000)
+    runFor(hard, 50_000)
+    // Hard has already broken the 50 L spread at 50s; Easier hasn't.
     expect(computeWarnings(hard).some(w => w.startsWith('ENGINE'))).toBe(true)
     expect(computeWarnings(easy).some(w => w.startsWith('ENGINE'))).toBe(false)
   })
@@ -124,27 +124,47 @@ describe('CUT simulation — Easier difficulty', () => {
     for (let n = 0; n < 8; n++) {
       const easy = makeSim('easier')
       const hard = makeSim('hard')
-      runFor(easy, 180_000)
-      runFor(hard, 180_000)
+      runFor(easy, easy.tuning.gameMs)
+      runFor(hard, hard.tuning.gameMs)
       easyTotal += easy.messages.length
       hardTotal += hard.messages.length
     }
     expect(easyTotal).toBeLessThan(hardTotal)
   })
 
-  it('keeps the shared tolerances and run length identical', () => {
+  it('keeps shared tolerances and three-minute rounds on both difficulties', () => {
     const easy = makeSim('easier')
     const hard = makeSim('hard')
     // Sensor intervals are tolerance timers, not message cadence — untouched.
+    expect(easy.tuning.gameMs).toBe(180_000)
+    expect(hard.tuning.gameMs).toBe(180_000)
     expect(easy.airDueAt).toBe(hard.airDueAt)
     expect(easy.groundDueAt).toBe(hard.groundDueAt)
     expect(computeWarnings(easy)).toEqual([])
   })
 
   it('grades on its own lower bands', () => {
-    expect(grade(800, CUT_TUNING.easier).label).toBe('Outstanding')
-    expect(grade(800, CUT_TUNING.hard).label).toBe('Good')
+    expect(grade(620, CUT_TUNING.easier).label).toBe('Outstanding')
+    expect(grade(620, CUT_TUNING.hard).label).toBe('Good')
     // Default is Hard, so an ungraded call can't silently inflate a score.
-    expect(grade(800).label).toBe('Good')
+    expect(grade(620).label).toBe('Good')
+  })
+})
+
+
+describe.each([false, true])('CUT code deadlines (CBAT theme: %s)', (cbat) => {
+  it.each(['easier', 'hard'])('keeps %s codes live until their configured deadline', (difficulty) => {
+    const sim = makeSim(difficulty, { cbat })
+    advanceSim(sim, sim.tuning.firstCodeMs)
+    const dueAt = sim.code.dueAt
+    expect(dueAt - sim.elapsedMs).toBe(sim.tuning.codeWindowMs)
+    expect(sim.messages.at(-1).text).toContain(`final ${sim.tuning.codeSubmitWindowMs / 1000}s`)
+    advanceSim(sim, sim.tuning.codeWindowMs)
+    expect(sim.code).not.toBeNull()
+    expect(sim.log.some(e => e.text === 'comms code window missed')).toBe(false)
+    advanceSim(sim, 100)
+    expect(sim.code).toBeNull()
+    expect(sim.log.filter(e => e.text === 'comms code window missed')).toHaveLength(1)
+    expect(sim.codeAck).toEqual(cbat ? { since: dueAt } : null)
   })
 })

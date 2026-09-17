@@ -1,21 +1,7 @@
-// CUT difficulty tuning.
-//
-// Hard is the original test — every value here is what CUT shipped with. Easier
-// runs the same 180 seconds, the same six displays, the same tolerances and the
-// same scoring; what changes is how fast the systems wander away from you and
-// how often the Message feed asks for something:
-//
-//   • fuel drains slower, so the tank spread takes longer to break
-//   • hydraulic pressure rises and falls slower, so the band lasts longer
-//   • airspeed bleeds off slower (the wind pushing you off the required speed)
-//   • tasks — and therefore messages — arrive further apart
-//
-// Everything else is deliberately shared, so the two difficulties stay the same
-// test at different loads.
-//
-// This file imports nothing from cutSim.js: cutSim imports the tuning for its
-// defaults, and a cycle between them would leave one side undefined at module
-// init. The numbers live here, and cutSim reads them off the sim.
+// CUT difficulty tuning. Hard uses the former Easier pacing; Easier gives
+// players more time between tasks and longer code and mission entry windows.
+// Both difficulties last three minutes. Tolerances and rewards are shared.
+// Kept independent of cutSim.js to avoid a circular import.
 
 export const DEFAULT_CUT_DIFFICULTY = 'easier'
 
@@ -31,67 +17,92 @@ export const CUT_TUNING = {
     // Backend leaderboard key — its own collection, its own board.
     gameKey: 'cut-easier',
     bars: 1,
-    blurb: 'Slower drift, fewer messages',
+    blurb: 'Slowest drift, fewer tasks',
+    gameMs: 180_000,
 
     // Drift rates — how fast a system leaves tolerance while you're looking at
     // one of the other five.
-    fuelDrainPerSec: 2.5,
-    speedDriftPerSec: 0.28,
-    pressRisePerSec: 0.4,
-    pressDropPerSec: 0.3,
+    fuelDrainPerSec: 0.75,
+    speedDriftPerSec: 0.085,
+    pressRisePerSec: 0.12,
+    pressDropPerSec: 0.09,
 
+    // Tasks start early, with long repeat gaps to keep the workload gentle.
     // Task cadence. Every one of these announces itself in Message, so
     // stretching them is what "fewer messages" means.
-    speedChangeMs: [52_000, 68_000],
-    cameraFirstMs: [62_000, 80_000],
-    cameraNextMs: [65_000, 95_000],
-    firstCodeMs: 16_000,
-    codeGapMs: [14_000, 24_000],
+    speedChangeMs: [100_000, 120_000],
+    cameraFirstMs: [20_000, 24_000],
+    cameraNextMs: [120_000, 150_000],
+    firstCodeMs: 2_000,
+    codeGapMs: [60_000, 75_000],
+
+    codeWindowMs: 50_000,
+    codeSubmitWindowMs: 40_000,
+    fieldWindowMs: 50_000,
 
     // Mission display (cutSim's "Mission display" block). A load drop is
     // ordered this far ahead of its time, its three values this far apart,
     // and the next drop follows this long after; video values are ordered on
     // their own cadence.
-    firstDropMs: 12_000,
-    dropLeadMs: [40_000, 55_000],
-    dropOrderGapMs: [5_000, 9_000],
-    dropGapMs: [14_000, 22_000],
-    fieldFirstMs: 20_000,
-    fieldGapMs: [22_000, 32_000],
+    // Two complete drop windows fit even if the first is missed.
+    firstDropMs: 1_000,
+    dropLeadMs: [55_000, 55_000],
+    dropOrderGapMs: [5_000, 7_000],
+    dropGapMs: [20_000, 30_000],
+    fieldFirstMs: 8_000,
+    fieldGapMs: [60_000, 75_000],
     // Real CBAT theme only: camera orders carry a time this far ahead.
-    cameraLeadMs: [12_000, 20_000],
+    cameraLeadMs: [28_000, 30_000],
 
-    // Fewer tasks in the same 180s means a lower achievable total, so the grade
+    // Fewer tasks mean a lower achievable total, so the grade
     // bands come down with them.
-    grades: { outstanding: 800, good: 500, needsWork: 250 },
+    grades: { outstanding: 600, good: 400, needsWork: 200 },
   },
   hard: {
     key: 'hard',
     label: 'Hard',
+    // Backend leaderboard key — its own collection, its own board.
     gameKey: 'cut',
     bars: 3,
-    blurb: 'Harder than the real thing',
+    blurb: 'Gentle drift, three-minute run',
+    gameMs: 180_000,
 
-    fuelDrainPerSec: 4.5,
-    speedDriftPerSec: 0.5,
-    pressRisePerSec: 0.7,
-    pressDropPerSec: 0.5,
+    // Drift rates — how fast a system leaves tolerance while you're looking at
+    // one of the other five.
+    fuelDrainPerSec: 1.5,
+    speedDriftPerSec: 0.17,
+    pressRisePerSec: 0.24,
+    pressDropPerSec: 0.18,
 
-    speedChangeMs: [32_000, 42_000],
-    cameraFirstMs: [40_000, 55_000],
-    cameraNextMs: [40_000, 60_000],
-    firstCodeMs: 10_000,
-    codeGapMs: [8_000, 14_000],
+    // Task cadence. Every one of these announces itself in Message, so
+    // stretching them is what "fewer messages" means.
+    speedChangeMs: [70_000, 90_000],
+    cameraFirstMs: [80_000, 100_000],
+    cameraNextMs: [85_000, 115_000],
+    firstCodeMs: 20_000,
+    codeGapMs: [20_000, 32_000],
 
+    codeWindowMs: 45_000,
+    codeSubmitWindowMs: 25_000,
+    fieldWindowMs: 45_000,
+
+    // Mission display (cutSim's "Mission display" block). A load drop is
+    // ordered this far ahead of its time, its three values this far apart,
+    // and the next drop follows this long after; video values are ordered on
+    // their own cadence.
+    // Three complete drop windows fit at the slowest cadence, including misses.
     firstDropMs: 8_000,
-    dropLeadMs: [30_000, 40_000],
-    dropOrderGapMs: [4_000, 7_000],
-    dropGapMs: [8_000, 14_000],
-    fieldFirstMs: 14_000,
-    fieldGapMs: [14_000, 20_000],
-    cameraLeadMs: [10_000, 18_000],
+    dropLeadMs: [32_000, 38_000],
+    dropOrderGapMs: [5_000, 7_000],
+    dropGapMs: [8_000, 10_000],
+    fieldFirstMs: 26_000,
+    fieldGapMs: [32_000, 44_000],
+    // Real CBAT theme only: camera orders carry a time this far ahead.
+    cameraLeadMs: [18_000, 28_000],
 
-    grades: { outstanding: 1100, good: 700, needsWork: 350 },
+    // Fewer tasks mean a lower achievable total, so the grade
+    // bands come down with them.
+    grades: { outstanding: 650, good: 400, needsWork: 200 },
   },
 }
 
