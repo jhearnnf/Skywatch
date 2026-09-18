@@ -6,6 +6,7 @@ const AppSettings    = require('../models/AppSettings');
 const SurveyInvite   = require('../models/SurveyInvite');
 const SurveyResponse = require('../models/SurveyResponse');
 const surveyRoles    = require('../constants/surveyRoles.json');
+const surveyTests    = require('../constants/surveyTests.json');
 const { uploadBuffer, destroyAsset, signedUrl } = require('../utils/cloudinary');
 const {
   SURVEY_CAMPAIGN,
@@ -438,6 +439,15 @@ function sanitiseAnswers(body = {}) {
   const pass = (v) => (PASS_ANSWERS.includes(v) ? v : null);
 
   if ('satTest' in body)       out.satTest = body.satTest === true ? true : body.satTest === false ? false : null;
+  if ('testType' in body) {
+    out.testType = surveyTests.some(test => test.key === body.testType) ? body.testType : null;
+    if (out.testType !== 'other') out.testOther = null;
+  }
+  if ('testOther' in body && (!('testType' in body) || out.testType === 'other')) out.testOther = text(body.testOther, 120);
+  if (out.satTest === false) {
+    out.testType = null;
+    out.testOther = null;
+  }
   if ('testBookedFor' in body) out.testBookedFor = parseBookingDate(body.testBookedFor);
   if ('testBookedUnknown' in body) out.testBookedUnknown = body.testBookedUnknown === true;
   if ('role' in body)          out.role = text(body.role, 60);

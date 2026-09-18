@@ -1,4 +1,5 @@
 import surveyRoles from '../../backend/constants/surveyRoles.json'
+import surveyTests from '../../backend/constants/surveyTests.json'
 
 // Role list for the CBAT outcome questionnaire, imported straight from the
 // backend constants file the same way categories.json is — one definition, so
@@ -24,15 +25,17 @@ export function roleLabel(key, other) {
 // finds every RCAF role and typing "pilot" finds every service's pilot. Groups
 // with no surviving roles drop out entirely rather than rendering an empty
 // heading.
-export function filterRoleGroups(query) {
+export function filterRoleGroups(query, testType) {
   const q = query.trim().toLowerCase()
-  if (!q) return ROLE_GROUPS
-  return ROLE_GROUPS
+  const services = surveyTests.find(test => test.key === testType)?.services
+  const groups = services ? ROLE_GROUPS.filter(g => services.includes(g.service) || g.roles.some(role => role.key === OTHER_ROLE_KEY)) : ROLE_GROUPS
+  if (!q) return groups
+  return groups
     .map(g => {
       const serviceMatches = g.service.toLowerCase().includes(q)
       const roles = serviceMatches
         ? g.roles
-        : g.roles.filter(r => r.label.toLowerCase().includes(q))
+        : g.roles.filter(r => r.key === OTHER_ROLE_KEY || r.label.toLowerCase().includes(q))
       return { ...g, roles }
     })
     .filter(g => g.roles.length > 0)

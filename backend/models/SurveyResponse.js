@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const surveyTests = require('../constants/surveyTests.json');
 const { SURVEY_CAMPAIGN, PASS_ANSWERS, RATING_MIN, RATING_MAX, OPT_OUT_REASONS } = require('../constants/survey');
 
 // One person's answers to the CBAT outcome questionnaire.
@@ -21,6 +22,8 @@ const surveyResponseSchema = new mongoose.Schema({
   // donation ask. A "not yet" is not a failed send: it means the dormancy
   // threshold was early for this person, and they stay re-contactable.
   satTest: { type: Boolean, default: null },
+  testType: { type: String, enum: [...surveyTests.map(test => test.key), null], default: null },
+  testOther: { type: String, trim: true, maxlength: 120, default: null },
 
   // Follow-up to a "not yet": when is it booked for?
   //

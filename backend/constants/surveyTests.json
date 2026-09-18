@@ -1,0 +1,7 @@
+[
+  { "key": "raf-cbat", "label": "RAF CBAT", "services": ["Royal Air Force"] },
+  { "key": "rn-cbat", "label": "Royal Navy CBAT", "services": ["Royal Navy / Fleet Air Arm"] },
+  { "key": "cfast", "label": "Canadian Forces Aircrew Selection Test (CFAST)", "services": ["Royal Canadian Air Force"] },
+  { "key": "adf-asp", "label": "Australian ADF Aviation Screening Program (ASP / MACTS)", "services": ["Royal Australian Air Force"] },
+  { "key": "other", "label": "Other test" }
+]

@@ -652,3 +652,20 @@ describe('DELETE /api/survey/:token/cbat-result/:imageId', () => {
     expect((await SurveyResponse.findOne({ inviteId: invite._id })).resultImagesUploaded).toBe(0);
   });
 });
+
+describe('Test selection', () => {
+  it('persists and reloads the selected test and custom name', async () => {
+    expect((await patch({ satTest: true, testType: 'other', testOther: '  Example aircrew test  ' })).status).toBe(200);
+    expect((await get()).body.data.response).toMatchObject({ testType: 'other', testOther: 'Example aircrew test' });
+    await patch({ testType: 'cfast' });
+    expect((await get()).body.data.response).toMatchObject({ testType: 'cfast', testOther: null });
+  });
+
+  it('rejects unknown keys and clears the test when changed to not yet', async () => {
+    await patch({ testType: 'invalid' });
+    expect((await get()).body.data.response.testType).toBeNull();
+    await patch({ satTest: true, testType: 'raf-cbat' });
+    await patch({ satTest: false });
+    expect((await get()).body.data.response).toMatchObject({ testType: null, testOther: null });
+  });
+});

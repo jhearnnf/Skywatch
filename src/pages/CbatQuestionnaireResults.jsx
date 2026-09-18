@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import Overlay from '../components/ui/Overlay'
 import { roleLabel } from '../data/surveyRoles'
+import surveyTests from '../../backend/constants/surveyTests.json'
 
 /**
  * Admin ▸ CBAT Questionnaire Results.
@@ -425,6 +426,7 @@ function AnswersTable({ rows, highlightUserId, onOpenSheets }) {
           </div>
 
           <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-600">
+            {r.testType && <span>{r.testType === 'other' ? r.testOther || 'Other test' : surveyTests.find(test => test.key === r.testType)?.label || r.testType}</span>}
             {r.role && <span>{roleLabel(r.role, r.roleOther)}</span>}
             {r.passedAnyRole === 'yes' && <span className="text-emerald-700">Passed for another role</span>}
             {r.realismRating != null && <span>Realism {r.realismRating}/5</span>}

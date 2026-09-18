@@ -209,6 +209,7 @@ describe('Survey — the main path', () => {
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'))
     await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
   }
 
   it('saves every answer as it is given, not only at the end', async () => {
@@ -226,15 +227,20 @@ describe('Survey — the main path', () => {
     await waitFor(() => expect(patches).toContainEqual(expect.objectContaining({ passedForRole: 'yes' })))
   })
 
-  it('asks about other roles only after a "no"', async () => {
+  it('records a pass for another role without a follow-up question', async () => {
     renderSurvey()
     await startAndSit()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'))
     await advance()
 
-    fireEvent.click(await screen.findByTestId('survey-passed-no'))
+    fireEvent.click(await screen.findByTestId('survey-passed-other'))
     await advance()
-    expect(await screen.findByTestId('survey-any-yes')).toBeInTheDocument()
+    expect(await screen.findByTestId('survey-realism-5')).toBeInTheDocument()
+    expect(patches).toContainEqual(expect.objectContaining({ passedForRole: 'no', passedAnyRole: 'yes' }))
+    fireEvent.click(screen.getByRole('button', { name: /Back/ }))
+    fireEvent.click(await screen.findByTestId('survey-passed-waiting'))
+    await screen.findByTestId('survey-realism-5')
+    expect(patches.at(-1)).toEqual(expect.objectContaining({ passedForRole: 'waiting', passedAnyRole: null }))
   })
 
   it('skips the other-roles question after a "yes"', async () => {
@@ -284,7 +290,7 @@ describe('Survey — the main path', () => {
     await startAndSit()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));  await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-no'));   await advance()
-    fireEvent.click(await screen.findByTestId('survey-any-no'));      await advance()
+
     fireEvent.click(await screen.findByTestId('survey-realism-2'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-3'));    await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit')); await advance()
@@ -329,11 +335,9 @@ describe('Survey — the Google Play ask', () => {
   const finish = async ({ passed = 'yes', helped = 5 } = {}) => {
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));           await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));        await advance()
     fireEvent.click(await screen.findByTestId(`survey-passed-${passed}`));   await advance()
-    if (passed === 'no') {
-      fireEvent.click(await screen.findByTestId('survey-any-no'));          await advance()
-    }
     fireEvent.click(await screen.findByTestId('survey-realism-4'));         await advance()
     fireEvent.click(await screen.findByTestId(`survey-helped-${helped}`));   await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));       await advance()
@@ -397,26 +401,28 @@ describe('Survey — the Google Play ask', () => {
 })
 
 describe('Survey — the role picker', () => {
-  const toRole = async () => {
+  const toRole = async (test = 'raf-cbat') => {
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'))
     await advance()
+    fireEvent.click(await screen.findByTestId(`survey-test-${test}`)); await advance()
     return screen.findByTestId('survey-role-picker')
   }
 
-  it('filters by role name across every service', async () => {
+  it('searches only roles for the selected test', async () => {
     renderSurvey()
     await toRole()
     fireEvent.change(screen.getByTestId('survey-role-search'), { target: { value: 'pilot' } })
 
     expect(screen.getByTestId('survey-role-pilot')).toBeInTheDocument()
-    expect(screen.getByTestId('survey-role-rcaf-pilot')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-role-rcaf-pilot')).not.toBeInTheDocument()
+    expect(screen.getByTestId('survey-role-other')).toBeInTheDocument()
     expect(screen.queryByTestId('survey-role-wso')).not.toBeInTheDocument()
   })
 
   it('filters by service, so "canadian" finds the RCAF roles', async () => {
     renderSurvey()
-    await toRole()
+    await toRole('cfast')
     fireEvent.change(screen.getByTestId('survey-role-search'), { target: { value: 'canadian' } })
 
     expect(screen.getByTestId('survey-role-rcaf-pilot')).toBeInTheDocument()
@@ -456,6 +462,7 @@ describe('Survey — progress and going back', () => {
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'))
     await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     await screen.findByTestId('survey-role-picker')
 
     fireEvent.click(screen.getByText('← Back'))
@@ -475,6 +482,7 @@ describe('Survey — the /survey/preview demo', () => {
     renderPreview()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
@@ -491,6 +499,7 @@ describe('Survey — the /survey/preview demo', () => {
     renderPreview()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
@@ -518,6 +527,7 @@ describe('Survey — the /survey/preview demo', () => {
     renderPreview()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
@@ -525,9 +535,10 @@ describe('Survey — the /survey/preview demo', () => {
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));  await advance()
     await skipSheet()
 
-    fireEvent.click(await screen.findByTestId('survey-donate-submit'))
+    fireEvent.click(await screen.findByTestId('survey-donate-20'))
+    fireEvent.click(screen.getByTestId('survey-donate-submit'))
 
-    expect(await screen.findByTestId('survey-donate-note')).toBeInTheDocument()
+    expect(await screen.findByTestId('survey-donate-note')).toHaveTextContent('£20')
     expect(global.fetch).not.toHaveBeenCalled()
   })
 })
@@ -538,6 +549,7 @@ describe('Survey — the last question follows from the realism rating', () => {
     renderSurvey()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));            await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));         await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-yes'));         await advance()
     fireEvent.click(await screen.findByTestId(`survey-realism-${rating}`));  await advance()
@@ -594,6 +606,7 @@ describe('Survey — the donation ladder', () => {
     renderSurvey()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
@@ -603,19 +616,22 @@ describe('Survey — the donation ladder', () => {
     return screen.findByTestId('survey-done')
   }
 
-  it('offers three amounts, stopping at the figure the copy names', async () => {
+  it('offers all four donation amounts', async () => {
     await reachDone()
     expect(screen.getByTestId('survey-donate-3')).toBeInTheDocument()
     expect(screen.getByTestId('survey-donate-5')).toBeInTheDocument()
     expect(screen.getByTestId('survey-donate-10')).toBeInTheDocument()
-    // £20 would sit beside a sentence that says "a one-off £3".
-    expect(screen.queryByTestId('survey-donate-20')).not.toBeInTheDocument()
+    expect(screen.getByTestId('survey-donate-20')).toBeInTheDocument()
   })
 
-  it('preselects the amount the copy promises', async () => {
+  it('waits for the respondent to choose an amount', async () => {
     await reachDone()
-    expect(screen.getByTestId('survey-donate-3')).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Give £3' })).toBeInTheDocument()
+    for (const amount of [3, 5, 10, 20]) {
+      expect(screen.getByTestId(`survey-donate-${amount}`)).toHaveAttribute('aria-pressed', 'false')
+    }
+    expect(screen.getByRole('button', { name: 'Choose an amount' })).toBeDisabled()
+    fireEvent.click(screen.getByTestId('survey-donate-20'))
+    expect(screen.getByRole('button', { name: 'Give £20' })).toBeEnabled()
   })
 
   it('sends a bigger giver to the full donate page rather than capping them', async () => {
@@ -630,6 +646,7 @@ describe('Survey — the closing comment box', () => {
     renderSurvey()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
@@ -686,11 +703,9 @@ describe('Survey — the score sheet ask', () => {
     renderSurvey()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));            await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));         await advance()
     fireEvent.click(await screen.findByTestId(`survey-passed-${passed}`));   await advance()
-    if (passed === 'no') {
-      fireEvent.click(await screen.findByTestId('survey-any-no'));           await advance()
-    }
     fireEvent.click(await screen.findByTestId('survey-realism-4'));          await advance()
     fireEvent.click(await screen.findByTestId('survey-helped-5'));           await advance()
     fireEvent.click(await screen.findByTestId('survey-gaps-submit'));        await advance()
@@ -855,6 +870,7 @@ describe('Survey — the score sheet ask', () => {
     renderPreview()
     fireEvent.click(await screen.findByTestId('survey-start'))
     fireEvent.click(await screen.findByTestId('survey-sat-yes'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat')); await advance()
     fireEvent.click(await screen.findByTestId('survey-role-pilot'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-passed-yes'));   await advance()
     fireEvent.click(await screen.findByTestId('survey-realism-4'));    await advance()
@@ -868,5 +884,48 @@ describe('Survey — the score sheet ask', () => {
     await waitFor(() => expect(screen.getByTestId('survey-upload-list')).toBeInTheDocument())
     expect(screen.getByTestId('survey-upload-preview-note')).toBeInTheDocument()
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('Survey test selection', () => {
+  it('clears the previous role and outcome when the test changes', async () => {
+    mockApi({ response: { satTest: true, testType: 'raf-cbat', role: 'pilot', passedForRole: 'yes' } })
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'))
+    fireEvent.click(await screen.findByTestId('survey-test-rn-cbat'))
+    expect(await screen.findByTestId('survey-role-rn-pilot')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-role-pilot')).not.toBeInTheDocument()
+    expect(patches.at(-1)).toEqual(expect.objectContaining({ testType: 'rn-cbat', role: null, passedForRole: null }))
+  })
+
+  it('saves a named test before asking for the preferred role', async () => {
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'))
+    fireEvent.click(await screen.findByTestId('survey-test-cfast'))
+    expect(await screen.findByText('Which role were you aiming for?')).toBeInTheDocument()
+    expect(screen.getByText('Which test did you take?')).toBeInTheDocument()
+    expect(screen.getByText('2 of 6')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-passed-yes')).not.toBeInTheDocument()
+    expect(patches).toContainEqual(expect.objectContaining({ testType: 'cfast', testOther: null }))
+    fireEvent.click(screen.getByTestId('survey-role-rcaf-pilot'))
+    await screen.findByTestId('survey-passed-yes')
+    expect(screen.getByText('3 of 6')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Back/ }))
+    expect(await screen.findByTestId('survey-test-cfast')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('survey-role-rcaf-pilot')).toBeInTheDocument()
+  })
+
+  it('requires a custom name for Other and saves it', async () => {
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'))
+    fireEvent.click(await screen.findByTestId('survey-test-other'))
+    expect(screen.getByTestId('survey-test-other-submit')).toBeDisabled()
+    fireEvent.change(screen.getByTestId('survey-test-other-name'), { target: { value: 'Another aircrew test' } })
+    fireEvent.click(screen.getByTestId('survey-test-other-submit'))
+    await screen.findByTestId('survey-role-picker')
+    expect(patches).toContainEqual(expect.objectContaining({ testType: 'other', testOther: 'Another aircrew test' }))
   })
 })

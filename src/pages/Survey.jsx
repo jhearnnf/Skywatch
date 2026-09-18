@@ -7,6 +7,7 @@ import SEO from '../components/SEO'
 import { SLIM_APP } from '../utils/appMode'
 import { PLAY_STORE_URL } from '../utils/appUpdate'
 import { ROLE_GROUPS, OTHER_ROLE_KEY, filterRoleGroups, roleLabel } from '../data/surveyRoles'
+import surveyTests from '../../backend/constants/surveyTests.json'
 
 /**
  * The CBAT outcome questionnaire.
@@ -38,10 +39,10 @@ import { ROLE_GROUPS, OTHER_ROLE_KEY, filterRoleGroups, roleLabel } from '../dat
  *    profile — and only then does the donation appear.
  */
 
-// The core path. `passedAny` and `booked` are branches off `passed` and `sat`
+// The core path. `booked` is a branch off `sat`
 // and are deliberately excluded: padding the denominator for questions most
 // people never see would make the progress bar lie about how much is left.
-const CORE_STEPS = ['sat', 'role', 'passed', 'realism', 'helped', 'gaps']
+const CORE_STEPS = ['sat', 'test', 'passed', 'realism', 'helped', 'gaps']
 
 const RATINGS = {
   realism: [
@@ -99,24 +100,8 @@ function gapsVariantFor(rating) {
   return GAPS_VARIANTS.high
 }
 
-// Three, deliberately, where /donate offers four (3/5/10/20) plus a free-text
-// box. The two asks are doing different jobs and should not be made to match.
-//
-// /donate is reached on purpose: the visitor has already decided to give and the
-// only open question is how much, so a wider ladder and a custom box cost
-// nothing and let a motivated donor go higher.
-//
-// This one is attached to the end of a favour the reader has just done us. It is
-// unsolicited, and the risk here is not leaving money on the table but the ask
-// reading as grabby and being dismissed. Every extra option is another decision
-// at precisely the moment attention is thinnest, so the ladder stays short and
-// the whole thing stays a single tap.
-//
-// It also stops at £10 because the copy just above it names £3. A £20 chip sat
-// beside a sentence saying "a one-off £3" quietly contradicts it, and the top
-// preset is read as the expected amount. Anyone who wants to give more has the
-// link below, which is a better home for that than a text field on this card.
-const DONATION_PRESETS = [3, 5, 10]
+// Match the donation page presets; the respondent chooses their own amount.
+const DONATION_PRESETS = [3, 5, 10, 20]
 
 // Who gets asked for a score sheet.
 //
@@ -320,11 +305,10 @@ export default function Survey() {
   // rather than scattered through the handlers.
   const advanceFrom = useCallback((from, value) => {
     switch (from) {
-      case 'sat':     return value === true ? 'role' : 'booked'
+      case 'sat':     return value === true ? 'test' : 'booked'
+      case 'test':    return 'passed'
       case 'booked':  return 'notyet'
-      case 'role':    return 'passed'
-      case 'passed':  return value === 'no' ? 'passedAny' : 'realism'
-      case 'passedAny': return 'realism'
+      case 'passed':  return 'realism'
       case 'realism': return 'helped'
       case 'helped':  return 'gaps'
       // The score sheet ask, shown only to someone who actually has one. A
@@ -482,11 +466,34 @@ export default function Survey() {
               <ChoiceButton
                 testId="survey-sat-no"
                 selected={answers.satTest === false}
-                onClick={() => answerAndAdvance('sat', { satTest: false }, false)}
+                onClick={() => answerAndAdvance('sat', { satTest: false, testType: null, testOther: null }, false)}
               >
                 Not yet
               </ChoiceButton>
             </QuestionCard>
+          )}
+
+          {step === 'test' && (
+            <TestCard answers={answers} onSelect={(patch) => save({
+              ...patch,
+              ...(patch.testType !== answers.testType ? { role: null, roleOther: null, passedForRole: null, passedAnyRole: null, passedAnyRoleWhich: null } : {}),
+            })}>
+              <section className="mt-4 border-l-2 border-brand-400 pl-4" aria-labelledby="survey-role-heading">
+                <h2 id="survey-role-heading" className="text-base font-bold text-slate-900 mb-1">Which role were you aiming for?</h2>
+                <p className="text-xs text-slate-500 mb-3">If you were aiming for more than one role, choose your first choice.</p>
+                <RoleCombobox
+                  key={answers.testType}
+                  testType={answers.testType}
+                  value={answers.role}
+                  other={answers.roleOther}
+                  onSelect={(key) => {
+                    if (key === OTHER_ROLE_KEY || key === null) save({ role: key, roleOther: null })
+                    else answerAndAdvance('test', { role: key, roleOther: null }, key)
+                  }}
+                  onOtherSubmit={(text) => answerAndAdvance('test', { role: OTHER_ROLE_KEY, roleOther: text }, OTHER_ROLE_KEY)}
+                />
+              </section>
+            </TestCard>
           )}
 
           {step === 'booked' && (
@@ -497,27 +504,6 @@ export default function Survey() {
 
           {step === 'notyet' && <NotYetCard deferredUntil={deferredUntil} />}
 
-          {step === 'role' && (
-            <QuestionCard
-              title="Which role were you tested for?"
-              hint="Search by role or by service."
-            >
-              <RoleCombobox
-                value={answers.role}
-                other={answers.roleOther}
-                onSelect={(key) => {
-                  if (key === OTHER_ROLE_KEY) {
-                    // Do not advance — they still have to type the role.
-                    save({ role: key })
-                  } else {
-                    answerAndAdvance('role', { role: key, roleOther: null }, key)
-                  }
-                }}
-                onOtherSubmit={(text) => answerAndAdvance('role', { role: OTHER_ROLE_KEY, roleOther: text }, OTHER_ROLE_KEY)}
-              />
-            </QuestionCard>
-          )}
-
           {step === 'passed' && (
             <QuestionCard
               title="Did you pass for that role?"
@@ -526,45 +512,30 @@ export default function Survey() {
               <ChoiceButton
                 testId="survey-passed-yes"
                 selected={answers.passedForRole === 'yes'}
-                onClick={() => answerAndAdvance('passed', { passedForRole: 'yes' }, 'yes')}
+                onClick={() => answerAndAdvance('passed', { passedForRole: 'yes', passedAnyRole: null, passedAnyRoleWhich: null }, 'yes')}
               >
                 Yes, I passed
               </ChoiceButton>
               <ChoiceButton
+                testId="survey-passed-other"
+                selected={answers.passedForRole === 'no' && answers.passedAnyRole === 'yes'}
+                onClick={() => answerAndAdvance('passed', { passedForRole: 'no', passedAnyRole: 'yes', passedAnyRoleWhich: null }, 'other')}
+              >
+                No, but I passed for another role
+              </ChoiceButton>
+              <ChoiceButton
                 testId="survey-passed-no"
-                selected={answers.passedForRole === 'no'}
-                onClick={() => answerAndAdvance('passed', { passedForRole: 'no' }, 'no')}
+                selected={answers.passedForRole === 'no' && answers.passedAnyRole !== 'yes'}
+                onClick={() => answerAndAdvance('passed', { passedForRole: 'no', passedAnyRole: 'no', passedAnyRoleWhich: null }, 'no')}
               >
                 No, I did not
               </ChoiceButton>
               <ChoiceButton
                 testId="survey-passed-waiting"
                 selected={answers.passedForRole === 'waiting'}
-                onClick={() => answerAndAdvance('passed', { passedForRole: 'waiting' }, 'waiting')}
+                onClick={() => answerAndAdvance('passed', { passedForRole: 'waiting', passedAnyRole: null, passedAnyRoleWhich: null }, 'waiting')}
               >
                 Still waiting to hear
-              </ChoiceButton>
-            </QuestionCard>
-          )}
-
-          {step === 'passedAny' && (
-            <QuestionCard
-              title="Did you pass for any other role?"
-              hint="Scores often qualify you for something you did not apply for."
-            >
-              <ChoiceButton
-                testId="survey-any-yes"
-                selected={answers.passedAnyRole === 'yes'}
-                onClick={() => answerAndAdvance('passedAny', { passedAnyRole: 'yes' }, 'yes')}
-              >
-                Yes, for another role
-              </ChoiceButton>
-              <ChoiceButton
-                testId="survey-any-no"
-                selected={answers.passedAnyRole === 'no'}
-                onClick={() => answerAndAdvance('passedAny', { passedAnyRole: 'no' }, 'no')}
-              >
-                No
               </ChoiceButton>
             </QuestionCard>
           )}
@@ -643,7 +614,7 @@ function IntroCard({ name, onStart }) {
         {name ? `Hello ${name}` : 'Hello'}
       </h1>
       <p className="text-sm text-slate-500 leading-relaxed mb-6">
-        Six quick questions about how your CBAT went. It takes about a minute, there is
+        Six quick questions about how your aptitude test went. It takes about a minute, there is
         nothing to sign in to, and your answers tell us what to fix next.
       </p>
       <button
@@ -654,6 +625,37 @@ function IntroCard({ name, onStart }) {
         Start
       </button>
     </div>
+  )
+}
+
+function TestCard({ answers, onSelect, children }) {
+  const [text, setText] = useState(answers.testOther || '')
+  return (
+    <QuestionCard title="Which test did you take?" hint="Choose your test, then the role you were aiming for.">
+      {surveyTests.map(test => (
+        <div key={test.key}>
+          <ChoiceButton
+            testId={`survey-test-${test.key}`}
+            selected={answers.testType === test.key}
+            onClick={() => onSelect({ testType: test.key, testOther: test.key === 'other' ? text.trim() || null : null })}
+          >
+            {test.label}
+          </ChoiceButton>
+          {answers.testType === test.key && (
+            <>
+              {test.key === 'other' && (
+                <form className="mt-3" onSubmit={event => { event.preventDefault(); if (text.trim()) onSelect({ testType: 'other', testOther: text.trim() }) }}>
+                  <label htmlFor="survey-test-other-name" className="block text-xs text-slate-500 mb-2">Test name and country or service</label>
+                  <input id="survey-test-other-name" data-testid="survey-test-other-name" value={text} onChange={event => setText(event.target.value)} maxLength={120} autoFocus className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface text-sm text-slate-700" />
+                  <button type="submit" data-testid="survey-test-other-submit" disabled={!text.trim()} className="w-full mt-3 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm disabled:opacity-40">Show roles</button>
+                </form>
+              )}
+              {(test.key !== 'other' || (answers.testOther && answers.testOther === text.trim())) && children}
+            </>
+          )}
+        </div>
+      ))}
+    </QuestionCard>
   )
 }
 
@@ -1072,14 +1074,14 @@ function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, o
 }
 
 function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awaitingResult = false, onDonationClick, onPlayReviewClick, onComment }) {
-  const [amount, setAmount] = useState(DONATION_PRESETS[0])
+  const [amount, setAmount] = useState(null)
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
   const [declined, setDeclined] = useState(false)
   const [note,   setNote]   = useState('')
 
   const donate = async () => {
-    if (busy) return
+    if (busy || amount === null) return
     onDonationClick()
     // The demo stops here rather than opening a Checkout session. Creating one
     // would be a real Stripe object with a real payable link in it.
@@ -1171,15 +1173,13 @@ function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awai
           </p>
           <p className="text-xs text-slate-500 leading-relaxed mb-4">
             {badge
-              ? <>You got through, and the training was free the whole way. A one-off £3 helps
-                  keep it that way for whoever is preparing for the same tests right now. There
-                  is nothing to unlock, and nothing changes if you would rather not.</>
-              : <>SkyWatch is free, has no ads and is paid for out of pocket. A one-off £3 helps
-                  keep it that way for everyone preparing. There is nothing to unlock, and
-                  nothing changes if you would rather not.</>}
+              ? <>You got through, and the training was free the whole way. A one-off donation helps
+                  keep it that way for whoever is preparing for the same tests right now.</>
+              : <>SkyWatch is free, has no ads and is paid for out of pocket. A one-off donation helps
+                  keep it that way for everyone preparing.</>}
           </p>
 
-          <div className="grid grid-cols-3 gap-2 mb-3" role="group" aria-label="Donation amount">
+          <div className="grid grid-cols-4 gap-2 mb-3" role="group" aria-label="Donation amount">
             {DONATION_PRESETS.map(n => (
               <button
                 key={n}
@@ -1217,11 +1217,11 @@ function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awai
 
           <button
             onClick={donate}
-            disabled={busy}
+            disabled={busy || amount === null}
             data-testid="survey-donate-submit"
             className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm transition-colors disabled:opacity-50"
           >
-            {busy ? 'Opening…' : `Give £${amount}`}
+            {busy ? 'Opening…' : amount === null ? 'Choose an amount' : `Give £${amount}`}
           </button>
           <button
             onClick={() => setDeclined(true)}
@@ -1378,12 +1378,12 @@ function CommentBox({ onSubmit }) {
 // A searchable, grouped combobox rather than a native <select>. The list spans
 // six services, and a native select on mobile becomes an unscannable wheel the
 // moment it passes a dozen entries.
-function RoleCombobox({ value, other, onSelect, onOtherSubmit }) {
+function RoleCombobox({ value, other, testType, onSelect, onOtherSubmit }) {
   const [query, setQuery] = useState('')
   const [otherText, setOtherText] = useState(other ?? '')
   const inputRef = useRef(null)
 
-  const groups = useMemo(() => filterRoleGroups(query), [query])
+  const groups = useMemo(() => filterRoleGroups(query, testType), [query, testType])
   const showingOther = value === OTHER_ROLE_KEY
 
   useEffect(() => { inputRef.current?.focus() }, [])
