@@ -120,6 +120,18 @@ describe('Profile — stat card navigation', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/intel-brief-history')
   })
 
+  it.each([false, true])('loads the signed-in user public profile (admin: %s)', async (isAdmin) => {
+    const auth = mockUseAuth()
+    auth.user.isAdmin = isAdmin
+    render(<Profile />)
+    fireEvent.click(screen.getByRole('button', { name: 'Public profile' }))
+    await waitFor(() => expect(auth.apiFetch).toHaveBeenCalledWith('/api/users/user1/profile', expect.anything()))
+    expect(auth.apiFetch).not.toHaveBeenCalledWith('/api/admin/users/user1/profile', expect.anything())
+    expect(screen.queryByText('Admin View')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Stats/ }))
+    expect(screen.getByText('Games Played')).toBeInTheDocument()
+  })
+
   it('clicking "Avg Score" navigates to /game-history', async () => {
     render(<Profile />)
     await waitFor(() => screen.getByText('Avg Score'))

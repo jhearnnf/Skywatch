@@ -22,6 +22,7 @@ import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
 import { PLAY_STORE_URL, forceUpdateWebApp, isNativeUpdateAvailable } from '../utils/appUpdate'
 import BlockedAgents from './chat/components/BlockedAgents'
+import { AgentProfileContent } from './AgentProfile'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
@@ -105,7 +106,7 @@ export default function Profile() {
   const [nameError,   setNameError]   = useState('')
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
-  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials'
+  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials' | 'public'
   const [namePulse,   setNamePulse]   = useState(false)
   const [resetDone,   setResetDone]   = useState(false)
 
@@ -372,7 +373,8 @@ export default function Profile() {
           { key: 'leaderboard', label: '🏆 Ranks' },
           { key: 'settings',    label: '⚙️ Settings' },
           { key: 'tutorials',   label: '💡 Help' },
-        ].filter(t => !(slim && t.key === 'leaderboard')).map(t => (
+          { key: 'public',      label: 'Public profile' },
+        ].filter(t => !(slim && t.key === 'leaderboard') && !(t.key === 'public' && !user)).map(t => (
           <button
             key={t.key}
             data-tutorial-target={t.key === 'settings' ? 'profile-tab-settings' : undefined}
@@ -386,6 +388,10 @@ export default function Profile() {
       </div>
 
       {/* Stats tab */}
+      {tab === 'public' && user && (
+        <AgentProfileContent id={user._id} embedded />
+      )}
+
       {tab === 'stats' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className={`grid ${slim ? 'grid-cols-1' : 'grid-cols-2'} gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>

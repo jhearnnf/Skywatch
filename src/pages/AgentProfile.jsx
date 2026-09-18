@@ -183,12 +183,16 @@ const fmtDateTime = (iso) => (iso
 
 export default function AgentProfile() {
   const { id } = useParams()
+  return <AgentProfileContent id={id} />
+}
+
+export function AgentProfileContent({ id, embedded = false }) {
   const { user, API, apiFetch } = useAuth()
   const { levels } = useAppSettings()
   const navigate = useNavigate()
   const location = useLocation()
 
-  const isAdmin = Boolean(user?.isAdmin)
+  const isAdmin = !embedded && Boolean(user?.isAdmin)
 
   // Where "Back" goes. Community sends the thread it was opened from, so someone
   // who tapped a name mid-conversation lands back in that conversation. With
@@ -277,14 +281,14 @@ export default function AgentProfile() {
       ? 'pb-8 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)_minmax(0,1fr)] xl:grid-rows-[auto_auto] xl:gap-x-6 xl:items-start'
       : 'max-w-lg mx-auto pb-8'}
     >
-      <SEO title="Agent Profile" description="One agent's profile." noIndex={true} />
+      {!embedded && <SEO title="Agent Profile" description="One agent's profile." noIndex={true} />}
 
       {/* Left column: nothing here yet. It exists so the public column sits in
           the middle of the page, not against the sidebar. */}
       {isAdmin && <div className="hidden xl:block xl:col-start-1 xl:row-span-2" aria-hidden="true" />}
 
       <div className={isAdmin ? midTop : undefined}>
-      <div className="mb-4">
+      {!embedded && <div className="mb-4">
         <button
           onClick={() => navigate(backTo, backState ? { state: backState } : undefined)}
           className="text-sm text-slate-500 hover:text-slate-700 transition-colors mb-3 flex items-center gap-1"
@@ -301,7 +305,7 @@ export default function AgentProfile() {
             </span>
           </div>
         )}
-      </div>
+      </div>}
 
       {loading && <p className="text-sm text-slate-400 py-8 text-center">Loading agent…</p>}
       {error && !loading && (
@@ -315,7 +319,7 @@ export default function AgentProfile() {
           {/* Identity — the public half: the badge they wear, their name and
               their agent number. Rank, streak and level are account standing,
               and sit on the admin card in the rail. */}
-          <motion.div
+          {!embedded && <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl p-5 mb-4 card-shadow border border-brand-300/40"
@@ -335,7 +339,7 @@ export default function AgentProfile() {
                 <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{agent.agentNumber ?? '———'}</p>
               </div>
             </div>
-          </motion.div>
+          </motion.div>}
         </>
       )}
       </div>
