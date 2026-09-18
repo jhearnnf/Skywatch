@@ -62,7 +62,9 @@ export function CbatGameHeader({
         <div className="cbat-testbar-left">
           {quit}
           <div className="cbat-testbar-meters" aria-hidden="true">
-            <Meter label="Time" frac={test.timeFrac} tone="cbat-testbar-time" />
+            {clamp01(test.timeFrac) != null && (
+              <Meter label="Time" frac={test.timeFrac} tone="cbat-testbar-time" />
+            )}
             <Meter label="Progress" frac={test.progressFrac} tone="cbat-testbar-progress" />
           </div>
         </div>

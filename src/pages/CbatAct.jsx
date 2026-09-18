@@ -1838,7 +1838,10 @@ export default function CbatAct() {
         intro={phase === 'intro'}
         onQuit={handleMenu}
         confirmNeeded={!['intro', 'results'].includes(phase)}
-        test={!['intro', 'results'].includes(phase) ? { stage: phase === 'tutorial' ? 'Instructions' : 'Testing' } : null}
+        test={!['intro', 'results'].includes(phase) ? {
+          stage: phase === 'tutorial' ? 'Instructions' : 'Testing',
+          progressFrac: (roundIdx + (phase === 'recap' ? 1 : 0)) / TOTAL_ROUNDS,
+        } : null}
       />
 
       {!user && (

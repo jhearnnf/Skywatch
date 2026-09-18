@@ -49,6 +49,21 @@ describe('CbatGameHeader', () => {
     expect(screen.queryByTestId('cbat-testbar')).toBeNull()
     expect(screen.getByRole('heading')).toHaveTextContent('Angles')
   })
+
+  it('omits unavailable time meters while keeping a countdown at zero visible', () => {
+    authRef.user = { _id: 'u1', uiTheme: 'cbat' }
+    const header = (timeFrac) => <MemoryRouter><CbatGameHeader title="ACT" test={{ timeFrac, progressFrac: 0.2 }} /></MemoryRouter>
+    const { rerender, container } = render(header(undefined))
+    expect(screen.queryByText('Time')).toBeNull()
+    expect(container.querySelector('.cbat-testbar-progress')).toHaveStyle({ width: '20%' })
+    rerender(header(null))
+    expect(screen.queryByText('Time')).toBeNull()
+    rerender(header(0.5))
+    expect(container.querySelector('.cbat-testbar-time')).toHaveStyle({ width: '50%' })
+    rerender(header(0))
+    expect(screen.getByText('Time')).toBeInTheDocument()
+    expect(container.querySelector('.cbat-testbar-time')).toHaveStyle({ width: '0%' })
+  })
 })
 
 describe('CbatFooterStrip and CbatKeyCap', () => {
