@@ -86,6 +86,44 @@ function makeUser(n) {
 // is simply numbered so a page's contents are obvious.
 const ALL = Array.from({ length: TOTAL }, (_, i) => makeUser(i + 1))
 
+describe('Users upcoming CBAT sort', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('resets pagination, preserves date order over admin priority and keeps the sort when searching', async () => {
+    const base = setupFetch()
+    global.fetch = vi.fn((url, opts) => {
+      if (url.includes('/api/admin/users?') && url.includes('sort=upcoming-cbat')) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: {
+          users: [
+            { ...ALL[1], cbatDate: '2099-01-01' },
+            { ...ALL[0], isAdmin: true, cbatDate: '2099-02-01' },
+          ], total: 2, page: 1, pageCount: 1,
+        } }) })
+      }
+      return base.fetchMock(url, opts)
+    })
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+    await screen.findByText('Agent 021')
+    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'upcoming-cbat' } })
+    await screen.findByText('CBAT: 1 Jan 2099')
+    expect(screen.getAllByRole('button', { name: /^Expand Agent/ }).map(el => el.getAttribute('aria-label')))
+      .toEqual(['Expand Agent 002', 'Expand Agent 001'])
+    const sortedRequest = fetch.mock.calls.find(([url]) => url.includes('sort=upcoming-cbat'))[0]
+    expect(new URL(sortedRequest, 'http://x').searchParams.get('page')).toBe('1')
+    fireEvent.change(screen.getByPlaceholderText(/Search by email/), { target: { value: 'user42' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await screen.findByText('Agent 042')
+    expect(fetch.mock.calls.some(([url]) => url.includes('/users/search?q=user42&sort=upcoming-cbat'))).toBe(true)
+    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'default' } })
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/users/search?q=user42&sort=default'))).toBe(true))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await screen.findByText('Agent 001')
+  })
+})
+
 function setupFetch() {
   const listCalls = []
 

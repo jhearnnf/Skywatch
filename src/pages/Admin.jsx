@@ -4990,6 +4990,8 @@ function UsersTab({ API, onViewEmailHistory }) {
   const slim = useSlimMode() // CBAT-only mode disables in-app messaging
   const [users,   setUsers]   = useState([])
   const [q,       setQ]       = useState('')
+  const [userSort, setUserSort] = useState('default')
+  const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState(false) // is in search mode
   const [modal,   setModal]   = useState(null)
@@ -5071,7 +5073,7 @@ function UsersTab({ API, onViewEmailHistory }) {
     // just acted on reads as the panel breaking rather than as work happening.
     if (renderedPage.current !== wanted) setUsers([])
     const res = await apiFetch(
-      `${API}/api/admin/users?page=${wanted}&limit=${USERS_PAGE_SIZE}&testerFx=${testerFx ? '1' : '0'}`,
+      `${API}/api/admin/users?page=${wanted}&limit=${USERS_PAGE_SIZE}&testerFx=${testerFx ? '1' : '0'}&sort=${userSort}`,
       { credentials: 'include' },
     )
     const data = await res.json()
@@ -5087,15 +5089,14 @@ function UsersTab({ API, onViewEmailHistory }) {
     if (data.data?.page && data.data.page !== wanted) setPage(data.data.page)
     renderedPage.current = data.data?.page ?? wanted
     setLoading(false)
-  }, [API, testerFx, withCachedStats])
-
-  useEffect(() => { loadPage(page) }, [loadPage, page, reloadTick])
+  }, [API, testerFx, withCachedStats, userSort])
 
   // Re-read the page that is on screen, for when an action has changed it.
   const reload = useCallback(() => setReloadTick(t => t + 1), [])
 
   // Back to the top of the list — what Clear and a fresh browse both mean.
   const loadAll = useCallback(() => {
+    setSearchQuery('')
     if (page === 1) reload(); else setPage(1)
   }, [page, reload])
 
@@ -5134,11 +5135,10 @@ function UsersTab({ API, onViewEmailHistory }) {
     })
   }
 
-  const runSearch = async () => {
-    if (!q.trim()) { loadAll(); return }
+  const fetchSearch = useCallback(async (query) => {
     const seq = ++listSeq.current
     setLoading(true)
-    const res  = await apiFetch(`${API}/api/admin/users/search?q=${encodeURIComponent(q.trim())}`, { credentials: 'include' })
+    const res  = await apiFetch(`${API}/api/admin/users/search?q=${encodeURIComponent(query)}&sort=${userSort}`, { credentials: 'include' })
     const data = await res.json()
     if (seq !== listSeq.current) return
     // Search hits arrive fully enriched — the endpoint caps them at 20, which is
@@ -5152,6 +5152,17 @@ function UsersTab({ API, onViewEmailHistory }) {
     setUsers(rows)
     setLatestClients(data.data?.latestClients ?? {})
     setLoading(false)
+  }, [API, userSort, rememberStats])
+
+  useEffect(() => {
+    if (searchQuery) fetchSearch(searchQuery)
+    else loadPage(page)
+  }, [loadPage, fetchSearch, searchQuery, page, reloadTick])
+
+  const runSearch = () => {
+    if (!q.trim()) { loadAll(); return }
+    if (searchQuery === q.trim()) reload()
+    else setSearchQuery(q.trim())
   }
 
   // Fill in the expensive half of any row that is open without it. Driven off
@@ -5225,6 +5236,7 @@ function UsersTab({ API, onViewEmailHistory }) {
   }, [page])
 
   const sortedUsers = useMemo(() => {
+    if (userSort === 'upcoming-cbat') return users
     // A tester who has not tested today is the row worth chasing, so they lead
     // their group — matching the idle border the row already gets.
     // With the toggle off the list sorts purely on admin/online status.
@@ -5239,7 +5251,7 @@ function UsersTab({ API, onViewEmailHistory }) {
     }
     return [...users].sort((a, b) =>
       priority(b) - priority(a) || owesTest(b) - owesTest(a))
-  }, [users, testerFx])
+  }, [users, testerFx, userSort])
 
   // Flag/unflag a user as a tester. Saves instantly (no confirm) and optimistically
   // updates local state so the row re-sorts + re-styles immediately; reverts on failure.
@@ -5370,6 +5382,25 @@ function UsersTab({ API, onViewEmailHistory }) {
           </button>
         )}
       </form>
+
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <label htmlFor="users-sort" className="text-sm font-semibold text-slate-600">Sort by</label>
+        <select id="users-sort" value={userSort}
+          onChange={e => {
+            ++listSeq.current
+            renderedPage.current = null
+            setUsers([])
+            setPage(1)
+            setUserSort(e.target.value)
+          }}
+          className="border border-slate-200 bg-surface rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400">
+          <option value="default">Default</option>
+          <option value="upcoming-cbat">Upcoming CBAT</option>
+        </select>
+        {userSort === 'upcoming-cbat' && (
+          <p className="text-xs text-slate-400">Recorded CBAT dates from today onwards, soonest first.</p>
+        )}
+      </div>
 
       {/* Skeleton rows, not a spinner, and exactly as many as the page is about
           to hold. The page therefore reaches its real height immediately, so the
@@ -5549,7 +5580,12 @@ function UsersTab({ API, onViewEmailHistory }) {
                     </label>
                   )}
                 </p>
-                <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                <p className="flex items-center gap-2 text-xs text-slate-400">
+                  <span className="truncate">{u.email}</span>
+                  {userSort === 'upcoming-cbat' && u.cbatDate && (
+                    <span className="shrink-0 text-brand-600">CBAT: {fmtCbatDate(u.cbatDate)}</span>
+                  )}
+                </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {isExpanded && (
@@ -5960,7 +5996,10 @@ function UsersTab({ API, onViewEmailHistory }) {
               u={u}
               API={API}
               apiFetch={apiFetch}
-              onChange={patch => setUsers(prev => prev.map(x => x._id === u._id ? { ...x, ...patch } : x))}
+              onChange={patch => {
+                setUsers(prev => prev.map(x => x._id === u._id ? { ...x, ...patch } : x))
+                if (userSort === 'upcoming-cbat') reload()
+              }}
               onToast={setToast}
             />
 

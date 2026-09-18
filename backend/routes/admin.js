@@ -1539,6 +1539,12 @@ function orderUsersForList({ users, owesTest, testerHighlights }) {
 // GET /api/admin/users — one ordered page: admins first, then whoever is online,
 // then oldest registration first. ?page, ?limit, and ?testerFx=0 to drop the
 // tester terms from the order (the list's own highlight switch).
+function upcomingCbatFilter() {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return { cbatDate: { $gte: today } };
+}
+
 router.get('/users', async (req, res) => {
   try {
     await sweepStaleStreaks();
@@ -1549,7 +1555,8 @@ router.get('/users', async (req, res) => {
     // Ordering inputs for the whole population and nothing else — five small
     // fields an account, rather than the megabyte that fetching every full
     // document used to cost.
-    const ordering  = await User.find({}, '_id isAdmin isTester lastSeen createdAt lastClients').lean();
+    const upcomingCbat = req.query.sort === 'upcoming-cbat';
+    const ordering  = await User.find(upcomingCbat ? upcomingCbatFilter() : {}, '_id isAdmin isTester lastSeen createdAt lastClients cbatDate').lean();
     const total     = ordering.length;
     const pageCount = Math.max(1, Math.ceil(total / limit));
     const page      = Math.min(Math.max(parseInt(req.query.page, 10) || 1, 1), pageCount);
@@ -1579,7 +1586,11 @@ router.get('/users', async (req, res) => {
         .map(u => u._id.toString()),
     );
 
-    const pageIds = orderUsersForList({ users: ordering, owesTest, testerHighlights })
+    const ordered = upcomingCbat
+      ? ordering.sort((a, b) => new Date(a.cbatDate) - new Date(b.cbatDate)
+        || a._id.toString().localeCompare(b._id.toString()))
+      : orderUsersForList({ users: ordering, owesTest, testerHighlights });
+    const pageIds = ordered
       .slice((page - 1) * limit, page * limit)
       .map(u => u._id);
 
@@ -1648,8 +1659,10 @@ router.get('/users/search', async (req, res) => {
     const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
     const users = await User.find({
+      ...(req.query.sort === 'upcoming-cbat' ? upcomingCbatFilter() : {}),
       $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }],
-    }).populate('rank').sort({ isAdmin: -1, createdAt: 1 }).limit(20);
+    }).populate('rank').sort(req.query.sort === 'upcoming-cbat'
+      ? { cbatDate: 1, _id: 1 } : { isAdmin: -1, createdAt: 1 }).limit(20);
 
     // Latest-release yardstick comes from the whole population, not just the
     // search hits — otherwise searching for one outdated user would make their

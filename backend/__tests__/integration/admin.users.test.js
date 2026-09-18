@@ -110,6 +110,35 @@ describe('GET /api/admin/users — sort order', () => {
     .get(`/api/admin/users${query}`)
     .set('Cookie', authCookie(admin._id));
 
+  it('filters upcoming CBAT dates before pagination and orders today first', async () => {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const later = new Date(today.getTime() + 7 * 86400000);
+    const admin = await createAdminUser({ cbatDate: later });
+    const soon = await createUser({ cbatDate: today });
+    await createUser({ cbatDate: new Date(today.getTime() - 86400000) });
+    await createUser();
+    const first = await listFor(admin, '?sort=upcoming-cbat&limit=1');
+    expect(first.status).toBe(200);
+    expect(first.body.data).toMatchObject({ total: 2, pageCount: 2, page: 1 });
+    expect(first.body.data.users.map(u => u._id)).toEqual([soon.id]);
+    const second = await listFor(admin, '?sort=upcoming-cbat&limit=1&page=2');
+    expect(second.body.data.users.map(u => u._id)).toEqual([admin.id]);
+  });
+
+  it('applies upcoming CBAT filtering and ordering to search', async () => {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const admin = await createAdminUser({ displayName: 'CBAT match', cbatDate: new Date(today.getTime() + 86400000) });
+    const soon = await createUser({ displayName: 'CBAT match today', cbatDate: today });
+    await createUser({ displayName: 'CBAT match unknown' });
+    await createUser({ displayName: 'CBAT match past', cbatDate: new Date(today.getTime() - 86400000) });
+    const res = await request(app).get('/api/admin/users/search?q=CBAT%20match&sort=upcoming-cbat')
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data.users.map(u => u._id)).toEqual([soon.id, admin.id]);
+  });
+
   it('places admins before non-admins regardless of registration date', async () => {
     // Seed three non-admins with old createdAt and one admin with new createdAt;
     // admin must still appear ahead of all of them.
