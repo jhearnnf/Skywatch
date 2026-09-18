@@ -68,6 +68,7 @@ const MOCK_STATS = {
     cbatThemeUsers: 3,
     privateScoreUsers: 2,
     emailsSent: 42, emailsFailed: 7,
+    amazonAffiliateClicks: 1234,
     questionnaire: { sent: 20, started: 8, completed: 5 },
     donation: {
       seen: 40, clicked: 6,
@@ -133,6 +134,13 @@ function setupFetch() {
 describe('Admin — Stats tab: donation funnel', () => {
   beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
   afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows the stored Amazon affiliate click total', async () => {
+    render(<Admin />)
+    const label = await screen.findByText('Amazon Affiliate Clicks')
+    expect(label.parentElement).toHaveTextContent('1,234')
+    expect(label.parentElement).toHaveTextContent('including repeat clicks')
+  })
 
   it('shows clicked-through over asked, with the rate', async () => {
     render(<Admin />)

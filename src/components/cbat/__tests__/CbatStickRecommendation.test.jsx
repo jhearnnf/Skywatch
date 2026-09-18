@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { render, screen, within, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import CbatStickRecommendation from '../CbatStickRecommendation'
 import { RECOMMENDED_STICK, RECOMMENDED_PEDALS } from '../../../utils/cbat/recommendedStick'
@@ -32,6 +32,29 @@ function expectItem(container, item, href = item.url) {
 describe('CbatStickRecommendation', () => {
   beforeEach(() => { playerIn('GB') })
   afterEach(() => { vi.restoreAllMocks() })
+
+  it('records each product click with the selected store, including middle clicks', async () => {
+    playerIn('CA', 'America/Toronto', 'en-CA')
+    const { container } = render(<CbatStickRecommendation pedals />)
+    await waitFor(() => expect(container.querySelector('[data-stick-recommendation]')).toHaveAttribute('data-hardware-store', 'ca'))
+    const links = screen.getAllByRole('link', { name: /view on amazon/i })
+    fireEvent.click(links[0])
+    fireEvent(links[1], new MouseEvent('auxclick', { bubbles: true, button: 1 }))
+    const calls = globalThis.fetch.mock.calls.filter(([url]) => url.endsWith('/api/affiliate/click'))
+    expect(calls.map(([, options]) => JSON.parse(options.body))).toEqual([
+      { item: 'stick', store: 'ca' }, { item: 'pedals', store: 'ca' },
+    ])
+    expect(calls[0][1]).toMatchObject({ method: 'POST', keepalive: true })
+    expect(links[0]).toHaveAttribute('href', RECOMMENDED_STICK.links.ca)
+  })
+
+  it('keeps the link usable when click recording fails', () => {
+    render(<CbatStickRecommendation />)
+    globalThis.fetch.mockRejectedValue(new Error('offline'))
+    const link = screen.getByRole('link', { name: /view on amazon/i })
+    expect(fireEvent.click(link)).toBe(true)
+    expect(link).toHaveAttribute('href', RECOMMENDED_STICK.links.uk)
+  })
 
   it('recommends the stick alone by default, with a disclosed affiliate link', () => {
     const { container } = render(<CbatStickRecommendation />)

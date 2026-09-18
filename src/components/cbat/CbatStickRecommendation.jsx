@@ -1,6 +1,17 @@
 import { RECOMMENDED_STICK, RECOMMENDED_PEDALS, storeLink } from '../../utils/cbat/recommendedStick'
 import { useHardwareStore } from '../../utils/cbat/hardwareStore'
 
+async function recordClick(item, store) {
+  try {
+    await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/affiliate/click`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item, store }),
+      keepalive: true,
+    })
+  } catch { /* A failed stat must never prevent opening the shop. */ }
+}
+
 // The hardware recommendation: a third arcade cabinet that stacks under the
 // joystick panel while no stick is plugged in.
 //
@@ -80,6 +91,8 @@ export default function CbatStickRecommendation({ stick = true, pedals = false, 
               </span>
               <a
                 href={storeLink(item, store)}
+                onClick={() => { void recordClick(item.key, store) }}
+                onAuxClick={event => { if (event.button === 1) void recordClick(item.key, store) }}
                 target="_blank"
                 rel="sponsored noopener noreferrer"
                 className="cbat-arcade-btn shrink-0 rounded bg-brand-600 hover:bg-brand-700 border-b-[#1f5da8] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-white cursor-pointer"

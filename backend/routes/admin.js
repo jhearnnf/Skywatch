@@ -6,6 +6,7 @@ const AdminAction = require('../models/AdminAction');
 const AccountDeletion = require('../models/AccountDeletion');
 const EmailLog    = require('../models/EmailLog');
 const AppSettings = require('../models/AppSettings');
+const AffiliateClickCount = require('../models/AffiliateClickCount');
 const { sendWelcomeEmail, sendReportReplyEmail, sendAdminComposedEmail } = require('../utils/email');
 const UserNotification = require('../models/UserNotification');
 const GameSessionQuizResult               = require('../models/GameSessionQuizResult');
@@ -474,6 +475,7 @@ router.get('/stats', async (_req, res) => {
       questionnaireSent, questionnaireStarted, questionnaireCompleted,
       donatePageSeen, donatePageClicked,
       donationReceivedAgg, donationAnonReceivedAgg,
+      affiliateCounts,
     ] = await Promise.all([
       User.countDocuments(),
       // Same window as GET /api/chat/presence, from one constant — this tile and
@@ -652,6 +654,7 @@ router.get('/stats', async (_req, res) => {
             pence:  { $sum: { $ifNull: ['$paidPence', 0] } },
         }},
       ]),
+      AffiliateClickCount.find().lean(),
     ]);
 
     // The union is over people, not rows: someone who saw the post-game note and later
@@ -674,6 +677,7 @@ router.get('/stats', async (_req, res) => {
           privateScoreUsers,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
+          amazonAffiliateClicks: affiliateCounts.reduce((total, row) => total + row.count, 0),
           // The donate page is reported alongside the asks rather than added into them. It is
           // where the post-game note's link lands, so folding its visits into `seen` would
           // count that click twice — once as a click and again as an impression.

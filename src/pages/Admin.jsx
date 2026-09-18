@@ -874,6 +874,14 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           </button>
         </div>
         {showDonationFunnel && <DonationFunnelList API={API} donation={donation} />}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+          <StatCard
+            label="Amazon Affiliate Clicks"
+            value={fmtNum(users.amazonAffiliateClicks ?? 0)}
+            color="amber"
+            sub="Total clicks since tracking began, including repeat clicks"
+          />
+        </div>
       </StatsSection>
 
       {/* Server / Performance */}
