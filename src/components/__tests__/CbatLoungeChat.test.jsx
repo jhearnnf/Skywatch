@@ -186,6 +186,15 @@ describe('closed', () => {
     expect(onToggle).toHaveBeenCalledWith(true)
   })
 
+  it('cannot be closed or collapsed in the small-screen layout', async () => {
+    stubFetch()
+    renderClosed({ collapsible: false })
+
+    expect(await screen.findByRole('tab', { name: 'Lounge' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Close the lounge' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /CBAT Lounge/i })).toBeNull()
+  })
+
   it('shows a dot when there is something unread', async () => {
     stubFetch({ lounge: { ...LOUNGE, unread: true } })
     renderClosed()
@@ -225,6 +234,14 @@ describe('closed', () => {
 })
 
 describe('private CBAT group', () => {
+  it('shows the unread message count on My group while another room is selected', async () => {
+    stubFetch({ group: { configured: true, conversationId: 'group-1', unread: true, unreadCount: 4 } })
+    renderOpen()
+
+    expect(await screen.findByLabelText('4 new group messages')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /My group/ })).toHaveTextContent('4')
+  })
+
   it('shows the date form instead of remaining on Loading when no date is configured', async () => {
     stubFetch()
     renderOpen()
@@ -241,13 +258,39 @@ describe('private CBAT group', () => {
     expect(screen.queryByLabelText('Upcoming CBAT date')).toBeNull()
   })
 
-  it('gives admins an all-groups list with total and red unread counts', async () => {
+  it('flashes the irreversible-date warning after selection and before Continue', async () => {
+    stubFetch({ group: { configured: false, applicable: true, regionAvailable: true } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.change(await screen.findByLabelText('Upcoming CBAT date'), { target: { value: '2099-10-14' } })
+
+    const warning = screen.getByRole('alert')
+    expect(warning.textContent).toContain('Choose carefully — you cannot change this date.')
+    expect(warning.className).toContain('cbat-date-warning')
+    expect(warning.compareDocumentPosition(screen.getByRole('button', { name: 'Continue' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('gives admins an all-groups list with participant, message and unread counts', async () => {
     mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
-    stubFetch({ group: { groups: [{ conversationId: 'c1', date: '2099-10-14', region: 'GB', messageCount: 12, unread: 3 }] } })
+    stubFetch({ group: { groups: [{ conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 7, messageCount: 12, unread: 3 }] } })
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'All groups' }))
-    expect(await screen.findByText('12 messages')).toBeTruthy()
-    expect(screen.getByText('3').className).toContain('bg-red-500')
+    expect(await screen.findByText('7 participants · 12 messages')).toBeTruthy()
+    expect(screen.getByLabelText('3 new messages in this group').className).toContain('bg-red-500')
+  })
+
+  it('aggregates unread messages onto the admin All groups pill', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    stubFetch({ group: { groups: [
+      { conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 2, messageCount: 3, unread: 2 },
+      { conversationId: 'c2', date: '2099-10-15', region: 'GB', participantCount: 3, messageCount: 5, unread: 4 },
+    ] } })
+    renderOpen()
+
+    expect(await screen.findByLabelText('6 new messages across CBAT groups')).toBeTruthy()
+    expect(screen.getByRole('tab', { name: /All groups/ })).toHaveTextContent('6')
   })
 })
 

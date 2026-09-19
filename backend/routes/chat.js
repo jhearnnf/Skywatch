@@ -103,6 +103,12 @@ async function serializeCbatGroup(user) {
   }
   const convo = await ensureCbatCohort(date, region);
   const readRow = await ChatRead.findOne({ userId: user._id, conversationId: convo._id }).lean();
+  const unreadCount = await ChatMessage.countDocuments({
+    conversationId: convo._id,
+    deletedAt: null,
+    senderUserId: { $ne: user._id },
+    ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+  });
   const refusal = postRefusal(convo, user);
   const code = refusal?.body?.code ?? null;
   return {
@@ -111,8 +117,8 @@ async function serializeCbatGroup(user) {
     region,
     conversationId: convo._id,
     title: channelTitle(convo),
-    unread: Boolean(convo.messageCount)
-      && (!readRow || new Date(readRow.lastReadAt) < new Date(convo.lastMessageAt)),
+    unread: unreadCount > 0,
+    unreadCount,
     lastMessageAt: convo.lastMessageAt,
     canPost: !refusal,
     displayNameRequired: code === 'DISPLAY_NAME_REQUIRED',
@@ -1028,18 +1034,25 @@ router.get('/cbat-groups', adminOnly, async (req, res) => {
     const reads = await readMap(req.user._id, groups.map(group => group._id));
     const rows = await Promise.all(groups.map(async group => {
       const read = reads.get(String(group._id));
-      const unread = await ChatMessage.countDocuments({
-        conversationId: group._id,
-        deletedAt: null,
-        senderUserId: { $ne: req.user._id },
-        ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
-      });
+      const [unread, participantCount] = await Promise.all([
+        ChatMessage.countDocuments({
+          conversationId: group._id,
+          deletedAt: null,
+          senderUserId: { $ne: req.user._id },
+          ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
+        }),
+        User.countDocuments({
+          upcomingCbatDate: new Date(`${group.channel.cohortDate}T00:00:00.000Z`),
+          upcomingCbatRegion: group.channel.cohortRegion,
+        }),
+      ]);
       return {
         conversationId: group._id,
         date: group.channel.cohortDate,
         region: group.channel.cohortRegion,
         title: channelTitle(group),
         messageCount: group.messageCount ?? 0,
+        participantCount,
         unread,
       };
     }));
@@ -1063,6 +1076,12 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
         upcomingCbatRegion: convo.channel.cohortRegion,
       }).select('displayName agentNumber cbatPassed').sort({ displayNameLower: 1, agentNumber: 1 }).lean(),
     ]);
+    const unreadCount = await ChatMessage.countDocuments({
+      conversationId: convo._id,
+      deletedAt: null,
+      senderUserId: { $ne: req.user._id },
+      ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
+    });
     const refusal = postRefusal(convo, req.user);
     res.json({ status: 'success', data: {
       configured: true,
@@ -1070,8 +1089,8 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
       region: convo.channel.cohortRegion,
       conversationId: convo._id,
       title: channelTitle(convo),
-      unread: Boolean(convo.messageCount)
-        && (!read || new Date(read.lastReadAt) < new Date(convo.lastMessageAt)),
+      unread: unreadCount > 0,
+      unreadCount,
       canPost: !refusal,
       displayNameRequired: refusal?.body?.code === 'DISPLAY_NAME_REQUIRED',
       chatBanned: refusal?.body?.code === 'CHAT_BANNED',
@@ -2673,14 +2692,22 @@ router.get('/unread/admin', adminOnly, async (req, res) => {
 });
 
 // GET /api/chat/admin/conversations?status=&type=&userId=&page=&limit=
-// `type` is the new filter powering the Support / Channels / DMs tabs in the
-// admin rail; omitting it keeps the original support-only behaviour.
+// `group` is a virtual type for CBAT cohort channels. They remain channels in
+// storage, but admins need a complete, explicit list of the private groups.
 router.get('/admin/conversations', adminOnly, async (req, res) => {
   try {
     const status = req.query.status || 'all';
     const type   = req.query.type   || 'support';
     const filter = {};
-    if (type !== 'all') filter.type = type;
+    if (type === 'group') {
+      filter.type = 'channel';
+      filter['channel.audience'] = 'cbat-cohort';
+    } else if (type === 'channel') {
+      filter.type = 'channel';
+      filter['channel.audience'] = { $ne: 'cbat-cohort' };
+    } else if (type !== 'all') {
+      filter.type = type;
+    }
     if (type === 'support' && (status === 'open' || status === 'closed')) filter.status = status;
     if (req.query.userId && isValidId(req.query.userId)) {
       filter.$or = [{ userId: req.query.userId }, { participantIds: req.query.userId }];
@@ -2689,31 +2716,39 @@ router.get('/admin/conversations', adminOnly, async (req, res) => {
     const page  = Math.max(1, parseInt(req.query.page,  10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 30));
 
+    // The console has no pager. Do not strand older groups behind the ordinary
+    // 100-row transcript limit: "Groups" must genuinely mean every group.
+    const conversationsQuery = ChatConversation.find(filter).sort({ lastMessageAt: -1 });
+    if (type !== 'group') conversationsQuery.skip((page - 1) * limit).limit(limit);
+
     const [conversations, total] = await Promise.all([
-      ChatConversation.find(filter)
-        .sort({ lastMessageAt: -1 })
-        .skip((page - 1) * limit)
-        .limit(limit)
+      conversationsQuery
         .populate('userId', 'agentNumber email isAdmin displayName')
         .populate('participantIds', 'agentNumber email displayName')
         .lean(),
       ChatConversation.countDocuments(filter),
     ]);
 
-    const enriched = conversations.map(c => ({
+    const enriched = await Promise.all(conversations.map(async c => ({
       ...c,
       title: c.type === 'channel' ? channelTitle(c) : null,
+      participantCount: type === 'group'
+        ? await User.countDocuments({
+          upcomingCbatDate: new Date(`${c.channel.cohortDate}T00:00:00.000Z`),
+          upcomingCbatRegion: c.channel.cohortRegion,
+        })
+        : undefined,
       hasAdminUnread:
         c.type === 'support' &&
         c.lastMessageSenderRole === 'user' &&
         (!c.adminLastReadAt || new Date(c.adminLastReadAt) < new Date(c.lastMessageAt)),
-    }));
+    })));
 
     res.json({ status: 'success', data: {
       conversations: enriched,
       total,
       page,
-      totalPages: Math.ceil(total / limit),
+      totalPages: type === 'group' ? 1 : Math.ceil(total / limit),
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });

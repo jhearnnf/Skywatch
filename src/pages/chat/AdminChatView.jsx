@@ -12,6 +12,7 @@ const POLL_MESSAGES_MS = 10_000
 const TYPE_TABS = [
   { id: 'support', label: 'Support'  },
   { id: 'channel', label: 'Channels' },
+  { id: 'group',   label: 'Groups'   },
   { id: 'dm',      label: 'DMs'      },
 ]
 
@@ -79,7 +80,10 @@ export default function AdminChatView() {
     })
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
-        const type = d?.data?.conversation?.type
+        const conversation = d?.data?.conversation
+        const type = conversation?.type === 'channel' && conversation?.channel?.audience === 'cbat-cohort'
+          ? 'group'
+          : conversation?.type
         if (cancelled || !type) return
         setTypeFilter(type)
         setSelectedId(initialConversationId)
@@ -353,6 +357,7 @@ export default function AdminChatView() {
                 {c.hasAdminUnread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
               </div>
               <p className="text-[10px] text-slate-400 mt-0.5">
+                {typeFilter === 'group' ? `${c.participantCount ?? 0} participant${c.participantCount === 1 ? '' : 's'} · ` : ''}
                 {c.type === 'support' && c.status === 'closed' ? 'Closed · ' : ''}
                 {c.isArchived ? 'Archived · ' : ''}
                 {/* An empty thread still carries a `lastMessageAt` — the model

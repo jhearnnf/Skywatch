@@ -786,7 +786,7 @@ export default function Cbat() {
               <div className={`${loungeOpen && loungeInColumn ? 'flex-[3]' : 'flex-1'} min-h-0`}>
                 <RecentCbatScores fill />
               </div>
-              {loungeInColumn && <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} />}
+              {loungeInColumn && <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} collapsible />}
             </div>
           </aside>
         )}
@@ -1008,10 +1008,10 @@ export default function Cbat() {
         <motion.div
           ref={loungeRef}
           data-testid="cbat-lounge-panel"
-          className={`flex flex-col ${loungeOpen ? 'h-[60dvh] min-h-[360px]' : ''}`}
+          className="flex h-[60dvh] min-h-[360px] flex-col"
           style={{ opacity: loungePanelOpacity, y: loungePanelY }}
         >
-          <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} />
+          <CbatLoungeChat open collapsible={false} />
         </motion.div>
       )}
 

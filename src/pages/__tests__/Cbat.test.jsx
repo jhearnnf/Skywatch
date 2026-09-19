@@ -799,10 +799,10 @@ describe('CBAT hub — the CBAT LOUNGE landmark', () => {
   it('mounts exactly one copy of the chat, in the panel and not the column', () => {
     renderWithUser()
     const panel = screen.getByTestId('cbat-lounge-panel')
-    // The widget's own header/tab label, which is the one thing only it renders.
-    const headers = screen.getAllByText('🛩️ CBAT Lounge')
-    expect(headers).toHaveLength(1)
-    expect(panel).toContainElement(headers[0])
+    // The widget's own room tab, which is the one thing only it renders.
+    const loungeTabs = screen.getAllByRole('tab', { name: 'Lounge' })
+    expect(loungeTabs).toHaveLength(1)
+    expect(panel).toContainElement(loungeTabs[0])
   })
 
   // The other way round from lg up: the column keeps the chat and the panel
@@ -811,7 +811,7 @@ describe('CBAT hub — the CBAT LOUNGE landmark', () => {
     setWideViewport(true)
     renderWithUser()
     expect(screen.queryByTestId('cbat-lounge-panel')).toBeNull()
-    expect(screen.getAllByText('🛩️ CBAT Lounge')).toHaveLength(1)
+    expect(screen.getAllByRole('tab', { name: 'Lounge' })).toHaveLength(1)
   })
 
   // Below the strip, not above it: the landmark is the last thing on the first
@@ -834,17 +834,20 @@ describe('CBAT hub — the CBAT LOUNGE landmark', () => {
     expect(page.contains(panel)).toBe(false)
   })
 
-  // CbatLoungeChat's message list is `flex-1 min-h-0 overflow-y-auto`, which
-  // collapses to nothing in an auto-height parent — but only while it is open.
-  // Collapsed it is a tab, and 60dvh of empty space under a tab is a hole.
-  it('gives the open panel a height and the collapsed one none', () => {
+  // On small screens the lounge is a destination reached by scrolling, not a
+  // collapsible widget. A remembered desktop "closed" preference must not turn
+  // it back into a reopen tab or remove the height its message list requires.
+  it('keeps the small-screen lounge open even when desktop was left collapsed', () => {
     renderWithUser()
     expect(screen.getByTestId('cbat-lounge-panel').className).toContain('h-[60dvh]')
+    expect(screen.queryByRole('button', { name: 'Close the lounge' })).toBeNull()
 
     cleanup()
     localStorage.setItem('skywatch.cbatLounge.open', 'closed')
     renderWithUser()
-    expect(screen.getByTestId('cbat-lounge-panel').className).not.toContain('h-[60dvh]')
+    expect(screen.getByTestId('cbat-lounge-panel').className).toContain('h-[60dvh]')
+    expect(screen.getByRole('tab', { name: 'Lounge' })).toBeTruthy()
+    expect(document.querySelector('button[aria-expanded="false"]')).toBeNull()
   })
 
   // Nothing to talk in and nothing to sign in as: the widget itself renders null

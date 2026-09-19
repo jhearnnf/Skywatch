@@ -113,6 +113,55 @@ describe('GET /api/chat/admin/conversations', () => {
     expect(res.body.data.conversations[0].status).toBe('closed');
   });
 
+  it('type=group returns every cohort chat with its participant count', async () => {
+    const admin = await createUser({ isAdmin: true });
+    await createUser({ firstSeenCountry: 'GB', upcomingCbatDate: new Date('2099-10-14T00:00:00.000Z'), upcomingCbatRegion: 'GB' });
+    const groups = Array.from({ length: 101 }, (_, i) => ({
+      type: 'channel',
+      channel: {
+        name: `CBAT group ${i + 1}`,
+        slug: `cbat-group-${i + 1}`,
+        audience: 'cbat-cohort',
+        cohortKey: `2099-10-${String(i + 1).padStart(3, '0')}:GB`,
+        cohortDate: i === 0 ? '2099-10-14' : '2099-11-14',
+        cohortRegion: 'GB',
+      },
+    }));
+    await ChatConversation.insertMany(groups);
+    await ChatConversation.create({
+      type: 'channel', channel: { name: 'General', slug: 'general', audience: 'public' },
+    });
+
+    const res = await request(app).get('/api/chat/admin/conversations?type=group&limit=100')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.conversations).toHaveLength(101);
+    expect(res.body.data.total).toBe(101);
+    expect(res.body.data.conversations.every(c => c.channel.audience === 'cbat-cohort')).toBe(true);
+    expect(res.body.data.conversations.find(c => c.channel.cohortDate === '2099-10-14').participantCount).toBe(1);
+  });
+
+  it('type=channel excludes CBAT cohort groups', async () => {
+    const admin = await createUser({ isAdmin: true });
+    await ChatConversation.create({
+      type: 'channel',
+      channel: {
+        name: 'CBAT group', slug: 'cbat-group', audience: 'cbat-cohort',
+        cohortKey: '2099-10-14:GB', cohortDate: '2099-10-14', cohortRegion: 'GB',
+      },
+    });
+    await ChatConversation.create({
+      type: 'channel', channel: { name: 'General', slug: 'general', audience: 'public' },
+    });
+
+    const res = await request(app).get('/api/chat/admin/conversations?type=channel')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.conversations.map(c => c.channel.name)).toEqual(['General']);
+  });
+
   it('rejects non-admin with 403', async () => {
     const u = await createUser();
     const res = await request(app).get('/api/chat/admin/conversations').set('Cookie', authCookie(u._id));

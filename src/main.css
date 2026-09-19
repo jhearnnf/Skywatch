@@ -234,6 +234,43 @@ header.fixed {
 .aptitude-dot-2 { animation-delay: 0.18s; }
 .aptitude-dot-3 { animation-delay: 0.36s; }
 
+/* Date lock warning: a composed one-time entrance instead of a perpetual
+   pulse. It draws the eye, then settles so the irreversible choice is easy to
+   read without making the whole form feel like an error state. */
+@keyframes cbat-date-warning-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.975); filter: blur(3px); }
+  58%  { opacity: 1; transform: translateY(-1px) scale(1.008); filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes cbat-date-warning-sheen {
+  0%   { transform: translateX(-145%) skewX(-18deg); opacity: 0; }
+  18%  { opacity: 0.65; }
+  100% { transform: translateX(245%) skewX(-18deg); opacity: 0; }
+}
+@keyframes cbat-date-warning-icon {
+  0%   { transform: scale(0.55) rotate(-12deg); opacity: 0; }
+  65%  { transform: scale(1.1) rotate(3deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+.cbat-date-warning {
+  position: relative;
+  overflow: hidden;
+  animation: cbat-date-warning-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity, filter;
+}
+.cbat-date-warning::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 -45%;
+  width: 38%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.18), transparent);
+  animation: cbat-date-warning-sheen 900ms 110ms ease-out both;
+}
+.cbat-date-warning-icon {
+  animation: cbat-date-warning-icon 460ms 90ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
 /* ── Base ─────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -3641,4 +3678,5 @@ body.play-mode .card-shadow {
 
 @media (prefers-reduced-motion: reduce) {
   .cbat-room-enter, .cbat-room-enter-right, .cbat-room-enter-left { animation: none; }
+  .cbat-date-warning, .cbat-date-warning::after, .cbat-date-warning-icon { animation: none; }
 }

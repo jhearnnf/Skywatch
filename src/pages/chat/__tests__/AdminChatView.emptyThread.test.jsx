@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 // A support thread is created the moment someone presses "chat to us", before
@@ -86,5 +86,22 @@ describe('AdminChatView — threads nobody ever wrote in', () => {
 
     await waitFor(() => expect(screen.getByText('annie@example.com')).toBeTruthy())
     expect(row('annie@example.com').textContent).toContain('Closed · Opened, no messages ·')
+  })
+
+  it('offers a dedicated group list with participant totals', async () => {
+    route([convo({
+      _id: 'g1', type: 'channel', title: 'CBAT · 14 Oct 2099',
+      channel: { audience: 'cbat-cohort' }, participantCount: 3,
+    })])
+    render(<AdminChatView />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Groups' }))
+
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/chat/admin/conversations?type=group&limit=100'),
+      { credentials: 'include' },
+    ))
+    expect(await screen.findByText('CBAT · 14 Oct 2099')).toBeTruthy()
+    expect(row('CBAT · 14 Oct 2099').textContent).toContain('3 participants')
   })
 })

@@ -30,6 +30,9 @@ const MESSAGE_LIMIT = 40
 // Only used when the stream is down. Deliberately slower than the main thread's
 // 5s: this is a degraded mode on a page whose real job is the games.
 const FALLBACK_POLL_MS = 10_000
+// The inactive My group tab has no EventSource of its own. This small status
+// response keeps its badge live without holding a second chat stream open.
+const GROUP_UNREAD_POLL_MS = 15_000
 
 // How long a just-sent message is held over a load that has not caught up with
 // it. See applyJustSent below.
@@ -154,7 +157,7 @@ function Reactions({ message, onReact, picking, onPick }) {
   )
 }
 
-export default function CbatLoungeChat({ open, onToggle }) {
+export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
   const navigate = useNavigate()
@@ -168,6 +171,9 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const [err,       setErr]       = useState('')
   const [draft,     setDraft]     = useState('')
   const [hasNew,    setHasNew]    = useState(false)
+  const [groupUnreadCount, setGroupUnreadCount] = useState(0)
+  const [allGroupsUnreadCount, setAllGroupsUnreadCount] = useState(0)
+  const [selectedAdminGroupUnread, setSelectedAdminGroupUnread] = useState(0)
   const [needsName, setNeedsName] = useState(false)
   // Bumped to refetch /api/chat/lounge. Needed after the display-name gate:
   // the endpoint reports canPost:false while a name is missing, so clearing
@@ -308,6 +314,15 @@ export default function CbatLoungeChat({ open, onToggle }) {
       if (!ok) { if (status === 404) setGone(true); setLoading(false); return }
       setLounge(data)
       setHasNew(Boolean(data.unread))
+      if (room === 'group') setGroupUnreadCount(Number(data.unreadCount) || 0)
+      if (room === 'groups') {
+        if (Array.isArray(data.groups)) {
+          setAllGroupsUnreadCount(data.groups.reduce((sum, group) => sum + (Number(group.unread) || 0), 0))
+          setSelectedAdminGroupUnread(0)
+        } else {
+          setSelectedAdminGroupUnread(Number(data.unreadCount) || 0)
+        }
+      }
       setNeedsName(Boolean(data.displayNameRequired))
       // Setup and admin-list responses intentionally have no conversation, so
       // no message request will come along later to clear this state.
@@ -315,6 +330,45 @@ export default function CbatLoungeChat({ open, onToggle }) {
     }).catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [enabled, get, loungeReload, roomEndpoint])
+
+  // Keep the inactive My group pill current. Once that room is selected its
+  // own load + stream take over, so there is never a duplicate polling path.
+  useEffect(() => {
+    if (!enabled || room === 'group') return
+    let cancelled = false
+    const load = () => {
+      if (document.hidden) return
+      get('/api/chat/cbat-group')
+        .then(({ ok, data }) => {
+          if (!cancelled && ok) setGroupUnreadCount(Number(data?.unreadCount) || 0)
+        })
+        .catch(() => {})
+    }
+    load()
+    const id = setInterval(load, GROUP_UNREAD_POLL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [enabled, get, room])
+
+  // Admins need the same signal one level up: the All groups pill aggregates
+  // every cohort row while its list is not selected. The list response already
+  // contains the per-group counts used by the red badges on each row.
+  useEffect(() => {
+    if (!enabled || !user?.isAdmin || room === 'groups') return
+    let cancelled = false
+    const load = () => {
+      if (document.hidden) return
+      get('/api/chat/cbat-groups')
+        .then(({ ok, data }) => {
+          if (!cancelled && ok && Array.isArray(data?.groups)) {
+            setAllGroupsUnreadCount(data.groups.reduce((sum, group) => sum + (Number(group.unread) || 0), 0))
+          }
+        })
+        .catch(() => {})
+    }
+    load()
+    const id = setInterval(load, GROUP_UNREAD_POLL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [enabled, get, room, user?.isAdmin])
 
   const saveCbatDate = async () => {
     setDateBusy(true)
@@ -400,8 +454,21 @@ export default function CbatLoungeChat({ open, onToggle }) {
       ))
       const mine = String(incoming.senderUserId ?? '') === String(user?._id)
       if (mine) return
-      if (readingRef.current) markRead()
-      else setHasNew(true)
+      if (readingRef.current) {
+        markRead()
+        if (room === 'group') setGroupUnreadCount(0)
+        if (room === 'groups' && selectedAdminGroupUnread > 0) {
+          setAllGroupsUnreadCount(count => Math.max(0, count - selectedAdminGroupUnread))
+          setSelectedAdminGroupUnread(0)
+        }
+      } else {
+        setHasNew(true)
+        if (room === 'group') setGroupUnreadCount(count => count + 1)
+        if (room === 'groups') {
+          setAllGroupsUnreadCount(count => count + 1)
+          setSelectedAdminGroupUnread(count => count + 1)
+        }
+      }
     }
 
     source.addEventListener('ready',   () => { setStreaming(true); setErr('') })
@@ -418,7 +485,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
     source.onerror = () => setStreaming(false)
 
     return () => { source.close(); setStreaming(false) }
-  }, [API, conversationId, enabled, loadMessages, markRead, user])
+  }, [API, conversationId, enabled, loadMessages, markRead, room, selectedAdminGroupUnread, user])
 
   // Fallback for a stream that will not stay up. Skips hidden tabs, like every
   // other poll in the app.
@@ -475,8 +542,13 @@ export default function CbatLoungeChat({ open, onToggle }) {
   useEffect(() => {
     if (!reading || !conversationId) return
     setHasNew(false)
+    if (room === 'group') setGroupUnreadCount(0)
+    if (room === 'groups' && selectedAdminGroupUnread > 0) {
+      setAllGroupsUnreadCount(count => Math.max(0, count - selectedAdminGroupUnread))
+      setSelectedAdminGroupUnread(0)
+    }
     markRead()
-  }, [reading, conversationId, markRead])
+  }, [reading, conversationId, markRead, room, selectedAdminGroupUnread])
 
   // Stick to the bottom, which is where a chat lives. useLayoutEffect so the
   // jump happens before paint rather than as a visible scroll.
@@ -727,7 +799,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
   // The mt-3 on both states is deliberate, rather than a gap on the column:
   // the admin view toggle above Recent Scores is docked to that card's top
   // edge, and a column gap would detach it.
-  if (!open) {
+  if (collapsible && !open) {
     return (
       <button
         type="button"
@@ -772,18 +844,38 @@ export default function CbatLoungeChat({ open, onToggle }) {
       className="flex-[2] min-h-0 mt-3 flex flex-col bg-game-panel border border-game-line rounded-xl overflow-hidden shadow-[0_18px_50px_rgba(2,8,23,0.14)]"
     >
       <div className="shrink-0 px-4 py-3 border-b border-game-line flex items-center gap-2">
-        <div className="relative flex rounded-xl bg-surface p-1 border border-game-line shadow-inner" role="tablist" aria-label="CBAT chats">
-          <span
-            aria-hidden="true"
-            className="absolute top-1 bottom-1 rounded-lg bg-brand-600 shadow-[0_6px_18px_rgba(37,99,235,0.28)] transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)]"
-            style={{
-              width: user?.isAdmin ? 'calc(33.333% - 2.67px)' : 'calc(50% - 2px)',
-              transform: `translateX(${room === 'groups' ? 200 : room === 'group' ? 100 : 0}%)`,
-            }}
-          />
+        <div className={`grid ${user?.isAdmin ? 'grid-cols-3' : 'grid-cols-2'} rounded-lg bg-game-arena/70 p-1 border border-game-line shadow-inner`} role="tablist" aria-label="CBAT chats">
           {['lounge', 'group', ...(user?.isAdmin ? ['groups'] : [])].map(key => (
-            <button key={key} type="button" role="tab" aria-selected={room === key} onClick={() => changeRoom(key)} className={`relative z-10 px-2.5 py-1 text-[10px] font-extrabold tracking-wide transition-colors duration-300 ${room === key ? 'text-white' : 'text-slate-500 hover:text-brand-600'}`}>
-              {key === 'lounge' ? 'Lounge' : key === 'group' ? 'My group' : 'All groups'}
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={room === key}
+              onClick={() => changeRoom(key)}
+              className={`min-w-[4.5rem] rounded-md border px-3 py-1.5 text-center text-[10px] font-extrabold tracking-wide transition-[color,background-color,border-color,box-shadow] duration-200
+                ${room === key
+                  ? 'border-brand-400/70 bg-brand-600 text-white shadow-[0_2px_8px_rgba(37,99,235,.24),inset_0_1px_0_rgba(255,255,255,.16)]'
+                  : 'border-transparent text-slate-500 hover:bg-brand-500/8 hover:text-brand-700'}`}
+            >
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <span>{key === 'lounge' ? 'Lounge' : key === 'group' ? 'My group' : 'All groups'}</span>
+                {key === 'group' && groupUnreadCount > 0 && (
+                  <span
+                    aria-label={`${groupUnreadCount} new group ${groupUnreadCount === 1 ? 'message' : 'messages'}`}
+                    className="min-w-4 h-4 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[8px] leading-none font-black shadow-[0_0_8px_rgba(239,68,68,.55)]"
+                  >
+                    {groupUnreadCount > 99 ? '99+' : groupUnreadCount}
+                  </span>
+                )}
+                {key === 'groups' && allGroupsUnreadCount > 0 && (
+                  <span
+                    aria-label={`${allGroupsUnreadCount} new ${allGroupsUnreadCount === 1 ? 'message' : 'messages'} across CBAT groups`}
+                    className="min-w-4 h-4 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[8px] leading-none font-black shadow-[0_0_8px_rgba(239,68,68,.55)]"
+                  >
+                    {allGroupsUnreadCount > 99 ? '99+' : allGroupsUnreadCount}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>
@@ -792,15 +884,17 @@ export default function CbatLoungeChat({ open, onToggle }) {
           className="text-[10px] text-slate-500 no-underline hover:text-brand-600 hover:underline underline-offset-2 transition-colors"
           title="Open this group in Community"
         >Community</Link>}
-        <button
-          type="button"
-          onClick={() => onToggle(false)}
-          aria-expanded="true"
-          aria-label="Close the lounge"
-          className="ml-auto text-[11px] text-slate-500 hover:text-slate-400 px-1.5 py-0.5 rounded-lg border border-game-line hover:border-brand-400 transition-colors"
-        >
-          Close
-        </button>
+        {collapsible && (
+          <button
+            type="button"
+            onClick={() => onToggle(false)}
+            aria-expanded="true"
+            aria-label="Close the lounge"
+            className="ml-auto text-[11px] text-slate-500 hover:text-slate-400 px-1.5 py-0.5 rounded-lg border border-game-line hover:border-brand-400 transition-colors"
+          >
+            Close
+          </button>
+        )}
       </div>
 
       {room === 'group' && lounge?.configured && (
@@ -849,8 +943,10 @@ export default function CbatLoungeChat({ open, onToggle }) {
                 <span className="block text-xs font-extrabold text-game-text">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}</span>
                 <span className="block text-[10px] text-slate-500">Region {group.region}</span>
               </span>
-              <span className="ml-auto text-[10px] text-slate-500">{group.messageCount} messages</span>
-              {group.unread > 0 && <span className="min-w-5 h-5 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[9px] font-black shadow-[0_0_12px_rgba(239,68,68,.45)]">{group.unread}</span>}
+              <span className="ml-auto text-[10px] text-slate-500">
+                {group.participantCount ?? 0} participant{group.participantCount === 1 ? '' : 's'} · {group.messageCount} messages
+              </span>
+              {group.unread > 0 && <span aria-label={`${group.unread} new ${group.unread === 1 ? 'message' : 'messages'} in this group`} className="min-w-5 h-5 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[9px] font-black shadow-[0_0_12px_rgba(239,68,68,.45)]">{group.unread}</span>}
             </button>
           ))}
         </div>
@@ -874,7 +970,17 @@ export default function CbatLoungeChat({ open, onToggle }) {
               <div className="space-y-3">
                 <label className="block text-[11px] font-bold text-slate-500" htmlFor="upcoming-cbat-date">Upcoming CBAT date</label>
                 <input id="upcoming-cbat-date" type="date" min={new Date().toISOString().slice(0, 10)} value={dateChoice} onChange={e => { setDateChoice(e.target.value); setDateError('') }} className="w-full rounded-xl bg-surface border border-game-line px-3 py-2.5 text-sm text-game-text outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 transition-all" />
-                <p className="text-[11px] text-slate-500">Choose carefully — you cannot change this date after confirming.</p>
+                {dateChoice && (
+                  <div key={dateChoice} role="alert" className="cbat-date-warning rounded-xl border border-amber-400/70 bg-gradient-to-r from-amber-500/8 via-amber-500/14 to-amber-500/8 px-3 py-2.5 shadow-[0_10px_30px_rgba(245,158,11,.14),inset_0_1px_0_rgba(251,191,36,.12)]">
+                    <div className="relative z-10 flex items-center gap-2.5 text-left">
+                      <span aria-hidden="true" className="cbat-date-warning-icon grid h-7 w-7 shrink-0 place-items-center rounded-full border border-amber-400/60 bg-amber-500/15 text-xs font-black text-amber-600">!</span>
+                      <div>
+                        <p className="text-xs font-black text-amber-600">Choose carefully — you cannot change this date.</p>
+                        <p className="mt-0.5 text-[10px] font-semibold text-amber-600/90">Check it before you click Continue.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <button type="button" disabled={!dateChoice} onClick={() => setConfirmingDate(true)} className="w-full rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-xs font-extrabold py-2.5 shadow-[0_10px_24px_rgba(37,99,235,.22)] transition-all hover:-translate-y-0.5 active:translate-y-0">Continue</button>
               </div>
             ) : (

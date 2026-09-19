@@ -50,4 +50,18 @@ describe('CBAT cohort groups', () => {
     expect(detail.body.data.members.map(m => m.displayName).sort()).toEqual(['Falcon', 'Viper']);
     expect(detail.body.data.members.find(m => m.displayName === 'Viper').cbatPassed).toBe(true);
   });
+
+  it('includes participant totals in the admin all-groups list', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    await Promise.all([choose(a), choose(b)]);
+
+    const list = await request(app).get('/api/chat/cbat-groups')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(list.status).toBe(200);
+    expect(list.body.data.groups).toHaveLength(1);
+    expect(list.body.data.groups[0].participantCount).toBe(2);
+  });
 });

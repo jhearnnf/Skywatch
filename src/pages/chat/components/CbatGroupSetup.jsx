@@ -49,7 +49,17 @@ export default function CbatGroupSetup({ state, onJoined, onCancel }) {
               <div className="space-y-3">
                 <label className="block text-xs font-bold text-slate-600" htmlFor="community-cbat-date">Upcoming CBAT date</label>
                 <input id="community-cbat-date" type="date" min={new Date().toISOString().slice(0, 10)} value={date} onChange={e => { setDate(e.target.value); setError('') }} className="w-full rounded-xl bg-white border border-slate-200 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 transition-all" />
-                <p className="text-xs text-slate-500">Choose carefully — you cannot change this date after confirming.</p>
+                {date && (
+                  <div key={date} role="alert" className="cbat-date-warning rounded-xl border border-amber-400/70 bg-gradient-to-r from-amber-50 via-amber-100/80 to-amber-50 px-3 py-2.5 shadow-[0_10px_30px_rgba(245,158,11,.16),inset_0_1px_0_rgba(255,255,255,.7)]">
+                    <div className="relative z-10 flex items-center gap-2.5 text-left">
+                      <span aria-hidden="true" className="cbat-date-warning-icon grid h-8 w-8 shrink-0 place-items-center rounded-full border border-amber-400/60 bg-amber-200/60 text-amber-700">!</span>
+                      <div>
+                        <p className="text-sm font-black text-amber-800">Choose carefully — you cannot change this date.</p>
+                        <p className="mt-0.5 text-xs font-semibold text-amber-700">Check it before you click Continue.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <button type="button" disabled={!date} onClick={() => setConfirming(true)} className="w-full rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white text-sm font-extrabold py-2.5 shadow-[0_10px_24px_rgba(37,99,235,.2)] transition-all">Continue</button>
               </div>
             ) : (
