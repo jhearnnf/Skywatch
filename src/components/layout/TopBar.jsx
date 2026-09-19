@@ -10,6 +10,7 @@ import { GUEST_UI_THEME_EVENT, hasGuestUiThemeChoice } from '../../lib/uiTheme'
 const PUBLIC_GAME_PATHS = new Set(['/cbat/target', '/cbat/ant', '/cbat/symbols', '/cbat/code-duplicates'])
 const THEME_HINT_SEEN_KEY = 'skywatch.guestThemeHintSeen'
 const THEME_HINT_DISMISSED_EVENT = 'skywatch:guest-theme-hint-dismissed'
+const THEME_HINT_LIFETIME_MS = 4800
 
 function guestThemeHintSeen() {
   try { return localStorage.getItem(THEME_HINT_SEEN_KEY) === '1' } catch { return false }
@@ -34,6 +35,15 @@ function GuestThemeHint({ compact = false }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!visible) return undefined
+    const timer = window.setTimeout(() => {
+      try { localStorage.setItem(THEME_HINT_SEEN_KEY, '1') } catch { /* storage unavailable */ }
+      window.dispatchEvent(new Event(THEME_HINT_DISMISSED_EVENT))
+    }, THEME_HINT_LIFETIME_MS)
+    return () => window.clearTimeout(timer)
+  }, [visible])
+
   if (!visible) return null
   const dismiss = () => {
     try { localStorage.setItem(THEME_HINT_SEEN_KEY, '1') } catch { /* storage unavailable */ }
@@ -42,13 +52,15 @@ function GuestThemeHint({ compact = false }) {
   return (
     <div
       role="status"
-      className={`${compact ? 'md:hidden' : 'hidden md:flex'} absolute left-1/2 top-[calc(100%+9px)] -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-[#5baaff]/50 bg-[#071426] py-1.5 pl-3 pr-1.5 text-[11px] font-medium text-[#ddecff] shadow-[0_8px_24px_rgba(0,0,0,0.45),0_0_16px_rgba(91,170,255,0.12)]`}
+      className={`guest-theme-hint ${compact ? 'md:hidden' : 'hidden md:flex'}`}
       data-testid={compact ? 'guest-theme-hint-mobile' : 'guest-theme-hint-desktop'}
     >
-      <span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-[#5baaff]/50 bg-[#071426]" aria-hidden="true" />
-      <span>Try the Real CBAT theme</span>
-      <span className="text-[#5baaff]" aria-hidden="true">↑</span>
-      <button type="button" onClick={dismiss} aria-label="Dismiss theme hint" className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full text-sm leading-none text-[#7892ad] transition-colors hover:bg-white/10 hover:text-white">×</button>
+      <span className="guest-theme-hint-caret" aria-hidden="true" />
+      <button type="button" onClick={dismiss} aria-label="Dismiss theme hint" className="guest-theme-hint-window">
+        <span className="guest-theme-hint-kicker">THEME PREVIEW</span>
+        <span className="guest-theme-hint-copy">Try the Real CBAT theme</span>
+        <span className="guest-theme-hint-detail">A sharper, test-style view is one hold away.</span>
+      </button>
     </div>
   )
 }
@@ -105,15 +117,15 @@ export default function TopBar() {
             the logo and the avatar. Desktop carries the full selector on the
             right instead. */}
         <div className="relative flex md:hidden items-center justify-center min-w-0">
-          <ThemeSelector compact />
           <GuestThemeHint compact />
+          <ThemeSelector compact />
         </div>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
           <div className="relative hidden md:flex items-center mr-2">
-            <ThemeSelector />
             <GuestThemeHint />
+            <ThemeSelector />
           </div>
           {user ? (
             <>
