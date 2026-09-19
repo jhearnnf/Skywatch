@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, useScroll, useTransform } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -320,6 +320,7 @@ function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, nav
 }
 
 export default function Cbat() {
+  const location = useLocation()
   const { user } = useAuth()
   const { settings } = useAppSettings()
   const navigate = useNavigate()
@@ -342,6 +343,19 @@ export default function Cbat() {
   const cancelLongPress = () => clearTimeout(longPressRef.current.timer)
   useEffect(() => () => clearTimeout(longPressRef.current.timer), [])
   const [flickeringKey, setFlickeringKey] = useState(null)
+  const [highlightGuestUnlock, setHighlightGuestUnlock] = useState(
+    () => Boolean(location.state?.highlightGuestUnlock),
+  )
+  useEffect(() => {
+    if (!location.state?.highlightGuestUnlock) return
+    setHighlightGuestUnlock(true)
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.pathname, location.state, navigate])
+  useEffect(() => {
+    if (!highlightGuestUnlock) return
+    const timer = setTimeout(() => setHighlightGuestUnlock(false), 2400)
+    return () => clearTimeout(timer)
+  }, [highlightGuestUnlock])
   // The "Play on a PC" note. Only ever reachable from the native app, where the
   // link that opens it is the one that replaces the donation link.
   const [pcNoteOpen, setPcNoteOpen] = useState(false)
@@ -553,18 +567,6 @@ export default function Cbat() {
           player switches games. It is outside the grid so the layer is not
           itself a grid cell. */}
       <div className="relative" ref={gridWrapRef}>
-      {!user && (
-        <div className="absolute inset-x-0 top-[78px] sm:top-[324px] z-30 flex justify-center px-2 sm:px-8">
-          <div className="w-full max-w-xl rounded-2xl border border-brand-400/40 bg-game-panel/95 px-4 py-4 text-center shadow-2xl backdrop-blur-md sm:px-8 sm:py-6">
-            <div className="text-2xl mb-1 sm:text-3xl sm:mb-2">🔒</div>
-            <p className="font-bold text-white mb-1">Create an account to unlock every game</p>
-            <p className="hidden text-sm text-slate-400 mb-4 sm:block">Signing up is free. Your scores from the four games above will be added to your account.</p>
-            <Link to="/login" className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition-colors sm:px-6 sm:py-2.5 sm:text-sm">
-              Sign in or create an account
-            </Link>
-          </div>
-        </div>
-      )}
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-8">
         {visibleGames.map((game, i) => {
           const isImplemented = !!game.path
@@ -593,8 +595,41 @@ export default function Cbat() {
             },
           }
           return (
+            <Fragment key={game.key}>
+            {!user && i === 4 && (
+              <div className="sticky top-20 z-30 col-span-4 h-0 sm:top-24 sm:col-span-2 flex justify-center px-2 sm:px-8">
+                <div className="w-full max-w-xl -translate-y-1/3">
+                <motion.div
+                  animate={highlightGuestUnlock
+                    ? {
+                        y: [0, -5, 0, -5, 0],
+                        scale: [1, 1.035, 1, 1.035, 1],
+                        boxShadow: [
+                          '0 20px 45px rgba(0,0,0,0.45)',
+                          '0 0 0 5px rgba(91,170,255,0.28), 0 0 38px rgba(91,170,255,0.6)',
+                          '0 20px 45px rgba(0,0,0,0.45)',
+                          '0 0 0 5px rgba(91,170,255,0.28), 0 0 38px rgba(91,170,255,0.6)',
+                          '0 20px 45px rgba(0,0,0,0.45)',
+                        ],
+                      }
+                    : { y: [0, -5, 0], scale: 1 }}
+                  transition={highlightGuestUnlock
+                    ? { duration: 1.8, ease: 'easeInOut' }
+                    : { duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+                  data-testid="guest-unlock-prompt"
+                  className={`w-full rounded-2xl border bg-game-panel/95 px-4 py-4 text-center shadow-2xl backdrop-blur-md transition-colors sm:px-8 sm:py-6 ${highlightGuestUnlock ? 'border-brand-300' : 'border-brand-400/40'}`}
+                >
+                  <div className="text-2xl mb-1 sm:text-3xl sm:mb-2">🔒</div>
+                  <p className="font-bold text-white mb-1">Create an account to unlock every game</p>
+                  <p className="hidden text-sm text-slate-400 mb-4 sm:block">Signing up is free. Your scores from the four games above will be added to your account.</p>
+                  <Link to="/login" className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition-colors sm:px-6 sm:py-2.5 sm:text-sm">
+                    Sign in or create an account
+                  </Link>
+                </motion.div>
+                </div>
+              </div>
+            )}
             <motion.div
-              key={game.key}
               // What the presence overlay measures and keys its dots by. On the
               // wrapper rather than the tile itself so it is present whether the
               // tile is a link, a combined tile or a greyed-out "coming soon".
@@ -635,7 +670,7 @@ export default function Cbat() {
                   </div>
                 </Link>
               ) : (
-                <div className={`${TILE_BASE} opacity-60`}>
+                <div className={`${TILE_BASE} ${!user && !guestPlayable ? 'opacity-30 saturate-0 blur-[0.6px] pointer-events-none select-none' : 'opacity-60'}`} aria-disabled={!user && !guestPlayable ? 'true' : undefined}>
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} dimmed />
                   <EstTime game={game} />
                   <span className={TILE_EMOJI} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
@@ -656,6 +691,7 @@ export default function Cbat() {
                 </div>
               )}
             </motion.div>
+            </Fragment>
           )
         })}
 

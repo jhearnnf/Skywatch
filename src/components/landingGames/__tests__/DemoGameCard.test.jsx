@@ -1,5 +1,5 @@
-import { render, screen, act } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { render, screen, act, fireEvent } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import DemoGameCard from '../DemoGameCard'
 import { frameFor } from '../demoFraming'
@@ -20,6 +20,10 @@ const entry = {
 
 const StubGame = () => <button data-demo-start>Start</button>
 const ExplodingGame = () => { throw new Error('boom') }
+const LocationProbe = () => {
+  const location = useLocation()
+  return <output data-testid="location">{JSON.stringify({ pathname: location.pathname, state: location.state })}</output>
+}
 
 function renderCard(props = {}) {
   return render(
@@ -33,9 +37,29 @@ describe('DemoGameCard', () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
-  it('sends logged-out visitors to register, not into the game', () => {
-    renderCard({ loggedIn: false })
-    expect(screen.getByRole('link').getAttribute('href')).toBe('/login?tab=register')
+  it('sends a logged-out visitor selecting a locked game to the CBAT menu', () => {
+    render(
+      <MemoryRouter>
+        <DemoGameCard entry={entry} Component={StubGame} loggedIn={false} />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link').getAttribute('href')).toBe('/cbat')
+    fireEvent.click(screen.getByRole('link'))
+    expect(JSON.parse(screen.getByTestId('location').textContent)).toEqual({
+      pathname: '/cbat',
+      state: { highlightGuestUnlock: true },
+    })
+  })
+
+  it('sends a logged-out visitor straight into a public game', () => {
+    const publicEntry = { ...entry, id: 'symbols', gameKey: 'symbols', label: 'Symbols', path: '/cbat/symbols' }
+    render(
+      <MemoryRouter>
+        <DemoGameCard entry={publicEntry} Component={StubGame} loggedIn={false} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('link').getAttribute('href')).toBe('/cbat/symbols')
   })
 
   it('sends signed-in visitors straight to the game', () => {

@@ -36,16 +36,20 @@ const ok = (user) => Promise.resolve({ ok: true, json: () => Promise.resolve({ d
 
 describe('ThemeSelector', () => {
   beforeEach(() => {
+    localStorage.clear()
     auth.user = { _id: 'u1', uiTheme: 'skywatch' }
     auth.setUser.mockReset()
     auth.apiFetch.mockReset()
     inProgress.value = false
   })
 
-  it('renders nothing for a guest', () => {
+  it('lets a guest choose a theme and stores it on this device', async () => {
     auth.user = null
-    const { container } = render(<ThemeSelector />)
-    expect(container.firstChild).toBeNull()
+    render(<ThemeSelector />)
+    fireEvent.click(screen.getByRole('button', { name: 'Real CBAT' }))
+    await waitFor(() => expect(localStorage.getItem('skywatch.guestUiTheme')).toBe('cbat'))
+    expect(auth.apiFetch).not.toHaveBeenCalled()
+    expect(auth.setUser).not.toHaveBeenCalled()
   })
 
   it('offers SkyWatch and Real CBAT, with the saved theme pressed', () => {

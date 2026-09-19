@@ -5,6 +5,7 @@ import { runDemoDriver } from './demoDriver'
 import { frameFor } from './demoFraming'
 import { requestRemountSlot } from './remountScheduler'
 import { beginDemo } from '../../utils/cbat/demoMode'
+import { isPublicCbatGame } from '../../utils/cbat/publicGames'
 
 // One tile on the landing page's live game wall: a real CBAT game, mounted at a
 // fixed "stage" size and scaled down to fit the card.
@@ -120,9 +121,10 @@ export default function DemoGameCard({
   // last played, so a tile has to name the one it is showing or tapping "Trace
   // Practise 3D" can land you in Trace 1. Derived from the same `forcedMode`
   // the tile renders with, so the link and the tile can't drift apart.
-  const to = loggedIn
-    ? (gameProps?.forcedMode ? `${path}?mode=${gameProps.forcedMode}` : path)
-    : '/login?tab=register'
+  const gamePath = gameProps?.forcedMode ? `${path}?mode=${gameProps.forcedMode}` : path
+  const canOpenGame = loggedIn || isPublicCbatGame(entry.gameKey)
+  const to = canOpenGame ? gamePath : '/cbat'
+  const navigationState = canOpenGame ? undefined : { highlightGuestUnlock: true }
   // The poster carries the card until the game is genuinely running, and for
   // good if it can't run here.
   const showPoster = !mounted || !alive
@@ -204,6 +206,7 @@ export default function DemoGameCard({
       {/* Tap target — covers the card, above everything else. */}
       <Link
         to={to}
+        state={navigationState}
         target={linkTarget}
         aria-label={`${label} — CBAT practice game`}
         className="absolute inset-0 z-10"

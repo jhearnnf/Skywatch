@@ -1,9 +1,57 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import ProfileBadge from '../ProfileBadge'
 import OfflineBadge from './OfflineBadge'
 import ThemeSelector from './ThemeSelector'
 import { useSlimMode, useLandingPageEnabled } from '../../hooks/useSlimMode'
+import { GUEST_UI_THEME_EVENT, hasGuestUiThemeChoice } from '../../lib/uiTheme'
+
+const PUBLIC_GAME_PATHS = new Set(['/cbat/target', '/cbat/ant', '/cbat/symbols', '/cbat/code-duplicates'])
+const THEME_HINT_SEEN_KEY = 'skywatch.guestThemeHintSeen'
+const THEME_HINT_DISMISSED_EVENT = 'skywatch:guest-theme-hint-dismissed'
+
+function guestThemeHintSeen() {
+  try { return localStorage.getItem(THEME_HINT_SEEN_KEY) === '1' } catch { return false }
+}
+
+function GuestThemeHint({ compact = false }) {
+  const { user } = useAuth()
+  const { pathname } = useLocation()
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    setVisible(!user && PUBLIC_GAME_PATHS.has(pathname) && !hasGuestUiThemeChoice() && !guestThemeHintSeen())
+  }, [pathname, user])
+
+  useEffect(() => {
+    const hide = () => setVisible(false)
+    window.addEventListener(GUEST_UI_THEME_EVENT, hide)
+    window.addEventListener(THEME_HINT_DISMISSED_EVENT, hide)
+    return () => {
+      window.removeEventListener(GUEST_UI_THEME_EVENT, hide)
+      window.removeEventListener(THEME_HINT_DISMISSED_EVENT, hide)
+    }
+  }, [])
+
+  if (!visible) return null
+  const dismiss = () => {
+    try { localStorage.setItem(THEME_HINT_SEEN_KEY, '1') } catch { /* storage unavailable */ }
+    window.dispatchEvent(new Event(THEME_HINT_DISMISSED_EVENT))
+  }
+  return (
+    <div
+      role="status"
+      className={`${compact ? 'md:hidden' : 'hidden md:flex'} absolute left-1/2 top-[calc(100%+9px)] -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-[#5baaff]/50 bg-[#071426] py-1.5 pl-3 pr-1.5 text-[11px] font-medium text-[#ddecff] shadow-[0_8px_24px_rgba(0,0,0,0.45),0_0_16px_rgba(91,170,255,0.12)]`}
+      data-testid={compact ? 'guest-theme-hint-mobile' : 'guest-theme-hint-desktop'}
+    >
+      <span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border-l border-t border-[#5baaff]/50 bg-[#071426]" aria-hidden="true" />
+      <span>Try the Real CBAT theme</span>
+      <span className="text-[#5baaff]" aria-hidden="true">↑</span>
+      <button type="button" onClick={dismiss} aria-label="Dismiss theme hint" className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full text-sm leading-none text-[#7892ad] transition-colors hover:bg-white/10 hover:text-white">×</button>
+    </div>
+  )
+}
 
 function CrosshairLogo() {
   return (
@@ -56,24 +104,23 @@ export default function TopBar() {
         {/* Theme — the phone's faint "Switch theme" link, in the gap between
             the logo and the avatar. Desktop carries the full selector on the
             right instead. */}
-        {user && (
-          <div className="flex md:hidden items-center justify-center min-w-0">
-            <ThemeSelector compact />
-          </div>
-        )}
+        <div className="relative flex md:hidden items-center justify-center min-w-0">
+          <ThemeSelector compact />
+          <GuestThemeHint compact />
+        </div>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
+          <div className="relative hidden md:flex items-center mr-2">
+            <ThemeSelector />
+            <GuestThemeHint />
+          </div>
           {user ? (
             <>
               {/* Theme — the full selector, desktop only (the phone has the
                   link above). An account setting, so it shows in slim mode
                   too: the look applies to the CBAT games as much as to the
                   rest of the site. */}
-              <div className="hidden md:flex items-center mr-2">
-                <ThemeSelector />
-              </div>
-
               {/* Streak — hidden in slim (native) mode */}
               {!slim && (
                 <button

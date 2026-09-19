@@ -32,7 +32,7 @@ export default function ThemeHoldSwitch() {
   const [announced, setAnnounced] = useState(null) // theme being flashed, or 'tip'
   const onRevert = useCallback(() => setAnnounced(null), [])
   const clearAnnounced = useCallback(() => setAnnounced(null), [])
-  const { user, current, busy, locked, choose } = useUiThemeChoice({ onRevert })
+  const { current, busy, locked, choose } = useUiThemeChoice({ onRevert })
   const [holdT, setHoldT] = useState(0)          // 0..1 while the thumb is down
   const holdingRef = useRef(false)
   const startRef = useRef(0)
@@ -44,7 +44,6 @@ export default function ThemeHoldSwitch() {
   const stopTick = () => { clearInterval(tickRef.current); tickRef.current = null }
   useEffect(() => () => { stopTick(); clearTimeout(tipTimerRef.current) }, [])
 
-  if (!user) return null
   const other = UI_THEMES.find(t => t !== current) ?? current
 
   const complete = () => {

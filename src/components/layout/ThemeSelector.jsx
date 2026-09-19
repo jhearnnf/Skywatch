@@ -20,8 +20,7 @@ export const LOCKED_TITLE = 'Theme is locked while a test is running. Finish or 
 export default function ThemeSelector({ compact = false }) {
   const [flash, setFlash] = useState(null)
   const clearFlash = useCallback(() => setFlash(null), [])
-  const { user, current, busy, locked, choose } = useUiThemeChoice({ onRevert: clearFlash })
-  if (!user) return null
+  const { current, busy, locked, choose } = useUiThemeChoice({ onRevert: clearFlash })
   if (compact) return <ThemeHoldSwitch />
 
   const pick = (theme, e) => {

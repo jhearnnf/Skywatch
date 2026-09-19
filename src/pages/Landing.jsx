@@ -220,13 +220,14 @@ export default function Landing() {
                 {slim ? 'Play CBAT Games' : 'Continue Learning'}
               </Link>
             ) : slim ? (
-              <Link
-                to="/login?tab=register"
-                className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
-                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
+              <a
+                href="/cbat"
+                data-testid="landing-primary-cbat-cta"
+                className="relative z-10 inline-flex min-h-14 cursor-pointer touch-manipulation select-none items-center justify-center bg-brand-600 hover:bg-brand-700 active:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-[background-color,box-shadow] hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-400"
+                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)', WebkitTapHighlightColor: 'rgba(91,170,255,0.2)' }}
               >
                 Start Practising Free →
-              </Link>
+              </a>
             ) : (
               <button
                 onClick={() => setShowOnboarding(true)}

@@ -15,6 +15,7 @@ import { useUiTheme } from '../useUiTheme'
 describe('useUiTheme', () => {
   beforeEach(() => {
     authRef.user = null
+    localStorage.clear()
     document.documentElement.removeAttribute('data-theme')
   })
 
@@ -22,6 +23,13 @@ describe('useUiTheme', () => {
     const { result } = renderHook(() => useUiTheme())
     expect(result.current).toBe('skywatch')
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
+  })
+
+  it('restores a guest theme saved on this device', () => {
+    localStorage.setItem('skywatch.guestUiTheme', 'cbat')
+    const { result } = renderHook(() => useUiTheme())
+    expect(result.current).toBe('cbat')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('cbat')
   })
 
   it('stamps the saved Real CBAT theme for a signed-in user', () => {

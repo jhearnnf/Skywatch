@@ -122,13 +122,11 @@ describe('Landing — slim (CBAT-only) mode', () => {
     expect(card.textContent.match(/Start/gi) ?? []).toHaveLength(1)
   })
 
-  it('points the signup CTAs at register (not the RAF onboarding flow)', () => {
+  it('opens the guest CBAT menu from the primary CTA and keeps the closing signup CTA', () => {
     render(<Landing />)
+    expect(screen.getByTestId('landing-primary-cbat-cta').getAttribute('href')).toBe('/cbat')
     const ctas = screen.getAllByText('Start Practising Free →')
-    expect(ctas.length).toBeGreaterThan(0)
-    for (const cta of ctas) {
-      expect(cta.closest('a').getAttribute('href')).toBe('/login?tab=register')
-    }
+    expect(ctas.some(cta => cta.closest('a')?.getAttribute('href') === '/login?tab=register')).toBe(true)
   })
 })
 

@@ -6,11 +6,12 @@ import TopBar from '../../components/layout/TopBar'
 
 const mockNavigate = vi.hoisted(() => vi.fn())
 const mockUseAuth  = vi.hoisted(() => vi.fn())
+const mockLocation = vi.hoisted(() => ({ state: null, pathname: '/', search: '', hash: '' }))
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate, useLocation: () => ({ state: null, pathname: '/', search: '', hash: '' }),
+  useNavigate: () => mockNavigate, useLocation: () => mockLocation,
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 
@@ -42,6 +43,8 @@ function setupAuth(userOverrides) {
 
 describe('TopBar — airstar display', () => {
   beforeEach(() => {
+    localStorage.clear()
+    mockLocation.pathname = '/'
     setupAuth({})
     mockNavigate.mockClear()
   })
@@ -125,6 +128,31 @@ describe('TopBar — airstar display', () => {
     setupAuth(null)
     render(<TopBar />)
     expect(screen.getByText('Sign In')).toBeDefined()
+  })
+
+  it('shows guests the theme controls', () => {
+    setupAuth(null)
+    render(<TopBar />)
+    expect(screen.getByRole('button', { name: 'Real CBAT' })).toBeDefined()
+    expect(screen.getByTestId('theme-hold-switch')).toBeDefined()
+  })
+
+  it('points out the theme control on a guest\'s first public game', () => {
+    setupAuth(null)
+    mockLocation.pathname = '/cbat/target'
+    render(<TopBar />)
+    expect(screen.getAllByText('Try the Real CBAT theme')).toHaveLength(2)
+    fireEvent.click(screen.getAllByLabelText('Dismiss theme hint')[0])
+    expect(localStorage.getItem('skywatch.guestThemeHintSeen')).toBe('1')
+    expect(screen.queryByText('Try the Real CBAT theme')).toBeNull()
+  })
+
+  it('does not show the game hint after a guest has chosen a theme', () => {
+    setupAuth(null)
+    mockLocation.pathname = '/cbat/ant'
+    localStorage.setItem('skywatch.guestUiTheme', 'cbat')
+    render(<TopBar />)
+    expect(screen.queryByText('Try the Real CBAT theme')).toBeNull()
   })
 
   it('does not show streak or airstars badges when no user', () => {

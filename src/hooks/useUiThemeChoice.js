@@ -2,9 +2,10 @@ import { useCallback, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { resolveUiTheme } from '../lib/uiTheme'
 import { useCbatGameInProgress } from './useCbatGameInProgress'
+import { useGuestUiTheme } from './useGuestUiTheme'
 
-// Choosing the account's theme, shared by the desktop selector and the
-// phone's hold-to-switch control.
+// Choosing a theme, shared by the desktop selector and phone hold control.
+// Accounts save to the API; guests save locally on their current device.
 //
 // Applied optimistically: the user's local `uiTheme` flips first so the whole
 // page re-skins at once, then the PATCH makes it stick. A failed save puts the
@@ -20,12 +21,19 @@ import { useCbatGameInProgress } from './useCbatGameInProgress'
 // theme), so `choose` refuses and the controls show why.
 export function useUiThemeChoice({ onRevert } = {}) {
   const { user, setUser, API, apiFetch } = useAuth()
+  const [guestTheme, setGuestTheme] = useGuestUiTheme()
   const [busy, setBusy] = useState(false)
-  const current = resolveUiTheme(user)
+  const current = user ? resolveUiTheme(user) : guestTheme
   const locked = useCbatGameInProgress()
 
   const choose = useCallback(async (theme, { apply } = {}) => {
     if (busy || locked || theme === current) return false
+    if (!user) {
+      const commit = () => setGuestTheme(theme)
+      if (apply) await apply(commit)
+      else commit()
+      return true
+    }
     const previous = current
     setBusy(true)
     const commit = () => setUser(prev => (prev ? { ...prev, uiTheme: theme } : prev))
@@ -51,7 +59,7 @@ export function useUiThemeChoice({ onRevert } = {}) {
     } finally {
       setBusy(false)
     }
-  }, [busy, locked, current, setUser, apiFetch, API, onRevert])
+  }, [busy, locked, current, user, setGuestTheme, setUser, apiFetch, API, onRevert])
 
   return { user, current, busy, locked, choose }
 }

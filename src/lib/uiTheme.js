@@ -9,6 +9,28 @@ import { UI_THEMES, DEFAULT_UI_THEME, UI_THEME_LABELS, UI_THEME_TAGLINES } from 
 export { UI_THEMES, DEFAULT_UI_THEME, UI_THEME_LABELS, UI_THEME_TAGLINES }
 
 export const THEME_ATTR = 'data-theme'
+export const GUEST_UI_THEME_KEY = 'skywatch.guestUiTheme'
+export const GUEST_UI_THEME_EVENT = 'skywatch:guest-ui-theme'
+
+export function readGuestUiTheme(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+  try {
+    const theme = storage?.getItem(GUEST_UI_THEME_KEY)
+    return UI_THEMES.includes(theme) ? theme : DEFAULT_UI_THEME
+  } catch {
+    return DEFAULT_UI_THEME
+  }
+}
+
+export function hasGuestUiThemeChoice(storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+  try { return UI_THEMES.includes(storage?.getItem(GUEST_UI_THEME_KEY)) } catch { return false }
+}
+
+export function saveGuestUiTheme(theme, storage = typeof localStorage !== 'undefined' ? localStorage : null) {
+  const resolved = UI_THEMES.includes(theme) ? theme : DEFAULT_UI_THEME
+  try { storage?.setItem(GUEST_UI_THEME_KEY, resolved) } catch { /* storage may be unavailable */ }
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(GUEST_UI_THEME_EVENT, { detail: resolved }))
+  return resolved
+}
 
 // The theme an account resolves to. Anything unknown (older cached user, a
 // theme retired later) falls back to the default rather than leaving the page

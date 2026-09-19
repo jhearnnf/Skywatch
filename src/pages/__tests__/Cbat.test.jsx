@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Cbat, { CBAT_GAMES } from '../Cbat'
 import { formatEstTime, formatEstTimeCompact, shortTitle, CBAT_SHORT_TITLES } from '../../data/cbatGames'
 
@@ -8,13 +8,16 @@ import { formatEstTime, formatEstTimeCompact, shortTitle, CBAT_SHORT_TITLES } fr
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
 const mockNavigate = vi.hoisted(() => vi.fn())
+const mockLocation = vi.hoisted(() => ({ pathname: '/cbat', search: '', state: null }))
+
+afterEach(() => { mockLocation.state = null })
 
 vi.mock('react-router-dom', () => ({
   // Spread the rest so contextmenu/touch/click handlers reach the anchor.
   Link: ({ children, to, ...rest }) => <a href={to} {...rest}>{children}</a>,
   useNavigate: () => mockNavigate,
   // RecentCbatScores reads it to build the "back to" it hands the CBAT history.
-  useLocation: () => ({ pathname: '/cbat', search: '' }),
+  useLocation: () => mockLocation,
 }))
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
@@ -140,6 +143,8 @@ describe('CBAT_GAMES data', () => {
 describe('Cbat page — background images', () => {
   beforeEach(() => {
     mockUseAuth.mockReset()
+    mockNavigate.mockReset()
+    mockLocation.state = null
   })
 
   it('renders a bg image element for every game that has art', () => {
@@ -222,6 +227,14 @@ describe('Cbat page — background images', () => {
 
     const locked = CBAT_GAMES.filter(g => !['target', 'ant', 'symbols', 'code-duplicates'].includes(g.key))
     for (const game of locked) expect(screen.getByText(game.title).closest('a')).toBeNull()
+  })
+
+  it('emphasises the unlock prompt when a guest selected a locked landing-page game', () => {
+    mockUseAuth.mockReturnValue({ user: null })
+    mockLocation.state = { highlightGuestUnlock: true }
+    render(<Cbat />)
+    expect(screen.getByTestId('guest-unlock-prompt').className).toContain('border-brand-300')
+    expect(mockNavigate).toHaveBeenCalledWith('/cbat', { replace: true, state: null })
   })
 })
 
