@@ -1,8 +1,16 @@
+const { SHIMMER_BAR_STYLE } = require('./emailHero');
+
 // Shared HTML shell for transactional emails. Each mailer passes only the
 // variable parts (heading, subtitle, body, optional middle block, CTA, footer)
 // and this builder produces the surrounding layout (blue accent bar, card,
 // "Classified Transmission" header).
-function buildEmailHTML({ heading, subtitle = '', body = '', middle = '', ctaText, ctaUrl, footer }) {
+//
+// `hero` is an optional block of table rows painted above the accent bar and
+// `headCss` goes into a <style> in the head — together they carry the animated
+// header the questionnaire uses (see emailHero.js). `animatedBar` swaps the
+// static accent gradient for the shimmering one. All three default to off so
+// every existing mailer renders exactly as before.
+function buildEmailHTML({ heading, subtitle = '', body = '', middle = '', ctaText, ctaUrl, footer, hero = '', headCss = '', animatedBar = false }) {
   const subtitleHtml = subtitle
     ? `
           <p style="font-size:13px;color:#94a3b8;letter-spacing:0.04em;margin:0 0 28px;">
@@ -27,15 +35,20 @@ function buildEmailHTML({ heading, subtitle = '', body = '', middle = '', ctaTex
             ${ctaText}
           </a>\n`
     : '';
+  const styleHtml = headCss ? `<style type="text/css">${headCss}</style>` : '';
+  const barClass  = animatedBar ? ' class="sw-bar"' : '';
+  const barStyle  = animatedBar
+    ? SHIMMER_BAR_STYLE
+    : 'background:linear-gradient(90deg,#1d4ed8 0%,#3b82f6 100%);';
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">${styleHtml}</head>
 <body style="margin:0;padding:0;background:#f4f8ff;font-family:Arial,Helvetica,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f8ff;padding:48px 20px;">
     <tr><td align="center">
       <table width="100%" style="max-width:520px;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;overflow:hidden;">
-
-        <tr><td style="background:linear-gradient(90deg,#1d4ed8 0%,#3b82f6 100%);height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
+${hero}
+        <tr><td${barClass} style="${barStyle}height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>
 
         <tr><td style="padding:40px 36px;">
 
