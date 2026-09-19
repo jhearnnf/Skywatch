@@ -119,6 +119,21 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.totalUsers).toBe(3);
   });
 
+  it('counts users who currently have an upcoming CBAT group date', async () => {
+    const admin = await createAdminUser();
+    await createUser({ upcomingCbatDate: new Date('2026-10-12T00:00:00.000Z') });
+    await createUser({ upcomingCbatDate: new Date('2026-10-12T00:00:00.000Z') });
+    await createUser({ upcomingCbatDate: null });
+    await createUser();
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.users.cbatDateUsers).toBe(2);
+  });
+
   it('counts online users as those with lastSeen within 10 minutes (matches the Users-page dots)', async () => {
     const admin  = await createAdminUser();
     const recent = new Date(Date.now() - 2 * 60 * 1000);  // 2 min ago — green/live

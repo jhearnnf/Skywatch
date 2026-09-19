@@ -102,7 +102,7 @@ const MESSAGES = [
 
 // Routes the component's fetches. `overrides` swaps one response without having
 // to restate the rest.
-function stubFetch({ lounge = LOUNGE, loungeStatus = 200, messages = MESSAGES, senders = {}, onPost } = {}) {
+function stubFetch({ lounge = LOUNGE, loungeStatus = 200, group = { configured: false, applicable: true, regionAvailable: true }, messages = MESSAGES, senders = {}, onPost } = {}) {
   const json = (status, data) => Promise.resolve({
     ok: status < 400,
     status,
@@ -111,6 +111,12 @@ function stubFetch({ lounge = LOUNGE, loungeStatus = 200, messages = MESSAGES, s
   const fetchMock = vi.fn((url, opts) => {
     // A function lets a test change the answer between calls, which is how the
     // display-name gate behaves: refused before the name is set, allowed after.
+    if (String(url).includes('/api/chat/cbat-groups')) {
+      return json(200, group)
+    }
+    if (String(url).includes('/api/chat/cbat-group')) {
+      return json(200, group)
+    }
     if (String(url).includes('/api/chat/lounge')) {
       return json(loungeStatus, typeof lounge === 'function' ? lounge() : lounge)
     }
@@ -215,6 +221,33 @@ describe('closed', () => {
       _id: 'm2', senderUserId: 'u1', senderDisplayName: 'Falcon', body: 'hello', mentions: [],
     })
     await waitFor(() => expect(screen.queryByLabelText('New messages')).toBeNull())
+  })
+})
+
+describe('private CBAT group', () => {
+  it('shows the date form instead of remaining on Loading when no date is configured', async () => {
+    stubFetch()
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    expect(await screen.findByLabelText('Upcoming CBAT date')).toBeTruthy()
+    expect(screen.queryByText('Loading…')).toBeNull()
+  })
+
+  it('does not offer a new date after the user has passed', async () => {
+    stubFetch({ group: { configured: false, applicable: false, regionAvailable: true } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    expect(await screen.findByText(/already passed your CBAT/i)).toBeTruthy()
+    expect(screen.queryByLabelText('Upcoming CBAT date')).toBeNull()
+  })
+
+  it('gives admins an all-groups list with total and red unread counts', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    stubFetch({ group: { groups: [{ conversationId: 'c1', date: '2099-10-14', region: 'GB', messageCount: 12, unread: 3 }] } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'All groups' }))
+    expect(await screen.findByText('12 messages')).toBeTruthy()
+    expect(screen.getByText('3').className).toContain('bg-red-500')
   })
 })
 

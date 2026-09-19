@@ -76,6 +76,12 @@ const chatConversationSchema = new mongoose.Schema({
     // day and train people to ignore it — which would cost the dot its meaning
     // everywhere else, not just here.
     notifyMembers: { type: Boolean, default: true },
+
+    audience:     { type: String, enum: ['public', 'cbat-cohort'], default: 'public' },
+    cohortKey:    { type: String, default: null },
+    cohortDate:   { type: String, default: null },
+    cohortRegion: { type: String, default: null },
+
   },
 
   // Archiving hides a channel from users while keeping every message readable
@@ -123,6 +129,15 @@ chatConversationSchema.index(
     unique: true,
     name: 'uniq_open_support_per_user',
     partialFilterExpression: { status: 'open', type: 'support' },
+  },
+);
+
+chatConversationSchema.index(
+  { 'channel.cohortKey': 1 },
+  {
+    unique: true,
+    name: 'uniq_cbat_cohort',
+    partialFilterExpression: { type: 'channel', 'channel.audience': 'cbat-cohort' },
   },
 );
 

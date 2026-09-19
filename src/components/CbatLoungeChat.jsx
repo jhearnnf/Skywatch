@@ -204,6 +204,12 @@ export default function CbatLoungeChat({ open, onToggle }) {
   // The offset of an "@" the user dismissed with Escape, so it stays dismissed
   // until they start a different mention.
   const [mentionDismissed, setMentionDismissed] = useState(null)
+  const [room, setRoom] = useState('lounge')
+  const [dateChoice, setDateChoice] = useState('')
+  const [confirmingDate, setConfirmingDate] = useState(false)
+  const [dateBusy, setDateBusy] = useState(false)
+  const [dateError, setDateError] = useState('')
+  const [adminGroupId, setAdminGroupId] = useState(null)
 
   const scrollRef = useRef(null)
   const inputRef  = useRef(null)
@@ -263,6 +269,24 @@ export default function CbatLoungeChat({ open, onToggle }) {
 
   const conversationId = lounge?.conversationId ?? null
   const enabled = Boolean(user) && settings?.chatEnabled !== false
+  const roomEndpoint = room === 'group'
+    ? '/api/chat/cbat-group'
+    : room === 'groups'
+      ? (adminGroupId ? `/api/chat/cbat-groups/${adminGroupId}` : '/api/chat/cbat-groups')
+      : '/api/chat/lounge'
+
+  const changeRoom = useCallback((next) => {
+    if (next === room) return
+    setRoom(next)
+    setLounge(null)
+    setMessages([])
+    setSenders({})
+    setLoading(true)
+    setGone(false)
+    setErr('')
+    setHasNew(false)
+    if (next !== 'groups') setAdminGroupId(null)
+  }, [room])
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -277,7 +301,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
   useEffect(() => {
     if (!enabled) return
     let cancelled = false
-    get('/api/chat/lounge').then(({ ok, status, data }) => {
+    get(roomEndpoint).then(({ ok, status, data }) => {
       if (cancelled) return
       // 404 means an admin archived or deleted the room. The widget simply does
       // not appear; the hub carries on without it.
@@ -285,9 +309,32 @@ export default function CbatLoungeChat({ open, onToggle }) {
       setLounge(data)
       setHasNew(Boolean(data.unread))
       setNeedsName(Boolean(data.displayNameRequired))
+      // Setup and admin-list responses intentionally have no conversation, so
+      // no message request will come along later to clear this state.
+      if (!data.conversationId) setLoading(false)
     }).catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [enabled, get, loungeReload])
+  }, [enabled, get, loungeReload, roomEndpoint])
+
+  const saveCbatDate = async () => {
+    setDateBusy(true)
+    setDateError('')
+    try {
+      const response = await fetch(`${API}/api/chat/cbat-group`, {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateChoice }),
+      })
+      const json = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(json.message || 'Could not save your CBAT date.')
+      setLounge(json.data)
+      setConfirmingDate(false)
+      setLoading(false)
+    } catch (error) {
+      setDateError(error.message)
+    } finally {
+      setDateBusy(false)
+    }
+  }
 
   // How busy the site has been lately, shown under the lounge header. Refreshed
   // on a slow timer rather than with the messages: the numbers move over days,
@@ -720,18 +767,31 @@ export default function CbatLoungeChat({ open, onToggle }) {
   const showMentionPicker = Boolean(mention) && mention.start !== mentionDismissed
 
   return (
-    <div ref={setPanelEl} className="flex-[2] min-h-0 mt-3 flex flex-col bg-game-panel border border-game-line rounded-xl overflow-hidden">
+    <div
+      ref={setPanelEl}
+      className="flex-[2] min-h-0 mt-3 flex flex-col bg-game-panel border border-game-line rounded-xl overflow-hidden shadow-[0_18px_50px_rgba(2,8,23,0.14)]"
+    >
       <div className="shrink-0 px-4 py-3 border-b border-game-line flex items-center gap-2">
-        <p className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">
-          {lounge?.title ?? '🛩️ CBAT Lounge'}
-        </p>
-        <Link
-          to="/chat"
+        <div className="relative flex rounded-xl bg-surface p-1 border border-game-line shadow-inner" role="tablist" aria-label="CBAT chats">
+          <span
+            aria-hidden="true"
+            className="absolute top-1 bottom-1 rounded-lg bg-brand-600 shadow-[0_6px_18px_rgba(37,99,235,0.28)] transition-transform duration-500 ease-[cubic-bezier(.22,1,.36,1)]"
+            style={{
+              width: user?.isAdmin ? 'calc(33.333% - 2.67px)' : 'calc(50% - 2px)',
+              transform: `translateX(${room === 'groups' ? 200 : room === 'group' ? 100 : 0}%)`,
+            }}
+          />
+          {['lounge', 'group', ...(user?.isAdmin ? ['groups'] : [])].map(key => (
+            <button key={key} type="button" role="tab" aria-selected={room === key} onClick={() => changeRoom(key)} className={`relative z-10 px-2.5 py-1 text-[10px] font-extrabold tracking-wide transition-colors duration-300 ${room === key ? 'text-white' : 'text-slate-500 hover:text-brand-600'}`}>
+              {key === 'lounge' ? 'Lounge' : key === 'group' ? 'My group' : 'All groups'}
+            </button>
+          ))}
+        </div>
+        {room !== 'lounge' && lounge?.conversationId && <Link
+          to={`/chat/${lounge.conversationId}`}
           className="text-[10px] text-slate-500 no-underline hover:text-brand-600 hover:underline underline-offset-2 transition-colors"
-          title="Open the full chat in Community"
-        >
-          Community
-        </Link>
+          title="Open this group in Community"
+        >Community</Link>}
         <button
           type="button"
           onClick={() => onToggle(false)}
@@ -743,7 +803,97 @@ export default function CbatLoungeChat({ open, onToggle }) {
         </button>
       </div>
 
-      <ActivityStrip activity={activity} />
+      {room === 'group' && lounge?.configured && (
+        <div className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.75)]" aria-hidden="true" />
+          <p className="text-[10px] font-bold text-game-text">
+            {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${lounge.date}T00:00:00Z`))}
+          </p>
+          <p className="ml-auto text-[9px] text-slate-500">Private to this date + region</p>
+        </div>
+      )}
+
+      {room === 'groups' && lounge?.configured && (
+        <button type="button" onClick={() => { setAdminGroupId(null); setLounge(null); setMessages([]); setLoading(true) }} className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2 text-left hover:bg-brand-500/10 transition-colors">
+          <span className="text-brand-500" aria-hidden="true">←</span>
+          <span className="text-[10px] font-bold text-game-text">All CBAT groups</span>
+          <span className="ml-auto text-[9px] text-slate-500">{lounge.date} · {lounge.region}</span>
+        </button>
+      )}
+
+      {room === 'groups' && lounge?.configured && lounge.members && (
+        <div className="shrink-0 border-b border-game-line px-3 py-2 bg-surface/50">
+          <p className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 mb-1.5">
+            Members · {lounge.members.length}
+          </p>
+          <div className="max-h-20 overflow-y-auto flex flex-wrap gap-1.5">
+            {lounge.members.length === 0 ? (
+              <span className="text-[10px] text-slate-500">No members currently assigned.</span>
+            ) : lounge.members.map(member => (
+              <button key={member._id} type="button" onClick={() => setCardUserId(String(member._id))} className="rounded-full border border-game-line bg-game-panel px-2 py-1 text-[10px] font-bold text-game-text hover:border-brand-400 hover:text-brand-500 transition-colors">
+                {member.displayName || `Agent #${member.agentNumber || '—'}`}{member.cbatPassed ? ' · Passed' : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {room === 'groups' && !loading && lounge?.groups ? (
+        <div className="cbat-room-enter flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+          {lounge.groups.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-8">No CBAT groups have been created yet.</p>
+          ) : lounge.groups.map(group => (
+            <button key={group.conversationId} type="button" onClick={() => { setAdminGroupId(group.conversationId); setLounge(null); setLoading(true) }} className="w-full rounded-xl border border-game-line bg-surface/70 px-3 py-2.5 flex items-center gap-3 text-left hover:border-brand-400 hover:bg-brand-500/[0.06] hover:-translate-y-px transition-all">
+              <span className="w-9 h-9 rounded-xl grid place-items-center bg-brand-500/10 text-brand-500">✈</span>
+              <span className="min-w-0">
+                <span className="block text-xs font-extrabold text-game-text">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}</span>
+                <span className="block text-[10px] text-slate-500">Region {group.region}</span>
+              </span>
+              <span className="ml-auto text-[10px] text-slate-500">{group.messageCount} messages</span>
+              {group.unread > 0 && <span className="min-w-5 h-5 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[9px] font-black shadow-[0_0_12px_rgba(239,68,68,.45)]">{group.unread}</span>}
+            </button>
+          ))}
+        </div>
+      ) : room === 'group' && !loading && lounge && lounge.applicable === false ? (
+        <div className="cbat-room-enter flex-1 min-h-0 px-6 py-8 flex flex-col items-center justify-center text-center">
+          <div className="w-12 h-12 rounded-2xl grid place-items-center bg-emerald-500/10 text-emerald-500 text-xl mb-4">✓</div>
+          <h3 className="text-base font-black text-game-text">You’ve already passed your CBAT</h3>
+          <p className="text-xs text-slate-500 mt-2 max-w-xs">Upcoming-date groups are for applicants preparing to attend. If a CBAT date was previously recorded for you, your original group will appear here automatically.</p>
+        </div>
+      ) : room === 'group' && !loading && lounge && !lounge.configured ? (
+        <div key="group-setup" className="cbat-room-enter flex-1 min-h-0 overflow-y-auto relative px-5 py-6 flex flex-col justify-center">
+          <div aria-hidden="true" className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_80%_10%,rgba(59,130,246,.18),transparent_42%),radial-gradient(circle_at_10%_90%,rgba(99,102,241,.12),transparent_38%)]" />
+          <div className="relative mx-auto w-full max-w-sm">
+            <div className="w-12 h-12 mb-4 rounded-2xl grid place-items-center text-xl bg-brand-600 text-white shadow-[0_12px_30px_rgba(37,99,235,.32)]">✈</div>
+            <p className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-brand-500 mb-2">Private CBAT group</p>
+            <h3 className="text-lg font-black text-game-text leading-tight mb-2">Meet applicants attending with you.</h3>
+            <p className="text-xs leading-relaxed text-slate-500 mb-5">Enter your upcoming CBAT date to join people with the same date in your region. Your date is only visible to people in that private group.</p>
+            {!lounge.regionAvailable ? (
+              <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-xs text-amber-600">We could not determine your region yet. Refresh the app, then return here.</p>
+            ) : !confirmingDate ? (
+              <div className="space-y-3">
+                <label className="block text-[11px] font-bold text-slate-500" htmlFor="upcoming-cbat-date">Upcoming CBAT date</label>
+                <input id="upcoming-cbat-date" type="date" min={new Date().toISOString().slice(0, 10)} value={dateChoice} onChange={e => { setDateChoice(e.target.value); setDateError('') }} className="w-full rounded-xl bg-surface border border-game-line px-3 py-2.5 text-sm text-game-text outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 transition-all" />
+                <p className="text-[11px] text-slate-500">Choose carefully — you cannot change this date after confirming.</p>
+                <button type="button" disabled={!dateChoice} onClick={() => setConfirmingDate(true)} className="w-full rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-xs font-extrabold py-2.5 shadow-[0_10px_24px_rgba(37,99,235,.22)] transition-all hover:-translate-y-0.5 active:translate-y-0">Continue</button>
+              </div>
+            ) : (
+              <div className="cbat-room-enter rounded-2xl border border-brand-400/30 bg-surface/80 backdrop-blur px-4 py-4 shadow-xl">
+                <p className="text-xs text-slate-500">Confirm your CBAT date</p>
+                <p className="text-xl font-black text-game-text my-1">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${dateChoice}T00:00:00Z`))}</p>
+                <p className="text-[11px] font-semibold text-amber-600 mb-4">This cannot be changed after you confirm.</p>
+                <div className="flex gap-2">
+                  <button type="button" disabled={dateBusy} onClick={() => setConfirmingDate(false)} className="flex-1 rounded-xl border border-game-line py-2 text-xs font-bold text-slate-500 hover:border-brand-400 transition-colors">Back</button>
+                  <button type="button" disabled={dateBusy} onClick={saveCbatDate} className="flex-[1.5] rounded-xl bg-brand-600 py-2 text-xs font-extrabold text-white shadow-[0_10px_24px_rgba(37,99,235,.25)] transition-all hover:-translate-y-0.5 disabled:opacity-50">{dateBusy ? 'Joining…' : 'Confirm & join'}</button>
+                </div>
+              </div>
+            )}
+            {dateError && <p className="mt-3 text-xs text-red-400">{dateError}</p>}
+          </div>
+        </div>
+      ) : <div key={room} className={`${room === 'group' ? 'cbat-room-enter-right' : 'cbat-room-enter-left'} flex-1 min-h-0 flex flex-col`}>
+
+      {room === 'lounge' && <ActivityStrip activity={activity} />}
 
       <div
         ref={scrollRef}
@@ -1093,6 +1243,7 @@ export default function CbatLoungeChat({ open, onToggle }) {
           onBlockChanged={() => { loadMessages().catch(() => {}) }}
         />
       )}
+      </div>}
     </div>
   )
 }

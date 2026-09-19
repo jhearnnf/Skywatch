@@ -154,6 +154,13 @@ const userSchema = new mongoose.Schema(
     // or leaderboard.
     cbatDate: { type: Date, default: null },
 
+    // Immutable member-facing cohort selection, separate from the admin's
+    // research date above. Region is snapshotted when the date is confirmed.
+    upcomingCbatDate:          { type: Date, default: null },
+    upcomingCbatRegion:        { type: String, trim: true, uppercase: true, default: null },
+    upcomingCbatDateLockedAt:  { type: Date, default: null },
+    upcomingCbatDateRemovedAt: { type: Date, default: null },
+
     // Screenshots of the user's real CBAT score sheet. These are the evidence
     // behind `cbatPassed` — a sheet shows the actual battery scores, which
     // nothing in the app can otherwise know and which is what the Aptitude

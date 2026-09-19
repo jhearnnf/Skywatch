@@ -778,6 +778,16 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
               : 'no accounts yet'}
           />
         </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
+          <StatCard
+            label="CBAT Dates Entered"
+            value={fmtNum(users.cbatDateUsers ?? 0)}
+            color="brand"
+            sub={users.totalUsers
+              ? `${pct(users.cbatDateUsers ?? 0, users.totalUsers)} of all accounts`
+              : 'no accounts yet'}
+          />
+        </div>
         {/* The tier trio opens this row in reading order: Free, Trial, Paying Subscribers. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard label="Free"             value={fmtNum(users.freeUsers)}         color="slate"   {...slimStat} />
@@ -4651,6 +4661,7 @@ function describeCbatDate(iso) {
 function UserCbatDateRow({ u, API, apiFetch, onChange, onToast }) {
   const [value, setValue]   = useState(() => toDateInput(u.cbatDate))
   const [saving, setSaving] = useState(false)
+  const [removingGroupDate, setRemovingGroupDate] = useState(false)
 
   const saved = toDateInput(u.cbatDate)
   const dirty = value !== saved
@@ -4673,6 +4684,24 @@ function UserCbatDateRow({ u, API, apiFetch, onChange, onToast }) {
       onToast(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function removeGroupDate() {
+    if (!window.confirm('Remove this locked upcoming CBAT date? The user will leave that private group and may choose a new date.')) return
+    setRemovingGroupDate(true)
+    try {
+      const res = await apiFetch(`${API}/api/admin/users/${u._id}/upcoming-cbat-date`, {
+        method: 'DELETE', credentials: 'include',
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.message || 'Could not remove the group date')
+      onChange({ upcomingCbatDate: null, upcomingCbatRegion: null, upcomingCbatDateLockedAt: null })
+      onToast('Upcoming CBAT group date removed')
+    } catch (err) {
+      onToast(err.message)
+    } finally {
+      setRemovingGroupDate(false)
     }
   }
 
@@ -4713,6 +4742,17 @@ function UserCbatDateRow({ u, API, apiFetch, onChange, onToast }) {
           <span className="text-xs text-slate-400">{describeCbatDate(u.cbatDate)}</span>
         )}
       </form>
+      {u.upcomingCbatDate && (
+        <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+          <div className="mr-auto">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Locked group date</p>
+            <p className="text-xs text-slate-600 mt-0.5">{fmtCbatDate(u.upcomingCbatDate)} · {u.upcomingCbatRegion || 'Unknown region'}</p>
+          </div>
+          <button type="button" onClick={removeGroupDate} disabled={removingGroupDate} className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors disabled:opacity-40">
+            {removingGroupDate ? 'Removing…' : 'Remove group date'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

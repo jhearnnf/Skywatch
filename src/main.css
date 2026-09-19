@@ -3622,3 +3622,23 @@ body.play-mode .card-shadow {
   transform-origin: center;
   animation: cf-hotspot-pulse 1.8s ease-out infinite;
 }
+@keyframes cbat-room-enter {
+  from { opacity: 0; transform: translate3d(18px, 0, 0) scale(.992); filter: blur(3px); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+}
+
+@keyframes cbat-room-enter-left {
+  from { opacity: 0; transform: translate3d(-18px, 0, 0) scale(.992); filter: blur(3px); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); filter: blur(0); }
+}
+
+.cbat-room-enter {
+  animation: cbat-room-enter 420ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.cbat-room-enter-right { animation: cbat-room-enter 420ms cubic-bezier(.22, 1, .36, 1) both; }
+.cbat-room-enter-left { animation: cbat-room-enter-left 420ms cubic-bezier(.22, 1, .36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cbat-room-enter, .cbat-room-enter-right, .cbat-room-enter-left { animation: none; }
+}

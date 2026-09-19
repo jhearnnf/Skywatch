@@ -451,7 +451,7 @@ router.get('/stats', async (_req, res) => {
     const passThresholdMedium = settings.passThresholdMedium ?? 60;
 
     const [
-      totalUsers, onlineUsers, activeUsers, freeUsers, trialUsers, silverUsers, goldUsers,
+      totalUsers, cbatDateUsers, onlineUsers, activeUsers, freeUsers, trialUsers, silverUsers, goldUsers,
       easyPlayers, mediumPlayers,
       androidAppUsers,
       cbatThemeUsers,
@@ -478,6 +478,10 @@ router.get('/stats', async (_req, res) => {
       affiliateCounts,
     ] = await Promise.all([
       User.countDocuments(),
+      // A non-null upcoming date is the source of truth for membership of a
+      // date-and-region CBAT group. Dates removed by an admin are cleared, so
+      // those accounts automatically fall back out of this total.
+      User.countDocuments({ upcomingCbatDate: { $ne: null } }),
       // Same window as GET /api/chat/presence, from one constant — this tile and
       // the community rail's presence strip must never report different numbers.
       User.countDocuments({ lastSeen: { $gte: new Date(Date.now() - PRESENCE_WINDOW_MS) } }),
@@ -669,7 +673,7 @@ router.get('/stats', async (_req, res) => {
       status: 'success',
       data: {
         users: {
-          totalUsers, onlineUsers, activeUsers, freeUsers, trialUsers,
+          totalUsers, cbatDateUsers, onlineUsers, activeUsers, freeUsers, trialUsers,
           subscribedUsers: silverUsers + goldUsers,
           easyPlayers, mediumPlayers,
           androidAppUsers,
@@ -1859,6 +1863,32 @@ router.patch('/users/:id/cbat-date', async (req, res) => {
     );
     if (!updated) return res.status(404).json({ message: 'User not found.' });
     res.json({ status: 'success', data: { cbatDate: updated.cbatDate } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Remove the member-facing locked cohort date and let the user choose again.
+// The research cbatDate is left alone; the marker prevents its legacy backfill
+// from immediately recreating the group choice.
+router.delete('/users/:id/upcoming-cbat-date', async (req, res) => {
+  try {
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: {
+        upcomingCbatDate: null,
+        upcomingCbatRegion: null,
+        upcomingCbatDateLockedAt: null,
+        upcomingCbatDateRemovedAt: new Date(),
+      } },
+      { returnDocument: 'after' },
+    );
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+    res.json({ status: 'success', data: {
+      upcomingCbatDate: null,
+      upcomingCbatRegion: null,
+      upcomingCbatDateLockedAt: null,
+    } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

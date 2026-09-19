@@ -31,6 +31,96 @@ const { overDailyBudget, noteBotSpend } = require('../utils/chatBotBudget');
 const BOT_KNOWLEDGE_SLUG = 'cbat-guide';
 
 const POST_POLICIES = ['everyone', 'admin', 'bot'];
+const CBAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const userCbatDateKey = (user) => user?.upcomingCbatDate
+  ? new Date(user.upcomingCbatDate).toISOString().slice(0, 10)
+  : null;
+
+async function ensureCbatCohort(dateKey, region) {
+  const cohortKey = `${dateKey}:${region}`;
+  const readableDate = new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(`${dateKey}T00:00:00.000Z`));
+  return ChatConversation.findOneAndUpdate(
+    { type: 'channel', 'channel.cohortKey': cohortKey },
+    {
+      $setOnInsert: {
+        type: 'channel',
+        isArchived: false,
+        channel: {
+          name: `CBAT · ${readableDate}`,
+          slug: `cbat-${dateKey}-${region.toLowerCase()}`,
+          description: 'Private chat for applicants attending CBAT on the same date in the same region.',
+          emoji: '✈️',
+          order: 3,
+          postPolicy: 'everyone',
+          notifyMembers: false,
+          audience: 'cbat-cohort',
+          cohortKey,
+          cohortDate: dateKey,
+          cohortRegion: region,
+        },
+      },
+    },
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+  );
+}
+
+async function serializeCbatGroup(user) {
+  let date = userCbatDateKey(user);
+  let region = user?.upcomingCbatRegion ?? null;
+
+  // Existing admin-recorded dates predate this feature. Import them lazily so
+  // those users arrive in the correct room without having to enter it again.
+  // This intentionally accepts past dates: someone marked as having passed
+  // may still need access to the cohort they attended with.
+  const detectedRegion = String(user?.firstSeenCountry || user?.geo?.country || '').toUpperCase();
+  if (!date && user?.cbatDate && !user?.upcomingCbatDateRemovedAt && /^[A-Z]{2}$/.test(detectedRegion)) {
+    const imported = await User.findOneAndUpdate(
+      { _id: user._id, upcomingCbatDate: null, upcomingCbatDateRemovedAt: null },
+      {
+        $set: {
+          upcomingCbatDate: user.cbatDate,
+          upcomingCbatRegion: detectedRegion,
+          upcomingCbatDateLockedAt: new Date(),
+        },
+      },
+      { returnDocument: 'after' },
+    );
+    if (imported) {
+      user = imported;
+      date = userCbatDateKey(imported);
+      region = imported.upcomingCbatRegion;
+    }
+  }
+  if (!date || !region) {
+    return {
+      configured: false,
+      applicable: !user?.cbatPassed,
+      regionAvailable: Boolean(user?.firstSeenCountry || user?.geo?.country),
+    };
+  }
+  const convo = await ensureCbatCohort(date, region);
+  const readRow = await ChatRead.findOne({ userId: user._id, conversationId: convo._id }).lean();
+  const refusal = postRefusal(convo, user);
+  const code = refusal?.body?.code ?? null;
+  return {
+    configured: true,
+    date,
+    region,
+    conversationId: convo._id,
+    title: channelTitle(convo),
+    unread: Boolean(convo.messageCount)
+      && (!readRow || new Date(readRow.lastReadAt) < new Date(convo.lastMessageAt)),
+    lastMessageAt: convo.lastMessageAt,
+    canPost: !refusal,
+    displayNameRequired: code === 'DISPLAY_NAME_REQUIRED',
+    chatBanned: code === 'CHAT_BANNED',
+    postBlockedMessage: refusal && !code ? refusal.body.message : null,
+    botName: null,
+  };
+}
 
 // Fixed reaction set. Deliberately small: a picker people can scan beats an
 // emoji keyboard, and a whitelist keeps arbitrary text out of a channel whose
@@ -159,7 +249,17 @@ const SUPPORT_LABEL = 'SkyWatch Support';
 function canRead(convo, user) {
   if (!convo) return false;
   if (user.isAdmin) return true;
-  if (convo.type === 'channel') return !convo.isArchived;
+  if (convo.type === 'channel') {
+    if (convo.isArchived) return false;
+    if (convo.channel?.audience === 'cbat-cohort') {
+      const date = user.upcomingCbatDate
+        ? new Date(user.upcomingCbatDate).toISOString().slice(0, 10)
+        : null;
+      return date === convo.channel?.cohortDate
+        && user.upcomingCbatRegion === convo.channel?.cohortRegion;
+    }
+    return true;
+  }
   if (convo.type === 'dm') {
     return (convo.participantIds ?? []).some(id => String(id) === String(user._id));
   }
@@ -346,7 +446,19 @@ async function visibleConversations(user, { lean = true } = {}) {
   const blocked = blockedIds(user);
   const query = ChatConversation.find({
     $or: [
-      { type: 'channel', isArchived: false },
+      {
+        type: 'channel', isArchived: false,
+        $or: [
+          { 'channel.audience': { $ne: 'cbat-cohort' } },
+          {
+            'channel.audience': 'cbat-cohort',
+            'channel.cohortDate': user.upcomingCbatDate
+              ? new Date(user.upcomingCbatDate).toISOString().slice(0, 10)
+              : '__none__',
+            'channel.cohortRegion': user.upcomingCbatRegion ?? '__none__',
+          },
+        ],
+      },
       {
         type: 'dm',
         participantIds: blocked.length
@@ -600,6 +712,9 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
 // an unread flag.
 router.get('/overview', async (req, res) => {
   try {
+    // Resolve/import the viewer's cohort before loading visible conversations,
+    // so a newly created room is present in this same overview response.
+    const cbatGroupState = await serializeCbatGroup(req.user);
     const convos = await visibleConversations(req.user);
     const ids    = convos.map(c => c._id);
     const reads = await readMap(req.user._id, ids);
@@ -674,7 +789,7 @@ router.get('/overview', async (req, res) => {
       };
     };
 
-    const channels = convos
+    const channelRows = convos
       .filter(c => c.type === 'channel')
       .map(c => ({
         ...decorate(c),
@@ -688,8 +803,25 @@ router.get('/overview', async (req, res) => {
         // Derived, never stored: "not everyone can post here".
         adminOnly:   (c.channel?.postPolicy ?? 'everyone') !== 'everyone',
         notifyMembers: c.channel?.notifyMembers !== false,
+        audience:      c.channel?.audience ?? 'public',
       }))
       .sort((a, b) => (a.order - b.order) || a.name.localeCompare(b.name));
+
+    const channels = channelRows.filter(c => c.audience !== 'cbat-cohort');
+    const groups = channelRows.filter(c => c.audience === 'cbat-cohort');
+    if (!groups.length) {
+      groups.push({
+        _id: null,
+        title: 'My CBAT Group',
+        name: 'My CBAT Group',
+        emoji: '✈️',
+        setupRequired: true,
+        applicable: cbatGroupState.applicable !== false,
+        regionAvailable: cbatGroupState.regionAvailable !== false,
+        unread: false,
+        personalUnread: 0,
+      });
+    }
 
     const dms = convos
       .filter(c => c.type === 'dm')
@@ -757,6 +889,7 @@ router.get('/overview', async (req, res) => {
         adminOnly:   Boolean(g.adminOnly),
       })),
       channels,
+      groups,
       // A bot DM is listed under `bots`, not here — it is a tool, not a person
       // you are talking to, and mixing them would bury real conversations.
       dms: dms.filter(d => !convos.find(c => String(c._id) === String(d._id))?.botUserId),
@@ -814,6 +947,142 @@ router.get('/lounge', async (req, res) => {
       chatBanned:          code === 'CHAT_BANNED',
       postBlockedMessage:  refusal && !code ? refusal.body.message : null,
       botName:             bot?.displayName ?? null,
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// The private room paired with the public lounge. A member may choose once;
+// the immutable server-side write is the anti-room-hopping boundary, not the UI.
+router.get('/cbat-group', async (req, res) => {
+  try {
+    res.json({ status: 'success', data: await serializeCbatGroup(req.user) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/cbat-group', async (req, res) => {
+  try {
+    if (req.user.cbatPassed && !req.user.upcomingCbatDate) {
+      return res.status(403).json({
+        code: 'CBAT_ALREADY_PASSED',
+        message: 'Upcoming CBAT groups are not available after you have passed your CBAT.',
+      });
+    }
+    const date = String(req.body?.date ?? '');
+    if (!CBAT_DATE_RE.test(date)) {
+      return res.status(400).json({ message: 'Choose a valid CBAT date.' });
+    }
+    const parsed = new Date(`${date}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+      return res.status(400).json({ message: 'Choose a valid CBAT date.' });
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (date < today) return res.status(400).json({ message: 'Your upcoming CBAT date cannot be in the past.' });
+
+    const region = String(req.user.firstSeenCountry || req.user.geo?.country || '').toUpperCase();
+    if (!/^[A-Z]{2}$/.test(region)) {
+      return res.status(409).json({
+        code: 'REGION_UNAVAILABLE',
+        message: 'We could not determine your region yet. Refresh the app and try again.',
+      });
+    }
+
+    const locked = await User.findOneAndUpdate(
+      { _id: req.user._id, upcomingCbatDate: null, upcomingCbatDateLockedAt: null },
+      {
+        $set: {
+          upcomingCbatDate: parsed,
+          upcomingCbatRegion: region,
+          upcomingCbatDateLockedAt: new Date(),
+          upcomingCbatDateRemovedAt: null,
+        },
+      },
+      { returnDocument: 'after' },
+    );
+    if (!locked) {
+      return res.status(409).json({
+        code: 'CBAT_DATE_LOCKED',
+        message: 'Your upcoming CBAT date has already been confirmed and cannot be changed.',
+      });
+    }
+    res.status(201).json({ status: 'success', data: await serializeCbatGroup(locked) });
+  } catch (err) {
+    if (err?.code === 11000) {
+      const fresh = await User.findById(req.user._id);
+      return res.status(201).json({ status: 'success', data: await serializeCbatGroup(fresh) });
+    }
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Admin cockpit for every private cohort. Counts are deliberately calculated
+// against the requesting admin's own read marker, not a shared admin marker.
+router.get('/cbat-groups', adminOnly, async (req, res) => {
+  try {
+    const groups = await ChatConversation.find({
+      type: 'channel', 'channel.audience': 'cbat-cohort', isArchived: false,
+    }).sort({ 'channel.cohortDate': -1, 'channel.cohortRegion': 1 }).lean();
+    const reads = await readMap(req.user._id, groups.map(group => group._id));
+    const rows = await Promise.all(groups.map(async group => {
+      const read = reads.get(String(group._id));
+      const unread = await ChatMessage.countDocuments({
+        conversationId: group._id,
+        deletedAt: null,
+        senderUserId: { $ne: req.user._id },
+        ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
+      });
+      return {
+        conversationId: group._id,
+        date: group.channel.cohortDate,
+        region: group.channel.cohortRegion,
+        title: channelTitle(group),
+        messageCount: group.messageCount ?? 0,
+        unread,
+      };
+    }));
+    res.json({ status: 'success', data: { groups: rows } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Group not found' });
+    const convo = await ChatConversation.findOne({
+      _id: req.params.id, type: 'channel', 'channel.audience': 'cbat-cohort', isArchived: false,
+    });
+    if (!convo) return res.status(404).json({ message: 'Group not found' });
+    const [read, members] = await Promise.all([
+      ChatRead.findOne({ userId: req.user._id, conversationId: convo._id }).lean(),
+      User.find({
+        upcomingCbatDate: new Date(`${convo.channel.cohortDate}T00:00:00.000Z`),
+        upcomingCbatRegion: convo.channel.cohortRegion,
+      }).select('displayName agentNumber cbatPassed').sort({ displayNameLower: 1, agentNumber: 1 }).lean(),
+    ]);
+    const refusal = postRefusal(convo, req.user);
+    res.json({ status: 'success', data: {
+      configured: true,
+      date: convo.channel.cohortDate,
+      region: convo.channel.cohortRegion,
+      conversationId: convo._id,
+      title: channelTitle(convo),
+      unread: Boolean(convo.messageCount)
+        && (!read || new Date(read.lastReadAt) < new Date(convo.lastMessageAt)),
+      canPost: !refusal,
+      displayNameRequired: refusal?.body?.code === 'DISPLAY_NAME_REQUIRED',
+      chatBanned: refusal?.body?.code === 'CHAT_BANNED',
+      postBlockedMessage: refusal && !refusal.body?.code ? refusal.body.message : null,
+      botName: null,
+      members: members.map(member => ({
+        _id: member._id,
+        displayName: member.displayName ?? null,
+        agentNumber: member.agentNumber ?? null,
+        cbatPassed: Boolean(member.cbatPassed),
+      })),
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });

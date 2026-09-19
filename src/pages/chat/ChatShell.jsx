@@ -7,6 +7,7 @@ import useChatPresence from '../../hooks/useChatPresence'
 import { fetchOverview, getCachedOverview, syncChatCacheOwner } from '../../utils/chatCache'
 import ChatSidebar from './ChatSidebar'
 import ChatThread from './ChatThread'
+import CbatGroupSetup from './components/CbatGroupSetup'
 
 const POLL_MS = 30_000
 
@@ -46,6 +47,7 @@ export default function ChatShell() {
   })
   const [loading, setLoading] = useState(() => !data)
   const [err,     setErr]     = useState('')
+  const [groupSetup, setGroupSetup] = useState(null)
 
   useGameBodyClass('chat-wide')
 
@@ -95,6 +97,7 @@ export default function ChatShell() {
     const rows = [
       d.support,
       ...(d.channels ?? []),
+      ...(d.groups ?? []),
       ...(d.dms ?? []),
       ...(d.bots ?? []).map(b => ({ _id: b.conversationId, unread: b.unread })),
     ].filter(Boolean)
@@ -176,6 +179,7 @@ export default function ChatShell() {
     const all = [
       data.support,
       ...(data.channels ?? []),
+      ...(data.groups ?? []),
       ...(data.dms ?? []),
       ...(data.bots ?? []).map(b => ({ _id: b.conversationId, title: b.title })),
     ].filter(Boolean)
@@ -192,11 +196,12 @@ export default function ChatShell() {
 
   return (
     <div className="h-[calc(100dvh-11rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex md:gap-3">
-      <div className={`w-full md:w-80 lg:w-96 md:shrink-0 ${conversationId ? 'hidden md:flex' : 'flex'} flex-col`}>
+      <div className={`w-full md:w-80 lg:w-96 md:shrink-0 ${conversationId || groupSetup ? 'hidden md:flex' : 'flex'} flex-col`}>
         <ChatSidebar
           support={data?.support}
           guides={data?.guides}
           channels={data?.channels}
+          groups={data?.groups}
           dms={data?.dms}
           bots={data?.bots}
           viewer={data?.viewer}
@@ -215,10 +220,11 @@ export default function ChatShell() {
           onStartSupport={startSupport}
           onOpenBot={openBot}
           onOpenDm={openDm}
+          onOpenGroupSetup={setGroupSetup}
         />
       </div>
 
-      <div className={`flex-1 min-w-0 ${conversationId ? 'flex' : 'hidden md:flex'} flex-col`}>
+      <div className={`flex-1 min-w-0 ${conversationId || groupSetup ? 'flex' : 'hidden md:flex'} flex-col`}>
         {conversationId ? (
           <ChatThread
             key={conversationId}
@@ -228,6 +234,16 @@ export default function ChatShell() {
             presenceById={presence.presenceById}
             onChanged={refreshOverview}
             onRead={onRead}
+          />
+        ) : groupSetup ? (
+          <CbatGroupSetup
+            state={groupSetup}
+            onCancel={() => setGroupSetup(null)}
+            onJoined={joined => {
+              setGroupSetup(null)
+              refreshOverview()
+              if (joined?.conversationId) navigate(`/chat/${joined.conversationId}`)
+            }}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-surface rounded-2xl border border-slate-200 card-shadow">

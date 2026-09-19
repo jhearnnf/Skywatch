@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 
 // The rail's two badges:
@@ -33,6 +33,24 @@ describe('ChatSidebar — conversation badges', () => {
   it('leaves a channel you are merely behind on with a plain dot', () => {
     renderRail({ channels: [{ ...CHANNEL, unread: true, personalUnread: 0 }] })
     expect(screen.queryByLabelText(/new message/)).toBeNull()
+  })
+})
+
+describe('ChatSidebar — CBAT groups', () => {
+  it('has a separate Groups heading and opens setup when no date is configured', () => {
+    const onOpenGroupSetup = vi.fn()
+    const setup = { _id: null, setupRequired: true, applicable: true, regionAvailable: true }
+    renderRail({ groups: [setup], onOpenGroupSetup })
+
+    expect(screen.getByRole('region', { name: 'Groups' })).toBeTruthy()
+    fireEvent.click(screen.getByText('My CBAT Group'))
+    expect(onOpenGroupSetup).toHaveBeenCalledWith(setup)
+    expect(screen.getByText(/Enter your upcoming CBAT date/i)).toBeTruthy()
+  })
+
+  it('links a configured group to its full Community thread', () => {
+    renderRail({ groups: [{ ...CHANNEL, _id: 'group-1', name: 'CBAT · 14 Oct 2099', emoji: '✈️' }] })
+    expect(screen.getByText('CBAT · 14 Oct 2099').closest('a').getAttribute('href')).toBe('/chat/group-1')
   })
 })
 

@@ -209,8 +209,9 @@ function useWaitingDms(dms, activeId) {
 // Purely presentational — ChatShell owns the data and the polling, so the rail
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
-  support, guides = [], channels = [], dms = [], bots = [], viewer, activeId, isAdmin,
+  support, guides = [], channels = [], groups = [], dms = [], bots = [], viewer, activeId, isAdmin,
   loading = false, onStartSupport, onOpenBot, onOpenDm, supportQueueUnread = 0,
+  onOpenGroupSetup,
   // Admin-only presence. Empty for everyone else — ChatShell does not even fetch
   // it — so the strip and the dots simply never appear rather than needing a
   // second permission check per call site.
@@ -369,6 +370,42 @@ export default function ChatSidebar({
             active={String(activeId) === String(c._id)}
           />
         ))}
+
+        <section aria-label="Groups">
+          <SectionLabel>Groups</SectionLabel>
+          {groups.length === 0 ? (
+            <p className={placeholder}>{loading ? 'Loading…' : 'No groups yet.'}</p>
+          ) : groups.map(group => group.setupRequired ? (
+            <button
+              key="cbat-group-setup"
+              type="button"
+              onClick={() => onOpenGroupSetup?.(group)}
+              className="w-full flex items-start gap-3 px-3 py-2.5 border-b border-slate-100 hover:bg-slate-100 transition-colors text-left"
+            >
+              <span className="text-lg leading-none pt-0.5">{group.emoji || '✈️'}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-bold text-slate-700">My CBAT Group</span>
+                <span className="block text-[11px] text-slate-400 truncate">
+                  {group.applicable === false ? 'Not applicable — CBAT passed' : 'Enter your upcoming CBAT date to join'}
+                </span>
+              </span>
+              <span className="text-[10px] font-bold text-brand-600 pt-0.5">Open</span>
+            </button>
+          ) : (
+            <Row
+              key={group._id}
+              to={`/chat/${group._id}`}
+              icon={group.emoji || '✈️'}
+              title={group.name || group.title}
+              subtitle={group.description || 'Private to your date and region'}
+              preview={group.preview}
+              unread={group.unread}
+              personalUnread={group.personalUnread}
+              timestamp={group.lastMessageAt}
+              active={String(activeId) === String(group._id)}
+            />
+          ))}
+        </section>
 
         {/* Bots are admin-only for now and kept out of Direct messages: a
             tool you query is not a person you are talking to, and mixing them

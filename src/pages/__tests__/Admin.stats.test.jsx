@@ -62,7 +62,7 @@ vi.mock('framer-motion', () => ({
 
 const MOCK_STATS = {
   users: {
-    totalUsers: 10, onlineUsers: 3, activeUsers: 1, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
+    totalUsers: 10, cbatDateUsers: 4, onlineUsers: 3, activeUsers: 1, freeUsers: 5, trialUsers: 2, subscribedUsers: 3,
     easyPlayers: 6, mediumPlayers: 4, combinedStreaks: 20,
     androidAppUsers: 4,
     cbatThemeUsers: 3,
@@ -240,6 +240,15 @@ describe('Admin — Stats tab: Android app users', () => {
   beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
   afterEach(() => { vi.restoreAllMocks(); mockAppSettings.value = {} })
 
+  it('shows how many accounts have entered their upcoming CBAT date', async () => {
+    render(<Admin />)
+
+    const label = await screen.findByText('CBAT Dates Entered')
+    const card = label.closest('[class*="rounded-2xl"]')
+    expect(within(card).getByText('4')).toBeInTheDocument()
+    expect(within(card).getByText('40% of all accounts')).toBeInTheDocument()
+  })
+
   it('shows how many accounts have ever used the app, as a share of everyone', async () => {
     render(<Admin />)
 
@@ -369,8 +378,9 @@ describe('Admin — Stats tab: Android app users', () => {
     render(<Admin />)
 
     await waitFor(() => expect(screen.getByText('Android App Users')).toBeInTheDocument())
-    expect(screen.getByText('Android App Users').closest('[aria-disabled="true"]')).toBeNull()
-    expect(screen.getByText(/0% of all accounts/)).toBeInTheDocument()
+    const card = screen.getByText('Android App Users').closest('[class*="rounded-2xl"]')
+    expect(card.closest('[aria-disabled="true"]')).toBeNull()
+    expect(within(card).getByText('0% of all accounts')).toBeInTheDocument()
   })
 })
 
