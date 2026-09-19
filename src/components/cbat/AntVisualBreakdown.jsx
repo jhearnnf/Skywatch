@@ -23,10 +23,17 @@ function Step({ number, eyebrow, title, children, delay = 0, reduceMotion }) {
 }
 
 function Equation({ children, answer }) {
+  const expression = typeof children === 'string'
+    ? children.split(/([+−×÷])/).map((part, i) => (
+      /[+−×÷]/.test(part)
+        ? <span key={i} className="ant-equation-operator" aria-label={part}>{part}</span>
+        : <span key={i}>{part}</span>
+    ))
+    : children
   return (
     <div className="ant-logic-equation">
-      <span>{children}</span>
-      <span className="text-slate-500">=</span>
+      <span className="ant-equation-expression">{expression}</span>
+      <span className="ant-equation-equals">=</span>
       <strong>{answer}</strong>
     </div>
   )
