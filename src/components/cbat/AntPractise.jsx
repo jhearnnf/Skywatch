@@ -14,10 +14,12 @@
 // 2D/3D sit beside Trace 1/2.
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '../../context/AuthContext'
 import { submitCbatResult } from '../../lib/cbatOutbox'
 import { useCbatTracking } from '../../utils/cbat/useCbatTracking'
 import CbatGameOver from '../CbatGameOver'
+import AntVisualBreakdown from './AntVisualBreakdown'
 import { scoreAnswer, formatHHMM, QUESTION_META } from '../../utils/antGenerator'
 import {
   buildPractiseRun,
@@ -60,27 +62,57 @@ function QuestionText({ parts }) {
 // room for a column, so the box drops under its question, indented to clear the
 // number so the sheet still reads as a list.
 function QuestionRow({ n, round, value, onChange, onEnter, inputRef }) {
+  const [showBreakdown, setShowBreakdown] = useState(false)
   const q = practiseQuestion(round)
   return (
-    <div className="px-4 sm:px-6 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5 transition-colors focus-within:bg-[#0b1c30]">
-      <div className="flex gap-3 sm:gap-4 flex-1 min-w-0">
-        <span className="shrink-0 w-5 text-sm font-mono text-slate-500">{n}.</span>
-        <QuestionText parts={q.parts} />
+    <div className="transition-colors focus-within:bg-[#0b1c30]">
+      <div className="px-4 sm:px-6 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
+        <div className="flex gap-3 sm:gap-4 flex-1 min-w-0">
+          <span className="shrink-0 w-5 text-sm font-mono text-slate-500">{n}.</span>
+          <div className="min-w-0">
+            <QuestionText parts={q.parts} />
+            <button
+              type="button"
+              onClick={() => setShowBreakdown(v => !v)}
+              aria-expanded={showBreakdown}
+              aria-controls={`ant-breakdown-${n}`}
+              className={`ant-breakdown-trigger ${showBreakdown ? 'is-open' : ''}`}
+            >
+              <span aria-hidden="true">{showBreakdown ? '−' : '✦'}</span>
+              {showBreakdown ? 'Hide visual breakdown' : 'Show me visually'}
+              <span className="ant-trigger-chevron" aria-hidden="true">⌄</span>
+            </button>
+          </div>
+        </div>
+        <div className="shrink-0 pl-8 sm:pl-0 flex items-center gap-2.5 sm:flex-col sm:items-stretch sm:gap-1 sm:w-24">
+          <input
+            ref={inputRef}
+            type="text"
+            inputMode="numeric"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
+            placeholder={q.placeholder}
+            aria-label={`Question ${n} answer in ${q.unit}`}
+            className="w-24 bg-game-arena border border-game-line rounded-lg px-2 py-2 text-white font-mono text-base text-center focus:outline-none focus:border-brand-400"
+          />
+          <span className="text-xs text-slate-500 sm:text-center">{q.unit}</span>
+        </div>
       </div>
-      <div className="shrink-0 pl-8 sm:pl-0 flex items-center gap-2.5 sm:flex-col sm:items-stretch sm:gap-1 sm:w-24">
-        <input
-          ref={inputRef}
-          type="text"
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onEnter() } }}
-          placeholder={q.placeholder}
-          aria-label={`Question ${n} answer in ${q.unit}`}
-          className="w-24 bg-game-arena border border-game-line rounded-lg px-2 py-2 text-white font-mono text-base text-center focus:outline-none focus:border-brand-400"
-        />
-        <span className="text-xs text-slate-500 sm:text-center">{q.unit}</span>
-      </div>
+      <AnimatePresence initial={false}>
+        {showBreakdown && (
+          <motion.div
+            id={`ant-breakdown-${n}`}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] }, opacity: { duration: 0.25 } }}
+            className="overflow-hidden"
+          >
+            <AntVisualBreakdown round={round} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -185,7 +217,7 @@ function MarkedSheet({ run, answers }) {
 }
 
 // ── the drill ────────────────────────────────────────────────────────────────
-export default function AntPractise({ onExit }) {
+export default function AntPractise() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 

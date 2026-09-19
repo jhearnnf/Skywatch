@@ -45,6 +45,7 @@ vi.mock('../../components/CbatGameOver', () => ({ default: ({ children }) => <di
 vi.mock('framer-motion', () => ({
   motion: { div: ({ children, className, style }) => <div className={className} style={style}>{children}</div> },
   AnimatePresence: ({ children }) => <>{children}</>,
+  useReducedMotion: () => false,
 }))
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -129,6 +130,17 @@ describe('CbatAnt — practise sheet', () => {
     expect(screen.queryByText(/Your sheet, marked/i)).toBeNull()
     expect(document.body.textContent).not.toMatch(/Correct:/)
     expect(document.body.textContent).not.toMatch(/Flight time/)
+  })
+
+  it('opens a tailored visual breakdown beneath a question without revealing its answer', () => {
+    openPractise()
+    const round = runRef.current[0]
+    fireEvent.click(screen.getAllByRole('button', { name: /show me visually/i })[0])
+
+    expect(screen.getByTestId(`ant-breakdown-${round.type}`)).toBeTruthy()
+    expect(screen.getByText(/make the journey visible/i)).toBeTruthy()
+    expect(screen.queryByText(/Correct:/)).toBeNull()
+    expect(screen.getByRole('button', { name: /hide visual breakdown/i }).getAttribute('aria-expanded')).toBe('true')
   })
 
   it('marks the whole sheet and submits it to the practise board', () => {

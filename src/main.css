@@ -909,6 +909,74 @@ button.cbat-keycap:disabled { background: #6e6e7c; color: #1a1a1a; box-shadow: n
    thumb as a circle. With the View Transitions API the reveal is the new
    page's snapshot clipped to that circle; without it a veil in the new
    ground colour does the same job and fades once the theme has flipped. */
+/* First-visit theme cue. It stays in the header's natural flow rather than
+   dropping over the page like a notification. The copy drifts toward the
+   choice while the destination gets two quiet pulses, then both settle. */
+.guest-theme-hint {
+  align-items: center;
+  flex: 0 0 auto;
+  margin-right: 0.55rem;
+  white-space: nowrap;
+  animation: guest-theme-hint-in 500ms 350ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.guest-theme-hint-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 160ms ease, color 160ms ease;
+}
+.guest-theme-hint-copy:hover,
+.guest-theme-hint-copy:focus-visible {
+  color: var(--color-brand-600);
+  opacity: 1;
+  outline: none;
+}
+.guest-theme-hint-arrow {
+  display: inline-block;
+  color: var(--color-brand-600);
+  font-size: 0.9rem;
+  animation: guest-theme-hint-nudge 1800ms 900ms ease-in-out 3;
+}
+.guest-theme-hint + .theme-selector .theme-selector-option:last-child,
+.guest-theme-hint + .theme-hold-switch {
+  animation: guest-theme-target-pulse 1800ms 900ms ease-in-out 3;
+}
+@keyframes guest-theme-hint-in {
+  from { opacity: 0; transform: translateX(-0.4rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes guest-theme-hint-nudge {
+  0%, 100% { transform: translateX(0); opacity: 0.65; }
+  45%, 60% { transform: translateX(0.22rem); opacity: 1; }
+}
+@keyframes guest-theme-target-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-brand-600) 0%, transparent); }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-600) 18%, transparent); }
+}
+@media (max-width: 767px) {
+  .guest-theme-hint { margin-right: 0.4rem; }
+  .guest-theme-hint-copy { font-size: 0.62rem; }
+  .guest-theme-hint-copy span:first-child { font-size: 0; }
+  .guest-theme-hint-copy span:first-child::after { content: 'Try CBAT'; font-size: 0.62rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guest-theme-hint,
+  .guest-theme-hint-arrow,
+  .guest-theme-hint + .theme-selector .theme-selector-option:last-child,
+  .guest-theme-hint + .theme-hold-switch {
+    animation: none;
+  }
+}
+
 .theme-hold-switch {
   touch-action: none;
   user-select: none;
@@ -3679,4 +3747,110 @@ body.play-mode .card-shadow {
 @media (prefers-reduced-motion: reduce) {
   .cbat-room-enter, .cbat-room-enter-right, .cbat-room-enter-left { animation: none; }
   .cbat-date-warning, .cbat-date-warning::after, .cbat-date-warning-icon { animation: none; }
+}
+/* ANT practise: an optional, visual working area inside each question. */
+.ant-breakdown-trigger {
+  display: inline-flex; align-items: center; gap: .45rem; margin-top: .65rem;
+  color: #67e8f9; font-size: .72rem; font-weight: 750; letter-spacing: .01em;
+  padding: .38rem .6rem; border: 1px solid rgba(34,211,238,.22); border-radius: 999px;
+  background: rgba(8,145,178,.08); transition: color .2s, background .2s, border-color .2s, transform .2s;
+}
+.ant-breakdown-trigger:hover { color: #cffafe; background: rgba(8,145,178,.15); border-color: rgba(103,232,249,.42); transform: translateY(-1px); }
+.ant-breakdown-trigger.is-open { color: #cbd5e1; background: rgba(30,41,59,.55); border-color: rgba(100,116,139,.3); }
+.ant-trigger-chevron { font-size: .85rem; transition: transform .25s; margin-left: .1rem; }
+.ant-breakdown-trigger.is-open .ant-trigger-chevron { transform: rotate(180deg); }
+.ant-logic-breakdown { margin: 0 .75rem .9rem 2.75rem; padding: 1rem; border: 1px solid rgba(34,211,238,.16); border-radius: 1rem; background: radial-gradient(circle at 8% 0%, rgba(6,182,212,.11), transparent 28%), linear-gradient(145deg, #081a2d, #071522); box-shadow: inset 0 1px rgba(255,255,255,.025), 0 16px 40px rgba(0,0,0,.15); }
+.ant-logic-bulb { width: 2rem; height: 2rem; flex: 0 0 auto; display: grid; place-items: center; border-radius: .65rem; color: #a5f3fc; background: rgba(6,182,212,.13); border: 1px solid rgba(103,232,249,.2); box-shadow: 0 0 24px rgba(34,211,238,.12); }
+.ant-logic-step { position: relative; display: flex; gap: .75rem; padding: .85rem; border: 1px solid rgba(51,65,85,.55); border-radius: .85rem; background: rgba(4,15,27,.58); overflow: hidden; }
+.ant-logic-step-number { width: 1.55rem; height: 1.55rem; flex: 0 0 auto; display: grid; place-items: center; border-radius: 999px; color: #071522; background: #67e8f9; font: 800 .72rem/1 ui-monospace, monospace; box-shadow: 0 0 18px rgba(103,232,249,.2); }
+.ant-logic-eyebrow { margin-bottom: .2rem; color: #67e8f9; text-transform: uppercase; letter-spacing: .1em; font-size: .57rem; font-weight: 800; }
+.ant-logic-equation { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: .55rem; margin-top: .75rem; padding: .65rem .8rem; border-radius: .65rem; background: rgba(15,23,42,.72); color: #cbd5e1; font: 700 .8rem/1.2 ui-monospace, monospace; }
+.ant-logic-equation strong { color: #67e8f9; font-size: .9rem; }
+.ant-clock-work { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; margin-top: .85rem; }
+.ant-clock-hop { display: flex; align-items: center; justify-content: center; min-width: min(100%,14rem); }
+.ant-clock-face { position: relative; width: 2.75rem; height: 2.75rem; flex: 0 0 auto; display: grid; place-items: end center; padding-bottom: .34rem; border: 1px solid #334b63; border-radius: 50%; color: #e2e8f0; background: radial-gradient(circle at 38% 30%,#1d3348,#0c1928 65%); box-shadow: inset 0 0 0 3px rgba(3,10,18,.45),0 6px 12px rgba(0,0,0,.2); }
+.ant-clock-face::before,.ant-clock-face::after { content: ''; position: absolute; left: 50%; top: .45rem; width: 1px; height: .72rem; transform-origin: 50% 100%; background: #67e8f9; }
+.ant-clock-face::before { transform: rotate(42deg); }
+.ant-clock-face::after { height: .9rem; transform: rotate(-55deg); }
+.ant-clock-face i { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; border-radius: 50%; background: #fff; transform: translate(-50%,-50%); }
+.ant-clock-face b { position: relative; z-index: 1; padding: .08rem .18rem; border-radius: .2rem; background: rgba(2,8,15,.82); font: 800 .55rem/1 ui-monospace,monospace; }
+.ant-clock-face.is-question { border-color: rgba(103,232,249,.5); box-shadow: 0 0 18px rgba(34,211,238,.13); }
+.ant-clock-face.is-question b { color: #67e8f9; }
+.ant-clock-arrow { position: relative; width: 4.3rem; text-align: center; }
+.ant-clock-arrow span { position: relative; z-index: 1; display: inline-block; padding: .15rem .28rem; color: #a5f3fc; background: #071522; font: 700 .56rem/1 ui-monospace,monospace; }
+.ant-clock-arrow i { display: block; height: 1px; margin-top: -.5rem; background: linear-gradient(90deg,#1e475c,#67e8f9); }
+.ant-clock-arrow i::after { content: ''; display: block; width: .38rem; height: .38rem; margin-left: auto; border-top: 1px solid #67e8f9; border-right: 1px solid #67e8f9; transform: translateY(-.2rem) rotate(45deg); }
+.ant-clock-total { flex-basis: 100%; margin-top: .2rem; text-align: center; color: #94a3b8; font: 650 .68rem/1.4 ui-monospace,monospace; }
+.ant-clock-total strong { color: #67e8f9; }
+.ant-journey { display: grid; grid-template-columns: 3.25rem minmax(5rem,1fr) 3.25rem; gap: .45rem; align-items: end; margin-top: .8rem; }
+.ant-journey-place { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.ant-journey-place strong { color: #fff; font: 800 .72rem/1.1 ui-monospace, monospace; }
+.ant-journey-place span { color: #64748b; font-size: .55rem; text-transform: uppercase; letter-spacing: .08em; margin-top: .2rem; }
+.ant-place-icon { font-size: 1.45rem; filter: drop-shadow(0 5px 8px rgba(0,0,0,.35)); margin-bottom: .25rem; }
+.ant-road-wrap { min-width: 0; padding-bottom: .12rem; }
+.ant-road { position: relative; height: 2rem; overflow: visible; border-radius: .45rem; border: 1px solid #334155; background: linear-gradient(#26384c, #182536); box-shadow: 0 8px 14px rgba(0,0,0,.22); }
+.ant-road-centre { position: absolute; inset: 50% .45rem auto; height: 2px; background: repeating-linear-gradient(90deg,#f8fafc 0 8px,transparent 8px 14px); opacity: .62; }
+.ant-plane { position: absolute; top: -.72rem; color: #a5f3fc; font-size: 1.2rem; transform: translateX(-50%) rotate(5deg); filter: drop-shadow(0 0 7px rgba(34,211,238,.55)); }
+.ant-road-label { margin-top: .35rem; text-align: center; color: #64748b; font-size: .58rem; }
+.ant-road-label strong { color: #67e8f9; font: 800 .72rem/1 ui-monospace, monospace; }
+.ant-minute-strip { display: grid; grid-template-columns: repeat(var(--minute-count), minmax(1px,1fr)); align-items: stretch; gap: clamp(1px,.25vw,3px); height: 2.7rem; padding: .35rem; border-radius: .55rem; background: linear-gradient(180deg, rgba(14,116,144,.18), rgba(8,47,73,.18)); border: 1px solid rgba(34,211,238,.13); overflow: hidden; }
+.ant-minute-tick { min-width: 1px; border-radius: 2px; transform-origin: bottom; background: linear-gradient(180deg,#67e8f9,#0891b2); box-shadow: 0 0 5px rgba(34,211,238,.15); }
+.ant-distance-blocks { display: flex; align-items: center; justify-content: center; gap: .7rem; margin-top: .75rem; }
+.ant-distance-blocks span { min-width: 5rem; padding: .55rem; text-align: center; border-radius: .6rem; color: #fff; background: rgba(15,23,42,.8); font: 800 .9rem/1 ui-monospace, monospace; border: 1px solid #23354b; }
+.ant-distance-blocks small { display: block; margin-top: .32rem; color: #64748b; font: 600 .55rem/1 sans-serif; }
+.ant-distance-blocks b { color: #67e8f9; }
+.ant-hour-gauge { position: relative; height: 1.4rem; margin: 1.65rem .2rem .25rem; border-radius: 999px; background: #111f31; border: 1px solid #27384d; }
+.ant-hour-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg,#0891b2,#67e8f9); box-shadow: 0 0 18px rgba(34,211,238,.22); }
+.ant-hour-marker { position: absolute; top: -.5rem; bottom: -.5rem; width: 1px; background: #fff; }
+.ant-hour-marker span { position: absolute; left: 50%; bottom: calc(100% + .25rem); transform: translateX(-50%); color: #fff; white-space: nowrap; font: 700 .62rem/1 ui-monospace, monospace; }
+.ant-scale-journey { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .65rem; margin-top: .85rem; }
+.ant-scale-journey > div:not(.ant-scale-arrow) { padding: .7rem .35rem; border: 1px solid #26384d; border-radius: .7rem; text-align: center; background: rgba(15,23,42,.72); }
+.ant-scale-journey strong,.ant-scale-journey span { display: block; }
+.ant-scale-journey strong { color: #fff; font: 800 .8rem/1.2 ui-monospace,monospace; }
+.ant-scale-journey span { color: #64748b; font-size: .65rem; margin-top: .25rem; }
+.ant-scale-journey .highlight { border-color: rgba(34,211,238,.3) !important; background: rgba(8,145,178,.1) !important; }
+.ant-scale-journey .highlight strong { color: #67e8f9; }
+.ant-scale-arrow { color: #67e8f9; font-size: 1.25rem; transform-origin: left; }
+
+/* Real CBAT equivalent: same teaching diagrams, expressed as flat test-software
+   instrumentation rather than SkyWatch glass, glow and cyan gradients. */
+:root[data-theme="cbat"] .ant-breakdown-trigger { color: #000; background: #b4b4b4; border: 1px solid #f0f0f0; border-radius: 0; box-shadow: inset -1px -1px 0 #606060,inset 1px 1px 0 #f0f0f0; font-family: Tahoma,Verdana,sans-serif; text-transform: uppercase; }
+:root[data-theme="cbat"] .ant-breakdown-trigger:hover { color: #000; background: #d2d2d2; border-color: #fff; transform: none; }
+:root[data-theme="cbat"] .ant-breakdown-trigger.is-open { color: #000; background: #a0a0a0; border-color: #e8e8e8; }
+:root[data-theme="cbat"] .ant-logic-breakdown { border: 1px solid #ffff99; border-radius: 0; background: #000080; box-shadow: none; }
+:root[data-theme="cbat"] .ant-logic-bulb { color: #000080; background: #ffff99; border: 1px solid #ffffcc; border-radius: 0; box-shadow: none; }
+:root[data-theme="cbat"] .ant-logic-step { border: 1px solid #d8d890; border-radius: 0; background: #000080; }
+:root[data-theme="cbat"] .ant-logic-step-number { color: #000080; background: #ffff99; border-radius: 0; box-shadow: none; }
+:root[data-theme="cbat"] .ant-logic-eyebrow,
+:root[data-theme="cbat"] .ant-logic-equation strong,
+:root[data-theme="cbat"] .ant-road-label strong,
+:root[data-theme="cbat"] .ant-distance-blocks b,
+:root[data-theme="cbat"] .ant-scale-journey .highlight strong,
+:root[data-theme="cbat"] .ant-scale-arrow,
+:root[data-theme="cbat"] .ant-clock-total strong { color: #ffff99; }
+:root[data-theme="cbat"] .ant-logic-equation { color: #fff; background: #000070; border: 1px solid #d8d890; border-radius: 0; }
+:root[data-theme="cbat"] .ant-road { border-color: #fff; border-radius: 0; background: #606060; box-shadow: none; }
+:root[data-theme="cbat"] .ant-plane { color: #ffff99; filter: none; }
+:root[data-theme="cbat"] .ant-minute-strip { border-color: #d8d890; border-radius: 0; background: #000070; }
+:root[data-theme="cbat"] .ant-minute-tick { border-radius: 0; background: #ffff99; box-shadow: none; }
+:root[data-theme="cbat"] .ant-distance-blocks span,
+:root[data-theme="cbat"] .ant-scale-journey > div:not(.ant-scale-arrow) { color: #fff; background: #000070; border-color: #d8d890; border-radius: 0; }
+:root[data-theme="cbat"] .ant-scale-journey .highlight { border-color: #ffff99 !important; background: #10109a !important; }
+:root[data-theme="cbat"] .ant-hour-gauge { border-color: #d8d890; border-radius: 0; background: #000060; }
+:root[data-theme="cbat"] .ant-hour-fill { border-radius: 0; background: #ffff99; box-shadow: none; }
+:root[data-theme="cbat"] .ant-clock-face { color: #fff; border-color: #ffff99; background: #000070; box-shadow: none; }
+:root[data-theme="cbat"] .ant-clock-face::before,
+:root[data-theme="cbat"] .ant-clock-face::after { background: #ffff99; }
+:root[data-theme="cbat"] .ant-clock-face b { color: #fff; background: #000080; border-radius: 0; }
+:root[data-theme="cbat"] .ant-clock-face.is-question { border-color: #fff; box-shadow: none; }
+:root[data-theme="cbat"] .ant-clock-face.is-question b,
+:root[data-theme="cbat"] .ant-clock-arrow span { color: #ffff99; background: #000080; }
+:root[data-theme="cbat"] .ant-clock-arrow i { background: #ffff99; }
+:root[data-theme="cbat"] .ant-clock-arrow i::after { border-color: #ffff99; }
+@media (max-width: 639px) {
+  .ant-logic-breakdown { margin-left: .75rem; padding: .75rem; }
+  .ant-logic-step { padding: .7rem; gap: .6rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ant-breakdown-trigger,.ant-trigger-chevron { transition: none; }
 }
