@@ -61,11 +61,10 @@ function QuestionText({ parts }) {
 // are still empty, and tab down them without hunting. Below `sm` there is no
 // room for a column, so the box drops under its question, indented to clear the
 // number so the sheet still reads as a list.
-function QuestionRow({ n, round, value, onChange, onEnter, inputRef }) {
-  const [showBreakdown, setShowBreakdown] = useState(false)
+function QuestionRow({ n, round, value, onChange, onEnter, inputRef, showBreakdown, onToggleBreakdown, isDimmed }) {
   const q = practiseQuestion(round)
   return (
-    <div className="transition-colors focus-within:bg-[#0b1c30]">
+    <div className={`ant-question-row transition-colors focus-within:bg-[#0b1c30] ${isDimmed ? 'ant-question-row-dimmed' : ''}`}>
       <div className="px-4 sm:px-6 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
         <div className="flex gap-3 sm:gap-4 flex-1 min-w-0">
           <span className="shrink-0 w-5 text-sm font-mono text-slate-500">{n}.</span>
@@ -73,7 +72,7 @@ function QuestionRow({ n, round, value, onChange, onEnter, inputRef }) {
             <QuestionText parts={q.parts} />
             <button
               type="button"
-              onClick={() => setShowBreakdown(v => !v)}
+              onClick={onToggleBreakdown}
               aria-expanded={showBreakdown}
               aria-controls={`ant-breakdown-${n}`}
               className={`ant-breakdown-trigger ${showBreakdown ? 'is-open' : ''}`}
@@ -229,6 +228,7 @@ export default function AntPractise() {
   const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
+  const [openBreakdown, setOpenBreakdown] = useState(null)
 
   // Stamped on mount rather than at useRef() — reading the clock during render
   // is impure, and the first tick is 100ms after the effects have run anyway.
@@ -324,6 +324,7 @@ export default function AntPractise() {
     setFinalTime(0)
     setScoreSaved(false)
     setQueued(false)
+    setOpenBreakdown(null)
     startedRef.current = Date.now()
     startTracking(GAME_KEY)
   }, [startTracking])
@@ -379,6 +380,9 @@ export default function AntPractise() {
             onChange={(v) => setAnswer(i, v)}
             onEnter={() => focusNextEmpty(i)}
             inputRef={(el) => { boxRefs.current[i] = el }}
+            showBreakdown={openBreakdown === i}
+            onToggleBreakdown={() => setOpenBreakdown(current => current === i ? null : i)}
+            isDimmed={openBreakdown !== null && openBreakdown !== i}
           />
         ))}
       </div>

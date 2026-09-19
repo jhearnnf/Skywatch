@@ -143,6 +143,23 @@ describe('CbatAnt — practise sheet', () => {
     expect(screen.getByRole('button', { name: /hide visual breakdown/i }).getAttribute('aria-expanded')).toBe('true')
   })
 
+  it('keeps only one visual breakdown open at a time', () => {
+    openPractise()
+    const triggers = screen.getAllByRole('button', { name: /show me visually/i })
+    fireEvent.click(triggers[0])
+    expect(screen.getAllByRole('button', { name: /hide visual breakdown/i })).toHaveLength(1)
+    fireEvent.click(screen.getAllByRole('button', { name: /show me visually/i })[1])
+    expect(screen.getAllByRole('button', { name: /hide visual breakdown/i })).toHaveLength(1)
+    expect(screen.getAllByTestId(/^ant-breakdown-/)).toHaveLength(1)
+  })
+
+  it('dims the other questions while one breakdown is open', () => {
+    openPractise()
+    const triggers = screen.getAllByRole('button', { name: /show me visually/i })
+    fireEvent.click(triggers[0])
+    expect(document.querySelectorAll('.ant-question-row-dimmed')).toHaveLength(PRACTISE_QUESTION_COUNT - 1)
+  })
+
   it('marks the whole sheet and submits it to the practise board', () => {
     openPractise()
     answerAll()
