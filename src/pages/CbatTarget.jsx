@@ -1744,11 +1744,12 @@ export default function CbatTarget() {
 
   // ── Fetch personal best + aircraft on mount ────────────────────────────────
   useEffect(() => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/target/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
+    if (user) {
+      apiFetch(`${API}/api/games/cbat/target/personal-best`)
+        .then(r => r.json())
+        .then(d => { if (d.data) setPersonalBest(d.data) })
+        .catch(() => {})
+    }
     getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(d => {
         const allowlist = new Set((settings?.cbatTargetAircraftBriefIds ?? []).map(String))
@@ -1951,10 +1952,12 @@ export default function CbatTarget() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/target/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        if (user) {
+          apiFetch(`${API}/api/games/cbat/target/personal-best`)
+            .then(r => r.json())
+            .then(d => { if (d.data) setPersonalBest(d.data) })
+            .catch(() => {})
+        }
       })
       .catch(() => {})
     setPhase('results')
@@ -2159,18 +2162,7 @@ export default function CbatTarget() {
     <div className="cbat-target-page">
       <SEO title="Target — CBAT" description="Multi-panel CBAT target identification game." />
 
-      {!user && (
-        <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
-          <div className="text-4xl mb-3">🔒</div>
-          <p className="font-bold text-slate-800 mb-1">Sign in to play</p>
-          <p className="text-sm text-slate-500 mb-4">Create a free account to access CBAT games.</p>
-          <Link to="/login" className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
-            Sign In
-          </Link>
-        </div>
-      )}
-
-      {user && (
+      {(
         <CbatGameHeader
           title={phase === 'tutorial' ? 'Target Tutorial' : 'Target'}
           fullTitle="Target Recognition Test"
@@ -2185,7 +2177,7 @@ export default function CbatTarget() {
         />
       )}
 
-      {user && (phase === 'intro' || phase === 'results') && (
+      {(phase === 'intro' || phase === 'results') && (
         <div className="flex flex-col items-center">
           {phase === 'intro' && (
             <Intro onStart={startGame} onTutorial={() => setPhase('tutorial')} personalBest={personalBest} aircraftReady={aircraftList.length > 0} />
@@ -2205,11 +2197,11 @@ export default function CbatTarget() {
         </div>
       )}
 
-      {user && phase === 'tutorial' && (
+      {phase === 'tutorial' && (
         <TargetTutorial onExit={() => setPhase('intro')} shapeScale={shapeScale} aircraftList={aircraftList} onProgress={reportTutorialProgress} />
       )}
 
-      {user && phase === 'playing' && (
+      {phase === 'playing' && (
         <div className="cbat-target-arena">
           {/* Top HUD strip */}
           <div className="cbat-target-hud">

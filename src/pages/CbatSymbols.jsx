@@ -470,13 +470,15 @@ export default function CbatSymbols() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/symbols/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        if (user) {
+          apiFetch(`${API}/api/games/cbat/symbols/personal-best`)
+            .then(r => r.json())
+            .then(d => { if (d.data) setPersonalBest(d.data) })
+            .catch(() => {})
+        }
       })
       .catch(() => {})
-  }, [apiFetch, API, cbat])
+  }, [apiFetch, API, cbat, user])
 
   // Under the Real CBAT theme the tiles carry red capitals and simple symbols,
   // as the real screen does, instead of the mixed-script pool.
@@ -729,20 +731,8 @@ export default function CbatSymbols() {
         )}
       </CbatGameHeader>
 
-      {/* Not logged in */}
-      {!user && (
-        <div className="bg-surface rounded-2xl border border-slate-200 p-6 text-center card-shadow">
-          <div className="text-4xl mb-3">{'\u{1F512}'}</div>
-          <p className="font-bold text-slate-800 mb-1">Sign in to play</p>
-          <p className="text-sm text-slate-500 mb-4">Create a free account to access CBAT games.</p>
-          <Link to="/login" className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
-            Sign In
-          </Link>
-        </div>
-      )}
-
       {/* Logged in — game */}
-      {user && (
+      {(
         <div className="flex flex-col items-center">
 
           {/* Intro screen */}

@@ -2189,7 +2189,10 @@ router.get('/history/flashcard/:sessionId', protect, async (req, res) => {
 
 // ── CBAT — Plane Turn: aircraft cutouts for character selection ────────────
 // Returns published Aircraft briefs that have a cutout image.
-router.get('/cbat/aircraft-cutouts', protect, async (_req, res) => {
+// Public because Target is one of the no-account CBAT games. The response is
+// only the same published-aircraft metadata/assets already exposed elsewhere;
+// no user or score data is included.
+router.get('/cbat/aircraft-cutouts', async (_req, res) => {
   try {
     const Media = require('../models/Media');
     const briefs = await IntelligenceBrief.find({

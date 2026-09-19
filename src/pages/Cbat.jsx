@@ -18,6 +18,7 @@ import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 import { SLIM_APP } from '../utils/appMode'
 import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
 import PlayOnPcNote from '../components/cbat/PlayOnPcNote'
+import { isPublicCbatGame } from '../utils/cbat/publicGames'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -526,12 +527,12 @@ export default function Cbat() {
 
       {/* Lock card — shown when not signed in */}
       {!user && (
-        <div className="bg-surface rounded-2xl border border-slate-200 p-6 mb-5 text-center card-shadow">
+        <div className="hidden">
           <div className="text-4xl mb-3">🔒</div>
-          <p className="font-bold text-slate-800 mb-1">Sign in to access CBAT Aptitude Practise</p>
-          <p className="text-sm text-slate-500 mb-4">Create a free account to start practising.</p>
+          <p className="font-bold text-slate-800 mb-1">Four games are free to play</p>
+          <p className="text-sm text-slate-500 mb-4">Try Target, ANT, Symbols and Code Duplicates. Your scores stay on this device and upload if you create an account.</p>
           <Link to="/login" className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors">
-            Sign In
+            Sign in to unlock the remaining games
           </Link>
         </div>
       )}
@@ -552,12 +553,25 @@ export default function Cbat() {
           player switches games. It is outside the grid so the layer is not
           itself a grid cell. */}
       <div className="relative" ref={gridWrapRef}>
-      <div className={`grid grid-cols-4 gap-2 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-8${!user ? ' opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
+      {!user && (
+        <div className="absolute inset-x-0 top-[78px] sm:top-[324px] z-30 flex justify-center px-2 sm:px-8">
+          <div className="w-full max-w-xl rounded-2xl border border-brand-400/40 bg-game-panel/95 px-4 py-4 text-center shadow-2xl backdrop-blur-md sm:px-8 sm:py-6">
+            <div className="text-2xl mb-1 sm:text-3xl sm:mb-2">🔒</div>
+            <p className="font-bold text-white mb-1">Create an account to unlock every game</p>
+            <p className="hidden text-sm text-slate-400 mb-4 sm:block">Signing up is free. Your scores from the four games above will be added to your account.</p>
+            <Link to="/login" className="inline-flex px-5 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition-colors sm:px-6 sm:py-2.5 sm:text-sm">
+              Sign in or create an account
+            </Link>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-4 gap-2 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-8">
         {visibleGames.map((game, i) => {
           const isImplemented = !!game.path
           const enabled       = isGameEnabled(game.key)
+          const guestPlayable = !user && isPublicCbatGame(game.key)
           // Admins always click through to test, regardless of toggle state.
-          const clickable     = isImplemented && (enabled || !!user?.isAdmin)
+          const clickable     = isImplemented && (enabled || !!user?.isAdmin) && (!!user || guestPlayable)
           // Distinguishes "admin disabled this in settings" (temporary) from
           // "this game has no page yet" (genuinely future) so the picker can
           // show the right message to non-admins.
@@ -632,7 +646,9 @@ export default function Cbat() {
                     {/* The phone tile has room for one word, so it states the
                         condition and the desktop card keeps the explanation. */}
                     <p className="text-[7px] leading-tight text-slate-500 uppercase tracking-wide sm:text-[10px] sm:mt-1">
-                      {adminDisabled
+                      {!user && !guestPlayable
+                        ? <><span className="sm:hidden">Locked</span><span className="hidden sm:inline">Sign in to unlock</span></>
+                        : adminDisabled
                         ? <><span className="sm:hidden">Off</span><span className="hidden sm:inline">Temporarily disabled — check back soon</span></>
                         : <><span className="sm:hidden">Soon</span><span className="hidden sm:inline">Coming soon</span></>}
                     </p>

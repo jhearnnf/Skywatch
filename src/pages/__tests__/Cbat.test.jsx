@@ -209,10 +209,19 @@ describe('Cbat page — background images', () => {
     expect(screen.getByTestId('est-time-dpt')).toHaveTextContent('⏱ 7–11 min')
   })
 
-  it('shows lock card and blurs grid when user is null', () => {
+  it('lets guests open exactly the four public games and locks the rest', () => {
     mockUseAuth.mockReturnValue({ user: null })
     render(<Cbat />)
-    expect(screen.getByText(/Sign in to access CBAT Aptitude Practise/i)).toBeInTheDocument()
+    expect(screen.getByText(/Create an account to unlock every game/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /sign in or create an account/i })).toBeInTheDocument()
+
+    for (const key of ['target', 'ant', 'symbols', 'code-duplicates']) {
+      const game = CBAT_GAMES.find(g => g.key === key)
+      expect(screen.getByText(game.title).closest('a')).toHaveAttribute('href', game.path)
+    }
+
+    const locked = CBAT_GAMES.filter(g => !['target', 'ant', 'symbols', 'code-duplicates'].includes(g.key))
+    for (const game of locked) expect(screen.getByText(game.title).closest('a')).toBeNull()
   })
 })
 

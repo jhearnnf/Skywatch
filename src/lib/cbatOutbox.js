@@ -69,6 +69,15 @@ export async function submitCbatResult(gameKey, payload, { apiFetch, API }) {
   // somebody else on a shared device. See lib/outboxOwner.js.
   const item = { clientResultId, gameKey, body, queuedAt: Date.now(), userId: getOutboxOwner() }
 
+  // Guest runs live on this device until an account is authenticated. Avoid a
+  // request that is guaranteed to return 401 (and would incorrectly mark API
+  // health as signed-out). The normal idempotent flush uploads these rows after
+  // sign-in; ownerless rows are deliberately claimable by that first account.
+  if (!item.userId) {
+    await outboxPut(item); notifyChange()
+    return { queued: true, local: true }
+  }
+
   if (isOnline()) {
     try {
       const res = await apiFetch(resultUrl(API, gameKey), postOpts(body))

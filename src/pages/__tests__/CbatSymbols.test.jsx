@@ -87,18 +87,17 @@ describe('pickUniqueSymbols — case-collision guard', () => {
 describe('CbatSymbols — guest gate', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('shows sign-in prompt when not logged in', () => {
+  it('shows the playable intro when not logged in', () => {
     setupGuest()
     render(<CbatSymbols />)
-    expect(screen.getByText('Sign in to play')).toBeDefined()
-    expect(screen.queryByRole('button', { name: /start/i })).toBeNull()
+    expect(screen.getByText('Symbol Recognition')).toBeDefined()
+    expect(screen.getByRole('button', { name: /^start$/i })).toBeDefined()
   })
 
-  it('sign-in CTA links to /login', () => {
+  it('does not interrupt a guest with a sign-in gate', () => {
     setupGuest()
     render(<CbatSymbols />)
-    const link = screen.getByRole('link', { name: /sign in/i })
-    expect(link.getAttribute('href')).toBe('/login')
+    expect(screen.queryByText('Sign in to play')).toBeNull()
   })
 })
 

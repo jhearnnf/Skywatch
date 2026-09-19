@@ -49,6 +49,27 @@ describe('ownsQueuedItem', () => {
 })
 
 describe('queued scores carry their owner', () => {
+  it('stores a guest score locally without making an unauthorized request', async () => {
+    const apiFetch = vi.fn()
+    const result = await submitCbatResult('target', { totalScore: 10 }, ctx(apiFetch))
+
+    expect(result).toMatchObject({ queued: true, local: true })
+    expect(apiFetch).not.toHaveBeenCalled()
+    expect([...mem.values()][0]).toMatchObject({ gameKey: 'target', userId: null })
+  })
+
+  it('uploads an ownerless guest score to the account created on that device', async () => {
+    await submitCbatResult('symbols', { correctCount: 7 }, ctx(vi.fn()))
+
+    setOutboxOwner('new-user')
+    const apiFetch = vi.fn().mockResolvedValue({ ok: true, status: 201 })
+    await flushOutbox(ctx(apiFetch))
+
+    expect(apiFetch).toHaveBeenCalledTimes(1)
+    expect(apiFetch.mock.calls[0][0]).toBe(`${API}/api/games/cbat/symbols/result`)
+    expect(mem.size).toBe(0)
+  })
+
   it('stamps the signed-in user when queueing', async () => {
     setOutboxOwner('u1')
     isOnline.mockReturnValue(false)
