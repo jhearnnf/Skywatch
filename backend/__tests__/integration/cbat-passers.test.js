@@ -833,8 +833,11 @@ describe('comments on the results endpoint', () => {
   // arithmetic for the role they answered with.
   it('carries how much of the roster they played and the estimate for their role', async () => {
     const u = await candidate({ completions: 5 });   // five Hard Target runs
-    await GameSessionCbatCutEasierResult.create({ userId: u._id, ...cutEasierRun });
-    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    // Dated with the rest of their play: a run stamped "now" would make them
+    // active today and drop them out of the dormant cohort.
+    await GameSessionCbatCutEasierResult.create({ userId: u._id, ...cutEasierRun, createdAt: daysAgo(30) });
+    // Five runs sit under the default threshold of ten, so lower it for the send.
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({ minCompletions: 5 });
     const invite = await SurveyInvite.findOne({ userId: u._id });
     await request(app).patch(`/api/survey/${invite.token}`).send({ satTest: true, role: 'pilot', passedForRole: 'yes' });
 
