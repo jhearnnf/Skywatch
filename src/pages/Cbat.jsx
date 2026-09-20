@@ -936,7 +936,7 @@ export default function Cbat() {
           data-testid="cbat-lounge-landmark"
           onClick={() => loungeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
           className="lg:hidden relative w-full py-3 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
-          aria-label="CBAT Lounge — go to the chat"
+          aria-label="CBAT chat: go to the lounge and your group"
         >
           {/* Ambient blue radial glow for depth — matches the radar tint below */}
           <div
@@ -998,7 +998,7 @@ export default function Cbat() {
               zIndex:     1,
             }}
           >
-            CBAT LOUNGE
+            CBAT CHAT
           </motion.span>
           <motion.span
             className="relative flex items-center gap-3 mt-1.5"

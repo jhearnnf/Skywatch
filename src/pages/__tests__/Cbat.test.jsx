@@ -800,7 +800,7 @@ describe('CBAT hub — the CBAT LOUNGE landmark', () => {
   it('announces the room under the report strip, below lg only', () => {
     renderWithUser()
     const landmark = screen.getByTestId('cbat-lounge-landmark')
-    expect(landmark).toHaveTextContent('CBAT LOUNGE')
+    expect(landmark).toHaveTextContent('CBAT CHAT')
     expect(landmark.className).toContain('lg:hidden')
   })
 
