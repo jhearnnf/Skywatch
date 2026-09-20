@@ -179,6 +179,18 @@ export default function Donate() {
           Your donation went through. Stripe has emailed you a receipt. This genuinely keeps
           SkyWatch running, and it is a real help.
         </p>
+        {/* The one moment the badge is worth mentioning. Signed-in only: an
+            anonymous donor does not get one, and telling them so here would
+            only sour the thank-you. */}
+        {user && (
+          <p className="text-sm text-slate-500 mb-6">
+            You now have a Supporter badge next to your name. You can hide it at any time under{' '}
+            <Link to="/profile" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
+              Profile
+            </Link>
+            {' '}&gt; Settings.
+          </p>
+        )}
         <Link
           to="/cbat"
           className="inline-flex px-6 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors no-underline"
@@ -313,9 +325,10 @@ export default function Donate() {
           dispute. */}
       <p className="text-[10px] sm:text-xs text-slate-400 leading-relaxed mt-4">
         Payments are handled securely by Stripe, and SkyWatch never sees your full card details.
-        A donation is a one-off voluntary payment: it is not a subscription, nothing is charged
-        again, and it does not unlock any features or change your scores. It is not a charitable
-        donation for tax purposes.
+        A donation is a one-off voluntary payment: it is not a subscription and nothing is charged
+        again. The only thing it changes is a Supporter badge next to your name, if you are signed
+        in when you give. It never affects your scores. It is not a charitable donation for tax
+        purposes.
       </p>
 
       <p className="text-[10px] sm:text-xs text-slate-500 text-center mt-5">

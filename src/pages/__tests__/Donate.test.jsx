@@ -195,6 +195,22 @@ describe('Donate page', () => {
     expect(screen.getByTestId('donate-success')).toHaveTextContent(/thank you/i)
   })
 
+  // The one moment the Supporter badge is worth mentioning, and the one place
+  // a donor learns it can be switched off.
+  it('tells a signed-in donor about the badge and where to hide it', () => {
+    renderPage({ query: 'donation=success', user: { _id: 'u1' } })
+    const card = screen.getByTestId('donate-success')
+    expect(card).toHaveTextContent(/supporter badge/i)
+    expect(card).toHaveTextContent(/hide it/i)
+    expect(card).toHaveTextContent(/settings/i)
+  })
+
+  // An anonymous donor does not get one, and being told so would sour the thank-you.
+  it('says nothing about the badge to a donor who was not signed in', () => {
+    renderPage({ query: 'donation=success' })
+    expect(screen.getByTestId('donate-success')).not.toHaveTextContent(/badge/i)
+  })
+
   // Backing out is a normal thing to do and is not an error, so it is stated
   // plainly and the form is left exactly as it was.
   it('states plainly that nothing was taken when the donor backs out', () => {
@@ -221,7 +237,12 @@ describe('Donate page', () => {
     renderPage()
     const text = screen.getByTestId('donate-page').textContent
     expect(text).toMatch(/not a subscription/i)
-    expect(text).toMatch(/does not unlock/i)
+    // The badge is the one thing a donation DOES change, and only for a
+    // signed-in donor. Both halves have to be said, or an anonymous donor
+    // finds out afterwards.
+    expect(text).toMatch(/supporter badge/i)
+    expect(text).toMatch(/signed in/i)
+    expect(text).toMatch(/never affects your scores/i)
     expect(text).toMatch(/stripe/i)
   })
 

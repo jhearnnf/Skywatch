@@ -252,6 +252,39 @@ router.patch('/me/showcase', protect, async (req, res) => {
   }
 });
 
+// PATCH /api/users/me/supporter-badge — wear or hide the "Supporter" mark.
+// Body { visible: boolean }.
+//
+// Its own switch rather than a rider on Score Sharing: that one promises the
+// name and badge still show, and a donor who is happy on the boards may still
+// not want their giving known (or the reverse). Stored as the objection, so
+// every existing donor wears the mark without a backfill. Refused for an
+// account that has never donated, so the flag can never sit on a profile it
+// does not apply to. Nothing is cached on the way out: every surface derives
+// the mark per request through `User.isSupporter`.
+router.patch('/me/supporter-badge', protect, async (req, res) => {
+  try {
+    const { visible } = req.body ?? {};
+    if (typeof visible !== 'boolean') {
+      return res.status(400).json({ status: 'error', message: 'visible must be true or false' });
+    }
+    if (!User.hasDonated(req.user)) {
+      return res.status(403).json({ status: 'error', message: 'Only a supporter has a Supporter badge' });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { hideSupporterBadge: !visible },
+      { returnDocument: 'after' }
+    ).populate('rank');
+
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // PATCH /api/users/me/community-notifications — turn the Community unread dot
 // on or off. Body { enabled: boolean }.
 //
@@ -415,7 +448,7 @@ router.get('/:id/profile', protect, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
     const target = await User.findById(req.params.id)
-      .select('displayName agentNumber isBot botKey cbatPassed selectedBadgeBriefId hideFromShowcase')
+      .select('displayName agentNumber isBot botKey cbatPassed donationPrompt.donatedAt hideSupporterBadge selectedBadgeBriefId hideFromShowcase')
       .lean();
     if (!target) return res.status(404).json({ message: 'User not found' });
 
@@ -434,6 +467,7 @@ router.get('/:id/profile', protect, async (req, res) => {
         isBot:       Boolean(target.isBot),
         botKey:      target.botKey ?? null,
         cbatPassed:  Boolean(target.cbatPassed),
+        supporter:   User.isSupporter(target),
         selectedBadge,
       },
       scoresHidden,

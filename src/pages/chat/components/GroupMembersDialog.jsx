@@ -41,6 +41,9 @@ export default function GroupMembersDialog({ title, members = [], onClose, onOpe
                   {m.cbatPassed && (
                     <span className="text-[10px] font-semibold text-emerald-600 shrink-0">Passed</span>
                   )}
+                  {m.supporter && (
+                    <span className="text-[10px] font-semibold text-amber-600 shrink-0">Supporter</span>
+                  )}
                 </li>
               ))}
             </ul>

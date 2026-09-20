@@ -149,7 +149,7 @@ router.post('/create-donation-session', optionalAuth, async (req, res) => {
           unit_amount: pence,
           product_data: {
             name:        'SkyWatch donation',
-            description: 'A one-off contribution towards running costs. Not a subscription, and it does not unlock any features.',
+            description: 'Thank you for supporting SkyWatch. A one-off contribution towards running costs, with nothing charged again. Signed-in donors get a Supporter badge next to their name.',
           },
         },
       }],

@@ -90,6 +90,14 @@ describe('GET /api/users/:id/profile — identity', () => {
     });
   });
 
+  // The Supporter mark is derived from the webhook's `donatedAt` stamp, never
+  // stored as its own flag, so the route has to compute it from the sub-doc.
+  it('marks a signed-in donor as a supporter, and nobody else', async () => {
+    expect((await get()).body.data.user.supporter).toBe(false);
+    await User.findByIdAndUpdate(user._id, { 'donationPrompt.donatedAt': new Date() });
+    expect((await get()).body.data.user.supporter).toBe(true);
+  });
+
   it('resolves the worn badge rather than returning a bare brief id', async () => {
     const media = await Media.create({
       mediaType: 'picture',

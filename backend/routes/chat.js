@@ -717,7 +717,7 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
   if (!ids.length) return {};
 
   const users = await User.find({ _id: { $in: ids } })
-    .select('displayName agentNumber selectedBadgeBriefId rank isBot botKey cbatPassed')
+    .select('displayName agentNumber selectedBadgeBriefId rank isBot botKey cbatPassed donationPrompt.donatedAt hideSupporterBadge')
     .populate('rank', 'rankNumber rankAbbreviation')
     .lean();
 
@@ -743,6 +743,8 @@ async function senderProfiles(messages, { conversationType, viewerIsAdmin }) {
       // Drives the "Passed" mark beside the name. Chat is signed-in only, so
       // there is no logged-out case to withhold it from here.
       cbatPassed:    Boolean(u.cbatPassed),
+      // Drives the "Supporter" mark beside it, for someone who has donated.
+      supporter:     User.isSupporter(u),
       // Picks which bot avatar to draw. A bot has no rank and no aircraft
       // badge, so without this it would fall all the way through to the "AC"
       // text every unranked account shows.
@@ -1120,7 +1122,7 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
       User.find({
         upcomingCbatDate: new Date(`${convo.channel.cohortDate}T00:00:00.000Z`),
         upcomingCbatRegion: convo.channel.cohortRegion,
-      }).select('displayName agentNumber cbatPassed').sort({ displayNameLower: 1, agentNumber: 1 }).lean(),
+      }).select('displayName agentNumber cbatPassed donationPrompt.donatedAt hideSupporterBadge').sort({ displayNameLower: 1, agentNumber: 1 }).lean(),
     ]);
     const unreadCount = await ChatMessage.countDocuments({
       conversationId: convo._id,
@@ -1150,6 +1152,7 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
         displayName: member.displayName ?? null,
         agentNumber: member.agentNumber ?? null,
         cbatPassed: Boolean(member.cbatPassed),
+        supporter: User.isSupporter(member),
       })),
     } });
   } catch (err) {
@@ -1163,7 +1166,7 @@ router.get('/users/:id/card', async (req, res) => {
   try {
     if (!isValidId(req.params.id)) return res.status(404).json({ message: 'User not found' });
     const target = await User.findById(req.params.id)
-      .select('displayName agentNumber isAdmin isBanned isBot botKey cbatPassed').lean();
+      .select('displayName agentNumber isAdmin isBanned isBot botKey cbatPassed donationPrompt.donatedAt hideSupporterBadge').lean();
     if (!target || target.isBanned) return res.status(404).json({ message: 'User not found' });
 
     res.json({ status: 'success', data: { user: {
@@ -1173,6 +1176,7 @@ router.get('/users/:id/card', async (req, res) => {
       isAdmin:     Boolean(target.isAdmin),
       isBot:       Boolean(target.isBot),
       cbatPassed:  Boolean(target.cbatPassed),
+      supporter:   User.isSupporter(target),
       botKey:      target.botKey ?? null,
       isSelf:      String(target._id) === String(req.user._id),
       // Drives the Block/Unblock button. Bots are excluded because blocking one

@@ -153,6 +153,13 @@ export default function Privacy() {
               ask us and we will remove the mark from your account.
             </li>
             <li>
+              <span className="text-slate-700 font-medium">Supporter badge</span> — if you make a
+              donation while signed in, an amber "Supporter" mark is shown beside your name across
+              the site, including on leaderboards, in chat and on your player profile. Only signed-in
+              SkyWatch users see it, and the amount you gave is never shown. You can hide it at any
+              time under Profile → Settings → Supporter Badge, and it takes effect immediately.
+            </li>
+            <li>
               <span className="text-slate-700 font-medium">Homepage progress examples</span> — your
               agent number only, never your display name. See section 4, including how to opt out
               under Profile → Settings → Score Sharing.

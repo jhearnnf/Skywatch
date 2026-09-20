@@ -19,6 +19,7 @@
 
 import { motion } from 'framer-motion'
 import CbatPassedBadge from './CbatPassedBadge'
+import SupporterBadge from './SupporterBadge'
 import { INPUT_METHOD_ICON, PEDALS_ICON, describeInput, normalizeInputMethod, normalizePedals } from '../utils/cbat/inputMethod'
 import UiThemeMark from './UiThemeMark'
 import { UI_THEME_LABELS, normalizeUiTheme } from '../lib/uiTheme'
@@ -216,6 +217,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
           {agentName(entry)}{isMe ? ' (you)' : ''}
         </span>
         {entry.cbatPassed && <CbatPassedBadge />}
+        {entry.supporter && <SupporterBadge />}
       </span>
       {variant === 'weekly' ? (
         <>

@@ -2952,7 +2952,19 @@ async function cbatLeaderboard(req, res, gameKey) {
           // that opening one of them to logged-out visitors cannot silently
           // start publishing the flag as well. Padded demo rows carry no
           // `user` at all, so they never show the tick.
-          ...(req.user ? { cbatPassed: '$user.cbatPassed' } : {}),
+          ...(req.user ? {
+            cbatPassed: '$user.cbatPassed',
+            // The "Supporter" mark: a signed-in donation stamps `donatedAt`,
+            // and the donor may switch it off. Same rule as `User.isSupporter`,
+            // in aggregation form. `$ifNull` covers both an unset sub-document
+            // and an explicit null.
+            supporter: {
+              $and: [
+                { $cond: [{ $ifNull: ['$user.donationPrompt.donatedAt', false] }, true, false] },
+                { $ne: ['$user.hideSupporterBadge', true] },
+              ],
+            },
+          } : {}),
           ...(isAdmin ? { email: '$user.email', achievedAt: '$createdAt' } : {}),
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
@@ -3113,7 +3125,15 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
           agentNumber: '$user.agentNumber',
           displayName: '$user.displayName',
           // Signed-in viewers only — see the all-time board for the reasoning.
-          ...(req.user ? { cbatPassed: '$user.cbatPassed' } : {}),
+          ...(req.user ? {
+            cbatPassed: '$user.cbatPassed',
+            supporter: {
+              $and: [
+                { $cond: [{ $ifNull: ['$user.donationPrompt.donatedAt', false] }, true, false] },
+                { $ne: ['$user.hideSupporterBadge', true] },
+              ],
+            },
+          } : {}),
           ...(isAdmin ? { email: '$user.email' } : {}),
           weekTotal: 1,
           plays: 1,

@@ -13,6 +13,7 @@ import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
 import ProfileBadge from '../components/ProfileBadge'
 import CbatPassedBadge from '../components/CbatPassedBadge'
+import SupporterBadge from '../components/SupporterBadge'
 import SocialLinks from '../components/SocialLinks'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import SEO from '../components/SEO'
@@ -99,6 +100,7 @@ export default function Profile() {
 
   const [diffBusy,    setDiffBusy]    = useState(false)
   const [showcaseBusy, setShowcaseBusy] = useState(false)
+  const [supporterBusy, setSupporterBusy] = useState(false)
   const [communityNotifsBusy, setCommunityNotifsBusy] = useState(false)
   const [nameEditing, setNameEditing] = useState(false)
   const [nameDraft,   setNameDraft]   = useState('')
@@ -262,6 +264,26 @@ export default function Profile() {
     finally { setShowcaseBusy(false) }
   }
 
+  // Wear or hide the Supporter mark. Its own switch, not part of Score Sharing:
+  // that one promises the name and badge still show, and giving is an identity
+  // fact rather than a score. Stored as the objection (hideSupporterBadge), so
+  // `visible` is its inverse and every existing donor wears it by default.
+  const supporterVisible = Boolean(user?.supporter)
+  const changeSupporter = async (visible) => {
+    if (supporterBusy || visible === supporterVisible) return
+    setSupporterBusy(true)
+    try {
+      const res = await apiFetch(`${API}/api/users/me/supporter-badge`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visible }),
+      })
+      const data = await res.json()
+      if (data?.data?.user) setUser(data.data.user)
+    } catch { /* non-fatal */ }
+    finally { setSupporterBusy(false) }
+  }
+
   // Community notification dot. Stored as "enabled" server-side, so an absent
   // field reads as on and needs no backfill.
   const communityNotifs = user?.communityNotificationsEnabled !== false
@@ -322,6 +344,7 @@ export default function Profile() {
                   {user.displayName || `Agent #${user.agentNumber ?? '———'}`}
                 </button>
                 {user?.cbatPassed && <CbatPassedBadge />}
+                {user?.supporter && <SupporterBadge />}
               </div>
               {!slim && <p className="text-slate-600 text-sm">{rankDisplay}</p>}
               {user.displayName && (
@@ -682,6 +705,49 @@ export default function Profile() {
               </p>
             )}
           </div>
+
+          {/* Supporter badge. Only offered to someone who has donated: a switch
+              for a badge you have not earned is noise, and 99% of accounts
+              would otherwise see a dead setting. */}
+          {user?.hasDonated && (
+            <div data-testid="supporter-badge-setting" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Supporter Badge</p>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Thank you for donating. A Supporter badge is shown next to your name in chat, on the
+                leaderboards and on your player profile. Other signed-in players can see it. You can
+                hide it here at any time.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => changeSupporter(true)}
+                  disabled={supporterBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${supporterVisible
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
+                >
+                  🏅 Show my badge
+                </button>
+                <button
+                  onClick={() => changeSupporter(false)}
+                  disabled={supporterBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${!supporterVisible
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
+                >
+                  🚫 Hide my badge
+                </button>
+              </div>
+              {!supporterVisible && (
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Your Supporter badge is hidden everywhere. This takes effect straight away.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Subscription — hidden in slim (native) mode and while beta tester auto-gold is active */}
           {!slim && !appSettings?.betaTesterAutoGold && (() => {

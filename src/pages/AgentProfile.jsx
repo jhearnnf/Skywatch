@@ -9,6 +9,7 @@ import UserCbatProgressModal from '../components/admin/UserCbatProgressModal'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import ProfileBadge from '../components/ProfileBadge'
 import CbatPassedBadge from '../components/CbatPassedBadge'
+import SupporterBadge from '../components/SupporterBadge'
 import SEO from '../components/SEO'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
@@ -335,6 +336,7 @@ export function AgentProfileContent({ id, embedded = false }) {
                     {agent.displayName || `Agent #${agent.agentNumber ?? '———'}`}
                   </p>
                   {agent.cbatPassed && <CbatPassedBadge />}
+                  {agent.supporter && <SupporterBadge />}
                 </div>
                 <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{agent.agentNumber ?? '———'}</p>
               </div>

@@ -227,6 +227,14 @@ const userSchema = new mongoose.Schema(
     // clears the showcase cache).
     hideFromShowcase: { type: Boolean, default: false },
 
+    // Whether a donor wears the "Supporter" mark beside their name. Stored as
+    // the objection, like hideFromShowcase, so an existing donor needs no
+    // backfill and reads as wearing it. Deliberately NOT folded into Score
+    // Sharing: that switch promises "your name and badge still show", and a
+    // donation is an identity fact rather than a score. Only meaningful on an
+    // account with `donationPrompt.donatedAt` set; see `isSupporter`.
+    hideSupporterBadge: { type: Boolean, default: false },
+
     // The role the user is aiming at, as a `key` from constants/cbatBatteries.json. Picks which
     // battery the Aptitude Report leads with, and which one the summary card on /cbat shows. Null
     // until they choose — the report then prompts for a target rather than guessing one, since the
@@ -508,7 +516,42 @@ userSchema.methods.comparePassword = function (candidate) {
   return bcrypt.compare(candidate, this.password);
 };
 
+// ── Statics ──────────────────────────────────────────────────────────────────
+
+// Whether this account wears the "Supporter" mark: someone who has donated
+// while signed in and has not switched the mark off. Derived from
+// `donationPrompt.donatedAt` rather than stored as its own flag, because the
+// webhook already stamps that field and one source of truth is one fewer
+// thing to backfill. Takes a plain object so it works on `.lean()` results as
+// well as documents; the virtual below is the same rule for documents that
+// serialise themselves (e.g. /me).
+//
+// Every surface that shows the mark reads it through here, which is what
+// makes the opt-out (hideSupporterBadge) cover chat, the boards, the profile
+// and the user card with no per-surface work. Callers must select BOTH
+// fields.
+//
+// An anonymous donor is invisible by construction (see the schema comment on
+// `donatedAt`), so the mark can only ever be earned signed in.
+userSchema.statics.isSupporter = function (u) {
+  return Boolean(u?.donationPrompt?.donatedAt) && !u?.hideSupporterBadge;
+};
+
+// Has donated, whether or not they wear the mark. Drives whether the settings
+// row is offered at all: a switch for a badge you have not earned is noise.
+userSchema.statics.hasDonated = function (u) {
+  return Boolean(u?.donationPrompt?.donatedAt);
+};
+
 // ── Virtuals ─────────────────────────────────────────────────────────────────
+
+userSchema.virtual('supporter').get(function () {
+  return Boolean(this.donationPrompt?.donatedAt) && !this.hideSupporterBadge;
+});
+
+userSchema.virtual('hasDonated').get(function () {
+  return Boolean(this.donationPrompt?.donatedAt);
+});
 
 userSchema.virtual('isTrialActive').get(function () {
   if (this.subscriptionTier !== 'trial' || !this.trialStartDate) return false;

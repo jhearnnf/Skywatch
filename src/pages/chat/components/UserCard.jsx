@@ -107,6 +107,9 @@ export default function UserCard({ userId, onClose, onOpenDm, onViewProfile, onB
             {profile.cbatPassed && (
               <p className="text-[11px] font-semibold text-emerald-600 mt-1">Passed the CBAT</p>
             )}
+            {profile.supporter && (
+              <p className="text-[11px] font-semibold text-amber-600 mt-1">SkyWatch supporter</p>
+            )}
 
             {err && <p className="text-xs text-red-600 mt-3">{err}</p>}
 
