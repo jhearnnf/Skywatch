@@ -865,3 +865,51 @@ describe('GET /api/admin/stats/donation-funnel', () => {
     expect(res.body.data.users.map(u => u.displayName)).toEqual(['Clicker', 'SawOnly']);
   });
 });
+
+// ── games.cbatHardware ───────────────────────────────────────────────────────
+// The two Stats tiles beside the affiliate clicks: runs flown on a joystick
+// across every steered game, and SMA runs flown on pedals. Runs and players
+// both, with the share taken against runs that recorded the field at all.
+describe('GET /api/admin/stats — games.cbatHardware', () => {
+  const GameSessionCbatRttResult       = require('../../models/GameSessionCbatRttResult');
+  const GameSessionCbatSmaResult       = require('../../models/GameSessionCbatSmaResult');
+  const GameSessionCbatSmaEasierResult = require('../../models/GameSessionCbatSmaEasierResult');
+
+  it('returns zeroes with nothing recorded', async () => {
+    const admin = await createAdminUser();
+    const res = await request(app).get('/api/admin/stats').set('Cookie', authCookie(admin._id));
+    expect(res.body.data.games.cbatHardware).toEqual({
+      joystick: { runs: 0, players: 0, recorded: 0 },
+      pedals:   { runs: 0, players: 0, recorded: 0 },
+    });
+  });
+
+  it('counts joystick runs across the steered games, players once each, and only recorded runs in the share', async () => {
+    const admin = await createAdminUser();
+    const a = await createUser();
+    const b = await createUser();
+    await GameSessionCbatRttResult.create([
+      { userId: a._id, totalScore: 1, totalTime: 1, inputMethod: 'joystick' },
+      { userId: a._id, totalScore: 1, totalTime: 1, inputMethod: 'joystick' },
+      { userId: b._id, totalScore: 1, totalTime: 1, inputMethod: 'touch' },
+      { userId: b._id, totalScore: 1, totalTime: 1 },                          // older run: unrecorded
+    ]);
+    await GameSessionCbatSmaResult.create([
+      { userId: a._id, totalScore: 1, totalTime: 1, inputMethod: 'joystick', pedals: true },
+      { userId: b._id, totalScore: 1, totalTime: 1, inputMethod: 'keyboard-mouse', pedals: true },
+      { userId: b._id, totalScore: 1, totalTime: 1, inputMethod: 'keyboard-mouse', pedals: false },
+      { userId: b._id, totalScore: 1, totalTime: 1, inputMethod: 'keyboard-mouse' },   // pedals unsaid
+    ]);
+    await GameSessionCbatSmaEasierResult.create([
+      { userId: a._id, totalScore: 1, totalTime: 1, inputMethod: 'joystick', pedals: true },
+    ]);
+
+    const res = await request(app).get('/api/admin/stats').set('Cookie', authCookie(admin._id));
+    expect(res.body.data.games.cbatHardware).toEqual({
+      // 2 RTT + 1 SMA + 1 SMA Easier joystick runs, all by `a`; 8 runs recorded a control.
+      joystick: { runs: 4, players: 1, recorded: 8 },
+      // 3 pedal runs by two people; 4 SMA runs said either way.
+      pedals:   { runs: 3, players: 2, recorded: 4 },
+    });
+  });
+});

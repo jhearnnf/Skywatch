@@ -86,6 +86,10 @@ const MOCK_STATS = {
     wta:          { total: 4, won: 2, abandoned: 1, round1Correct: 3, round2Correct: 2, totalSeconds: 300 },
     flashcard:    { sessions: 8, totalCards: 40, recalled: 30, abandoned: 2, totalSeconds: 200 },
     aptitudeSync: { total: 3, completed: 2, abandoned: 1, airstarsEarned: 120 },
+    cbatHardware: {
+      joystick: { runs: 30, players: 4, recorded: 200 },
+      pedals:   { runs: 5,  players: 1, recorded: 80 },
+    },
   },
   briefs: { totalBrifsRead: 80, totalBrifsOpened: 120, totalReadSeconds: 10000 },
   tutorials: { viewed: 5, skipped: 2 },
@@ -381,6 +385,76 @@ describe('Admin — Stats tab: Android app users', () => {
     const card = screen.getByText('Android App Users').closest('[class*="rounded-2xl"]')
     expect(card.closest('[aria-disabled="true"]')).toBeNull()
     expect(within(card).getByText('0% of all accounts')).toBeInTheDocument()
+  })
+})
+
+// The joystick and pedal tiles: runs as the headline (what the boards show),
+// players and the share of recorded runs underneath. They live in the affiliate
+// row because the Amazon link is on the cabinets these runs come from.
+describe('Admin — Stats tab: hardware runs', () => {
+  beforeEach(() => { global.fetch = setupFetch(); mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('shows joystick runs with players and the share of steered runs', async () => {
+    render(<Admin />)
+    const label = await screen.findByText('Joystick Runs')
+    const card = label.closest('[class*="rounded-2xl"]')
+    expect(within(card).getByText('30')).toBeInTheDocument()
+    expect(within(card).getByText('4 players · 15% of steered runs')).toBeInTheDocument()
+  })
+
+  it('shows pedal runs with players and the share of SMA runs, singular for one player', async () => {
+    render(<Admin />)
+    const label = await screen.findByText('Pedal Runs')
+    const card = label.closest('[class*="rounded-2xl"]')
+    expect(within(card).getByText('5')).toBeInTheDocument()
+    expect(within(card).getByText('1 player · 6% of SMA runs')).toBeInTheDocument()
+  })
+
+  it('sits in the same row as the affiliate clicks', async () => {
+    render(<Admin />)
+    await screen.findByText('Joystick Runs')
+    const row = (label) => screen.getByText(label).closest('.grid')
+    expect(row('Joystick Runs')).toBe(row('Amazon Affiliate Clicks'))
+    expect(row('Pedal Runs')).toBe(row('Amazon Affiliate Clicks'))
+  })
+
+  it('says so plainly before anything has been recorded, and survives an older backend', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({
+          status: 'success',
+          data: { ...MOCK_STATS, games: { ...MOCK_STATS.games, cbatHardware: undefined } },
+        }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<Admin />)
+    const joystick = (await screen.findByText('Joystick Runs')).closest('[class*="rounded-2xl"]')
+    expect(within(joystick).getByText('0')).toBeInTheDocument()
+    expect(within(joystick).getByText('no steered runs recorded yet')).toBeInTheDocument()
+    const pedals = screen.getByText('Pedal Runs').closest('[class*="rounded-2xl"]')
+    expect(within(pedals).getByText('no SMA runs recorded yet')).toBeInTheDocument()
+  })
+
+  it('distinguishes "nobody yet" from "recorded, but none on hardware"', async () => {
+    global.fetch = vi.fn().mockImplementation((url) => {
+      if (url.includes('/api/admin/stats')) {
+        return Promise.resolve({ ok: true, json: async () => ({
+          status: 'success',
+          data: { ...MOCK_STATS, games: { ...MOCK_STATS.games, cbatHardware: {
+            joystick: { runs: 0, players: 0, recorded: 12 },
+            pedals:   { runs: 0, players: 0, recorded: 0 },
+          } } },
+        }) })
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) })
+    })
+
+    render(<Admin />)
+    const joystick = (await screen.findByText('Joystick Runs')).closest('[class*="rounded-2xl"]')
+    expect(within(joystick).getByText('none of 12 steered runs')).toBeInTheDocument()
   })
 })
 

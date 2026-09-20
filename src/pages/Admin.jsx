@@ -699,6 +699,20 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
     page:   { visits: 0, checkouts: 0, ...(users.donation?.page ?? {}) },
     received: { donors: 0, totalPence: 0, ...(users.donation?.received ?? {}) },
   }
+  // Same defaulting for the hardware tiles: an older backend shows two honest
+  // zeroes rather than a crash.
+  const h0 = { runs: 0, players: 0, recorded: 0 }
+  const hardware = {
+    joystick: { ...h0, ...(games.cbatHardware?.joystick ?? {}) },
+    pedals:   { ...h0, ...(games.cbatHardware?.pedals   ?? {}) },
+  }
+  // "12 players · 8% of runs", or why there is nothing to show yet. The share is
+  // of runs that recorded a control, which is what the backend counts in
+  // `recorded` — see cbatHardwareStats.
+  const hardwareSub = ({ runs, players, recorded }, what) => {
+    if (!runs) return recorded ? `none of ${fmtNum(recorded)} ${what}` : `no ${what} recorded yet`
+    return `${fmtNum(players)} ${players === 1 ? 'player' : 'players'} · ${pct(runs, recorded)} of ${what}`
+  }
 
   // Slim (CBAT-only) mode removes the surfaces some of these stats measure — quiz difficulty and
   // the tier-gated full site — so the cards would sit there quietly frozen with no hint as to
@@ -884,12 +898,29 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
           </button>
         </div>
         {showDonationFunnel && <DonationFunnelList API={API} donation={donation} />}
+        {/* The hardware row. The two run counts sit beside the affiliate clicks because
+            they are the other end of the same cabinet: the joystick and pedal panels on
+            the steered games carry the Amazon link, and these say whether anyone who saw
+            it actually flies on the thing. Runs are the headline (that is what the boards
+            show); players and the share of recorded runs go on the sub line. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">
           <StatCard
             label="Amazon Affiliate Clicks"
             value={fmtNum(users.amazonAffiliateClicks ?? 0)}
             color="amber"
             sub="Total clicks since tracking began, including repeat clicks"
+          />
+          <StatCard
+            label="Joystick Runs"
+            value={fmtNum(hardware.joystick.runs)}
+            color="brand"
+            sub={hardwareSub(hardware.joystick, 'steered runs')}
+          />
+          <StatCard
+            label="Pedal Runs"
+            value={fmtNum(hardware.pedals.runs)}
+            color="brand"
+            sub={hardwareSub(hardware.pedals, 'SMA runs')}
           />
         </div>
       </StatsSection>

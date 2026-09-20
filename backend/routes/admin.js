@@ -443,6 +443,46 @@ router.post('/account-deletions/lookup', async (req, res) => {
   }
 });
 
+// Runs flown on real hardware across the steered CBAT games — the number that
+// says whether the joystick and pedal cabinets (and the Amazon link under them)
+// are reaching anyone. Registry-driven: every entry with `inputMethod: true`
+// records a control, every entry with `pedals: true` (SMA) records pedals, so a
+// new steered game is counted the day it ships.
+//
+// Runs AND players, because they answer different questions: a hundred stick
+// runs from one enthusiast is one stick owner. Players are unioned across the
+// collections in a Set — the same person on RTT and SMA is one person.
+//
+// The share is taken against runs that RECORDED the field (it is null on scores
+// older than it, and on offline scores queued before it shipped), so the
+// percentage means "of runs since we started asking", not "of all runs ever".
+async function cbatHardwareStats() {
+  const steered  = Object.values(CBAT_GAMES).filter(c => c.inputMethod);
+  const pedalled = Object.values(CBAT_GAMES).filter(c => c.pedals);
+  const runs = (cfgs, filter) => Promise.all(
+    cfgs.map(c => c.Model.countDocuments({ ...(c.modeFilter ?? {}), ...filter })),
+  ).then(ns => ns.reduce((a, b) => a + b, 0));
+  const players = (cfgs, filter) => Promise.all(
+    cfgs.map(c => c.Model.distinct('userId', { ...(c.modeFilter ?? {}), ...filter })),
+  ).then(lists => new Set(lists.flat().map(String)).size);
+
+  const [
+    joystickRuns, joystickPlayers, steeredRecorded,
+    pedalRuns, pedalPlayers, pedalRecorded,
+  ] = await Promise.all([
+    runs(steered, { inputMethod: 'joystick' }),
+    players(steered, { inputMethod: 'joystick' }),
+    runs(steered, { inputMethod: { $ne: null } }),
+    runs(pedalled, { pedals: true }),
+    players(pedalled, { pedals: true }),
+    runs(pedalled, { pedals: { $ne: null } }),
+  ]);
+  return {
+    joystick: { runs: joystickRuns, players: joystickPlayers, recorded: steeredRecorded },
+    pedals:   { runs: pedalRuns,    players: pedalPlayers,    recorded: pedalRecorded },
+  };
+}
+
 // GET /api/admin/stats
 router.get('/stats', async (_req, res) => {
   try {
@@ -476,6 +516,7 @@ router.get('/stats', async (_req, res) => {
       donatePageSeen, donatePageClicked,
       donationReceivedAgg, donationAnonReceivedAgg,
       affiliateCounts,
+      cbatHardware,
     ] = await Promise.all([
       User.countDocuments(),
       // A non-null upcoming date is the source of truth for membership of a
@@ -659,6 +700,7 @@ router.get('/stats', async (_req, res) => {
         }},
       ]),
       AffiliateClickCount.find().lean(),
+      cbatHardwareStats(),
     ]);
 
     // The union is over people, not rows: someone who saw the post-game note and later
@@ -741,6 +783,9 @@ router.get('/stats', async (_req, res) => {
             abandoned:      aptitudeSyncAbandoned,
             airstarsEarned: aptitudeSyncAirstarsAgg[0]?.total ?? 0,
           },
+          // Steered CBAT runs flown on a joystick, and SMA runs flown on
+          // pedals — see cbatHardwareStats above for what each number is.
+          cbatHardware,
         },
         briefs: { totalBrifsRead, totalBrifsOpened, totalReadSeconds: readTimeAgg[0]?.total ?? 0 },
         tutorials: {
