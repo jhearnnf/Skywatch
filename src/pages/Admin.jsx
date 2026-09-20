@@ -1376,6 +1376,53 @@ const writeTesterFx = (on) => {
 // grew underneath it. Matches the other paged admin lists.
 const USERS_PAGE_SIZE = 20
 
+// Which page numbers the users pager shows: the first and last always, a window
+// around the current page, and a gap marker wherever pages are skipped, so an
+// admin can jump straight into the middle or to the end of a long list instead
+// of stepping there one page at a time. Seven or fewer pages simply all show.
+function pageNumberWindow(page, pageCount) {
+  if (pageCount <= 7) return Array.from({ length: pageCount }, (_, i) => i + 1)
+  const pages = new Set([1, pageCount])
+  for (let n = page - 1; n <= page + 1; n++) if (n >= 1 && n <= pageCount) pages.add(n)
+  // Near either end the window slides rather than shrinks, so the pager always
+  // offers the same number of direct jumps wherever the reader is.
+  if (page <= 3) [2, 3, 4].forEach(n => pages.add(n))
+  if (page >= pageCount - 2) [pageCount - 3, pageCount - 2, pageCount - 1].forEach(n => pages.add(n))
+  const sorted = [...pages].sort((a, b) => a - b)
+  const out = []
+  sorted.forEach((n, i) => {
+    if (i > 0 && n - sorted[i - 1] > 1) out.push('gap')
+    out.push(n)
+  })
+  return out
+}
+
+function UsersPageNumbers({ page, pageCount, loading, onPage }) {
+  return (
+    <nav aria-label="Pages" className="flex items-center gap-1">
+      {pageNumberWindow(page, pageCount).map((n, i) => n === 'gap' ? (
+        <span key={`gap-${i}`} aria-hidden="true" className="px-1 text-xs text-slate-400">…</span>
+      ) : (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onPage(n)}
+          disabled={loading || n === page}
+          aria-current={n === page ? 'page' : undefined}
+          aria-label={`Page ${n}`}
+          className={`min-w-[2rem] text-xs px-2 py-1.5 rounded-lg border font-semibold transition-colors ${
+            n === page
+              ? 'border-brand-600 bg-brand-600 text-white'
+              : 'border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40'
+          }`}
+        >
+          {n}
+        </button>
+      ))}
+    </nav>
+  )
+}
+
 // Every collapsed row in the users list is this tall, no exceptions: two rows of
 // the same page must never differ because one of them has a version verdict to
 // show and the other doesn't, and the skeleton must stand at exactly the height
@@ -6190,22 +6237,27 @@ function UsersTab({ API, onViewEmailHistory }) {
       {/* Pagination. Hidden while searching: those results are their own short,
           complete list rather than a window onto the population. */}
       {!search && pageCount > 1 && (
-        <div className="flex items-center justify-between mt-5 pr-16">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1 || loading}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
-          >
-            ← Prev
-          </button>
-          <span className="text-xs text-slate-400">Page {page} of {pageCount} ({total} total)</span>
-          <button
-            onClick={() => setPage(p => Math.min(pageCount, p + 1))}
-            disabled={page === pageCount || loading}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
-          >
-            Next →
-          </button>
+        <div className="mt-5 pr-16 space-y-3">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            >
+              ← Prev
+            </button>
+            <span className="text-xs text-slate-400">Page {page} of {pageCount} ({total} total)</span>
+            <button
+              onClick={() => setPage(p => Math.min(pageCount, p + 1))}
+              disabled={page === pageCount || loading}
+              className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 font-semibold disabled:opacity-40 hover:bg-slate-50 transition-colors"
+            >
+              Next →
+            </button>
+          </div>
+          <div className="flex justify-center">
+            <UsersPageNumbers page={page} pageCount={pageCount} loading={loading} onPage={setPage} />
+          </div>
         </div>
       )}
     </div>

@@ -124,8 +124,9 @@ describe('Users upcoming CBAT sort', () => {
   })
 })
 
-function setupFetch() {
+function setupFetch(population = ALL) {
   const listCalls = []
+  const total = population.length
 
   const fetchMock = vi.fn().mockImplementation((url, opts = {}) => {
     // Writes (ban, make-admin, award…) share the /users prefix; only reads are
@@ -146,10 +147,10 @@ function setupFetch() {
       const params = new URL(url, 'http://x').searchParams
       const limit  = parseInt(params.get('limit'), 10) || PAGE_SIZE
       const page   = parseInt(params.get('page'), 10) || 1
-      const users  = ALL.slice((page - 1) * limit, page * limit)
+      const users  = population.slice((page - 1) * limit, page * limit)
       return Promise.resolve({ ok: true, json: async () => ({
         status: 'success',
-        data: { users, latestClients: {}, total: TOTAL, page, limit, pageCount: Math.ceil(TOTAL / limit) },
+        data: { users, latestClients: {}, total, page, limit, pageCount: Math.ceil(total / limit) },
       }) })
     }
     if (url.includes('/api/admin/stats')) {
@@ -547,5 +548,83 @@ describe('Admin — Users tab: one row height', () => {
 
     const expandedCard = screen.getByText('Joined').closest('.rounded-2xl.overflow-hidden')
     expect(expandedCard.className).not.toContain(ROW_H)
+  })
+})
+
+// The numbered pager: every page of a short list, and a window with gaps on a
+// long one, so an admin can land in the middle or at the end in one click.
+describe('Admin — Users tab: page numbers', () => {
+  let listCalls
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const pageButtons = () => screen.getAllByRole('button', { name: /^Page \d+$/ })
+    .map(b => b.textContent)
+
+  it('lists every page of a short list and marks the current one', async () => {
+    const s = setupFetch()
+    global.fetch = s.fetchMock
+    listCalls = s.listCalls
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+
+    expect(pageButtons()).toEqual(['1', '2', '3'])
+    expect(screen.getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Page 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Page 3' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('jumps straight to a page by its number', async () => {
+    const s = setupFetch()
+    global.fetch = s.fetchMock
+    listCalls = s.listCalls
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Page 3' }))
+
+    await screen.findByText('Page 3 of 3 (45 total)')
+    expect(rowNames()[0]).toBe('Agent 041')
+    expect(new URL(listCalls[1], 'http://x').searchParams.get('page')).toBe('3')
+    expect(screen.getByRole('button', { name: 'Page 3' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('windows a long list around the current page with the ends always reachable', async () => {
+    // 400 accounts, 20 pages — the population the real list is at.
+    const big = Array.from({ length: 400 }, (_, i) => makeUser(i + 1))
+    const s = setupFetch(big)
+    global.fetch = s.fetchMock
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+
+    expect(pageButtons()).toEqual(['1', '2', '3', '4', '20'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Page 20' }))
+    await screen.findByText('Page 20 of 20 (400 total)')
+    expect(rowNames()[0]).toBe('Agent 381')
+    expect(pageButtons()).toEqual(['1', '17', '18', '19', '20'])
+
+    // Into the middle: the window recentres and both ends stay one click away.
+    for (let n = 17; n >= 10; n--) {
+      fireEvent.click(screen.getByRole('button', { name: `Page ${n}` }))
+      await screen.findByText(`Page ${n} of 20 (400 total)`)
+    }
+    expect(pageButtons()).toEqual(['1', '9', '10', '11', '20'])
+    expect(rowNames()[0]).toBe('Agent 181')
+  })
+
+  it('is hidden with the rest of the pager while searching', async () => {
+    global.fetch = setupFetch().fetchMock
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+
+    fireEvent.change(screen.getByPlaceholderText('Search by email or agent number…'), { target: { value: 'user42' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await screen.findByText('Agent 042')
+
+    expect(screen.queryByRole('button', { name: /^Page \d+$/ })).not.toBeInTheDocument()
   })
 })
