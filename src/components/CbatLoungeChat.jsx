@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { nameColour } from '../pages/chat/nameColour'
@@ -885,11 +885,6 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
             </button>
           ))}
         </div>
-        {room !== 'lounge' && lounge?.conversationId && <Link
-          to={`/chat/${lounge.conversationId}`}
-          className="text-[10px] text-slate-500 no-underline hover:text-brand-600 hover:underline underline-offset-2 transition-colors"
-          title="Open this group in Community"
-        >Community</Link>}
         {collapsible && (
           <button
             type="button"
