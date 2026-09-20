@@ -586,6 +586,11 @@ export default function MessageList({
   // Name of the bot currently composing a reply, or null.
   typingName = null,
   emptyLabel = 'No messages yet — say hi to get started.',
+  // Background text drawn above the whole history: what this room is for.
+  // Not a message, so it has no sender, no time, no actions and never counts
+  // as unread. Conversation pushes it up out of the way; a scroll back finds
+  // it again. Only a CBAT group sends one.
+  hint = null,
 }) {
   const scrollRef = useRef(null)
   // Which row has its actions pinned open, on a device with no hover. Held
@@ -639,14 +644,23 @@ export default function MessageList({
   // The first message the viewer had not seen last time they were here. Found
   // once per render pass rather than tested per row, so the line can only ever
   // be drawn in one place.
+  // Never on a system line: a "closed this chat" marker is not a new message
+  // waiting for anyone.
   const firstUnseen = dividerAfter
-    ? visible.find(m => new Date(m.createdAt) > new Date(dividerAfter))
+    ? visible.find(m => m.senderRole !== 'system' && new Date(m.createdAt) > new Date(dividerAfter))
     : null
 
   return (
     <div ref={scrollRef} onScroll={trackPinned} className="flex-1 overflow-y-auto px-4 py-3">
       <div ref={contentRef}>
-      {visible.length === 0 && (
+      {hint && (
+        <div className="flex justify-center px-2 pt-2 pb-4" data-testid="room-hint">
+          <p className="max-w-md text-center text-xs leading-relaxed text-slate-400 italic">{hint}</p>
+        </div>
+      )}
+      {/* With a hint on screen an empty room already says what to do, so the
+          generic prompt would just repeat it. */}
+      {visible.length === 0 && !hint && (
         <p className="text-center text-xs text-slate-400 py-8">{emptyLabel}</p>
       )}
       {visible.map((m, i) => {

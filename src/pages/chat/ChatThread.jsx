@@ -520,6 +520,7 @@ export default function ChatThread({
           emptyLabel={type === 'channel'
             ? 'Nothing here yet — be the first to post.'
             : 'No messages yet — say hi to get started.'}
+          hint={conversation?.welcome ?? null}
         />
       )}
 

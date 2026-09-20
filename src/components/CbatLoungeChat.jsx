@@ -454,6 +454,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
       ))
       const mine = String(incoming.senderUserId ?? '') === String(user?._id)
       if (mine) return
+      // A system line is shown but never counted: no "new messages" nudge and
+      // no number on a tab, same as the server's unread counts.
+      if (incoming.senderRole === 'system') return
       if (readingRef.current) {
         markRead()
         if (room === 'group') setGroupUnreadCount(0)
@@ -1014,14 +1017,35 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
         }}
         className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5"
       >
+        {/* The group's welcome, as background text above the history rather
+            than a message in it: nothing to reply to, react on or count. The
+            server only sends one for a cohort room. */}
+        {!loading && lounge?.welcome && (
+          <div className="flex justify-center px-2 pt-1 pb-3" data-testid="room-hint">
+            <p className="max-w-[26rem] text-center text-[11px] leading-relaxed text-slate-500 italic">{lounge.welcome}</p>
+          </div>
+        )}
         {loading ? (
           <p className="text-xs text-slate-500 text-center py-6">Loading…</p>
         ) : visible.length === 0 ? (
-          <p className="text-xs text-slate-500 text-center py-6">
+          // The hint already says what the room is for; no second prompt
+          // under it.
+          !lounge?.welcome && <p className="text-xs text-slate-500 text-center py-6">
             Nobody has said anything yet. Say hello.
           </p>
         ) : (
           visible.map(m => {
+            // The same grey centred hint the full room draws: a line from the
+            // site, not a person, so it gets no name, no colour and no actions.
+            if (m.senderRole === 'system') {
+              return (
+                <div key={m._id} className="flex justify-center py-1" data-msg-row={String(m._id)}>
+                  <span className="text-[11px] leading-snug text-slate-500 italic text-center px-3 py-1.5 rounded-xl bg-slate-100/60 border border-game-line max-w-[26rem]">
+                    {m.body}
+                  </span>
+                </div>
+              )
+            }
             const prof    = senders[String(m.senderUserId ?? '')]
             const name     = senderName(m.senderUserId, senders, m.senderDisplayName) || 'Unknown agent'
             const isBot   = prof

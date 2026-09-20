@@ -221,6 +221,17 @@ describe('closed', () => {
     expect(await screen.findByLabelText('New messages')).toBeTruthy()
   })
 
+  it('does not light the dot for a system line', async () => {
+    stubFetch()
+    renderClosed()
+    await waitFor(() => expect(FakeEventSource.last).not.toBeNull())
+
+    FakeEventSource.last.emit('message', {
+      _id: 's1', senderUserId: null, senderRole: 'system', body: 'Welcome to your SkyWatch group.', mentions: [],
+    })
+    await waitFor(() => expect(screen.queryByLabelText('New messages')).toBeNull())
+  })
+
   it('does not light the dot for your own message', async () => {
     stubFetch()
     renderClosed()
@@ -247,6 +258,32 @@ describe('private CBAT group', () => {
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
     expect(await screen.findByLabelText('3 members in your CBAT group')).toHaveTextContent('3 members')
+  })
+
+  it('draws the welcome as background text above the history, not as a message', async () => {
+    stubFetch({
+      group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 1, welcome: 'Welcome to your SkyWatch group.' },
+      messages: [],
+    })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    const hint = await screen.findByTestId('room-hint')
+    expect(hint).toHaveTextContent('Welcome to your SkyWatch group.')
+    // Not a row: nothing to tap, no sender, and no second "say hello" prompt.
+    expect(document.querySelector('[data-msg-row]')).toBeNull()
+    expect(screen.queryByText('Unknown agent')).toBeNull()
+    expect(screen.queryByText('Nobody has said anything yet. Say hello.')).toBeNull()
+  })
+
+  it('keeps the welcome above the conversation once people start talking', async () => {
+    stubFetch({
+      group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 2, welcome: 'Welcome to your SkyWatch group.' },
+    })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    const hint = await screen.findByTestId('room-hint')
+    const first = await screen.findByText('anyone about?')
+    expect(hint.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows the date form instead of remaining on Loading when no date is configured', async () => {

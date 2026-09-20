@@ -54,6 +54,26 @@ const renderList = (messages, props = {}) =>
     />,
   )
 
+describe('MessageList — room hint', () => {
+  it('draws the hint above the first message and drops the empty prompt', () => {
+    const { rerender } = renderList([], { hint: 'Welcome to your SkyWatch group.', emptyLabel: 'Nothing here yet' })
+    expect(screen.getByTestId('room-hint')).toHaveTextContent('Welcome to your SkyWatch group.')
+    expect(screen.queryByText('Nothing here yet')).toBeNull()
+
+    rerender(
+      <MessageList messages={[msg('u1', 'hello')]} currentUserId="me" conversationType="channel" senders={SENDERS} hint="Welcome to your SkyWatch group." />,
+    )
+    const hint = screen.getByTestId('room-hint')
+    expect(hint.compareDocumentPosition(screen.getByText('hello')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows nothing extra without one', () => {
+    renderList([], { emptyLabel: 'Nothing here yet' })
+    expect(screen.queryByTestId('room-hint')).toBeNull()
+    expect(screen.getByText('Nothing here yet')).toBeTruthy()
+  })
+})
+
 describe('MessageList — avatars', () => {
   it('shows the sender\'s selected profile image beside their message', () => {
     renderList([msg('u1', 'hello')])

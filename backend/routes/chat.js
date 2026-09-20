@@ -37,11 +37,36 @@ const userCbatDateKey = (user) => user?.upcomingCbatDate
   ? new Date(user.upcomingCbatDate).toISOString().slice(0, 10)
   : null;
 
+// What the test is called where the room is. Not everyone sits "the CBAT":
+// Canada's is the CFAST, and the rest have no one name applicants agree on,
+// so those get the plain phrase rather than a guess that reads wrong.
+const cohortTestName = (region) => ({ GB: 'the CBAT', CA: 'the CFAST' })[region] ?? 'your aptitude test';
+
+// The hint drawn above every cohort room's history, so a group is never an
+// empty box. NOT a message: nothing is stored, it is sent with the room and
+// the client renders it at the top of the list, where conversation pushes it
+// up out of the way and a scroll back finds it again. Explains what the room
+// is and why it might be worth using.
+//
+// Tone: a quiet suggestion, not an instruction. Nobody is told to post; the
+// room is offered as a way to take the edge off the day for anyone who wants
+// it.
+const cohortWelcome = (readableDate, region) =>
+  `Welcome to your SkyWatch group. Everyone in here is sitting ${cohortTestName(region)} on ${readableDate}, `
+  + "same date and region as you. Test day is easier when you're not walking in alone. Swap a few messages "
+  + "beforehand and you'll already know someone in the waiting room.";
+
+const cohortReadableDate = (dateKey) => new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+}).format(new Date(`${dateKey}T00:00:00.000Z`));
+
+// The welcome for one cohort room, from the room itself.
+const cohortWelcomeFor = (convo) =>
+  cohortWelcome(cohortReadableDate(convo.channel.cohortDate), convo.channel.cohortRegion);
+
 async function ensureCbatCohort(dateKey, region) {
   const cohortKey = `${dateKey}:${region}`;
-  const readableDate = new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-  }).format(new Date(`${dateKey}T00:00:00.000Z`));
+  const readableDate = cohortReadableDate(dateKey);
   return ChatConversation.findOneAndUpdate(
     { type: 'channel', 'channel.cohortKey': cohortKey },
     {
@@ -116,6 +141,9 @@ async function serializeCbatGroup(user) {
     ChatMessage.countDocuments({
       conversationId: convo._id,
       deletedAt: null,
+      // A system line is not a message waiting for you, so it never puts a
+      // number on the My group tab. Same rule as personalUnreadCounts.
+      senderRole: { $ne: 'system' },
       senderUserId: { $ne: user._id },
       ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
     }),
@@ -130,6 +158,7 @@ async function serializeCbatGroup(user) {
     conversationId: convo._id,
     title: channelTitle(convo),
     memberCount,
+    welcome: cohortWelcomeFor(convo),
     unread: unreadCount > 0,
     unreadCount,
     lastMessageAt: convo.lastMessageAt,
@@ -1057,6 +1086,7 @@ router.get('/cbat-groups', adminOnly, async (req, res) => {
         ChatMessage.countDocuments({
           conversationId: group._id,
           deletedAt: null,
+          senderRole: { $ne: 'system' },
           senderUserId: { $ne: req.user._id },
           ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
         }),
@@ -1095,6 +1125,7 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
     const unreadCount = await ChatMessage.countDocuments({
       conversationId: convo._id,
       deletedAt: null,
+      senderRole: { $ne: 'system' },
       senderUserId: { $ne: req.user._id },
       ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
     });
@@ -1113,6 +1144,7 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
       postBlockedMessage: refusal && !refusal.body?.code ? refusal.body.message : null,
       botName: null,
       memberCount: members.length,
+      welcome: cohortWelcomeFor(convo),
       members: members.map(member => ({
         _id: member._id,
         displayName: member.displayName ?? null,
@@ -1561,10 +1593,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
         adminOnly:  (convo.channel?.postPolicy ?? 'everyone') !== 'everyone',
         title:      convo.type === 'channel' ? channelTitle(convo) : (dmOther?.title ?? null),
         // Cohort rooms only: the header says how many people share the date
-        // and region. Absent elsewhere so a public channel never shows a count
-        // of "everyone".
+        // and region, and the list opens with the welcome hint. Both absent
+        // elsewhere so a public channel never shows a count of "everyone".
         ...(convo.channel?.audience === 'cbat-cohort'
-          ? { memberCount: await cohortMemberCount(convo) }
+          ? { memberCount: await cohortMemberCount(convo), welcome: cohortWelcomeFor(convo) }
           : {}),
         ...(dmOther?.userId ? { otherUserId: dmOther.userId } : {}),
         // Admin-only, DM-only; the key is absent for everyone else rather than

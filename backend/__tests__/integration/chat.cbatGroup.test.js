@@ -5,6 +5,7 @@ const app = require('../../app');
 const db = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 const ChatConversation = require('../../models/ChatConversation');
+const ChatMessage = require('../../models/ChatMessage');
 
 beforeAll(async () => { await db.connect(); await ChatConversation.syncIndexes(); });
 beforeEach(async () => { await createSettings(); });
@@ -49,6 +50,62 @@ describe('CBAT cohort groups', () => {
     expect(detail.status).toBe(200);
     expect(detail.body.data.members.map(m => m.displayName).sort()).toEqual(['Falcon', 'Viper']);
     expect(detail.body.data.members.find(m => m.displayName === 'Viper').cbatPassed).toBe(true);
+  });
+
+  it('shows a late joiner everything said before they arrived', async () => {
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    const id = made.body.data.conversationId;
+    await request(app).post(`/api/chat/conversations/${id}/messages`)
+      .set('Cookie', authCookie(a._id)).send({ body: 'anyone else on this date?' });
+
+    const late = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    await choose(late);
+    const thread = await request(app).get(`/api/chat/conversations/${id}/messages`)
+      .set('Cookie', authCookie(late._id));
+
+    expect(thread.status).toBe(200);
+    expect(thread.body.data.messages.map(m => m.body)).toEqual(['anyone else on this date?']);
+  });
+
+  it('sends the welcome hint with the room, never as a stored message', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    const id = made.body.data.conversationId;
+    const cookie = authCookie(a._id);
+
+    const [mine, thread, detail, overview] = await Promise.all([
+      request(app).get('/api/chat/cbat-group').set('Cookie', cookie),
+      request(app).get(`/api/chat/conversations/${id}/messages`).set('Cookie', cookie),
+      request(app).get(`/api/chat/cbat-groups/${id}`).set('Cookie', authCookie(admin._id)),
+      request(app).get('/api/chat/overview').set('Cookie', cookie),
+    ]);
+
+    const expected = expect.stringMatching(/^Welcome to your SkyWatch group\. Everyone in here is sitting the CBAT on 14 Oct 2099,/);
+    expect(mine.body.data.welcome).toEqual(expected);
+    expect(thread.body.data.conversation.welcome).toEqual(expected);
+    expect(detail.body.data.welcome).toEqual(expected);
+    // Nothing was written: the room is empty, unread for nobody, and the
+    // welcome is not a row anyone could reply to or react on.
+    expect(thread.body.data.messages).toEqual([]);
+    expect(await ChatMessage.countDocuments({ conversationId: id })).toBe(0);
+    expect(mine.body.data.unreadCount).toBe(0);
+    expect(overview.body.data.groups.find(g => String(g._id) === String(id)).unread).toBe(false);
+    // Public channels carry no welcome.
+    const lounge = overview.body.data.channels[0];
+    if (lounge) {
+      const pub = await request(app).get(`/api/chat/conversations/${lounge._id}/messages`).set('Cookie', cookie);
+      expect(pub.body.data.conversation).not.toHaveProperty('welcome');
+    }
+  });
+
+  it('names the CFAST for a Canadian group and stays generic elsewhere', async () => {
+    const ca = await createUser({ displayName: 'Falcon', firstSeenCountry: 'CA' });
+    const au = await createUser({ displayName: 'Viper', firstSeenCountry: 'AU' });
+    const [caRoom, auRoom] = await Promise.all([choose(ca), choose(au)]);
+    expect(caRoom.body.data.welcome).toContain('sitting the CFAST on');
+    expect(auRoom.body.data.welcome).toContain('sitting your aptitude test on');
   });
 
   it('tells a member how many people share their group', async () => {
