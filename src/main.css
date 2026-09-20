@@ -314,6 +314,30 @@ body::before {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #1a3060; border-radius: 9999px; }
 
+/* Scrollable but with no visible bar: for cells and chip rows that swipe
+   sideways (the leaderboard's Agent column, the brief reader's chip strip)
+   where a 6px track would sit under every row whether it overflows or not.
+   Tailwind 4 ships no scrollbar utility of its own. */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* The "there is more this way" cue on a sideways scroller: the clipped edge
+   of the content dissolves rather than stopping dead. A mask, not a gradient
+   overlay, so it works over any row background. Used by the leaderboard's
+   Agent name; which edge fades follows the scroll position (LeaderboardRow). */
+@utility scroll-fade-r {
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+}
+@utility scroll-fade-l {
+  mask-image: linear-gradient(to right, transparent, #000 1.75rem);
+}
+@utility scroll-fade-x {
+  mask-image: linear-gradient(to right, transparent, #000 1.75rem, #000 calc(100% - 1.75rem), transparent);
+}
+
 /* ── "Real CBAT" theme ─────────────────────────────────────────────────
    Picked per account from the top-bar theme selector (ThemeSelector.jsx);
    useUiTheme stamps `data-theme="cbat"` on <html>. The default SkyWatch

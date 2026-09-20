@@ -50,12 +50,11 @@ describe('the passed mark on a leaderboard row', () => {
     expect(screen.queryByLabelText(LABEL)).toBeNull()
   })
 
-  it('keeps the name truncating rather than the mark', () => {
+  it('keeps the mark outside the name so it stays a pill', () => {
     render(<LeaderboardRow entry={entry({ cbatPassed: true })} variant="alltime" cfg={cfg} />)
-    // The mark must not be inside the truncating element, or a long name would
-    // clip it away — that is the whole reason the name has its own span.
+    // The mark must not be inside the name's span, or it would wrap with the
+    // text instead of sitting beside it — that is why the name has its own span.
     const name = screen.getByText('Falcon')
-    expect(name.className).toContain('truncate')
     expect(name.querySelector('[aria-label]')).toBeNull()
   })
 

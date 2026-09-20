@@ -29,14 +29,15 @@ describe('leaderboard column budget', () => {
   // 6 ("12.34s"), where weekly's Plays is only ever 1-2 digits. Every board
   // carries the Theme column, a 2.5rem icon-only track, so it is in every
   // budget; the Input column (steered games only) is the same kind of track
-  // and widens the budget by exactly that much, not more.
+  // and widens the budget by exactly that much, not more. Rank is 2rem: the
+  // list is a top 20, so "#20" is the widest rank a list row ever holds.
   it.each([
-    ['weekly', 'weekly', cfg, 10.5],
-    ['all-time', 'alltime', cfg, 12],
-    ['all-time without the Time column', 'alltime', { hideTime: true }, 8.5],
-    ['weekly with Input', 'weekly', { ...cfg, showInput: true }, 13],
-    ['all-time with Input', 'alltime', { ...cfg, showInput: true }, 14.5],
-    ['all-time without Time, with Input', 'alltime', { hideTime: true, showInput: true }, 11],
+    ['weekly', 'weekly', cfg, 10],
+    ['all-time', 'alltime', cfg, 11.5],
+    ['all-time without the Time column', 'alltime', { hideTime: true }, 8],
+    ['weekly with Input', 'weekly', { ...cfg, showInput: true }, 12.5],
+    ['all-time with Input', 'alltime', { ...cfg, showInput: true }, 14],
+    ['all-time without Time, with Input', 'alltime', { hideTime: true, showInput: true }, 10.5],
   ])('keeps %s fixed columns within the mobile budget', (_label, variant, c, budget) => {
     expect(mobileFixedRem(rowCols(variant, c))).toBeLessThanOrEqual(budget)
   })
