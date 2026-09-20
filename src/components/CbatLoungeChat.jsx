@@ -12,6 +12,7 @@ import SeenByDialog from '../pages/chat/components/SeenByDialog'
 import EditHistoryDialog from '../pages/chat/components/EditHistoryDialog'
 import MentionPicker from '../pages/chat/components/MentionPicker'
 import UserCard from '../pages/chat/components/UserCard'
+import GroupMembersDialog from '../pages/chat/components/GroupMembersDialog'
 
 // The mini chat docked under Recent Scores on the CBAT hub.
 //
@@ -195,6 +196,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
   // for an admin the profile. Nothing rebuilt here; UserCard does its own
   // fetching and the lounge only needs to know who was tapped.
   const [cardUserId, setCardUserId] = useState(null)
+  const [membersOpen, setMembersOpen] = useState(false)
   // The message being edited in the composer, or null. The widget has one
   // input, so editing borrows it rather than growing a second one inside a
   // 40-message list that is already only a few hundred pixels tall.
@@ -288,6 +290,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
     setMessages([])
     setSenders({})
     setLoading(true)
+    setMembersOpen(false)
     setGone(false)
     setErr('')
     setHasNew(false)
@@ -915,28 +918,34 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
         </div>
       )}
 
+      {/* An admin inside one group sees the strip the members see (date,
+          headcount, region) plus a way back to the list. The names are behind
+          the count rather than laid out here, so the drill-down reads as the
+          room and not as a roster with a chat under it. */}
       {room === 'groups' && lounge?.configured && (
-        <button type="button" onClick={() => { setAdminGroupId(null); setLounge(null); setMessages([]); setLoading(true) }} className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2 text-left hover:bg-brand-500/10 transition-colors">
-          <span className="text-brand-500" aria-hidden="true">←</span>
-          <span className="text-[10px] font-bold text-game-text">All CBAT groups</span>
-          <span className="ml-auto text-[9px] text-slate-500">{lounge.date} · {lounge.region}</span>
-        </button>
-      )}
-
-      {room === 'groups' && lounge?.configured && lounge.members && (
-        <div className="shrink-0 border-b border-game-line px-3 py-2 bg-surface/50">
-          <p className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 mb-1.5">
-            Members · {lounge.members.length}
+        <div className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setAdminGroupId(null); setLounge(null); setMessages([]); setLoading(true); setMembersOpen(false) }}
+            aria-label="Back to all groups"
+            title="All CBAT groups"
+            className="text-brand-500 hover:text-brand-400 text-xs leading-none px-1 -ml-1 transition-colors"
+          >←</button>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.75)]" aria-hidden="true" />
+          <p className="text-[10px] font-bold text-game-text">
+            {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${lounge.date}T00:00:00Z`))}
           </p>
-          <div className="max-h-20 overflow-y-auto flex flex-wrap gap-1.5">
-            {lounge.members.length === 0 ? (
-              <span className="text-[10px] text-slate-500">No members currently assigned.</span>
-            ) : lounge.members.map(member => (
-              <button key={member._id} type="button" onClick={() => setCardUserId(String(member._id))} className="rounded-full border border-game-line bg-game-panel px-2 py-1 text-[10px] font-bold text-game-text hover:border-brand-400 hover:text-brand-500 transition-colors">
-                {member.displayName || `Agent #${member.agentNumber || '—'}`}{member.cbatPassed ? ' · Passed' : ''}
-              </button>
-            ))}
-          </div>
+          {lounge.members && (
+            <button
+              type="button"
+              onClick={() => setMembersOpen(true)}
+              aria-label={`${lounge.members.length} ${lounge.members.length === 1 ? 'member' : 'members'}, open the list`}
+              className="text-[10px] text-slate-500 hover:text-brand-500 transition-colors"
+            >
+              · <span className="font-bold text-game-text">{lounge.members.length}</span> {lounge.members.length === 1 ? 'member' : 'members'}
+            </button>
+          )}
+          <p className="ml-auto text-[9px] font-bold tracking-wider text-slate-500">{lounge.region}</p>
         </div>
       )}
 
@@ -1357,6 +1366,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
           message={editsMsg}
           senders={senders}
           onClose={() => setEditsMsg(null)}
+        />
+      )}
+      {membersOpen && lounge?.members && (
+        <GroupMembersDialog
+          title={lounge.title || `CBAT · ${lounge.date}`}
+          members={lounge.members}
+          onClose={() => setMembersOpen(false)}
+          onOpenUser={(id) => { setMembersOpen(false); setCardUserId(id) }}
         />
       )}
       {cardUserId && (

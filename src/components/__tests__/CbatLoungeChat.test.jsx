@@ -325,6 +325,44 @@ describe('private CBAT group', () => {
     expect(screen.getByLabelText('3 new messages in this group').className).toContain('bg-red-500')
   })
 
+  it('shows an admin the member strip inside a group, with the names behind the count', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    const list = { groups: [{ conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 2, messageCount: 1, unread: 0 }] }
+    const detail = {
+      configured: true, conversationId: 'c1', date: '2099-10-14', region: 'GB', title: 'CBAT · 14 Oct 2099',
+      unreadCount: 0, canPost: true, memberCount: 2,
+      members: [
+        { _id: 'a1', displayName: 'Falcon', agentNumber: 7, cbatPassed: false },
+        { _id: 'a2', displayName: 'Viper', agentNumber: 9, cbatPassed: true },
+      ],
+    }
+    // The list first, the one group once a row has been opened.
+    const group = vi.fn(url => (String(url).endsWith('/cbat-groups') ? list : detail))
+    global.fetch = vi.fn((url, opts) => {
+      const data = String(url).includes('/api/chat/cbat-groups') ? group(url)
+        : String(url).includes('/messages') ? { messages: [], senders: {}, botTyping: null }
+        : {}
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'success', data }) })
+    })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'All groups' }))
+    fireEvent.click(await screen.findByText('Region GB'))
+
+    // The strip the members see: date, count, region on the right. No roster.
+    expect(await screen.findByText('14 Oct 2099')).toBeTruthy()
+    expect(screen.getByText('GB')).toBeTruthy()
+    expect(screen.getByLabelText('Back to all groups')).toBeTruthy()
+    expect(screen.queryByText('Falcon')).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('2 members, open the list'))
+    const dialog = await screen.findByTestId('group-members-dialog')
+    expect(dialog).toHaveTextContent('Falcon')
+    expect(dialog).toHaveTextContent('Viper')
+    expect(dialog).toHaveTextContent('Passed')
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByTestId('group-members-dialog')).toBeNull())
+  })
+
   it('aggregates unread messages onto the admin All groups pill', async () => {
     mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
     stubFetch({ group: { groups: [
