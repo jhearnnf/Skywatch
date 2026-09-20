@@ -1,60 +1,50 @@
 /**
  * emailHero.test.js
  *
- * The animated radar header on the CBAT questionnaire email. The animation is
- * CSS only, so what these tests guard is the fallback story: a client that
- * strips keyframes must still get a complete static radar from the inline
- * styles alone, Outlook for Windows must get nothing, and the mailers that do
- * NOT ask for the hero must render exactly as they always have.
+ * The animated radar header on the CBAT questionnaire email. It is an
+ * animated GIF fetched from the public site, because CSS animation is
+ * stripped by Gmail and Outlook. What these tests guard: the image is linked
+ * by absolute URL under the site origin (never a relative path, never the
+ * backend), it sizes correctly in Outlook for Windows, and the mailers that do
+ * NOT ask for the hero render exactly as they always have.
  */
 
-const { radarHero, BLIPS, PERIOD } = require('../../utils/emailHero');
+const { radarHero, heroImageUrl, HERO_PATH, HERO_WIDTH, HERO_HEIGHT } = require('../../utils/emailHero');
 const { buildEmailHTML }  = require('../../utils/emailTemplate');
 const { renderSurveyEmail, SURVEY_DEFAULTS } = require('../../utils/surveyEmail');
 
 describe('radarHero', () => {
-  const hero = radarHero();
+  const hero = radarHero({ baseUrl: 'https://skywatch.academy' });
 
-  it('drives every moving part from the head CSS, not inline', () => {
-    for (const name of ['sw-spin', 'sw-ping', 'sw-blip', 'sw-shimmer', 'sw-status']) {
+  it('links the GIF by absolute URL on the site origin', () => {
+    expect(hero.html).toContain(`src="https://skywatch.academy${HERO_PATH}"`);
+    expect(heroImageUrl('https://skywatch.academy/')).toBe(`https://skywatch.academy${HERO_PATH}`);
+  });
+
+  it('refuses to render without a base URL rather than emitting a relative src', () => {
+    // A relative path resolves against nothing in an inbox: the image would
+    // simply be missing.
+    expect(() => radarHero({})).toThrow(/public site URL/);
+  });
+
+  it('sizes the image with attributes for Outlook and inline width for everyone else', () => {
+    expect(hero.html).toMatch(new RegExp(`<img [^>]*width="${HERO_WIDTH}" height="${HERO_HEIGHT}"`));
+    expect(hero.html).toMatch(/<img [^>]*style="[^"]*width:100%;max-width:520px;height:auto/);
+    expect(hero.html).toMatch(/<img [^>]*alt="/);
+  });
+
+  it('keeps the moving CSS in the head, never inline', () => {
+    for (const name of ['sw-shimmer', 'sw-status']) {
       expect(hero.css).toContain(`@keyframes ${name}`);
     }
-    // Inline styles are what Gmail keeps; no animation may live there or a
-    // stripped property leaves a half-drawn scope behind.
     expect(hero.html).not.toMatch(/style="[^"]*animation/);
-    expect(hero.html).not.toMatch(/position\s*:/);
   });
 
-  it('is hidden from Outlook for Windows with an mso conditional', () => {
-    expect(hero.html).toContain('<!--[if !mso]><!-- -->');
-    expect(hero.html).toContain('<!--<![endif]-->');
-  });
-
-  it('stacks the layers with zero-height wrappers so the scope survives without position', () => {
-    expect((hero.html.match(/height:0;overflow:visible;/g) ?? []).length).toBeGreaterThanOrEqual(3);
-  });
-
-  it('lights each blip when the beam reaches it', () => {
-    // A blip's delay is its clockwise angle as a fraction of the sweep period.
-    const period = parseFloat(PERIOD);
-    for (const b of BLIPS) {
-      const delay = parseFloat(b.delay);
-      expect(delay).toBeGreaterThan(0);
-      expect(delay).toBeLessThan(period);
-      expect(hero.css).toContain(`.${b.cls} { animation-delay: ${b.delay}; }`);
-      expect(hero.html).toContain(`class="sw-blip ${b.cls}"`);
-    }
-  });
-
-  it('keeps the blips visible in the static fallback', () => {
-    // Dim, not gone: a client with no animation still sees contacts on the scope.
-    const blipStyles = hero.html.match(/class="sw-blip[^"]*" style="([^"]*)"/g) ?? [];
-    expect(blipStyles).toHaveLength(BLIPS.length);
-    for (const s of blipStyles) expect(s).toMatch(/opacity:\.55/);
-  });
-
-  it('hides the ping in the static fallback so no second ring appears', () => {
-    expect(hero.html).toMatch(/class="sw-ping" style="[^"]*opacity:0;/);
+  it('paints the image and the status line on the navy background', () => {
+    // The GIF's edges are flat navy, so the cell behind it must match or a
+    // seam shows where the image ends.
+    expect((hero.html.match(/bgcolor="#06101e"/g) ?? []).length).toBe(2);
+    expect(hero.html).toContain('Signal acquired');
   });
 });
 
@@ -77,19 +67,19 @@ describe('buildEmailHTML — hero slots', () => {
 });
 
 describe('renderSurveyEmail', () => {
-  it('carries the animated radar and the shimmer bar', () => {
+  it('carries the radar GIF and the shimmer bar', () => {
     const fields = {
       subject: SURVEY_DEFAULTS.subject, heading: SURVEY_DEFAULTS.heading,
       subtitle: SURVEY_DEFAULTS.subtitle, body: SURVEY_DEFAULTS.body,
       ctaText: SURVEY_DEFAULTS.cta, footer: SURVEY_DEFAULTS.footer,
     };
     const { html } = renderSurveyEmail({ fields, user: { displayName: 'Pilot', agentNumber: '1' }, token: 't' });
-    expect(html).toContain('@keyframes sw-spin');
-    expect(html).toContain('class="sw-sweep"');
+    expect(html).toContain(`${process.env.CLIENT_URL || 'http://localhost:5173'}${HERO_PATH}`);
+    expect(html).toContain('@keyframes sw-shimmer');
     expect(html).toContain('class="sw-bar"');
     expect(html).toContain('Classified Transmission');
     // The hero sits inside the card, before the accent bar and the copy.
-    expect(html.indexOf('sw-sweep')).toBeLessThan(html.indexOf('sw-bar'));
+    expect(html.indexOf(HERO_PATH)).toBeLessThan(html.indexOf('class="sw-bar"'));
     expect(html.indexOf('sw-bar')).toBeLessThan(html.indexOf('Classified Transmission'));
   });
 });

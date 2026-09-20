@@ -163,10 +163,9 @@ function renderSurveyEmail({ fields, user, token }) {
   // without JavaScript and honours the opt-out on arrival.
   const footer = `${fill(fields.footer)}<br><a href="${optOutUrl(token)}" style="color:#94a3b8;text-decoration:underline;">Do not email me about this again</a>`;
 
-  // The animated radar header. CSS only, so it plays in the admin preview and
-  // in any client that runs keyframes, and falls back to a static radar (or, in
-  // Outlook for Windows, nothing) everywhere else. See emailHero.js.
-  const hero = radarHero();
+  // The animated radar header: a GIF fetched from the public site, so it plays
+  // in Gmail and Outlook as well as the admin preview. See emailHero.js.
+  const hero = radarHero({ baseUrl: clientUrl() });
 
   return {
     subject: fill(fields.subject),
