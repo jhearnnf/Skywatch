@@ -563,11 +563,12 @@ function cbatLabelWithDifficulty(gameKey) {
     // Most Easier boards spell it out in their own label because nothing else
     // reads that label. ANT's cannot: `ant` is also the key its tutorial files
     // under, and a tutorial row on the admin report is deliberately bare (one
-    // tutorial, both difficulties). Vigilance's stays bare for a different
-    // reason: `vigilance` is the key the Aptitude Report scores, and the report
-    // reads the raw label then names the difficulty itself — "Vigilance Test
-    // (Easier) on Easier" would read twice. So both stay plain and the suffix
-    // is added here instead.
+    // tutorial, both difficulties). Vigilance's stays bare to match: the two
+    // plain-key Easier boards are wired the same way, and the Aptitude Report
+    // (which scores `vigilance-hard`) reads the raw label then names the
+    // difficulty itself, so a label carrying "(Easier)" would read twice
+    // anywhere the report mentioned it. So both stay plain and the suffix is
+    // added here instead.
     return cfg.label.includes('(Easier)') ? cfg.label : `${cfg.label} (Easier)`;
   }
   return HARD_KEYS.has(gameKey) ? `${cfg.label} (Hard)` : cfg.label;

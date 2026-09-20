@@ -119,6 +119,16 @@ const confidenceFor = (runs, gameKey) => {
 // runs but no Hard ones.
 const EASIER_SUFFIX = '-easier';
 
+// The Easier key that pairs with a scored Hard key, or null for a game with no split. Usually the
+// suffix, but two splits keep their Easier half on the PLAIN key (`vigilance` ↔ `vigilance-hard`,
+// `ant` ↔ `ant-hard`; see `hardKey` in constants/cbatGames.js), so a suffix lookup alone would
+// tell a player with twenty Easier Vigilance runs that they had never touched the game.
+function easierKeyFor(hardKey) {
+  if (CBAT_GAMES[`${hardKey}${EASIER_SUFFIX}`]) return `${hardKey}${EASIER_SUFFIX}`;
+  const plain = Object.keys(CBAT_GAMES).find(k => CBAT_GAMES[k].hardKey === hardKey);
+  return plain ?? null;
+}
+
 // ── Form ─────────────────────────────────────────────────────────────────────────────────────
 // One query per scorable game, run in parallel. Every result model carries the
 // { userId: 1, createdAt: -1 } index this sorts on.
@@ -145,7 +155,8 @@ async function loadForm(userId, gameKeys = SCORED_GAME_KEYS) {
     if (!recent.length) {
       // Distinguish "never touched this game" from "only ever played it on Easier", so the report
       // can tell the second group why their runs aren't counting.
-      const easierCfg = CBAT_GAMES[`${gameKey}${EASIER_SUFFIX}`];
+      const easierKey = easierKeyFor(gameKey);
+      const easierCfg = easierKey ? CBAT_GAMES[easierKey] : null;
       const easierOnly = easierCfg
         ? await easierCfg.Model.exists({ ...(easierCfg.modeFilter ?? {}), userId }).then(Boolean)
         : false;
@@ -885,9 +896,10 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
 // admissible evidence. Someone who played ten games on Easier has engaged with ten games, and a
 // "0 / 23" beside them would be a lie about what they did.
 //
-// Every registry key folds onto the scored key it is a variant of (`cut-easier` → `cut`, `ant-hard`
-// → `ant`, `dpt-easier` → `dpt-hard`); keys with no scored counterpart — the Trace practise boards,
-// ANT practise, the retired eight-round DPT — still count as runs but not as a game.
+// Every registry key folds onto the scored key it is a variant of (`cut-easier` → `cut`, `ant` →
+// `ant-hard`, `dpt-easier` → `dpt-hard`, `vigilance` → `vigilance-hard`); keys with no scored
+// counterpart — the Trace practise boards, ANT practise, the retired eight-round DPT — still count
+// as runs but not as a game.
 const SCORED_FAMILY_BY_KEY = (() => {
   const map = {};
   for (const key of Object.keys(CBAT_GAMES)) {

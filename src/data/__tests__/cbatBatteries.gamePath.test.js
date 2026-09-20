@@ -51,12 +51,15 @@ describe('gamePath', () => {
     expect(gamePath('symbols')).toBe('/cbat/symbols')
   })
 
-  it('asks for Easier where the battery scores the Easier half', () => {
-    // ANT and Vigilance both score on the plain key, which is their Easier
-    // board. A link that forced Hard would send the player to a board whose
-    // runs the report does not count.
+  it('names the half the battery actually scores, not the half the key looks like', () => {
+    // ANT and Vigilance keep their Easier board on the PLAIN key, and the
+    // batteries score their `-hard` keys. The link has to say so: the card
+    // would otherwise open on whichever half the player last chose. And if a
+    // battery ever scored a plain key again, the link would follow it to Easier
+    // rather than sending the player to a board whose runs do not count.
+    expect(gamePath('ant-hard')).toBe('/cbat/ant?difficulty=hard')
+    expect(gamePath('vigilance-hard')).toBe('/cbat/vigilance?difficulty=hard')
     expect(gamePath('ant')).toBe('/cbat/ant?difficulty=easier')
-    expect(gamePath('vigilance')).toBe('/cbat/vigilance?difficulty=easier')
   })
 
   it('falls back to the games hub for a key with no board', () => {

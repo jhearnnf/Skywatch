@@ -524,6 +524,36 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     expect(cut.stanine).toBeNull();
   });
 
+  // ANT and Vigilance kept the ORIGINAL key as the Easier half (`ant` is the eight-round table
+  // board, `vigilance` a fixed minute at triple points) and put Hard on `-hard`. The battery scores
+  // Hard like every other split game, and the "only played on Easier" nudge has to find the plain
+  // key rather than an `ant-easier` that does not exist - or a player with twenty Easier runs would
+  // be told they had never touched the game.
+  it.each([
+    ['ANT',  'ant',       'ant-hard',       'pilot',              'SymR',   60],
+    ['VIG1', 'vigilance', 'vigilance-hard', 'control-officer-wc', 'Percpt', 900],
+  ])('scores %s on the Hard board and reads plain-key runs as Easier', async (code, easierKey, hardKey, battery, domain, easierScore) => {
+    expect(TESTS[code].games).toEqual([hardKey]);
+    if (code === 'VIG1') expect(TESTS.VGIL_SPEED.games).toEqual([hardKey]);
+
+    const easier = CBAT_GAMES[easierKey];
+    for (let i = 0; i < 5; i++) await easier.Model.create(makeDoc(easier, user._id, easierScore));
+
+    let res = await request(app).get(`/api/games/cbat/report/${battery}`).set('Cookie', cookie);
+    let t = res.body.data.domains.find(d => d.key === domain).tests.find(x => x.code === code);
+    expect(t.state).toBe('easier-only');
+    expect(t.stanine).toBeNull();
+
+    const hard = CBAT_GAMES[hardKey];
+    for (let i = 0; i < FORM_MIN_RUNS; i++) await hard.Model.create(makeDoc(hard, user._id, STANINE_ANCHORS[hardKey].median));
+
+    res = await request(app).get(`/api/games/cbat/report/${battery}`).set('Cookie', cookie);
+    t = res.body.data.domains.find(d => d.key === domain).tests.find(x => x.code === code);
+    expect(t.state).not.toBe('easier-only');
+    expect(t.played[0].runs).toBe(FORM_MIN_RUNS);   // the five Easier runs are not in the window
+    expect(t.stanine).not.toBeNull();
+  });
+
   it('reports no gaps on a battery every test of which now has a game', async () => {
     // Control Officer (ATC) used to list MATF and SIT as gaps. Both now have games (the Table
     // Reading Test and the Spatial Integration Test), so this battery is fully covered and the

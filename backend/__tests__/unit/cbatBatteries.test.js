@@ -1,4 +1,5 @@
 const { BATTERIES, BATTERY_BY_KEY, DOMAINS, TESTS, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MAX_STANINE } = require('../../constants/cbatBatteries');
+const { isCbatEasierKey } = require('../../constants/cbatGames');
 const { CBAT_GAMES } = require('../../constants/cbatGames');
 const { scoreToStanine, scoreForStanine, stanineStep, topSegment, removeCohortShift, applyCohortShift, clampStanine, COHORT_SHIFT, MEDIAN_STANINE, STRONG_STANINE } = require('../../utils/cbatStanine');
 
@@ -63,8 +64,14 @@ describe('test → game mapping', () => {
   it('never maps a test to an Easier collection', () => {
     // Only Hard counts — the real CBAT has one difficulty, and folding Easier runs in would
     // inflate every estimate. See the note in utils/cbatAptitudeReport.js.
-    for (const t of Object.values(TESTS)) {
-      for (const gameKey of t.games) expect(gameKey.endsWith('-easier')).toBe(false);
+    //
+    // Checked through the registry rather than the `-easier` suffix, because two splits keep
+    // their Easier half on the PLAIN key (`ant`, `vigilance`) and a suffix check waved both
+    // through after their splits: ANT for a fortnight, Vigilance for five days.
+    for (const [code, t] of Object.entries(TESTS)) {
+      for (const gameKey of t.games) {
+        expect([code, gameKey, isCbatEasierKey(gameKey)]).toEqual([code, gameKey, false]);
+      }
     }
   });
 
@@ -230,8 +237,10 @@ describe('the ceiling on a bounded game', () => {
   });
 
   it('keeps ANT inside its board, whether or not the compressed band is in use', () => {
-    // ANT is the game compression was written for: measured anchors of 53 and 77 put the plain
-    // stanine-9 threshold at 81 on a board marked out of 80.
+    // ANT's Easier board is the game compression was written for: measured anchors of 53 and 77
+    // put the plain stanine-9 threshold at 81 on a board marked out of 80. No battery scores that
+    // board any more (ANT moved to `ant-hard` on 2026-09-20), but its anchor is kept in the file
+    // precisely so this guard keeps running against the one real pair that overshoots.
     //
     // The cohort shift pulls that threshold well below the ceiling on its own, so the compressed
     // band is currently DORMANT rather than gone — with a shift of 1 the top branch needs a target

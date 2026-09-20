@@ -37,11 +37,11 @@ export function gameHasDifficulties(gameKey) {
 // WHICH difficulty the key a battery scores actually is — 'Easier', 'Hard', or null for a game with
 // no split. Not the same question as gameHasDifficulties, and the report needs this one.
 //
-// For nearly every split game the scored key is the Hard half, so the two used to be interchangeable
-// and the page assumed Hard outright. ANT broke that: its Easier half is the original board on the
-// plain 'ant' key, which is the key the battery scores, so a sheet hard-coded to Hard would send a
-// user to a board whose runs it does not count. Reading the difficulty off the registry keeps the
-// wording and the link honest whichever half a battery happens to point at.
+// Every battery scores the Hard half today, so this always answers 'Hard' for a split game. It is
+// still read off the registry rather than assumed: for a fortnight ANT's battery scored the plain
+// 'ant' key, which is its Easier board, and a sheet hard-coded to Hard would have sent a user to a
+// board whose runs it did not count. Reading the difficulty keeps the wording and the link honest
+// whichever half a battery happens to point at.
 export function scoredDifficulty(gameKey) {
   return CBAT_DIFFICULTY_BY_KEY[gameKey] ?? null
 }
