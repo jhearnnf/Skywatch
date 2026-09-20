@@ -21,6 +21,23 @@ const POLL_MS = 5_000
 // the server really did drop cannot linger on screen.
 const PENDING_MS = 30_000
 
+// Older pages, loaded by scrolling up, must survive the poll. Every refresh of
+// the thread is a snapshot of only the newest page, so applied as it stands it
+// would drop everything the viewer had scrolled back to and dump them at the
+// bottom again. Anything in `prev` from before the snapshot's oldest message is
+// kept in front of it; anything from inside or after the snapshot's window
+// that the snapshot no longer has is gone for a reason (removed, or a held
+// send the server never got) and is let go. A message removed from a kept page
+// stays until the thread is reopened — the poll never looks that far back.
+const mergeOlder = (prev, snapshot) => {
+  if (!prev.length || !snapshot.length) return snapshot
+  const oldest = new Date(snapshot[0].createdAt).getTime()
+  const ids    = new Set(snapshot.map(m => String(m._id)))
+  const kept   = prev.filter(m =>
+    !ids.has(String(m._id)) && new Date(m.createdAt).getTime() < oldest)
+  return kept.length ? [...kept, ...snapshot] : snapshot
+}
+
 // The right-hand pane. Owns its own messages and polling; everything it knows
 // about the wider chat (its title, whether the viewer still needs a display
 // name) comes from ChatShell, which already has the overview.
@@ -71,6 +88,13 @@ export default function ChatThread({
   const [entryState,   setEntryState]   = useState(null)
   const [highlightId,  setHighlightId]  = useState(null)
   const [jumping,      setJumping]      = useState(false)
+  // Paging back through history. `hasMore` is the server's word on whether
+  // anything precedes the oldest message on screen; it goes false the first
+  // time a page comes back short, and stays false — the far end of a channel
+  // does not grow.
+  const [hasMore,      setHasMore]      = useState(cached?.hasMore ?? false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [olderErr,     setOlderErr]     = useState(false)
   // Two sources: the server's own flag, picked up by the poll, and an
   // optimistic local one set the moment you send a message that asks the bot
   // something — otherwise the indicator would not appear for up to a poll,
@@ -78,8 +102,12 @@ export default function ChatThread({
   const [botTyping,    setBotTyping]    = useState(null)
   const [askedBot,     setAskedBot]     = useState(null)
 
-  const fetchMessages = useCallback(async ({ limit } = {}) => {
-    const qs = limit ? `?limit=${limit}` : ''
+  const fetchMessages = useCallback(async ({ limit, before } = {}) => {
+    const params = new URLSearchParams()
+    if (limit)  params.set('limit', limit)
+    if (before) params.set('before', before)
+    const q  = params.toString()
+    const qs = q ? `?${q}` : ''
     const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages${qs}`, {
       credentials: 'include',
     })
@@ -88,14 +116,47 @@ export default function ChatThread({
     const data = d?.data ?? { messages: [], conversation: null, senders: {} }
     // Cached here rather than at each call site so every path that refreshes
     // the thread — the poll, a moderator delete, the mention jump — leaves the
-    // cache agreeing with the screen.
-    setCachedThread(conversationId, {
-      messages:     data.messages,
-      senders:      data.senders ?? {},
-      conversation: data.conversation,
-    })
+    // cache agreeing with the screen. A page of older history is not the
+    // thread's current state, so it is left out: the cache is a head start on
+    // the newest page, and coming back to a channel starts at the bottom.
+    if (!before) {
+      setCachedThread(conversationId, {
+        messages:     data.messages,
+        senders:      data.senders ?? {},
+        conversation: data.conversation,
+        hasMore:      Boolean(data.hasMore),
+      })
+    }
     return data
   }, [API, apiFetch, conversationId])
+
+  // The next page back, keyed on the oldest message on screen. Prepended, and
+  // the senders it names go underneath the ones already known, so a profile
+  // that changed since is not put back the old way.
+  const olderInFlight = useRef(false)
+  const loadOlder = useCallback(async () => {
+    const oldest = messages[0]
+    // The ref, not the state: two triggers in one frame — the observer and a
+    // click on the retry button — would both see the state still false.
+    if (!oldest || !hasMore || olderInFlight.current) return
+    olderInFlight.current = true
+    setLoadingOlder(true); setOlderErr(false)
+    try {
+      const d = await fetchMessages({ before: oldest.createdAt })
+      setMessages(prev => {
+        const ids   = new Set(prev.map(m => String(m._id)))
+        const fresh = d.messages.filter(m => !ids.has(String(m._id)))
+        return fresh.length ? [...fresh, ...prev] : prev
+      })
+      setSenders(prev => ({ ...(d.senders ?? {}), ...prev }))
+      setHasMore(Boolean(d.hasMore))
+    } catch {
+      setOlderErr(true)
+    } finally {
+      olderInFlight.current = false
+      setLoadingOlder(false)
+    }
+  }, [fetchMessages, hasMore, messages])
 
   // Messages this client appended from its own POST, until a poll confirms the
   // server has them. Keyed by id, holding the message and when it was sent.
@@ -129,6 +190,7 @@ export default function ChatThread({
       messages:     merged,
       senders:      data.senders ?? {},
       conversation: data.conversation,
+      hasMore:      Boolean(data.hasMore),
     })
     return merged
   }, [conversationId])
@@ -159,6 +221,7 @@ export default function ChatThread({
         setMessages(d.messages)
         setSenders(d.senders ?? {})
         setConversation(d.conversation)
+        setHasMore(Boolean(d.hasMore))
         setEntryState({
           lastReadAt:         d.lastReadAt ?? null,
           unreadMentionCount: d.unreadMentionCount ?? 0,
@@ -184,8 +247,11 @@ export default function ChatThread({
       if (document.hidden) return
       try {
         const d = await fetchMessages()
-        const next = applyJustSent(d)
-        setMessages(prev => (signature(prev) === signature(next) ? prev : next))
+        const fresh = applyJustSent(d)
+        setMessages(prev => {
+          const next = mergeOlder(prev, fresh)
+          return signature(prev) === signature(next) ? prev : next
+        })
         setSenders(d.senders ?? {})
         setBotTyping(d.botTyping ?? null)
         // The server is now authoritative again, so drop the optimistic flag.
@@ -246,6 +312,8 @@ export default function ChatThread({
             agentNumber:   user?.agentNumber ?? null,
             selectedBadge: user?.selectedBadge ?? null,
             rank:          user?.rank ?? null,
+            cbatPassed:    Boolean(user?.cbatPassed),
+            supporter:     Boolean(user?.supporter),
           },
         })
       }
@@ -265,7 +333,7 @@ export default function ChatThread({
         method: 'POST', credentials: 'include',
       })
       const fresh = await fetchMessages()
-      setMessages(fresh.messages)
+      setMessages(prev => mergeOlder(prev, fresh.messages))
       setSenders(fresh.senders ?? {})
       setConversation(fresh.conversation)
       onChanged?.()
@@ -312,8 +380,9 @@ export default function ChatThread({
     setJumping(true)
     try {
       const d = await fetchMessages({ limit: 200 })
-      setMessages(d.messages)
-      setSenders(d.senders ?? {})
+      setMessages(prev => mergeOlder(prev, d.messages))
+      setSenders(prev => ({ ...prev, ...(d.senders ?? {}) }))
+      setHasMore(Boolean(d.hasMore))
       // The DOM has not painted the new rows yet, so the scroll waits a frame.
       requestAnimationFrame(() => { scroll(target._id) })
     } catch {
@@ -360,7 +429,12 @@ export default function ChatThread({
     }).catch(() => {})
     forgetJustSent(message)
     const fresh = await fetchMessages()
-    setMessages(fresh.messages)
+    // The refetch only covers the newest page, so a removal further back is
+    // taken out of the kept history by hand.
+    setMessages(prev => mergeOlder(
+      prev.filter(m => String(m._id) !== String(message._id)),
+      fresh.messages,
+    ))
     setSenders(fresh.senders ?? {})
     onChanged?.()
   }
@@ -508,6 +582,10 @@ export default function ChatThread({
           onShowEdits={user?.isAdmin ? setEditsMsg : undefined}
           dividerAfter={entryState?.lastReadAt ?? null}
           highlightId={highlightId}
+          onLoadOlder={loadOlder}
+          hasOlder={hasMore}
+          loadingOlder={loadingOlder}
+          olderError={olderErr}
           typingName={botTyping || askedBot}
           // A feed is a log, not a conversation: every entry is from the same
           // poster, so each one keeps its own name and timestamp. That covers

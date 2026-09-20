@@ -9,6 +9,7 @@ import { enterShouldSend } from '../enterSends'
 import { useAutoGrow } from '../autoGrow'
 import { PresenceDot } from './PresenceStrip'
 import CbatPassedBadge from '../../../components/CbatPassedBadge'
+import SupporterBadge from '../../../components/SupporterBadge'
 
 // Discord-style rows rather than chat bubbles. Bubbles alternate sides and
 // carry a lot of padding, which is fine for two people and unreadable once a
@@ -399,6 +400,7 @@ function MessageRow({
               </span>
             )}
             {profile?.cbatPassed && <CbatPassedBadge />}
+            {profile?.supporter && <SupporterBadge />}
             <span className="text-[10px] text-slate-400">
               {datedStamps ? formatStamp(m.createdAt) : formatTime(m.createdAt)}
             </span>
@@ -591,6 +593,14 @@ export default function MessageList({
   // as unread. Conversation pushes it up out of the way; a scroll back finds
   // it again. Only a CBAT group sends one.
   hint = null,
+  // Paging back through history. Scrolling to the top asks for the page
+  // before the oldest message on screen; the thread prepends it. `hasOlder`
+  // is the server's word on whether there is one, and without a handler the
+  // list is whatever it was given — the lounge chat shows a fixed tail.
+  onLoadOlder = null,
+  hasOlder = false,
+  loadingOlder = false,
+  olderError = false,
 }) {
   const scrollRef = useRef(null)
   // Which row has its actions pinned open, on a device with no hover. Held
@@ -599,11 +609,54 @@ export default function MessageList({
   const toggleActions = (id) =>
     setOpenActionsId(cur => (id === null || cur === id ? null : String(id)))
 
+  // A page of history arriving above the viewer must not move what they are
+  // reading. The list gets taller at the top, so the scroll offset is pushed
+  // down by exactly the height that was added, before the browser paints.
+  // Spotted by the first message changing while the previous first message
+  // is still in the list — that is what a prepend looks like, and nothing
+  // else does.
+  const prevFirstIdRef = useRef(null)
+  const prevHeightRef  = useRef(0)
+  const prependedRef   = useRef(false)
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const first     = messages[0]?._id ?? null
+    const prevFirst = prevFirstIdRef.current
+    const prepended = Boolean(prevFirst) && first !== prevFirst
+      && messages.some(m => m._id === prevFirst)
+    if (prepended) el.scrollTop += el.scrollHeight - prevHeightRef.current
+    prependedRef.current   = prepended
+    prevFirstIdRef.current = first
+    prevHeightRef.current  = el.scrollHeight
+  }, [messages])
+
   // Also scrolls when the indicator appears, so it is not left below the fold.
+  // Not after a prepend: the viewer went up there on purpose.
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    if (prependedRef.current) { prependedRef.current = false; return }
+    el.scrollTop = el.scrollHeight
   }, [messages, typingName])
+
+  // Ask for the previous page when the top of the list comes into view. An
+  // observer rather than a scroll handler, so a page too short to scroll
+  // still fills up to the point where it can. The observer is rebuilt when
+  // the request state changes, so a page that has just landed does not
+  // re-fire on the same intersection until the sentinel leaves and returns.
+  const topRef = useRef(null)
+  const wantOlder = Boolean(onLoadOlder) && hasOlder && !loadingOlder && !olderError
+  useEffect(() => {
+    const root = scrollRef.current
+    const target = topRef.current
+    if (!wantOlder || !root || !target || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) onLoadOlder()
+    }, { root, rootMargin: '120px 0px 0px 0px' })
+    io.observe(target)
+    return () => io.disconnect()
+  }, [wantOlder, onLoadOlder])
 
   // Whether the viewer is at the bottom of the thread. While they are, the
   // list stays there whenever its content gets taller for a reason other than
@@ -653,6 +706,23 @@ export default function MessageList({
   return (
     <div ref={scrollRef} onScroll={trackPinned} className="flex-1 overflow-y-auto px-4 py-3">
       <div ref={contentRef}>
+      {onLoadOlder && hasOlder && (
+        <div ref={topRef} className="flex justify-center py-2" data-testid="older-messages">
+          {olderError ? (
+            <button
+              type="button"
+              onClick={onLoadOlder}
+              className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
+            >
+              Could not load older messages. Try again
+            </button>
+          ) : (
+            <span className="text-[11px] text-slate-400">
+              {loadingOlder ? 'Loading older messages…' : 'Scroll up for older messages'}
+            </span>
+          )}
+        </div>
+      )}
       {hint && (
         <div className="flex justify-center px-2 pt-2 pb-4" data-testid="room-hint">
           <p className="max-w-md text-center text-xs leading-relaxed text-slate-400 italic">{hint}</p>
