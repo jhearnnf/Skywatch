@@ -1594,6 +1594,24 @@ function upcomingCbatFilter() {
   return { cbatDate: { $gte: today } };
 }
 
+// ?sort=created-newest / created-oldest — registration date alone, no admin or
+// presence terms, so an admin can walk the population in the order it signed
+// up. Returned as a Mongo sort spec because /users/search applies the same
+// order in the query; the list route applies it in JS via createdAtComparator.
+// null for any other value, which the callers read as "not a registration sort".
+function createdSortSpec(sort) {
+  if (sort === 'created-newest') return { createdAt: -1, _id: -1 };
+  if (sort === 'created-oldest') return { createdAt: 1, _id: 1 };
+  return null;
+}
+
+function createdAtComparator(spec) {
+  const dir = spec.createdAt;
+  return (a, b) =>
+    dir * (new Date(a.createdAt) - new Date(b.createdAt))
+    || dir * a._id.toString().localeCompare(b._id.toString());
+}
+
 router.get('/users', async (req, res) => {
   try {
     await sweepStaleStreaks();
@@ -1635,10 +1653,13 @@ router.get('/users', async (req, res) => {
         .map(u => u._id.toString()),
     );
 
+    const createdSpec = createdSortSpec(req.query.sort);
     const ordered = upcomingCbat
       ? ordering.sort((a, b) => new Date(a.cbatDate) - new Date(b.cbatDate)
         || a._id.toString().localeCompare(b._id.toString()))
-      : orderUsersForList({ users: ordering, owesTest, testerHighlights });
+      : createdSpec
+        ? ordering.sort(createdAtComparator(createdSpec))
+        : orderUsersForList({ users: ordering, owesTest, testerHighlights });
     const pageIds = ordered
       .slice((page - 1) * limit, page * limit)
       .map(u => u._id);
@@ -1711,7 +1732,8 @@ router.get('/users/search', async (req, res) => {
       ...(req.query.sort === 'upcoming-cbat' ? upcomingCbatFilter() : {}),
       $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }],
     }).populate('rank').sort(req.query.sort === 'upcoming-cbat'
-      ? { cbatDate: 1, _id: 1 } : { isAdmin: -1, createdAt: 1 }).limit(20);
+      ? { cbatDate: 1, _id: 1 }
+      : createdSortSpec(req.query.sort) ?? { isAdmin: -1, createdAt: 1 }).limit(20);
 
     // Latest-release yardstick comes from the whole population, not just the
     // search hits — otherwise searching for one outdated user would make their

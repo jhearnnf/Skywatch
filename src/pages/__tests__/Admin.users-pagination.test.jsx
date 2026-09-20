@@ -628,3 +628,45 @@ describe('Admin — Users tab: page numbers', () => {
     expect(screen.queryByRole('button', { name: /^Page \d+$/ })).not.toBeInTheDocument()
   })
 })
+
+// "Account created" is a server order in both directions: the page comes back
+// in the order asked for, and the client must not re-sort it by presence.
+describe('Admin — Users tab: account created sort', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('asks the server for each direction from page 1 and keeps its order as served', async () => {
+    const base = setupFetch()
+    const served = {
+      'created-newest': [{ ...ALL[2], createdAt: '2026-01-03T00:00:00Z' }, { ...ALL[1], isAdmin: true, createdAt: '2026-01-02T00:00:00Z' }, { ...ALL[0], createdAt: '2026-01-01T00:00:00Z' }],
+      'created-oldest': [{ ...ALL[0], createdAt: '2026-01-01T00:00:00Z' }, { ...ALL[1], isAdmin: true, createdAt: '2026-01-02T00:00:00Z' }, { ...ALL[2], createdAt: '2026-01-03T00:00:00Z' }],
+    }
+    global.fetch = vi.fn((url, opts) => {
+      const sort = url.includes('/api/admin/users?') && new URL(url, 'http://x').searchParams.get('sort')
+      if (served[sort]) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: {
+          users: served[sort], total: 3, page: 1, pageCount: 1,
+        } }) })
+      }
+      return base.fetchMock(url, opts)
+    })
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+    await screen.findByText('Agent 021')
+
+    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'created-newest' } })
+    await waitFor(() => expect(rowNames()).toEqual(['Agent 003', 'Agent 002', 'Agent 001']))
+    const newestReq = fetch.mock.calls.find(([url]) => url.includes('sort=created-newest'))[0]
+    expect(new URL(newestReq, 'http://x').searchParams.get('page')).toBe('1')
+
+    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'created-oldest' } })
+    // The admin sits second either way: the served order wins over admin priority.
+    await waitFor(() => expect(rowNames()).toEqual(['Agent 001', 'Agent 002', 'Agent 003']))
+
+    fireEvent.change(screen.getByPlaceholderText(/Search by email/), { target: { value: 'user42' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await screen.findByText('Agent 042')
+    expect(fetch.mock.calls.some(([url]) => url.includes('/users/search?q=user42&sort=created-oldest'))).toBe(true)
+  })
+})

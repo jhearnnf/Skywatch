@@ -139,6 +139,48 @@ describe('GET /api/admin/users — sort order', () => {
     expect(res.body.data.users.map(u => u._id)).toEqual([soon.id, admin.id]);
   });
 
+  it('orders by registration date alone under the created sorts, newest and oldest', async () => {
+    // The admin is the newest account and would lead the default order; under a
+    // registration sort they take their place by date like anyone else.
+    const oldest = await createUser({ createdAt: new Date('2020-01-01T00:00:00Z') });
+    const middle = await createUser({ createdAt: new Date('2022-06-01T00:00:00Z') });
+    const admin  = await createAdminUser({ createdAt: new Date('2025-01-01T00:00:00Z') });
+
+    const newest = await listFor(admin, '?sort=created-newest');
+    expect(newest.status).toBe(200);
+    expect(newest.body.data.users.map(u => u._id)).toEqual([admin.id, middle.id, oldest.id]);
+
+    const oldestFirst = await listFor(admin, '?sort=created-oldest');
+    expect(oldestFirst.body.data.users.map(u => u._id)).toEqual([oldest.id, middle.id, admin.id]);
+  });
+
+  it('cuts pages from the created order, not from the default one', async () => {
+    const oldest = await createUser({ createdAt: new Date('2020-01-01T00:00:00Z') });
+    const middle = await createUser({ createdAt: new Date('2022-06-01T00:00:00Z') });
+    const admin  = await createAdminUser({ createdAt: new Date('2025-01-01T00:00:00Z') });
+
+    const first = await listFor(admin, '?sort=created-newest&limit=2');
+    expect(first.body.data).toMatchObject({ total: 3, pageCount: 2, page: 1 });
+    expect(first.body.data.users.map(u => u._id)).toEqual([admin.id, middle.id]);
+    const second = await listFor(admin, '?sort=created-newest&limit=2&page=2');
+    expect(second.body.data.users.map(u => u._id)).toEqual([oldest.id]);
+  });
+
+  it('applies the created sorts to search', async () => {
+    const oldest = await createUser({ displayName: 'Created match old', createdAt: new Date('2020-01-01T00:00:00Z') });
+    const admin  = await createAdminUser({ displayName: 'Created match admin', createdAt: new Date('2025-01-01T00:00:00Z') });
+    await createUser({ displayName: 'no hit', createdAt: new Date('2023-01-01T00:00:00Z') });
+
+    const newest = await request(app).get('/api/admin/users/search?q=Created%20match&sort=created-newest')
+      .set('Cookie', authCookie(admin._id));
+    expect(newest.status).toBe(200);
+    expect(newest.body.data.users.map(u => u._id)).toEqual([admin.id, oldest.id]);
+
+    const oldestFirst = await request(app).get('/api/admin/users/search?q=Created%20match&sort=created-oldest')
+      .set('Cookie', authCookie(admin._id));
+    expect(oldestFirst.body.data.users.map(u => u._id)).toEqual([oldest.id, admin.id]);
+  });
+
   it('places admins before non-admins regardless of registration date', async () => {
     // Seed three non-admins with old createdAt and one admin with new createdAt;
     // admin must still appear ahead of all of them.

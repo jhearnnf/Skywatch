@@ -5354,7 +5354,9 @@ function UsersTab({ API, onViewEmailHistory }) {
   }, [page])
 
   const sortedUsers = useMemo(() => {
-    if (userSort === 'upcoming-cbat') return users
+    // These orders are the server's alone; re-sorting a page of them by
+    // presence would scramble the very order the admin asked for.
+    if (userSort !== 'default') return users
     // A tester who has not tested today is the row worth chasing, so they lead
     // their group — matching the idle border the row already gets.
     // With the toggle off the list sorts purely on admin/online status.
@@ -5514,6 +5516,8 @@ function UsersTab({ API, onViewEmailHistory }) {
           className="border border-slate-200 bg-surface rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400">
           <option value="default">Default</option>
           <option value="upcoming-cbat">Upcoming CBAT</option>
+          <option value="created-newest">Account created (newest first)</option>
+          <option value="created-oldest">Account created (oldest first)</option>
         </select>
         {userSort === 'upcoming-cbat' && (
           <p className="text-xs text-slate-400">Recorded CBAT dates from today onwards, soonest first.</p>
