@@ -181,6 +181,38 @@ describe('GET /api/admin/users — sort order', () => {
     expect(oldestFirst.body.data.users.map(u => u._id)).toEqual([oldest.id, admin.id]);
   });
 
+  it('lists only supporters under the supporter sort, biggest total first then latest gift', async () => {
+    const admin = await createAdminUser();
+    await createUser({ displayName: 'never donated' });
+    const small = await createUser({ donationPrompt: { donatedAt: new Date('2026-03-01T00:00:00Z'), donatedTotalPence: 500 } });
+    const big   = await createUser({ donationPrompt: { donatedAt: new Date('2026-01-01T00:00:00Z'), donatedTotalPence: 2500 } });
+    const tieNewer = await createUser({ donationPrompt: { donatedAt: new Date('2026-02-01T00:00:00Z'), donatedTotalPence: 500 } });
+    // Dismissed the note but never gave: not a supporter, whatever the counters say.
+    await createUser({ donationPrompt: { dismissCount: 3, impressionCount: 5 } });
+
+    const res = await listFor(admin, '?sort=supporter');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ total: 3, pageCount: 1 });
+    expect(res.body.data.users.map(u => u._id)).toEqual([big.id, small.id, tieNewer.id]);
+    // The amount rides on the row, so the panel can show it without another fetch.
+    expect(res.body.data.users[0].donationPrompt.donatedTotalPence).toBe(2500);
+
+    const second = await listFor(admin, '?sort=supporter&limit=2&page=2');
+    expect(second.body.data.users.map(u => u._id)).toEqual([tieNewer.id]);
+  });
+
+  it('applies the supporter filter and order to search', async () => {
+    const admin = await createAdminUser({ displayName: 'Donor match admin' });
+    await createUser({ displayName: 'Donor match none' });
+    const small = await createUser({ displayName: 'Donor match small', donationPrompt: { donatedAt: new Date('2026-03-01T00:00:00Z'), donatedTotalPence: 500 } });
+    const big   = await createUser({ displayName: 'Donor match big',   donationPrompt: { donatedAt: new Date('2026-01-01T00:00:00Z'), donatedTotalPence: 2500 } });
+
+    const res = await request(app).get('/api/admin/users/search?q=Donor%20match&sort=supporter')
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data.users.map(u => u._id)).toEqual([big.id, small.id]);
+  });
+
   it('places admins before non-admins regardless of registration date', async () => {
     // Seed three non-admins with old createdAt and one admin with new createdAt;
     // admin must still appear ahead of all of them.

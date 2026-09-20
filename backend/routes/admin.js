@@ -1594,6 +1594,23 @@ function upcomingCbatFilter() {
   return { cbatDate: { $gte: today } };
 }
 
+// ?sort=supporter — only the accounts that have donated while signed in (the
+// same rule as User.isSupporter), biggest total first so the people who have
+// given most lead the page, then most recent gift. A filter rather than a
+// reorder of everyone, like upcoming-cbat: the non-donors have no order worth
+// showing underneath, and the page count then reads as "how many supporters".
+function supporterFilter() {
+  return { 'donationPrompt.donatedAt': { $ne: null } };
+}
+
+const SUPPORTER_SORT_SPEC = { 'donationPrompt.donatedTotalPence': -1, 'donationPrompt.donatedAt': -1, _id: 1 };
+
+function supporterComparator(a, b) {
+  return (b.donationPrompt?.donatedTotalPence ?? 0) - (a.donationPrompt?.donatedTotalPence ?? 0)
+    || new Date(b.donationPrompt?.donatedAt ?? 0) - new Date(a.donationPrompt?.donatedAt ?? 0)
+    || a._id.toString().localeCompare(b._id.toString());
+}
+
 // ?sort=created-newest / created-oldest — registration date alone, no admin or
 // presence terms, so an admin can walk the population in the order it signed
 // up. Returned as a Mongo sort spec because /users/search applies the same
@@ -1623,7 +1640,11 @@ router.get('/users', async (req, res) => {
     // fields an account, rather than the megabyte that fetching every full
     // document used to cost.
     const upcomingCbat = req.query.sort === 'upcoming-cbat';
-    const ordering  = await User.find(upcomingCbat ? upcomingCbatFilter() : {}, '_id isAdmin isTester lastSeen createdAt lastClients cbatDate').lean();
+    const supporters   = req.query.sort === 'supporter';
+    const ordering  = await User.find(
+      upcomingCbat ? upcomingCbatFilter() : supporters ? supporterFilter() : {},
+      '_id isAdmin isTester lastSeen createdAt lastClients cbatDate donationPrompt.donatedAt donationPrompt.donatedTotalPence',
+    ).lean();
     const total     = ordering.length;
     const pageCount = Math.max(1, Math.ceil(total / limit));
     const page      = Math.min(Math.max(parseInt(req.query.page, 10) || 1, 1), pageCount);
@@ -1657,9 +1678,11 @@ router.get('/users', async (req, res) => {
     const ordered = upcomingCbat
       ? ordering.sort((a, b) => new Date(a.cbatDate) - new Date(b.cbatDate)
         || a._id.toString().localeCompare(b._id.toString()))
-      : createdSpec
-        ? ordering.sort(createdAtComparator(createdSpec))
-        : orderUsersForList({ users: ordering, owesTest, testerHighlights });
+      : supporters
+        ? ordering.sort(supporterComparator)
+        : createdSpec
+          ? ordering.sort(createdAtComparator(createdSpec))
+          : orderUsersForList({ users: ordering, owesTest, testerHighlights });
     const pageIds = ordered
       .slice((page - 1) * limit, page * limit)
       .map(u => u._id);
@@ -1729,10 +1752,12 @@ router.get('/users/search', async (req, res) => {
     const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
     const users = await User.find({
-      ...(req.query.sort === 'upcoming-cbat' ? upcomingCbatFilter() : {}),
+      ...(req.query.sort === 'upcoming-cbat' ? upcomingCbatFilter()
+        : req.query.sort === 'supporter'    ? supporterFilter()
+        : {}),
       $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }],
-    }).populate('rank').sort(req.query.sort === 'upcoming-cbat'
-      ? { cbatDate: 1, _id: 1 }
+    }).populate('rank').sort(req.query.sort === 'upcoming-cbat' ? { cbatDate: 1, _id: 1 }
+      : req.query.sort === 'supporter'    ? SUPPORTER_SORT_SPEC
       : createdSortSpec(req.query.sort) ?? { isAdmin: -1, createdAt: 1 }).limit(20);
 
     // Latest-release yardstick comes from the whole population, not just the

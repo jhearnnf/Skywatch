@@ -107,7 +107,7 @@ describe('Users upcoming CBAT sort', () => {
     await screen.findByText('Agent 001')
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await screen.findByText('Agent 021')
-    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'upcoming-cbat' } })
+    fireEvent.change(screen.getByLabelText('Sort or filter'), { target: { value: 'upcoming-cbat' } })
     await screen.findByText('CBAT: 1 Jan 2099')
     expect(screen.getAllByRole('button', { name: /^Expand Agent/ }).map(el => el.getAttribute('aria-label')))
       .toEqual(['Expand Agent 002', 'Expand Agent 001'])
@@ -117,10 +117,71 @@ describe('Users upcoming CBAT sort', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     await screen.findByText('Agent 042')
     expect(fetch.mock.calls.some(([url]) => url.includes('/users/search?q=user42&sort=upcoming-cbat'))).toBe(true)
-    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'default' } })
+    fireEvent.change(screen.getByLabelText('Sort or filter'), { target: { value: 'default' } })
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => url.includes('/users/search?q=user42&sort=default'))).toBe(true))
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
     await screen.findByText('Agent 001')
+  })
+})
+
+// Supporters is a server filter like upcoming CBAT: the page is served in
+// donation order and kept as served. The amount shows on the collapsed row
+// under that sort only, and on the expanded panel under any sort.
+describe('Users supporter sort', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('asks the server for supporters from page 1, keeps its order and shows what each gave', async () => {
+    const base = setupFetch()
+    global.fetch = vi.fn((url, opts) => {
+      if (url.includes('/api/admin/users?') && url.includes('sort=supporter')) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: {
+          users: [
+            { ...ALL[1], donationPrompt: { donatedAt: '2026-01-01T00:00:00Z', donatedTotalPence: 2500 } },
+            { ...ALL[0], isAdmin: true, donationPrompt: { donatedAt: '2026-03-01T00:00:00Z', donatedTotalPence: 1250 } },
+          ], total: 2, page: 1, pageCount: 1,
+        } }) })
+      }
+      return base.fetchMock(url, opts)
+    })
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+    await screen.findByText('Agent 021')
+
+    fireEvent.change(screen.getByLabelText('Sort or filter'), { target: { value: 'supporter' } })
+    await screen.findByText('Donated: £25.00')
+    expect(screen.getByText('Donated: £12.50')).toBeInTheDocument()
+    // The bigger donor leads even though the other row is the admin.
+    expect(rowNames()).toEqual(['Agent 002', 'Agent 001'])
+    const sortedRequest = fetch.mock.calls.find(([url]) => url.includes('sort=supporter'))[0]
+    expect(new URL(sortedRequest, 'http://x').searchParams.get('page')).toBe('1')
+
+    fireEvent.change(screen.getByPlaceholderText(/Search by email/), { target: { value: 'user42' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await screen.findByText('Agent 042')
+    expect(fetch.mock.calls.some(([url]) => url.includes('/users/search?q=user42&sort=supporter'))).toBe(true)
+  })
+
+  it('shows the donated total on an expanded row under the default sort, and nothing for a non-donor', async () => {
+    const population = [
+      { ...ALL[0], donationPrompt: { donatedAt: '2026-03-01T00:00:00Z', donatedTotalPence: 1250 } },
+      ALL[1],
+    ]
+    const { fetchMock } = setupFetch(population)
+    global.fetch = fetchMock
+    render(<Admin />)
+    fireEvent.click(screen.getByText('Users'))
+    await screen.findByText('Agent 001')
+    expect(screen.queryByText(/Donated/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Expand Agent 001'))
+    await screen.findByText('Donated')
+    expect(screen.getByText('£12.50')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Expand Agent 002'))
+    await screen.findByLabelText('Collapse Agent 002')
+    expect(screen.getAllByText('Donated')).toHaveLength(1)
   })
 })
 
@@ -655,12 +716,12 @@ describe('Admin — Users tab: account created sort', () => {
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
     await screen.findByText('Agent 021')
 
-    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'created-newest' } })
+    fireEvent.change(screen.getByLabelText('Sort or filter'), { target: { value: 'created-newest' } })
     await waitFor(() => expect(rowNames()).toEqual(['Agent 003', 'Agent 002', 'Agent 001']))
     const newestReq = fetch.mock.calls.find(([url]) => url.includes('sort=created-newest'))[0]
     expect(new URL(newestReq, 'http://x').searchParams.get('page')).toBe('1')
 
-    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'created-oldest' } })
+    fireEvent.change(screen.getByLabelText('Sort or filter'), { target: { value: 'created-oldest' } })
     // The admin sits second either way: the served order wins over admin priority.
     await waitFor(() => expect(rowNames()).toEqual(['Agent 001', 'Agent 002', 'Agent 003']))
 

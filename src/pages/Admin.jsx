@@ -65,6 +65,9 @@ const fmtGBP = (pence) => {
     : `£${pounds.toFixed(2)}`
 }
 
+// One person's donations, to the penny: a £12.50 gift is £12.50, not £13.
+const fmtGBPExact = (pence) => `£${((typeof pence === 'number' ? pence : 0) / 100).toFixed(2)}`
+
 function fmtUptime(s) {
   if (!s) return '0s'
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -5504,7 +5507,7 @@ function UsersTab({ API, onViewEmailHistory }) {
       </form>
 
       <div className="flex flex-wrap items-center gap-3 mb-5">
-        <label htmlFor="users-sort" className="text-sm font-semibold text-slate-600">Sort by</label>
+        <label htmlFor="users-sort" className="text-sm font-semibold text-slate-600">Sort or filter</label>
         <select id="users-sort" value={userSort}
           onChange={e => {
             ++listSeq.current
@@ -5516,11 +5519,15 @@ function UsersTab({ API, onViewEmailHistory }) {
           className="border border-slate-200 bg-surface rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400">
           <option value="default">Default</option>
           <option value="upcoming-cbat">Upcoming CBAT</option>
+          <option value="supporter">Supporters</option>
           <option value="created-newest">Account created (newest first)</option>
           <option value="created-oldest">Account created (oldest first)</option>
         </select>
         {userSort === 'upcoming-cbat' && (
           <p className="text-xs text-slate-400">Recorded CBAT dates from today onwards, soonest first.</p>
+        )}
+        {userSort === 'supporter' && (
+          <p className="text-xs text-slate-400">Accounts that have donated while signed in, largest total first.</p>
         )}
       </div>
 
@@ -5707,6 +5714,9 @@ function UsersTab({ API, onViewEmailHistory }) {
                   {userSort === 'upcoming-cbat' && u.cbatDate && (
                     <span className="shrink-0 text-brand-600">CBAT: {fmtCbatDate(u.cbatDate)}</span>
                   )}
+                  {userSort === 'supporter' && u.donationPrompt?.donatedAt && (
+                    <span className="shrink-0 text-brand-600">Donated: {fmtGBPExact(u.donationPrompt.donatedTotalPence)}</span>
+                  )}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -5798,6 +5808,19 @@ function UsersTab({ API, onViewEmailHistory }) {
                   <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Last online</p>
                   <p className="text-xs font-bold text-slate-700">{fmtDateTime(u.lastSeen)}</p>
                 </div>
+
+                {/* What they have given, if anything. The total accumulates
+                    across gifts (see the User schema), so the date under it is
+                    the latest one. Absent rather than "£0.00" for everyone else:
+                    an anonymous donor is invisible to us, so a missing block
+                    means "not seen donating", not "has never donated". */}
+                {u.donationPrompt?.donatedAt && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Donated</p>
+                    <p className="text-xs font-bold text-slate-700">{fmtGBPExact(u.donationPrompt.donatedTotalPence)}</p>
+                    <p className="text-[10px] text-slate-400">last gift {fmtDateTime(u.donationPrompt.donatedAt)}</p>
+                  </div>
+                )}
 
                 {/* Country, with the two raw signals under it so a mismatch
                     can be read rather than just flagged. Nothing shown for an
