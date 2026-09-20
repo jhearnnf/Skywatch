@@ -13,9 +13,14 @@ import { AxisBar } from './StickSetup'
 // because a guessed axis on a pedal set is a toe brake steering the dot and
 // nothing about that looks broken until a run is lost to it.
 //
-// Same attract mode as the joystick cabinet: NO PEDALS DETECTED snaps in
-// amber while nothing is set up, PEDALS DETECTED! gets the slow blue pulse
-// once a set is. A quieter waiting state was tried and read as the panel
+// Same attract mode as the joystick cabinet: an amber headline snaps in
+// while nothing is set up, PEDALS DETECTED! gets the slow blue pulse once a
+// set is. The idle headline has two wordings on purpose. With no gamepad at
+// all it is NO PEDALS DETECTED, which is true. With a stick present it is
+// NO PEDALS SET UP, because a browser cannot tell pedals from a stick before
+// they are pressed (chained into a HOTAS they are just extra axes on the
+// stick's own id), so the panel cannot claim to have looked and found none
+// while offering a Calibrate button. That pairing read as a bug. A quieter waiting state was tried and read as the panel
 // being switched off next to the joystick one; the user wants the two
 // cabinets to feel like the same machine.
 
@@ -69,7 +74,7 @@ export default function PedalSetup({ title = 'Pedals' }) {
   }, [])
 
   const start = useCallback(() => {
-    if (!listPads().length) { setError('No pedals detected yet.'); return }
+    if (!listPads().length) { setError('No device found yet. Plug the pedals in and press one.'); return }
     const cal = createPedalCalibration()
     calRef.current = cal
     setError(null)
@@ -114,7 +119,7 @@ export default function PedalSetup({ title = 'Pedals' }) {
   return (
     <div
       data-pedals-connected={connected ? 'yes' : 'no'}
-      className={`cbat-arcade-panel rounded-lg border-2 p-3 mb-4 text-left transition-opacity duration-300 ${
+      className={`cbat-arcade-panel @container rounded-lg border-2 p-3 mb-4 text-left transition-opacity duration-300 ${
         connected ? 'border-brand-600/50 opacity-100' : 'cbat-arcade-idle border-game-line opacity-90'
       }`}
     >
@@ -134,7 +139,7 @@ export default function PedalSetup({ title = 'Pedals' }) {
         <>
           <p
             data-pedals-detected
-            className="cbat-stick-detected mb-2 text-center font-mono text-lg font-extrabold uppercase tracking-[0.18em] text-brand-600"
+            className="cbat-stick-detected mb-2 text-center font-mono text-[min(1.125rem,5cqi)] leading-7 font-extrabold uppercase tracking-[0.18em] whitespace-nowrap text-brand-600"
           >
             <span aria-hidden="true" className="mr-1.5">{'▸'}</span>
             Pedals detected!
@@ -165,17 +170,17 @@ export default function PedalSetup({ title = 'Pedals' }) {
         <>
           <p
             data-pedals-missing
-            className="cbat-stick-attract mb-2 text-center font-mono text-lg font-extrabold uppercase tracking-[0.16em] leading-tight"
+            className="cbat-stick-attract mb-2 text-center font-mono text-[min(1.125rem,5cqi)] font-extrabold uppercase tracking-[0.16em] leading-tight whitespace-nowrap"
           >
             <span aria-hidden="true" className="mr-1.5">{'▸'}</span>
-            No pedals detected
+            {view.padCount > 0 ? 'No pedals set up' : 'No pedals detected'}
             <span aria-hidden="true" className="ml-1.5">{'◂'}</span>
           </p>
           {view.padCount > 0 ? (
             <>
               <p className="mb-3 text-xs text-game-muted">
-                Pedals are learned by watching you press them, so it does not matter which lead they
-                are on or which device they show up as. Plug them in and calibrate.
+                Pedals cannot be told apart from a stick until you press them. If yours are plugged
+                in, on their own lead or through the stick, calibrate and they will be found.
               </p>
               <button type="button" onClick={start} className={primary}>Calibrate pedals</button>
             </>

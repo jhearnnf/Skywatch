@@ -200,7 +200,7 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
   return (
     <div
       data-stick-connected={view.connected ? 'yes' : 'no'}
-      className={`cbat-arcade-panel rounded-lg border-2 p-3 mb-4 text-left transition-opacity duration-300 ${
+      className={`cbat-arcade-panel @container rounded-lg border-2 p-3 mb-4 text-left transition-opacity duration-300 ${
         view.connected
           ? 'border-brand-600/50 opacity-100'
           : 'cbat-arcade-idle border-game-line opacity-90'
@@ -221,11 +221,17 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
 
       {/* The arcade moment. A stick is rare enough here that finding one is
           worth announcing, and it also answers the question the panel exists to
-          answer before the player has read a word of it. */}
+          answer before the player has read a word of it.
+
+          Both headlines (and the pedal cabinet's) are sized against the panel
+          (@container + cqi) rather than a fixed text-lg: 18px until the rail
+          is too narrow for the longest one, NO JOYSTICK DETECTED, then they
+          shrink together instead of breaking onto two lines. On SMA, where the
+          pedal cabinet shares the rail, a fixed size wrapped it. */}
       {view.connected && !calibrating && (
         <p
           data-stick-detected
-          className="cbat-stick-detected mb-2 text-center font-mono text-lg font-extrabold uppercase tracking-[0.18em] text-brand-600"
+          className="cbat-stick-detected mb-2 text-center font-mono text-[min(1.125rem,5cqi)] leading-7 font-extrabold uppercase tracking-[0.18em] whitespace-nowrap text-brand-600"
         >
           <span aria-hidden="true" className="mr-1.5">{'\u25B8'}</span>
           Joystick detected!
@@ -241,7 +247,7 @@ export default function StickSetup({ title = 'Joystick', mockActive = false, chi
         <>
           <p
             data-stick-missing
-            className="cbat-stick-attract mb-2 text-center font-mono text-lg font-extrabold uppercase tracking-[0.16em] leading-tight"
+            className="cbat-stick-attract mb-2 text-center font-mono text-[min(1.125rem,5cqi)] font-extrabold uppercase tracking-[0.16em] leading-tight whitespace-nowrap"
           >
             <span aria-hidden="true" className="mr-1.5">{'▸'}</span>
             No joystick detected

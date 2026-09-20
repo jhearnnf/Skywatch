@@ -51,6 +51,11 @@ describe('PedalSetup', () => {
     const { container } = render(<PedalSetup />)
     await frames()
     expect(container.firstChild.dataset.pedalsConnected).toBe('no')
+    // With a device present the headline stops claiming nothing was found:
+    // the pedals may be axes on that very stick, and only calibration can tell.
+    const headline = container.querySelector('[data-pedals-missing]')
+    expect(headline.textContent).toMatch(/no pedals set up/i)
+    expect(headline.textContent).not.toMatch(/detected/i)
     fireEvent.click(screen.getByRole('button', { name: /calibrate pedals/i }))
 
     // Rest.
