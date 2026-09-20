@@ -41,15 +41,15 @@ const DRY = process.argv.includes('--dry-run')
 const GUIDES = [
   {
     url:         '/cbat-guide-canada.html',
-    title:       'Canadian Aircrew Selection',
-    description: 'CFAST at Trenton: the two days, the battery and the real pass rates',
+    title:       'CFAST: Canadian Aircrew Selection',
+    description: 'Trenton: the two days, the battery and the real pass rates',
     emoji:       '🇨🇦',
     order:       10,
   },
   {
     url:         '/cbat-guide-australia.html',
-    title:       'ADF Aviation Screening',
-    description: 'MACTS at East Sale, and the two earlier tests people prepare for by mistake',
+    title:       'MACTS: ADF Aviation Screening',
+    description: 'East Sale, and the two earlier tests people prepare for by mistake',
     emoji:       '🇦🇺',
     order:       11,
   },
