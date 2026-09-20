@@ -242,6 +242,13 @@ describe('private CBAT group', () => {
     expect(screen.getByRole('tab', { name: /My group/ })).toHaveTextContent('4')
   })
 
+  it('shows the member count in the My group header', async () => {
+    stubFetch({ group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 3 } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    expect(await screen.findByLabelText('3 members in your CBAT group')).toHaveTextContent('3 members')
+  })
+
   it('shows the date form instead of remaining on Loading when no date is configured', async () => {
     stubFetch()
     renderOpen()

@@ -67,6 +67,15 @@ async function ensureCbatCohort(dateKey, region) {
   );
 }
 
+// How many accounts are in a cohort room. Membership is derived from the
+// user's locked date + region, never stored on the conversation, so the count
+// is always a live query. Shown to members on the Community rail and the
+// CBAT lounge; admins get the same number as `participantCount`.
+const cohortMemberCount = (convo) => User.countDocuments({
+  upcomingCbatDate: new Date(`${convo.channel.cohortDate}T00:00:00.000Z`),
+  upcomingCbatRegion: convo.channel.cohortRegion,
+});
+
 async function serializeCbatGroup(user) {
   let date = userCbatDateKey(user);
   let region = user?.upcomingCbatRegion ?? null;
@@ -103,12 +112,15 @@ async function serializeCbatGroup(user) {
   }
   const convo = await ensureCbatCohort(date, region);
   const readRow = await ChatRead.findOne({ userId: user._id, conversationId: convo._id }).lean();
-  const unreadCount = await ChatMessage.countDocuments({
-    conversationId: convo._id,
-    deletedAt: null,
-    senderUserId: { $ne: user._id },
-    ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
-  });
+  const [unreadCount, memberCount] = await Promise.all([
+    ChatMessage.countDocuments({
+      conversationId: convo._id,
+      deletedAt: null,
+      senderUserId: { $ne: user._id },
+      ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+    }),
+    cohortMemberCount(convo),
+  ]);
   const refusal = postRefusal(convo, user);
   const code = refusal?.body?.code ?? null;
   return {
@@ -117,6 +129,7 @@ async function serializeCbatGroup(user) {
     region,
     conversationId: convo._id,
     title: channelTitle(convo),
+    memberCount,
     unread: unreadCount > 0,
     unreadCount,
     lastMessageAt: convo.lastMessageAt,
@@ -815,6 +828,12 @@ router.get('/overview', async (req, res) => {
 
     const channels = channelRows.filter(c => c.audience !== 'cbat-cohort');
     const groups = channelRows.filter(c => c.audience === 'cbat-cohort');
+    // A viewer only ever has one cohort room, so this is one extra count, not
+    // one per channel.
+    await Promise.all(groups.map(async g => {
+      const convo = convos.find(c => String(c._id) === String(g._id));
+      g.memberCount = convo ? await cohortMemberCount(convo) : 0;
+    }));
     if (!groups.length) {
       groups.push({
         _id: null,
@@ -1041,10 +1060,7 @@ router.get('/cbat-groups', adminOnly, async (req, res) => {
           senderUserId: { $ne: req.user._id },
           ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
         }),
-        User.countDocuments({
-          upcomingCbatDate: new Date(`${group.channel.cohortDate}T00:00:00.000Z`),
-          upcomingCbatRegion: group.channel.cohortRegion,
-        }),
+        cohortMemberCount(group),
       ]);
       return {
         conversationId: group._id,
@@ -1096,6 +1112,7 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
       chatBanned: refusal?.body?.code === 'CHAT_BANNED',
       postBlockedMessage: refusal && !refusal.body?.code ? refusal.body.message : null,
       botName: null,
+      memberCount: members.length,
       members: members.map(member => ({
         _id: member._id,
         displayName: member.displayName ?? null,
@@ -1543,6 +1560,12 @@ router.get('/conversations/:id/messages', async (req, res) => {
         postPolicy: convo.channel?.postPolicy ?? 'everyone',
         adminOnly:  (convo.channel?.postPolicy ?? 'everyone') !== 'everyone',
         title:      convo.type === 'channel' ? channelTitle(convo) : (dmOther?.title ?? null),
+        // Cohort rooms only: the header says how many people share the date
+        // and region. Absent elsewhere so a public channel never shows a count
+        // of "everyone".
+        ...(convo.channel?.audience === 'cbat-cohort'
+          ? { memberCount: await cohortMemberCount(convo) }
+          : {}),
         ...(dmOther?.userId ? { otherUserId: dmOther.userId } : {}),
         // Admin-only, DM-only; the key is absent for everyone else rather than
         // null, so a client cannot distinguish "never seen" from "not for you".

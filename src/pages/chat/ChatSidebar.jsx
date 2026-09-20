@@ -397,7 +397,12 @@ export default function ChatSidebar({
               to={`/chat/${group._id}`}
               icon={group.emoji || '✈️'}
               title={group.name || group.title}
-              subtitle={group.description || 'Private to your date and region'}
+              // Lead with the headcount: "how many of us are there" is the
+              // first thing anyone asks about their date.
+              subtitle={[
+                Number.isFinite(group.memberCount) ? `${group.memberCount} ${group.memberCount === 1 ? 'member' : 'members'}` : null,
+                group.description || 'Private to your date and region',
+              ].filter(Boolean).join(' · ')}
               preview={group.preview}
               unread={group.unread}
               personalUnread={group.personalUnread}

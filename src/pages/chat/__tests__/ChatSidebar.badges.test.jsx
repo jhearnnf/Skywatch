@@ -52,6 +52,11 @@ describe('ChatSidebar — CBAT groups', () => {
     renderRail({ groups: [{ ...CHANNEL, _id: 'group-1', name: 'CBAT · 14 Oct 2099', emoji: '✈️' }] })
     expect(screen.getByText('CBAT · 14 Oct 2099').closest('a').getAttribute('href')).toBe('/chat/group-1')
   })
+
+  it('says how many people are in the group', () => {
+    renderRail({ groups: [{ ...CHANNEL, _id: 'group-1', name: 'CBAT · 14 Oct 2099', emoji: '✈️', description: '', memberCount: 7 }] })
+    expect(screen.getByText('7 members · Private to your date and region')).toBeTruthy()
+  })
 })
 
 describe('ChatSidebar — the Community console link', () => {

@@ -416,6 +416,10 @@ export default function ChatThread({
                 : isClosed ? 'This chat is closed'
                   : postPolicy === 'bot' ? 'Automatic feed - react rather than reply'
                   : isAdminOnly ? 'Updates from the SkyWatch team'
+                    // Only a cohort room carries a memberCount, so its presence
+                    // is the whole test for "this is a CBAT group".
+                    : Number.isFinite(conversation?.memberCount)
+                      ? `${conversation.memberCount} ${conversation.memberCount === 1 ? 'member' : 'members'} in your CBAT group`
                     : type === 'channel' ? 'Everyone can see this channel'
                       : type === 'dm' ? 'Direct message'
                         : 'Usually replies within a few hours'}

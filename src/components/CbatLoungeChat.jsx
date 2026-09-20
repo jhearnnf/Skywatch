@@ -903,6 +903,11 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
           <p className="text-[10px] font-bold text-game-text">
             {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${lounge.date}T00:00:00Z`))}
           </p>
+          {Number.isFinite(lounge.memberCount) && (
+            <p className="text-[10px] text-slate-500" aria-label={`${lounge.memberCount} ${lounge.memberCount === 1 ? 'member' : 'members'} in your CBAT group`}>
+              · <span className="font-bold text-game-text">{lounge.memberCount}</span> {lounge.memberCount === 1 ? 'member' : 'members'}
+            </p>
+          )}
           <p className="ml-auto text-[9px] text-slate-500">Private to this date + region</p>
         </div>
       )}

@@ -51,6 +51,34 @@ describe('CBAT cohort groups', () => {
     expect(detail.body.data.members.find(m => m.displayName === 'Viper').cbatPassed).toBe(true);
   });
 
+  it('tells a member how many people share their group', async () => {
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const other = await createUser({ displayName: 'Hawk', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await choose(b);
+    await choose(other, '2099-11-02'); // a different date: not counted
+    const id = made.body.data.conversationId;
+    const cookie = authCookie(a._id);
+
+    const [mine, overview, thread] = await Promise.all([
+      request(app).get('/api/chat/cbat-group').set('Cookie', cookie),
+      request(app).get('/api/chat/overview').set('Cookie', cookie),
+      request(app).get(`/api/chat/conversations/${id}/messages`).set('Cookie', cookie),
+    ]);
+
+    expect(mine.body.data.memberCount).toBe(2);
+    const row = overview.body.data.groups.find(g => String(g._id) === String(id));
+    expect(row.memberCount).toBe(2);
+    expect(thread.body.data.conversation.memberCount).toBe(2);
+    // Public channels carry no count at all.
+    const lounge = overview.body.data.channels[0];
+    if (lounge) {
+      const pub = await request(app).get(`/api/chat/conversations/${lounge._id}/messages`).set('Cookie', cookie);
+      expect(pub.body.data.conversation).not.toHaveProperty('memberCount');
+    }
+  });
+
   it('includes participant totals in the admin all-groups list', async () => {
     const admin = await createUser({ displayName: 'Control', isAdmin: true });
     const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
