@@ -252,7 +252,12 @@ export default function ChatThread({
           const next = mergeOlder(prev, fresh)
           return signature(prev) === signature(next) ? prev : next
         })
-        setSenders(d.senders ?? {})
+        // Merged, never replaced: the poll only covers the newest page, but
+        // mergeOlder keeps the older history on screen, and a sender who only
+        // appears back there is not in this page's map. Replacing the map
+        // stripped their avatar, rank and name marks within one poll of
+        // scrolling up. Fresh profiles win where both have one.
+        setSenders(prev => ({ ...prev, ...(d.senders ?? {}) }))
         setBotTyping(d.botTyping ?? null)
         // The server is now authoritative again, so drop the optimistic flag.
         // A poll that reports no reply in flight means the bot either answered
@@ -334,7 +339,7 @@ export default function ChatThread({
       })
       const fresh = await fetchMessages()
       setMessages(prev => mergeOlder(prev, fresh.messages))
-      setSenders(fresh.senders ?? {})
+      setSenders(prev => ({ ...prev, ...(fresh.senders ?? {}) }))
       setConversation(fresh.conversation)
       onChanged?.()
     } finally {
@@ -435,7 +440,7 @@ export default function ChatThread({
       prev.filter(m => String(m._id) !== String(message._id)),
       fresh.messages,
     ))
-    setSenders(fresh.senders ?? {})
+    setSenders(prev => ({ ...prev, ...(fresh.senders ?? {}) }))
     onChanged?.()
   }
 

@@ -131,6 +131,43 @@ describe('ChatThread — paging back through history', () => {
     }
   })
 
+  // The real route only sends the profiles of the senders on the page it
+  // returns. Someone who only posted further back is therefore missing from
+  // every poll's map, and swapping the map in for the old one stripped their
+  // marks (and avatar) a few seconds after the viewer scrolled up to them.
+  it('keeps the profiles of senders who only appear further back when the poll replaces the newest page', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    // Messages 1..6 are from a third agent who has both marks; 7..12 stay Viper's.
+    server.messages = server.messages.map(m => Number(m._id.slice(1)) <= 6
+      ? { ...m, senderUserId: 'u3', senderDisplayName: 'Hawk' }
+      : m)
+    const u3 = { _id: 'u3', displayName: 'Hawk', agentNumber: '1111111', cbatPassed: true, supporter: true }
+    mockApiFetch.mockImplementation((url, opts = {}) => {
+      if (opts.method === 'POST') return route(url, opts)
+      const res = page(url)
+      return Promise.resolve({ ok: true, json: async () => {
+        const d = (await res.json()).data
+        const ids = new Set(d.messages.map(m => m.senderUserId))
+        const senders = Object.fromEntries(Object.entries({ ...SENDERS, u3 }).filter(([id]) => ids.has(id)))
+        return { status: 'success', data: { ...d, senders } }
+      } })
+    })
+
+    renderThread()
+    await screen.findByText('message 12')
+    await reachTop()
+    await screen.findByText('message 7')
+    await reachTop()
+    await screen.findByText('message 4')
+    expect(screen.getAllByLabelText('Passed the CBAT').length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText('SkyWatch supporter').length).toBeGreaterThan(0)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    expect(screen.getByText('message 4')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('Passed the CBAT').length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText('SkyWatch supporter').length).toBeGreaterThan(0)
+  })
+
   it('stops asking once the far end of the channel is reached', async () => {
     renderThread()
     await screen.findByText('message 12')
