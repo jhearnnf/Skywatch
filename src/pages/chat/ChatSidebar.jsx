@@ -7,6 +7,7 @@ import PresenceStrip, { PresenceDot } from './components/PresenceStrip'
 import { formatRelative, SUPPORT_LABEL } from './format'
 import { badgeLabel, supportQueueLabel } from '../../utils/chatBadge'
 import CountBadge from '../../components/ui/CountBadge'
+import CountryFlag, { hasFlag } from '../../components/ui/CountryFlag'
 
 function Row({
   to, icon, title, subtitle, preview, unread, timestamp, active,
@@ -130,7 +131,9 @@ function GuideCard({ guide }) {
   const internal = onSite && !/\.[a-z0-9]+$/i.test(guide.url)
   const body = (
     <>
-      <CardIcon>{guide.emoji || '📖'}</CardIcon>
+      {/* A flag emoji is drawn as an SVG because Windows has no flag glyphs and
+          would show "CA" in the tile instead. Any other emoji renders as is. */}
+      <CardIcon>{hasFlag(guide.emoji) ? <CountryFlag emoji={guide.emoji} /> : (guide.emoji || '📖')}</CardIcon>
       <div className="min-w-0 flex-1">
         {/* The badge sits on the title row rather than after the description,
             so it is read before the card is opened rather than after. The title

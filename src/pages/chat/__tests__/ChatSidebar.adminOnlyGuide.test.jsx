@@ -82,3 +82,22 @@ describe('ChatSidebar — admin-only guides', () => {
     expect(card.getAttribute('data-router-link')).toBe('true')
   })
 })
+
+// The rail's guides carry flag emoji, which Windows renders as bare letters
+// ("CA" in a box). The card draws them as SVG instead; any other emoji is left
+// alone so a 📖 guide still gets its book.
+describe('ChatSidebar — guide flags', () => {
+  it('draws a flag emoji as an SVG flag', () => {
+    renderRail([GUIDE])
+    const card = screen.getByText(GUIDE.title).closest('a')
+    expect(card.querySelector('svg[data-flag="CA"]')).toBeTruthy()
+    expect(card.textContent).not.toContain('🇨🇦')
+  })
+
+  it('keeps a non-flag emoji as text', () => {
+    renderRail([{ ...GUIDE, emoji: '📖' }])
+    const card = screen.getByText(GUIDE.title).closest('a')
+    expect(card.querySelector('svg[data-flag]')).toBeNull()
+    expect(card.textContent).toContain('📖')
+  })
+})
