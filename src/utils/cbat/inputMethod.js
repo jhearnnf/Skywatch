@@ -78,3 +78,26 @@ export function dominantInput(tally) {
 export function normalizeInputMethod(value) {
   return INPUT_METHODS.includes(value) ? value : null
 }
+
+// ── Pedals ───────────────────────────────────────────────────────────────────
+// Rudder pedals are not a fourth bucket: they only ever hold ONE axis (SMA's
+// lateral one) while something from the list above flies the other, so a
+// pedal run is "joystick + pedals" or "keyboard + mouse + pedals", never
+// "pedals" instead of those. The run therefore carries a separate boolean,
+// `pedals`, beside `inputMethod`, and the board shows the pedal icon beside
+// the method's icon. null means the client never said (an older score).
+export const PEDALS_LABEL = 'Pedals'
+export const PEDALS_ICON = '🦶'
+
+export function normalizePedals(value) {
+  return value === true ? true : value === false ? false : null
+}
+
+// One tooltip for the whole Input cell: the methods (comma-separated, as a
+// weekly row with several always was), then "+ pedals" if they were used.
+// "Joystick + pedals" is what a player would say they flew on.
+export function describeInput(methods, pedals) {
+  const label = methods.map(m => INPUT_METHOD_LABEL[m]).join(', ')
+  if (pedals) return label ? `${label} + ${PEDALS_LABEL.toLowerCase()}` : PEDALS_LABEL
+  return label || 'Not recorded'
+}

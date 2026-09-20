@@ -645,6 +645,50 @@ describe('CbatLeaderboard — Input column', () => {
     expect(cell.textContent).toBe('🕹️👆')
   })
 
+  // SMA is the one game flown on pedals as well. They share the Input cell with
+  // the method, pedal icon after the method's, so a stick-and-pedals run reads
+  // as both side by side.
+  it('shows the pedal icon beside the method on an SMA row flown on pedals', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', inputMethod: 'joystick', pedals: true },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'sma' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    const cell = await waitFor(() => screen.getByTestId('input-method'))
+    expect(cell.textContent).toBe('🕹️🦶')
+    expect(cell.getAttribute('title')).toBe('Joystick + pedals')
+    expect(cell.getAttribute('data-pedals')).toBe('true')
+  })
+
+  it('shows mouse plus pedals as both icons, and no pedal icon when pedals were not used', async () => {
+    setupAuth(mockApi({ allTime: { leaderboard: [
+      { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', inputMethod: 'keyboard-mouse', pedals: true },
+      { _id: 'e2', userId: 'u2', rank: 2, bestScore: 800, bestTime: 20, agentNumber: 'A002', inputMethod: 'joystick', pedals: false },
+      { _id: 'e3', userId: 'u3', rank: 3, bestScore: 700, bestTime: 20, agentNumber: 'A003', inputMethod: 'joystick' },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'sma' })
+    render(<CbatLeaderboard />)
+    await selectAllTime()
+
+    const cells = await waitFor(() => screen.getAllByTestId('input-method'))
+    expect(cells.map(c => c.textContent)).toEqual(['⌨️🦶', '🕹️', '🕹️'])
+    expect(cells[0].getAttribute('title')).toBe('Keyboard + mouse + pedals')
+    expect(cells[1].hasAttribute('data-pedals')).toBe(false)
+  })
+
+  it('shows the pedal icon on a weekly SMA row when any run that week used them', async () => {
+    setupAuth(mockApi({ weekly: { leaderboard: [
+      { _id: 'w1', userId: 'u1', rank: 1, weekTotal: 300, plays: 4, agentNumber: 'A001', inputMethods: ['joystick'], pedals: true },
+    ] } }))
+    mockUseParams.mockReturnValue({ gameKey: 'sma' })
+    render(<CbatLeaderboard />)
+
+    await waitFor(() => expect(screen.getByText('Agent A001 (you)')).toBeDefined())
+    expect(screen.getByTestId('input-method').textContent).toBe('🕹️🦶')
+  })
+
   it('shows the "not recorded" marker for an older score with no input method', async () => {
     setupAuth(mockApi({ allTime: { leaderboard: [
       { _id: 'e1', userId: 'u1', rank: 1, bestScore: 900, bestTime: 20, agentNumber: 'A001', inputMethod: null },

@@ -261,6 +261,7 @@ export default function CbatSma() {
     // Read before setPhase: the input layer is torn down when the phase leaves
     // 'playing', and the tally goes with it.
     const inputMethod = inputRef.current?.inputMethod() ?? null
+    const pedals = inputRef.current?.usedPedals() ?? null
     setFinalStats(stats)
     setScoreSaved(false)
     setQueued(false)
@@ -272,6 +273,7 @@ export default function CbatSma() {
       worstErrorPct: stats.worstErrorPct,
       totalTime: stats.totalTime,
       inputMethod,
+      pedals,
     }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)

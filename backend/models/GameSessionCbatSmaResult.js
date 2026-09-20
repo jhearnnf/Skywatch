@@ -27,6 +27,10 @@ const schema = new mongoose.Schema({
   // Which physical control this run was flown on. Only the steered games (ACT,
   // RTT, SMA) carry this field.
   inputMethod:   { type: String, enum: CBAT_INPUT_METHODS, default: null },
+  // Whether rudder pedals held the lateral axis, beside whatever `inputMethod`
+  // flew the vertical one. SMA is the only test flown on pedals, so only its
+  // two collections carry this. null = the client never said (older builds).
+  pedals:        { type: Boolean, default: null },
   createdAt:     { type: Date, default: Date.now },
 });
 

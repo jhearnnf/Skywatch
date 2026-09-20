@@ -504,6 +504,21 @@ function fakeInputMethodFor(gameKey, offset, i) {
   return INPUT_METHOD_PATTERN[(offset + i) % INPUT_METHOD_PATTERN.length];
 }
 
+// Whether a demo row on a pedal board (SMA — CBAT_GAMES[key].pedals) is shown
+// flying on pedals as well. Indexed in step with INPUT_METHOD_PATTERN: two of
+// the three joystick slots (2 and 10) and one keyboard-mouse slot (8), so the
+// board shows both "stick + pedals" and "mouse + pedals" and never a phone
+// with pedals. Exactly 1/4 of rows.
+const PEDALS_PATTERN = [
+  false, false, true, false,
+  false, false, false, false,
+  true, false, true, false,
+];
+
+function fakePedalsFor(gameKey, offset, i) {
+  return PEDALS_PATTERN[(offset + i) % PEDALS_PATTERN.length];
+}
+
 // Which theme a demo row is shown playing under — every board carries the
 // Theme column. Same fixed-pattern idea as the controls above: mostly
 // SkyWatch, with Real CBAT at exactly 1/4, indexed by the per-game offset plus
@@ -552,6 +567,7 @@ function generateFakes(gameKey, count, { lowerBetter, tuning, isAdmin }) {
     };
     if (isAdmin) entry.email = 'demo';
     if (CBAT_GAMES[gameKey]?.inputMethod) entry.inputMethod = fakeInputMethodFor(gameKey, offset, i);
+    if (CBAT_GAMES[gameKey]?.pedals) entry.pedals = fakePedalsFor(gameKey, offset, i);
     entry.uiTheme = fakeUiThemeFor(gameKey, offset, i);
     fakes.push(entry);
   }
@@ -709,6 +725,7 @@ function generateWeeklyFakes(gameKey, perPlay, isAdmin) {
     // rolled-up total, not individual sessions, so there is no real per-run
     // control to vary within one row the way a genuine week's $addToSet can.
     if (CBAT_GAMES[gameKey]?.inputMethod) entry.inputMethods = [fakeInputMethodFor(gameKey, offset, i)];
+    if (CBAT_GAMES[gameKey]?.pedals) entry.pedals = fakePedalsFor(gameKey, offset, i);
     entry.uiThemes = [fakeUiThemeFor(gameKey, offset, i)];
     fakes.push(entry);
   }

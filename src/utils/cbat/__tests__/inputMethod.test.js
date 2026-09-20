@@ -3,8 +3,9 @@ import {
   INPUT_METHODS, INPUT_METHOD_LABEL, INPUT_METHOD_ICON,
   INPUT_JOYSTICK, INPUT_KEYBOARD_MOUSE, INPUT_TOUCH,
   createInputTally, addInput, mergeInputTallies, dominantInput, normalizeInputMethod,
+  PEDALS_ICON, PEDALS_LABEL, normalizePedals, describeInput,
 } from '../inputMethod'
-import { CBAT_INPUT_METHODS } from '../../../../backend/constants/cbatInputMethods'
+import { CBAT_INPUT_METHODS, normalizePedals as backendNormalizePedals } from '../../../../backend/constants/cbatInputMethods'
 
 describe('input method vocabulary', () => {
   it('matches the backend list exactly — the server nulls anything else', () => {
@@ -74,5 +75,33 @@ describe('input tally', () => {
     expect(normalizeInputMethod('touch')).toBe('touch')
     expect(normalizeInputMethod('gamepad')).toBeNull()
     expect(normalizeInputMethod(undefined)).toBeNull()
+  })
+})
+
+// Pedals ride beside the method rather than replacing it — see the note in
+// inputMethod.js. Only a real boolean is a claim; anything else is "unsaid".
+describe('pedals', () => {
+  it('has an icon and a plain label', () => {
+    expect(typeof PEDALS_ICON).toBe('string')
+    expect(PEDALS_LABEL).toBe('Pedals')
+  })
+
+  it('normalises to true, false or null the same way as the backend', () => {
+    for (const v of [true, false, null, undefined, 'true', 1, 0, 'pedals']) {
+      expect([v, normalizePedals(v)]).toEqual([v, backendNormalizePedals(v)])
+    }
+    expect(normalizePedals(true)).toBe(true)
+    expect(normalizePedals(false)).toBe(false)
+    expect(normalizePedals('true')).toBeNull()
+    expect(normalizePedals(1)).toBeNull()
+  })
+
+  it('describes a cell as the method(s) plus pedals, in the words a player would use', () => {
+    expect(describeInput([INPUT_JOYSTICK], true)).toBe('Joystick + pedals')
+    expect(describeInput([INPUT_KEYBOARD_MOUSE], true)).toBe('Keyboard + mouse + pedals')
+    expect(describeInput([INPUT_JOYSTICK, INPUT_TOUCH], false)).toBe('Joystick, Touch')
+    expect(describeInput([INPUT_JOYSTICK, INPUT_TOUCH], true)).toBe('Joystick, Touch + pedals')
+    expect(describeInput([], true)).toBe('Pedals')
+    expect(describeInput([], false)).toBe('Not recorded')
   })
 })

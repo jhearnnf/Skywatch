@@ -239,6 +239,10 @@ describe('SMA — submitting a run', () => {
       // Untouched controls, so the drift wins — a real score, but not a good one.
       expect(payload.totalScore).toBeGreaterThanOrEqual(0)
       expect(payload.totalScore).toBeLessThan(maxSmaScore(SMA_TUNING[difficulty]))
+      // The control fields ride along, as keys even when nothing steered: the
+      // board tells "no pedals" from "never asked" by the value, not the key.
+      expect(payload).toHaveProperty('inputMethod')
+      expect(payload).toHaveProperty('pedals')
 
       // And the results screen is filed under the same board.
       expect(container.querySelector(`[data-game-key="${gameKey}"]`)).toBeTruthy()

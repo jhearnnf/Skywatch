@@ -62,6 +62,13 @@ const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSma
 // surface it per row. Every other game leaves the flag off and its payloads
 // are unaffected.
 //
+// `pedals` (optional, boolean), when true, marks an entry whose rows also carry
+// a `pedals` boolean beside `inputMethod` — rudder pedals holding the lateral
+// axis while the method flew the vertical one. Only SMA and its Easier half:
+// it is the one test flown on pedals. Surfaced per row on both boards (all-time
+// from the best run, weekly true if any run that week used them) and counted on
+// the admin Stats page.
+//
 // Every game's result rows carry a `uiTheme` field (which site theme the run
 // was played under — see constants/cbatUiThemes.js; utils/cbatResult.js adds
 // the path and stamps it), and both boards surface it per row on every game,
@@ -498,6 +505,7 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Sensory Motor Apparatus Test',
     inputMethod: true,
+    pedals: true,
   },
   // SMA's "Easier" difficulty — a slower drift, no gusts, a run of 30 scored
   // seconds instead of 60, and a tolerance ring of 0.24 of the display radius
@@ -511,6 +519,7 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Sensory Motor Apparatus Test (Easier)',
     inputMethod: true,
+    pedals: true,
   },
 };
 

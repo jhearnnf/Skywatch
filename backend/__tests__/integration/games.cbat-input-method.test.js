@@ -152,3 +152,81 @@ describe('CBAT input method — non-steered games are unaffected', () => {
     expect(row).not.toHaveProperty('inputMethods');
   });
 });
+
+// Pedals ride beside the method rather than replacing it (see
+// constants/cbatInputMethods.js): SMA is the one test flown on them, so only
+// its two routes accept the field and only its boards carry it.
+describe('CBAT pedals — SMA', () => {
+  const RESULT_URL = '/api/games/cbat/sma/result';
+  const ALLTIME_URL = '/api/games/cbat/sma/leaderboard';
+  const WEEKLY_URL  = '/api/games/cbat/sma/leaderboard?period=weekly';
+  const body = { totalScore: 340, totalTime: 62.5, inputMethod: 'joystick' };
+
+  it.each([
+    ['sma',        '/api/games/cbat/sma/result'],
+    ['sma-easier', '/api/games/cbat/sma-easier/result'],
+  ])('stores a real boolean on %s and treats anything else as unsaid', async (_key, url) => {
+    for (const [sent, stored] of [[true, true], [false, false], ['true', null], [1, null], [undefined, null]]) {
+      const res = await request(app).post(url).set('Cookie', cookie).send({ ...body, pedals: sent });
+      expect(res.status).toBe(201);
+      expect([sent, res.body.data.pedals]).toEqual([sent, stored]);
+    }
+  });
+
+  it("shows the BEST run's pedals on the all-time board, beside its method", async () => {
+    await request(app).post(RESULT_URL).set('Cookie', cookie).send({ ...body, totalScore: 200, inputMethod: 'keyboard-mouse', pedals: false });
+    await request(app).post(RESULT_URL).set('Cookie', cookie).send({ ...body, totalScore: 900, pedals: true });
+    await request(app).post(RESULT_URL).set('Cookie', cookie).send({ ...body, totalScore: 300, pedals: false });
+
+    const res = await request(app).get(ALLTIME_URL).set('Cookie', cookie);
+    const row = res.body.data.leaderboard.find(e => e.agentNumber === '1000001');
+    expect(row.bestScore).toBe(900);
+    expect(row.inputMethod).toBe('joystick');
+    expect(row.pedals).toBe(true);
+    expect(res.body.data.myBest.pedals).toBe(true);
+  });
+
+  it('marks a weekly row as pedals if any run that week used them', async () => {
+    await request(app).post(RESULT_URL).set('Cookie', cookie).send({ ...body, pedals: false, playedAt: inWeek });
+    await request(app).post(RESULT_URL).set('Cookie', cookie).send({ ...body, pedals: true, playedAt: inWeek });
+    await request(app).post(RESULT_URL).set('Cookie', cookie).send({ ...body, playedAt: inWeek });
+
+    const res = await request(app).get(WEEKLY_URL).set('Cookie', cookie);
+    const row = res.body.data.leaderboard.find(e => e.agentNumber === '1000001') || res.body.data.myBest;
+    expect(row.pedals).toBe(true);
+  });
+
+  it('leaves a weekly row null when no run that week said either way', async () => {
+    await request(app).post(RESULT_URL).set('Cookie', cookie).send({ ...body, playedAt: inWeek });
+    const res = await request(app).get(WEEKLY_URL).set('Cookie', cookie);
+    const row = res.body.data.leaderboard.find(e => e.agentNumber === '1000001') || res.body.data.myBest;
+    expect(row.pedals).toBeNull();
+  });
+
+  it('pads both SMA boards with demo rows that carry a boolean pedals, some of them true', async () => {
+    for (const url of [ALLTIME_URL, WEEKLY_URL]) {
+      const res = await request(app).get(url).set('Cookie', cookie);
+      const { leaderboard } = res.body.data;
+      expect(leaderboard.length).toBeGreaterThan(0);
+      leaderboard.forEach(e => expect(typeof e.pedals).toBe('boolean'));
+      expect(leaderboard.some(e => e.pedals)).toBe(true);
+      expect(leaderboard.some(e => !e.pedals)).toBe(true);
+      // Never a phone with pedals.
+      leaderboard.filter(e => e.pedals).forEach(e => {
+        expect(e.inputMethod ?? e.inputMethods[0]).not.toBe('touch');
+      });
+    }
+  });
+
+  it('is ignored by the other steered games: RTT rows carry no pedals key', async () => {
+    const res1 = await request(app).post('/api/games/cbat/rtt/result').set('Cookie', cookie)
+      .send({ totalScore: 800, totalTime: 115, inputMethod: 'joystick', pedals: true, playedAt: inWeek });
+    expect(res1.status).toBe(201);
+    expect(res1.body.data).not.toHaveProperty('pedals');
+    const all = await request(app).get('/api/games/cbat/rtt/leaderboard').set('Cookie', cookie);
+    expect(all.body.data.leaderboard.find(e => e.agentNumber === '1000001')).not.toHaveProperty('pedals');
+    const week = await request(app).get('/api/games/cbat/rtt/leaderboard?period=weekly').set('Cookie', cookie);
+    const row = week.body.data.leaderboard.find(e => e.agentNumber === '1000001') || week.body.data.myBest;
+    expect(row).not.toHaveProperty('pedals');
+  });
+});

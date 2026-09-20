@@ -19,7 +19,7 @@
 
 import { motion } from 'framer-motion'
 import CbatPassedBadge from './CbatPassedBadge'
-import { INPUT_METHOD_ICON, INPUT_METHOD_LABEL, normalizeInputMethod } from '../utils/cbat/inputMethod'
+import { INPUT_METHOD_ICON, PEDALS_ICON, describeInput, normalizeInputMethod, normalizePedals } from '../utils/cbat/inputMethod'
 import UiThemeMark from './UiThemeMark'
 import { UI_THEME_LABELS, normalizeUiTheme } from '../lib/uiTheme'
 
@@ -118,18 +118,28 @@ function GainCell({ value, gain, pulse, tone, className = '' }) {
 // would hide that the total isn't comparable to a single-device rival's. No
 // recorded method (an older score) shows a muted "?" rather than a blank, so
 // it reads as "unknown" and not as a rendering bug.
+//
+// Pedals (SMA only) are not a method of their own but a partner to one — they
+// hold the lateral axis while the method holds the vertical — so `entry.pedals`
+// adds the pedal icon AFTER the method's, in the same cell: a stick-and-pedals
+// run reads 🕹️🦶. Weekly carries one `pedals` for the week: true if any run
+// that week was flown on them, for the same reason the methods are a set.
 function InputMethodCell({ variant, entry }) {
   const methods = variant === 'weekly'
     ? (entry.inputMethods || []).map(normalizeInputMethod).filter(Boolean)
     : (normalizeInputMethod(entry.inputMethod) ? [entry.inputMethod] : [])
+  const pedals = normalizePedals(entry.pedals) === true
 
   const cellClass = 'flex items-center justify-end gap-0.5 text-right text-xs text-slate-400 whitespace-nowrap cursor-help'
-  const label = methods.length ? methods.map(m => INPUT_METHOD_LABEL[m]).join(', ') : 'Not recorded'
+  const label = describeInput(methods, pedals)
 
   return (
-    <span className={cellClass} data-testid="input-method" title={label} aria-label={label}>
-      {methods.length
-        ? methods.map(m => <span key={m} aria-hidden="true">{INPUT_METHOD_ICON[m]}</span>)
+    <span className={cellClass} data-testid="input-method" data-pedals={pedals ? 'true' : undefined} title={label} aria-label={label}>
+      {methods.length || pedals
+        ? <>
+            {methods.map(m => <span key={m} aria-hidden="true">{INPUT_METHOD_ICON[m]}</span>)}
+            {pedals && <span aria-hidden="true">{PEDALS_ICON}</span>}
+          </>
         : '?'}
     </span>
   )

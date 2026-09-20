@@ -172,6 +172,12 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     // all the time and counts every frame it is on the page; a frame with none
     // of them is nobody's.
     inputTally: createInputTally(),
+    // The pedals' own tally, kept apart from the one above because they are
+    // not a rival to those controls but a partner: every pedal frame is ALSO
+    // a stick, mouse or pad frame on the vertical axis. `steeredFrames` is
+    // the denominator — frames on which anything at all was flying.
+    pedalFrames: 0,
+    steeredFrames: 0,
   }
 
   const readRect = (now) => {
@@ -349,17 +355,18 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
       const base = pickBase(now)
       state.source = base.source
       state.axes = base.axes
-      let method = base.method
 
       // Engaged pedals own the lateral axis, whatever is flying the vertical
-      // one. The stick's own roll goes unread, as on the apparatus. A run
-      // flown on pedals is a run flown on hardware for the board's purposes,
-      // whichever device happened to hold the other axis.
+      // one. The stick's own roll goes unread, as on the apparatus. The run's
+      // label stays whatever flew the vertical axis — a mouse with pedals is
+      // still a mouse run, not a joystick one — and the pedals are recorded
+      // beside it, so the board can show both.
       if (state.pedalsEngaged) {
         state.axes = { x: pedals.x(), y: state.axes.y }
-        method = INPUT_JOYSTICK
+        state.pedalFrames += 1
       }
-      if (method) addInput(state.inputTally, method)
+      if (base.method) addInput(state.inputTally, base.method)
+      if (base.method || state.pedalsEngaged) state.steeredFrames += 1
     },
 
     axes() { return state.axes },
@@ -373,6 +380,15 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     // run and sent with the score.
     inputMethod() { return dominantInput(state.inputTally) },
     inputTally() { return { ...state.inputTally } },
+    // Whether the pedals get credited with the run: the same majority rule as
+    // the method above, applied to the lateral axis. Pedals that held it for
+    // at least half the frames anything was flying count; a set pushed once
+    // near the end of a mouse run does not. false once something has steered
+    // without them, null before anything has steered at all.
+    usedPedals() {
+      if (!state.steeredFrames) return null
+      return state.pedalFrames * 2 >= state.steeredFrames
+    },
     // Lets the stick and pedals pick up a fresh calibration without a remount.
     refresh() { stick.refresh(); pedals.refresh() },
 

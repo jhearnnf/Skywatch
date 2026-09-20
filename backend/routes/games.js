@@ -21,7 +21,7 @@ const GameOrderOfBattle = require('../models/GameOrderOfBattle');
 const { BATTLE_CATEGORIES, ORDER_TYPES, REQUIRED_FIELD } = require('../models/GameOrderOfBattle');
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
-const { normalizeInputMethod } = require('../constants/cbatInputMethods');
+const { normalizeInputMethod, normalizePedals } = require('../constants/cbatInputMethods');
 const { saveCbatResult } = require('../utils/cbatResult');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
@@ -2586,7 +2586,7 @@ router.post('/cbat/vigilance-hard/result', protect, (req, res) => submitVigilanc
 // formula. See backend/models/GameSessionCbatSmaResult.js.
 async function submitSmaResult(req, res, Model) {
   try {
-    const { totalScore, onTargetPct, rmsErrorPct, worstErrorPct, totalTime, inputMethod } = req.body;
+    const { totalScore, onTargetPct, rmsErrorPct, worstErrorPct, totalTime, inputMethod, pedals } = req.body;
     const result = await saveCbatResult(Model, req, {
       totalScore: totalScore ?? 0,
       onTargetPct,
@@ -2594,6 +2594,8 @@ async function submitSmaResult(req, res, Model) {
       worstErrorPct,
       totalTime,
       inputMethod: normalizeInputMethod(inputMethod),
+      // SMA is the one test flown on pedals — see constants/cbatInputMethods.js.
+      pedals: normalizePedals(pedals),
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2915,6 +2917,8 @@ async function cbatLeaderboard(req, res, gameKey) {
           // session first, so $first here is the control that best run was
           // flown on.
           ...(cfg.inputMethod ? { inputMethod: { $first: '$inputMethod' } } : {}),
+          // SMA only: whether that same best run was flown on pedals.
+          ...(cfg.pedals ? { pedals: { $first: '$pedals' } } : {}),
           // Every game: the theme that best run was played under (null for
           // rows older than the field).
           uiTheme: { $first: '$uiTheme' },
@@ -2953,6 +2957,7 @@ async function cbatLeaderboard(req, res, gameKey) {
           bestScore: `$${cfg.primaryField}`,
           bestTime: '$totalTime',
           ...(cfg.inputMethod ? { inputMethod: 1 } : {}),
+          ...(cfg.pedals ? { pedals: 1 } : {}),
           uiTheme: 1,
         },
       },
@@ -3027,6 +3032,7 @@ async function cbatLeaderboard(req, res, gameKey) {
             bestTime: timeVal,
             rank: countBetter + 1,
             ...(cfg.inputMethod ? { inputMethod: best.inputMethod ?? null } : {}),
+            ...(cfg.pedals ? { pedals: best.pedals ?? null } : {}),
             uiTheme: best.uiTheme ?? null,
           };
         }
@@ -3078,6 +3084,10 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
       // filtered to non-null in the $project below (a run predating this
       // feature, or with an unrecognised value, contributes nothing here).
       ...(cfg.inputMethod ? { inputMethods: { $addToSet: '$inputMethod' } } : {}),
+      // SMA only: true if any run this week was flown on pedals. $max works
+      // because BSON orders null < false < true, so one pedal run wins over
+      // any number without, and a week of nothing-recorded stays null.
+      ...(cfg.pedals ? { pedals: { $max: '$pedals' } } : {}),
       // Same shape for the theme, on every game: every distinct theme played
       // under this week.
       uiThemes: { $addToSet: '$uiTheme' },
@@ -3112,6 +3122,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
               $filter: { input: '$inputMethods', as: 'm', cond: { $ne: ['$$m', null] } },
             },
           } : {}),
+          ...(cfg.pedals ? { pedals: 1 } : {}),
           uiThemes: {
             $filter: { input: '$uiThemes', as: 't', cond: { $ne: ['$$t', null] } },
           },
@@ -3138,6 +3149,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
               weekTotal: { $sum: valueExpr },
               plays: { $sum: 1 },
               ...(cfg.inputMethod ? { inputMethods: { $addToSet: '$inputMethod' } } : {}),
+              ...(cfg.pedals ? { pedals: { $max: '$pedals' } } : {}),
               uiThemes: { $addToSet: '$uiTheme' },
             },
           },
@@ -3163,6 +3175,7 @@ async function cbatWeeklyLeaderboard(req, res, gameKey, cfg) {
             plays: mine.plays,
             rank: (betterAgg[0]?.n || 0) + 1,
             ...(cfg.inputMethod ? { inputMethods: (mine.inputMethods || []).filter(m => m != null) } : {}),
+            ...(cfg.pedals ? { pedals: mine.pedals ?? null } : {}),
             uiThemes: (mine.uiThemes || []).filter(t => t != null),
           };
         }

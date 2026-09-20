@@ -383,7 +383,9 @@ describe('createSmaInput source priority', () => {
       expect(input.pedalsEngaged()).toBe(true)
       expect(input.axes().x).toBe(0)
       expect(Object.is(input.axes().x, 0)).toBe(true)
+      // Stick on the vertical axis, pedals on the lateral: the board gets both.
       expect(input.inputMethod()).toBe('joystick')
+      expect(input.usedPedals()).toBe(true)
     })
 
     it('pairs pedals with a mouse on the vertical axis when there is no stick', () => {
@@ -399,8 +401,29 @@ describe('createSmaInput source priority', () => {
       expect(input.pedalsEngaged()).toBe(true)
       expect(input.axes().x).toBeGreaterThan(0.5)
       expect(input.axes().y).toBeGreaterThan(0.5)
-      // And the run counts as flown on hardware, once per frame, not twice.
-      expect(input.inputTally()).toEqual({ joystick: 1, 'keyboard-mouse': 0, touch: 0 })
+      // The mouse flew the vertical axis, so that is the run's method — pedals
+      // are recorded beside it, not instead of it, and never as a joystick.
+      expect(input.inputTally()).toEqual({ joystick: 0, 'keyboard-mouse': 1, touch: 0 })
+      expect(input.inputMethod()).toBe('keyboard-mouse')
+      expect(input.usedPedals()).toBe(true)
+    })
+
+    // The same majority rule the method uses, on the lateral axis: pedals that
+    // held it for at least half the run count, a late nudge does not.
+    it('credits the pedals only when they held the lateral axis for at least half the run', () => {
+      pedalProfile()
+      const pedals = { id: 'Pedals', connected: true, axes: [0, 0, 0], buttons: [] }
+      navigator.getGamepads = () => [pedals]
+      input = createSmaInput({ el: arena() })
+      expect(input.usedPedals()).toBeNull()   // nothing has steered yet
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 200, clientY: 350 }))
+      for (let i = 0; i < 6; i++) input.poll(16)   // six mouse-only frames
+      expect(input.usedPedals()).toBe(false)
+      pedals.axes = [0, 0, 0.9]
+      for (let i = 0; i < 5; i++) input.poll(16)   // five pedal frames: 5 of 11
+      expect(input.usedPedals()).toBe(false)
+      input.poll(16)                               // 6 of 12: half, and counted
+      expect(input.usedPedals()).toBe(true)
     })
 
     it('lets the pedals go when they are unplugged', () => {

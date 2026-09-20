@@ -176,7 +176,9 @@ export const CBAT_LEADERBOARD_CONFIG = {
   // control the score was set on change what the number means. This flag is
   // half of the wiring: the backend registry's matching `inputMethod: true` on
   // the same keys is what makes leaderboard rows actually carry the field, so
-  // the two must be added and removed together.
+  // the two must be added and removed together. The same column also shows
+  // the pedal icon when a row carries `pedals: true` — no flag of its own here,
+  // because only rows from a backend entry with `pedals: true` (SMA) ever do.
   'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true, showInput: true },
   'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'numerical-ops-easier': { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
