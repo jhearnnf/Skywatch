@@ -231,10 +231,11 @@ function useScrollFade(ref, contentRef, deps) {
 //
 // `marks` is passed pre-gated (null when there are none) so the stacked layout
 // does not leave an empty second line under a plain name.
-function AgentCell({ isMe, title, name, marks }) {
+function AgentCell({ isMe, title, name, marks, onClick }) {
   const nameRef = useRef(null)
   const textRef = useRef(null)
   const fade = useScrollFade(nameRef, textRef, [name])
+  const Name = onClick ? 'button' : 'span'
 
   return (
     <span
@@ -249,13 +250,15 @@ function AgentCell({ isMe, title, name, marks }) {
       >
         {/* inline-block so the text has a box of its own to measure; the admin
             timestamp tooltip sits on the text because it is about the name */}
-        <span
+        <Name
           ref={textRef}
-          className={`inline-block ${title ? 'cursor-help' : ''}`}
+          type={onClick ? 'button' : undefined}
+          onClick={onClick}
+          className={`inline-block text-left ${onClick ? 'cursor-pointer hover:underline focus-visible:underline focus-visible:outline-none' : title ? 'cursor-help' : ''}`}
           {...(title ? { title } : {})}
         >
           {name}
-        </span>
+        </Name>
       </span>
       {/* One wrapping row of marks under the name on a phone; `sm:contents`
           dissolves the wrapper so the marks become inline siblings of the name. */}
@@ -279,7 +282,7 @@ function AgentCell({ isMe, title, name, marks }) {
 // The annotations are absolutely positioned in the row's vertical gutter: the
 // weekly columns are sized to the digits they hold (see rowCols), so anything
 // added in-flow would either reflow the grid or clip.
-export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, layout = false, delta = null, compact = false, gains = null, pulse = false }) {
+export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false, divider = false, layout = false, delta = null, compact = false, gains = null, pulse = false, onOpenUser }) {
   const achievedAtTitle = entry.achievedAt
     ? new Date(entry.achievedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
     : null
@@ -305,6 +308,7 @@ export default function LeaderboardRow({ entry, variant, cfg = {}, isMe = false,
         )}
       </span>
       <AgentCell
+        onClick={onOpenUser && entry.userId && !entry.isFake ? () => onOpenUser(entry.userId) : undefined}
         isMe={isMe}
         title={achievedAtTitle}
         name={`${agentName(entry)}${isMe ? ' (you)' : ''}`}

@@ -87,6 +87,45 @@ describe('generateDadQuestion', () => {
     }
   })
 
+  // Regression: the option list must not give the answer away. The old picker
+  // always offered the answer's two 45° neighbours plus its opposite, so the
+  // answer was always the middle of three consecutive compass points and
+  // "NE and NW both offered ⇒ answer is N" held on every question.
+  it('does not let the answer be recovered from the options alone', () => {
+    const seen = new Map() // sorted option set -> { count, answers }
+    let middleOfTrioHits = 0
+    let total = 0
+    for (let seed = 1; seed <= 3000; seed++) {
+      for (const diagonals of [true, false]) {
+        const q = generateDadQuestion(5, mulberry32(seed), { diagonals })
+        total++
+        const key = [...q.options].sort().join(',')
+        const entry = seen.get(key) ?? { count: 0, answers: new Set() }
+        entry.count++
+        entry.answers.add(q.answer)
+        seen.set(key, entry)
+
+        // The old leak: both 45° neighbours offered, answer in the middle.
+        const a = COMPASS.indexOf(q.answer)
+        if (q.options.includes(COMPASS[(a + 1) % 8]) && q.options.includes(COMPASS[(a + 7) % 8])) {
+          middleOfTrioHits++
+        }
+      }
+    }
+    // Any option set sampled a reasonable number of times has produced more
+    // than one answer, so the set alone does not identify the answer.
+    let checked = 0
+    for (const { count, answers } of seen.values()) {
+      if (count < 12) continue
+      checked++
+      expect(answers.size).toBeGreaterThan(1)
+    }
+    expect(checked).toBeGreaterThan(20)
+    // The old heuristic was right 100% of the time; now only when both
+    // neighbours happen to be drawn (≈14%).
+    expect(middleOfTrioHits / total).toBeLessThan(0.3)
+  })
+
   // ── First-half (cardinal-only) mode ────────────────────────────────────────
   describe('with diagonals disabled', () => {
     it('uses only cardinal headings and 90° turns', () => {

@@ -75,15 +75,19 @@ function shuffle(arr, rng) {
   return a
 }
 
-// 4 multiple-choice options: the answer plus 3 plausible near-misses (both
-// 45° neighbours and the opposite point), then shuffled.
+// 4 multiple-choice options: the answer plus 3 distractors drawn at random from
+// the other seven compass points, then shuffled.
+//
+// The distractors must NOT have a fixed shape relative to the answer. An
+// earlier version always offered the two 45° neighbours plus the opposite
+// point, which meant three options were always consecutive with the answer in
+// the middle — every question could be solved from the option list alone
+// without reading the journey (a player spotted "if NE and NW are both offered
+// the answer is N"). With a random draw, any member of the set is equally
+// likely to be the answer.
 function buildOptions(answer, rng) {
-  const i = COMPASS.indexOf(answer)
-  const distractors = [
-    COMPASS[(i + 1) % 8],
-    COMPASS[(i + 7) % 8],
-    COMPASS[(i + 4) % 8],
-  ]
+  const others = COMPASS.filter(d => d !== answer)
+  const distractors = shuffle(others, rng).slice(0, 3)
   return shuffle([answer, ...distractors], rng)
 }
 

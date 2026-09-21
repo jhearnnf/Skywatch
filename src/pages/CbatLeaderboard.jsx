@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useParams, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useLocation, useSearchParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
@@ -11,6 +11,7 @@ import { cbatTrend, cbatTrendPhrase } from '../utils/cbatProgress'
 import { cbatLastRankKey } from '../utils/storageKeys'
 import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
 import { MAX_LEVEL } from '../utils/cbat/tracePractise'
+import UserCard from './chat/components/UserCard'
 
 // 'you' is the odd one out: it's the user's own score history rather than a board of other
 // people, and it reads from /progress instead of /leaderboard. It lives here anyway because
@@ -246,6 +247,8 @@ function ProgressPanel({ board, cfg }) {
 }
 
 export default function CbatLeaderboard() {
+  const navigate = useNavigate()
+  const [cardUserId, setCardUserId] = useState(null)
   const { gameKey } = useParams()
   const { user, apiFetch, API } = useAuth()
 
@@ -410,6 +413,20 @@ export default function CbatLeaderboard() {
 
   return (
     <div className="cbat-leaderboard-page">
+      {cardUserId && (
+        <UserCard
+          key={cardUserId}
+          userId={cardUserId}
+          onClose={() => setCardUserId(null)}
+          onOpenDm={(id) => { setCardUserId(null); navigate(`/chat/${id}`) }}
+          onViewProfile={(id) => {
+            setCardUserId(null)
+            navigate(`/agent/${id}`, {
+              state: { backTo: `${location.pathname}?period=${tab}`, backLabel: 'Back to leaderboard' },
+            })
+          }}
+        />
+      )}
       {/* Difficulty-qualified, unlike the <h1> below: the two boards are two
           routes with two sets of scores, and in a tab strip or a search result
           there are no pills alongside to say which one this is. */}
@@ -547,6 +564,7 @@ export default function CbatLeaderboard() {
                     <LeaderboardRow
                       key={entry._id}
                       entry={entry}
+                      onOpenUser={user ? setCardUserId : undefined}
                       variant={tab}
                       cfg={cfg}
                       isMe={isMe}
@@ -561,7 +579,7 @@ export default function CbatLeaderboard() {
               {myBestOutsideTop && (
                 <>
                   <div className="px-4 py-1 text-center text-[10px] text-slate-500">···</div>
-                  <LeaderboardRow entry={myBest} variant={tab} cfg={cfg} isMe divider />
+                  <LeaderboardRow entry={myBest} variant={tab} cfg={cfg} isMe divider onOpenUser={user ? setCardUserId : undefined} />
                 </>
               )}
             </div>

@@ -4,6 +4,7 @@ import CbatLeaderboard from '../CbatLeaderboard'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
+const mockNavigate = vi.hoisted(() => vi.fn())
 const mockUseAuth   = vi.hoisted(() => vi.fn())
 const mockUseParams = vi.hoisted(() => vi.fn())
 // Search string the mocked useSearchParams reports — set per-test to exercise
@@ -12,7 +13,7 @@ const mockSearch    = vi.hoisted(() => ({ value: '' }))
 
 vi.mock('react-router-dom', () => ({
   useParams: () => mockUseParams(),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useLocation: () => ({ state: null, pathname: '/cbat/x/leaderboard', search: mockSearch.value, hash: '' }),
   useSearchParams: () => [new URLSearchParams(mockSearch.value), vi.fn()],
   // Pass the rest of the props through — the difficulty pills are Links
@@ -68,6 +69,27 @@ const selectAllTime = async () => {
 // Runs before every test regardless of block, so a deep-link set in one test
 // never leaks into the next.
 beforeEach(() => { mockSearch.value = '' })
+
+describe('leaderboard user card', () => {
+  it.each(['weekly', 'all-time'])('opens user actions from %s and returns to that board from the profile', async (period) => {
+    mockSearch.value = `?period=${period}`
+    mockUseParams.mockReturnValue({ gameKey: 'symbols' })
+    const board = { leaderboard: [{ _id: 'score1', userId: 'u2', displayName: 'Viper', rank: 1, bestScore: 120, bestTime: 30, weekTotal: 120, plays: 1 }] }
+    const boardApi = mockApi({ weekly: board, allTime: board })
+    setupAuth(vi.fn((url) => String(url).endsWith('/users/u2/card')
+      ? Promise.resolve({ ok: true, json: async () => ({ data: { user: { _id: 'u2', displayName: 'Viper', canBlock: true } } }) })
+      : boardApi(url)))
+    render(<CbatLeaderboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Viper' }))
+    expect(await screen.findByRole('button', { name: 'Message' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Block' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'View profile' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/agent/u2', {
+      state: { backTo: `/cbat/x/leaderboard?period=${period}`, backLabel: 'Back to leaderboard' },
+    })
+    expect(screen.queryByRole('button', { name: 'Block' })).not.toBeInTheDocument()
+  })
+})
 
 describe('CbatLeaderboard — deep-linked tab', () => {
   beforeEach(() => vi.clearAllMocks())
