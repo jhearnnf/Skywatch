@@ -83,7 +83,7 @@ function setupAuth() {
 // to the social icons. Help holds Report a Problem and the tutorials only.
 async function openOverview() {
   render(<Profile />)
-  await waitFor(() => screen.getByText('📤 Share SkyWatch'))
+  await waitFor(() => screen.getByText('Share SkyWatch'))
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -103,8 +103,10 @@ describe('Profile — Overview "Support SkyWatch" link', () => {
     expect(link.getAttribute('href')).toBe('/donate')
     expect(link.textContent).toContain('Support SkyWatch')
 
-    const labels = [...link.parentElement.querySelectorAll('a')].map(a => a.textContent)
-    expect(labels).toEqual(['📤 Share SkyWatch', '💙 Support SkyWatch'])
+    // Labels are text beside an inline SVG now, not emoji, so normalise.
+    const labels = [...link.parentElement.querySelectorAll('a')]
+      .map(a => a.textContent.replace(/\s+/g, ' ').trim())
+    expect(labels).toEqual(['Share SkyWatch', 'Support SkyWatch'])
   })
 
   it('is absent in the native app', async () => {
@@ -113,14 +115,14 @@ describe('Profile — Overview "Support SkyWatch" link', () => {
     expect(screen.queryByTestId('profile-help-donate')).toBeNull()
     expect(screen.queryByText(/Support SkyWatch/)).toBeNull()
     // The neighbouring link is unaffected.
-    expect(screen.getByText('📤 Share SkyWatch')).toBeDefined()
+    expect(screen.getByText('Share SkyWatch')).toBeDefined()
   })
 
   it('keeps Report a Problem on the Help tab, without Share or Support', async () => {
     await openOverview()
     fireEvent.click(screen.getByRole('button', { name: 'Help' }))
     await waitFor(() => screen.getByText('⚠️ Report a Problem'))
-    expect(screen.queryByText('📤 Share SkyWatch')).toBeNull()
+    expect(screen.queryByText('Share SkyWatch')).toBeNull()
     expect(screen.queryByTestId('profile-help-donate')).toBeNull()
   })
 })

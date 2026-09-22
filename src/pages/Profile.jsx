@@ -25,6 +25,27 @@ import { getClientInfo } from '../utils/appVersion'
 import { PLAY_STORE_URL, forceUpdateWebApp, isNativeUpdateAvailable } from '../utils/appUpdate'
 import BlockedAgents from './chat/components/BlockedAgents'
 
+/* Share / Support sit directly under the monochrome social SVGs, so they are
+   drawn the same way rather than with emoji. The OS colour-emoji font renders
+   at its own weight and baseline, which is what made the old 📤 / 💙 pair look
+   pasted on next to the TikTok and X marks. */
+function ShareIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M12 2.6l4.2 4.2-1.4 1.4-1.8-1.8V15h-2V6.4L9.2 8.2 7.8 6.8 12 2.6z"/>
+      <path d="M4 13h2v5h12v-5h2v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6z"/>
+    </svg>
+  )
+}
+
+function HeartIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+    </svg>
+  )
+}
+
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
   return (
@@ -444,11 +465,17 @@ export default function Profile() {
           )}
           <SocialLinks source="profile" className="mt-6 pt-4 border-t border-slate-200" />
           <div className="mt-3 flex items-center justify-center gap-4 text-xs font-semibold text-slate-500">
-            <Link to="/share" className="hover:text-slate-700 transition-colors">📤 Share SkyWatch</Link>
+            <Link to="/share" className="inline-flex items-center gap-1.5 hover:text-slate-700 transition-colors">
+              <ShareIcon className="w-3.5 h-3.5" />
+              Share SkyWatch
+            </Link>
             {/* Never in the native app: Google Play forbids off-store payment
                 links, so /donate is web-only everywhere (see Donate.jsx). */}
             {!SLIM_APP && (
-              <Link to="/donate" data-testid="profile-help-donate" className="hover:text-slate-700 transition-colors">💙 Support SkyWatch</Link>
+              <Link to="/donate" data-testid="profile-help-donate" className="inline-flex items-center gap-1.5 hover:text-slate-700 transition-colors">
+                <HeartIcon className="w-3.5 h-3.5" />
+                Support SkyWatch
+              </Link>
             )}
           </div>
         </motion.div>
