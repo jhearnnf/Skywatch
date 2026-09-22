@@ -123,6 +123,38 @@ const cohortMemberCount = (convo) => User.countDocuments({
   upcomingCbatRegion: convo.channel.cohortRegion,
 });
 
+// A cohort room nobody is in and nobody ever posted in.
+//
+// The room is created the moment someone locks a date, and membership is
+// derived from that date rather than stored on the room, so clearing the last
+// member's date — a mistyped one entered to see what the feature does, an
+// account deleted — leaves an empty shell that would otherwise sit on the
+// admin list for ever.
+//
+// Hard delete rather than archive, because `ensureCbatCohort` upserts the room
+// back on demand: if somebody really does sit that date later they get a fresh
+// room with the right name and welcome, so nothing is lost by binning it now.
+// That also makes the delete safe to race — a member locking the date at the
+// same moment simply gets the room recreated on their next fetch, with no
+// messages to lose. Archiving would be the wrong tool: the upsert does not
+// filter on `isArchived`, so it would hand the next applicant an archived room
+// they are refused permission to post in.
+//
+// `messageCount` only ever goes up (withdrawing a message does not decrement
+// it), so a zero means nothing was ever said here, not that the room was
+// emptied afterwards. A room that was talked in is kept whatever its
+// membership: the transcript is a record, and destroying one stays the
+// deliberate archive-then-purge on the Channels tab.
+const reapEmptyCohort = async (group) => {
+  if ((group.messageCount ?? 0) > 0) return false;
+  const { deletedCount } = await ChatConversation.deleteOne({ _id: group._id, messageCount: 0 });
+  if (!deletedCount) return false;
+  // With no messages in it, the only read marker a room can carry is from an
+  // admin who opened it.
+  await ChatRead.deleteMany({ conversationId: group._id });
+  return true;
+};
+
 async function serializeCbatGroup(user) {
   let date = userCbatDateKey(user);
   let region = user?.upcomingCbatRegion ?? null;
@@ -1044,7 +1076,7 @@ router.get('/cbat-groups', adminOnly, async (req, res) => {
       type: 'channel', 'channel.audience': 'cbat-cohort', isArchived: false,
     }).sort({ 'channel.cohortDate': -1, 'channel.cohortRegion': 1 }).lean();
     const reads = await readMap(req.user._id, groups.map(group => group._id));
-    const rows = await Promise.all(groups.map(async group => {
+    const rows = (await Promise.all(groups.map(async group => {
       const read = reads.get(String(group._id));
       const [unread, participantCount] = await Promise.all([
         ChatMessage.countDocuments({
@@ -1056,6 +1088,9 @@ router.get('/cbat-groups', adminOnly, async (req, res) => {
         }),
         cohortMemberCount(group),
       ]);
+      // Reaped here rather than on a schedule: this list is the only place an
+      // empty room is visible, so tidying it as it is read needs no cron.
+      if (participantCount === 0 && await reapEmptyCohort(group)) return null;
       return {
         conversationId: group._id,
         date: group.channel.cohortDate,
@@ -1065,7 +1100,7 @@ router.get('/cbat-groups', adminOnly, async (req, res) => {
         participantCount,
         unread,
       };
-    }));
+    }))).filter(Boolean);
     res.json({ status: 'success', data: { groups: rows } });
   } catch (err) {
     res.status(500).json({ message: err.message });

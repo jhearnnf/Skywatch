@@ -170,4 +170,61 @@ describe('CBAT cohort groups', () => {
     expect(list.body.data.groups).toHaveLength(1);
     expect(list.body.data.groups[0].participantCount).toBe(2);
   });
+
+  // A date typed in to see what the feature does leaves a room behind when it
+  // is cleared again. Nobody is in it and nothing was ever said in it, so it
+  // is debris rather than a group, and the admin list is where it gets swept.
+  it('deletes a group once its last member and its messages are gone', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    await choose(a);
+    await request(app).delete(`/api/admin/users/${a._id}/upcoming-cbat-date`)
+      .set('Cookie', authCookie(admin._id));
+
+    const list = await request(app).get('/api/chat/cbat-groups')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(list.status).toBe(200);
+    expect(list.body.data.groups).toEqual([]);
+    expect(await ChatConversation.countDocuments({ 'channel.audience': 'cbat-cohort' })).toBe(0);
+  });
+
+  // ...but a room that was talked in is a transcript, so emptying it of members
+  // leaves it on the list to be dealt with by hand.
+  it('keeps an empty group that was talked in', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await request(app).post(`/api/chat/conversations/${made.body.data.conversationId}/messages`)
+      .set('Cookie', authCookie(a._id)).send({ body: 'anyone else on this date?' });
+    await request(app).delete(`/api/admin/users/${a._id}/upcoming-cbat-date`)
+      .set('Cookie', authCookie(admin._id));
+
+    const list = await request(app).get('/api/chat/cbat-groups')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(list.body.data.groups).toHaveLength(1);
+    expect(list.body.data.groups[0].participantCount).toBe(0);
+    expect(list.body.data.groups[0].messageCount).toBe(1);
+  });
+
+  // The room is rebuilt from the date, so sweeping it is never a one-way door.
+  it('rebuilds a swept group for the next person on that date', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    await choose(a);
+    await request(app).delete(`/api/admin/users/${a._id}/upcoming-cbat-date`)
+      .set('Cookie', authCookie(admin._id));
+    await request(app).get('/api/chat/cbat-groups').set('Cookie', authCookie(admin._id));
+
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const rejoined = await choose(b);
+
+    expect(rejoined.status).toBe(201);
+    expect(rejoined.body.data.memberCount).toBe(1);
+    const list = await request(app).get('/api/chat/cbat-groups')
+      .set('Cookie', authCookie(admin._id));
+    expect(list.body.data.groups).toHaveLength(1);
+    expect(list.body.data.groups[0].conversationId).toBe(rejoined.body.data.conversationId);
+  });
 });
