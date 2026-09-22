@@ -39,7 +39,7 @@ describe('ChatSidebar — conversation badges', () => {
 describe('ChatSidebar — CBAT groups', () => {
   it('has a separate Groups heading and opens setup when no date is configured', () => {
     const onOpenGroupSetup = vi.fn()
-    const setup = { _id: null, setupRequired: true, applicable: true, regionAvailable: true }
+    const setup = { _id: null, title: 'My CBAT Group', setupRequired: true, applicable: true, regionAvailable: true, testName: 'CBAT' }
     renderRail({ groups: [setup], onOpenGroupSetup })
 
     expect(screen.getByRole('region', { name: 'Groups' })).toBeTruthy()

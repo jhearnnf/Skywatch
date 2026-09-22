@@ -100,12 +100,33 @@ describe('CBAT cohort groups', () => {
     }
   });
 
-  it('names the CFAST for a Canadian group and stays generic elsewhere', async () => {
+  it('names the CFAST for Canada, the MACTS for Australia, and stays generic elsewhere', async () => {
     const ca = await createUser({ displayName: 'Falcon', firstSeenCountry: 'CA' });
     const au = await createUser({ displayName: 'Viper', firstSeenCountry: 'AU' });
-    const [caRoom, auRoom] = await Promise.all([choose(ca), choose(au)]);
+    const nz = await createUser({ displayName: 'Kiwi', firstSeenCountry: 'NZ' });
+    const [caRoom, auRoom, nzRoom] = await Promise.all([choose(ca), choose(au), choose(nz)]);
     expect(caRoom.body.data.welcome).toContain('sitting the CFAST on');
-    expect(auRoom.body.data.welcome).toContain('sitting your aptitude test on');
+    expect(caRoom.body.data.testName).toBe('CFAST');
+    expect(caRoom.body.data.title).toBe('✈️ CFAST · 14 Oct 2099');
+    expect(auRoom.body.data.welcome).toContain('sitting the MACTS on');
+    expect(auRoom.body.data.testName).toBe('MACTS');
+    expect(nzRoom.body.data.welcome).toContain('sitting your aptitude test on');
+    expect(nzRoom.body.data.testName).toBeNull();
+    expect(nzRoom.body.data.title).toBe('✈️ Test day · 14 Oct 2099');
+  });
+
+  it('tells the client which test to name before a date is chosen', async () => {
+    const ca = await createUser({ displayName: 'Falcon', firstSeenCountry: 'CA' });
+    const gb = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const [caState, gbState, overview] = await Promise.all([
+      request(app).get('/api/chat/cbat-group').set('Cookie', authCookie(ca._id)),
+      request(app).get('/api/chat/cbat-group').set('Cookie', authCookie(gb._id)),
+      request(app).get('/api/chat/overview').set('Cookie', authCookie(ca._id)),
+    ]);
+    expect(caState.body.data).toMatchObject({ configured: false, region: 'CA', testName: 'CFAST' });
+    expect(gbState.body.data).toMatchObject({ configured: false, region: 'GB', testName: 'CBAT' });
+    const setup = overview.body.data.groups.find(g => g.setupRequired);
+    expect(setup).toMatchObject({ title: 'My CFAST Group', testName: 'CFAST' });
   });
 
   it('tells a member how many people share their group', async () => {

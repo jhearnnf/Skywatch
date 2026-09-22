@@ -16,6 +16,7 @@ import CbatPassedBadge from '../components/CbatPassedBadge'
 import SupporterBadge from '../components/SupporterBadge'
 import SocialLinks from '../components/SocialLinks'
 import AptitudeReportCard from '../components/AptitudeReportCard'
+import CbatDateCard from '../components/CbatDateCard'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
 import { SLIM_APP } from '../utils/appMode'
@@ -388,6 +389,11 @@ export default function Profile() {
           </Link>
         </div>
       )}
+
+      {/* Test date + private same-date group. Above the tabs on purpose: it
+          is the one thing on this page we want a new account to do, and a
+          tab is where it went unnoticed before. Hides itself once done. */}
+      {user && <CbatDateCard />}
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4">

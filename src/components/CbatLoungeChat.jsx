@@ -13,6 +13,7 @@ import EditHistoryDialog from '../pages/chat/components/EditHistoryDialog'
 import MentionPicker from '../pages/chat/components/MentionPicker'
 import UserCard from '../pages/chat/components/UserCard'
 import GroupMembersDialog from '../pages/chat/components/GroupMembersDialog'
+import { cohortCopy, formatCohortDate } from '../utils/cbat/cohortCopy'
 
 // The mini chat docked under Recent Scores on the CBAT hub.
 //
@@ -382,7 +383,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
         body: JSON.stringify({ date: dateChoice }),
       })
       const json = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(json.message || 'Could not save your CBAT date.')
+      if (!response.ok) throw new Error(json.message || cohortCopy(lounge?.testName).saveError)
       setLounge(json.data)
       setConfirmingDate(false)
       setLoading(false)
@@ -905,7 +906,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
             {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${lounge.date}T00:00:00Z`))}
           </p>
           {Number.isFinite(lounge.memberCount) && (
-            <p className="text-[10px] text-slate-500" aria-label={`${lounge.memberCount} ${lounge.memberCount === 1 ? 'member' : 'members'} in your CBAT group`}>
+            <p className="text-[10px] text-slate-500" aria-label={`${lounge.memberCount} ${lounge.memberCount === 1 ? 'member' : 'members'} in your ${lounge.testName ?? 'test-day'} group`}>
               · <span className="font-bold text-game-text">{lounge.memberCount}</span> {lounge.memberCount === 1 ? 'member' : 'members'}
             </p>
           )}
@@ -965,30 +966,30 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
       ) : room === 'group' && !loading && lounge && lounge.applicable === false ? (
         <div className="cbat-room-enter flex-1 min-h-0 px-6 py-8 flex flex-col items-center justify-center text-center">
           <div className="w-12 h-12 rounded-2xl grid place-items-center bg-emerald-500/10 text-emerald-500 text-xl mb-4">✓</div>
-          <h3 className="text-base font-black text-game-text">You’ve already passed your CBAT</h3>
-          <p className="text-xs text-slate-500 mt-2 max-w-xs">Upcoming-date groups are for applicants preparing to attend. If a CBAT date was previously recorded for you, your original group will appear here automatically.</p>
+          <h3 className="text-base font-black text-game-text">{cohortCopy(lounge.testName).passedTitle}</h3>
+          <p className="text-xs text-slate-500 mt-2 max-w-xs">{cohortCopy(lounge.testName).passedBody}</p>
         </div>
       ) : room === 'group' && !loading && lounge && !lounge.configured ? (
         <div key="group-setup" className="cbat-room-enter flex-1 min-h-0 overflow-y-auto relative px-5 py-6 flex flex-col justify-center">
           <div aria-hidden="true" className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_80%_10%,rgba(59,130,246,.18),transparent_42%),radial-gradient(circle_at_10%_90%,rgba(99,102,241,.12),transparent_38%)]" />
           <div className="relative mx-auto w-full max-w-sm">
             <div className="w-12 h-12 mb-4 rounded-2xl grid place-items-center text-xl bg-brand-600 text-white shadow-[0_12px_30px_rgba(37,99,235,.32)]">✈</div>
-            <p className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-brand-500 mb-2">Private CBAT group</p>
-            <h3 className="text-lg font-black text-game-text leading-tight mb-2">Meet applicants attending with you.</h3>
-            <p className="text-xs leading-relaxed text-slate-500 mb-5">Enter your upcoming CBAT date to join people with the same date in your region. Your date is only visible to people in that private group.</p>
+            <p className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-brand-500 mb-2">{cohortCopy(lounge.testName).eyebrow}</p>
+            <h3 className="text-lg font-black text-game-text leading-tight mb-2">{cohortCopy(lounge.testName).heading}</h3>
+            <p className="text-xs leading-relaxed text-slate-500 mb-5">{cohortCopy(lounge.testName).intro}</p>
             {!lounge.regionAvailable ? (
-              <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-xs text-amber-600">We could not determine your region yet. Refresh the app, then return here.</p>
+              <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-xs text-amber-600">{cohortCopy(lounge.testName).noRegion}</p>
             ) : !confirmingDate ? (
               <div className="space-y-3">
-                <label className="block text-[11px] font-bold text-slate-500" htmlFor="upcoming-cbat-date">Upcoming CBAT date</label>
+                <label className="block text-[11px] font-bold text-slate-500" htmlFor="upcoming-cbat-date">{cohortCopy(lounge.testName).label}</label>
                 <input id="upcoming-cbat-date" type="date" min={new Date().toISOString().slice(0, 10)} value={dateChoice} onChange={e => { setDateChoice(e.target.value); setDateError('') }} className="w-full rounded-xl bg-surface border border-game-line px-3 py-2.5 text-sm text-game-text outline-none focus:border-brand-400 focus:ring-4 focus:ring-brand-500/10 transition-all" />
                 {dateChoice && (
                   <div key={dateChoice} role="alert" className="cbat-date-warning rounded-xl border border-amber-400/70 bg-gradient-to-r from-amber-500/8 via-amber-500/14 to-amber-500/8 px-3 py-2.5 shadow-[0_10px_30px_rgba(245,158,11,.14),inset_0_1px_0_rgba(251,191,36,.12)]">
                     <div className="relative z-10 flex items-center gap-2.5 text-left">
                       <span aria-hidden="true" className="cbat-date-warning-icon grid h-7 w-7 shrink-0 place-items-center rounded-full border border-amber-400/60 bg-amber-500/15 text-xs font-black text-amber-600">!</span>
                       <div>
-                        <p className="text-xs font-black text-amber-600">Choose carefully — you cannot change this date.</p>
-                        <p className="mt-0.5 text-[10px] font-semibold text-amber-600/90">Check it before you click Continue.</p>
+                        <p className="text-xs font-black text-amber-600">{cohortCopy(lounge.testName).warning}</p>
+                        <p className="mt-0.5 text-[10px] font-semibold text-amber-600/90">{cohortCopy(lounge.testName).warningHint}</p>
                       </div>
                     </div>
                   </div>
@@ -997,12 +998,12 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
               </div>
             ) : (
               <div className="cbat-room-enter rounded-2xl border border-brand-400/30 bg-surface/80 backdrop-blur px-4 py-4 shadow-xl">
-                <p className="text-xs text-slate-500">Confirm your CBAT date</p>
-                <p className="text-xl font-black text-game-text my-1">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(`${dateChoice}T00:00:00Z`))}</p>
-                <p className="text-[11px] font-semibold text-amber-600 mb-4">This cannot be changed after you confirm.</p>
+                <p className="text-xs text-slate-500">{cohortCopy(lounge.testName).confirmTitle}</p>
+                <p className="text-xl font-black text-game-text my-1">{formatCohortDate(dateChoice)}</p>
+                <p className="text-[11px] font-semibold text-amber-600 mb-4">{cohortCopy(lounge.testName).confirmNote}</p>
                 <div className="flex gap-2">
                   <button type="button" disabled={dateBusy} onClick={() => setConfirmingDate(false)} className="flex-1 rounded-xl border border-game-line py-2 text-xs font-bold text-slate-500 hover:border-brand-400 transition-colors">Back</button>
-                  <button type="button" disabled={dateBusy} onClick={saveCbatDate} className="flex-[1.5] rounded-xl bg-brand-600 py-2 text-xs font-extrabold text-white shadow-[0_10px_24px_rgba(37,99,235,.25)] transition-all hover:-translate-y-0.5 disabled:opacity-50">{dateBusy ? 'Joining…' : 'Confirm & join'}</button>
+                  <button type="button" disabled={dateBusy} onClick={saveCbatDate} className="flex-[1.5] rounded-xl bg-brand-600 py-2 text-xs font-extrabold text-white shadow-[0_10px_24px_rgba(37,99,235,.25)] transition-all hover:-translate-y-0.5 disabled:opacity-50">{dateBusy ? cohortCopy(lounge.testName).joining : cohortCopy(lounge.testName).joinButton}</button>
                 </div>
               </div>
             )}

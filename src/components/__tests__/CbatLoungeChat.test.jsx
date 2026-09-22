@@ -102,7 +102,7 @@ const MESSAGES = [
 
 // Routes the component's fetches. `overrides` swaps one response without having
 // to restate the rest.
-function stubFetch({ lounge = LOUNGE, loungeStatus = 200, group = { configured: false, applicable: true, regionAvailable: true }, messages = MESSAGES, senders = {}, onPost } = {}) {
+function stubFetch({ lounge = LOUNGE, loungeStatus = 200, group = { configured: false, applicable: true, regionAvailable: true, testName: 'CBAT' }, messages = MESSAGES, senders = {}, onPost } = {}) {
   const json = (status, data) => Promise.resolve({
     ok: status < 400,
     status,
@@ -254,7 +254,7 @@ describe('private CBAT group', () => {
   })
 
   it('shows the member count in the My group header', async () => {
-    stubFetch({ group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 3 } })
+    stubFetch({ group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', testName: 'CBAT', unreadCount: 0, memberCount: 3 } })
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
     expect(await screen.findByLabelText('3 members in your CBAT group')).toHaveTextContent('3 members')
@@ -295,15 +295,24 @@ describe('private CBAT group', () => {
   })
 
   it('does not offer a new date after the user has passed', async () => {
-    stubFetch({ group: { configured: false, applicable: false, regionAvailable: true } })
+    stubFetch({ group: { configured: false, applicable: false, regionAvailable: true, testName: 'CBAT' } })
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
     expect(await screen.findByText(/already passed your CBAT/i)).toBeTruthy()
     expect(screen.queryByLabelText('Upcoming CBAT date')).toBeNull()
   })
 
+  it('asks a Canadian for a CFAST date, not a CBAT one', async () => {
+    stubFetch({ group: { configured: false, applicable: true, regionAvailable: true, region: 'CA', testName: 'CFAST' } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    expect(await screen.findByLabelText('Upcoming CFAST date')).toBeTruthy()
+    expect(screen.getByText('Private CFAST group')).toBeTruthy()
+    expect(screen.queryByText(/CBAT date/)).toBeNull()
+  })
+
   it('flashes the irreversible-date warning after selection and before Continue', async () => {
-    stubFetch({ group: { configured: false, applicable: true, regionAvailable: true } })
+    stubFetch({ group: { configured: false, applicable: true, regionAvailable: true, testName: 'CBAT' } })
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
 
@@ -311,7 +320,7 @@ describe('private CBAT group', () => {
     fireEvent.change(await screen.findByLabelText('Upcoming CBAT date'), { target: { value: '2099-10-14' } })
 
     const warning = screen.getByRole('alert')
-    expect(warning.textContent).toContain('Choose carefully — you cannot change this date.')
+    expect(warning.textContent).toContain('Choose carefully. You cannot change this date.')
     expect(warning.className).toContain('cbat-date-warning')
     expect(warning.compareDocumentPosition(screen.getByRole('button', { name: 'Continue' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
