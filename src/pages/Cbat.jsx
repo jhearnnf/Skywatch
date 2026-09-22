@@ -19,6 +19,8 @@ import { SLIM_APP } from '../utils/appMode'
 import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
 import PlayOnPcNote from '../components/cbat/PlayOnPcNote'
 import { isPublicCbatGame } from '../utils/cbat/publicGames'
+import { useClanOffered } from '../utils/cbat/clanOffer'
+import CountryFlag from '../components/ui/CountryFlag'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -135,11 +137,21 @@ function EstTimeCompact({ game }) {
 // only the dense mobile tile uses; the desktop card has the room for the real
 // name and keeps it. A game needing no shortening renders a single node rather
 // than a hidden duplicate, so its title appears exactly once in the DOM.
-function TileTitle({ game }) {
+//
+// `titleParts` is the two-test tile (FLAG | CLAN): the
+// two names either side of a rule down the middle, so the tile reads as two
+// things to pick between rather than one game with a long name.
+function TileTitle({ game, titleParts }) {
   const short = shortTitle(game)
   return (
     <p className="font-bold text-slate-800 text-[8.5px] leading-[1.15] sm:text-base sm:leading-normal sm:mb-0.5">
-      {short ? (
+      {titleParts ? (
+        <span className="inline-flex items-center" data-testid={`tile-title-split-${game.key}`}>
+          <span>{titleParts[0]}</span>
+          <span aria-hidden="true" className="inline-block w-px h-[1.1em] mx-1 sm:mx-2 bg-slate-400/70 align-middle" />
+          <span>{titleParts[1]}</span>
+        </span>
+      ) : short ? (
         <>
           <span className="sm:hidden">{short}</span>
           <span className="hidden sm:inline">{game.title}</span>
@@ -260,6 +272,26 @@ const SPLIT_TILES = {
 }
 const persistMode = (key, mode) => { try { localStorage.setItem(key, mode) } catch { /* storage unavailable */ } }
 
+// The FLAG tile also holds CLAN, the test the RAF replaced with FLAG and that
+// Canada's CFAST still sits (see utils/cbat/clanOffer.js for why everyone gets
+// it). The tile reads FLAG | CLAN and fans out into the two on hover the way
+// Visualisation does. The halves are two different pages rather than two modes
+// of one, so each carries its own `path`; nothing is persisted. Touch devices,
+// where there is no hover, tap through to FLAG as before and reach CLAN from
+// the link on its card.
+const FLAG_CLAN_SPLIT = {
+  titleParts: ['FLAG', 'CLAN'],
+  // FLAG is a minute, CLAN a minute and a half.
+  estMinutes: [1, 1.5],
+  desc: 'FLAG: track aircraft, answer maths and identification questions, hit target shapes. CLAN: the Colours, Letters and Numbers test, still sat in Canada.',
+  // `flag` is the country whose battery sits that test, drawn in the corner of
+  // its half (inline SVG, not an emoji: Windows has no flag glyphs).
+  halves: [
+    { label: 'FLAG', mode: 'flag', path: '/cbat/flag', lbKey: 'flag', flag: 'GB' },
+    { label: 'CLAN', mode: 'clan', path: '/cbat/clan', lbKey: 'clan', flag: 'CA' },
+  ],
+}
+
 // A combined tile (Trace 1/2, Visualisation 2D/3D). Identical to the normal tile
 // off-hover; on hover (desktop only — `group-hover` in Tailwind v4 fires solely
 // on hover-capable devices) it greys the card and floats two half-width mode
@@ -267,7 +299,9 @@ const persistMode = (key, mode) => { try { localStorage.setItem(key, mode) } cat
 // its clicks never trip the anchor's navigation and touch devices — where the
 // overlay stays inert — fall through to the Link's tap / long-press exactly as
 // before. Whichever half is hovered is the active (brand) one; the other dims.
-function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, navigate, baseHandlers }) {
+function CombinedGameTile({ game: tileGame, i, split, flickeringKey, enabled, isAdmin, navigate, baseHandlers }) {
+  // A split that holds two run lengths states the range on the tile.
+  const game = split.estMinutes ? { ...tileGame, estMinutes: split.estMinutes } : tileGame
   return (
     <div className="relative h-full group">
       <Link
@@ -280,9 +314,9 @@ function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, nav
         {!enabled && isAdmin && <TileBadge text="Disabled" tone="slate" />}
         <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
         <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
-          <TileTitle game={game} />
+          <TileTitle game={game} titleParts={split.titleParts} />
           <EstTimeCompact game={game} />
-          <p className="hidden sm:block text-xs text-slate-700">{game.desc}</p>
+          <p className="hidden sm:block text-xs text-slate-700">{split.desc ?? game.desc}</p>
         </div>
       </Link>
 
@@ -297,20 +331,22 @@ function CombinedGameTile({ game, i, split, flickeringKey, enabled, isAdmin, nav
           <div
             key={h.mode}
             onClick={() => {
-              // Left-click → open the game with this mode pre-selected.
-              persistMode(split.storageKey, h.mode)
-              navigate(game.path)
+              // Left-click → open the game with this mode pre-selected, or
+              // the half's own page where the halves are separate games.
+              if (split.storageKey) persistMode(split.storageKey, h.mode)
+              navigate(h.path ?? game.path)
             }}
             onContextMenu={(e) => {
               // Right-click → this mode's all-time leaderboard.
               e.preventDefault()
               navigate(`/cbat/${h.lbKey}/leaderboard?period=all-time`)
             }}
-            className="flex-1 max-w-[40%] flex items-center justify-center px-5 py-6 rounded-xl cursor-pointer select-none
+            className="relative flex-1 max-w-[40%] flex items-center justify-center px-5 py-6 rounded-xl cursor-pointer select-none
               border border-game-line bg-game-panel text-slate-400 opacity-60 transition-all
               hover:opacity-100 hover:bg-brand-600 hover:text-white hover:border-brand-400
               hover:shadow-[0_0_16px_rgba(91,170,255,0.45)]"
           >
+            {h.flag && <CountryFlag code={h.flag} width={22} className="absolute top-2 left-2" />}
             <span className="text-base font-extrabold tracking-wide uppercase">{h.label}</span>
           </div>
         ))}
@@ -376,6 +412,9 @@ export default function Cbat() {
   const gridWrapRef = useRef(null)
   const isAdmin     = !!user?.isAdmin
   const presence    = useChatPresence(isAdmin, PRESENCE_POLL_MS)
+  // Whether the FLAG tile also offers CLAN (everyone, unless an admin has
+  // switched the game off).
+  const clanOffered = useClanOffered()
 
   // The phone grid is four across, so a game count that is not a multiple of
   // four leaves dead cells on the last row — at 22 games, the two beside
@@ -578,7 +617,9 @@ export default function Cbat() {
           // "this game has no page yet" (genuinely future) so the picker can
           // show the right message to non-admins.
           const adminDisabled = isImplemented && !enabled
-          const split         = SPLIT_TILES[game.key]
+          const split         = game.key === 'flag'
+            ? (clanOffered ? FLAG_CLAN_SPLIT : undefined)
+            : SPLIT_TILES[game.key]
           // Shared base-<Link> handlers: right-click → the persisted mode's board;
           // touch tap / long-press unchanged. Combined tiles reuse these for their
           // base layer (mobile), and add a desktop hover split on top.

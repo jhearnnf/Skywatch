@@ -25,6 +25,11 @@ vi.mock('../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({ settings: { cbatGameEnabled: {} } }),
 }))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
+// The FLAG tile normally carries CLAN as well (FLAG | CLAN, a combined tile
+// with two names, two run lengths and a hover split). That tile has its own
+// tests in Cbat.clanTile.test.jsx; here it is switched off so the whole-roster
+// assertions below see FLAG as the plain single-game tile the rest are.
+vi.mock('../../utils/cbat/clanOffer', () => ({ useClanOffered: () => false }))
 
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,

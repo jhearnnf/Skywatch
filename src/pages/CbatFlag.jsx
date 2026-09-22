@@ -29,6 +29,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import { useClanOffered } from '../utils/cbat/clanOffer'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Shared by both difficulties. The only things a difficulty changes are how
@@ -101,7 +102,7 @@ function ResultsScreen({ stats, tuning }) {
 // ── Intro screen ──────────────────────────────────────────────────────────────
 function IntroScreen({
   onStart, onTutorial, personalBest, bestLoading, aircraftList, aircraftLoading,
-  difficulty, onDifficulty, tuning, launching,
+  difficulty, onDifficulty, tuning, launching, clanOffered = false,
 }) {
   const disabled = aircraftLoading || aircraftList.length === 0
   // During the launch flash everything on the card except the chosen difficulty
@@ -182,6 +183,16 @@ function IntroScreen({
           {aircraftLoading ? 'Loading aircraft…' : aircraftList.length === 0 ? 'No aircraft enabled — ask an admin to enable at least one in CBAT settings.' : 'Start'}
         </button>
       </div>
+
+      {/* The other test on the same tile (Canada's CFAST sits CLAN, not FLAG).
+          The hub's hover split does the same job on a desktop; this is how a
+          phone gets there. */}
+      {clanOffered && (
+        <p className={`mt-5 text-[11px] text-slate-500${dim}`}>
+          Sitting the Canadian battery? That one uses CLAN, not FLAG.{' '}
+          <Link to="/cbat/clan" data-testid="flag-to-clan" className="text-brand-600 hover:text-brand-700 transition-colors">Play CLAN →</Link>
+        </p>
+      )}
     </motion.div>
   )
 }
@@ -636,6 +647,7 @@ export default function CbatFlag() {
   const demo = useCbatDemo()
   const { settings } = useAppSettings()
   const { enterImmersive, exitImmersive } = useGameChrome()
+  const clanOffered = useClanOffered()
 
   const [phase, setPhase] = useState('intro')   // intro | launching | tutorial | playing | results
 
@@ -1193,6 +1205,7 @@ export default function CbatFlag() {
                 onDifficulty={chooseDifficulty}
                 tuning={tuning}
                 launching={phase === 'launching'}
+                clanOffered={clanOffered}
               />
             )}
 
