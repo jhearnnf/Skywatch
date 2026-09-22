@@ -46,6 +46,8 @@ const GameSessionCbatAntPractiseResult    = CBAT_GAMES['ant-practise'].Model;
 const GameSessionCbatAntHardResult        = CBAT_GAMES['ant-hard'].Model;
 const GameSessionCbatFlagResult           = CBAT_GAMES['flag'].Model;
 const GameSessionCbatFlagEasierResult     = CBAT_GAMES['flag-easier'].Model;
+const GameSessionCbatClanResult           = CBAT_GAMES['clan'].Model;
+const GameSessionCbatClanEasierResult     = CBAT_GAMES['clan-easier'].Model;
 const GameSessionCbatVisualisation2DResult = CBAT_GAMES['visualisation-2d'].Model;
 const GameSessionCbatVisualisation3DResult = CBAT_GAMES['visualisation-3d'].Model;
 const GameSessionCbatDptResult             = CBAT_GAMES['dpt'].Model;
@@ -2734,6 +2736,33 @@ async function submitFlagResult(req, res, Model) {
 router.post('/cbat/flag/result', protect, (req, res) => submitFlagResult(req, res, GameSessionCbatFlagResult));
 router.post('/cbat/flag-easier/result', protect, (req, res) => submitFlagResult(req, res, GameSessionCbatFlagEasierResult));
 
+// POST /api/games/cbat/clan/result and /clan-easier/result
+// FLAG's arrangement: identical payloads, the difficulty fixed by the route so
+// a run can only land in the collection its board reads from.
+async function submitClanResult(req, res, Model) {
+  try {
+    const {
+      totalScore,
+      colourHits, colourWrong, colourMissed,
+      letterCorrect, letterWrong, letterTimeout,
+      mathCorrect, mathWrong, mathTimeout,
+      totalTime, grade,
+    } = req.body;
+    const result = await saveCbatResult(Model, req, {
+      totalScore: totalScore ?? 0,
+      colourHits, colourWrong, colourMissed,
+      letterCorrect, letterWrong, letterTimeout,
+      mathCorrect, mathWrong, mathTimeout,
+      totalTime, grade,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+router.post('/cbat/clan/result',        protect, (req, res) => submitClanResult(req, res, GameSessionCbatClanResult));
+router.post('/cbat/clan-easier/result', protect, (req, res) => submitClanResult(req, res, GameSessionCbatClanEasierResult));
+
 // POST /api/games/cbat/target/result
 router.post('/cbat/target/result', protect, async (req, res) => {
   try {
@@ -3358,6 +3387,8 @@ router.get('/cbat/ant-hard/leaderboard', protect, (req, res) => cbatLeaderboard(
 router.get('/cbat/ant-practise/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant-practise'));
 router.get('/cbat/flag/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag'));
 router.get('/cbat/flag-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'flag-easier'));
+router.get('/cbat/clan/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'clan'));
+router.get('/cbat/clan-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'clan-easier'));
 router.get('/cbat/visualisation-2d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-2d'));
 router.get('/cbat/visualisation-3d/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dpt'));
@@ -3579,6 +3610,8 @@ router.get('/cbat/ant-hard/personal-best', protect, (req, res) => cbatPersonalBe
 router.get('/cbat/ant-practise/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant-practise'));
 router.get('/cbat/flag/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag'));
 router.get('/cbat/flag-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'flag-easier'));
+router.get('/cbat/clan/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'clan'));
+router.get('/cbat/clan-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'clan-easier'));
 router.get('/cbat/visualisation-2d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-2d'));
 router.get('/cbat/visualisation-3d/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'visualisation-3d'));
 router.get('/cbat/dpt/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dpt'));

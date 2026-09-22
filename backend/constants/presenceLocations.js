@@ -28,6 +28,7 @@ const LOCATIONS = [
   [/^\/cbat\/instruments\/?$/,      'CBAT · Instruments'],
   [/^\/cbat\/ant\/?$/,              'CBAT · ANT'],
   [/^\/cbat\/flag\/?$/,             'CBAT · FLAG'],
+  [/^\/cbat\/clan\/?$/,             'CBAT · CLAN'],
   [/^\/cbat\/visualisation\/?$/,    'CBAT · Visualisation'],
   [/^\/cbat\/dpt\/?$/,              'CBAT · DPT'],
   [/^\/cbat\/act\/?$/,              'CBAT · ACT'],
@@ -155,6 +156,9 @@ const CBAT_SEGMENT_TO_CARD = {
   'visualisation-3d': 'visualisation',
   'ant-practise':     'ant',
   'instruments-orientation': 'instruments',
+  // CLAN is the second test behind the FLAG tile (offered to players in
+  // Canada), so a player on it is standing on the FLAG card.
+  'clan':             'flag',
 };
 
 // Difficulty is a leaderboard split, not a card split: 'cut-easier' and 'cut'

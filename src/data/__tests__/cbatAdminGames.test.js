@@ -35,7 +35,13 @@ const splitHardKeys = new Set(easierKeys.map(cbatHardKeyFor))
 // A key that is also a hub tile in its own right is excluded, which is what
 // keeps `ant` toggleable: it is simultaneously ANT's tile and ANT's Easier half,
 // so its toggle gates the whole page rather than one difficulty.
-const isHubTile = k => CBAT_GAMES.some(g => g.key === k)
+//
+// CLAN is the other exception: a second test behind the FLAG tile (offered to
+// players in Canada) rather than a tile of its own, so it is not in CBAT_GAMES
+// — but it IS a page with its own toggle, the Instruments Orientation
+// arrangement, and its Hard key is what that toggle gates.
+const SECOND_BOARDS = new Set(['clan'])
+const isHubTile = k => CBAT_GAMES.some(g => g.key === k) || SECOND_BOARDS.has(k)
 const DIFFICULTY_ONLY = new Set(
   [...easierKeys, ...splitHardKeys].filter(k => !isHubTile(k)),
 )
@@ -97,6 +103,16 @@ describe('CBAT_ADMIN_GAMES', () => {
     for (const key of ['sit', 'slt', 'vlt', 'matf', 'vigilance', 'sma']) {
       expect([key, adminKeys.has(key)]).toEqual([key, true])
     }
+  })
+
+  it('fans the FLAG tile out into FLAG and CLAN, each with its own page', () => {
+    const flag = CBAT_ADMIN_GAMES.find(g => g.key === 'flag')
+    const clan = CBAT_ADMIN_GAMES.find(g => g.key === 'clan')
+    expect(flag?.path).toBe('/cbat/flag')
+    expect(clan?.path).toBe('/cbat/clan')
+    expect(clan?.title).toBe('CLAN')
+    // Only the Hard key gets a toggle; Easier rides on it like every split.
+    expect(CBAT_ADMIN_GAMES.some(g => g.key === 'clan-easier')).toBe(false)
   })
 })
 

@@ -24,6 +24,8 @@ export const GAME_LABELS = {
   'ant-practise':     'ANT Practise',
   'flag':             'FLAG (Hard)',
   'flag-easier':      'FLAG (Easier)',
+  'clan':             'CLAN (Hard)',
+  'clan-easier':      'CLAN (Easier)',
   'visualisation-2d': 'Visualisation 2D',
   'visualisation-3d': 'Visualisation 3D',
   'dpt':              'DPT (8-round)',

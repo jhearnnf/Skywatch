@@ -15,6 +15,8 @@ const GAME_MAX = {
   'ant-practise':    80,    // 8 questions × 10 points
   'flag':            null,   // accumulating score, no fixed ceiling
   'flag-easier':     null,   // accumulating score, no fixed ceiling
+  'clan':            null,   // accumulating score, no fixed ceiling
+  'clan-easier':     null,   // accumulating score, no fixed ceiling
   'visualisation-2d': null,  // small count, no ceiling assertion needed
   'visualisation-3d': 8,     // 8 rounds, one point each
   // All three DPT boards have a fixed ceiling: each plays a fixed set of rounds
@@ -52,7 +54,9 @@ const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 
 // Fixed-duration games whose real runs all display the same totalTime, so their
 // demo rows deliberately tie on time instead of carrying fractional variety.
-const FIXED_60S_GAMES = new Set(['flag', 'flag-easier']);
+// FLAG runs 60 seconds; CLAN, the test it replaced, runs 90.
+const FIXED_TIME_GAMES = { 'flag': 60, 'flag-easier': 60, 'clan': 90, 'clan-easier': 90 };
+const FIXED_LENGTH_GAMES = new Set(Object.keys(FIXED_TIME_GAMES));
 
 function realEntry({ id, userId, score, time, agent, rank }) {
   return { _id: id, userId, agentNumber: agent, bestScore: score, bestTime: time, rank };
@@ -191,13 +195,13 @@ describe('padLeaderboard', () => {
     }
   });
 
-  it('produces decimal-bearing demo times for every game except the FLAG pair (fixed-60s, intentional)', () => {
+  it('produces decimal-bearing demo times for every game except the fixed-length FLAG and CLAN pairs (intentional)', () => {
     // Demo bestTime is rounded to 1 decimal. If seedTime AND timeStep are both
-    // integers, every row displays as N.0 — looks fake. Both FLAG difficulties
-    // are the documented exception (fixed-60s games where real runs also
-    // display 60.0).
+    // integers, every row displays as N.0 — looks fake. The FLAG and CLAN
+    // difficulties are the documented exception (fixed-length games where real
+    // runs also display 60.0 / 90.0).
     for (const { game, opts } of ALL_GAMES_FROM_TUNING) {
-      if (FIXED_60S_GAMES.has(game)) continue;
+      if (FIXED_LENGTH_GAMES.has(game)) continue;
       const out = padLeaderboard([], game, opts);
       const fakes = out.filter(e => e.isFake);
       const fractional = fakes.filter(f => Math.round(f.bestTime * 10) % 10 !== 0);
@@ -239,10 +243,10 @@ describe('padLeaderboard', () => {
     expect(fastest.bestScore).toBeLessThan(out[0].bestScore);
   });
 
-  it('FLAG fakes intentionally tie at 60.0 (fixed-60s games, real runs do the same)', () => {
-    for (const game of FIXED_60S_GAMES) {
+  it('FLAG and CLAN fakes intentionally tie at the run length (fixed-length games, real runs do the same)', () => {
+    for (const [game, seconds] of Object.entries(FIXED_TIME_GAMES)) {
       const out = padLeaderboard([], game);
-      out.filter(e => e.isFake).forEach(f => expect(f.bestTime).toBe(60));
+      out.filter(e => e.isFake).forEach(f => expect(f.bestTime).toBe(seconds));
     }
   });
 

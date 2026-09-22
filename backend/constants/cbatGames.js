@@ -10,6 +10,8 @@ const GameSessionCbatAntPractiseResult    = require('../models/GameSessionCbatAn
 const GameSessionCbatAntHardResult        = require('../models/GameSessionCbatAntHardResult');
 const GameSessionCbatFlagResult           = require('../models/GameSessionCbatFlagResult');
 const GameSessionCbatFlagEasierResult     = require('../models/GameSessionCbatFlagEasierResult');
+const GameSessionCbatClanResult           = require('../models/GameSessionCbatClanResult');
+const GameSessionCbatClanEasierResult     = require('../models/GameSessionCbatClanEasierResult');
 const GameSessionCbatVisualisation2DResult = require('../models/GameSessionCbatVisualisation2DResult');
 const GameSessionCbatVisualisation3DResult = require('../models/GameSessionCbatVisualisation3DResult');
 const GameSessionCbatDptResult           = require('../models/GameSessionCbatDptResult');
@@ -234,6 +236,27 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'FLAG (Easier)',
+  },
+  // Colours, Letters and Numbers — the test FLAG replaced in the RAF battery
+  // in 2021, still sat on Canada's CFAST. It shares the FLAG tile (offered to
+  // players in Canada) but is its own game with its own boards: diamonds
+  // pressed in their colour band, a memorised code picked from four options,
+  // and typed sums, all at once for a fixed 90 seconds.
+  'clan': {
+    Model: GameSessionCbatClanResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'CLAN',
+  },
+  // CLAN's "Easier" difficulty — shorter codes, slower diamonds, fewer and
+  // gentler sums over the same 90 seconds. Own collection, own boards.
+  'clan-easier': {
+    Model: GameSessionCbatClanEasierResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'CLAN (Easier)',
   },
   'visualisation-2d': {
     Model: GameSessionCbatVisualisation2DResult,

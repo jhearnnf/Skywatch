@@ -58,6 +58,8 @@ const GAME_OFFSET = {
   'ant-hard':        39,
   'vigilance-hard':  40,
   'instruments-orientation': 41,
+  'clan':            42,
+  'clan-easier':     43,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -194,6 +196,24 @@ const FAKE_TUNING = {
     // (Outstanding starts at 300), trailing to 60 at the foot of the board.
     floor: 60, ceiling: 260, seedTime: 60, timeStep: 0,
     scoreSequence: [260, 245, 230, 215, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 65, 60],
+  },
+  'clan': {
+    // Fixed-90s game, so real totalTimes all equal 90 and the fakes match
+    // (integer seedTime, timeStep 0) for the same reason FLAG's do. Every
+    // award is a multiple of 5 (+10/-5 diamonds, +20/-10/-5 codes, +15/-10/-5
+    // sums), so the sequence keeps that granularity. No production history yet
+    // — the top demo of 470 is a strong run against a practical ceiling
+    // around 600 (Outstanding starts at 450), trailing to 60 at the foot.
+    // Reseat once real runs exist.
+    floor: 60, ceiling: 470, seedTime: 90, timeStep: 0,
+    scoreSequence: [470, 435, 405, 380, 355, 330, 305, 280, 260, 240, 220, 200, 180, 160, 140, 120, 105, 90, 75, 60],
+  },
+  'clan-easier': {
+    // Same fixed-90s shape as `clan`. Slower diamonds, shorter codes and fewer
+    // sums give a lower practical ceiling (~480), so the band sits under Hard's
+    // (Outstanding starts at 350). Multiples of 5 throughout.
+    floor: 40, ceiling: 370, seedTime: 90, timeStep: 0,
+    scoreSequence: [370, 340, 315, 295, 275, 255, 240, 225, 210, 195, 180, 165, 150, 135, 120, 105, 90, 75, 55, 40],
   },
   'act': {
     // 5 rounds × ~45s = ~225s totalTime. Score is a sum of correct rings (+20),
@@ -660,6 +680,10 @@ const WEEKLY_PER_PLAY = {
   // ringed contacts in the same 60s, so a decent run scores below a decent
   // hard one.
   'flag-easier':     170,
+  // No production history yet — set from each demo band's middle. Reseat once
+  // real runs exist.
+  'clan':            250,
+  'clan-easier':     190,
   // The eight-round board keeps the value it always had — it is still ranking
   // eight-round runs. The two post-split boards are each a half of that ladder,
   // so Hard's is the old figure less the 1,700 that rounds 1-4 were worth.

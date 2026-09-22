@@ -27,6 +27,10 @@ export const CBAT_ADMIN_VIEW_KEY = 'sw_cbat_admin_view'
 // on next visit.
 export const CBAT_FLAG_DIFFICULTY_KEY = 'sw_cbat_flag_difficulty'
 
+// CLAN's difficulty selection ('easier' | 'hard'). FLAG's contract exactly —
+// see src/utils/cbat/clanDifficulty.js.
+export const CBAT_CLAN_DIFFICULTY_KEY = 'sw_cbat_clan_difficulty'
+
 // ANT's difficulty selection ('easier' | 'hard'). Same contract as FLAG's, but
 // the two ANT boards are different games rather than one game at two loads —
 // see src/utils/cbat/antDifficulty.js.

@@ -916,6 +916,302 @@ button.cbat-keycap:disabled { background: #6e6e7c; color: #1a1a1a; box-shadow: n
   .cbat-drt-question { font-size: 1.4rem; }
 }
 
+/* ── CLAN (pages/CbatClan.jsx, CbatClan/ClanBoard.jsx) ──────────────────
+   The Colours, Letters and Numbers screen, laid out from a candidate's
+   screenshot of the real software: four option boxes in the corners, the
+   code box top-centre, the arena in the middle with its three colour bands
+   on the right, the sum bottom-centre. One markup, two skins: the tokens
+   below give the SkyWatch look; `.cbat-clan-real` (set under the Real CBAT
+   theme) repaints every box in the screenshot's literal colours. */
+.cbat-clan-board {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+.cbat-clan-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 0.5rem 0.6rem;
+}
+.cbat-clan-option-tl { grid-column: 1; grid-row: 1; }
+.cbat-clan-letters   { grid-column: 2; grid-row: 1; }
+.cbat-clan-option-tr { grid-column: 3; grid-row: 1; }
+.cbat-clan-arena     { grid-column: 1 / -1; grid-row: 2; }
+.cbat-clan-option-bl { grid-column: 1; grid-row: 3; }
+.cbat-clan-maths     { grid-column: 2; grid-row: 3; }
+.cbat-clan-option-br { grid-column: 3; grid-row: 3; }
+
+/* The four corners. A button so a touch picks it; the key cap in the corner
+   is the keyboard's letter. */
+.cbat-clan-option {
+  position: relative;
+  min-height: 4.25rem;
+  padding: 0.75rem 0.5rem;
+  border: 1px solid var(--color-game-line);
+  border-radius: var(--radius-btn);
+  background: var(--color-game-panel);
+  color: var(--color-game-text);
+  font-family: var(--font-family-mono);
+  font-size: clamp(0.85rem, 3.2vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+.cbat-clan-option:disabled { cursor: default; opacity: 0.55; }
+.cbat-clan-option:not(:disabled):hover { border-color: var(--color-brand-400); background: var(--color-game-raised); }
+.cbat-clan-option-correct { border-color: #22c55e !important; box-shadow: 0 0 0 1px #22c55e inset; }
+.cbat-clan-option-wrong   { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444 inset; }
+.cbat-clan-option-text { display: block; min-height: 1.2em; line-height: 1.2; }
+.cbat-clan-option-key {
+  position: absolute;
+  right: 0.35rem;
+  bottom: 0.3rem;
+  line-height: 1;
+}
+/* The SkyWatch key badge; the Real CBAT theme draws its own key cap instead. */
+.cbat-clan-option-key-sw {
+  display: inline-block;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  background: var(--color-game-fill);
+  color: var(--color-game-text);
+  font-family: var(--font-family-sans);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+.cbat-clan-real .cbat-clan-option-key-sw { display: none; }
+.cbat-clan-option-tl .cbat-clan-option-key,
+.cbat-clan-option-tr .cbat-clan-option-key { top: 0.3rem; bottom: auto; }
+.cbat-clan-option-tl .cbat-clan-option-key,
+.cbat-clan-option-bl .cbat-clan-option-key { left: 0.35rem; right: auto; }
+
+/* The code box top-centre and the sum box bottom-centre. */
+.cbat-clan-letters,
+.cbat-clan-maths {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 4.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--color-game-line);
+  border-radius: var(--radius-btn);
+  background: var(--color-game-arena);
+  color: var(--color-game-text);
+  text-align: center;
+  transition: border-color 0.15s ease;
+}
+.cbat-clan-letters-correct, .cbat-clan-maths-correct { border-color: #22c55e; }
+.cbat-clan-letters-wrong,   .cbat-clan-maths-wrong   { border-color: #ef4444; }
+.cbat-clan-code {
+  font-family: var(--font-family-mono);
+  font-size: clamp(1.25rem, 5vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  line-height: 1.1;
+}
+.cbat-clan-caption {
+  margin-top: 0.15rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-game-faint);
+}
+.cbat-clan-sum {
+  font-family: var(--font-family-mono);
+  font-size: clamp(1.1rem, 4.5vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.cbat-clan-entered { color: var(--color-brand-600); }
+.cbat-clan-maths-timer {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  bottom: 0.3rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-game-line);
+  overflow: hidden;
+}
+.cbat-clan-maths-timer > span {
+  display: block;
+  height: 100%;
+  background: var(--color-brand-600);
+}
+
+/* The arena. The bands are absolutely placed from CLAN_BANDS; the diamonds
+   from their snapshot x/y. */
+.cbat-clan-arena {
+  position: relative;
+  height: clamp(9rem, 32vw, 15rem);
+  border: 1px solid var(--color-game-line);
+  border-radius: var(--radius-btn);
+  background: var(--color-game-arena);
+  overflow: hidden;
+}
+.cbat-clan-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0.85;
+}
+.cbat-clan-band-red    { background: #ff3b3b; }
+.cbat-clan-band-yellow { background: #ffe94d; }
+.cbat-clan-band-green  { background: #4dff5e; }
+.cbat-clan-diamond {
+  position: absolute;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: -0.475rem 0 0 -0.475rem;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  will-change: left;
+}
+.cbat-clan-diamond-red    { background: #ff3b3b; }
+.cbat-clan-diamond-yellow { background: #ffe94d; }
+.cbat-clan-diamond-green  { background: #4dff5e; }
+.cbat-clan-diamond-hit {
+  background: #ffffff;
+  box-shadow: 0 0 0 2px #ffffff, 0 0 12px 4px rgba(255, 255, 255, 0.7);
+}
+.cbat-clan-diamond-missed { opacity: 0.3; }
+
+/* On-screen keys: three colour keys and a pad. */
+.cbat-clan-keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.75rem 1.25rem;
+  width: 100%;
+}
+.cbat-clan-colour-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 3.6rem);
+  gap: 0.4rem;
+}
+.cbat-clan-colour-key {
+  height: 2.6rem;
+  border: 0;
+  border-radius: var(--radius-btn);
+  color: #06101e;
+  font-weight: 900;
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+.cbat-clan-colour-key:active { transform: scale(0.95); }
+.cbat-clan-colour-key:hover { filter: brightness(1.1); }
+.cbat-clan-colour-key-red    { background: #ff3b3b; }
+.cbat-clan-colour-key-yellow { background: #ffe94d; }
+.cbat-clan-colour-key-green  { background: #4dff5e; }
+.cbat-clan-numpad {
+  display: grid;
+  grid-template-columns: repeat(3, 2.9rem);
+  gap: 0.3rem;
+}
+.cbat-clan-numkey {
+  height: 2.2rem;
+  border: 1px solid var(--color-game-line);
+  border-radius: var(--radius-btn);
+  background: var(--color-game-panel);
+  color: var(--color-game-text);
+  font-family: var(--font-family-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.cbat-clan-numkey:hover { background: var(--color-game-raised); border-color: var(--color-brand-400); }
+.cbat-clan-numkey-enter { background: var(--color-game-fill); }
+
+/* ── The Real CBAT skin ──
+   Literal colours from the screenshot, never tokens: grey option boxes with
+   black serif capitals and a black key square, the arena black with a white
+   rule, the bands flat red/yellow/green, the sum in a mid-grey box. Nothing
+   here says right or wrong. */
+.cbat-clan-real .cbat-clan-option {
+  background: #c8c8c8;
+  border: 1px solid #ffffff;
+  border-radius: 0;
+  color: #000000;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: clamp(1rem, 3.6vw, 1.7rem);
+  letter-spacing: 0.06em;
+  opacity: 1;
+  box-shadow: none !important;
+}
+.cbat-clan-real .cbat-clan-option:not(:disabled):hover { background: #d8d8d8; }
+.cbat-clan-real .cbat-clan-option-key .cbat-keycap {
+  background: #000000;
+  color: #ffffff;
+  box-shadow: none;
+  font-size: 0.7rem;
+  min-width: 1.4em;
+  height: 1.4em;
+}
+.cbat-clan-real .cbat-clan-letters {
+  background: #000080;
+  border: 1px solid #9a9ad0;
+  border-radius: 0;
+  color: #ffffff;
+}
+.cbat-clan-real .cbat-clan-code {
+  font-family: 'Times New Roman', Times, serif;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.cbat-clan-real .cbat-clan-arena {
+  background: #000000;
+  border: 1px solid #ffffff;
+  border-radius: 0;
+}
+.cbat-clan-real .cbat-clan-band { opacity: 1; }
+.cbat-clan-real .cbat-clan-band-red    { background: #ff3030; }
+.cbat-clan-real .cbat-clan-band-yellow { background: #ffff40; }
+.cbat-clan-real .cbat-clan-band-green  { background: #40ff40; }
+.cbat-clan-real .cbat-clan-diamond { box-shadow: none; }
+.cbat-clan-real .cbat-clan-diamond-red    { background: #ff3030; }
+.cbat-clan-real .cbat-clan-diamond-yellow { background: #ffff40; }
+.cbat-clan-real .cbat-clan-diamond-green  { background: #40ff40; }
+.cbat-clan-real .cbat-clan-diamond-missed { opacity: 1; }
+.cbat-clan-real .cbat-clan-maths {
+  background: #6e6e6e;
+  border: 1px solid #ffffff;
+  border-radius: 0;
+  color: #000000;
+}
+.cbat-clan-real .cbat-clan-sum {
+  font-family: 'Times New Roman', Times, serif;
+  font-weight: 400;
+  font-size: clamp(1.3rem, 5vw, 2rem);
+}
+.cbat-clan-real .cbat-clan-entered { color: #000000; }
+/* The keys are the real keyboard's: grey caps with black legends. */
+.cbat-clan-real .cbat-clan-colour-key { border-radius: 0; box-shadow: inset -1px -1px 0 #606060, inset 1px 1px 0 #ffffff; }
+.cbat-clan-real .cbat-clan-numkey {
+  background: #b4b4b4;
+  border: 0;
+  border-radius: 0;
+  color: #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  box-shadow: inset -1px -1px 0 #606060, inset 1px 1px 0 #f0f0f0;
+}
+/* A desktop under the Real CBAT theme plays on the keyboard, the Symbols
+   arrangement: no on-screen keys where a pointer that hovers is present. */
+@media (min-width: 601px) and (hover: hover) {
+  .cbat-clan-real .cbat-clan-keys { display: none; }
+}
+
 @media (max-width: 600px) {
   .cbat-testbar {
     grid-template-columns: 1fr;

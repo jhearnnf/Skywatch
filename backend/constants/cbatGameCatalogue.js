@@ -144,6 +144,14 @@ const CBAT_GAME_CATALOGUE = [
     tutorial: 'three steps on the live field, one job at a time - strike the armed shapes, watch the aircraft and answer YES or NO on callsigns, then solve the maths - before they all run together.',
   },
   {
+    name: 'CLAN',
+    registryKeys: ['clan', 'clan-easier'],
+    simulates: 'CLAN',
+    aliases: ['clan', 'colours letters and numbers', 'colours, letters and numbers', 'colors letters and numbers', 'diamonds'],
+    what: 'ninety seconds of three tasks at once: press R, Y or G as each coloured diamond crosses its colour band, memorise a letter code and pick it out of four near-identical options in the corners (A to D), and type the sums as they appear. The test the RAF replaced with FLAG in 2021; still sat in Canada, so it shares the FLAG tile for players there.',
+    difficulties: ['Easier', 'Hard'],
+  },
+  {
     name: 'Visualisation 2D and 3D',
     registryKeys: ['visualisation-2d', 'visualisation-3d'],
     simulates: 'VISS',

@@ -35,6 +35,8 @@ const OWNED_BY_USER = [
   'GameSessionCbatDptHardResult',
   'GameSessionCbatFlagResult',
   'GameSessionCbatFlagEasierResult',
+  'GameSessionCbatClanResult',
+  'GameSessionCbatClanEasierResult',
   'GameSessionCbatInstrumentsResult',
   'GameSessionCbatInstrumentsOrientationResult',
   'GameSessionCbatMatfResult',

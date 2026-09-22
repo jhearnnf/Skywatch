@@ -163,6 +163,11 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'ant-practise':    { title: 'ANT Practise',      emoji: '📡',  scoreLabel: 'Points',    lowerIsBetter: false, maxScore: 80, formatScore: (s) => `${s}`, backPath: '/cbat/ant' },
   'flag':            { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true, difficultyGroup: 'flag' },
   'flag-easier':     { title: 'FLAG',              emoji: '🚩',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/flag',           hideTime: true, difficultyGroup: 'flag' },
+  // Colours, Letters and Numbers: the test FLAG replaced in 2021, still sat in
+  // Canada, so it lives behind the FLAG tile for players there and has a page
+  // of its own. Fixed 90-second runs, so the time column is hidden like FLAG's.
+  'clan':            { title: 'CLAN',              emoji: '💎',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/clan',           hideTime: true, difficultyGroup: 'clan' },
+  'clan-easier':     { title: 'CLAN',              emoji: '💎',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/clan',           hideTime: true, difficultyGroup: 'clan' },
   'visualisation-2d':{ title: 'Visualisation 2D',  emoji: '🧮',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
   'visualisation-3d':{ title: 'Visualisation 3D',  emoji: '🧊',  scoreLabel: 'Correct',   lowerIsBetter: false, maxScore: 8, formatScore: (s) => `${s}/8`,   backPath: '/cbat/visualisation' },
   // The original eight-round board. No `difficultyGroup`: it is neither half
@@ -239,6 +244,10 @@ export const CBAT_DIFFICULTY_GROUPS = {
   flag: [
     { gameKey: 'flag-easier', label: 'Easier' },
     { gameKey: 'flag',        label: 'Hard' },
+  ],
+  clan: [
+    { gameKey: 'clan-easier', label: 'Easier' },
+    { gameKey: 'clan',        label: 'Hard' },
   ],
   cut: [
     { gameKey: 'cut-easier', label: 'Easier' },
@@ -339,6 +348,16 @@ export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
     return [
       { ...g, key: 'ant',          title: 'ANT' },
       { ...g, key: 'ant-practise', title: 'ANT Practise' },
+    ]
+  }
+  // FLAG's tile also holds CLAN for players in Canada (src/pages/Cbat.jsx).
+  // Instruments' arrangement: FLAG's own key gates the tile, and CLAN is the
+  // second test behind it with its own toggle and its own page at /cbat/clan.
+  // Turning CLAN off takes the CLAN half off the tile and the page with it.
+  if (g.key === 'flag') {
+    return [
+      { ...g, key: 'flag', title: 'FLAG' },
+      { ...g, key: 'clan', title: 'CLAN', path: '/cbat/clan', emoji: '💎' },
     ]
   }
   if (g.key === 'visualisation') {
