@@ -81,3 +81,32 @@ describe('InstrumentPanel — the six faces do not share ids', () => {
     expect(ids.some(id => id.startsWith('attClip-'))).toBe(true)
   })
 })
+
+describe('InstrumentPanel — the attitude ball stays covered', () => {
+  it('keeps sky and ground covering the ball at full pitch and roll', () => {
+    const container = panel()
+    const clip = container.querySelector('clipPath circle')
+    const cy = Number(clip.getAttribute('cy'))
+    const r = Number(clip.getAttribute('r'))
+    const MAX_PITCH = 12  // AttitudeIndicator's Ascend/Descend deflection
+
+    const sky = container.querySelector('rect[fill="#1d5fa8"]')
+    const ground = container.querySelector('rect[fill="#6b4a2a"]')
+    const top = (el) => Number(el.getAttribute('y'))
+    const bottom = (el) => top(el) + Number(el.getAttribute('height'))
+
+    // Pitch slides the pair by MAX_PITCH, so each must overhang the clip circle
+    // by at least that much or page background shows through inside the ball.
+    expect(top(sky)).toBeLessThanOrEqual(cy - r - MAX_PITCH)
+    expect(bottom(ground)).toBeGreaterThanOrEqual(cy + r + MAX_PITCH)
+    // They must still meet exactly on the horizon, with no gap or overlap.
+    expect(bottom(sky)).toBe(top(ground))
+
+    // Roll turns them, so they have to overhang sideways too.
+    for (const el of [sky, ground]) {
+      const x = Number(el.getAttribute('x'))
+      expect(x).toBeLessThanOrEqual(50 - r)
+      expect(x + Number(el.getAttribute('width'))).toBeGreaterThanOrEqual(50 + r)
+    }
+  })
+})

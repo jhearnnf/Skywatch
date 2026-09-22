@@ -181,12 +181,17 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
           {/* Pitch only translates, and a translation ignores the origin, so
               this inner group needs no pivot of its own. */}
           <g style={{ transition: t, transform: `translateY(${pitch}px)` }}>
+            {/* Sky and ground overhang the face on every side. They are clipped
+                to a circle spanning 10..90, and pitch slides them up to 12 away
+                from centre while roll turns them, so a band that merely filled
+                the viewBox left a sliver of page background showing inside the
+                ball on any climb or descend question. */}
             {/* Sky */}
-            <rect x="0" y="0" width="100" height="50" fill="#1d5fa8" />
+            <rect x="-40" y="-40" width="180" height="90" fill="#1d5fa8" />
             {/* Ground */}
-            <rect x="0" y="50" width="100" height="50" fill="#6b4a2a" />
+            <rect x="-40" y="50" width="180" height="90" fill="#6b4a2a" />
             {/* Horizon line */}
-            <line x1="0" y1="50" x2="100" y2="50" stroke="var(--color-game-text)" strokeWidth="1.2" />
+            <line x1="-40" y1="50" x2="140" y2="50" stroke="var(--color-game-text)" strokeWidth="1.2" />
             {/* Pitch reference ladders */}
             <line x1="42" y1="40" x2="58" y2="40" stroke="var(--color-game-text)" strokeWidth="0.5" />
             <line x1="44" y1="45" x2="56" y2="45" stroke="var(--color-game-text)" strokeWidth="0.5" />
