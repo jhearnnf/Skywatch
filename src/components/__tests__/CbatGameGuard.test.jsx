@@ -16,6 +16,11 @@ vi.mock('../../context/AppSettingsContext', () => ({
 
 vi.mock('../SEO', () => ({ default: () => null }))
 
+let mockInProgress = false
+vi.mock('../../hooks/useCbatGameInProgress', () => ({
+  useCbatGameInProgress: () => mockInProgress,
+}))
+
 function renderGuard(props) {
   return render(
     <MemoryRouter>
@@ -30,6 +35,7 @@ describe('CbatGameGuard', () => {
   beforeEach(() => {
     mockUser     = { _id: 'u1', isAdmin: false }
     mockSettings = { cbatGameEnabled: { target: true, symbols: false } }
+    mockInProgress = false
   })
 
   it('renders children when the game is enabled', () => {
@@ -88,5 +94,46 @@ describe('CbatGameGuard', () => {
     renderGuard({ gameKey: 'plane-turn', gameTitle: 'TRACE 1/2' })
     expect(screen.queryByTestId('game-content')).toBeNull()
     expect(screen.getByText(/TRACE 1\/2 OFFLINE/)).toBeTruthy()
+  })
+})
+
+// The link rides along with the game so a bug can be reported from where it
+// was seen; it steps out of the way while a test is actually running.
+describe('CbatGameGuard — report link', () => {
+  beforeEach(() => {
+    mockUser     = { _id: 'u1', isAdmin: false }
+    mockSettings = { cbatGameEnabled: { target: true, symbols: false } }
+    mockInProgress = false
+  })
+
+  it('links to the report form alongside an enabled game', () => {
+    renderGuard({ gameKey: 'target', gameTitle: 'Target' })
+    expect(screen.getByTestId('cbat-game-report').getAttribute('href')).toBe('/report')
+  })
+
+  it('links to the report form for an admin viewing a disabled game', () => {
+    mockUser = { _id: 'admin', isAdmin: true }
+    renderGuard({ gameKey: 'symbols', gameTitle: 'Symbols' })
+    expect(screen.getByTestId('cbat-game-report')).toBeTruthy()
+  })
+
+  it('does not show the link on the disabled page', () => {
+    renderGuard({ gameKey: 'symbols', gameTitle: 'Symbols' })
+    expect(screen.queryByTestId('cbat-game-report')).toBeNull()
+  })
+
+  it('hides the link while a test is in progress', () => {
+    mockInProgress = true
+    renderGuard({ gameKey: 'target', gameTitle: 'Target' })
+    expect(screen.getByTestId('game-content')).toBeTruthy()
+    expect(screen.queryByTestId('cbat-game-report')).toBeNull()
+  })
+
+  it('is desktop-only, so a phone layout tuned to one screen gains no line', () => {
+    renderGuard({ gameKey: 'target', gameTitle: 'Target' })
+    const cls = screen.getByTestId('cbat-game-report').className.split(/\s+/)
+    expect(cls).toContain('hidden')
+    expect(cls).toContain('lg:inline-flex')
+    expect(cls).toContain('fixed')
   })
 })
