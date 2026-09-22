@@ -515,7 +515,7 @@ export default function CbatVigilance() {
 
   return (
     <div>
-      <SEO title="Vigilance Test (CBAT)" description="The star grid. Three minutes of clearing coordinates, with priority tasks that appear when the job has gone quiet. Hard is the same grid with stars appearing much more often." />
+      <SEO title="Vigilance Test (CBAT)" description="Practise vigilance on the star grid: clear coordinates for three minutes and respond to priority tasks. Hard mode adds more frequent stars." />
 
       <CbatGameHeader
         title="Vigilance Test"
