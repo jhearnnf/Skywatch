@@ -99,10 +99,10 @@ describe('Profile — slim (native) mode', () => {
   it('hides the Ranks tab', async () => {
     render(<Profile />)
     await waitFor(() => screen.getByText('Games Played'))
-    expect(screen.queryByText('🏆 Ranks')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Ranks' })).toBeNull()
     // Other tabs still present
-    expect(screen.getByText('📊 Stats')).toBeDefined()
-    expect(screen.getByText('⚙️ Settings')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Overview' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeDefined()
   })
 
   it('hides the streak and the level meter', async () => {
@@ -124,19 +124,18 @@ describe('Profile — slim (native) mode', () => {
   it('Settings tab hides Recall Difficulty and Subscription but keeps Display Name and Volume', async () => {
     render(<Profile />)
     await waitFor(() => screen.getByText('Games Played'))
-    fireEvent.click(screen.getByText('⚙️ Settings'))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     await waitFor(() => screen.getByText('Display Name'))
     expect(screen.getByText('SkyWatch Volume')).toBeDefined()
     expect(screen.queryByText('Recall Difficulty')).toBeNull()
     expect(screen.queryByText('Subscription')).toBeNull()
   })
 
-  it('Help tab hides the Replay Tutorials section but keeps Share / Report links', async () => {
+  it('Help tab hides the Replay Tutorials section but keeps the Report link', async () => {
     render(<Profile />)
     await waitFor(() => screen.getByText('Games Played'))
-    fireEvent.click(screen.getByText('💡 Help'))
-    await waitFor(() => screen.getByText('📤 Share SkyWatch'))
-    expect(screen.getByText('⚠️ Report a Problem')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Help' }))
+    await waitFor(() => screen.getByText('⚠️ Report a Problem'))
     expect(screen.queryByText(/Replay any tutorial/)).toBeNull()
     expect(screen.queryByText(/Reset All Tutorials/)).toBeNull()
   })

@@ -83,7 +83,7 @@ function statsAndDefaultFetch(overrideHandler) {
 
 async function goToSettings() {
   render(<Profile />)
-  fireEvent.click(await screen.findByText(/⚙️ Settings/))
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
 }
 
 describe('Profile — Display Name', () => {

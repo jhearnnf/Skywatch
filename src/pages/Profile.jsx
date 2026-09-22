@@ -24,7 +24,6 @@ import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
 import { PLAY_STORE_URL, forceUpdateWebApp, isNativeUpdateAvailable } from '../utils/appUpdate'
 import BlockedAgents from './chat/components/BlockedAgents'
-import { AgentProfileContent } from './AgentProfile'
 
 function StatCard({ label, value, icon, onClick, badge, badgeLabel = 'abandoned', loading }) {
   const Tag = onClick && !loading ? 'button' : 'div'
@@ -109,7 +108,7 @@ export default function Profile() {
   const [nameError,   setNameError]   = useState('')
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
   const [masterVol,   setMasterVol]   = useState(() => isIOS ? 100 : getMasterVolume())
-  const [tab,         setTab]         = useState('stats') // 'stats' | 'leaderboard' | 'settings' | 'tutorials' | 'public'
+  const [tab,         setTab]         = useState('overview') // 'overview' | 'leaderboard' | 'settings' | 'tutorials'
   const [namePulse,   setNamePulse]   = useState(false)
   const [resetDone,   setResetDone]   = useState(false)
 
@@ -351,6 +350,12 @@ export default function Profile() {
               {user.displayName && (
                 <p className="text-slate-500 text-xs mt-0.5 intel-mono">#{user.agentNumber ?? '———'}</p>
               )}
+              {/* The page other players open from a leaderboard or chat: best
+                  scores and medals. Linked here so you can see exactly what
+                  they see, instead of a copy of it embedded under a tab. */}
+              <Link to={`/agent/${user._id}`} className="inline-block mt-1.5 text-xs font-bold text-brand-600 hover:text-brand-700 transition-colors">
+                View public profile →
+              </Link>
             </div>
             {!slim && (
               <div className="text-right shrink-0">
@@ -395,15 +400,17 @@ export default function Profile() {
           tab is where it went unnoticed before. Hides itself once done. */}
       {user && <CbatDateCard />}
 
-      {/* Tabs */}
+      {/* Tabs. Three for most people: Overview is what you have done and where
+          you are heading, Settings is every switch, Help is help. Ranks (the
+          Airstars board) only exists outside slim mode. The public profile is
+          a link in the header now, not a tab: it is a real page others see. */}
       <div className="flex gap-2 mb-4">
         {[
-          { key: 'stats',       label: '📊 Stats' },
-          { key: 'leaderboard', label: '🏆 Ranks' },
-          { key: 'settings',    label: '⚙️ Settings' },
-          { key: 'tutorials',   label: '💡 Help' },
-          { key: 'public',      label: 'Public profile' },
-        ].filter(t => !(slim && t.key === 'leaderboard') && !(t.key === 'public' && !user)).map(t => (
+          { key: 'overview',    label: 'Overview' },
+          { key: 'leaderboard', label: 'Ranks' },
+          { key: 'settings',    label: 'Settings' },
+          { key: 'tutorials',   label: 'Help' },
+        ].filter(t => !(slim && t.key === 'leaderboard')).map(t => (
           <button
             key={t.key}
             data-tutorial-target={t.key === 'settings' ? 'profile-tab-settings' : undefined}
@@ -416,12 +423,10 @@ export default function Profile() {
         ))}
       </div>
 
-      {/* Stats tab */}
-      {tab === 'public' && user && (
-        <AgentProfileContent id={user._id} embedded />
-      )}
-
-      {tab === 'stats' && (
+      {/* Overview tab: what you have done (tiles) and where you are heading
+          (Aptitude Report). Share / Support live at the foot with the social
+          icons: they are about the site, not about you, and not help. */}
+      {tab === 'overview' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <div className={`grid ${slim ? 'grid-cols-1' : 'grid-cols-2'} gap-3 ${!user ? 'opacity-40 pointer-events-none select-none blur-sm' : ''}`}>
             {!slim && <StatCard loading={user && statsLoading} label="Briefs Read"  value={stats.brifsRead}           icon="📋" onClick={user ? () => navigate('/intel-brief-history') : undefined} badge={stats.flashcardsCollected} badgeLabel="flashcards" />}
@@ -438,13 +443,24 @@ export default function Profile() {
             </div>
           )}
           <SocialLinks source="profile" className="mt-6 pt-4 border-t border-slate-200" />
+          <div className="mt-3 flex items-center justify-center gap-4 text-xs font-semibold text-slate-500">
+            <Link to="/share" className="hover:text-slate-700 transition-colors">📤 Share SkyWatch</Link>
+            {/* Never in the native app: Google Play forbids off-store payment
+                links, so /donate is web-only everywhere (see Donate.jsx). */}
+            {!SLIM_APP && (
+              <Link to="/donate" data-testid="profile-help-donate" className="hover:text-slate-700 transition-colors">💙 Support SkyWatch</Link>
+            )}
+          </div>
         </motion.div>
       )}
 
-      {/* Settings tab */}
+      {/* Settings tab. Grouped by what the switch is about, most-touched
+          first. Each card keeps its own heading; the group labels only say
+          which shelf it sits on. Sign out and Delete account close the tab so
+          they are not on screen while someone is looking at their stats. */}
       {tab === 'settings' && user && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
-
+          <p className="text-[10px] font-extrabold text-brand-600 uppercase tracking-[0.2em]">Account</p>
           {/* Display Name */}
           <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${namePulse ? ' flashcard-ring-active' : ''}`}>
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Display Name</p>
@@ -529,57 +545,41 @@ export default function Profile() {
             )}
           </div>
 
-          {/* Difficulty */}
-          {!slim && (
-          <div data-tutorial-target="profile-difficulty" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recall Difficulty</p>
-            <div className="flex gap-2">
-              {/* Standard — always available */}
-              <button
-                onClick={() => changeDifficulty('easy')}
-                disabled={diffBusy}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-                  ${(user.difficultySetting ?? 'easy') === 'easy'
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
-                  }`}
-              >
-                🌱 Standard
-              </button>
-
-              {/* Advanced — locked for free users */}
-              {isFreeUser(user) ? (
-                <button
-                  onClick={() => navigate('/subscribe')}
-                  title="Upgrade to Silver to unlock Advanced difficulty"
-                  className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-slate-50 border border-slate-200 text-slate-400 opacity-60 hover:opacity-80 transition-opacity"
+          {/* Subscription — hidden in slim (native) mode and while beta tester auto-gold is active */}
+          {!slim && !appSettings?.betaTesterAutoGold && (() => {
+            const tier        = user.subscriptionTier ?? 'free'
+            const isGold      = tier === 'gold'
+            const isSilver    = tier === 'silver'
+            const isActiveTrial = tier === 'trial' && user.isTrialActive
+            const hasPaidPerks  = isGold || isSilver || isActiveTrial
+            const icon = isGold ? '🥇' : (isSilver || isActiveTrial) ? '🥈' : '🆓'
+            const badgeClass = isGold
+              ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-200'
+              : (isSilver || isActiveTrial)
+                ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200'
+                : 'bg-slate-100 text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-700'
+            return (
+              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Subscription</p>
+                <Link
+                  to="/subscribe"
+                  className="flex items-center justify-between hover:bg-slate-50 rounded-xl px-1 py-1 -mx-1 transition-colors group"
                 >
-                  🔒 Advanced
-                </button>
-              ) : (
-                <button
-                  onClick={() => changeDifficulty('medium')}
-                  disabled={diffBusy}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-                    ${(user.difficultySetting ?? 'easy') === 'medium'
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
-                    }`}
-                >
-                  <span className="flame-blue">🔥</span> Advanced
-                </button>
-              )}
-            </div>
-            {isFreeUser(user) && (
-              <p className="text-xs text-slate-400 mt-2">
-                <button onClick={() => navigate('/subscribe')} className="text-brand-500 font-semibold hover:underline">
-                  Upgrade to Silver
-                </button>{' '}to unlock Advanced difficulty.
-              </p>
-            )}
-          </div>
-          )}
-
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{icon}</span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">Current Plan</p>
+                      <p className="text-xs text-slate-400">{displayTier(user)}</p>
+                    </div>
+                  </div>
+                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${badgeClass}`}>
+                    {hasPaidPerks ? 'Manage →' : 'Upgrade →'}
+                  </span>
+                </Link>
+              </div>
+            )
+          })()}
+          <p className="text-[10px] font-extrabold text-brand-600 uppercase tracking-[0.2em] pt-2">Sound</p>
           {/* Volume */}
           <div className={`bg-surface rounded-2xl border border-slate-200 p-4 card-shadow${isIOS ? ' opacity-50' : ''}`}>
             <div className="flex justify-between items-center mb-3">
@@ -615,53 +615,7 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Community notifications — the opt-out for the navbar unread dot. */}
-          {appSettings?.chatEnabled !== false && (
-            <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Community Notifications</p>
-              <p className="text-[11px] text-slate-400 mb-3">
-                Show a red dot on the Community button when there are new messages in a channel or
-                a direct message.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => changeCommunityNotifs(true)}
-                  disabled={communityNotifsBusy}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-                    ${communityNotifs
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
-                    }`}
-                >
-                  🔔 Notify me
-                </button>
-                <button
-                  onClick={() => changeCommunityNotifs(false)}
-                  disabled={communityNotifsBusy}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
-                    ${!communityNotifs
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
-                    }`}
-                >
-                  🔕 Turn off
-                </button>
-              </div>
-              {!communityNotifs && (
-                <p className="text-[11px] text-slate-400 mt-2">
-                  The dot is off. Community still works normally and any new messages are waiting
-                  for you when you open it.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* The undo for a block. Sits next to the other Community setting
-              rather than inside Community itself, because blocking someone
-              removes their messages from the very place you would look for
-              them. See BlockedAgents. */}
-          {appSettings?.chatEnabled !== false && <BlockedAgents />}
-
+          <p className="text-[10px] font-extrabold text-brand-600 uppercase tracking-[0.2em] pt-2">Community and privacy</p>
           {/* Score sharing — one opt-out for every place their scores are shown
               to anyone else: the leaderboards, the Recent Scores feed, the
               medals, their player profile and the landing page's progress wall
@@ -755,40 +709,122 @@ export default function Profile() {
             </div>
           )}
 
-          {/* Subscription — hidden in slim (native) mode and while beta tester auto-gold is active */}
-          {!slim && !appSettings?.betaTesterAutoGold && (() => {
-            const tier        = user.subscriptionTier ?? 'free'
-            const isGold      = tier === 'gold'
-            const isSilver    = tier === 'silver'
-            const isActiveTrial = tier === 'trial' && user.isTrialActive
-            const hasPaidPerks  = isGold || isSilver || isActiveTrial
-            const icon = isGold ? '🥇' : (isSilver || isActiveTrial) ? '🥈' : '🆓'
-            const badgeClass = isGold
-              ? 'bg-amber-100 text-amber-700 group-hover:bg-amber-200'
-              : (isSilver || isActiveTrial)
-                ? 'bg-brand-100 text-brand-700 group-hover:bg-brand-200'
-                : 'bg-slate-100 text-slate-600 group-hover:bg-brand-100 group-hover:text-brand-700'
-            return (
-              <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Subscription</p>
-                <Link
-                  to="/subscribe"
-                  className="flex items-center justify-between hover:bg-slate-50 rounded-xl px-1 py-1 -mx-1 transition-colors group"
+          {/* Community notifications — the opt-out for the navbar unread dot. */}
+          {appSettings?.chatEnabled !== false && (
+            <div className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Community Notifications</p>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Show a red dot on the Community button when there are new messages in a channel or
+                a direct message.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => changeCommunityNotifs(true)}
+                  disabled={communityNotifsBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${communityNotifs
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">{icon}</span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-700">Current Plan</p>
-                      <p className="text-xs text-slate-400">{displayTier(user)}</p>
-                    </div>
-                  </div>
-                  <span className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors ${badgeClass}`}>
-                    {hasPaidPerks ? 'Manage →' : 'Upgrade →'}
-                  </span>
-                </Link>
+                  🔔 Notify me
+                </button>
+                <button
+                  onClick={() => changeCommunityNotifs(false)}
+                  disabled={communityNotifsBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${!communityNotifs
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
+                >
+                  🔕 Turn off
+                </button>
               </div>
-            )
-          })()}
+              {!communityNotifs && (
+                <p className="text-[11px] text-slate-400 mt-2">
+                  The dot is off. Community still works normally and any new messages are waiting
+                  for you when you open it.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* The undo for a block. Sits next to the other Community setting
+              rather than inside Community itself, because blocking someone
+              removes their messages from the very place you would look for
+              them. See BlockedAgents. */}
+          {appSettings?.chatEnabled !== false && <BlockedAgents />}
+
+          {!slim && (<>
+          <p className="text-[10px] font-extrabold text-brand-600 uppercase tracking-[0.2em] pt-2">Learning</p>
+          {/* Difficulty */}
+          <div data-tutorial-target="profile-difficulty" className="bg-surface rounded-2xl border border-slate-200 p-4 card-shadow">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recall Difficulty</p>
+            <div className="flex gap-2">
+              {/* Standard — always available */}
+              <button
+                onClick={() => changeDifficulty('easy')}
+                disabled={diffBusy}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                  ${(user.difficultySetting ?? 'easy') === 'easy'
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                  }`}
+              >
+                🌱 Standard
+              </button>
+
+              {/* Advanced — locked for free users */}
+              {isFreeUser(user) ? (
+                <button
+                  onClick={() => navigate('/subscribe')}
+                  title="Upgrade to Silver to unlock Advanced difficulty"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold bg-slate-50 border border-slate-200 text-slate-400 opacity-60 hover:opacity-80 transition-opacity"
+                >
+                  🔒 Advanced
+                </button>
+              ) : (
+                <button
+                  onClick={() => changeDifficulty('medium')}
+                  disabled={diffBusy}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all
+                    ${(user.difficultySetting ?? 'easy') === 'medium'
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-500 hover:border-brand-300'
+                    }`}
+                >
+                  <span className="flame-blue">🔥</span> Advanced
+                </button>
+              )}
+            </div>
+            {isFreeUser(user) && (
+              <p className="text-xs text-slate-400 mt-2">
+                <button onClick={() => navigate('/subscribe')} className="text-brand-500 font-semibold hover:underline">
+                  Upgrade to Silver
+                </button>{' '}to unlock Advanced difficulty.
+              </p>
+            )}
+          </div>
+
+          </>)}
+          <p className="text-[10px] font-extrabold text-brand-600 uppercase tracking-[0.2em] pt-2">Account actions</p>
+          <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden divide-y divide-slate-100">
+            <button
+              onClick={logout}
+              className="w-full text-left px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              Sign out
+            </button>
+            {/* Kept in slim mode too: Google Play requires the in-app deletion
+                path to exist in the shipped native app, which is slim-only. */}
+            <button
+              onClick={() => setShowDelete(true)}
+              className="w-full text-left px-4 py-3 text-sm font-semibold text-slate-500 hover:text-red-700 transition-colors"
+            >
+              Delete account
+            </button>
+          </div>
         </motion.div>
       )}
 
@@ -850,26 +886,14 @@ export default function Profile() {
         </motion.div>
       )}
 
-      {/* Tutorials tab */}
+      {/* Help tab: report a problem, and the tutorials. */}
       {tab === 'tutorials' && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
           <div className="bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden divide-y divide-slate-100">
-            <Link to="/share" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
-              <span>📤 Share SkyWatch</span>
-              <span className="text-slate-400">→</span>
-            </Link>
             <Link to="/report" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
               <span>⚠️ Report a Problem</span>
               <span className="text-slate-400">→</span>
             </Link>
-            {/* Never in the native app: Google Play forbids off-store payment
-                links, so /donate is web-only everywhere (see Donate.jsx). */}
-            {!SLIM_APP && (
-              <Link to="/donate" data-testid="profile-help-donate" className="flex items-center justify-between px-4 py-3 text-sm font-semibold text-slate-500 hover:text-slate-700 transition-colors">
-                <span>💙 Support SkyWatch</span>
-                <span className="text-slate-400">→</span>
-              </Link>
-            )}
           </div>
           {!slim && (<>
           <p className="text-sm text-slate-500 mb-1">Replay any tutorial to revisit how a feature works.</p>
@@ -898,25 +922,6 @@ export default function Profile() {
           </button>
           </>)}
         </motion.div>
-      )}
-
-      {user && (
-        <div className="mt-6 flex flex-col items-center gap-1">
-          <button
-            onClick={logout}
-            className="text-sm text-slate-400 hover:text-slate-600 transition-colors py-2 px-4"
-          >
-            Sign out
-          </button>
-          {/* Kept in slim mode too: Google Play requires the in-app deletion
-              path to exist in the shipped native app, which is slim-only. */}
-          <button
-            onClick={() => setShowDelete(true)}
-            className="text-xs text-slate-400 hover:text-red-700 transition-colors py-2 px-4"
-          >
-            Delete account
-          </button>
-        </div>
       )}
 
       {/* Build stamp — last thing on the page, shown to everyone (incl. Android).

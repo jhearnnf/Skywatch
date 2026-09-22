@@ -120,15 +120,13 @@ describe('Profile — stat card navigation', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/intel-brief-history')
   })
 
-  it.each([false, true])('loads the signed-in user public profile (admin: %s)', async (isAdmin) => {
+  it('links to the public profile page others see, instead of embedding it', async () => {
     const auth = mockUseAuth()
-    auth.user.isAdmin = isAdmin
     render(<Profile />)
-    fireEvent.click(screen.getByRole('button', { name: 'Public profile' }))
-    await waitFor(() => expect(auth.apiFetch).toHaveBeenCalledWith('/api/users/user1/profile', expect.anything()))
-    expect(auth.apiFetch).not.toHaveBeenCalledWith('/api/admin/users/user1/profile', expect.anything())
-    expect(screen.queryByText('Admin View')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Stats/ }))
+    const link = await screen.findByText('View public profile →')
+    expect(link.getAttribute('href')).toBe('/agent/user1')
+    expect(auth.apiFetch).not.toHaveBeenCalledWith('/api/users/user1/profile', expect.anything())
+    expect(screen.queryByRole('button', { name: 'Public profile' })).toBeNull()
     expect(screen.getByText('Games Played')).toBeInTheDocument()
   })
 

@@ -79,16 +79,16 @@ function setupAuth() {
   })
 }
 
-async function openHelpTab() {
+// Share and Support sit at the foot of the Overview tab (the default), next
+// to the social icons. Help holds Report a Problem and the tutorials only.
+async function openOverview() {
   render(<Profile />)
-  await waitFor(() => screen.getByText('💡 Help'))
-  fireEvent.click(screen.getByText('💡 Help'))
   await waitFor(() => screen.getByText('📤 Share SkyWatch'))
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe('Profile — Help tab "Support SkyWatch" link', () => {
+describe('Profile — Overview "Support SkyWatch" link', () => {
   beforeEach(() => {
     setupAuth()
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) })
@@ -97,22 +97,30 @@ describe('Profile — Help tab "Support SkyWatch" link', () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it('links to /donate on the web, after Share and Report', async () => {
-    await openHelpTab()
+  it('links to /donate on the web, next to Share', async () => {
+    await openOverview()
     const link = screen.getByTestId('profile-help-donate')
     expect(link.getAttribute('href')).toBe('/donate')
     expect(link.textContent).toContain('Support SkyWatch')
 
-    const labels = [...link.parentElement.querySelectorAll('a')].map(a => a.firstChild.textContent)
-    expect(labels).toEqual(['📤 Share SkyWatch', '⚠️ Report a Problem', '💙 Support SkyWatch'])
+    const labels = [...link.parentElement.querySelectorAll('a')].map(a => a.textContent)
+    expect(labels).toEqual(['📤 Share SkyWatch', '💙 Support SkyWatch'])
   })
 
   it('is absent in the native app', async () => {
     mockSlimApp.value = true
-    await openHelpTab()
+    await openOverview()
     expect(screen.queryByTestId('profile-help-donate')).toBeNull()
     expect(screen.queryByText(/Support SkyWatch/)).toBeNull()
-    // The neighbouring links are unaffected.
-    expect(screen.getByText('⚠️ Report a Problem')).toBeDefined()
+    // The neighbouring link is unaffected.
+    expect(screen.getByText('📤 Share SkyWatch')).toBeDefined()
+  })
+
+  it('keeps Report a Problem on the Help tab, without Share or Support', async () => {
+    await openOverview()
+    fireEvent.click(screen.getByRole('button', { name: 'Help' }))
+    await waitFor(() => screen.getByText('⚠️ Report a Problem'))
+    expect(screen.queryByText('📤 Share SkyWatch')).toBeNull()
+    expect(screen.queryByTestId('profile-help-donate')).toBeNull()
   })
 })
