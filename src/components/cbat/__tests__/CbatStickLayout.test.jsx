@@ -87,3 +87,27 @@ describe('CbatStickLayout', () => {
     expect(screen.getByLabelText('Joystick setup')).toBeInTheDocument()
   })
 })
+
+// MATF passes null on both sides until the player has printed a sheet, and a
+// grid of three tracks holding one thing is not a grid.
+//
+// This is not tidiness. The tracks live on this element and the shell's width
+// override lives on <body>; any gap between the two leaves 19rem + 19rem of
+// fixed track eating a 768px shell and squeezes the card into a sliver. MATF
+// hit exactly that during its launch flash. A caller with no panels should not
+// be able to reach the failure at all.
+describe('CbatStickLayout with nothing in either track', () => {
+  it('drops the grid rather than reserving tracks for panels that never arrive', () => {
+    const { container } = render(<CbatStickLayout><p>card</p></CbatStickLayout>)
+    expect(screen.getByText('card')).toBeInTheDocument()
+    expect(container.querySelector('aside')).toBeNull()
+    expect(container.firstChild.className).not.toContain('grid-cols')
+  })
+
+  it('still builds the grid when only one side is filled', () => {
+    const { container } = render(
+      <CbatStickLayout stick={<p>rail</p>}><p>card</p></CbatStickLayout>,
+    )
+    expect(container.firstChild.className).toContain('grid-cols')
+  })
+})
