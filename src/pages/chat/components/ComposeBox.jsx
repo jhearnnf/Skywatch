@@ -13,6 +13,10 @@ export default function ComposeBox({
   // Enables the @ autocomplete. Absent in support threads, where there is
   // nobody to mention.
   mentionConversationId,
+  // The guide bot's display name, in the rooms that offer the one-tap ask
+  // button. Null everywhere else and the button is simply not drawn — the
+  // server decides which rooms those are, not this component.
+  botName,
 }) {
   const [body, setBody] = useState('')
   const [caret, setCaret] = useState(0)
@@ -53,6 +57,25 @@ export default function ComposeBox({
     })
   }
 
+  // Put "@Guide Bot " in front of whatever is typed and hand the box back.
+  //
+  // It fills the composer rather than sending: the button is there to save
+  // people typing a name they have to spell exactly, not to send an empty
+  // question. Idempotent, so a second press does not stack the mention.
+  const askBot = () => {
+    if (!botName) return
+    const next = body.includes(`@${botName}`) ? body : `@${botName} ${body}`.trim() + ' '
+    setBody(next)
+    setCaret(next.length)
+    setDismissed(null)
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(next.length, next.length)
+    })
+  }
+
   return (
     <div className="border-t border-slate-200">
       {/* Reply target, shown above the box so it is obvious what you are
@@ -82,6 +105,18 @@ export default function ComposeBox({
           onPick={pickMention}
           onDismiss={() => setDismissed(mention.start)}
         />
+      )}
+      {botName && (
+        <button
+          type="button"
+          onClick={askBot}
+          disabled={disabled}
+          title={`Ask ${botName} a question`}
+          aria-label={`Ask ${botName} a question`}
+          className="shrink-0 px-2.5 py-2 rounded-xl border border-slate-200 text-sm text-slate-500 hover:text-brand-600 hover:border-brand-400 disabled:opacity-50 transition-colors"
+        >
+          🤖
+        </button>
       )}
       <textarea
         ref={inputRef}

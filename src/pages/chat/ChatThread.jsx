@@ -689,6 +689,8 @@ export default function ChatThread({
             // No @ picker in support: it is a private thread with staff, so there
             // is nobody to mention and no bot to summon.
             mentionConversationId={type === 'support' ? null : conversationId}
+            // Drawn only where the server names a bot — the lounge and General.
+            botName={conversation?.botName ?? null}
           />
         </>
       )}

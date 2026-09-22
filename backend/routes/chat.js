@@ -30,6 +30,15 @@ const { SUPPORT_LABEL, markRead, appendMessage } = require('../utils/chatWrite')
 const { openTicket, nameTicketFromFirstMessage, resolveTicket, reopenTicket } = require('../utils/supportTickets');
 const { describeReportEnvironment } = require('../utils/reportEnvironment');
 
+// The channels whose composer offers a one-tap "ask the guide bot" button.
+//
+// The bot answers an @mention in ANY channel, so this is not about where it
+// works — it is about where the prompt belongs. These are the two rooms people
+// actually bring questions to; offering it on a feed or the announcements board
+// would just be a button nobody presses. Same 🤖 button as the mini chat on the
+// CBAT hub, which has had it since the lounge shipped.
+const BOT_PROMPT_SLUGS = new Set([LOUNGE_SLUG, 'general']);
+
 // One knowledge document for now. A second bot would key off its own slug.
 const BOT_KNOWLEDGE_SLUG = 'cbat-guide';
 
@@ -1504,7 +1513,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
       deletedAt:      null,
       ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
     };
-    const [firstMention, unreadMentions, dmOther] = await Promise.all([
+    const [firstMention, unreadMentions, dmOther, promptBot] = await Promise.all([
       ChatMessage.findOne(mentionFilter).sort({ createdAt: 1 }).select('_id createdAt').lean(),
       ChatMessage.countDocuments(mentionFilter),
       // Name the other person, because the rail cannot always do it: the
@@ -1533,6 +1542,14 @@ router.get('/conversations/:id/messages', async (req, res) => {
           lastSeen: req.user.isAdmin ? (other.lastSeen ?? null) : undefined,
         };
       })(),
+      // The bot behind the composer's ask button, in the rooms that offer it
+      // (see BOT_PROMPT_SLUGS). Looked up by name rather than assumed, because
+      // an admin can rename or retire the bot and the button must then say the
+      // right thing or not appear at all.
+      BOT_PROMPT_SLUGS.has(convo.channel?.slug)
+        ? User.findOne({ isBot: true, botAnswersDms: true, isBanned: { $ne: true } })
+          .select('displayName').lean()
+        : null,
     ]);
 
     res.json({ status: 'success', data: {
@@ -1581,6 +1598,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
         // Admin-only, DM-only; the key is absent for everyone else rather than
         // null, so a client cannot distinguish "never seen" from "not for you".
         ...(dmOther?.lastSeen !== undefined ? { otherLastSeen: dmOther.lastSeen } : {}),
+        // Names the guide bot for the composer's ask button. Null everywhere
+        // the button is not offered, so the composer needs no slug list of its
+        // own — it draws the button when it has a name.
+        botName: promptBot?.displayName ?? null,
       },
     } });
   } catch (err) {

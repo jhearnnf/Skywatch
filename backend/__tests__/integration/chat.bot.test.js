@@ -354,3 +354,46 @@ describe('knowledge upload', () => {
       .set('Cookie', c)).status).toBe(403);
   });
 });
+
+// The 🤖 button beside the composer, which fills the box with "@Guide Bot ".
+// The client draws it whenever the thread payload names a bot, so which rooms
+// offer it is decided here — see BOT_PROMPT_SLUGS in routes/chat.js.
+describe('the composer ask button', () => {
+  const channel = (name, slug) => ChatConversation.create({
+    type: 'channel',
+    channel: { name, slug, audience: 'public', postPolicy: 'everyone' },
+  });
+
+  const thread = (userId, convoId) =>
+    request(app).get(`/api/chat/conversations/${convoId}/messages`)
+      .set('Cookie', authCookie(userId));
+
+  it('names the bot in General and in the lounge', async () => {
+    await seedChatBot();
+    const falcon  = await createUser({ displayName: 'Falcon' });
+    const general = await channel('General', 'general');
+    const lounge  = await channel('CBAT Lounge', 'cbat-lounge');
+
+    expect((await thread(falcon._id, general._id)).body.data.conversation.botName)
+      .toBe('Guide Bot');
+    expect((await thread(falcon._id, lounge._id)).body.data.conversation.botName)
+      .toBe('Guide Bot');
+  });
+
+  it('names nobody in a room that does not offer it', async () => {
+    await seedChatBot();
+    const falcon = await createUser({ displayName: 'Falcon' });
+    const off    = await channel('Off Topic', 'off-topic');
+
+    expect((await thread(falcon._id, off._id)).body.data.conversation.botName).toBeNull();
+  });
+
+  it('names nobody once the bot has stopped answering, so the button goes', async () => {
+    const { guideBotId } = await seedChatBot();
+    await User.updateOne({ _id: guideBotId }, { $set: { botAnswersDms: false } });
+    const falcon  = await createUser({ displayName: 'Falcon' });
+    const general = await channel('General', 'general');
+
+    expect((await thread(falcon._id, general._id)).body.data.conversation.botName).toBeNull();
+  });
+});

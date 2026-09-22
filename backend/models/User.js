@@ -469,6 +469,12 @@ userSchema.index(
   { unique: true, partialFilterExpression: { displayNameLower: { $type: 'string' } } }
 );
 
+// Finding the guide bot. Every open of a room that offers the "ask the bot"
+// button asks for it, and the thread endpoint re-answers on each 5s poll, so
+// the lookup cannot be a collection scan. Partial, because the bots are a
+// handful of documents among every account on the site.
+userSchema.index({ isBot: 1 }, { partialFilterExpression: { isBot: true } });
+
 // "Has anyone blocked me?" runs on every DM open and every DM send, so the
 // reverse lookup needs an index of its own — the forward direction is already
 // answered by the blocker's own document.

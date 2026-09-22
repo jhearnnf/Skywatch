@@ -68,6 +68,36 @@ describe('ComposeBox', () => {
     }
   })
 
+  describe('the ask-the-bot button', () => {
+    const askBot = () => screen.getByRole('button', { name: 'Ask Guide Bot a question' })
+
+    it('is absent in a room the server names no bot for', () => {
+      render(<ComposeBox onSend={vi.fn()} />)
+      expect(screen.queryByRole('button', { name: /Ask .* a question/ })).toBeNull()
+    })
+
+    it('puts the mention in front of what is already typed', () => {
+      render(<ComposeBox onSend={vi.fn()} botName="Guide Bot" />)
+      fireEvent.change(box(), { target: { value: 'how long is the test?' } })
+      fireEvent.click(askBot())
+      expect(box().value).toBe('@Guide Bot how long is the test? ')
+    })
+
+    it('leaves a trailing space to type into when the box is empty', () => {
+      render(<ComposeBox onSend={vi.fn()} botName="Guide Bot" />)
+      fireEvent.click(askBot())
+      expect(box().value).toBe('@Guide Bot ')
+    })
+
+    it('does not stack the mention when pressed twice', () => {
+      render(<ComposeBox onSend={vi.fn()} botName="Guide Bot" />)
+      fireEvent.click(askBot())
+      fireEvent.change(box(), { target: { value: '@Guide Bot hello' } })
+      fireEvent.click(askBot())
+      expect(box().value).toBe('@Guide Bot hello')
+    })
+  })
+
   describe('Enter', () => {
     it('sends from a physical keyboard, and Shift+Enter breaks the line', () => {
       pointer('fine')
