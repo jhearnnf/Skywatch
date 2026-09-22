@@ -2444,8 +2444,12 @@ router.get('/messages/:id/seen-by', async (req, res) => {
       ...(message.senderUserId ? { userId: { $ne: message.senderUserId } } : {}),
     };
 
+    // Most recent reader first. The list is read top-down to answer "has this
+    // landed yet", and the limit therefore has to keep the newest markers
+    // rather than the oldest ones: a truncated list sorted the other way would
+    // name the first 200 people to open the channel and hide everyone since.
     const [rows, total] = await Promise.all([
-      ChatRead.find(filter).sort({ lastReadAt: 1 }).limit(SEEN_BY_LIMIT).lean(),
+      ChatRead.find(filter).sort({ lastReadAt: -1 }).limit(SEEN_BY_LIMIT).lean(),
       ChatRead.countDocuments(filter),
     ]);
 

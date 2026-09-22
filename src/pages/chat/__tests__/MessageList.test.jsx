@@ -827,33 +827,22 @@ describe('MessageList — reaching the actions without a hover', () => {
 
 // Reactions are anonymous to the room and named only to staff. Members see a
 // count on the pill and nothing more, which is what keeps a reaction cheap
-// enough to tap; the names are a moderation record.
+// enough to tap; the names are a moderation record, and they live inside the
+// Seen by dialog rather than a second modal of their own.
 describe('MessageList — who reacted', () => {
   const reacted = (extra = {}) =>
     msg('u1', 'hello', { reactions: [{ emoji: '👍', count: 2, mine: false }], ...extra })
 
-  it('offers an admin the reactor list on a message that has reactions', () => {
-    renderList([reacted()], { viewerIsAdmin: true, onShowReactors: vi.fn() })
-    expect(screen.getByTitle('Who reacted')).toBeTruthy()
+  it('offers no reactor button of its own, only the dialog that carries them', () => {
+    renderList([reacted()], { viewerIsAdmin: true, onSeenBy: vi.fn() })
+    expect(screen.queryByTitle('Who reacted')).toBeNull()
+    expect(screen.getByTitle('Seen by')).toBeTruthy()
   })
 
-  it('opens it on the message it belongs to', () => {
-    const onShowReactors = vi.fn()
-    const m = reacted()
-    renderList([m], { viewerIsAdmin: true, onShowReactors })
-    fireEvent.click(screen.getByTitle('Who reacted'))
-    expect(onShowReactors).toHaveBeenCalledWith(expect.objectContaining({ _id: m._id }))
-  })
-
-  it('offers nothing to an ordinary member, who still sees the count', () => {
-    renderList([reacted()], { viewerIsAdmin: false, onShowReactors: vi.fn() })
+  it('names nobody to an ordinary member, who still sees the count', () => {
+    renderList([reacted()], { viewerIsAdmin: false, onSeenBy: vi.fn() })
     expect(screen.queryByTitle('Who reacted')).toBeNull()
     expect(screen.getByLabelText('👍 2')).toBeTruthy()
-  })
-
-  it('offers nothing on a message nobody has reacted to', () => {
-    renderList([msg('u1', 'hello')], { viewerIsAdmin: true, onShowReactors: vi.fn() })
-    expect(screen.queryByTitle('Who reacted')).toBeNull()
   })
 })
 

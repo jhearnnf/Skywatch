@@ -9,7 +9,6 @@ import DisplayNameGate from './components/DisplayNameGate'
 import UserCard from './components/UserCard'
 import ReportMessageDialog from './components/ReportMessageDialog'
 import SeenByDialog from './components/SeenByDialog'
-import ReactorsDialog from './components/ReactorsDialog'
 import EditHistoryDialog from './components/EditHistoryDialog'
 import AnnouncementDrafter from './components/AnnouncementDrafter'
 import { formatLastOnline, isOnlineNow } from './format'
@@ -82,7 +81,6 @@ export default function ChatThread({
   const [blockDone,    setBlockDone]    = useState(false)
   const [replyTo,      setReplyTo]      = useState(null)
   const [seenByMsg,    setSeenByMsg]    = useState(null)
-  const [reactorsMsg,  setReactorsMsg]  = useState(null)
   const [editsMsg,     setEditsMsg]     = useState(null)
   // Both frozen at entry. The server's answers change the moment we mark the
   // conversation read, so if these tracked the polls the "new" line would creep
@@ -590,9 +588,6 @@ export default function ChatThread({
           onDelete={handleDelete}
           onEdit={handleEdit}
           onSeenBy={setSeenByMsg}
-          // Admin-only. MessageList gates the button on viewerIsAdmin too; this
-          // just keeps the handler off every other viewer's rows entirely.
-          onShowReactors={user?.isAdmin ? setReactorsMsg : undefined}
           onShowEdits={user?.isAdmin ? setEditsMsg : undefined}
           dividerAfter={entryState?.lastReadAt ?? null}
           highlightId={highlightId}
@@ -735,9 +730,6 @@ export default function ChatThread({
           senders={senders}
           onClose={() => setEditsMsg(null)}
         />
-      )}
-      {reactorsMsg && (
-        <ReactorsDialog key={reactorsMsg._id} message={reactorsMsg} onClose={() => setReactorsMsg(null)} />
       )}
       {reporting && (
         <ReportMessageDialog

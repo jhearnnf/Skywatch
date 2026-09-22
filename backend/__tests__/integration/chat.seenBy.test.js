@@ -60,6 +60,20 @@ describe('GET /api/chat/messages/:id/seen-by', () => {
     expect(res.body.data.readers.some(r => String(r._id) === String(absent._id))).toBe(false);
   });
 
+  it('puts the most recent reader first', async () => {
+    const { author, reader, absent, channelId, messageId } = await seedChannel();
+
+    // Nomad opens it, then Viper — so Viper is the newer marker of the two.
+    await openChannel(absent._id, channelId);
+    await openChannel(reader._id, channelId);
+
+    const res = await seenBy(author._id, messageId);
+    // Newest first. The list is read top-down to answer "has this landed yet",
+    // and the 200-row limit has to keep the newest markers rather than name
+    // the first 200 people ever to open the channel.
+    expect(res.body.data.readers.map(r => r.displayName)).toEqual(['Viper', 'Nomad']);
+  });
+
   it('leaves the sender off their own list', async () => {
     const { author, messageId } = await seedChannel();
     // Sending marks the conversation read for the sender, so without the
