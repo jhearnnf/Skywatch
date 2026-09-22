@@ -8,6 +8,11 @@
     }
   ],
   "rewrites": [
+    { "source": "/cbat", "destination": "/public-pages/cbat.html" },
+    { "source": "/cbat/target", "destination": "/public-pages/cbat/target.html" },
+    { "source": "/cbat/ant", "destination": "/public-pages/cbat/ant.html" },
+    { "source": "/cbat/symbols", "destination": "/public-pages/cbat/symbols.html" },
+    { "source": "/cbat/code-duplicates", "destination": "/public-pages/cbat/code-duplicates.html" },
     { "source": "/cbat-guide", "destination": "/cbat-guide.html" },
     { "source": "/cbat-guide-canada", "destination": "/cbat-guide-canada.html" },
     { "source": "/cbat-guide-australia", "destination": "/cbat-guide-australia.html" },

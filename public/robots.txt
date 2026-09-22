@@ -6,15 +6,16 @@
 # exclusion), admin-only, or a utility route with no search value.
 #
 # NOTE: never add a bare "Disallow: /cbat" — it would match every CBAT URL,
-# including the two public ones we want indexed (/cbat and /cbat/report).
-# The per-game routes are already excluded from the sitemap and unreachable
-# without an account, so they need no rule here.
+# including /cbat, /cbat/report and the four public game routes in the sitemap.
+# The remaining game routes require an account and stay out of the sitemap.
 #
 # Do not disallow /assets/, /images/, /models/ or /sounds/. Google renders the
 # page to index this SPA and needs the CSS, JS and media to do it.
 
 User-agent: *
 Allow: /
+# This wildcard also permits OAI-SearchBot, Googlebot, Bingbot and
+# Google-Extended on the public pages. Keep shared exclusions below.
 
 # Admin and internal tooling
 Disallow: /admin

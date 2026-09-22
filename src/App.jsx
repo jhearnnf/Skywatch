@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { publicPageInitial } from './utils/publicPagePreview'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
@@ -121,7 +122,7 @@ function PageWrapper({ children }) {
   return (
     <motion.div
       className="app-page"
-      initial={{ opacity: 0, y: 8 }}
+      initial={publicPageInitial({ opacity: 0, y: 8 })}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}

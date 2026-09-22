@@ -2,11 +2,9 @@
 <!--
   Only publicly reachable, indexable pages belong here.
 
-  Every /cbat/<game> route sits behind RequireAuth, so a logged-out crawler is
-  redirected to /login. Listing those URLs would fill Google Search Console with
-  "Page with redirect" exclusions and spend crawl budget on pages that can never
-  rank, so they are deliberately absent — they are reached by internal links
-  once a user signs in.
+  Target, ANT, Symbols and Code Duplicates are publicly playable without an
+  account and are included below. Other game routes require sign-in and stay
+  out of the sitemap.
 
   The guide is listed at its clean URL. vercel.json rewrites /cbat-guide to
   /cbat-guide.html, and the document self-canonicalises to the clean form, so
@@ -15,7 +13,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://skywatch.academy/</loc>
-    <lastmod>2026-08-15</lastmod>
+    <lastmod>2026-09-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -33,9 +31,33 @@
   </url>
   <url>
     <loc>https://skywatch.academy/cbat</loc>
-    <lastmod>2026-08-15</lastmod>
+    <lastmod>2026-09-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://skywatch.academy/cbat/target</loc>
+    <lastmod>2026-09-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://skywatch.academy/cbat/ant</loc>
+    <lastmod>2026-09-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://skywatch.academy/cbat/symbols</loc>
+    <lastmod>2026-09-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://skywatch.academy/cbat/code-duplicates</loc>
+    <lastmod>2026-09-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://skywatch.academy/cbat/report</loc>

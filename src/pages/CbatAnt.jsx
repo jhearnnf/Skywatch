@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
+import { publicPageInitial } from '../utils/publicPagePreview'
 import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatGameOver from '../components/CbatGameOver'
@@ -1155,7 +1156,7 @@ export default function CbatAnt() {
           {/* Intro */}
           {(phase === 'intro' || phase === 'launching') && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={publicPageInitial({ opacity: 0, y: 10 })}
               animate={{ opacity: 1, y: 0 }}
               className="w-full max-w-xl lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >

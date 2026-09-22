@@ -6,6 +6,7 @@ import { initPostHog } from './lib/posthog'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { setUpdateSW } from './utils/appUpdate'
+import { preparePublicPagePreview } from './utils/publicPagePreview'
 
 initPostHog()
 
@@ -36,6 +37,11 @@ window.addEventListener('vite:preloadError', () => {
     window.location.reload()
   }
 })
+
+// React 19 hoists Helmet's metadata natively. Remove the initial document's
+// marked fallback first, so it cannot leave a second title/canonical behind.
+document.head.querySelectorAll('[data-static-seo]').forEach(node => node.remove())
+preparePublicPagePreview()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

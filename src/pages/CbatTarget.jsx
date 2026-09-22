@@ -15,6 +15,7 @@ import { useAppSettings } from '../context/AppSettingsContext'
 import { useGameChrome } from '../context/GameChromeContext'
 import { getModelUrl, hasWorkingCloseupModel, titleToSlug } from '../data/aircraftModels'
 import SEO from '../components/SEO'
+import { publicPageInitial } from '../utils/publicPagePreview'
 import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
@@ -792,7 +793,7 @@ function ResultsScreen({ stats }) {
 function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={publicPageInitial({ opacity: 0, y: 10 })}
       animate={{ opacity: 1, y: 0 }}
       className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
     >

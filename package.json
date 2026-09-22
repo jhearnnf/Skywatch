@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "node scripts/prerender-cbat-guide.mjs && node scripts/check-build-api-url.mjs",
+    "postbuild": "node scripts/prerender-cbat-guide.mjs && node scripts/check-build-api-url.mjs && node scripts/prerender-public-pages.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
+    "check:public-pages": "node scripts/check-public-pages.mjs",
     "optimize-models": "node scripts/optimize-models.mjs",
     "email-hero": "node scripts/generate-email-hero.mjs",
     "predev": "node scripts/optimize-models.mjs",
@@ -49,6 +50,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@sparticuz/chromium": "^147.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -61,6 +63,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "jsdom": "^29.0.0",
+    "playwright": "^1.63.0",
     "sharp": "^0.34.5",
     "typescript": "^6.0.2",
     "vite": "^7.3.1",

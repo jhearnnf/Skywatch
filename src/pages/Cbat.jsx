@@ -4,6 +4,7 @@ import { motion, useScroll, useTransform } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
+import { publicPageInitial } from '../utils/publicPagePreview'
 import RecentCbatScores from '../components/RecentCbatScores'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
@@ -741,7 +742,7 @@ export default function Cbat() {
               // wrapper rather than the tile itself so it is present whether the
               // tile is a link, a combined tile or a greyed-out "coming soon".
               data-cbat-card={game.key}
-              initial={{ opacity: 0, y: 14 }}
+              initial={publicPageInitial({ opacity: 0, y: 14 })}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.35 }}
               className="h-full"

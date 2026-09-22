@@ -16,6 +16,7 @@ import { join, extname, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { formatTitle } from '../utils/seoTitle.js'
 import { CBAT_GUIDE_HREF } from '../utils/guideHref.js'
+import { PUBLIC_CBAT_GAME_KEYS } from '../utils/cbat/publicGames.js'
 
 // Resolved from this file rather than process.cwd() so the test does not depend
 // on where vitest was invoked from — and so it needs no Node globals, which the
@@ -126,19 +127,20 @@ describe('<SEO> rendered output', () => {
 // ── index.html (the no-JS fallback every crawler reads first) ─────────────
 describe('index.html', () => {
   const html = readText('index.html')
+  const doc = new DOMParser().parseFromString(html, 'text/html')
 
   it('has a self-referencing canonical', () => {
-    expect(html).toContain(`<link rel="canonical" href="${SITE_URL}/" />`)
+    expect(doc.querySelector('link[rel="canonical"]').getAttribute('href')).toBe(`${SITE_URL}/`)
   })
 
   it('leads its title with the CBAT keyword and stays within budget', () => {
-    const title = html.match(/<title>([^<]*)<\/title>/)[1]
+    const title = doc.querySelector('title').textContent
     expect(title.startsWith('CBAT')).toBe(true)
     expect(title.length).toBeLessThanOrEqual(MAX_TITLE)
   })
 
   it('has a description within the snippet limit', () => {
-    const desc = html.match(/<meta name="description" content="([^"]*)"/)[1]
+    const desc = doc.querySelector('meta[name="description"]').getAttribute('content')
     expect(desc.length).toBeGreaterThan(50)
     expect(desc.length).toBeLessThanOrEqual(MAX_DESCRIPTION)
   })
@@ -249,10 +251,11 @@ describe('sitemap.xml', () => {
     expect(paths.some(p => p.endsWith('.html'))).toBe(false)
   })
 
-  // Every /cbat/<game> route sits behind RequireAuth and redirects a logged-out
-  // crawler to /login. /cbat/report is the one public exception.
+  // Public games and the report are indexable; other game routes need sign-in.
   it('omits the auth-gated CBAT game routes', () => {
-    const gated = paths.filter(p => /^\/cbat\//.test(p) && p !== '/cbat/report')
+    const publicPaths = PUBLIC_CBAT_GAME_KEYS.map(key => `/cbat/${key}`)
+    for (const path of publicPaths) expect(paths).toContain(path)
+    const gated = paths.filter(p => /^\/cbat\//.test(p) && p !== '/cbat/report' && !publicPaths.includes(p))
     expect(gated).toEqual([])
   })
 })
