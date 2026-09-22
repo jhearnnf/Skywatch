@@ -26,7 +26,9 @@ const { LOUNGE_SLUG } = require('../seeds/seedCbatLounge');
 const { resolveMentions, MENTION_LIMIT } = require('../utils/chatMentions');
 const { selectGuideSlice } = require('../utils/cbatGuideRetrieval');
 const { overDailyBudget, noteBotSpend } = require('../utils/chatBotBudget');
-const { listTickets, unreadTicketReplies } = require('../utils/reportTickets');
+const { SUPPORT_LABEL, markRead, appendMessage } = require('../utils/chatWrite');
+const { openTicket, nameTicketFromFirstMessage, resolveTicket, reopenTicket } = require('../utils/supportTickets');
+const { describeReportEnvironment } = require('../utils/reportEnvironment');
 
 // One knowledge document for now. A second bot would key off its own slug.
 const BOT_KNOWLEDGE_SLUG = 'cbat-guide';
@@ -300,11 +302,6 @@ const DM_BLOCK_MESSAGE = {
   them: 'You cannot send messages to this agent.',
 };
 
-// Who a message is from, as far as other users are concerned. Support threads
-// collapse every admin to one "SkyWatch Support" identity; in channels and DMs
-// admins speak under their own display name like anyone else.
-const SUPPORT_LABEL = 'SkyWatch Support';
-
 // Read access.
 //   channel  — any logged-in user, unless archived (admins keep reading those)
 //   dm       — the two participants
@@ -376,10 +373,10 @@ function postRefusal(convo, user) {
       };
     }
   }
-  if (convo.type === 'support') {
-    if (convo.status === 'closed') return { status: 400, body: { message: 'This chat has been closed.' } };
-    return null; // bans and display names do not gate support
-  }
+  // Bans and display names do not gate support. Nor does a resolved ticket:
+  // replying to one reopens it (see the message route), which is the whole
+  // point of keeping it in the rail rather than telling people to start over.
+  if (convo.type === 'support') return null;
 
   if (isChatBanned(user)) {
     return {
@@ -404,81 +401,8 @@ function postRefusal(convo, user) {
   return null;
 }
 
-// Append a message, advancing the conversation's last-message fields and
-// marking it read for the sender (sending implies reading everything up to now).
-async function appendMessage({
-  conversation, senderUserId, senderRole, body, senderDisplayName = null, replyTo = null,
-  mentions = [],
-}) {
-  const message = await ChatMessage.create({
-    conversationId: conversation._id,
-    senderUserId,
-    senderRole,
-    body,
-    senderDisplayName,
-    ...(replyTo ? { replyTo } : {}),
-    ...(mentions.length ? { mentions } : {}),
-  });
-
-  const update = {
-    lastMessageAt:         message.createdAt,
-    lastMessageSenderRole: senderRole,
-  };
-  // Shared across the admin team — see the note on the field in the model.
-  if (senderRole === 'admin' && conversation.type === 'support') {
-    update.adminLastReadAt = message.createdAt;
-  }
-  await ChatConversation.findByIdAndUpdate(conversation._id, {
-    $set: update,
-    $inc: { messageCount: 1 },
-  });
-
-  if (senderUserId) await markRead(senderUserId, conversation._id, message.createdAt);
-
-  // Push to anyone holding a live stream on this conversation. Done here rather
-  // than at each call site so every writer — a user, the guide bot, the medal
-  // feed — pushes without having to remember to.
-  //
-  // The payload is the NON-ADMIN view, deliberately: a stream carries one
-  // rendering to every listener, so it must be the one that is safe for all of
-  // them. In practice that only matters in a support thread, where the admin
-  // who replied stays behind the shared support identity.
-  chatStream.publish(conversation._id, 'message', {
-    _id:               String(message._id),
-    conversationId:    String(conversation._id),
-    senderUserId:      senderUserId ? String(senderUserId) : null,
-    senderRole,
-    senderDisplayName: conversation.type === 'support' && senderRole === 'admin'
-      ? SUPPORT_LABEL
-      : senderDisplayName,
-    body,
-    createdAt:         message.createdAt,
-    mentions:          mentions.map(String),
-    // The reply snapshot rides along, or a reply arriving live would render
-    // without the quote it is answering until the next full refetch. Safe for
-    // every listener for the same reason the snapshot exists: it is a copy
-    // taken at send time, not a live read of the parent.
-    replyTo:           replyTo ? {
-      messageId:   String(replyTo.messageId),
-      displayName: replyTo.displayName ?? null,
-      excerpt:     replyTo.excerpt ?? null,
-    } : null,
-    // A brand new message has none, but the field has to exist: clients render
-    // reactions straight off the message and would otherwise special-case the
-    // streamed copy.
-    reactions:         [],
-  });
-
-  return message;
-}
-
-function markRead(userId, conversationId, at = new Date()) {
-  return ChatRead.findOneAndUpdate(
-    { userId, conversationId },
-    { $set: { lastReadAt: at } },
-    { upsert: true },
-  );
-}
+// appendMessage() and markRead() live in utils/chatWrite.js so the report
+// route and the admin Reports tab can write into a ticket too.
 
 // The unread rule, in one place.
 //
@@ -784,7 +708,7 @@ router.get('/overview', async (req, res) => {
     const convos = await visibleConversations(req.user);
     const ids    = convos.map(c => c._id);
     const reads = await readMap(req.user._id, ids);
-    const [personal, previews, dmUsers, guides, tickets] = await Promise.all([
+    const [personal, previews, dmUsers, guides] = await Promise.all([
       // Same helper the navbar count uses, so the rail explains the number
       // rather than merely agreeing with it.
       personalUnreadCounts(req.user, convos, reads),
@@ -807,10 +731,6 @@ router.get('/overview', async (req, res) => {
       ChatGuide.find(
         req.user.isAdmin ? { isHidden: false } : { isHidden: false, adminOnly: { $ne: true } },
       ).sort({ order: 1, title: 1 }).lean(),
-      // The viewer's own problem reports, with the team's replies. Listed here
-      // so a reply reaches them the same way a DM does, in the rail, rather
-      // than as a toast over whatever they were doing.
-      listTickets(req.user._id),
     ]);
 
     // Current names for whoever wrote each preview. The rail line is "Name:
@@ -921,9 +841,20 @@ router.get('/overview', async (req, res) => {
       // walking away; don't clutter the list with it.
       .filter(d => d.messageCount > 0);
 
-    const supportConvo = convos.find(c => c.type === 'support' && c.status === 'open')
-      ?? convos.find(c => c.type === 'support')
-      ?? null;
+    // Support tickets: the viewer's own threads with the team, one per
+    // problem. Listed while open, and once resolved until the closing line
+    // has been read — "we've fixed it" is the one reply nobody should miss —
+    // then they leave the rail. A blank one (opened, never typed into) is not
+    // a ticket yet and is left out like an empty DM.
+    const tickets = convos
+      .filter(c => c.type === 'support' && c.messageCount > 0)
+      .map(c => ({
+        ...decorate(c),
+        title:    c.title || 'Support ticket',
+        status:   c.status,
+        reportId: c.reportId ?? null,
+      }))
+      .filter(t => t.status === 'open' || t.unread);
 
     // Bots are admin-only for now, and a bot you have never messaged has no
     // conversation to list — so they are advertised separately from `dms`,
@@ -953,9 +884,6 @@ router.get('/overview', async (req, res) => {
     }
 
     res.json({ status: 'success', data: {
-      support: supportConvo
-        ? { ...decorate(supportConvo), title: SUPPORT_LABEL, status: supportConvo.status }
-        : null,
       guides: guides.map(g => ({
         _id:         g._id,
         title:       g.title,
@@ -968,7 +896,7 @@ router.get('/overview', async (req, res) => {
       })),
       channels,
       // Empty for almost everyone; the rail only shows the section when it is
-      // not. Open tickets, plus resolved ones with a reply still unread.
+      // not. Open tickets, plus resolved ones with the closing line unread.
       tickets,
       groups,
       // A bot DM is listed under `bots`, not here — it is a tool, not a person
@@ -1350,28 +1278,42 @@ router.post('/dm', async (req, res) => {
   }
 });
 
-// ── User: support chat (unchanged behaviour) ─────────────────────────────────
+// The report behind a ticket, as the admin thread header shows it: where it
+// was filed from, what the device was. Null for a thread with no report.
+async function reportContextFor(convo) {
+  if (!convo.reportId) return null;
+  const r = await ProblemReport.findById(convo.reportId)
+    .select('pageReported routeTrail clientPlatform clientVersion clientBuild environment solved intelligenceBrief time')
+    .lean();
+  if (!r) return null;
+  return {
+    _id:                r._id,
+    pageReported:       r.pageReported,
+    routeTrail:         r.routeTrail ?? [],
+    clientPlatform:     r.clientPlatform ?? null,
+    clientVersion:      r.clientVersion ?? null,
+    clientBuild:        r.clientBuild ?? null,
+    solved:             Boolean(r.solved),
+    time:               r.time,
+    environmentSummary: describeReportEnvironment(r.environment, { clientPlatform: r.clientPlatform }),
+  };
+}
 
-// POST /api/chat/conversations — start (or coalesce into) a help chat.
+// ── User: support tickets ────────────────────────────────────────────────────
+
+// POST /api/chat/conversations — open a support ticket ("Message the team").
+//
+// A new thread every time, not the user's one open thread: a person with two
+// problems has two tickets. The exception is a blank one — opening the
+// composer twice without typing lands on the same empty thread rather than
+// leaving a trail of them (see utils/supportTickets.js). An optional `body`
+// is the opening message, which also names the ticket.
 router.post('/conversations', async (req, res) => {
   try {
-    let convo = await ChatConversation.findOne({
-      type: 'support', userId: req.user._id, status: 'open',
-    });
-    if (!convo) {
-      try {
-        convo = await ChatConversation.create({
-          type: 'support', userId: req.user._id, startedByRole: 'user',
-        });
-      } catch (err) {
-        if (err && err.code === 11000) {
-          convo = await ChatConversation.findOne({ type: 'support', userId: req.user._id, status: 'open' });
-        } else {
-          throw err;
-        }
-      }
-    }
-    res.json({ status: 'success', data: { conversation: convo } });
+    const body = (req.body?.body ?? '').toString().trim();
+    if (body.length > 4000) return res.status(400).json({ message: 'Message too long (max 4000 chars)' });
+    const { conversation, created } = await openTicket({ user: req.user, body: body || null });
+    res.json({ status: 'success', data: { conversation, created } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1400,10 +1342,7 @@ router.get('/unread/me', async (req, res) => {
     const unread = convos.filter(c => isUnread(c, reads.get(String(c._id))));
     const hasAnyOpenChat = convos.some(c => c.type === 'support' && c.status === 'open');
     const personal = await personalUnreadCounts(req.user, convos, reads);
-    // A reply to your own problem report is as personal as a DM: it goes on
-    // the number, not the dot.
-    const ticketReplies = await unreadTicketReplies(req.user._id);
-    const personalUnread = [...personal.values()].reduce((a, b) => a + b, 0) + ticketReplies;
+    const personalUnread = [...personal.values()].reduce((a, b) => a + b, 0);
 
     // Opted out of the Community dot. Zeroed here rather than left to the
     // client so the badge cannot come back through any other caller, and so a
@@ -1412,9 +1351,8 @@ router.get('/unread/me', async (req, res) => {
 
     res.json({ status: 'success', data: {
       hasAnyOpenChat,
-      hasUnread:   !muted && (unread.length > 0 || ticketReplies > 0),
+      hasUnread:   !muted && unread.length > 0,
       totalUnread: muted ? 0 : unread.length,
-      ticketReplies: muted ? 0 : ticketReplies,
       // What the navbar puts a NUMBER on: messages aimed at this user. Channel
       // chatter is left to `hasUnread` and its quiet dot — see
       // personalUnreadCounts for why the two are separated.
@@ -1624,7 +1562,15 @@ router.get('/conversations/:id/messages', async (req, res) => {
         isArchived: convo.isArchived,
         postPolicy: convo.channel?.postPolicy ?? 'everyone',
         adminOnly:  (convo.channel?.postPolicy ?? 'everyone') !== 'everyone',
-        title:      convo.type === 'channel' ? channelTitle(convo) : (dmOther?.title ?? null),
+        title:      convo.type === 'channel' ? channelTitle(convo)
+          : convo.type === 'support' ? (convo.title ?? null)
+            : (dmOther?.title ?? null),
+        // Support only: the problem report the ticket was opened from, with
+        // its context described for the admin reading the thread. The owner
+        // gets only the id; the environment is theirs, but the admin card is
+        // where it is read.
+        ...(convo.type === 'support' ? { reportId: convo.reportId ?? null } : {}),
+        ...(convo.type === 'support' && req.user.isAdmin ? { report: await reportContextFor(convo) } : {}),
         // Cohort rooms only: the header says how many people share the date
         // and region, and the list opens with the welcome hint. Both absent
         // elsewhere so a public channel never shows a count of "everyone".
@@ -1680,6 +1626,18 @@ router.post('/conversations/:id/messages', async (req, res) => {
       ? (isOwner ? 'user' : 'admin')
       : (req.user.isAdmin ? 'admin' : 'user');
 
+    // A message on a resolved ticket reopens it. Someone replying to "fixed
+    // in the latest build" with "still broken for me" has reopened the
+    // problem whatever the status says, and the linked report's solved flag
+    // follows the thread.
+    if (convo.type === 'support' && convo.status === 'closed') {
+      await reopenTicket(convo, {
+        byRole: senderRole, byUserId: req.user._id,
+        body: senderRole === 'admin' ? 'SkyWatch Support reopened this ticket' : 'Reopened with a new message',
+      });
+      convo.status = 'open';
+    }
+
     // Reply target. Snapshotted at send time rather than joined on read, so the
     // quote survives the parent being deleted or scrolled out of the page.
     let replyTo = null;
@@ -1719,6 +1677,9 @@ router.post('/conversations/:id/messages', async (req, res) => {
       replyTo,
       mentions:          mentioned.map(u => u._id),
     });
+
+    // The first thing typed into a blank ticket names it.
+    if (senderRole === 'user') nameTicketFromFirstMessage(convo, body);
 
     // In a channel the bot speaks only when @mentioned — never on its own, and
     // never in a thread it was not addressed in. A bot that mentions itself
@@ -2713,45 +2674,14 @@ router.post('/conversations/:id/close', async (req, res) => {
       return res.json({ status: 'success', data: { conversation: convo } });
     }
 
-    const updated = await closeConversation(convo, {
-      byRole: 'user', byUserId: req.user._id, body: 'User closed this chat',
+    const updated = await resolveTicket(convo, {
+      byRole: 'user', byUserId: req.user._id, body: 'You marked this ticket resolved',
     });
     res.json({ status: 'success', data: { conversation: updated } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
-
-// Shared by the user and admin close routes. Snaps both sides' read markers to
-// the closing system message so neither is left with a dot pointing at a
-// surface they can no longer act on.
-async function closeConversation(convo, { byRole, byUserId, body }) {
-  const sysMsg = await ChatMessage.create({
-    conversationId: convo._id,
-    senderUserId:   byUserId,
-    senderRole:     'system',
-    body,
-  });
-  const updated = await ChatConversation.findByIdAndUpdate(
-    convo._id,
-    {
-      $set: {
-        status:                'closed',
-        closedAt:              sysMsg.createdAt,
-        closedBy:              byRole,
-        closedByUserId:        byUserId,
-        lastMessageAt:         sysMsg.createdAt,
-        lastMessageSenderRole: 'system',
-        adminLastReadAt:       sysMsg.createdAt,
-      },
-      $inc: { messageCount: 1 },
-    },
-    { returnDocument: 'after' },
-  );
-  if (convo.userId) await markRead(convo.userId, convo._id, sysMsg.createdAt);
-  if (byUserId)     await markRead(byUserId,     convo._id, sysMsg.createdAt);
-  return updated;
-}
 
 // ── Admin: support queue (unchanged behaviour) ───────────────────────────────
 
@@ -2819,7 +2749,9 @@ router.get('/admin/conversations', adminOnly, async (req, res) => {
 
     const enriched = await Promise.all(conversations.map(async c => ({
       ...c,
-      title: c.type === 'channel' ? channelTitle(c) : null,
+      // A support thread keeps its own title: it is a ticket, and one user
+      // can have several, so the console row has to say which.
+      title: c.type === 'channel' ? channelTitle(c) : (c.title ?? null),
       participantCount: type === 'group'
         ? await User.countDocuments({
           upcomingCbatDate: new Date(`${c.channel.cohortDate}T00:00:00.000Z`),
@@ -2861,7 +2793,9 @@ router.get('/admin/users/:userId/conversations', adminOnly, async (req, res) => 
 
     const enriched = conversations.map(c => ({
       ...c,
-      title: c.type === 'channel' ? channelTitle(c) : null,
+      // A support thread keeps its own title: it is a ticket, and one user
+      // can have several, so the console row has to say which.
+      title: c.type === 'channel' ? channelTitle(c) : (c.title ?? null),
       hasAdminUnread:
         c.type === 'support' &&
         c.lastMessageSenderRole === 'user' &&
@@ -3063,28 +2997,19 @@ router.post('/admin/conversations', adminOnly, async (req, res) => {
     const { userId } = req.body || {};
     if (!isValidId(userId)) return res.status(400).json({ message: 'Invalid user id' });
 
-    const target = await User.findById(userId).select('_id');
+    const target = await User.findById(userId).select('_id displayName');
     if (!target) return res.status(404).json({ message: 'User not found' });
 
-    let convo = await ChatConversation.findOne({ type: 'support', userId, status: 'open' });
-    let created = false;
-    if (!convo) {
-      try {
-        convo = await ChatConversation.create({ type: 'support', userId, startedByRole: 'admin' });
-        created = true;
-        await AdminAction.create({
-          userId:       req.user._id,
-          actionType:   'chat_start',
-          reason:       'Admin started a help chat with the user',
-          targetUserId: userId,
-        });
-      } catch (err) {
-        if (err && err.code === 11000) {
-          convo = await ChatConversation.findOne({ type: 'support', userId, status: 'open' });
-        } else {
-          throw err;
-        }
-      }
+    // A new ticket, unless the user already has a blank one waiting — the
+    // same rule the user's own "Message the team" follows.
+    const { conversation: convo, created } = await openTicket({ user: target, startedByRole: 'admin' });
+    if (created) {
+      await AdminAction.create({
+        userId:       req.user._id,
+        actionType:   'chat_start',
+        reason:       'Admin started a help chat with the user',
+        targetUserId: userId,
+      });
     }
 
     res.json({ status: 'success', data: { conversation: convo, created } });
@@ -3107,8 +3032,8 @@ router.post('/admin/conversations/:id/close', adminOnly, async (req, res) => {
       return res.json({ status: 'success', data: { conversation: convo } });
     }
 
-    const updated = await closeConversation(convo, {
-      byRole: 'admin', byUserId: req.user._id, body: 'Admin closed this chat',
+    const updated = await resolveTicket(convo, {
+      byRole: 'admin', byUserId: req.user._id, body: 'SkyWatch Support marked this ticket resolved',
     });
 
     await AdminAction.create({
@@ -3135,29 +3060,9 @@ router.post('/admin/conversations/:id/reopen', adminOnly, async (req, res) => {
       return res.json({ status: 'success', data: { conversation: convo } });
     }
 
-    const sysMsg = await ChatMessage.create({
-      conversationId: convo._id,
-      senderUserId:   req.user._id,
-      senderRole:     'system',
-      body:           'Admin reopened this chat',
+    const updated = await reopenTicket(convo, {
+      byRole: 'admin', byUserId: req.user._id, body: 'SkyWatch Support reopened this ticket',
     });
-    const updated = await ChatConversation.findByIdAndUpdate(
-      convo._id,
-      {
-        $set: {
-          status:                'open',
-          closedAt:              null,
-          closedBy:              null,
-          closedByUserId:        null,
-          lastMessageAt:         sysMsg.createdAt,
-          lastMessageSenderRole: 'system',
-          adminLastReadAt:       sysMsg.createdAt,
-        },
-        $inc: { messageCount: 1 },
-      },
-      { returnDocument: 'after' },
-    );
-    await markRead(req.user._id, convo._id, sysMsg.createdAt);
 
     await AdminAction.create({
       userId:       req.user._id,

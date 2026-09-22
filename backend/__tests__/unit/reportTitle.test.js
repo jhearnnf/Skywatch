@@ -12,10 +12,12 @@ jest.mock('../../utils/openRouter', () => ({
   callOpenRouter: jest.fn(),
 }));
 jest.mock('../../models/ProblemReport', () => ({ updateOne: jest.fn().mockResolvedValue({}) }));
+jest.mock('../../models/ChatConversation', () => ({ updateOne: jest.fn().mockResolvedValue({}) }));
 
 const { callOpenRouter } = require('../../utils/openRouter');
 const ProblemReport = require('../../models/ProblemReport');
-const { generateReportTitle, scheduleReportTitle, cleanTitle, _flushPendingTitles } = require('../../utils/reportTitle');
+const ChatConversation = require('../../models/ChatConversation');
+const { generateReportTitle, scheduleReportTitle, scheduleTicketTitle, cleanTitle, excerptTitle, _flushPendingTitles } = require('../../utils/reportTitle');
 
 const answer = (text) => callOpenRouter.mockResolvedValue({ choices: [{ message: { content: text } }] });
 
@@ -23,6 +25,7 @@ beforeEach(() => {
   process.env.OPENROUTER_KEY = 'test-key';
   callOpenRouter.mockReset();
   ProblemReport.updateOne.mockClear();
+  ChatConversation.updateOne.mockClear();
   jest.spyOn(console, 'error').mockImplementation(() => {});
 });
 afterEach(() => { jest.restoreAllMocks(); });
@@ -38,7 +41,7 @@ describe('generateReportTitle', () => {
     const { body, feature } = callOpenRouter.mock.calls[0][0];
     expect(feature).toBe('report-title');
     expect(body.model).toBe('anthropic/claude-haiku-4-5');
-    expect(body.messages[1].content).toMatch(/Filed from: CBAT · Instruments/);
+    expect(body.messages[1].content).toMatch(/Sent from: CBAT · Instruments/);
     expect(body.messages[1].content).toMatch(/needles are either completely off/);
   });
 
@@ -66,12 +69,40 @@ describe('generateReportTitle', () => {
   });
 });
 
-describe('scheduleReportTitle', () => {
-  it('stores the title on the report once it lands', async () => {
+describe('excerptTitle', () => {
+  it('is the opening of the message, cut to fit, until the real title lands', () => {
+    expect(excerptTitle('  Can I   change my\nagent number? ')).toBe('Can I change my agent number?');
+    const t = excerptTitle('x'.repeat(200));
+    expect(t.length).toBeLessThanOrEqual(80);
+    expect(t.endsWith('…')).toBe(true);
+  });
+});
+
+describe('scheduleTicketTitle', () => {
+  it('stores the title on the thread and on the report it came from', async () => {
     answer('Test report');
-    scheduleReportTitle({ _id: 'r1', description: 'test problem bro just seeing how it work.', pageReported: 'unknown' });
+    scheduleTicketTitle({ conversationId: 'c1', reportId: 'r1', description: 'test problem bro just seeing how it work.', pageReported: 'unknown' });
+    await _flushPendingTitles();
+    expect(ChatConversation.updateOne).toHaveBeenCalledWith({ _id: 'c1' }, { $set: { title: 'Test report' } });
+    expect(ProblemReport.updateOne).toHaveBeenCalledWith({ _id: 'r1' }, { $set: { title: 'Test report' } });
+  });
+
+  it('titles a thread with no report on its own', async () => {
+    answer('Agent number change request');
+    scheduleTicketTitle({ conversationId: 'c1', description: 'Can I change my agent number?' });
+    await _flushPendingTitles();
+    expect(ChatConversation.updateOne).toHaveBeenCalledWith({ _id: 'c1' }, { $set: { title: 'Agent number change request' } });
+    expect(ProblemReport.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe('scheduleReportTitle', () => {
+  it('stores the title on the report and its thread once it lands', async () => {
+    answer('Test report');
+    scheduleReportTitle({ _id: 'r1', conversationId: 'c1', description: 'test problem bro just seeing how it work.', pageReported: 'unknown' });
     await _flushPendingTitles();
     expect(ProblemReport.updateOne).toHaveBeenCalledWith({ _id: 'r1' }, { $set: { title: 'Test report' } });
+    expect(ChatConversation.updateOne).toHaveBeenCalledWith({ _id: 'c1' }, { $set: { title: 'Test report' } });
   });
 
   it('writes nothing when there is no title to write', async () => {

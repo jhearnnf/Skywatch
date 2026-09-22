@@ -95,7 +95,7 @@ describe('ReportProblem — briefId prefill', () => {
     fireEvent.change(screen.getByPlaceholderText(/what happened/i), {
       target: { value: 'Section 2 has a typo' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /submit report/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open ticket|submit report/i }))
 
     await waitFor(() => {
       const postCall = apiFetchMock.mock.calls.find(([url]) => url.includes('/api/users/report-problem'))
@@ -119,7 +119,7 @@ describe('ReportProblem — briefId prefill', () => {
     fireEvent.change(screen.getByPlaceholderText(/what happened/i), {
       target: { value: 'A general bug somewhere' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /submit report/i }))
+    fireEvent.click(screen.getByRole('button', { name: /open ticket|submit report/i }))
 
     await waitFor(() => {
       const postCall = apiFetchMock.mock.calls.find(([url]) => url.includes('/api/users/report-problem'))

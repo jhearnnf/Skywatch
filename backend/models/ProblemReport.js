@@ -95,10 +95,12 @@ const problemReportSchema = new mongoose.Schema({
   // already in the queue. Absent on reports filed before this was captured.
   environment: { type: reportEnvironmentSchema, default: undefined },
 
-  // When the reporter last opened this report in the Community rail. A
-  // user-visible update newer than this is an unread reply; see
-  // utils/reportTickets.js. Null until they first look.
-  userSeenAt: { type: Date, default: null },
+  // The support thread this report opened (utils/supportTickets.js). The
+  // conversation is where the reporter and the team talk; this document keeps
+  // the context that came with the report. `solved` here mirrors the thread's
+  // open/closed status and the two are always moved together. Null only on a
+  // reported chat message, which is a moderation record and not a ticket.
+  conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', default: null },
 });
 
 problemReportSchema.index({ solved: 1, time: -1 });

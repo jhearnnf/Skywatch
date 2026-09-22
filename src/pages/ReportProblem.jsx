@@ -9,28 +9,25 @@ import { getRouteTrail } from '../utils/routeTrail'
 import { getClientInfo, peekClientInfo } from '../utils/appVersion'
 import { collectReportEnvironment } from '../utils/reportEnvironment'
 
+// ── What this page is ────────────────────────────────────────────────────────
+// One form: describe the problem, and it opens a support ticket — a thread in
+// Community where the team replies and you can answer. There used to be two
+// cards here, "start a chat" or "send a written report", which were two doors
+// into the same room; a report IS a ticket now, so the form is the one door.
+// The form still earns its place over the chat composer because it captures
+// what a chat cannot: the page you were on and what your device is.
+//
+// In slim mode (the native app, or the site with slim switched on) Community
+// is not reachable, so the ticket cannot be opened on screen; the form still
+// files it and the team replies by email.
+//
 // ── Fitting the phone viewport ───────────────────────────────────────────────
 // This page is reached from a link in the last row of the CBAT grid, which is
 // itself tuned to fit one screen — so arriving at a form that scrolls undoes
-// the point of it. Laid out as measured, the desktop page is about 760px of
-// content against roughly 370px of usable height on a small handset, so it does
-// not tighten into place; it needs a different shape at phone width.
-//
-// The shape is: everything except the textarea is fixed height, the page is
+// the point of it. Everything except the textarea is fixed height, the page is
 // pinned to the viewport, and the textarea takes whatever is left. That fits by
-// construction on any screen instead of by a set of numbers that happen to add
-// up on the one phone it was checked against, and it means a big phone gets a
-// bigger box to type in rather than a screenful of dead space under the form.
-//
-// What phone width drops, and why each is safe to drop:
-//   - the step numbers 1 and 2, which contradict the "or" between the cards
-//   - both cards' explanatory blurbs, replaced by one short line on the chat
-//     card; the written report's is carried by its own field label and the
-//     textarea's placeholder
-//   - the closing "reviewed by the SkyWatch team" note, which repeats the
-//     card's own promise
-// Nothing that is an option, a control or a piece of state goes away: both ways
-// to reach us are still cards, still equally weighted, still both one tap.
+// construction on any screen, and a big phone gets a bigger box to type in
+// rather than a screenful of dead space under the form.
 //
 // The floor is the escape hatch. Under about 23rem of usable height the textarea
 // would be squeezed past usefulness to keep the rest whole, so the page stops
@@ -69,31 +66,12 @@ export default function ReportProblem() {
   const [error,       setError]       = useState('')
   const [busy,        setBusy]        = useState(false)
   const [brief,       setBrief]       = useState(null)
-  const [chatBusy,    setChatBusy]    = useState(false)
 
   // Native reads its version over the Capacitor bridge, so it is asked for on
   // mount and read synchronously at submit time — the same order useHeartbeat
   // uses. Submitting must never wait on the bridge: a report that arrives
   // without a version is worth far more than one that hangs behind it.
   useEffect(() => { getClientInfo() }, [])
-
-  const startChat = async () => {
-    if (!user || chatBusy) return
-    setChatBusy(true)
-    try {
-      const res = await apiFetch(`${API}/api/chat/conversations`, {
-        method: 'POST', credentials: 'include',
-      })
-      if (!res.ok) throw new Error()
-      // Straight into the thread that was just opened, rather than the chat
-      // list — the user asked for help, not for a directory.
-      const d = await res.json().catch(() => null)
-      const id = d?.data?.conversation?._id
-      navigate(id ? `/chat/${id}` : '/chat')
-    } catch {
-      setChatBusy(false)
-    }
-  }
 
   useEffect(() => {
     if (!briefId) { setBrief(null); return }
@@ -156,6 +134,11 @@ export default function ReportProblem() {
         }),
       })
       if (!res.ok) throw new Error()
+      // Straight into the ticket, where the reply will land. Slim mode has no
+      // Community to land in, so it gets the confirmation instead.
+      const d = await res.json().catch(() => null)
+      const conversationId = d?.data?.conversationId
+      if (!slim && conversationId) { navigate(`/chat/${conversationId}`, { replace: true }); return }
       setSubmitted(true)
     } catch {
       setError('Failed to submit. Please try again.')
@@ -193,7 +176,7 @@ export default function ReportProblem() {
           ✅
         </motion.div>
         <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Report submitted</h1>
-        <p className="text-slate-500 mb-6">Thank you — our team will review your report shortly.</p>
+        <p className="text-slate-500 mb-6">Thank you. The SkyWatch team will look into it and reply by email.</p>
         <button
           onClick={() => navigate(-1)}
           className="px-6 py-2.5 border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-50 transition-colors text-sm"
@@ -215,52 +198,25 @@ export default function ReportProblem() {
         <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900">Report a Problem</h1>
         <p className="text-[11px] sm:text-sm text-slate-500 mt-0.5 sm:mt-1">
           {slim
-            ? 'Describe what went wrong and we\'ll look into it.'
-            : 'Chat live with the team, or send a written report.'}
+            ? 'Describe what went wrong and the team will reply by email.'
+            : 'Describe what went wrong. It opens a support ticket where the team will reply.'}
         </p>
       </div>
-
-      {/* Live-chat option — hidden in slim (native) mode, where /chat is not
-          reachable. Only the one-way written report is offered there. */}
-      {!slim && (<>
-        <div className="shrink-0 bg-surface rounded-2xl border border-slate-200 p-3 sm:p-5 card-shadow">
-          <div className="flex items-center gap-2.5 mb-1.5 sm:mb-2">
-            <span className="hidden sm:flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">1</span>
-            <p className="text-[11px] sm:text-xs font-bold text-slate-600 uppercase tracking-wider">Talk to a real person</p>
-          </div>
-          {/* One line on a phone, the full pitch from `sm` up. Both say the same
-              thing; the short one drops the framing, not the promise. */}
-          <p className="sm:hidden text-[10px] leading-[1.3] text-slate-500 mb-2">Fast reply, usually within a few hours.</p>
-          <p className="hidden sm:block text-sm text-slate-500 mb-3">Best for back-and-forth. Get a fast reply from the SkyWatch team — usually within a few hours.</p>
-          <button
-            type="button"
-            onClick={startChat}
-            disabled={chatBusy}
-            className="w-full py-2 sm:py-3 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold rounded-xl sm:rounded-2xl text-xs sm:text-sm transition-colors"
-          >
-            {chatBusy ? 'Opening…' : 'Start a chat'}
-          </button>
-        </div>
-
-        {/* Either/or divider — these two cards are alternatives, not steps */}
-        <div className="shrink-0 flex items-center gap-3 my-2 sm:my-4">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">or</span>
-          <div className="flex-1 h-px bg-slate-200" />
-        </div>
-      </>)}
 
       {/* The card that stretches. On a phone every box above is fixed height, so
           this one takes the remainder and passes it down the chain to the
           textarea — which is why each level below carries flex-1 and min-h-0. */}
       <div className="max-sm:flex-1 max-sm:min-h-0 max-sm:flex max-sm:flex-col bg-surface rounded-2xl border border-slate-200 p-3 sm:p-5 card-shadow">
         <div className="shrink-0 flex items-center gap-2.5 mb-1.5 sm:mb-2">
-          {!slim && <span className="hidden sm:flex items-center justify-center w-6 h-6 rounded-full bg-brand-600 text-white text-xs font-extrabold shrink-0">2</span>}
-          <p className="text-[11px] sm:text-xs font-bold text-slate-600 uppercase tracking-wider">Send a written report</p>
+          <p className="text-[11px] sm:text-xs font-bold text-slate-600 uppercase tracking-wider">New support ticket</p>
         </div>
         {/* Phone drops this: the field label below says "Describe the problem"
             and the placeholder asks what happened, so the line is a third telling. */}
-        <p className="hidden sm:block text-sm text-slate-500 mb-4">No reply needed — describe what went wrong and we'll look into it.</p>
+        <p className="hidden sm:block text-sm text-slate-500 mb-4">
+          {slim
+            ? 'Describe what went wrong and the team will look into it.'
+            : 'Your report opens as a private thread with the SkyWatch team. You can add to it or reply there.'}
+        </p>
         <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 sm:gap-4 max-sm:flex-1 max-sm:min-h-0">
           {briefId && (
             <div className="shrink-0 flex items-start justify-between gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200">
@@ -306,7 +262,7 @@ export default function ReportProblem() {
             disabled={busy || !description.trim()}
             className="shrink-0 w-full py-2.5 sm:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold rounded-xl sm:rounded-2xl text-xs sm:text-sm transition-colors"
           >
-            {busy ? 'Submitting…' : 'Submit Report'}
+            {busy ? 'Submitting…' : (slim ? 'Submit Report' : 'Open ticket')}
           </button>
         </form>
       </div>
@@ -314,7 +270,7 @@ export default function ReportProblem() {
       {/* The card above already promises the report is looked into, so on a
           phone this is a third restatement costing two lines of typing room. */}
       <p className="hidden sm:block text-xs text-slate-400 text-center mt-4">
-        Reports are reviewed by the SkyWatch team. We aim to respond within 48 hours.
+        Tickets are reviewed by the SkyWatch team. We aim to reply within 48 hours.
       </p>
     </div>
   )

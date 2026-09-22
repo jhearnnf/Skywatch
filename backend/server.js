@@ -55,6 +55,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // The room behind the mini chat on the CBAT hub. Runs once ever.
     await require('./seeds/seedCbatLounge')();
     await require('./migrations/backfillCbatCohorts')();
+    // Every problem report is a support ticket: give the ones filed before
+    // that a thread, and drop the one-open-thread-per-user index. Idempotent.
+    await require('./migrations/supportTickets')();
     // Add the clientResultId path/index to CBAT result schemas so offline score
     // submissions can be deduplicated on flush retries.
     require('./utils/cbatResult').ensureCbatResultPaths();

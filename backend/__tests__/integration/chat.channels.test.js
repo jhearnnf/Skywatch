@@ -325,8 +325,10 @@ describe('a sender who changes their display name', () => {
     await post(id, cu, 'help please');
     await post(id, authCookie(admin._id), 'on it');
 
+    // Support threads are listed as tickets now, one per problem.
     const overview = await request(app).get('/api/chat/overview').set('Cookie', cu);
-    expect(overview.body.data.support.preview.senderDisplayName).toBe('SkyWatch Support');
+    const [ticket] = overview.body.data.tickets;
+    expect(ticket.preview.senderDisplayName).toBe('SkyWatch Support');
   });
 });
 

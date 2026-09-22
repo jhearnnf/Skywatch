@@ -271,8 +271,16 @@ export default function AdminChatView() {
     if (c.type === 'dm') {
       return (c.participantIds ?? []).map(p => agentLabel(p)).join(' ↔ ') || 'Direct message'
     }
-    return c.userId?.email || c.userId?.displayName || c.userId?.agentNumber || 'Unknown user'
+    // A support thread is a ticket, and one person can have several: the row
+    // has to say WHICH, so it leads with the ticket's title. The owner is on
+    // the line below, where a channel's description would be.
+    return c.title || c.userId?.email || c.userId?.displayName || c.userId?.agentNumber || 'Support ticket';
   }
+
+  // Who a support ticket belongs to, for the line under its title.
+  const rowOwner = (c) => (c.type === 'support' && c.title
+    ? (c.userId?.email || c.userId?.displayName || (c.userId?.agentNumber ? `Agent ${c.userId.agentNumber}` : null))
+    : null)
 
   // The other party in a DM, or the owner of a support thread — whoever a ban
   // would apply to. Channels have no single subject, so no ban button there.
@@ -357,8 +365,9 @@ export default function AdminChatView() {
                 {c.hasAdminUnread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
               </div>
               <p className="text-[10px] text-slate-400 mt-0.5">
+                {rowOwner(c) ? `${rowOwner(c)} · ` : ''}
                 {typeFilter === 'group' ? `${c.participantCount ?? 0} participant${c.participantCount === 1 ? '' : 's'} · ` : ''}
-                {c.type === 'support' && c.status === 'closed' ? 'Closed · ' : ''}
+                {c.type === 'support' && c.status === 'closed' ? 'Resolved · ' : ''}
                 {c.isArchived ? 'Archived · ' : ''}
                 {/* An empty thread still carries a `lastMessageAt` — the model
                     defaults it to the moment of creation — so without this the

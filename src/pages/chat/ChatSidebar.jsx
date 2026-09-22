@@ -213,11 +213,7 @@ function useWaitingDms(dms, activeId) {
 // Purely presentational — ChatShell owns the data and the polling, so the rail
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
-  support, guides = [], channels = [], tickets = [], groups = [], dms = [], bots = [], viewer, activeId, isAdmin,
-  // The problem report open in the pane, if any. Tickets are not conversations
-  // and never share an id with one, but keeping the two params apart means a
-  // ticket row can never light up because a channel happens to be open.
-  activeTicketId = null,
+  guides = [], channels = [], tickets = [], groups = [], dms = [], bots = [], viewer, activeId, isAdmin,
   loading = false, onStartSupport, onOpenBot, onOpenDm, supportQueueUnread = 0,
   onOpenGroupSetup,
   // Admin-only presence. Empty for everyone else — ChatShell does not even fetch
@@ -284,54 +280,19 @@ export default function ChatSidebar({
             rule is something you come back to. */}
         <div className="p-2 pt-2.5 space-y-1.5 bg-slate-100/40">
           <SectionLabel className="px-1 pb-0.5">Get help</SectionLabel>
-          {support ? (
-            <ResourceCard
-              as={Link}
-              tone="brand"
-              to={`/chat/${support._id}`}
-              aria-current={String(activeId) === String(support._id) ? 'page' : undefined}
-              active={String(activeId) === String(support._id)}
-            >
-              <CardIcon>🎧</CardIcon>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className={`text-sm truncate ${support.unread ? 'font-extrabold text-slate-900' : 'font-bold text-slate-800'}`}>
-                    {SUPPORT_LABEL}
-                  </p>
-                  {support.personalUnread > 0
-                    ? <CountBadge count={support.personalUnread} label={badgeLabel(support.personalUnread)} />
-                    : support.unread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
-                  <span className="ml-auto text-[10px] text-slate-400 shrink-0">
-                    {formatRelative(support.lastMessageAt)}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                  {support.status === 'closed' ? 'Closed' : 'Usually replies within a few hours'}
-                </p>
-                {support.preview && (
-                  <p className="text-xs text-slate-500 truncate mt-0.5">
-                    {support.preview.senderDisplayName ? `${support.preview.senderDisplayName}: ` : ''}
-                    {support.preview.body}
-                  </p>
-                )}
-              </div>
-            </ResourceCard>
-          ) : loading ? (
-            // Offering "start a chat" before the rail has loaded would invite
-            // someone with an open support thread to start a second one.
-            <p className="text-[11px] text-slate-400 px-1 pb-1">Loading…</p>
-          ) : (
-            <ResourceCard as="button" type="button" tone="brand" onClick={onStartSupport}>
-              <CardIcon>🎧</CardIcon>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-slate-800 truncate">{SUPPORT_LABEL}</p>
-                <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                  A private thread with the SkyWatch team
-                </p>
-              </div>
-              <CardAction>Message</CardAction>
-            </ResourceCard>
-          )}
+          {/* Opens a new support ticket: a private thread with the team. Your
+              tickets themselves are listed further down, one per problem, so
+              this card is only ever the way to start another. */}
+          <ResourceCard as="button" type="button" tone="brand" onClick={onStartSupport} data-testid="new-ticket">
+            <CardIcon>🎧</CardIcon>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-800 truncate">{SUPPORT_LABEL}</p>
+              <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                Report a problem or ask the team. Usually replies within a few hours.
+              </p>
+            </div>
+            <CardAction>Message</CardAction>
+          </ResourceCard>
 
           {/* Nothing to show when the team has not added any — an empty section
               with a "coming soon" line would be noise above every channel. */}
@@ -379,26 +340,26 @@ export default function ChatSidebar({
           />
         ))}
 
-        {/* Your own problem reports, with the team's replies under them. Only
-            here while there is one to follow: open, or resolved with a reply
-            still unread. Everyone else never sees the heading. This replaced
-            the toast that used to pop the reply up over whatever page you
-            were on — including, once, a test in progress. */}
+        {/* Your tickets: every thread you have with the team, one per problem
+            or question, whether it began as a problem report or a message.
+            Only here while there is one to follow — open, or resolved with
+            the closing line still unread — so most people never see the
+            heading. A ticket is an ordinary conversation: open it and reply. */}
         {tickets.length > 0 && (
           <section aria-label="Support tickets">
             <SectionLabel>Support tickets</SectionLabel>
             {tickets.map(t => (
               <Row
                 key={t._id}
-                to={`/chat/ticket/${t._id}`}
-                icon={t.solved ? '✅' : '🛠️'}
+                to={`/chat/${t._id}`}
+                icon={t.status === 'closed' ? '✅' : '🎧'}
                 title={t.title}
-                subtitle={`${t.solved ? 'Resolved' : 'Open'} · ${t.pageReported}`}
-                preview={t.preview ? { senderDisplayName: SUPPORT_LABEL, body: t.preview.body } : null}
+                subtitle={t.status === 'closed' ? 'Resolved' : 'Open · SkyWatch Support'}
+                preview={t.preview}
                 unread={t.unread}
-                personalUnread={t.unreadCount}
-                timestamp={t.lastActivityAt}
-                active={String(activeTicketId) === String(t._id)}
+                personalUnread={t.personalUnread}
+                timestamp={t.lastMessageAt}
+                active={String(activeId) === String(t._id)}
               />
             ))}
           </section>

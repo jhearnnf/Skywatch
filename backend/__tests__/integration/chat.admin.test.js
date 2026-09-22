@@ -246,7 +246,7 @@ describe('POST /api/chat/admin/conversations', () => {
 // ── admin close + reopen ─────────────────────────────────────────────────────
 
 describe('POST /api/chat/admin/conversations/:id/close + reopen', () => {
-  it('close flips status, inserts system message, snaps both read timestamps, logs AdminAction', async () => {
+  it('close flips status, inserts system message, reads it for the admin but not the user, logs AdminAction', async () => {
     const u = await createUser();
     const admin = await createUser({ isAdmin: true });
     const cu = authCookie(u._id);
@@ -261,13 +261,14 @@ describe('POST /api/chat/admin/conversations/:id/close + reopen', () => {
     expect(res.body.data.conversation.status).toBe('closed');
     expect(res.body.data.conversation.closedBy).toBe('admin');
 
-    const sys = await ChatMessage.findOne({ conversationId: id, senderRole: 'system', body: 'Admin closed this chat' });
+    const sys = await ChatMessage.findOne({ conversationId: id, senderRole: 'system', body: 'SkyWatch Support marked this ticket resolved' });
     expect(sys).toBeTruthy();
 
-    // Both read timestamps snapped → no stale dot on either side
+    // The admin's own action is read for them. The user still has the
+    // resolution to see: a resolved ticket stays in their rail until they do.
     const userUnread  = await request(app).get('/api/chat/unread/me').set('Cookie', cu);
     const adminUnread = await request(app).get('/api/chat/unread/admin').set('Cookie', ca);
-    expect(userUnread.body.data.hasUnread).toBe(false);
+    expect(userUnread.body.data.hasUnread).toBe(true);
     expect(adminUnread.body.data.hasUnread).toBe(false);
 
     expect(await AdminAction.countDocuments({ actionType: 'chat_close' })).toBe(1);

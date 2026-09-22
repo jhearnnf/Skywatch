@@ -39,13 +39,32 @@ describe('POST /api/chat/conversations', () => {
     expect(res.body.data.conversation.userId).toBe(u._id.toString());
   });
 
-  it('coalesces — calling twice returns the same open conversation', async () => {
+  // Opening the composer twice without typing lands on the same blank
+  // ticket; a ticket with a message in it is a real one, and the next open
+  // starts another.
+  it('coalesces a blank ticket, and only a blank one', async () => {
     const u = await createUser();
     const c = authCookie(u._id);
     const a = await request(app).post('/api/chat/conversations').set('Cookie', c);
     const b = await request(app).post('/api/chat/conversations').set('Cookie', c);
     expect(a.body.data.conversation._id).toBe(b.body.data.conversation._id);
     expect(await ChatConversation.countDocuments({ userId: u._id })).toBe(1);
+
+    await request(app).post(`/api/chat/conversations/${a.body.data.conversation._id}/messages`)
+      .set('Cookie', c).send({ body: 'first problem' });
+    const d = await request(app).post('/api/chat/conversations').set('Cookie', c);
+    expect(d.body.data.conversation._id).not.toBe(a.body.data.conversation._id);
+    expect(await ChatConversation.countDocuments({ userId: u._id })).toBe(2);
+  });
+
+  it('opens the ticket with the message that names it', async () => {
+    const u = await createUser();
+    const res = await request(app).post('/api/chat/conversations').set('Cookie', authCookie(u._id))
+      .send({ body: 'Can I change my agent number?' });
+    expect(res.status).toBe(200);
+    const convo = await ChatConversation.findById(res.body.data.conversation._id);
+    expect(convo.title).toBe('Can I change my agent number?');
+    expect(convo.messageCount).toBe(1);
   });
 
   it('rejects guests with 401', async () => {
@@ -197,7 +216,9 @@ describe('messages thread', () => {
     expect(big.status).toBe(400);
   });
 
-  it('blocks sending to a closed conversation with 400', async () => {
+  // A ticket is never a dead end: "still broken for me" on a resolved one
+  // reopens it rather than sending the person off to start a new thread.
+  it('reopens a resolved ticket when a message is sent to it', async () => {
     const u = await createUser();
     const c = authCookie(u._id);
     const start = await request(app).post('/api/chat/conversations').set('Cookie', c);
@@ -206,7 +227,10 @@ describe('messages thread', () => {
     await request(app).post(`/api/chat/conversations/${id}/close`).set('Cookie', c);
 
     const res = await request(app).post(`/api/chat/conversations/${id}/messages`).set('Cookie', c).send({ body: 'still here' });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    expect((await ChatConversation.findById(id)).status).toBe('open');
+    const sys = await ChatMessage.find({ conversationId: id, senderRole: 'system' }).sort({ createdAt: 1 }).lean();
+    expect(sys.map(m => m.body)).toEqual(['You marked this ticket resolved', 'Reopened with a new message']);
   });
 });
 
@@ -226,7 +250,7 @@ describe('POST /api/chat/conversations/:id/close (user)', () => {
 
     const sys = await ChatMessage.findOne({ conversationId: id, senderRole: 'system' });
     expect(sys).toBeTruthy();
-    expect(sys.body).toBe('User closed this chat');
+    expect(sys.body).toBe('You marked this ticket resolved');
   });
 
   it('forbids a different user from closing', async () => {

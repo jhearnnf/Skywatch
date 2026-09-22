@@ -15,7 +15,6 @@ const IntelligenceBrief = require('../models/IntelligenceBrief');
 const Media = require('../models/Media');
 const ProblemReport = require('../models/ProblemReport');
 const SystemLog = require('../models/SystemLog');
-const UserNotification = require('../models/UserNotification');
 const AppSettings = require('../models/AppSettings');
 const Level = require('../models/Level');
 const Rank = require('../models/Rank');
@@ -33,7 +32,7 @@ const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../ut
 const { deleteUserAndData } = require('../services/deleteUserData');
 const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
 const { sanitiseReportEnvironment } = require('../utils/reportEnvironment');
-const { scheduleReportTitle } = require('../utils/reportTitle');
+const { openTicket } = require('../utils/supportTickets');
 const { sanitiseGeoInfo, resolveCountry } = require('../constants/geo');
 const { latestNativeReleases } = require('../utils/latestNativeReleases');
 const AppOpen = require('../models/AppOpen');
@@ -763,9 +762,11 @@ router.post('/report-problem', protect, async (req, res) => {
       ...(env ? { environment: env } : {}),
     });
 
-    // A one-line title, written after the response goes out so the reporter
-    // never waits on it. See utils/reportTitle.js.
-    scheduleReportTitle(report);
+    // The report opens a support ticket: a thread with the report as its
+    // first message, where the team replies and the reporter can answer. The
+    // title job runs off the back of it. See utils/supportTickets.js.
+    const { conversation } = await openTicket({ user: req.user, body: description, report });
+    report.conversationId = conversation._id;
 
     // Auto-raise the editor flag so admins see the issue in the briefs list.
     if (intelligenceBrief) {
@@ -775,7 +776,7 @@ router.post('/report-problem', protect, async (req, res) => {
       );
     }
 
-    res.status(201).json({ status: 'success', data: { report } });
+    res.status(201).json({ status: 'success', data: { report, conversationId: conversation._id } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -798,55 +799,6 @@ router.get('/me/wta-spawn', protect, async (req, res) => {
     const threshold  = user.whereAircraftSpawnThreshold     ?? 3;
     const prereqsMet = basesRead >= 2 && aircraftsRead >= 2;
     res.json({ status: 'success', data: { readsSince, threshold, remaining: Math.max(0, threshold - readsSince), prereqsMet, basesRead, aircraftsRead } });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// GET /api/users/me/notifications — unread in-app notifications for the current user
-router.get('/me/notifications', protect, async (req, res) => {
-  try {
-    const notifications = await UserNotification.find({ userId: req.user._id, read: false })
-      .sort({ createdAt: -1 })
-      .limit(20);
-    res.json({ status: 'success', data: { notifications } });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// POST /api/users/me/notifications/:id/read — mark a notification as read
-router.post('/me/notifications/:id/read', protect, async (req, res) => {
-  try {
-    await UserNotification.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
-      { read: true }
-    );
-    res.json({ status: 'success' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// POST /api/users/me/reports/:id/seen — the reporter has opened this report in
-// the Community rail. Stamps it so its replies stop counting as unread, and
-// clears the in-app notification rows that used to drive the old toast so
-// nothing else can resurface them. Only the report's own author can do this.
-router.post('/me/reports/:id/seen', protect, async (req, res) => {
-  try {
-    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: 'Report not found' });
-    const now = new Date();
-    const report = await ProblemReport.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
-      { $set: { userSeenAt: now } },
-      { returnDocument: 'after' },
-    ).select('_id userSeenAt');
-    if (!report) return res.status(404).json({ message: 'Report not found' });
-    await UserNotification.updateMany(
-      { userId: req.user._id, relatedReportId: report._id, read: false },
-      { $set: { read: true } },
-    );
-    res.json({ status: 'success', data: { seenAt: report.userSeenAt } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

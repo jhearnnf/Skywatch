@@ -67,6 +67,8 @@ function makeProblem(userId, overrides = {}) {
     kind:         'bug',
     updates:      overrides.updates ?? [],
     ...(overrides.title              ? { title: overrides.title }                           : {}),
+    ...(overrides.conversationId     ? { conversationId: overrides.conversationId }         : {}),
+    ...(overrides.clientPlatform     ? { clientPlatform: overrides.clientPlatform }         : {}),
     ...(overrides.environment        ? { environment: overrides.environment }               : {}),
     ...(overrides.environmentSummary ? { environmentSummary: overrides.environmentSummary } : {}),
   }
@@ -196,14 +198,29 @@ describe('Admin ▸ Intel ▸ Reports — device environment', () => {
   })
 })
 
+// ── The ticket the report opened ──────────────────────────────────────────
+
+describe('Admin ▸ Intel ▸ Reports — the ticket thread', () => {
+  it('offers the thread, which carries the answers the reporter sent', async () => {
+    await openReport([makeProblem(reporter, { conversationId: 't1' })])
+    expect(await screen.findByTestId('open-ticket')).toBeDefined()
+  })
+
+  it('offers nothing to open on a report filed before tickets', async () => {
+    await openReport([makeProblem(reporter)])
+    await screen.findByText('Original report')
+    expect(screen.queryByTestId('open-ticket')).toBeNull()
+  })
+})
+
 // ── Replying to a report ───────────────────────────────────────────────────
-// A visible reply always lands in the reporter's Support tickets; email is
-// the optional second channel.
+// A reply always lands in the reporter's ticket, where they can answer; email
+// is the optional second channel.
 
 async function startReply(note = 'We have fixed it') {
   await openReport([makeProblem(reporter)])
   fireEvent.change(await screen.findByPlaceholderText(/add admin note/i), { target: { value: note } })
-  fireEvent.click(screen.getByLabelText(/send update to user/i))
+  fireEvent.click(screen.getByLabelText(/reply to the reporter/i))
 }
 
 const channel = (name) => screen.getByLabelText(name)
@@ -222,13 +239,13 @@ describe('Admin ▸ Intel ▸ Reports — reply delivery channels', () => {
   // A visible reply always lands in the reporter's Support tickets on the
   // Community page; email is the optional extra. There is no longer an in-app
   // toast to tick on or off.
-  it('sends a visible reply to their tickets, without email by default', async () => {
+  it('posts a reply into the ticket, without email by default', async () => {
     await startReply()
     expect(channel(/also send by email/i).checked).toBe(false)
-    expect(screen.getByText(/shown in their support tickets/i)).toBeDefined()
+    expect(screen.getByText(/posted in their ticket, where they can reply/i)).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: /save note/i }))
-    await screen.findByText(/in their Support tickets on the Community page:/i)
+    await screen.findByText(/posted in the reporter's ticket as SkyWatch Support:/i)
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
 
     await waitFor(() => expect(sentBody()).not.toBeNull())
@@ -240,11 +257,22 @@ describe('Admin ▸ Intel ▸ Reports — reply delivery channels', () => {
     fireEvent.click(channel(/also send by email/i))
 
     fireEvent.click(screen.getByRole('button', { name: /save note/i }))
-    await screen.findByText(/and receive it by email/i)
+    await screen.findByText(/and emailed to them/i)
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
 
     await waitFor(() => expect(sentBody()).not.toBeNull())
     expect(sentBody()).toMatchObject({ notifyUser: true, sendEmail: true, sendNotification: true })
+  })
+
+  // Slim mode has no Community, so a reporter on the app cannot open their
+  // ticket: email is the only way the reply reaches them.
+  it('ticks email by default for a report filed from the app', async () => {
+    await openReport([makeProblem(reporter, { clientPlatform: 'android' })])
+    fireEvent.change(await screen.findByPlaceholderText(/add admin note/i), { target: { value: 'Fixed' } })
+    fireEvent.click(screen.getByLabelText(/reply to the reporter/i))
+
+    expect(channel(/also send by email/i).checked).toBe(true)
+    expect(screen.getByText(/reported from the app/i)).toBeDefined()
   })
 
   it('never blocks a reply for want of a channel: the ticket is always one', async () => {

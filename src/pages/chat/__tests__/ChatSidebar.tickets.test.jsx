@@ -21,11 +21,9 @@ const CHANNEL = {
 }
 
 const TICKET = {
-  _id: 'r1', title: 'The needles are off the dial', description: 'The needles are off the dial',
-  pageReported: 'CBAT · Instruments', time: new Date().toISOString(), solved: false,
-  updates: [{ _id: 'u1', time: new Date().toISOString(), description: 'On it, thanks.' }],
-  unread: true, unreadCount: 1, lastActivityAt: new Date().toISOString(),
-  preview: { body: 'On it, thanks.' },
+  _id: 't1', type: 'support', status: 'open', title: 'Instruments needles off the dial',
+  unread: true, personalUnread: 1, lastMessageAt: new Date().toISOString(),
+  preview: { body: 'On it, thanks.', senderDisplayName: 'SkyWatch Support' },
 }
 
 const renderRail = (props = {}) =>
@@ -37,12 +35,12 @@ describe('ChatSidebar — support tickets', () => {
     expect(screen.queryByRole('region', { name: 'Support tickets' })).toBeNull()
   })
 
-  it('lists an open ticket between Channels and Groups, linking to its page', () => {
+  it('lists an open ticket between Channels and Groups, as a conversation', () => {
     renderRail({ tickets: [TICKET] })
     const section = screen.getByRole('region', { name: 'Support tickets' })
     expect(section).toBeTruthy()
-    expect(screen.getByText('The needles are off the dial').closest('a').getAttribute('href')).toBe('/chat/ticket/r1')
-    expect(screen.getByText('Open · CBAT · Instruments')).toBeTruthy()
+    expect(screen.getByText('Instruments needles off the dial').closest('a').getAttribute('href')).toBe('/chat/t1')
+    expect(screen.getByText('Open · SkyWatch Support')).toBeTruthy()
     expect(screen.getByText(/SkyWatch Support: On it, thanks\./)).toBeTruthy()
 
     // Order in the column: channels, then tickets, then groups.
@@ -57,12 +55,12 @@ describe('ChatSidebar — support tickets', () => {
   })
 
   it('marks a resolved ticket as such', () => {
-    renderRail({ tickets: [{ ...TICKET, solved: true }] })
-    expect(screen.getByText('Resolved · CBAT · Instruments')).toBeTruthy()
+    renderRail({ tickets: [{ ...TICKET, status: 'closed' }] })
+    expect(screen.getByText('Resolved')).toBeTruthy()
   })
 
   it('highlights the ticket that is open in the pane', () => {
-    renderRail({ tickets: [TICKET], activeTicketId: 'r1' })
-    expect(screen.getByText('The needles are off the dial').closest('a').getAttribute('aria-current')).toBe('page')
+    renderRail({ tickets: [TICKET], activeId: 't1' })
+    expect(screen.getByText('Instruments needles off the dial').closest('a').getAttribute('aria-current')).toBe('page')
   })
 })

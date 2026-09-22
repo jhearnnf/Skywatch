@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { AnimatePresence, motion, useIsPresent, MotionGlobalConfig } from 'framer-motion'
@@ -364,10 +364,6 @@ function AppRoutes() {
               then reconciles them as one component instead of unmounting and
               remounting, so opening a conversation keeps the rail and its data
               alive. Paired with transitionKeyFor() — both are needed. */}
-          {/* A problem report opened from the rail's Support tickets section:
-              same two-pane shell, the ticket in place of a thread. Declared
-              before the id route so "ticket" is never read as a conversation. */}
-          <Route path="/chat/ticket/:ticketId" element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/chat/:conversationId" element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
           {/* The CBAT community guide is deliberately NOT a route. It is a

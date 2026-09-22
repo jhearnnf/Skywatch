@@ -67,6 +67,8 @@ export default function ChatThread({
   const [messages,     setMessages]     = useState(cached?.messages     ?? [])
   const [senders,      setSenders]      = useState(cached?.senders      ?? {})
   const [conversation, setConversation] = useState(cached?.conversation ?? null)
+  // Resolved ticket: the composer is behind a "Reopen ticket" button.
+  const [reopening, setReopening] = useState(false)
   const [loading,      setLoading]      = useState(!cached)
   const [busy,         setBusy]         = useState(false)
   const [err,          setErr]          = useState('')
@@ -307,6 +309,9 @@ export default function ChatThread({
           at:      Date.now(),
         })
         setMessages(prev => [...prev, d.data.message])
+        // Replying to a resolved ticket reopened it server-side; say so now
+        // rather than a poll later, so the Resolved pill and the note go.
+        if (isClosed) { setConversation(c => (c ? { ...c, status: 'open' } : c)); setReopening(false) }
         // Your first message in a thread wouldn't be in the sender map yet, so
         // your avatar would pop in a poll later. Seed it from the live user.
         setSenders(prev => prev[String(user?._id)] ? prev : {
@@ -331,7 +336,7 @@ export default function ChatThread({
   }
 
   const handleClose = async () => {
-    if (!window.confirm('Close this chat? You can start a new one anytime.')) return
+    if (!window.confirm('Mark this ticket resolved? You can reply to reopen it at any time.')) return
     setBusy(true)
     try {
       await apiFetch(`${API}/api/chat/conversations/${conversationId}/close`, {
@@ -456,7 +461,7 @@ export default function ChatThread({
   // Support never asks for a display name — see postRefusal() in routes/chat.js.
   const gateOnName = (needsName || displayNameRequired) && type !== 'support'
 
-  const heading = title || conversation?.title || 'Chat'
+  const heading = title || conversation?.title || (type === 'support' ? 'Support ticket' : 'Chat')
   const mentionCount = entryState?.firstUnreadMention ? (entryState.unreadMentionCount ?? 0) : 0
 
   return (
@@ -492,7 +497,7 @@ export default function ChatThread({
             )}
             <p className="text-[11px] text-slate-400">
               {isArchived ? 'Archived channel'
-                : isClosed ? 'This chat is closed'
+                : type === 'support' ? (isClosed ? 'Support ticket · Resolved' : 'Support ticket · Open. Usually replies within a few hours')
                   : postPolicy === 'bot' ? 'Automatic feed - react rather than reply'
                   : isAdminOnly ? 'Updates from the SkyWatch team'
                     // Only a cohort room carries a memberCount, so its presence
@@ -517,16 +522,20 @@ export default function ChatThread({
             </p>
           </div>
         </div>
-        {type === 'support' && !isClosed && (
+        {type === 'support' && (isClosed ? (
+          <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+            Resolved
+          </span>
+        ) : (
           <button
             type="button"
             onClick={handleClose}
             disabled={busy}
             className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors shrink-0"
           >
-            Close chat
+            Mark resolved
           </button>
-        )}
+        ))}
       </div>
 
       {/* Someone addressed you while you were away. Shown on entry and
@@ -625,10 +634,6 @@ export default function ChatThread({
         <div className="border-t border-slate-200 p-3 text-center">
           <p className="text-xs text-slate-500">This channel has been archived.</p>
         </div>
-      ) : isClosed ? (
-        <div className="border-t border-slate-200 p-3 text-center">
-          <p className="text-xs text-slate-500">This chat has been closed. Start a new one from Support.</p>
-        </div>
       ) : postPolicy === 'bot' ? (
         <div className="border-t border-slate-200 p-3 text-center">
           <p className="text-xs text-slate-500">
@@ -654,18 +659,43 @@ export default function ChatThread({
         )
       ) : gateOnName ? (
         <DisplayNameGate onDone={() => { setNeedsName(false); onChanged?.() }} />
+      ) : isClosed && !reopening ? (
+        // A resolved ticket is not a dead end, but a bare composer under a
+        // resolved thread read as if nothing had changed. The button says the
+        // state and the consequence; the composer appears once it is pressed,
+        // and the send is what actually reopens the ticket server-side.
+        <div className="border-t border-slate-200 p-3">
+          <button
+            type="button"
+            onClick={() => setReopening(true)}
+            data-testid="reopen-ticket"
+            className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold transition-colors"
+          >
+            Reopen ticket
+          </button>
+          <p className="mt-2 text-[11px] text-slate-500 text-center">
+            This ticket is resolved. Reopen it to reply if the problem is not fixed or you have more to add.
+          </p>
+        </div>
       ) : (
-        <ComposeBox
-          disabled={loading}
-          busy={busy}
-          onSend={handleSend}
-          replyTo={replyTo}
-          senders={senders}
-          onCancelReply={() => setReplyTo(null)}
-          // No @ picker in support: it is a private thread with staff, so there
-          // is nobody to mention and no bot to summon.
-          mentionConversationId={type === 'support' ? null : conversationId}
-        />
+        <>
+          {isClosed && (
+            <p className="px-4 pt-2 text-[11px] text-slate-500 text-center">
+              Your reply will reopen this ticket.
+            </p>
+          )}
+          <ComposeBox
+            disabled={loading}
+            busy={busy}
+            onSend={handleSend}
+            replyTo={replyTo}
+            senders={senders}
+            onCancelReply={() => setReplyTo(null)}
+            // No @ picker in support: it is a private thread with staff, so there
+            // is nobody to mention and no bot to summon.
+            mentionConversationId={type === 'support' ? null : conversationId}
+          />
+        </>
       )}
 
       {cardUserId && (

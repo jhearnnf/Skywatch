@@ -13,6 +13,7 @@ process.env.JWT_SECRET = 'test_secret';
 jest.mock('../../utils/reportTitle', () => ({
   ...jest.requireActual('../../utils/reportTitle'),
   scheduleReportTitle: jest.fn(),
+  scheduleTicketTitle: jest.fn(),
 }));
 
 const request = require('supertest');

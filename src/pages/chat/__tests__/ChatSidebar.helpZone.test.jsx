@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 
 // Support and the guides used to be flat rows in the same column as the
@@ -48,19 +48,13 @@ describe('ChatSidebar — the help zone', () => {
     expect(guide.parentElement).not.toBe(channel.parentElement)
   })
 
-  it('says support is private rather than another channel', () => {
-    renderRail({ support: null, loading: false })
-    expect(screen.getByText('A private thread with the SkyWatch team')).toBeTruthy()
-    expect(screen.getByText('Message')).toBeTruthy()
-  })
-
-  it('still shows the unread count on an open support thread', () => {
-    renderRail({
-      support: {
-        _id: 's1', status: 'open', unread: true, personalUnread: 2,
-        lastMessageAt: new Date().toISOString(), preview: null,
-      },
-    })
-    expect(screen.getByLabelText('2 new messages for you').textContent).toBe('2')
+  // The card is only ever the way to open a NEW ticket; the tickets
+  // themselves are rows further down, one per problem.
+  it('offers a new support ticket as an action, not a thread to keep up with', () => {
+    const onStartSupport = vi.fn()
+    renderRail({ onStartSupport })
+    expect(screen.getByText(/Report a problem or ask the team/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Message'))
+    expect(onStartSupport).toHaveBeenCalled()
   })
 })

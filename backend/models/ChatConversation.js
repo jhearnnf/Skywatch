@@ -38,6 +38,21 @@ const chatConversationSchema = new mongoose.Schema({
 
   startedByRole: { type: String, enum: ['user', 'admin'], default: 'user' },
 
+  // A support thread IS a support ticket. `title` is the one line the rail
+  // and the admin queue show for it (from the model, or the opening message
+  // until that lands; utils/reportTitle.js). `reportId` links the problem
+  // report it was opened from, which carries the structured context (page,
+  // device environment, brief) a chat cannot; null for a thread the user
+  // simply started. A user can have any number of open tickets, one per
+  // problem — the old one-open-thread-per-user index was dropped by
+  // migrations/supportTickets.js.
+  title:     { type: String, trim: true, maxlength: 80, default: null },
+  reportId:  { type: mongoose.Schema.Types.ObjectId, ref: 'ProblemReport', default: null },
+  // Same fact as `reportId != null`, kept as a boolean because the
+  // blank-ticket index below needs an equality it can filter on (a partial
+  // index can test neither null nor $exists: false).
+  hasReport: { type: Boolean, default: false },
+
   // ── dm ─────────────────────────────────────────────────────────────────────
   // Exactly two ids, sorted ascending so the pair has one canonical form.
   participantIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
@@ -115,20 +130,27 @@ chatConversationSchema.index({ status: 1, lastMessageAt: -1 });
 chatConversationSchema.index({ status: 1, lastMessageSenderRole: 1, adminLastReadAt: 1 });
 chatConversationSchema.index({ participantIds: 1, lastMessageAt: -1 });
 
-// At most one open SUPPORT conversation per user. Enforced at the DB level so
-// two concurrent "start chat" requests can't both insert (the second hits
-// E11000 and the route handler retries the lookup).
-//
-// NOTE: this replaces an older index of the same shape whose filter lacked
-// `type`. Without the type clause, DMs and channels (which have userId null)
-// would all collide on the single null key. migrations/chatChannelsUpgrade.js
-// drops the old one and builds this.
+// There is deliberately NO "one open support thread per user" index any more:
+// every problem report opens its own ticket, and a user with two problems has
+// two. The index that used to enforce it (`uniq_open_support_per_user`) is
+// dropped on boot by migrations/supportTickets.js; chatChannelsUpgrade.js
+// must not recreate it.
+chatConversationSchema.index({ reportId: 1 }, { sparse: true });
+
+// At most one BLANK ticket per user: opened by "Message the team" (or an
+// admin) and not yet typed into. Two concurrent opens must land on the same
+// empty thread rather than leave two behind; the loser of the race hits
+// E11000 and re-reads (utils/supportTickets.js). The moment a message or a
+// report is attached the row leaves the index, and the next open makes a
+// new ticket, which is the whole point.
 chatConversationSchema.index(
   { userId: 1 },
   {
     unique: true,
-    name: 'uniq_open_support_per_user',
-    partialFilterExpression: { status: 'open', type: 'support' },
+    name: 'uniq_blank_ticket_per_user',
+    partialFilterExpression: {
+      type: 'support', status: 'open', messageCount: 0, hasReport: false,
+    },
   },
 );
 

@@ -251,20 +251,29 @@ describe('ChatShell', () => {
     })
   })
 
-  it('offers to start a support chat when none exists', async () => {
-    overview({ support: null, channels: [], dms: [], viewer: VIEWER })
-    render(<ChatShell />)
-    await waitFor(() => expect(screen.getByText('A private thread with the SkyWatch team')).toBeTruthy())
-  })
-
-  it('pins an existing support thread above the channels', async () => {
+  it('always offers a new ticket, and lists open tickets as conversations', async () => {
     overview({
-      support: { _id: 's1', type: 'support', status: 'open', unread: false, lastMessageAt: new Date().toISOString(), preview: null },
+      tickets: [{
+        _id: 't1', type: 'support', status: 'open', title: 'Instruments needles off the dial',
+        unread: true, personalUnread: 1, lastMessageAt: new Date().toISOString(),
+        preview: { body: 'On it, thanks.', senderDisplayName: 'SkyWatch Support' },
+      }],
       channels: [], dms: [], viewer: VIEWER,
     })
     render(<ChatShell />)
-    await waitFor(() => expect(screen.getByText('SkyWatch Support')).toBeTruthy())
-    expect(screen.getByText('Usually replies within a few hours')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Instruments needles off the dial')).toBeTruthy())
+    expect(screen.getByText('Instruments needles off the dial').closest('a').getAttribute('href')).toBe('/chat/t1')
+    expect(screen.getByText(/Report a problem or ask the team/)).toBeTruthy()
+  })
+
+  it('passes a ticket title down to the thread like any other conversation', async () => {
+    mockParams.value = { conversationId: 't1' }
+    overview({
+      tickets: [{ _id: 't1', type: 'support', status: 'open', title: 'Instruments needles off the dial', unread: false, lastMessageAt: new Date().toISOString(), preview: null }],
+      channels: [], dms: [], viewer: VIEWER,
+    })
+    render(<ChatShell />)
+    await waitFor(() => expect(screen.getByTestId('thread').textContent).toBe('Instruments needles off the dial'))
   })
 
   it('tells a chat-banned user what they can still do', async () => {
@@ -321,62 +330,6 @@ describe('ChatShell', () => {
 
     await waitFor(() => expect(screen.getByText('General')).toBeTruthy())
     expect(screen.queryByText('Guides')).toBeNull()
-  })
-
-  // A problem report opened from the rail's Support tickets section. It is a
-  // read-only record, not a conversation, so it has its own pane.
-  describe('support tickets', () => {
-    const TICKET = {
-      _id: 'r1', title: 'Instruments needles off the dial', description: 'The needles are off the dial when the dials calibrate',
-      pageReported: 'CBAT · Instruments', time: new Date().toISOString(), solved: false,
-      updates: [{ _id: 'u1', time: new Date().toISOString(), description: 'On it, thanks.' }],
-      unread: true, unreadCount: 1, lastActivityAt: new Date().toISOString(),
-      preview: { body: 'On it, thanks.' },
-    }
-
-    it('opens the ticket in the pane and stamps it seen once', async () => {
-      mockParams.value = { ticketId: 'r1' }
-      const data = { support: null, channels: [CHANNEL], dms: [], tickets: [TICKET], viewer: VIEWER }
-      mockApiFetch.mockImplementation((url, init) => Promise.resolve({
-        ok: true,
-        json: async () => init?.method === 'POST' ? { status: 'success' } : { status: 'success', data },
-      }))
-      const { rerender } = render(<ChatShell />)
-
-      await waitFor(() => expect(screen.getByTestId('ticket-thread')).toBeTruthy())
-      // Rail row and pane header both carry the title; the full report is in the pane.
-      expect(screen.getAllByText('Instruments needles off the dial').length).toBe(2)
-      expect(screen.getByText('The needles are off the dial when the dials calibrate')).toBeTruthy()
-      expect(screen.getByText(/Your report from CBAT · Instruments/)).toBeTruthy()
-      expect(screen.getByText('On it, thanks.', { selector: 'div' })).toBeTruthy()
-      expect(screen.queryByTestId('thread')).toBeNull()
-
-      await waitFor(() => expect(mockApiFetch.mock.calls.some(([u, i]) => /\/api\/users\/me\/reports\/r1\/seen$/.test(u) && i?.method === 'POST')).toBe(true))
-      // Seen → the rail and the navbar number refresh together.
-      await waitFor(() => expect(mockRefresh).toHaveBeenCalled())
-
-      // The 30s poll re-renders with the same ticket; no second stamp.
-      rerender(<ChatShell />)
-      const seenPosts = () => mockApiFetch.mock.calls.filter(([u, i]) => /\/seen$/.test(u) && i?.method === 'POST').length
-      expect(seenPosts()).toBe(1)
-    })
-
-    it('does not stamp a ticket that has nothing unread', async () => {
-      mockParams.value = { ticketId: 'r1' }
-      overview({ support: null, channels: [CHANNEL], dms: [], tickets: [{ ...TICKET, unread: false, unreadCount: 0 }], viewer: VIEWER })
-      render(<ChatShell />)
-
-      await waitFor(() => expect(screen.getByTestId('ticket-thread')).toBeTruthy())
-      expect(mockApiFetch.mock.calls.some(([u]) => /\/seen$/.test(u))).toBe(false)
-    })
-
-    it('explains a ticket that has since left the rail', async () => {
-      mockParams.value = { ticketId: 'gone' }
-      overview({ support: null, channels: [CHANNEL], dms: [], tickets: [], viewer: VIEWER })
-      render(<ChatShell />)
-
-      await waitFor(() => expect(screen.getByText(/no longer listed/)).toBeTruthy())
-    })
   })
 
   it('points users at channels as the way into a DM', async () => {

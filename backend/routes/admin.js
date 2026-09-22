@@ -8,7 +8,7 @@ const EmailLog    = require('../models/EmailLog');
 const AppSettings = require('../models/AppSettings');
 const AffiliateClickCount = require('../models/AffiliateClickCount');
 const { sendWelcomeEmail, sendReportReplyEmail, sendAdminComposedEmail } = require('../utils/email');
-const UserNotification = require('../models/UserNotification');
+const ChatConversation = require('../models/ChatConversation');
 const GameSessionQuizResult               = require('../models/GameSessionQuizResult');
 const GameSessionQuizAttempt              = require('../models/GameSessionQuizAttempt');
 const GameSessionOrderOfBattleResult      = require('../models/GameSessionOrderOfBattleResult');
@@ -27,6 +27,8 @@ const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awa
 const { effectiveTier } = require('../utils/subscription');
 const { resolveSelectedBadge } = require('../utils/selectedBadge');
 const { describeReportEnvironment } = require('../utils/reportEnvironment');
+const { appendMessage } = require('../utils/chatWrite');
+const { ticketForReport, resolveTicket, reopenTicket } = require('../utils/supportTickets');
 const { validateDisplayName } = require('../utils/displayName');
 const { cbatRecordFor, withBoardRanks, medalsFrom } = require('../utils/cbatRecord');
 const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
@@ -3143,70 +3145,73 @@ router.get('/problems', async (req, res) => {
 });
 
 // POST /api/admin/problems/:id/update
+//
+// An internal note, a reply to the reporter, a status change, or any mix.
+// A reply is posted into the report's support ticket as SkyWatch Support —
+// the same thread the reporter opened, where they can answer — and optionally
+// emailed as well. Marking solved resolves the ticket; reopening reopens it.
+// The `updates` history keeps every note and reply for the admin card.
+//
+// `sendNotification` is what older admin bundles call the in-app channel;
+// the ticket IS that channel now, so a reply always goes there and the flag
+// is recorded as such.
 router.post('/problems/:id/update', async (req, res) => {
   try {
-    const { description, solved, notifyUser, sendEmail, sendNotification } = req.body;
+    const { description, solved, notifyUser, sendEmail } = req.body;
 
     const isUserVisible = notifyUser === true;
-    // Email and in-app notification are independent channels — an admin can pick
-    // either or both. `sendNotification` is absent on clients built before the
-    // split (cached web bundles, un-updated native installs); for those, fall
-    // back to the old either/or so their requests keep behaving as they did.
-    const wantEmail  = isUserVisible && sendEmail === true;
-    const wantNotif  = isUserVisible && (sendNotification === undefined ? sendEmail !== true : sendNotification === true);
+    const wantEmail = isUserVisible && sendEmail === true;
 
-    const updateEntry = {
-      adminUserId: req.user._id,
-      description,
-      isUserVisible,
-      emailSent: false,
-      notificationSent: false,
-    };
+    const report = await ProblemReport.findById(req.params.id).populate('userId', 'email agentNumber displayName');
+    if (!report) return res.status(404).json({ message: 'Report not found' });
 
-    const mongoUpdate = { $push: { updates: updateEntry } };
-    if (solved !== undefined) mongoUpdate.$set = { solved };
+    const text = String(description ?? '').trim();
+    if (text) {
+      report.updates.push({
+        adminUserId: req.user._id,
+        description: text,
+        isUserVisible,
+        emailSent: false,
+        notificationSent: false,
+      });
+    }
+    if (solved !== undefined) report.solved = Boolean(solved);
+    await report.save();
 
-    const report = await ProblemReport.findByIdAndUpdate(req.params.id, mongoUpdate, { returnDocument: 'after' })
-      .populate('userId', 'email agentNumber');
+    // Reported chat messages are moderation records with no thread.
+    const ticketable = report.kind !== 'chat_message' && report.userId;
+    const ticket = ticketable ? await ticketForReport(report, report.userId) : null;
+    const idx = report.updates.length - 1;
 
-    if (isUserVisible && report?.userId) {
+    if (ticket && isUserVisible && text) {
+      await appendMessage({
+        conversation: ticket, senderUserId: req.user._id, senderRole: 'admin', body: text,
+      });
       const { email, agentNumber } = report.userId;
-      const idx = report.updates.length - 1;
-
       if (wantEmail) {
-        // Fire email — errors caught inside sendReportReplyEmail
-        await sendReportReplyEmail({
-          email,
-          agentNumber,
-          pageReported: report.pageReported,
-          replyMessage: description,
-        });
+        // Errors caught inside sendReportReplyEmail
+        await sendReportReplyEmail({ email, agentNumber, pageReported: report.pageReported, replyMessage: text });
       }
+      await ProblemReport.updateOne(
+        { _id: report._id },
+        { $set: {
+          [`updates.${idx}.notificationSent`]: true,
+          ...(wantEmail ? { [`updates.${idx}.emailSent`]: true } : {}),
+        } },
+      );
+    }
 
-      if (wantNotif) {
-        await UserNotification.create({
-          userId:          report.userId._id,
-          type:            'report_reply',
-          title:           'Update on your report',
-          message:         description,
-          relatedReportId: report._id,
-        });
-      }
-
-      // One write for whichever channels actually went out, so the update
-      // history can show both.
-      if (wantEmail || wantNotif) {
-        await ProblemReport.updateOne(
-          { _id: report._id },
-          { $set: {
-            ...(wantEmail ? { [`updates.${idx}.emailSent`]: true }        : {}),
-            ...(wantNotif ? { [`updates.${idx}.notificationSent`]: true } : {}),
-          } }
-        );
+    if (ticket && solved !== undefined) {
+      const fresh = await ChatConversation.findById(ticket._id);
+      if (solved && fresh.status === 'open') {
+        await resolveTicket(fresh, { byRole: 'admin', byUserId: req.user._id, body: 'SkyWatch Support marked this ticket resolved' });
+      } else if (!solved && fresh.status === 'closed') {
+        await reopenTicket(fresh, { byRole: 'admin', byUserId: req.user._id, body: 'SkyWatch Support reopened this ticket' });
       }
     }
 
-    res.json({ status: 'success', data: { report } });
+    const saved = await ProblemReport.findById(report._id).populate('userId', 'email agentNumber displayName');
+    res.json({ status: 'success', data: { report: saved } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

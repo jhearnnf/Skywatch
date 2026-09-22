@@ -6346,10 +6346,9 @@ function ProblemsTab({ API, onOpenBrief }) {
   const [expanded, setExpanded] = useState(null)
   const [updates,  setUpdates]  = useState({})       // { reportId: text }
   const [notify,   setNotify]   = useState({})        // { reportId: bool }
-  // { reportId: bool } — also email the reply. A reply the user is meant to
-  // see always lands in their Support tickets on the Community page (that is
-  // what "send update to user" means now the toast is gone); email is the
-  // optional extra for someone who may not come back to the site.
+  // { reportId: bool } — also email the reply. A reply always lands in the
+  // reporter's ticket, which is where they answer; email is the optional extra
+  // for someone who may not come back to the site.
   const [emailToo, setEmailToo] = useState({})
   const [confirm,  setConfirm]  = useState(null)      // { id, description, solved, sendEmail } | null
   const [busy,     setBusy]     = useState(null)
@@ -6370,6 +6369,12 @@ function ProblemsTab({ API, onOpenBrief }) {
   const visible = search.trim()
     ? problems.filter(p => p.description.toLowerCase().includes(search.toLowerCase()) || p.pageReported?.toLowerCase().includes(search.toLowerCase()))
     : problems
+
+  // Whether "also send by email" starts ticked. On by default for a report
+  // filed from the app: slim mode has no Community, so the reporter cannot
+  // open their ticket and email is the only way a reply reaches them.
+  const emailDefault = (p) => p.clientPlatform === 'android' || p.clientPlatform === 'ios'
+  const emailFor = (p) => emailToo[p._id] ?? emailDefault(p)
 
   const executeUpdate = async ({ id, description, solved, notifyUser, sendEmail }) => {
     setBusy(id)
@@ -6441,7 +6446,7 @@ function ProblemsTab({ API, onOpenBrief }) {
       executeUpdate({ id: p._id, description, solved, notifyUser: false })
       return
     }
-    setConfirm({ id: p._id, description, solved, notifyUser, sendEmail: emailToo[p._id] ?? false })
+    setConfirm({ id: p._id, description, solved, notifyUser, sendEmail: emailFor(p) })
   }
 
   const handleSaveNote = (p) => {
@@ -6467,8 +6472,8 @@ function ProblemsTab({ API, onOpenBrief }) {
           <div className="bg-surface rounded-2xl shadow-xl border border-slate-700 max-w-md w-full p-6 space-y-4">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Confirm — send to user</h3>
             <p className="text-xs text-slate-600">
-              The user will see the following in their Support tickets on the Community page{
-                confirm.sendEmail ? ', and receive it by email' : ''
+              This is posted in the reporter's ticket as SkyWatch Support{
+                confirm.sendEmail ? ', and emailed to them' : ''
               }:
             </p>
             <div className="bg-surface-raised border-l-4 border-brand-600 rounded-r-xl p-3 text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
@@ -6570,6 +6575,22 @@ function ProblemsTab({ API, onOpenBrief }) {
 
             {expanded === p._id && (
               <div className="px-4 pb-4 border-t border-slate-700 pt-3 space-y-3">
+
+                {/* The ticket this report opened. Replying from here posts
+                    into it, but the thread is where the back-and-forth reads
+                    in order — and it is the only place the reporter's own
+                    answers appear. */}
+                {p.kind !== 'chat_message' && p.conversationId && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => navigate(`/chat/${p.conversationId}`)}
+                      data-testid="open-ticket"
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg border border-brand-200 text-brand-600 hover:bg-brand-100 transition-colors"
+                    >
+                      Open ticket thread
+                    </button>
+                  </div>
+                )}
 
                 {/* Moderation actions — chat reports only. The reported body is
                     copied into the description above, so it survives even if the
@@ -6694,16 +6715,19 @@ function ProblemsTab({ API, onOpenBrief }) {
                       onChange={e => setNotify(prev => ({ ...prev, [p._id]: e.target.checked }))}
                       className="accent-brand-600"
                     />
-                    Send update to user
+                    Reply to the reporter
                   </label>
 
                   {(notify[p._id]) && (
                     <div className="pl-5 text-xs text-slate-700 space-y-1">
-                      <p className="text-slate-500">Shown in their Support tickets on the Community page.</p>
+                      <p className="text-slate-500">
+                        Posted in their ticket, where they can reply.
+                        {emailDefault(p) && ' They reported from the app, which has no Community, so email is ticked for them.'}
+                      </p>
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={emailToo[p._id] ?? false}
+                          checked={emailFor(p)}
                           onChange={e => setEmailToo(prev => ({ ...prev, [p._id]: e.target.checked }))}
                           className="accent-brand-600"
                         />

@@ -80,12 +80,12 @@ describe('AdminChatView — threads nobody ever wrote in', () => {
     expect(row('annie@example.com').textContent).not.toContain('Opened, no messages')
   })
 
-  it('still marks an empty thread that was closed', async () => {
+  it('still marks an empty ticket that was resolved', async () => {
     route([convo({ messageCount: 0, status: 'closed' })])
     render(<AdminChatView />)
 
     await waitFor(() => expect(screen.getByText('annie@example.com')).toBeTruthy())
-    expect(row('annie@example.com').textContent).toContain('Closed · Opened, no messages ·')
+    expect(row('annie@example.com').textContent).toContain('Resolved · Opened, no messages ·')
   })
 
   it('offers a dedicated group list with participant totals', async () => {

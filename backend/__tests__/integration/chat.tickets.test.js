@@ -1,18 +1,19 @@
 /**
- * Support tickets in the Community rail.
+ * Support tickets: a problem report and a support chat are the same thing.
  *
- * A reply to a problem report used to reach its author as a one-off toast on
- * whatever page they were on. The report is now listed in the rail with the
- * team's replies under it, for as long as it is open — plus, once resolved,
- * until the last reply has been read. These cover what the overview lists, what
- * the navbar badge counts, and what "seen" clears.
+ * A report used to be a one-way form with admin notes, and a support chat a
+ * separate two-way thread. Now a report opens a support thread with the
+ * report as its first message; the team replies there; the reporter answers
+ * there; resolving it closes the thread. These cover the join: what filing a
+ * report creates, what the rail lists, what an admin reply from the Reports
+ * tab does, and the solved/closed mirror in both directions.
  */
 process.env.JWT_SECRET = 'test_secret';
 
 // No model call for a title from inside the suite.
 jest.mock('../../utils/reportTitle', () => ({
   ...jest.requireActual('../../utils/reportTitle'),
-  scheduleReportTitle: jest.fn(),
+  scheduleTicketTitle: jest.fn(),
 }));
 
 const request = require('supertest');
@@ -20,101 +21,128 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createAdminUser, createSettings, authCookie } = require('../helpers/factories');
 const ProblemReport    = require('../../models/ProblemReport');
-const UserNotification = require('../../models/UserNotification');
+const ChatConversation = require('../../models/ChatConversation');
+const ChatMessage      = require('../../models/ChatMessage');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
 afterEach(async () => { await db.clearDatabase(); });
 afterAll(async () => { await db.closeDatabase(); });
 
+const cookie = (u) => authCookie(u._id);
+
 async function fileReport(user, description = 'The needles are off the dial on Instruments') {
   const res = await request(app)
     .post('/api/users/report-problem')
-    .set('Cookie', authCookie(user._id))
+    .set('Cookie', cookie(user))
     .send({ description, pageReported: '/cbat/instruments' });
-  return res.body.data.report;
+  return res.body.data;
 }
 
-async function reply(admin, reportId, description, extra = {}) {
-  return request(app)
-    .post(`/api/admin/problems/${reportId}/update`)
-    .set('Cookie', authCookie(admin._id))
-    .send({ description, notifyUser: true, sendNotification: true, ...extra });
-}
+const adminUpdate = (admin, reportId, body) =>
+  request(app).post(`/api/admin/problems/${reportId}/update`).set('Cookie', cookie(admin)).send(body);
 
-const overview = (user) => request(app).get('/api/chat/overview').set('Cookie', authCookie(user._id));
-const unread   = (user) => request(app).get('/api/chat/unread/me').set('Cookie', authCookie(user._id));
-const seen     = (user, id) => request(app).post(`/api/users/me/reports/${id}/seen`).set('Cookie', authCookie(user._id));
+const overview = (user) => request(app).get('/api/chat/overview').set('Cookie', cookie(user));
+const messagesOf = (user, id) => request(app).get(`/api/chat/conversations/${id}/messages`).set('Cookie', cookie(user));
+const post = (user, id, body) =>
+  request(app).post(`/api/chat/conversations/${id}/messages`).set('Cookie', cookie(user)).send({ body });
+
+describe('filing a report opens a ticket', () => {
+  it('creates a support thread with the report as the first message, linked both ways', async () => {
+    const user = await createUser({ displayName: 'Falcon' });
+    const { report, conversationId } = await fileReport(user);
+
+    const convo = await ChatConversation.findById(conversationId).lean();
+    expect(convo.type).toBe('support');
+    expect(String(convo.userId)).toBe(String(user._id));
+    expect(String(convo.reportId)).toBe(String(report._id));
+    expect(convo.status).toBe('open');
+    expect(convo.title).toBe('The needles are off the dial on Instruments');
+
+    const saved = await ProblemReport.findById(report._id).lean();
+    expect(String(saved.conversationId)).toBe(String(convo._id));
+
+    const msgs = await ChatMessage.find({ conversationId: convo._id }).lean();
+    expect(msgs).toHaveLength(1);
+    expect(msgs[0].senderRole).toBe('user');
+    expect(msgs[0].body).toBe('The needles are off the dial on Instruments');
+  });
+
+  it('gives a second problem its own ticket', async () => {
+    const user = await createUser();
+    const a = await fileReport(user, 'First problem, the sound never plays');
+    const b = await fileReport(user, 'Second problem, the map never loads');
+    expect(a.conversationId).not.toBe(b.conversationId);
+    expect(await ChatConversation.countDocuments({ type: 'support', userId: user._id, status: 'open' })).toBe(2);
+  });
+
+  it('shows the reporter the ticket, and an admin the report context too', async () => {
+    const user  = await createUser();
+    const admin = await createAdminUser();
+    const { conversationId } = await fileReport(user);
+
+    const mine = await messagesOf(user, conversationId);
+    expect(mine.status).toBe(200);
+    expect(mine.body.data.conversation.title).toBe('The needles are off the dial on Instruments');
+    expect(mine.body.data.conversation.reportId).toBeTruthy();
+    expect(mine.body.data.conversation.report).toBeUndefined();
+
+    const theirs = await messagesOf(admin, conversationId);
+    expect(theirs.body.data.conversation.report.pageReported).toBe('CBAT · Instruments');
+    expect(Array.isArray(theirs.body.data.conversation.report.environmentSummary)).toBe(true);
+  });
+});
 
 describe('GET /api/chat/overview — tickets', () => {
-  it('lists nothing for a member with no reports', async () => {
+  it('lists nothing for a member with no tickets', async () => {
     const user = await createUser();
     const res = await overview(user);
     expect(res.status).toBe(200);
     expect(res.body.data.tickets).toEqual([]);
+    expect(res.body.data.support).toBeUndefined();
   });
 
-  it('lists an open report with only the replies the team chose to show', async () => {
+  it('lists an open ticket with its title and the last reply as preview', async () => {
     const user  = await createUser();
     const admin = await createAdminUser();
-    const report = await fileReport(user);
-    await request(app)
-      .post(`/api/admin/problems/${report._id}/update`)
-      .set('Cookie', authCookie(admin._id))
-      .send({ description: 'internal: probably the DPR bug', notifyUser: false });
-    await reply(admin, report._id, 'Thanks, we can reproduce this and are on it.');
+    const { conversationId } = await fileReport(user);
+    await post(admin, conversationId, 'Thanks, we can reproduce this.');
 
-    const res = await overview(user);
-    const [ticket] = res.body.data.tickets;
-    expect(res.body.data.tickets).toHaveLength(1);
-    expect(ticket._id).toBe(String(report._id));
+    const [ticket] = (await overview(user)).body.data.tickets;
+    expect(ticket._id).toBe(conversationId);
     expect(ticket.title).toBe('The needles are off the dial on Instruments');
-    expect(ticket.pageReported).toBe('CBAT · Instruments');
-    expect(ticket.solved).toBe(false);
-    expect(ticket.updates.map(u => u.description)).toEqual(['Thanks, we can reproduce this and are on it.']);
+    expect(ticket.status).toBe('open');
     expect(ticket.unread).toBe(true);
-    expect(ticket.unreadCount).toBe(1);
-    expect(ticket.preview.body).toBe('Thanks, we can reproduce this and are on it.');
+    expect(ticket.personalUnread).toBe(1);
+    expect(ticket.preview.body).toBe('Thanks, we can reproduce this.');
+    expect(ticket.preview.senderDisplayName).toBe('SkyWatch Support');
   });
 
-  it('uses the generated title once it has been written', async () => {
+  it('leaves a blank "Message the team" ticket out until something is typed', async () => {
     const user = await createUser();
-    const report = await fileReport(user);
-    await ProblemReport.updateOne({ _id: report._id }, { $set: { title: 'Instruments needles drawn off the dial' } });
-    const [ticket] = (await overview(user)).body.data.tickets;
-    expect(ticket.title).toBe('Instruments needles drawn off the dial');
-  });
+    const start = await request(app).post('/api/chat/conversations').set('Cookie', cookie(user));
+    expect((await overview(user)).body.data.tickets).toEqual([]);
 
-  it('shortens a long report into the row title', async () => {
-    const user = await createUser();
-    await fileReport(user, 'x'.repeat(200));
+    await post(user, start.body.data.conversation._id, 'Is there a way to reset my scores?');
     const [ticket] = (await overview(user)).body.data.tickets;
-    expect(ticket.title.length).toBeLessThanOrEqual(80);
-    expect(ticket.title.endsWith('…')).toBe(true);
-    expect(ticket.description).toHaveLength(200);
+    expect(ticket._id).toBe(start.body.data.conversation._id);
+    expect(ticket.title).toBe('Is there a way to reset my scores?');
   });
 
   // "We've fixed it" is the one reply the author must not miss.
-  it('keeps a resolved ticket listed until its last reply has been seen', async () => {
+  it('keeps a resolved ticket listed until its closing line has been read', async () => {
     const user  = await createUser();
     const admin = await createAdminUser();
-    const report = await fileReport(user);
-    await reply(admin, report._id, 'Fixed in the latest build.', { solved: true });
+    const { report, conversationId } = await fileReport(user);
+    await adminUpdate(admin, report._id, { description: 'Fixed in the latest build.', notifyUser: true, solved: true });
 
     let tickets = (await overview(user)).body.data.tickets;
     expect(tickets).toHaveLength(1);
-    expect(tickets[0].solved).toBe(true);
+    expect(tickets[0].status).toBe('closed');
 
-    await seen(user, report._id);
+    await request(app).post(`/api/chat/conversations/${conversationId}/read`).set('Cookie', cookie(user));
     tickets = (await overview(user)).body.data.tickets;
     expect(tickets).toEqual([]);
-  });
-
-  it('drops a resolved ticket with no reply to read', async () => {
-    const user  = await createUser();
-    const report = await fileReport(user);
-    await ProblemReport.updateOne({ _id: report._id }, { $set: { solved: true } });
-    expect((await overview(user)).body.data.tickets).toEqual([]);
   });
 
   it('never lists a reported chat message as a ticket', async () => {
@@ -124,80 +152,103 @@ describe('GET /api/chat/overview — tickets', () => {
       description: 'rude message', solved: false,
     });
     expect((await overview(user)).body.data.tickets).toEqual([]);
-  });
-
-  it('only ever lists the viewer\'s own reports', async () => {
-    const user  = await createUser();
-    const other = await createUser({ email: 'other@example.com' });
-    await fileReport(other);
-    expect((await overview(user)).body.data.tickets).toEqual([]);
+    expect(await ChatConversation.countDocuments({ type: 'support' })).toBe(0);
   });
 });
 
-describe('GET /api/chat/unread/me — ticket replies', () => {
-  it('counts unread replies on the number, and the seen stamp clears them', async () => {
+describe('admin reply from the Reports tab', () => {
+  it('posts a visible update into the thread as SkyWatch Support', async () => {
     const user  = await createUser();
     const admin = await createAdminUser();
-    const report = await fileReport(user);
+    const { report, conversationId } = await fileReport(user);
 
-    let res = await unread(user);
-    expect(res.body.data.ticketReplies).toBe(0);
-    const before = res.body.data.personalUnread;
-
-    await reply(admin, report._id, 'Looking into it.');
-    await reply(admin, report._id, 'Found it.');
-
-    res = await unread(user);
-    expect(res.body.data.ticketReplies).toBe(2);
-    expect(res.body.data.personalUnread).toBe(before + 2);
-    expect(res.body.data.hasUnread).toBe(true);
-
-    await seen(user, report._id);
-    res = await unread(user);
-    expect(res.body.data.ticketReplies).toBe(0);
-    expect(res.body.data.personalUnread).toBe(before);
-  });
-
-  it('a reply after the last look counts again', async () => {
-    const user  = await createUser();
-    const admin = await createAdminUser();
-    const report = await fileReport(user);
-    await reply(admin, report._id, 'Looking into it.');
-    await seen(user, report._id);
-    // Distinct timestamps: the seen stamp and the next reply must not tie.
-    await new Promise(r => setTimeout(r, 5));
-    await reply(admin, report._id, 'Found it.');
-
-    const [ticket] = (await overview(user)).body.data.tickets;
-    expect(ticket.unreadCount).toBe(1);
-  });
-});
-
-describe('POST /api/users/me/reports/:id/seen', () => {
-  it('clears the in-app notification rows for that report too', async () => {
-    const user  = await createUser();
-    const admin = await createAdminUser();
-    const report = await fileReport(user);
-    await reply(admin, report._id, 'Looking into it.');
-    expect(await UserNotification.countDocuments({ userId: user._id, read: false })).toBe(1);
-
-    const res = await seen(user, report._id);
+    const res = await adminUpdate(admin, report._id, { description: 'On it, thanks.', notifyUser: true, sendEmail: false });
     expect(res.status).toBe(200);
-    expect(await UserNotification.countDocuments({ userId: user._id, read: false })).toBe(0);
+
+    const msgs = (await messagesOf(user, conversationId)).body.data.messages;
+    expect(msgs.map(m => m.body)).toEqual(['The needles are off the dial on Instruments', 'On it, thanks.']);
+    expect(msgs[1].senderDisplayName).toBe('SkyWatch Support');
+
+    const saved = await ProblemReport.findById(report._id).lean();
+    expect(saved.updates[0].isUserVisible).toBe(true);
+    expect(saved.updates[0].notificationSent).toBe(true);
+    expect(saved.updates[0].emailSent).toBe(false);
   });
 
-  it('refuses to stamp someone else\'s report', async () => {
+  it('keeps an internal note out of the thread', async () => {
     const user  = await createUser();
-    const other = await createUser({ email: 'other@example.com' });
-    const report = await fileReport(other);
+    const admin = await createAdminUser();
+    const { report, conversationId } = await fileReport(user);
 
-    const res = await seen(user, report._id);
-    expect(res.status).toBe(404);
-    expect((await ProblemReport.findById(report._id)).userSeenAt).toBeNull();
+    await adminUpdate(admin, report._id, { description: 'probably the DPR bug', notifyUser: false });
+
+    expect(await ChatMessage.countDocuments({ conversationId })).toBe(1);
+    const saved = await ProblemReport.findById(report._id).lean();
+    expect(saved.updates[0].isUserVisible).toBe(false);
   });
 
-  it('404s on a malformed id', async () => {
+  it('marking solved resolves the thread, and reopening reopens it', async () => {
+    const user  = await createUser();
+    const admin = await createAdminUser();
+    const { report, conversationId } = await fileReport(user);
+
+    await adminUpdate(admin, report._id, { description: 'Fixed.', notifyUser: true, solved: true });
+    let convo = await ChatConversation.findById(conversationId).lean();
+    expect(convo.status).toBe('closed');
+    expect((await ProblemReport.findById(report._id)).solved).toBe(true);
+
+    await adminUpdate(admin, report._id, { description: 'Reopening, not fixed after all.', solved: false });
+    convo = await ChatConversation.findById(conversationId).lean();
+    expect(convo.status).toBe('open');
+    expect((await ProblemReport.findById(report._id)).solved).toBe(false);
+  });
+
+  it('threads a report that predates tickets on first admin reply', async () => {
+    const user  = await createUser();
+    const admin = await createAdminUser();
+    const legacy = await ProblemReport.create({ userId: user._id, pageReported: 'Login', description: 'Old report' });
+
+    await adminUpdate(admin, legacy._id, { description: 'Looking now.', notifyUser: true });
+
+    const saved = await ProblemReport.findById(legacy._id).lean();
+    expect(saved.conversationId).toBeTruthy();
+    const bodies = (await ChatMessage.find({ conversationId: saved.conversationId }).sort({ createdAt: 1 }).lean()).map(m => m.body);
+    expect(bodies).toEqual(['Old report', 'Looking now.']);
+  });
+});
+
+describe('the solved/closed mirror from the chat side', () => {
+  it('a user replying to a resolved ticket reopens it and the report', async () => {
+    const user  = await createUser();
+    const admin = await createAdminUser();
+    const { report, conversationId } = await fileReport(user);
+    await adminUpdate(admin, report._id, { description: 'Fixed.', notifyUser: true, solved: true });
+
+    const res = await post(user, conversationId, 'Still broken for me');
+    expect(res.status).toBe(200);
+
+    expect((await ChatConversation.findById(conversationId)).status).toBe('open');
+    expect((await ProblemReport.findById(report._id)).solved).toBe(false);
+    const bodies = (await ChatMessage.find({ conversationId }).sort({ createdAt: 1 }).lean()).map(m => m.body);
+    expect(bodies).toContain('Reopened with a new message');
+  });
+
+  it('closing the thread from the console marks the report solved', async () => {
+    const user  = await createUser();
+    const admin = await createAdminUser();
+    const { report, conversationId } = await fileReport(user);
+
+    await request(app).post(`/api/chat/admin/conversations/${conversationId}/close`).set('Cookie', cookie(admin));
+    expect((await ProblemReport.findById(report._id)).solved).toBe(true);
+
+    await request(app).post(`/api/chat/admin/conversations/${conversationId}/reopen`).set('Cookie', cookie(admin));
+    expect((await ProblemReport.findById(report._id)).solved).toBe(false);
+  });
+
+  it('the reporter marking it resolved solves the report', async () => {
     const user = await createUser();
-    expect((await seen(user, 'not-an-id')).status).toBe(404);
+    const { report, conversationId } = await fileReport(user);
+    await request(app).post(`/api/chat/conversations/${conversationId}/close`).set('Cookie', cookie(user));
+    expect((await ProblemReport.findById(report._id)).solved).toBe(true);
   });
 });

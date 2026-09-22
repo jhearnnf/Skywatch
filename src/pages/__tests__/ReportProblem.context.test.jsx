@@ -35,6 +35,9 @@ vi.mock('../../context/AuthContext', () => ({
 
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 
+let slim = false
+vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => slim }))
+
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, className }) => <div className={className}>{children}</div>,
@@ -60,7 +63,7 @@ vi.mock('../../utils/reportEnvironment', () => ({
 function okPost() {
   apiFetchMock.mockImplementation((url) => {
     if (url.includes('/api/users/report-problem')) {
-      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { report: { _id: 'r1' } } }) })
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { report: { _id: 'r1' }, conversationId: 'c1' } }) })
     }
     return Promise.resolve({ ok: true, json: async () => ({}) })
   })
@@ -68,7 +71,7 @@ function okPost() {
 
 function submit(text) {
   fireEvent.change(screen.getByPlaceholderText(/what happened/i), { target: { value: text } })
-  fireEvent.click(screen.getByRole('button', { name: /submit report/i }))
+  fireEvent.click(screen.getByRole('button', { name: /open ticket|submit report/i }))
 }
 
 async function postedBody() {
@@ -189,6 +192,36 @@ describe('ReportProblem — context sent with a report', () => {
     submit('Section 2 contradicts section 1')
 
     expect((await postedBody()).pageReported).toBe('/brief/brief123')
+  })
+})
+
+// A report is a support ticket: the form lands you in its thread, where the
+// reply will arrive. Slim mode has no Community to land in.
+describe('ReportProblem — where it goes after', () => {
+  beforeEach(() => {
+    searchParamsState = new URLSearchParams('')
+    navigateMock.mockClear()
+    apiFetchMock.mockReset()
+    __resetRouteTrail()
+    clientInfo = null
+    slim = false
+  })
+
+  it('opens the new ticket thread', async () => {
+    okPost()
+    render(<ReportProblem />)
+    submit('The dot never stops drifting')
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/chat/c1', { replace: true }))
+    expect(screen.queryByText(/Report submitted/)).toBeNull()
+  })
+
+  it('shows the confirmation instead in slim mode, where the ticket cannot be shown', async () => {
+    slim = true
+    okPost()
+    render(<ReportProblem />)
+    submit('The dot never stops drifting')
+    await screen.findByText(/Report submitted/)
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 })
 
