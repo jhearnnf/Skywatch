@@ -251,3 +251,39 @@ export function matfSheetQuestion(sheet, rng = Math.random) {
     options: shuffle([...opts], rng),
   }
 }
+
+// ── Rebuilding a run from a number ───────────────────────────────────────────
+//
+// The real test hands you a printed reference sheet and a screen. We let a
+// player print this run's tables and work from paper, which means a run has to
+// be reproducible months later from nothing but a code in the corner of that
+// sheet — otherwise a kept printout is waste paper.
+//
+// mulberry32: small, fast, and stable across browsers, which a seeded generator
+// has to be when the seed is written on a piece of paper in someone's house.
+export function mulberry32(seed) {
+  let a = seed >>> 0
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Both parts' reference material from one seed.
+//
+// THE ORDER IS LOAD-BEARING: grid first, then sheet, off a single rng. Split
+// them onto two rngs, or build the sheet first, and every printout anyone is
+// holding stops matching the run it rebuilds. `matfPrint.test.js` pins it.
+//
+// `tuning` carries both shapes (gridExtent for part one, tableCount/rowCount/
+// angleCount for part two), so the seed alone is not enough to rebuild a run —
+// a stored printout has to keep the difficulty beside it.
+export function buildMatfRun(tuning, seed) {
+  const rng = mulberry32(seed)
+  return {
+    grid: buildMatfGrid(tuning.gridExtent, rng),
+    sheet: buildMatfSheet(tuning, rng),
+  }
+}

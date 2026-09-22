@@ -1947,6 +1947,80 @@ body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
   }
 }
 
+/* ── Table Reading Test: the printed reference sheet ────────────────────────
+   The real test is worked against a pre-printed laminated sheet beside the
+   screen, so a run can hand the player its own tables on paper. See
+   components/cbat/MatfPrintSheet.jsx.
+
+   Sized for A4 PORTRAIT so nobody has to find the orientation setting. We
+   deliberately do NOT set `@page { size: landscape }`: `@page` cannot be scoped
+   to a body class, so it would silently reorient every other print in the app.
+   The ±17 grid is 36 columns inside 190mm of printable width, which is why its
+   cells are set in pt here — px sizing at that column count is either overflowed
+   or quietly rescaled by the print engine, and a rescaled grid is unreadable.
+
+   On screen the same markup is a preview of the paper, so the pt overrides live
+   in the print block and the px sizes are the screen ones. */
+.matf-print-grid th,
+.matf-print-grid td { padding: 1px 0; font-size: 9px; line-height: 1.3; }
+.matf-print-wind th,
+.matf-print-wind td { padding: 2px 3px; font-size: 10px; line-height: 1.3; }
+
+@media print {
+  /* Everything that is not the sheet. The app chrome is hidden rather than the
+     sheet being lifted out of the document, so the sheet keeps its place in the
+     flow and nothing has to be absolutely positioned out of an ancestor with
+     `overflow: clip` on it. */
+  body.matf-printing .app-topbar,
+  body.matf-printing .app-bottomnav,
+  body.matf-printing .app-shell-body > aside,
+  body.matf-printing .matf-print-chrome { display: none !important; }
+
+  /* The shell's own spacing is screen furniture: the topbar offset, the bottom
+     nav's clearance and the 768px cap all leave the paper short of the margins
+     the printer is already allowing for. */
+  body.matf-printing .app-shell-body { padding-top: 0 !important; }
+  body.matf-printing .app-shell-main {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  body.matf-printing .app-shell-content {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.matf-printing .matf-print-sheet {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    /* The grey header cells are how a row and a column are told apart at a
+       glance. Without this the browser drops them and every cell looks alike. */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* One part per page. The wind tables also carry break-inside: avoid, so a
+     table never splits across a fold — picking the right air speed is step one
+     of three, and half a table on each side of a crease makes that harder on
+     paper than it is on screen. */
+  body.matf-printing .matf-print-page { break-after: page; }
+  body.matf-printing .matf-print-page:last-child { break-after: auto; }
+  /* Screen-only breathing room between the two preview pages. */
+  body.matf-printing .matf-print-page-top { margin-top: 0 !important; }
+
+  body.matf-printing .matf-print-grid th,
+  body.matf-printing .matf-print-grid td { font-size: 6.5pt; padding: 0.4pt 0; }
+  body.matf-printing .matf-print-wind th,
+  body.matf-printing .matf-print-wind td { font-size: 8pt; padding: 1.5pt 2pt; }
+
+  @page { margin: 10mm; }
+}
+
 /* Spatial Integration gameplay: the study layers and the 3D camera pass ARE the
    test, and inside max-w-3xl they sat in a 448px column — a 360px map and a
    420px clip on a widescreen monitor, with most of the screen unused. The clip

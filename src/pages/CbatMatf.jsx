@@ -9,8 +9,14 @@
 //
 // The real test is worked against a pre-printed laminated sheet beside the
 // screen, and the corpus is explicit that managing the sheet AND the screen is
-// the actual difficulty. One display cannot reproduce that. Rather than pretend
-// otherwise, the intro says so and suggests the drill the corpus recommends.
+// the actual difficulty. One display cannot reproduce that — so the run offers
+// to print its own reference tables and let the player work the way the real
+// candidate does, with paper on the desk and questions on the screen.
+//
+// That is why a run is built from a SEED rather than straight off Math.random:
+// a sheet in someone's house has to find its way back to the run it belongs to
+// weeks later. See utils/cbat/matfPrint.js for the store and the rule that a
+// replayed sheet is never ranked.
 
 import { useState, useCallback, useEffect, useRef, Fragment } from 'react'
 import { Link } from 'react-router-dom'
@@ -30,12 +36,19 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import MatfPrintSheet from '../components/cbat/MatfPrintSheet'
+import MatfPrintoutRail from '../components/cbat/MatfPrintoutRail'
 import {
-  buildMatfGrid, matfGridQuestion, axisLabels,
-  buildMatfSheet, matfSheetQuestion, READOUTS,
+  matfGridQuestion, axisLabels,
+  matfSheetQuestion, READOUTS, buildMatfRun,
 } from '../utils/cbat/matfGenerator'
 import {
-  MATF_DIFFICULTIES, MATF_LAUNCH_MS,
+  matfRunSeed, matfSheetCode, matfPrintoutShape,
+  readMatfPrintouts, recordMatfPrintout, clearMatfPrintouts,
+} from '../utils/cbat/matfPrint'
+import {
+  MATF_DIFFICULTIES, MATF_LAUNCH_MS, DEFAULT_MATF_DIFFICULTY,
   matfTuning, computeMatfGrade,
   readStoredMatfDifficulty, storeMatfDifficulty,
 } from '../utils/cbat/matfDifficulty'
@@ -150,7 +163,88 @@ function SheetPanel({ sheet }) {
   )
 }
 
-function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade }) {
+// ── Working from paper ───────────────────────────────────────────────────────
+
+// Shown IN PLACE OF the on-screen reference once the player has printed the
+// sheet, or loaded one they printed before.
+//
+// In place of, not on top of: a translucent sheet over a 70vh table is a table
+// you can still half-read, and half-reading it is worse than either surface on
+// its own. Covering it properly also hands the height back, so the question and
+// its five options sit near the top of the screen — which is where they are on
+// the real test, with the paper on the desk rather than on the monitor.
+//
+// Dismissing is one-way for the run. The player has said they would rather work
+// on screen, and a control to put the cover back would be a button sitting over
+// the game for the rest of the test for no good reason.
+function PrintedSheetCover({ code, part, onReveal }) {
+  return (
+    <div className="w-full max-w-2xl mx-auto bg-game-panel border-2 border-brand-600/40 rounded-xl p-5 text-center">
+      <p className="text-3xl mb-2" aria-hidden="true">📄</p>
+      <p className="text-base font-extrabold text-white mb-1">
+        Use your printed sheet to help train in a more realistic way
+      </p>
+      <p className="text-sm text-game-muted mb-4">
+        Sheet <span className="font-mono text-brand-600">{code}</span>, page {part} of 2. The real
+        test keeps the reference on the desk and the questions on the screen, so working across the
+        two is part of what it measures.
+      </p>
+      <button
+        type="button"
+        onClick={onReveal}
+        className="px-5 py-2 rounded-lg border-2 border-game-line bg-game-arena text-slate-600 font-bold text-xs hover:border-brand-400 hover:text-brand-600 transition-colors cursor-pointer"
+      >
+        Show the table on screen instead
+      </button>
+    </div>
+  )
+}
+
+// The question asked between Start and the first item: paper or screen.
+//
+// It sits AFTER Start rather than on the instructions card because the tables
+// do not exist until Start is pressed — a run's numbers are generated then, and
+// printing them is the only reason the seed is kept. Asking beforehand would be
+// offering to print something we have not built.
+function PrintAskCard({ onPrint, onSkip }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="w-full max-w-md lg:max-w-xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-8 text-center"
+    >
+      <p className="text-4xl mb-3" aria-hidden="true">🖨️</p>
+      <p className="text-xl font-extrabold text-white mb-2">Print the reference tables?</p>
+      <p className="text-sm lg:text-base text-slate-400 mb-5 lg:max-w-md lg:mx-auto">
+        The real test puts the grid and the wind sheet on a printed sheet beside the screen, and
+        moving between paper and screen is a lot of what it costs you. You can print this run’s
+        tables and work from them the same way.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <button
+          type="button"
+          onClick={onPrint}
+          className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+        >
+          Yes, print the tables
+        </button>
+        <button
+          type="button"
+          onClick={onSkip}
+          data-demo-start
+          className="px-6 py-3 rounded-lg border-2 border-game-line bg-game-arena text-slate-600 font-bold text-sm hover:border-brand-400 hover:text-brand-600 transition-colors cursor-pointer"
+        >
+          No, play on screen
+        </button>
+      </div>
+      <p className="text-[11px] text-game-muted mt-4">
+        Skipping this changes nothing about the test. It runs exactly as it always has.
+      </p>
+    </motion.div>
+  )
+}
+
+function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade, replayedSheet }) {
   const correct = gridCorrect + tableCorrect
   const accuracy = attempted ? Math.round((correct / attempted) * 100) : 0
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '📋' : grade === 'Needs Work' ? '🔧' : '💥'
@@ -160,7 +254,12 @@ function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade 
     <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
       <p className="text-5xl mb-3">{emoji}</p>
       <p className={`text-2xl font-extrabold mb-1 ${color}`}>{grade}</p>
-      <p className="text-sm text-slate-400 mb-6">Table Reading Test Complete</p>
+      <p className={`text-sm text-slate-400 ${replayedSheet ? 'mb-2' : 'mb-6'}`}>Table Reading Test Complete</p>
+      {replayedSheet && (
+        <p className="text-xs text-amber-400 mb-6">
+          Replay of printed sheet {replayedSheet} · not submitted to the leaderboard
+        </p>
+      )}
 
       <div className="bg-game-arena rounded-lg border border-game-line p-4 sm:p-5 mb-4">
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
@@ -198,7 +297,7 @@ export default function CbatMatf() {
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const isDemo = useCbatDemo()
 
-  // intro | launching | part1 | interstitial | part2 | results
+  // intro | printAsk | printing | launching | part1 | interstitial | part2 | results
   const [phase, setPhase] = useState('intro')
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
@@ -222,12 +321,30 @@ export default function CbatMatf() {
   const [queued, setQueued] = useState(false)
   const cbat = useCbatTheme()
 
+  // The run's reference tables are rebuildable from this number alone — that is
+  // the whole basis of printing them and coming back to the same sheet later.
+  // See utils/cbat/matfPrint.js.
+  const [seed, setSeed] = useState(0)
+  // Working from paper: set when the player prints this run's sheet, or loads
+  // one they printed before. Cleared the moment they ask for the screen back.
+  const [onPaper, setOnPaper] = useState(false)
+  // A replay of a sheet the player has already seen. Never submitted.
+  const [replayed, setReplayed] = useState(false)
+  const [printouts, setPrintouts] = useState(() => readMatfPrintouts())
+
   const tickRef = useRef(null)
   const launchTimerRef = useRef(null)
   const phaseStartRef = useRef(null)
   const scoreRef = useRef({ grid: 0, table: 0, attempted: 0 })
   const gridRef = useRef(null)
   const sheetRef = useRef(null)
+  // The tuning the CURRENT run was built with. A ref, not the `runDifficulty`
+  // state, because prepareRun's callers need it on the same tick they set it.
+  const runTuningRef = useRef(matfTuning(DEFAULT_MATF_DIFFICULTY))
+  // Stamped once when the run is built, not read in render: the date printed in
+  // the sheet's header has to be the same on every render of the print screen,
+  // and Date.now() in a render body is not.
+  const runBuiltAtRef = useRef(Date.now())
 
   const runTuning = matfTuning(runDifficulty)
   const introTuning = matfTuning(difficulty)
@@ -235,7 +352,20 @@ export default function CbatMatf() {
 
   // The reference grid is the game; give it the screen while a part is running.
   // See the rule in main.css for why max-w-3xl is actively harmful here.
-  useGameBodyClass('cbat-matf-wide', phase === 'part1' || phase === 'part2')
+  useGameBodyClass('cbat-matf-wide', phase === 'part1' || phase === 'part2' || phase === 'printing')
+  // Room for the saved-sheets rail beside the instructions card, the same way
+  // ACT/RTT/SMA make room for the joystick panel. See CbatStickLayout.
+  //
+  // HELD ACROSS THE LAUNCH FLASH, and only on when there is actually a rail.
+  // The layout's three tracks (19rem + 42rem + 19rem) live on the element, not
+  // on the body class, so they stay on for as long as the card is mounted. Drop
+  // the shell back to its 768px cap underneath them — which is what dropping
+  // this at 'launching' did — and the two fixed outer tracks take 608px of it,
+  // squeezing the card itself down to a sliver mid-flash.
+  const hasSheets = printouts.length > 0
+  useGameBodyClass('cbat-stick-wide', hasSheets && (phase === 'intro' || phase === 'launching'))
+  // Strips the app chrome out of the printout. See @media print in main.css.
+  useGameBodyClass('matf-printing', phase === 'printing')
 
   // Keyed by board, so flipping mode never shows one board's score under
   // another's name and never blanks the panel while the new one loads.
@@ -248,11 +378,15 @@ export default function CbatMatf() {
     clearTimeout(launchTimerRef.current)
   }, [])
 
-  const submitScore = useCallback((totals, totalMs, key) => {
+  const submitScore = useCallback((totals, totalMs, key, unranked) => {
     const correctCount = totals.grid + totals.table
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: correctCount })
+    // A run on a sheet the player printed earlier is a run on numbers they have
+    // already looked at, so it never reaches a board. Same rule as the admin
+    // round-skip cheat: play it, see it, don't rank it.
+    if (unranked) return
     submitCbatResult(key, {
       correctCount,
       attempted: totals.attempted,
@@ -328,7 +462,7 @@ export default function CbatMatf() {
   })
   function finishRun() {
     const totalMs = runTuning.partMs * 2
-    submitScore(scoreRef.current, totalMs, gameKey)
+    submitScore(scoreRef.current, totalMs, gameKey, replayed)
     setPhase('results')
   }
 
@@ -337,29 +471,77 @@ export default function CbatMatf() {
     setPhase('part2')
   }
 
-  const beginLaunch = useCallback(() => {
-    const tuning = matfTuning(difficulty)
-    setRunDifficulty(difficulty)
-    storeMatfDifficulty(difficulty)
+  // Build a run's reference tables and hold them, without starting anything.
+  // The print question sits between here and the first item, and it cannot be
+  // answered until the tables it is offering to print actually exist — which is
+  // why they are built off Start rather than off the first question.
+  //
+  // Everything a run needs is `(seed, difficulty)`: see buildMatfRun. That pair
+  // is what a printed sheet carries, and it is all the saved-sheets rail keeps.
+  const prepareRun = useCallback((runSeed, key, isReplay) => {
+    const tuning = matfTuning(key)
+    runTuningRef.current = tuning
+    setRunDifficulty(key)
+    storeMatfDifficulty(key)
 
-    const g = buildMatfGrid(tuning.gridExtent)
-    const s = buildMatfSheet(tuning)
+    runBuiltAtRef.current = Date.now()
+    const { grid: g, sheet: sh } = buildMatfRun(tuning, runSeed)
     gridRef.current = g
-    sheetRef.current = s
+    sheetRef.current = sh
     setGrid(g)
-    setSheet(s)
+    setSheet(sh)
+    setSeed(runSeed)
     setQuestion(matfGridQuestion(g))
     setFlash(null)
     scoreRef.current = { grid: 0, table: 0, attempted: 0 }
     setGridCorrect(0)
     setTableCorrect(0)
     setAttempted(0)
-    startTracking(tuning.gameKey)
+    setScoreSaved(false)
+    setQueued(false)
+    setReplayed(isReplay)
+    // A replay starts covered: the player picked it off the rail because the
+    // sheet is already in front of them.
+    setOnPaper(isReplay)
+    return tuning
+  }, [])
 
-    if (isDemo) { setPhase('part1'); return }
+  // The only way into part 1 — both answers to the print question come through
+  // here, as does a sheet loaded from the rail.
+  const beginRun = useCallback(() => {
+    startTracking(runTuningRef.current.gameKey)
+    setPhase('part1')
+  }, [startTracking])
+
+  // Start: flash the mode the way FLAG, SAT and RTT do, then ask about paper.
+  // The flash belongs to the instructions card it is flashing on, so it runs
+  // before the print question rather than after it.
+  const beginLaunch = useCallback(() => {
+    const tuning = prepareRun(matfRunSeed(), difficulty, false)
+    if (isDemo) { startTracking(tuning.gameKey); setPhase('part1'); return }
     setPhase('launching')
-    launchTimerRef.current = setTimeout(() => setPhase('part1'), MATF_LAUNCH_MS)
-  }, [difficulty, startTracking, isDemo])
+    launchTimerRef.current = setTimeout(() => setPhase('printAsk'), MATF_LAUNCH_MS)
+  }, [difficulty, prepareRun, isDemo, startTracking])
+
+  // Print this run's sheet. Recorded at the moment the print dialog opens
+  // rather than on the way out of the screen, because a player who prints and
+  // then quits still has the paper and should still find it on the rail.
+  const printSheet = useCallback(() => {
+    setPrintouts(recordMatfPrintout({ seed, difficulty: runTuningRef.current.key }))
+    setOnPaper(true)
+    try { window.print() } catch { /* no print surface */ }
+  }, [seed])
+
+  const replaySheet = useCallback((entry) => {
+    setDifficulty(entry.difficulty)
+    prepareRun(entry.seed, entry.difficulty, true)
+    beginRun()
+  }, [prepareRun, beginRun])
+
+  const forgetSheets = useCallback(() => {
+    clearMatfPrintouts()
+    setPrintouts([])
+  }, [])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -372,6 +554,9 @@ export default function CbatMatf() {
     setTableCorrect(0)
     setAttempted(0)
     setScoreSaved(false)
+    setOnPaper(false)
+    setReplayed(false)
+    setPrintouts(readMatfPrintouts())
   }, [])
 
   const playing = phase === 'part1' || phase === 'part2'
@@ -386,12 +571,18 @@ export default function CbatMatf() {
   // Everything on the intro card except the flashing difficulty button dims
   // during the launch flash — the same treatment FLAG, SAT and RTT use.
   const dim = phase === 'launching' ? ' cbat-launch-dim' : ''
+  // Only built once the player has printed something; null keeps the layout's
+  // left track empty and the instructions card dead centre.
+  const printoutRail = printouts.length
+    ? <MatfPrintoutRail printouts={printouts} onReplay={replaySheet} onClear={forgetSheets} className={dim} />
+    : null
 
   return (
     <div>
       <SEO title="Table Reading Test (CBAT)" description="A signed coordinate grid and a wind reference sheet, worked against the clock." />
 
       <CbatGameHeader
+        className={phase === 'printing' ? 'matf-print-chrome' : ''}
         title="Table Reading Test"
         fullTitle={`MAT-F Part ${phase === 'part2' ? 'Two' : 'One'}`}
         intro={phase === 'intro'}
@@ -415,6 +606,7 @@ export default function CbatMatf() {
         <div className="flex flex-col items-center">
 
           {(phase === 'intro' || phase === 'launching') && (
+            <CbatStickLayout stick={printoutRail}>
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -457,7 +649,7 @@ export default function CbatMatf() {
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted pt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'📄'}</span>
-                  <span className="pt-0.5">The real test puts the reference on a printed sheet beside the screen, and moving between two surfaces is a lot of what it costs. Practise with a printed grid next to you as well as here.</span>
+                  <span className="pt-0.5">The real test puts the reference on a printed sheet beside the screen, and moving between two surfaces is a lot of what it costs. Press Start and you can print this run’s tables before it begins.</span>
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
@@ -484,6 +676,64 @@ export default function CbatMatf() {
                 Start
               </button>
             </motion.div>
+
+            {/* Below `lg` CbatStickLayout drops both side tracks, so the rail
+                would vanish on a phone. A player who printed at a desk and then
+                practises on the sofa still wants their sheets, so on a narrow
+                screen it goes under the card instead of beside it. */}
+            {printoutRail && (
+              <div className="lg:hidden w-full max-w-md mt-4">{printoutRail}</div>
+            )}
+            </CbatStickLayout>
+          )}
+
+          {phase === 'printAsk' && (
+            <PrintAskCard onPrint={() => setPhase('printing')} onSkip={beginRun} />
+          )}
+
+          {phase === 'printing' && grid && sheet && (
+            <div className="w-full flex flex-col items-center">
+              <div className="matf-print-chrome w-full max-w-3xl mb-4 text-center">
+                <p className="text-lg font-extrabold text-white mb-1">Your reference sheets</p>
+                <p className="text-sm text-slate-400 mb-1">
+                  Two pages, sized for A4. Print them, put them beside the keyboard, then start the
+                  test.
+                </p>
+                <p className="text-sm text-amber-400 mb-4">
+                  Every run builds a different set of numbers on purpose, so your brain learns the
+                  lookup instead of one set of values. We recommend a fresh print each time you play.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                  <button
+                    type="button"
+                    onClick={printSheet}
+                    className="px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer"
+                  >
+                    Print these sheets
+                  </button>
+                  <button
+                    type="button"
+                    onClick={beginRun}
+                    className="px-6 py-3 rounded-lg border-2 border-game-line bg-game-arena text-slate-600 font-bold text-sm hover:border-brand-400 hover:text-brand-600 transition-colors cursor-pointer"
+                  >
+                    {onPaper ? 'Start the test' : 'Skip printing and start'}
+                  </button>
+                </div>
+                <p className="text-[11px] text-game-muted mt-3">
+                  Sheet <span className="font-mono text-brand-600">{matfSheetCode(seed)}</span>. Keep
+                  the paper and you can play these same tables again from the instructions screen,
+                  though a repeat run is not submitted to the leaderboard.
+                </p>
+              </div>
+
+              <MatfPrintSheet
+                grid={grid}
+                sheet={sheet}
+                seed={seed}
+                shape={matfPrintoutShape(runTuning.key)}
+                printedAt={runBuiltAtRef.current}
+              />
+            </div>
           )}
 
           {phase === 'interstitial' && (
@@ -578,8 +828,16 @@ export default function CbatMatf() {
                 </div>
               </div>
 
-              {phase === 'part1' && grid && <GridPanel grid={grid} />}
-              {phase === 'part2' && sheet && <SheetPanel sheet={sheet} />}
+              {onPaper ? (
+                <PrintedSheetCover
+                  code={matfSheetCode(seed)}
+                  part={phase === 'part1' ? 1 : 2}
+                  onReveal={() => setOnPaper(false)}
+                />
+              ) : (<>
+                {phase === 'part1' && grid && <GridPanel grid={grid} />}
+                {phase === 'part2' && sheet && <SheetPanel sheet={sheet} />}
+              </>)}
 
               {/* Real CBAT theme: the instruction strip */}
               <CbatFooterStrip
@@ -606,6 +864,7 @@ export default function CbatMatf() {
                 attempted={attempted}
                 totalTime={(runTuning.partMs * 2) / 1000}
                 grade={computeMatfGrade(correctSoFar, runTuning)}
+                replayedSheet={replayed ? matfSheetCode(seed) : null}
               />
             </CbatGameOver>
           )}
