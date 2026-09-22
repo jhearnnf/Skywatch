@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 const mockApiFetch = vi.hoisted(() => vi.fn())
@@ -6,9 +6,10 @@ const mockRefresh  = vi.hoisted(() => vi.fn())
 const mockParams   = vi.hoisted(() => ({ value: {} }))
 const mockUnread   = vi.hoisted(() => ({ value: {} }))
 const mockThread   = vi.hoisted(() => ({ props: null }))
+const mockNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('react-router-dom', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useParams: () => mockParams.value,
   Link: ({ children, to, className, ...rest }) => (
     <a href={to} className={className} {...rest}>{children}</a>
@@ -56,6 +57,7 @@ describe('ChatShell', () => {
     mockParams.value = {}
     mockUnread.value = { hasUnread: false, totalUnread: 0, badgeCount: 0 }
     mockThread.props = null
+    mockNavigate.mockReset()
     document.body.className = ''
     // The rail cache lives for the life of the page, so it outlives a test too.
     // Each one starts cold unless it says otherwise.
@@ -330,6 +332,59 @@ describe('ChatShell', () => {
 
     await waitFor(() => expect(screen.getByText('General')).toBeTruthy())
     expect(screen.queryByText('Guides')).toBeNull()
+  })
+
+  // "My CBAT Group" sits in the same rail as the channels, but it opens a pane
+  // rather than a conversation — and the right pane always preferred the URL's
+  // conversation, so with a channel open the click did nothing at all.
+  describe('the CBAT group setup pane', () => {
+    const SETUP = {
+      _id: null, title: 'My CBAT Group', setupRequired: true,
+      applicable: true, regionAvailable: true, testName: 'CBAT',
+    }
+
+    it('leaves the open conversation so the pane can take the right pane', async () => {
+      mockParams.value = { conversationId: 'c1' }
+      overview({ support: null, channels: [CHANNEL], groups: [SETUP], dms: [], viewer: VIEWER })
+      const { rerender } = render(<ChatShell />)
+
+      fireEvent.click(await screen.findByText('My CBAT Group'))
+      expect(mockNavigate).toHaveBeenCalledWith('/chat')
+
+      // The navigate lands as a route change, as react-router delivers it.
+      mockParams.value = {}
+      rerender(<ChatShell />)
+
+      await waitFor(() => expect(screen.getByLabelText(/date/i)).toBeTruthy())
+      expect(screen.queryByTestId('thread')).toBeNull()
+    })
+
+    it('opens straight away when no conversation is on screen', async () => {
+      overview({ support: null, channels: [CHANNEL], groups: [SETUP], dms: [], viewer: VIEWER })
+      render(<ChatShell />)
+
+      fireEvent.click(await screen.findByText('My CBAT Group'))
+      await waitFor(() => expect(screen.getByLabelText(/date/i)).toBeTruthy())
+      expect(mockNavigate).not.toHaveBeenCalled()
+    })
+
+    it('drops the pane when a conversation is opened, so /chat is the rail again', async () => {
+      // Otherwise the mobile back control — which hides the rail while setup is
+      // up — lands on a setup pane nobody asked for a second time.
+      overview({ support: null, channels: [CHANNEL], groups: [SETUP], dms: [], viewer: VIEWER })
+      const { rerender } = render(<ChatShell />)
+
+      fireEvent.click(await screen.findByText('My CBAT Group'))
+      await waitFor(() => expect(screen.getByLabelText(/date/i)).toBeTruthy())
+
+      mockParams.value = { conversationId: 'c1' }
+      rerender(<ChatShell />)
+      await waitFor(() => expect(screen.getByTestId('thread')).toBeTruthy())
+
+      mockParams.value = {}
+      rerender(<ChatShell />)
+      await waitFor(() => expect(screen.getByText('Pick a conversation')).toBeTruthy())
+    })
   })
 
   it('points users at channels as the way into a DM', async () => {

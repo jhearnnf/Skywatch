@@ -49,6 +49,26 @@ export default function ChatShell() {
   const [err,     setErr]     = useState('')
   const [groupSetup, setGroupSetup] = useState(null)
 
+  // The right pane shows the thread whenever the URL carries a conversation, so
+  // setting `groupSetup` while a channel was open changed nothing on screen —
+  // "My CBAT Group" looked dead to anyone who had read a channel first. Leave
+  // the conversation as part of opening the pane.
+  const openGroupSetup = useCallback(group => {
+    setGroupSetup(group)
+    if (conversationId) navigate('/chat')
+  }, [conversationId, navigate])
+
+  // And drop it again when a conversation is opened, so coming back to /chat
+  // (the mobile back control, where the rail is hidden while setup is up) lands
+  // on the rail rather than on a setup pane nobody asked for a second time.
+  // Compared against the previous value, not just truthiness: the navigate above
+  // and the state set can land in either order without this clearing itself.
+  const prevConversationId = useRef(conversationId)
+  useEffect(() => {
+    if (conversationId && conversationId !== prevConversationId.current) setGroupSetup(null)
+    prevConversationId.current = conversationId
+  }, [conversationId])
+
   useGameBodyClass('chat-wide')
 
   // Admin only, and gated here rather than inside the hook so a normal member
@@ -222,7 +242,7 @@ export default function ChatShell() {
           onStartSupport={startSupport}
           onOpenBot={openBot}
           onOpenDm={openDm}
-          onOpenGroupSetup={setGroupSetup}
+          onOpenGroupSetup={openGroupSetup}
         />
       </div>
 
