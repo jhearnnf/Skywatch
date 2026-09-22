@@ -3,6 +3,31 @@ import { useEffect, useState } from 'react'
 // Spring-ish easing with slight overshoot — feels like a real needle settling.
 const SPRING = 'cubic-bezier(0.34, 1.35, 0.64, 1)'
 
+// Safari will not rotate these dials around the middle of the face.
+//
+// `transform-origin` on an SVG element is resolved against a reference box,
+// and Safari does not reliably honour `transform-box: view-box` — it measures
+// the element's OWN bounding box instead. A needle's bounding box is the
+// needle, so `transform-origin: 50px 50px` resolved to a point roughly half a
+// face away from the dial centre: needles swung out of the instrument
+// entirely, settled with their tails off-centre, and the compass rose spun its
+// cardinals out past the bezel.
+//
+// `fill-box` is the one reference box every browser agrees on, so pin the
+// bounding box rather than argue about which box to use. Every transformed
+// group carries this invisible square: centred on (50,50) and large enough to
+// swallow the group whatever the animation is doing, so the bounding box stays
+// symmetric about the face centre. `fill-box` + `50% 50%` then means the dial
+// centre in every browser — including one that ignores transform-box
+// altogether, since the bounding box IS its fallback behaviour.
+const PIVOT = { transformBox: 'fill-box', transformOrigin: '50% 50%' }
+
+// Render inside any group that uses PIVOT. `fill="none"` paints nothing but
+// still counts as geometry, which is all a bounding box is made of.
+function Pivot() {
+  return <rect x="-50" y="-50" width="200" height="200" fill="none" />
+}
+
 // Maintain an "unwrapped" angle so a CSS transition always takes the shortest
 // arc — otherwise a prop change from 350° to 10° would spin 340° backwards.
 // Initial state is randomised so the first paint places the needle off-target,
@@ -64,7 +89,7 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
   const bigTarget = ((altitude % 1000) / 1000) * 360
   const smallAngle = useUnwrappedAngle(smallTarget)
   const bigAngle = useUnwrappedAngle(bigTarget)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, transformOrigin: '50px 50px', transformBox: 'view-box' }
+  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
   return (
     <InstrumentFace label="Altimeter" onClick={onClick} active={active}>
       {/* Major ticks + numerals 0–9 */}
@@ -96,11 +121,13 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
       })}
       {/* Big hand — hundreds (longer, thinner) */}
       <g style={{ ...t, transform: `rotate(${bigAngle}deg)` }}>
+        <Pivot />
         <line x1="50" y1="50" x2="50" y2="14" stroke="var(--color-game-text)" strokeWidth="2" strokeLinecap="round" />
         <polygon points="50,10 47,18 53,18" fill="var(--color-game-text)" />
       </g>
       {/* Small hand — thousands (shorter, thicker, brand colour) */}
       <g style={{ ...t, transform: `rotate(${smallAngle}deg)` }}>
+        <Pivot />
         <line x1="50" y1="50" x2="50" y2="28" stroke="var(--color-game-accent)" strokeWidth="4" strokeLinecap="round" />
       </g>
       <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
@@ -141,7 +168,10 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
         </clipPath>
       </defs>
       <g clipPath="url(#attClip)">
-        <g style={{ transition: t, transformOrigin: '50px 50px', transformBox: 'view-box', transform: `rotate(${roll}deg)` }}>
+        <g style={{ transition: t, ...PIVOT, transform: `rotate(${roll}deg)` }}>
+          <Pivot />
+          {/* Pitch only translates, and a translation ignores the origin, so
+              this inner group needs no pivot of its own. */}
           <g style={{ transition: t, transform: `translateY(${pitch}px)` }}>
             {/* Sky */}
             <rect x="0" y="0" width="100" height="50" fill="#1d5fa8" />
@@ -171,7 +201,7 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
 export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
   const target = (knots / 360) * 360  // 0–360 kt mapped 1:1 to degrees
   const angle = useInterp(target, 180)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, transformOrigin: '50px 50px', transformBox: 'view-box' }
+  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
   return (
     <InstrumentFace label="Airspeed (kt)" onClick={onClick} active={active}>
       {/* Major ticks at 0, 60, 120, ... 300 */}
@@ -204,6 +234,7 @@ export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
       })}
       {/* Needle */}
       <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
+        <Pivot />
         <polygon points="50,50 47,50 50,12 53,50" fill="var(--color-game-accent)" />
       </g>
       <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
@@ -216,7 +247,7 @@ export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
 export function VSI({ vs, durationMs = 2000, onClick, active }) {
   const target = vs === 'Ascend' ? -60 : vs === 'Descend' ? -120 : -90
   const angle = useUnwrappedAngle(target)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, transformOrigin: '50px 50px', transformBox: 'view-box' }
+  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
   return (
     <InstrumentFace label="V. Speed" onClick={onClick} active={active}>
       {/* Scale marks along the left arc */}
@@ -234,6 +265,7 @@ export function VSI({ vs, durationMs = 2000, onClick, active }) {
       <text x="8" y="54" fill="var(--color-game-text)" fontSize="7" fontFamily="monospace" fontWeight="bold">0</text>
       {/* Needle */}
       <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
+        <Pivot />
         <line x1="50" y1="50" x2="50" y2="14" stroke="var(--color-game-accent)" strokeWidth="2.5" strokeLinecap="round" />
       </g>
       <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
@@ -247,7 +279,7 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
   const headingDeg = { N: 0, E: 90, S: 180, W: 270 }[heading] ?? 0
   // Rotate rose so heading sits at top: rose rotation = -heading
   const roseAngle = useUnwrappedAngle(-headingDeg)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, transformOrigin: '50px 50px', transformBox: 'view-box' }
+  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
   const cardinals = [
     { label: 'N', deg: 0 },
     { label: 'E', deg: 90 },
@@ -257,6 +289,7 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
   return (
     <InstrumentFace label="Heading" onClick={onClick} active={active}>
       <g style={{ ...t, transform: `rotate(${roseAngle}deg)` }}>
+        <Pivot />
         {/* Tick marks every 30° */}
         {Array.from({ length: 12 }).map((_, i) => {
           const deg = i * 30
@@ -310,7 +343,8 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active }) {
       <line x1="25" y1="40" x2="29" y2="44" stroke="var(--color-game-faint)" strokeWidth="1" />
       <line x1="71" y1="44" x2="75" y2="40" stroke="var(--color-game-faint)" strokeWidth="1" />
       {/* Aircraft silhouette — rotates with the turn rate */}
-      <g style={{ transition: t, transformOrigin: '50px 50px', transformBox: 'view-box', transform: `rotate(${needleAngle}deg)` }}>
+      <g style={{ transition: t, ...PIVOT, transform: `rotate(${needleAngle}deg)` }}>
+        <Pivot />
         <rect x="32" y="48" width="36" height="3" fill="var(--color-game-accent)" rx="1" />
         <rect x="46" y="42" width="8" height="12" fill="var(--color-game-accent)" rx="1" />
       </g>
@@ -321,7 +355,7 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active }) {
         <line x1="54" y1="72" x2="54" y2="82" stroke="var(--color-game-line)" strokeWidth="0.5" />
         <circle cx="50" cy="77" r="3"
           fill="#ffffff"
-          style={{ transition: t, transformOrigin: '50px 77px', transformBox: 'view-box', transform: `translateX(${ballX}px)` }} />
+          style={{ transition: t, transform: `translateX(${ballX}px)` }} />
       </g>
       <text x="50" y="66" fill="var(--color-game-faint)" fontSize="5" textAnchor="middle"
             fontFamily="monospace" fontWeight="bold">LEVEL</text>
