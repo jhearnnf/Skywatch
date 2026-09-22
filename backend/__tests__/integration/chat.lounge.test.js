@@ -371,22 +371,50 @@ describe('the guide bot in the lounge', () => {
     expect(systemPrompt).toContain('3d practise');
   });
 
-  it('leaves out a game an admin has switched off', async () => {
+  it('tells the bot which board an admin has switched off', async () => {
     // A game off in Game Options is off the hub, so recommending it would send
-    // someone to a tile that is not there.
+    // someone to a tile that is not there. The bot is told which board is off
+    // rather than having the game hidden from it, so it can also answer the
+    // person who noticed it had gone. Vigilance is the case that matters: its
+    // plain key is the Easier board and 'vigilance-hard' is Hard, so a mix-up
+    // here would have the bot name the wrong half to a user.
     await seedCbatLounge();
     const admin  = await createUser({ isAdmin: true, displayName: 'Control' });
     const falcon = await createUser({ displayName: 'Falcon' });
     await seedGuide(admin._id);
-    await AppSettings.updateOne({}, { $set: { 'cbatGameEnabled.vigilance': false } });
+    await AppSettings.updateOne({}, { $set: { 'cbatGameEnabled.vigilance-hard': false } });
     const convo = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
 
     await send(falcon._id, convo._id, '@Guide Bot what should i play');
     await settle();
 
     const systemPrompt = callOpenRouter.mock.calls[0][0].body.messages[0].content;
-    expect(systemPrompt).not.toContain('the star grid');
+    const vigilance = systemPrompt.split('\n').find(l => l.startsWith('- Vigilance Test |'));
+    expect(vigilance).toContain('switched off right now: Hard');
     expect(systemPrompt).toContain('Trace Practise 3D');
+    // Every other game's line is left clean.
+    expect(systemPrompt.split('\n').filter(l => l.includes('switched off right now:'))).toHaveLength(1);
+  });
+
+  it('marks a game whose every board is off', async () => {
+    await seedCbatLounge();
+    const admin  = await createUser({ isAdmin: true, displayName: 'Control' });
+    const falcon = await createUser({ displayName: 'Falcon' });
+    await seedGuide(admin._id);
+    await AppSettings.updateOne({}, { $set: {
+      'cbatGameEnabled.vigilance': false, 'cbatGameEnabled.vigilance-hard': false,
+    } });
+    const convo = await ChatConversation.findOne({ 'channel.slug': LOUNGE_SLUG }).lean();
+
+    await send(falcon._id, convo._id, '@Guide Bot what should i play');
+    await settle();
+
+    const systemPrompt = callOpenRouter.mock.calls[0][0].body.messages[0].content;
+    const vigilance = systemPrompt.split('\n').find(l => l.startsWith('- Vigilance Test |'));
+    // Named, not deleted: the bot has to be able to say it is off to someone
+    // who went looking for it.
+    expect(vigilance).toContain('switched off right now: the whole game');
+    expect(vigilance).toContain('the star grid');
   });
 
   it('answers a normal channel at full length, with no pointer', async () => {

@@ -98,6 +98,7 @@ const CBAT_GAME_CATALOGUE = [
   {
     name: 'Instruments',
     registryKeys: ['instruments', 'instruments-orientation'],
+    parts: { instruments: 'Reading', 'instruments-orientation': 'Orientation' },
     simulates: 'INSC',
     aliases: ['instruments', 'insc', 'instrument comprehension', 'dials', 'instruments reading', 'instruments orientation', 'orientation', 'artificial horizon'],
     what: 'two modes on one tile. Reading: read six cockpit dials against the clock and pick the statement that says what the aircraft is doing. Orientation: read an attitude indicator and a compass and pick which of four aircraft pictures is flying that way, seen from behind an aircraft heading north.',
@@ -154,6 +155,7 @@ const CBAT_GAME_CATALOGUE = [
   {
     name: 'Visualisation 2D and 3D',
     registryKeys: ['visualisation-2d', 'visualisation-3d'],
+    parts: { 'visualisation-2d': '2D', 'visualisation-3d': '3D' },
     simulates: 'VISS',
     aliases: ['visualisation', 'visualization', 'viss', 'vis 2d', 'vis 3d', 'visualisation 3d', 'shapes'],
     what: 'weld flat shapes together in your head (2D) or rotate solid composites to find the matching figure (3D). Two modes on one tile.',
@@ -161,6 +163,7 @@ const CBAT_GAME_CATALOGUE = [
   {
     name: 'DPT',
     registryKeys: ['dpt', 'dpt-hard', 'dpt-easier'],
+    parts: { dpt: 'the retired 8-round board' },
     simulates: 'DPT',
     aliases: ['dpt', 'dynamic projection', 'dynamic projection test'],
     what: 'vector several aircraft through gates on compass bearings and intercept contacts. The longest game here.',
@@ -275,6 +278,37 @@ const CBAT_APP_FEATURES = [
   'A written CBAT guide, plus Canadian and Australian equivalents, in the Community section.',
 ];
 
+// How a switched-off part of a game is flagged on its line. One phrase, used
+// by the renderer, quoted in the bot's rules and asserted in the tests, so the
+// three cannot drift apart.
+const OFF_MARKER = 'switched off right now';
+
+/**
+ * What to call one of a game's registry keys when only part of the game is off.
+ *
+ * Derived from the key rather than listed out per game, so a new split is
+ * covered by adding its `-easier` key to the registry and nothing else:
+ *
+ *   x-easier, x-hard         the suffix says which half it is
+ *   x beside an x-hard       the Easier half (ANT and Vigilance keep their
+ *                            original key for Easier so existing scores stay
+ *                            on it, which is why the plain key can be Easier)
+ *   x beside an x-easier     the Hard half, every other split
+ *
+ * A key that is not a difficulty at all - Instruments' two boards,
+ * Visualisation's 2D and 3D, DPT's retired eight-round board - names itself in
+ * the entry's `parts`, which wins over all of the above. A unit test pins that
+ * every key of a multi-key entry comes back with a name.
+ */
+function partLabel(game, key) {
+  if (game.parts?.[key]) return game.parts[key];
+  if (key.endsWith('-easier')) return 'Easier';
+  if (key.endsWith('-hard')) return 'Hard';
+  if (game.registryKeys.includes(`${key}-hard`)) return 'Easier';
+  if (game.registryKeys.includes(`${key}-easier`)) return 'Hard';
+  return null;
+}
+
 const CATALOGUE_HEADER = '=== SKYWATCH PRACTICE GAMES ===';
 const CATALOGUE_FOOTER = '=== END OF GAME LIST ===';
 
@@ -283,27 +317,33 @@ const CATALOGUE_FOOTER = '=== END OF GAME LIST ===';
  *
  * @param {Object}   opts
  * @param {Function} opts.isEnabled  (registryKey) => boolean. An admin can
- *   switch a game off in Game Options, and a bot that recommends a game nobody
- *   can open is worse than one that never mentions it. An entry survives while
- *   ANY of its keys is on, so turning off one difficulty does not hide the game.
- *   Omitted means everything is on.
+ *   switch a game, or one mode of a game, off in Game Options.
+ *
+ *   A switched-off game is MARKED rather than removed. Hiding it made the bot
+ *   deny the game existed, which is the one failure this catalogue was written
+ *   to prevent, and it could not answer the obvious question from someone
+ *   looking at a hub the game had just vanished from. Marked, the bot knows
+ *   both halves: it never recommends something nobody can open, and it can say
+ *   plainly that the mode is off at the moment. The rule that keeps it from
+ *   recommending one is in the preamble below, not in this filter.
+ *
+ *   Marking is per key, so "Vigilance, Hard switched off" is exactly what the
+ *   bot is told when only that board is off. Omitted means everything is on.
  * @returns {string}
  */
 function renderGameCatalogue({ isEnabled = null } = {}) {
-  const live = isEnabled
-    ? CBAT_GAME_CATALOGUE.filter(g => g.registryKeys.some(k => isEnabled(k)))
-    : CBAT_GAME_CATALOGUE;
-
   const lines = [
     CATALOGUE_HEADER,
     'This is the full, current list of practice games SkyWatch has built. It is fact about this app, not a candidate report, so it carries no confidence codes and needs no hedging.',
     'They are CBAT-style simulations written from what candidates described. They are not the real tests, and nobody outside the test provider has those.',
-    'Each line reads: NAME | also called | what you do | drills, meaning the real test it is built from | modes, where the game has two difficulties | tutorial, where the game has a Tutorial button of its own and what it teaches.',
+    `Each line reads: NAME | also called | what you do | drills, meaning the real test it is built from | modes, where the game has two difficulties | tutorial, where the game has a Tutorial button of its own and what it teaches | ${OFF_MARKER}, only where something is unavailable today.`,
+    `"${OFF_MARKER}" means an admin has switched that game, or that one mode of it, off in Game Options. It is not on the hub today and nobody can open it. Never recommend it, never count it among what someone can play, and never send someone to it. Asked about it by name, say plainly that it is switched off at the moment and name what is still playable in its place. You are not told why, so give no reason and do not guess at one.`,
     'Six games have a tutorial: Target, ANT, FLAG, SAT, CUT and DPT. It is opened from a Tutorial button on the game page itself, it is not scored, and it is the answer to "how do the controls work" or "I do not understand what to do" for those games. For a game without one, the answer is to play its Easier mode where it has one.',
     '',
   ];
 
-  for (const g of live) {
+  for (const g of CBAT_GAME_CATALOGUE) {
+    const off = isEnabled ? g.registryKeys.filter(k => !isEnabled(k)) : [];
     const parts = [g.name];
     parts.push(g.aliases.length ? `also called: ${g.aliases.join(', ')}` : 'also called: -');
     parts.push(g.what);
@@ -311,6 +351,8 @@ function renderGameCatalogue({ isEnabled = null } = {}) {
     if (g.difficulties) parts.push(`modes: ${g.difficulties.join(' and ')}`);
     if (g.tutorial) parts.push(`tutorial: ${g.tutorial}`);
     if (g.tile) parts.push(`found under the ${g.tile} tile`);
+    if (off.length === g.registryKeys.length) parts.push(`${OFF_MARKER}: the whole game`);
+    else if (off.length) parts.push(`${OFF_MARKER}: ${off.map(k => partLabel(g, k) ?? g.name).join(' and ')}`);
     lines.push(`- ${parts.join(' | ')}`);
   }
 
@@ -327,5 +369,7 @@ module.exports = {
   CBAT_APP_FEATURES,
   CATALOGUE_HEADER,
   CATALOGUE_FOOTER,
+  OFF_MARKER,
+  partLabel,
   renderGameCatalogue,
 };

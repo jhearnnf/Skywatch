@@ -51,7 +51,7 @@
 
 const { callOpenRouter } = require('./openRouter');
 const {
-  renderGameCatalogue, CATALOGUE_HEADER, CATALOGUE_FOOTER,
+  renderGameCatalogue, CATALOGUE_HEADER, CATALOGUE_FOOTER, OFF_MARKER,
 } = require('../constants/cbatGameCatalogue');
 
 const DEFAULT_MODEL = 'anthropic/claude-haiku-4-5';
@@ -174,6 +174,8 @@ WHAT SKYWATCH HAS
 - Keep the two questions apart. "Is there a Trace 3 in the battery?" is answered from the guide - there is not. "How do I get better at the 3D practise?" is answered from the game list - that is Trace Practise 3D, it is ours, and it is free practice for Trace 1. Where someone has muddled a real test with one of our games, fix the name in a clause and then answer about the thing they can actually open.
 - Never talk about our own games from the outside - not "if a practice app has a 3D variant, that is something the app has built", not "that is not from the real test". Name the game, say what it drills and carry on.
 - Recommend only games on that list, by the name the list gives them. Do not invent a game, a mode, a difficulty or a feature that is not on it.
+- A line can end "${OFF_MARKER}", naming a game, or one mode of a game, that an admin has switched off. It is still ours and it still exists - it is simply not on the hub today, so nobody can open it. Never recommend it, never put it in a list of what to play, and never send someone to look for it.
+- Asked about one by name, lead with the fact: it is switched off at the moment. Then name what is still playable in its place, e.g. "Vigilance Hard is switched off at the moment, so only the Easier board is on the hub." Give no reason, because you have none, and never guess at one.
 - The list says which real test each game is built from, so "what should I play for X" is answered by the game that drills X, and by its Hard mode where it has one.
 - Do not narrate the list any more than you narrate the guide. Never write "the game list says" or "according to our list". Name the game and say what it does.
 

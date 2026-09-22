@@ -9,6 +9,7 @@
  */
 const {
   CBAT_GAME_CATALOGUE, renderGameCatalogue, CATALOGUE_HEADER, CATALOGUE_FOOTER,
+  OFF_MARKER, partLabel,
 } = require('../../constants/cbatGameCatalogue');
 const { CBAT_GAMES, CBAT_TUTORIAL_GAME_KEYS, isCbatEasierKey } = require('../../constants/cbatGames');
 const { TESTS } = require('../../constants/cbatBatteries');
@@ -130,16 +131,60 @@ describe('rendering', () => {
     expect(block).toMatch(/Six games have a tutorial: Target, ANT, FLAG, SAT, CUT and DPT/);
   });
 
-  it('drops a game an admin has switched off', () => {
+  const lineFor = (block, name) => block.split('\n').find(l => l.startsWith(`- ${name} |`));
+
+  // Hiding it was the old behaviour and it was wrong: the bot then told the
+  // person looking at the hub that a game we built does not exist, which is
+  // the exact failure this catalogue was written to stop. It is named and
+  // marked instead, and the prompt rules keep it out of recommendations.
+  it('marks a game an admin has switched off rather than hiding it', () => {
     const block = renderGameCatalogue({ isEnabled: (k) => k !== 'target' });
-    expect(block).not.toContain('- Target |');
+    expect(lineFor(block, 'Target')).toContain(`${OFF_MARKER}: the whole game`);
     expect(block).toContain('Vigilance Test');
   });
 
-  // Turning off one difficulty must not hide the game: FLAG with only its
-  // Easier board switched off is still FLAG, and still playable.
-  it('keeps a game while any of its boards is on', () => {
+  // Turning off one difficulty must not mark the game as gone: FLAG with only
+  // its Easier board switched off is still FLAG, and Hard is still playable.
+  it('marks only the board that is off where a game has two', () => {
     const block = renderGameCatalogue({ isEnabled: (k) => k !== 'flag-easier' });
-    expect(block).toContain('FLAG');
+    expect(lineFor(block, 'FLAG')).toContain(`${OFF_MARKER}: Easier`);
+    expect(lineFor(block, 'FLAG')).not.toContain('the whole game');
+  });
+
+  // ANT and Vigilance are the two splits whose PLAIN key is the Easier half,
+  // so a labeller that trusted the suffix alone would tell the bot Easier was
+  // off when Hard is. Pinned here because the bot repeats this to a user.
+  it('names the right half of a split whose plain key is Easier', () => {
+    const block = renderGameCatalogue({ isEnabled: (k) => k !== 'vigilance-hard' });
+    expect(lineFor(block, 'Vigilance Test')).toContain(`${OFF_MARKER}: Hard`);
+
+    const easierOff = renderGameCatalogue({ isEnabled: (k) => k !== 'vigilance' });
+    expect(lineFor(easierOff, 'Vigilance Test')).toContain(`${OFF_MARKER}: Easier`);
+  });
+
+  // Every key of a multi-key game has to have something to call it, or the bot
+  // is handed a blank where the mode name goes.
+  it('has a name for every board of every game that has more than one', () => {
+    for (const game of CBAT_GAME_CATALOGUE) {
+      if (game.registryKeys.length < 2) continue;
+      for (const key of game.registryKeys) {
+        expect({ game: game.name, key, label: partLabel(game, key) })
+          .toEqual({ game: game.name, key, label: expect.any(String) });
+      }
+    }
+  });
+
+  it('marks nothing at all when no game is switched off', () => {
+    expect(renderGameCatalogue()).not.toContain(`${OFF_MARKER}:`);
+    expect(renderGameCatalogue({ isEnabled: () => true })).not.toContain(`${OFF_MARKER}:`);
+  });
+
+  // The marker is only half the fix: the bot also has to be told what to do
+  // with it, and those instructions ride in the same block.
+  it('tells the bot never to recommend a switched-off game and to say it is off', () => {
+    const block = renderGameCatalogue();
+    expect(block).toContain(`"${OFF_MARKER}" means an admin has switched that game`);
+    expect(block).toMatch(/Never recommend it/);
+    expect(block).toMatch(/switched off at the moment/);
   });
 });

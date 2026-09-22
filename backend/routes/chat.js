@@ -1820,14 +1820,16 @@ async function loadBotCorpus(question) {
   return doc.corpus ?? '';
 }
 
-// The SkyWatch game list the bot answers app questions from, filtered to the
-// games an admin has actually left switched on.
+// The SkyWatch game list the bot answers app questions from, stamped with what
+// an admin has switched off in Game Options.
 //
-// The filter is the only reason this is a function rather than a constant: a
-// game turned off in Game Options is not on the hub, and a bot that recommends
-// a game nobody can open is worse than one that never mentions it. A failure to
-// read settings falls back to the full list — knowing about a switched-off game
-// is a much smaller fault than knowing about none of them.
+// That stamp is the only reason this is a function rather than a constant. It
+// used to delete a switched-off game from the list, which made the bot deny the
+// game existed to the person looking at the hub it had gone from; now the line
+// stays and carries a marker, and the prompt rules do the rest - never
+// recommend it, say plainly that it is off if asked. A failure to read settings
+// falls back to the unmarked list: describing a game as playable when it is off
+// for the day is a much smaller fault than knowing about none of them.
 async function loadGameCatalogue() {
   try {
     const settings = await AppSettings.getSettings();
