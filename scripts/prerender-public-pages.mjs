@@ -120,41 +120,54 @@ export function buildPublicHtml(template, snapshot, pathname) {
   return result
 }
 
+async function capturePage(browser, origin, settings, pathname) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: 'block', reducedMotion: 'reduce' })
+  try {
+    await routePublicRequests(context, origin, settings)
+    const page = await context.newPage()
+    const errors = []
+    page.on('pageerror', error => errors.push(error.stack || error.message))
+    await page.goto(`${origin}${pathname}`, { waitUntil: 'networkidle' })
+    await page.locator(PUBLIC_PAGE_SEO[pathname].selector).waitFor({ state: 'visible' })
+    await page.waitForFunction(path => document.querySelector('link[rel="canonical"]')?.href === `https://skywatch.academy${path}`, pathname)
+    // Finish entrance animations before capturing visible styles.
+    await page.waitForFunction(() => document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).every(animation => animation.playState === 'finished'))
+    if (errors.length) throw new Error(`${pathname}: ${errors.join('; ')}`)
+    return await page.evaluate(() => ({
+      head: [...document.querySelectorAll('head title, head meta[name="description"], head meta[name="robots"], head link[rel="canonical"], head meta[property^="og:"], head meta[name^="twitter:"], [data-page-schema]')].map(node => node.outerHTML).join('\n'),
+      body: document.getElementById('root').innerHTML,
+      bodyClass: document.body.className,
+    }))
+  } finally { await context.close().catch(() => {}) }
+}
+
 export async function prerenderPublicPages() {
   const dist = join(process.cwd(), 'dist')
   const template = readFileSync(join(dist, 'index.html'), 'utf8')
   const settings = await publicSettings()
   const server = await serveBuild(dist, { snapshots: false })
-  let browser
   try {
-    browser = await launchBrowser()
     for (const pathname of PUBLIC_ROUTES) {
-      const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: 'block', reducedMotion: 'reduce' })
-      try {
-        await routePublicRequests(context, server.origin, settings)
-        const page = await context.newPage()
-        const errors = []
-        page.on('pageerror', error => errors.push(error.stack || error.message))
-        await page.goto(`${server.origin}${pathname}`, { waitUntil: 'networkidle' })
-        await page.locator(PUBLIC_PAGE_SEO[pathname].selector).waitFor({ state: 'visible' })
-        await page.waitForFunction(path => document.querySelector('link[rel="canonical"]')?.href === `https://skywatch.academy${path}`, pathname)
-        // Finish entrance animations before capturing visible styles.
-        await page.waitForFunction(() => document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).every(animation => animation.playState === 'finished'))
-        if (errors.length) throw new Error(`${pathname}: ${errors.join('; ')}`)
-        const snapshot = await page.evaluate(() => ({
-          head: [...document.querySelectorAll('head title, head meta[name="description"], head meta[name="robots"], head link[rel="canonical"], head meta[property^="og:"], head meta[name^="twitter:"], [data-page-schema]')].map(node => node.outerHTML).join('\n'),
-          body: document.getElementById('root').innerHTML,
-          bodyClass: document.body.className,
-        }))
-        const html = buildPublicHtml(template, snapshot, pathname)
-        const file = join(dist, 'public-pages', `${pathname.slice(1)}.html`)
-        mkdirSync(dirname(file), { recursive: true })
-        writeFileSync(file, html)
-        console.log(`Public HTML: ${pathname} (${Math.round(Buffer.byteLength(html) / 1024)} KB)`)
-      } finally { await context.close() }
+      // A fresh browser per route: on Vercel @sparticuz/chromium runs
+      // --single-process, so tearing down one WebGL page's context can take
+      // the whole browser with it and fail every route after it.
+      let snapshot
+      for (let attempt = 1; !snapshot; attempt++) {
+        const browser = await launchBrowser()
+        try {
+          snapshot = await capturePage(browser, server.origin, settings, pathname)
+        } catch (error) {
+          if (attempt >= 2) throw error
+          console.warn(`Public HTML: retrying ${pathname} after ${error.message.split('\n')[0]}`)
+        } finally { await browser.close().catch(() => {}) }
+      }
+      const html = buildPublicHtml(template, snapshot, pathname)
+      const file = join(dist, 'public-pages', `${pathname.slice(1)}.html`)
+      mkdirSync(dirname(file), { recursive: true })
+      writeFileSync(file, html)
+      console.log(`Public HTML: ${pathname} (${Math.round(Buffer.byteLength(html) / 1024)} KB)`)
     }
   } finally {
-    await browser?.close()
     await server.close()
   }
 }
