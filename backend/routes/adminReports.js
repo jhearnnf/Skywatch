@@ -9,6 +9,7 @@ const GameSessionFlashcardRecallResult = require('../models/GameSessionFlashcard
 const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
+const CbatMatfPrint = require('../models/CbatMatfPrint');
 const AppOpen = require('../models/AppOpen');
 const ChatConversation = require('../models/ChatConversation');
 const ChatMessage = require('../models/ChatMessage');
@@ -847,6 +848,32 @@ router.get('/cbat', async (req, res) => {
     }
     perGame.sort((a, b) => b.sessions - a.sessions);
 
+    // Stats that only mean something for one game. MATF prints: reference
+    // sheets sent to the printer (replays of a saved sheet are not counted).
+    const matfPrintsIn = async (start, end = null) => {
+      const printedAt = end ? { $gte: start, $lt: end } : { $gte: start };
+      const [byBoard, players] = await Promise.all([
+        CbatMatfPrint.aggregate([
+          { $match: { printedAt } },
+          { $group: { _id: '$gameKey', count: { $sum: 1 } } },
+        ]),
+        CbatMatfPrint.distinct('userId', { printedAt }),
+      ]);
+      const count = key => byBoard.find(r => r._id === key)?.count ?? 0;
+      return {
+        prints: count('matf') + count('matf-easier'),
+        hard: count('matf'),
+        easier: count('matf-easier'),
+        players: players.length,
+      };
+    };
+    const matfPrints = await matfPrintsIn(wStart);
+    if (wantCompare) {
+      const prev = (await matfPrintsIn(prior.start, prior.end)).prints;
+      matfPrints.prev = prev;
+      matfPrints.delta = relDelta(matfPrints.prints, prev);
+    }
+
     // Keys whose names render greyed on the Reports page (tutorial + practice).
     const practiceKeys = [...tutorials.map(t => t.key), ...PRACTICE_GAME_KEYS];
 
@@ -873,6 +900,7 @@ router.get('/cbat', async (req, res) => {
         activityHeatmap: heatmap,
         sessionsPerPlayerBuckets,
         perGame,
+        gameStats: { matfPrints },
         tutorials: tutorials.map(t => ({
           key: t.key,
           label: t.label,

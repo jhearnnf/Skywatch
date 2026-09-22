@@ -529,8 +529,16 @@ export default function CbatMatf() {
   const printSheet = useCallback(() => {
     setPrintouts(recordMatfPrintout({ seed, difficulty: runTuningRef.current.key }))
     setOnPaper(true)
+    // Counted for the admin Reports page. Fire-and-forget: a lost count must
+    // never get in the way of the print dialog.
+    apiFetch(`${API}/api/games/cbat/matf/print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ gameKey: runTuningRef.current.gameKey, seed }),
+    }).catch(() => {})
     try { window.print() } catch { /* no print surface */ }
-  }, [seed])
+  }, [seed, apiFetch, API])
 
   const replaySheet = useCallback((entry) => {
     setDifficulty(entry.difficulty)

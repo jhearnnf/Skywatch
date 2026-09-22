@@ -1944,6 +1944,29 @@ function ReportsTab({ API }) {
               </div>
             </div>
 
+            {/* Stats that only exist for one game */}
+            {cbat.gameStats && (
+              <div className="relative rounded-2xl border border-slate-200 bg-surface overflow-hidden" aria-busy={cbatLoading || undefined}>
+                <ChartLoadingBar active={cbatLoading} />
+                <div className="px-4 py-3 border-b border-slate-200">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Game-specific Stats</h4>
+                    <WindowChip window={window} sm />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">window: {window}</p>
+                </div>
+                <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <StatCard
+                    label="MATF Sheets Printed"
+                    value={fmtNum(cbat.gameStats.matfPrints.prints)}
+                    color="brand"
+                    sub={`${fmtNum(cbat.gameStats.matfPrints.players)} players · Hard ${fmtNum(cbat.gameStats.matfPrints.hard)} · Easier ${fmtNum(cbat.gameStats.matfPrints.easier)}`}
+                    delta={compareActive ? cbat.gameStats.matfPrints.delta : undefined}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Tutorial / practice-mode per-step drop-off */}
             {cbat.tutorials?.length > 0 && (
               <div className={`relative rounded-2xl border border-slate-200 bg-surface overflow-hidden transition-opacity ${compareActive ? 'opacity-60' : ''}`} aria-busy={cbatLoading || undefined}>

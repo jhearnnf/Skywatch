@@ -160,6 +160,7 @@ const MOCK_CBAT = {
       { key: 'angles',        label: 'Angles',         sessions: 14, players: 6, avgPerPlayer: 2.33, starts: 16, abandonPct: 0.125 },
       { key: 'target-tutorial', label: 'Target (tutorial)', sessions: 8, players: 3, avgPerPlayer: 2.67, starts: 8, abandonPct: 0.375, isTutorial: true },
     ],
+    gameStats: { matfPrints: { prints: 9, hard: 6, easier: 3, players: 4 } },
     tutorials: [
       {
         key: 'target-tutorial', label: 'Target (tutorial)', gameKey: 'target',
@@ -370,6 +371,14 @@ describe('Admin — Reports tab', () => {
     expect(screen.getByText('Trace Practise 3D')).toBeInTheDocument()
     expect(screen.getByText('Target')).toBeInTheDocument()
     expect(screen.getByText('Angles')).toBeInTheDocument()
+  })
+
+  it('shows how many MATF sheets were printed under Game-specific Stats', async () => {
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('Game-specific Stats')).toBeInTheDocument())
+    const card = screen.getByText('MATF Sheets Printed').closest('div.relative')
+    expect(within(card).getByText('9')).toBeInTheDocument()
+    expect(within(card).getByText('4 players · Hard 6 · Easier 3')).toBeInTheDocument()
   })
 
   it('shows the Target (tutorial) entry and a per-step Tutorial Drop-off funnel', async () => {

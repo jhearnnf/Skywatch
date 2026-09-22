@@ -52,11 +52,13 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
 
+let apiFetch
 function renderPage() {
+  apiFetch = vi.fn(async () => ({ ok: true, json: async () => ({}) }))
   mockUseAuth.mockReturnValue({
     user: { _id: 'u1' },
     API: '',
-    apiFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })),
+    apiFetch,
   })
   return render(<CbatMatf />)
 }
@@ -117,6 +119,19 @@ describe('CbatMatf printing helper', () => {
     // The note has to be on the PAPER, not only on the screen that offered it.
     expect(within(sheet).getByText(/good for one run/i)).toBeInTheDocument()
     expect(within(sheet).getByText(/different set of numbers on purpose/i)).toBeInTheDocument()
+  })
+
+  it('counts the print for the admin Reports page when the print dialog opens', () => {
+    renderPage()
+    pressStart()
+    click(/yes, print the tables/i)
+    const printCalls = () => apiFetch.mock.calls.filter(([url]) => url.endsWith('/api/games/cbat/matf/print'))
+    expect(printCalls()).toHaveLength(0)
+    click(/print these sheets/i)
+    expect(printCalls()).toHaveLength(1)
+    const body = JSON.parse(printCalls()[0][1].body)
+    expect(['matf', 'matf-easier']).toContain(body.gameKey)
+    expect(body.seed).toBe(readMatfPrintouts()[0].seed)
   })
 
   it('saves the sheet the moment the print dialog opens, not on the way out', () => {

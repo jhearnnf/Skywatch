@@ -33,6 +33,7 @@ const { buildCbatShowcase } = require('../utils/cbatShowcase');
 const { scoreSharingMatch } = require('../utils/cbatScoreSharing');
 const { buildCbatActivityStats } = require('../utils/cbatActivityStats');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
+const CbatMatfPrint = require('../models/CbatMatfPrint');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
 const GameSessionCbatAnglesResult         = CBAT_GAMES['angles'].Model;
@@ -2558,6 +2559,28 @@ async function submitMatfResult(req, res, Model) {
 }
 router.post('/cbat/matf/result',        protect, (req, res) => submitMatfResult(req, res, GameSessionCbatMatfResult));
 router.post('/cbat/matf-easier/result', protect, (req, res) => submitMatfResult(req, res, GameSessionCbatMatfEasierResult));
+
+// POST /api/games/cbat/matf/print
+// Counts a reference sheet sent to the printer, for the admin Reports page.
+// Body: { gameKey: 'matf' | 'matf-easier', seed }. Replays of a saved sheet
+// never call this — they are not a new printout.
+router.post('/cbat/matf/print', protect, async (req, res) => {
+  try {
+    const { gameKey, seed } = req.body || {};
+    if (gameKey !== 'matf' && gameKey !== 'matf-easier') {
+      return res.status(400).json({ message: 'Unknown MATF board' });
+    }
+    const s = Number(seed);
+    const row = await CbatMatfPrint.create({
+      userId: req.user._id,
+      gameKey,
+      seed: Number.isFinite(s) ? s : null,
+    });
+    res.status(201).json({ status: 'success', data: { id: row._id } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // POST /api/games/cbat/vigilance/result and /vigilance-hard/result
 // Plain 'vigilance' is the Easier board (the original, under its original
