@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useAuth } from '../../../context/AuthContext'
+import { useAutoGrow } from '../autoGrow'
 
 // Admin composer for an announcements channel.
 //
@@ -16,6 +17,12 @@ export default function AnnouncementDrafter({ conversationId, onPosted }) {
   const [posting, setPosting] = useState(null)
   const [err,     setErr]     = useState('')
   const [manual,  setManual]  = useState('')
+  const manualRef = useRef(null)
+
+  // Same growing box as every other channel's composer: a fixed single row
+  // hides everything but the last line once an announcement wraps, and these
+  // run to several paragraphs.
+  useAutoGrow(manualRef, manual)
 
   const draftFromGithub = async () => {
     setLoading(true); setErr('')
@@ -60,7 +67,7 @@ export default function AnnouncementDrafter({ conversationId, onPosted }) {
   const editDraft = (key, text) =>
     setDrafts(prev => (prev ?? []).map(d => (d.key === key ? { ...d, text } : d)))
 
-  const inputClass = 'w-full resize-none px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm'
+  const inputClass = 'w-full resize-none overflow-y-auto px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm'
 
   return (
     <div className="border-t border-slate-200 p-3 space-y-3">
@@ -117,6 +124,7 @@ export default function AnnouncementDrafter({ conversationId, onPosted }) {
       {/* Write one by hand */}
       <div className="flex items-end gap-2">
         <textarea
+          ref={manualRef}
           rows={1}
           value={manual}
           onChange={e => setManual(e.target.value)}
