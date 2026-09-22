@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 
 // Spring-ish easing with slight overshoot — feels like a real needle settling.
 const SPRING = 'cubic-bezier(0.34, 1.35, 0.64, 1)'
@@ -50,8 +50,15 @@ function useInterp(target, randomRange = 0) {
   return v
 }
 
+// Six faces share one document, so a literal id="faceBg" would give every
+// instrument the first face's gradient. Scope the id per instance instead.
+function useLocalId(prefix) {
+  return `${prefix}-${useId().replace(/:/g, '')}`
+}
+
 function InstrumentFace({ label, children, onClick, active }) {
   const clickable = typeof onClick === 'function'
+  const faceBg = useLocalId('faceBg')
   const wrapperClass = [
     'bg-game-arena border rounded-xl p-2 flex flex-col items-center transition-colors w-full',
     active ? 'border-amber-700 ring-2 ring-amber-700/40' : 'border-game-line',
@@ -63,12 +70,12 @@ function InstrumentFace({ label, children, onClick, active }) {
       <p className={`text-[9px] uppercase tracking-wide mb-1 text-center w-full ${active ? 'text-amber-700' : 'text-slate-500'}`}>{label}</p>
       <svg viewBox="0 0 100 100" className="w-full max-w-[120px] aspect-square pointer-events-none">
         <defs>
-          <radialGradient id="faceBg" cx="50%" cy="50%" r="50%">
+          <radialGradient id={faceBg} cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="var(--color-game-panel)" />
             <stop offset="100%" stopColor="var(--color-game-arena)" />
           </radialGradient>
         </defs>
-        <circle cx="50" cy="50" r="48" fill="url(#faceBg)" stroke="var(--color-game-line)" strokeWidth="1" />
+        <circle cx="50" cy="50" r="48" fill={`url(#${faceBg})`} stroke="var(--color-game-line)" strokeWidth="1" />
         {children}
       </svg>
     </>
@@ -146,6 +153,7 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
   // Roll rotates the horizon opposite the bank — right bank shows as horizon
   // rotating counter-clockwise (negative degrees).
   const targetRoll = turn === 'Standard' ? -15 : turn === 'Non-standard' ? -30 : 0
+  const attClip = useLocalId('attClip')
   const [pitch, setPitch] = useState(() => -10 + Math.random() * 20)
   const [roll, setRoll] = useState(() => -18 + Math.random() * 36)
   useEffect(() => {
@@ -163,11 +171,11 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
   return (
     <InstrumentFace label="Attitude" onClick={onClick} active={active}>
       <defs>
-        <clipPath id="attClip">
+        <clipPath id={attClip}>
           <circle cx="50" cy="50" r="40" />
         </clipPath>
       </defs>
-      <g clipPath="url(#attClip)">
+      <g clipPath={`url(#${attClip})`}>
         <g style={{ transition: t, ...PIVOT, transform: `rotate(${roll}deg)` }}>
           <Pivot />
           {/* Pitch only translates, and a translation ignores the origin, so

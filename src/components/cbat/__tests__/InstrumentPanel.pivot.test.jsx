@@ -70,3 +70,14 @@ describe('InstrumentPanel — dials rotate about the centre of the face', () => 
     }
   })
 })
+
+describe('InstrumentPanel — the six faces do not share ids', () => {
+  it('scopes the gradient and clip ids per instrument', () => {
+    const ids = [...panel().querySelectorAll('[id]')].map(el => el.getAttribute('id'))
+    expect(ids.length).toBeGreaterThan(1)
+    expect(new Set(ids).size).toBe(ids.length)
+    // References must point at the scoped id, not the bare one.
+    expect(ids.some(id => id.startsWith('faceBg-'))).toBe(true)
+    expect(ids.some(id => id.startsWith('attClip-'))).toBe(true)
+  })
+})
