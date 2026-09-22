@@ -7,6 +7,7 @@ import { useSlimMode } from '../hooks/useSlimMode'
 import { usePhoneTight } from '../hooks/usePhoneTight'
 import { getRouteTrail } from '../utils/routeTrail'
 import { getClientInfo, peekClientInfo } from '../utils/appVersion'
+import { collectReportEnvironment } from '../utils/reportEnvironment'
 
 // ── Fitting the phone viewport ───────────────────────────────────────────────
 // This page is reached from a link in the last row of the CBAT grid, which is
@@ -130,6 +131,11 @@ export default function ReportProblem() {
     // entry of every report ever filed.
     const trail = getRouteTrail().filter(p => !/^\/report\/?$/.test(p))
 
+    // OS, browser, screen, GPU and the rest — the questions a report cannot be
+    // triaged without and the reporter has no reason to know to answer. Best
+    // effort and time-capped inside the collector, so it never blocks the send.
+    const environment = await collectReportEnvironment()
+
     try {
       const res = await apiFetch(`${API}/api/users/report-problem`, {
         method: 'POST', credentials: 'include',
@@ -145,6 +151,7 @@ export default function ReportProblem() {
           // Optional and best-effort, exactly as on the heartbeat — null on a
           // native client whose bridge has not answered yet.
           ...(peekClientInfo() ? { client: peekClientInfo() } : {}),
+          ...(environment ? { environment } : {}),
           ...(briefId ? { briefId } : {}),
         }),
       })

@@ -26,6 +26,7 @@ const { LOUNGE_SLUG } = require('../seeds/seedCbatLounge');
 const { resolveMentions, MENTION_LIMIT } = require('../utils/chatMentions');
 const { selectGuideSlice } = require('../utils/cbatGuideRetrieval');
 const { overDailyBudget, noteBotSpend } = require('../utils/chatBotBudget');
+const { listTickets, unreadTicketReplies } = require('../utils/reportTickets');
 
 // One knowledge document for now. A second bot would key off its own slug.
 const BOT_KNOWLEDGE_SLUG = 'cbat-guide';
@@ -37,10 +38,18 @@ const userCbatDateKey = (user) => user?.upcomingCbatDate
   ? new Date(user.upcomingCbatDate).toISOString().slice(0, 10)
   : null;
 
-// What the test is called where the room is. Not everyone sits "the CBAT":
-// Canada's is the CFAST, and the rest have no one name applicants agree on,
-// so those get the plain phrase rather than a guess that reads wrong.
-const cohortTestName = (region) => ({ GB: 'the CBAT', CA: 'the CFAST' })[region] ?? 'your aptitude test';
+// What the test is called where the applicant is. Not everyone sits "the
+// CBAT": Canada's is the CFAST and Australia's deciding battery is the MACTS,
+// while the rest have no one name applicants agree on, so those get the plain
+// phrase rather than a guess that reads wrong.
+//
+// The bare label is what the client slots into headings and inputs ("Upcoming
+// CFAST date") and is sent with every cbat-group response, so the Profile
+// card, the CBAT lounge and the Community rail all say the same word without
+// each guessing the region for itself. The phrase is for running prose.
+const COHORT_TEST_LABELS = { GB: 'CBAT', CA: 'CFAST', AU: 'MACTS' };
+const cohortTestLabel = (region) => COHORT_TEST_LABELS[region] ?? null;
+const cohortTestName = (region) => (cohortTestLabel(region) ? `the ${cohortTestLabel(region)}` : 'your aptitude test');
 
 // The hint drawn above every cohort room's history, so a group is never an
 // empty box. NOT a message: nothing is stored, it is sent with the room and
@@ -74,9 +83,11 @@ async function ensureCbatCohort(dateKey, region) {
         type: 'channel',
         isArchived: false,
         channel: {
-          name: `CBAT · ${readableDate}`,
+          // Named for the test the room's region sits, so a Canadian sees
+          // "CFAST · 14 Oct 2099" on the rail and not a UK acronym.
+          name: `${cohortTestLabel(region) ?? 'Test day'} · ${readableDate}`,
           slug: `cbat-${dateKey}-${region.toLowerCase()}`,
-          description: 'Private chat for applicants attending CBAT on the same date in the same region.',
+          description: `Private chat for applicants sitting ${cohortTestName(region)} on the same date in the same region.`,
           emoji: '✈️',
           order: 3,
           postPolicy: 'everyone',
@@ -129,10 +140,14 @@ async function serializeCbatGroup(user) {
     }
   }
   if (!date || !region) {
+    // The detected region goes back even before a date is chosen so the form
+    // can be worded for the test the person will actually sit.
     return {
       configured: false,
       applicable: !user?.cbatPassed,
       regionAvailable: Boolean(user?.firstSeenCountry || user?.geo?.country),
+      region: /^[A-Z]{2}$/.test(detectedRegion) ? detectedRegion : null,
+      testName: cohortTestLabel(detectedRegion),
     };
   }
   const convo = await ensureCbatCohort(date, region);
@@ -155,6 +170,7 @@ async function serializeCbatGroup(user) {
     configured: true,
     date,
     region,
+    testName: cohortTestLabel(region),
     conversationId: convo._id,
     title: channelTitle(convo),
     memberCount,
@@ -768,7 +784,7 @@ router.get('/overview', async (req, res) => {
     const convos = await visibleConversations(req.user);
     const ids    = convos.map(c => c._id);
     const reads = await readMap(req.user._id, ids);
-    const [personal, previews, dmUsers, guides] = await Promise.all([
+    const [personal, previews, dmUsers, guides, tickets] = await Promise.all([
       // Same helper the navbar count uses, so the rail explains the number
       // rather than merely agreeing with it.
       personalUnreadCounts(req.user, convos, reads),
@@ -791,6 +807,10 @@ router.get('/overview', async (req, res) => {
       ChatGuide.find(
         req.user.isAdmin ? { isHidden: false } : { isHidden: false, adminOnly: { $ne: true } },
       ).sort({ order: 1, title: 1 }).lean(),
+      // The viewer's own problem reports, with the team's replies. Listed here
+      // so a reply reaches them the same way a DM does, in the rail, rather
+      // than as a toast over whatever they were doing.
+      listTickets(req.user._id),
     ]);
 
     // Current names for whoever wrote each preview. The rail line is "Name:
@@ -866,14 +886,16 @@ router.get('/overview', async (req, res) => {
       g.memberCount = convo ? await cohortMemberCount(convo) : 0;
     }));
     if (!groups.length) {
+      const groupTitle = `My ${cbatGroupState.testName ?? 'Test Day'} Group`;
       groups.push({
         _id: null,
-        title: 'My CBAT Group',
-        name: 'My CBAT Group',
+        title: groupTitle,
+        name: groupTitle,
         emoji: '✈️',
         setupRequired: true,
         applicable: cbatGroupState.applicable !== false,
         regionAvailable: cbatGroupState.regionAvailable !== false,
+        testName: cbatGroupState.testName ?? null,
         unread: false,
         personalUnread: 0,
       });
@@ -945,6 +967,9 @@ router.get('/overview', async (req, res) => {
         adminOnly:   Boolean(g.adminOnly),
       })),
       channels,
+      // Empty for almost everyone; the rail only shows the section when it is
+      // not. Open tickets, plus resolved ones with a reply still unread.
+      tickets,
       groups,
       // A bot DM is listed under `bots`, not here — it is a tool, not a person
       // you are talking to, and mixing them would bury real conversations.
@@ -1024,19 +1049,19 @@ router.post('/cbat-group', async (req, res) => {
     if (req.user.cbatPassed && !req.user.upcomingCbatDate) {
       return res.status(403).json({
         code: 'CBAT_ALREADY_PASSED',
-        message: 'Upcoming CBAT groups are not available after you have passed your CBAT.',
+        message: 'Upcoming-date groups are not available after you have passed your test.',
       });
     }
     const date = String(req.body?.date ?? '');
     if (!CBAT_DATE_RE.test(date)) {
-      return res.status(400).json({ message: 'Choose a valid CBAT date.' });
+      return res.status(400).json({ message: 'Choose a valid test date.' });
     }
     const parsed = new Date(`${date}T00:00:00.000Z`);
     if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
-      return res.status(400).json({ message: 'Choose a valid CBAT date.' });
+      return res.status(400).json({ message: 'Choose a valid test date.' });
     }
     const today = new Date().toISOString().slice(0, 10);
-    if (date < today) return res.status(400).json({ message: 'Your upcoming CBAT date cannot be in the past.' });
+    if (date < today) return res.status(400).json({ message: 'Your test date cannot be in the past.' });
 
     const region = String(req.user.firstSeenCountry || req.user.geo?.country || '').toUpperCase();
     if (!/^[A-Z]{2}$/.test(region)) {
@@ -1061,7 +1086,7 @@ router.post('/cbat-group', async (req, res) => {
     if (!locked) {
       return res.status(409).json({
         code: 'CBAT_DATE_LOCKED',
-        message: 'Your upcoming CBAT date has already been confirmed and cannot be changed.',
+        message: 'Your test date has already been confirmed and cannot be changed.',
       });
     }
     res.status(201).json({ status: 'success', data: await serializeCbatGroup(locked) });
@@ -1375,7 +1400,10 @@ router.get('/unread/me', async (req, res) => {
     const unread = convos.filter(c => isUnread(c, reads.get(String(c._id))));
     const hasAnyOpenChat = convos.some(c => c.type === 'support' && c.status === 'open');
     const personal = await personalUnreadCounts(req.user, convos, reads);
-    const personalUnread = [...personal.values()].reduce((a, b) => a + b, 0);
+    // A reply to your own problem report is as personal as a DM: it goes on
+    // the number, not the dot.
+    const ticketReplies = await unreadTicketReplies(req.user._id);
+    const personalUnread = [...personal.values()].reduce((a, b) => a + b, 0) + ticketReplies;
 
     // Opted out of the Community dot. Zeroed here rather than left to the
     // client so the badge cannot come back through any other caller, and so a
@@ -1384,8 +1412,9 @@ router.get('/unread/me', async (req, res) => {
 
     res.json({ status: 'success', data: {
       hasAnyOpenChat,
-      hasUnread:   !muted && unread.length > 0,
+      hasUnread:   !muted && (unread.length > 0 || ticketReplies > 0),
       totalUnread: muted ? 0 : unread.length,
+      ticketReplies: muted ? 0 : ticketReplies,
       // What the navbar puts a NUMBER on: messages aimed at this user. Channel
       // chatter is left to `hasUnread` and its quiet dot — see
       // personalUnreadCounts for why the two are separated.

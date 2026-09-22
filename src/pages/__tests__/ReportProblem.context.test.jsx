@@ -47,6 +47,14 @@ vi.mock('../../utils/appVersion', () => ({
   peekClientInfo: () => clientInfo,
 }))
 
+// The device: OS, browser, screen, GPU. Read by its own util; here it only
+// matters that whatever it resolves to is sent, and that nothing is sent when
+// it resolves to nothing.
+let environment = { screenWidth: 1920, screenHeight: 1080, uaPlatform: 'Windows', uaPlatformVersion: '15.0.0' }
+vi.mock('../../utils/reportEnvironment', () => ({
+  collectReportEnvironment: () => Promise.resolve(environment),
+}))
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function okPost() {
@@ -86,6 +94,7 @@ describe('ReportProblem — context sent with a report', () => {
     apiFetchMock.mockReset()
     __resetRouteTrail()
     clientInfo = { platform: 'android', version: '1.2.34', build: '39' }
+    environment = { screenWidth: 1920, screenHeight: 1080, uaPlatform: 'Windows', uaPlatformVersion: '15.0.0' }
   })
   afterEach(() => { vi.restoreAllMocks() })
 
@@ -138,6 +147,27 @@ describe('ReportProblem — context sent with a report', () => {
     submit('The screen goes blank on launch')
 
     expect((await postedBody()).client).toEqual({ platform: 'android', version: '1.2.34', build: '39' })
+  })
+
+  it('attaches what the browser says about the device', async () => {
+    okPost()
+    render(<ReportProblem />)
+    submit('The needles are off the dial')
+
+    expect((await postedBody()).environment).toEqual({
+      screenWidth: 1920, screenHeight: 1080, uaPlatform: 'Windows', uaPlatformVersion: '15.0.0',
+    })
+  })
+
+  it('still submits when nothing about the device could be read', async () => {
+    environment = null
+    okPost()
+    render(<ReportProblem />)
+    submit('The needles are off the dial')
+
+    const body = await postedBody()
+    expect(body.environment).toBeUndefined()
+    expect(body.description).toBe('The needles are off the dial')
   })
 
   it('still submits when the client cannot name its build', async () => {

@@ -15,6 +15,12 @@
  */
 process.env.JWT_SECRET = 'test_secret';
 
+// No model call for a title from inside the suite.
+jest.mock('../../utils/reportTitle', () => ({
+  ...jest.requireActual('../../utils/reportTitle'),
+  scheduleReportTitle: jest.fn(),
+}));
+
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');

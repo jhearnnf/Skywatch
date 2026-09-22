@@ -26,6 +26,7 @@ const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
 const { resolveSelectedBadge } = require('../utils/selectedBadge');
+const { describeReportEnvironment } = require('../utils/reportEnvironment');
 const { validateDisplayName } = require('../utils/displayName');
 const { cbatRecordFor, withBoardRanks, medalsFrom } = require('../utils/cbatRecord');
 const { grantSubscriptionUnlocks } = require('../utils/subscriptionUnlocks');
@@ -1095,6 +1096,7 @@ router.patch('/settings', requireReason, async (req, res) => {
     const CBAT_KNOWN_KEYS = new Set([
       'target', 'ant', 'ant-hard', 'ant-practise', 'symbols', 'code-duplicates', 'angles', 'instruments', 'instruments-orientation',
       'plane-turn-2d', 'plane-turn-3d', 'trace-1', 'trace-2', 'flag', 'flag-easier',
+      'clan', 'clan-easier',
       'visualisation-2d', 'visualisation-3d',
       'dpt', 'dpt-hard', 'dpt-easier', 'act', 'numerical-ops', 'numerical-ops-easier', 'dad', 'sat', 'sat-easier', 'cut', 'cut-easier',
       'rtt', 'rtt-easier',
@@ -3118,12 +3120,21 @@ router.get('/problems', async (req, res) => {
     if (kind === 'chat_message') filter.kind = 'chat_message';
     if (kind === 'bug')          filter.kind = { $ne: 'chat_message' };
 
-    const problems = await ProblemReport.find(filter)
+    const rows = await ProblemReport.find(filter)
       .populate('userId', 'email agentNumber displayName')
       .populate('reportedUserId', 'email agentNumber displayName chatBannedAt')
       .populate('updates.adminUserId', 'agentNumber email displayName')
       .populate('intelligenceBrief', 'title')
-      .sort({ time: -1 });
+      .sort({ time: -1 })
+      .lean();
+
+    // The stored environment is raw (UA string, Client Hints, pixel counts);
+    // the card wants "Windows 11 · Chrome 128". Described here, at read time,
+    // so parser fixes reach every report already filed.
+    const problems = rows.map(p => ({
+      ...p,
+      environmentSummary: describeReportEnvironment(p.environment, { clientPlatform: p.clientPlatform }),
+    }));
 
     res.json({ status: 'success', data: { problems } });
   } catch (err) {

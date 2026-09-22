@@ -323,6 +323,62 @@ describe('ChatShell', () => {
     expect(screen.queryByText('Guides')).toBeNull()
   })
 
+  // A problem report opened from the rail's Support tickets section. It is a
+  // read-only record, not a conversation, so it has its own pane.
+  describe('support tickets', () => {
+    const TICKET = {
+      _id: 'r1', title: 'Instruments needles off the dial', description: 'The needles are off the dial when the dials calibrate',
+      pageReported: 'CBAT · Instruments', time: new Date().toISOString(), solved: false,
+      updates: [{ _id: 'u1', time: new Date().toISOString(), description: 'On it, thanks.' }],
+      unread: true, unreadCount: 1, lastActivityAt: new Date().toISOString(),
+      preview: { body: 'On it, thanks.' },
+    }
+
+    it('opens the ticket in the pane and stamps it seen once', async () => {
+      mockParams.value = { ticketId: 'r1' }
+      const data = { support: null, channels: [CHANNEL], dms: [], tickets: [TICKET], viewer: VIEWER }
+      mockApiFetch.mockImplementation((url, init) => Promise.resolve({
+        ok: true,
+        json: async () => init?.method === 'POST' ? { status: 'success' } : { status: 'success', data },
+      }))
+      const { rerender } = render(<ChatShell />)
+
+      await waitFor(() => expect(screen.getByTestId('ticket-thread')).toBeTruthy())
+      // Rail row and pane header both carry the title; the full report is in the pane.
+      expect(screen.getAllByText('Instruments needles off the dial').length).toBe(2)
+      expect(screen.getByText('The needles are off the dial when the dials calibrate')).toBeTruthy()
+      expect(screen.getByText(/Your report from CBAT · Instruments/)).toBeTruthy()
+      expect(screen.getByText('On it, thanks.', { selector: 'div' })).toBeTruthy()
+      expect(screen.queryByTestId('thread')).toBeNull()
+
+      await waitFor(() => expect(mockApiFetch.mock.calls.some(([u, i]) => /\/api\/users\/me\/reports\/r1\/seen$/.test(u) && i?.method === 'POST')).toBe(true))
+      // Seen → the rail and the navbar number refresh together.
+      await waitFor(() => expect(mockRefresh).toHaveBeenCalled())
+
+      // The 30s poll re-renders with the same ticket; no second stamp.
+      rerender(<ChatShell />)
+      const seenPosts = () => mockApiFetch.mock.calls.filter(([u, i]) => /\/seen$/.test(u) && i?.method === 'POST').length
+      expect(seenPosts()).toBe(1)
+    })
+
+    it('does not stamp a ticket that has nothing unread', async () => {
+      mockParams.value = { ticketId: 'r1' }
+      overview({ support: null, channels: [CHANNEL], dms: [], tickets: [{ ...TICKET, unread: false, unreadCount: 0 }], viewer: VIEWER })
+      render(<ChatShell />)
+
+      await waitFor(() => expect(screen.getByTestId('ticket-thread')).toBeTruthy())
+      expect(mockApiFetch.mock.calls.some(([u]) => /\/seen$/.test(u))).toBe(false)
+    })
+
+    it('explains a ticket that has since left the rail', async () => {
+      mockParams.value = { ticketId: 'gone' }
+      overview({ support: null, channels: [CHANNEL], dms: [], tickets: [], viewer: VIEWER })
+      render(<ChatShell />)
+
+      await waitFor(() => expect(screen.getByText(/no longer listed/)).toBeTruthy())
+    })
+  })
+
   it('points users at channels as the way into a DM', async () => {
     overview({ support: null, channels: [], dms: [], viewer: VIEWER })
     render(<ChatShell />)

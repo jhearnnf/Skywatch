@@ -32,6 +32,8 @@ const mongoose = require('mongoose');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
 const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
+const { sanitiseReportEnvironment } = require('../utils/reportEnvironment');
+const { scheduleReportTitle } = require('../utils/reportTitle');
 const { sanitiseGeoInfo, resolveCountry } = require('../constants/geo');
 const { latestNativeReleases } = require('../utils/latestNativeReleases');
 const AppOpen = require('../models/AppOpen');
@@ -724,7 +726,7 @@ const ROUTE_TRAIL_MAX = 5;
 // they did before rather than storing a stray referrer.
 router.post('/report-problem', protect, async (req, res) => {
   try {
-    const { pageReported, description, briefId, routeTrail, client } = req.body;
+    const { pageReported, description, briefId, routeTrail, client, environment } = req.body;
     if (!description) return res.status(400).json({ message: 'Description required' });
 
     const trail = Array.isArray(routeTrail)
@@ -734,6 +736,11 @@ router.post('/report-problem', protect, async (req, res) => {
     // Best-effort, like the heartbeat's: a client that cannot name its build
     // must still be able to file a report.
     const clientInfo = sanitiseClientInfo(client);
+
+    // The device itself: OS, browser, screen, GPU. The User-Agent header is
+    // taken from the request rather than the payload, so even a bundle that
+    // predates the client-side collector files a report we can place.
+    const env = sanitiseReportEnvironment(environment, req.headers['user-agent']);
 
     let intelligenceBrief = null;
     if (briefId) {
@@ -753,7 +760,12 @@ router.post('/report-problem', protect, async (req, res) => {
         clientVersion:  clientInfo.version,
         clientBuild:    clientInfo.build,
       } : {}),
+      ...(env ? { environment: env } : {}),
     });
+
+    // A one-line title, written after the response goes out so the reporter
+    // never waits on it. See utils/reportTitle.js.
+    scheduleReportTitle(report);
 
     // Auto-raise the editor flag so admins see the issue in the briefs list.
     if (intelligenceBrief) {
@@ -811,6 +823,30 @@ router.post('/me/notifications/:id/read', protect, async (req, res) => {
       { read: true }
     );
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/users/me/reports/:id/seen — the reporter has opened this report in
+// the Community rail. Stamps it so its replies stop counting as unread, and
+// clears the in-app notification rows that used to drive the old toast so
+// nothing else can resurface them. Only the report's own author can do this.
+router.post('/me/reports/:id/seen', protect, async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ message: 'Report not found' });
+    const now = new Date();
+    const report = await ProblemReport.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      { $set: { userSeenAt: now } },
+      { returnDocument: 'after' },
+    ).select('_id userSeenAt');
+    if (!report) return res.status(404).json({ message: 'Report not found' });
+    await UserNotification.updateMany(
+      { userId: req.user._id, relatedReportId: report._id, read: false },
+      { $set: { read: true } },
+    );
+    res.json({ status: 'success', data: { seenAt: report.userSeenAt } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

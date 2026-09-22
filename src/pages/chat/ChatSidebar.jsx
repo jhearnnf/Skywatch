@@ -8,6 +8,7 @@ import { formatRelative, SUPPORT_LABEL } from './format'
 import { badgeLabel, supportQueueLabel } from '../../utils/chatBadge'
 import CountBadge from '../../components/ui/CountBadge'
 import CountryFlag, { hasFlag } from '../../components/ui/CountryFlag'
+import { cohortCopy } from '../../utils/cbat/cohortCopy'
 
 function Row({
   to, icon, title, subtitle, preview, unread, timestamp, active,
@@ -212,7 +213,11 @@ function useWaitingDms(dms, activeId) {
 // Purely presentational — ChatShell owns the data and the polling, so the rail
 // re-renders from props rather than holding a second copy of the overview.
 export default function ChatSidebar({
-  support, guides = [], channels = [], groups = [], dms = [], bots = [], viewer, activeId, isAdmin,
+  support, guides = [], channels = [], tickets = [], groups = [], dms = [], bots = [], viewer, activeId, isAdmin,
+  // The problem report open in the pane, if any. Tickets are not conversations
+  // and never share an id with one, but keeping the two params apart means a
+  // ticket row can never light up because a channel happens to be open.
+  activeTicketId = null,
   loading = false, onStartSupport, onOpenBot, onOpenDm, supportQueueUnread = 0,
   onOpenGroupSetup,
   // Admin-only presence. Empty for everyone else — ChatShell does not even fetch
@@ -374,6 +379,31 @@ export default function ChatSidebar({
           />
         ))}
 
+        {/* Your own problem reports, with the team's replies under them. Only
+            here while there is one to follow: open, or resolved with a reply
+            still unread. Everyone else never sees the heading. This replaced
+            the toast that used to pop the reply up over whatever page you
+            were on — including, once, a test in progress. */}
+        {tickets.length > 0 && (
+          <section aria-label="Support tickets">
+            <SectionLabel>Support tickets</SectionLabel>
+            {tickets.map(t => (
+              <Row
+                key={t._id}
+                to={`/chat/ticket/${t._id}`}
+                icon={t.solved ? '✅' : '🛠️'}
+                title={t.title}
+                subtitle={`${t.solved ? 'Resolved' : 'Open'} · ${t.pageReported}`}
+                preview={t.preview ? { senderDisplayName: SUPPORT_LABEL, body: t.preview.body } : null}
+                unread={t.unread}
+                personalUnread={t.unreadCount}
+                timestamp={t.lastActivityAt}
+                active={String(activeTicketId) === String(t._id)}
+              />
+            ))}
+          </section>
+        )}
+
         <section aria-label="Groups">
           <SectionLabel>Groups</SectionLabel>
           {groups.length === 0 ? (
@@ -387,9 +417,9 @@ export default function ChatSidebar({
             >
               <span className="text-lg leading-none pt-0.5">{group.emoji || '✈️'}</span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-slate-700">My CBAT Group</span>
+                <span className="block text-sm font-bold text-slate-700">{group.title || group.name || 'My Test Day Group'}</span>
                 <span className="block text-[11px] text-slate-400 truncate">
-                  {group.applicable === false ? 'Not applicable — CBAT passed' : 'Enter your upcoming CBAT date to join'}
+                  {group.applicable === false ? cohortCopy(group.testName).railPassed : cohortCopy(group.testName).railHint}
                 </span>
               </span>
               <span className="text-[10px] font-bold text-brand-600 pt-0.5">Open</span>

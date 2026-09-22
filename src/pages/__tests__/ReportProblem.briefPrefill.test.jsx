@@ -32,6 +32,11 @@ vi.mock('../../context/AuthContext', () => ({
 
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 
+// jsdom has no WebGL; the device collector is not what this suite is about.
+vi.mock('../../utils/reportEnvironment', () => ({
+  collectReportEnvironment: () => Promise.resolve(null),
+}))
+
 vi.mock('framer-motion', () => ({
   motion: {
     div: ({ children, className }) => <div className={className}>{children}</div>,

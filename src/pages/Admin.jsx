@@ -6346,11 +6346,12 @@ function ProblemsTab({ API, onOpenBrief }) {
   const [expanded, setExpanded] = useState(null)
   const [updates,  setUpdates]  = useState({})       // { reportId: text }
   const [notify,   setNotify]   = useState({})        // { reportId: bool }
-  // { reportId: { notif: bool, email: bool } } — the two channels are
-  // independent, so a reply can go out as both. In-app is the default because
-  // it always lands; email can bounce.
-  const [delivery, setDelivery] = useState({})
-  const [confirm,  setConfirm]  = useState(null)      // { id, description, solved, sendEmail, sendNotification } | null
+  // { reportId: bool } — also email the reply. A reply the user is meant to
+  // see always lands in their Support tickets on the Community page (that is
+  // what "send update to user" means now the toast is gone); email is the
+  // optional extra for someone who may not come back to the site.
+  const [emailToo, setEmailToo] = useState({})
+  const [confirm,  setConfirm]  = useState(null)      // { id, description, solved, sendEmail } | null
   const [busy,     setBusy]     = useState(null)
   const [toast,    setToast]    = useState('')
   const [tick,     setTick]     = useState(0)
@@ -6370,19 +6371,7 @@ function ProblemsTab({ API, onOpenBrief }) {
     ? problems.filter(p => p.description.toLowerCase().includes(search.toLowerCase()) || p.pageReported?.toLowerCase().includes(search.toLowerCase()))
     : problems
 
-  const DELIVERY_DEFAULT = { notif: true, email: false }
-  const deliveryFor = (id) => delivery[id] ?? DELIVERY_DEFAULT
-  const setChannel  = (id, channel, on) =>
-    setDelivery(prev => ({ ...prev, [id]: { ...(prev[id] ?? DELIVERY_DEFAULT), [channel]: on } }))
-  // "Send update to user" is on but both channels are off — there is nothing to
-  // send, so the action buttons stay disabled rather than silently no-op.
-  const noChannelPicked = (id) => {
-    if (!notify[id]) return false
-    const { email, notif } = deliveryFor(id)
-    return !email && !notif
-  }
-
-  const executeUpdate = async ({ id, description, solved, notifyUser, sendEmail, sendNotification }) => {
+  const executeUpdate = async ({ id, description, solved, notifyUser, sendEmail }) => {
     setBusy(id)
     setConfirm(null)
     await apiFetch(`${API}/api/admin/problems/${id}/update`, {
@@ -6391,7 +6380,9 @@ function ProblemsTab({ API, onOpenBrief }) {
       body: JSON.stringify({
         description,
         ...(solved !== undefined ? { solved } : {}),
-        ...(notifyUser ? { notifyUser: true, sendEmail, sendNotification } : {}),
+        // `sendNotification` is the server's name for the in-app channel,
+        // which is now the ticket itself — so a visible reply always sets it.
+        ...(notifyUser ? { notifyUser: true, sendEmail: Boolean(sendEmail), sendNotification: true } : {}),
       }),
     })
     setUpdates(p => ({ ...p, [id]: '' }))
@@ -6450,9 +6441,7 @@ function ProblemsTab({ API, onOpenBrief }) {
       executeUpdate({ id: p._id, description, solved, notifyUser: false })
       return
     }
-    const { email, notif } = deliveryFor(p._id)
-    if (!email && !notif) return   // guarded in the UI; nothing to send
-    setConfirm({ id: p._id, description, solved, notifyUser, sendEmail: email, sendNotification: notif })
+    setConfirm({ id: p._id, description, solved, notifyUser, sendEmail: emailToo[p._id] ?? false })
   }
 
   const handleSaveNote = (p) => {
@@ -6478,10 +6467,8 @@ function ProblemsTab({ API, onOpenBrief }) {
           <div className="bg-surface rounded-2xl shadow-xl border border-slate-700 max-w-md w-full p-6 space-y-4">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Confirm — send to user</h3>
             <p className="text-xs text-slate-600">
-              The user will receive the following {
-                confirm.sendEmail && confirm.sendNotification ? 'by email and as an in-app notification'
-                : confirm.sendEmail                           ? 'by email'
-                : 'as an in-app notification'
+              The user will see the following in their Support tickets on the Community page{
+                confirm.sendEmail ? ', and receive it by email' : ''
               }:
             </p>
             <div className="bg-surface-raised border-l-4 border-brand-600 rounded-r-xl p-3 text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">
@@ -6553,7 +6540,10 @@ function ProblemsTab({ API, onOpenBrief }) {
             >
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-slate-600 mb-0.5">{p.pageReported || 'Unknown page'} · {new Date(p.time).toLocaleDateString('en-GB')}</p>
-                <p className="text-sm font-semibold text-slate-900 line-clamp-2">{p.description}</p>
+                {/* The model's one-line title once it has landed (a few seconds
+                    after filing); the report's own opening until then. The full
+                    text is always in the Original report block below. */}
+                <p className="text-sm font-semibold text-slate-900 line-clamp-2">{p.title || p.description}</p>
                 {p.kind === 'chat_message' && (
                   <span className="inline-flex items-center gap-1 mt-1 mr-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-900/40 text-red-300">
                     💬 Chat report
@@ -6640,6 +6630,27 @@ function ProblemsTab({ API, onOpenBrief }) {
                       <span className="font-semibold">Came from:</span> {p.routeTrail.join(' → ')}
                     </p>
                   )}
+                  {/* The device: OS, browser, screen, GPU. Described by the
+                      server from what the form captured plus the request's
+                      User-Agent, so even a report from an old bundle has a
+                      row or two. Nothing at all only on reports filed before
+                      this was recorded. */}
+                  {p.environmentSummary?.length > 0 && (
+                    <dl className="mt-2 pt-2 border-t border-slate-700/60 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-slate-600">
+                      {p.environmentSummary.map(row => (
+                        <Fragment key={row.label}>
+                          <dt className="font-semibold">{row.label}</dt>
+                          <dd className="min-w-0 break-words">{row.value}</dd>
+                        </Fragment>
+                      ))}
+                      {p.environment?.userAgent && (
+                        <>
+                          <dt className="font-semibold text-slate-500">User agent</dt>
+                          <dd className="min-w-0 break-all text-slate-500 font-mono text-[10px] leading-relaxed">{p.environment.userAgent}</dd>
+                        </>
+                      )}
+                    </dl>
+                  )}
                 </div>
 
                 {/* Update history */}
@@ -6687,45 +6698,32 @@ function ProblemsTab({ API, onOpenBrief }) {
                   </label>
 
                   {(notify[p._id]) && (
-                    <>
-                      <div className="flex gap-4 pl-5 text-xs text-slate-700">
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={deliveryFor(p._id).notif}
-                            onChange={e => setChannel(p._id, 'notif', e.target.checked)}
-                            className="accent-brand-600"
-                          />
-                          In-app notification
-                        </label>
-                        <label className="flex items-center gap-1.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={deliveryFor(p._id).email}
-                            onChange={e => setChannel(p._id, 'email', e.target.checked)}
-                            className="accent-brand-600"
-                          />
-                          Email
-                        </label>
-                      </div>
-                      {noChannelPicked(p._id) && (
-                        <p className="pl-5 text-xs text-amber-400">Pick at least one way to reach them.</p>
-                      )}
-                    </>
+                    <div className="pl-5 text-xs text-slate-700 space-y-1">
+                      <p className="text-slate-500">Shown in their Support tickets on the Community page.</p>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={emailToo[p._id] ?? false}
+                          onChange={e => setEmailToo(prev => ({ ...prev, [p._id]: e.target.checked }))}
+                          className="accent-brand-600"
+                        />
+                        Also send by email
+                      </label>
+                    </div>
                   )}
                 </div>
 
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleSaveNote(p)}
-                    disabled={busy === p._id || !updates[p._id]?.trim() || noChannelPicked(p._id)}
+                    disabled={busy === p._id || !updates[p._id]?.trim()}
                     className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {busy === p._id ? 'Saving…' : 'Save Note'}
                   </button>
                   <button
                     onClick={() => handleToggleSolved(p)}
-                    disabled={busy === p._id || noChannelPicked(p._id)}
+                    disabled={busy === p._id}
                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed
                       ${p.solved ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-emerald-600 text-white hover:bg-emerald-500'}`}
                   >

@@ -10,6 +10,12 @@
  */
 process.env.JWT_SECRET = 'test_secret';
 
+// No model call for a title from inside the suite.
+jest.mock('../../utils/reportTitle', () => ({
+  ...jest.requireActual('../../utils/reportTitle'),
+  scheduleReportTitle: jest.fn(),
+}));
+
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
@@ -133,5 +139,64 @@ describe('POST /api/users/report-problem — client build', () => {
 
     expect(res.status).toBe(201);
     expect(await ProblemReport.countDocuments({ userId: user._id })).toBe(1);
+  });
+});
+
+describe('POST /api/users/report-problem — device environment', () => {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+
+  it('stores what the client read about its device', async () => {
+    const user = await createUser();
+    await request(app)
+      .post('/api/users/report-problem')
+      .set('Cookie', authCookie(user._id))
+      .set('User-Agent', UA)
+      .send({
+        description: 'The needles are off the dial',
+        environment: {
+          uaPlatform: 'Windows', uaPlatformVersion: '15.0.0',
+          uaBrands: [{ brand: 'Google Chrome', version: '128.0.6613.84' }],
+          screenWidth: 1920, screenHeight: 1080, viewportWidth: 1440, viewportHeight: 760,
+          dpr: 1, touchPoints: 0, theme: 'cbat',
+          webglRenderer: 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)',
+        },
+      });
+
+    const saved = await ProblemReport.findOne({ userId: user._id }).lean();
+    expect(saved.environment.uaPlatformVersion).toBe('15.0.0');
+    expect(saved.environment.uaBrands).toEqual([{ brand: 'Google Chrome', version: '128.0.6613.84' }]);
+    expect(saved.environment.screenWidth).toBe(1920);
+    expect(saved.environment.webglRenderer).toMatch(/RTX 3060/);
+  });
+
+  // The header, not the payload — and it is recorded even when the client
+  // sent no environment at all (a bundle from before the collector shipped).
+  it('stamps the User-Agent from the request header regardless of the payload', async () => {
+    const user = await createUser();
+    await request(app)
+      .post('/api/users/report-problem')
+      .set('Cookie', authCookie(user._id))
+      .set('User-Agent', UA)
+      .send({ description: 'Nothing loads after the splash' });
+
+    const saved = await ProblemReport.findOne({ userId: user._id }).lean();
+    expect(saved.environment.userAgent).toBe(UA);
+  });
+
+  it('does not let a junk environment cost us the report', async () => {
+    const user = await createUser();
+    const res = await report(user, { environment: ['not', 'an', 'object'] });
+
+    expect(res.status).toBe(201);
+    expect(await ProblemReport.countDocuments({ userId: user._id })).toBe(1);
+  });
+
+  it('keeps nothing it does not recognise', async () => {
+    const user = await createUser();
+    await report(user, { environment: { cookies: 'all of them', screenWidth: 1280 } });
+
+    const saved = await ProblemReport.findOne({ userId: user._id }).lean();
+    expect(saved.environment.cookies).toBeUndefined();
+    expect(saved.environment.screenWidth).toBe(1280);
   });
 });

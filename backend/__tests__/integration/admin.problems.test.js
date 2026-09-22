@@ -16,6 +16,12 @@
  */
 process.env.JWT_SECRET = 'test_secret';
 
+// No model call for a title from inside the suite.
+jest.mock('../../utils/reportTitle', () => ({
+  ...jest.requireActual('../../utils/reportTitle'),
+  scheduleReportTitle: jest.fn(),
+}));
+
 const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
@@ -146,6 +152,49 @@ describe('GET /api/admin/problems', () => {
     expect(problems[0].pageReported).toBe('Login');
     expect(Array.isArray(problems[0].updates)).toBe(true);
     expect(problems[0].userId).toBeDefined(); // populated
+  });
+
+  // The stored environment is raw; the card wants "Windows 11 · Chrome 128".
+  // Described on the way out so parser fixes reach reports already filed.
+  it('describes each report device environment in plain English', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+
+    await request(app)
+      .post('/api/users/report-problem')
+      .set('Cookie', authCookie(user._id))
+      .set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36')
+      .send({
+        description: 'Needles off the dial',
+        environment: {
+          uaPlatform: 'Windows', uaPlatformVersion: '15.0.0',
+          uaBrands: [{ brand: 'Google Chrome', version: '128.0.6613.84' }],
+          screenWidth: 1920, screenHeight: 1080, touchPoints: 0,
+        },
+      });
+
+    const res = await request(app)
+      .get('/api/admin/problems')
+      .set('Cookie', authCookie(admin._id));
+
+    const [problem] = res.body.data.problems;
+    const rows = Object.fromEntries(problem.environmentSummary.map(r => [r.label, r.value]));
+    expect(rows.OS).toBe('Windows 11');
+    expect(rows.Browser).toBe('Chrome 128');
+    expect(rows.Display).toBe('screen 1920×1080, no touch');
+    expect(problem.environment.userAgent).toMatch(/^Mozilla/);
+  });
+
+  it('returns an empty environment summary for reports filed before it was captured', async () => {
+    const admin = await createAdminUser();
+    const user  = await createUser();
+    await ProblemReport.create({ userId: user._id, pageReported: 'Login', description: 'Old report' });
+
+    const res = await request(app)
+      .get('/api/admin/problems')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.problems[0].environmentSummary).toEqual([]);
   });
 
   it('?solved=false returns only unsolved reports', async () => {

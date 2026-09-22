@@ -7,6 +7,7 @@ import useChatPresence from '../../hooks/useChatPresence'
 import { fetchOverview, getCachedOverview, syncChatCacheOwner } from '../../utils/chatCache'
 import ChatSidebar from './ChatSidebar'
 import ChatThread from './ChatThread'
+import TicketThread from './TicketThread'
 import CbatGroupSetup from './components/CbatGroupSetup'
 
 const POLL_MS = 30_000
@@ -27,7 +28,9 @@ const POLL_MS = 30_000
 // clamps every route to max-w-3xl, so a wider container here does nothing on
 // its own. See the override in src/main.css.
 export default function ChatShell() {
-  const { conversationId } = useParams()
+  // /chat/:conversationId opens a thread; /chat/ticket/:ticketId opens one of
+  // the viewer's own problem reports in the same pane. Never both.
+  const { conversationId, ticketId } = useParams()
   const { API, apiFetch, user } = useAuth()
   const {
     refresh: refreshUnread,
@@ -174,6 +177,11 @@ export default function ChatShell() {
   // The rail knows every conversation's human title; the messages endpoint only
   // knows a channel's own name. Resolving it here means the thread does not
   // need a second overview fetch just to render its header.
+  const activeTicket = useMemo(
+    () => ticketId ? (data?.tickets ?? []).find(t => String(t._id) === String(ticketId)) ?? null : null,
+    [ticketId, data],
+  )
+
   const activeTitle = useMemo(() => {
     if (!conversationId || !data) return ''
     const all = [
@@ -196,11 +204,12 @@ export default function ChatShell() {
 
   return (
     <div className="h-[calc(100dvh-11rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex md:gap-3">
-      <div className={`w-full md:w-80 lg:w-96 md:shrink-0 ${conversationId || groupSetup ? 'hidden md:flex' : 'flex'} flex-col`}>
+      <div className={`w-full md:w-80 lg:w-96 md:shrink-0 ${conversationId || ticketId || groupSetup ? 'hidden md:flex' : 'flex'} flex-col`}>
         <ChatSidebar
           support={data?.support}
           guides={data?.guides}
           channels={data?.channels}
+          tickets={data?.tickets}
           groups={data?.groups}
           dms={data?.dms}
           bots={data?.bots}
@@ -210,6 +219,7 @@ export default function ChatShell() {
           // the request has not come back with.
           loading={loading && !data}
           activeId={conversationId}
+          activeTicketId={ticketId}
           isAdmin={Boolean(user?.isAdmin)}
           // Support threads waiting on a staff reply. They are what an admin's
           // navbar badge is often counting, and they live in the console rather
@@ -224,8 +234,18 @@ export default function ChatShell() {
         />
       </div>
 
-      <div className={`flex-1 min-w-0 ${conversationId || groupSetup ? 'flex' : 'hidden md:flex'} flex-col`}>
-        {conversationId ? (
+      <div className={`flex-1 min-w-0 ${conversationId || ticketId || groupSetup ? 'flex' : 'hidden md:flex'} flex-col`}>
+        {ticketId ? (
+          <TicketThread
+            key={ticketId}
+            ticket={activeTicket}
+            loading={loading && !data}
+            // Seen: the rail's unread dot and the navbar number both come off
+            // the same stamp, so both are refreshed together.
+            onSeen={refreshOverview}
+            onStartSupport={startSupport}
+          />
+        ) : conversationId ? (
           <ChatThread
             key={conversationId}
             conversationId={conversationId}

@@ -66,6 +66,9 @@ function makeProblem(userId, overrides = {}) {
     solved:       false,
     kind:         'bug',
     updates:      overrides.updates ?? [],
+    ...(overrides.title              ? { title: overrides.title }                           : {}),
+    ...(overrides.environment        ? { environment: overrides.environment }               : {}),
+    ...(overrides.environmentSummary ? { environmentSummary: overrides.environmentSummary } : {}),
   }
 }
 
@@ -93,7 +96,8 @@ async function openReport(problems) {
   global.fetch = vi.fn().mockImplementation(baseHandlers(problems))
   render(<Admin />)
   fireEvent.click(await screen.findByRole('button', { name: /intel/i }))
-  fireEvent.click(await screen.findByText(problems[0].description))
+  // The card header carries the generated title when there is one.
+  fireEvent.click(await screen.findByText(problems[0].title || problems[0].description))
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -144,11 +148,57 @@ describe('Admin ▸ Intel ▸ Reports — reporter byline', () => {
   })
 })
 
-// ── Replying to a report ───────────────────────────────────────────────────
-// Email and in-app used to be mutually exclusive radios; they are now
-// independent checkboxes, so a reply can go out on both at once.
-
 const reporter = { _id: 'u1', displayName: 'Falcon', email: 'falcon@test.com', agentNumber: '1234567' }
+
+// ── The card header ───────────────────────────────────────────────────────
+
+describe('Admin ▸ Intel ▸ Reports — card title', () => {
+  it('leads with the generated title when there is one, keeping the full report below', async () => {
+    await openReport([makeProblem(reporter, { title: 'Map never loads on the brief page' })])
+    expect(await screen.findByText('Map never loads on the brief page')).toBeDefined()
+    expect(screen.getByText('The map never loads')).toBeDefined()
+  })
+
+  it('falls back to the report text on a report with no title yet', async () => {
+    await openReport([makeProblem(reporter)])
+    expect(await screen.findByText('Original report')).toBeDefined()
+    expect(screen.getAllByText('The map never loads').length).toBeGreaterThan(0)
+  })
+})
+
+// ── The device it was filed from ──────────────────────────────────────────
+// A report that reads "the needles are off the screen" cannot be triaged
+// without knowing the OS, browser, screen and GPU. The server describes them
+// as rows; the card shows every row it gets and the raw user agent under them.
+
+describe('Admin ▸ Intel ▸ Reports — device environment', () => {
+  it('shows the described rows and the raw user agent', async () => {
+    await openReport([makeProblem(reporter, {
+      environment: { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0' },
+      environmentSummary: [
+        { label: 'OS',       value: 'Windows 11' },
+        { label: 'Browser',  value: 'Chrome 128' },
+        { label: 'Display',  value: 'screen 1920×1080, viewport 1440×760, no touch' },
+        { label: 'Graphics', value: 'NVIDIA GeForce RTX 3060 (D3D11)' },
+      ],
+    })])
+    expect(await screen.findByText('Windows 11')).toBeDefined()
+    expect(screen.getByText('Chrome 128')).toBeDefined()
+    expect(screen.getByText('NVIDIA GeForce RTX 3060 (D3D11)')).toBeDefined()
+    expect(screen.getByText(/Mozilla\/5\.0 \(Windows NT 10\.0/)).toBeDefined()
+  })
+
+  it('shows nothing about the device on a report filed before it was captured', async () => {
+    await openReport([makeProblem(reporter, { environmentSummary: [] })])
+    await screen.findAllByText('The map never loads')
+    expect(screen.queryByText('User agent')).toBeNull()
+    expect(screen.queryByText('OS')).toBeNull()
+  })
+})
+
+// ── Replying to a report ───────────────────────────────────────────────────
+// A visible reply always lands in the reporter's Support tickets; email is
+// the optional second channel.
 
 async function startReply(note = 'We have fixed it') {
   await openReport([makeProblem(reporter)])
@@ -169,47 +219,38 @@ describe('Admin ▸ Intel ▸ Reports — reply delivery channels', () => {
   beforeEach(() => { global.Audio = class { play = vi.fn().mockResolvedValue(undefined) } })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('defaults to in-app only', async () => {
+  // A visible reply always lands in the reporter's Support tickets on the
+  // Community page; email is the optional extra. There is no longer an in-app
+  // toast to tick on or off.
+  it('sends a visible reply to their tickets, without email by default', async () => {
     await startReply()
-    expect(channel(/in-app notification/i).checked).toBe(true)
-    expect(channel(/^email$/i).checked).toBe(false)
-  })
-
-  it('lets both channels be ticked at once', async () => {
-    await startReply()
-    fireEvent.click(channel(/^email$/i))
-
-    expect(channel(/in-app notification/i).checked).toBe(true)
-    expect(channel(/^email$/i).checked).toBe(true)
+    expect(channel(/also send by email/i).checked).toBe(false)
+    expect(screen.getByText(/shown in their support tickets/i)).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: /save note/i }))
-    await screen.findByText(/by email and as an in-app notification/i)
-
+    await screen.findByText(/in their Support tickets on the Community page:/i)
     fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
+    await waitFor(() => expect(sentBody()).not.toBeNull())
+    expect(sentBody()).toMatchObject({ notifyUser: true, sendEmail: false, sendNotification: true })
+  })
+
+  it('emails as well when asked', async () => {
+    await startReply()
+    fireEvent.click(channel(/also send by email/i))
+
+    fireEvent.click(screen.getByRole('button', { name: /save note/i }))
+    await screen.findByText(/and receive it by email/i)
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
+
     await waitFor(() => expect(sentBody()).not.toBeNull())
     expect(sentBody()).toMatchObject({ notifyUser: true, sendEmail: true, sendNotification: true })
   })
 
-  it('sends email alone when in-app is unticked', async () => {
+  it('never blocks a reply for want of a channel: the ticket is always one', async () => {
     await startReply()
-    fireEvent.click(channel(/^email$/i))
-    fireEvent.click(channel(/in-app notification/i))
-
-    fireEvent.click(screen.getByRole('button', { name: /save note/i }))
-    await screen.findByText(/by email/i)
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
-
-    await waitFor(() => expect(sentBody()).not.toBeNull())
-    expect(sentBody()).toMatchObject({ sendEmail: true, sendNotification: false })
-  })
-
-  it('blocks the reply while both channels are unticked', async () => {
-    await startReply()
-    fireEvent.click(channel(/in-app notification/i))   // leaves nothing ticked
-
-    expect(await screen.findByText(/pick at least one way to reach them/i)).toBeDefined()
-    expect(screen.getByRole('button', { name: /save note/i }).disabled).toBe(true)
-    expect(screen.getByRole('button', { name: /mark solved/i }).disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /save note/i }).disabled).toBe(false)
+    expect(screen.getByRole('button', { name: /mark solved/i }).disabled).toBe(false)
   })
 
   it('marks an update that went out both ways', async () => {

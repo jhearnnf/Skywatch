@@ -67,6 +67,7 @@ import CbatTarget       from './pages/CbatTarget'
 import CbatInstruments  from './pages/CbatInstruments'
 import CbatAnt from './pages/CbatAnt'
 import CbatFlag from './pages/CbatFlag'
+import CbatClan from './pages/CbatClan'
 import CbatVisualisation from './pages/CbatVisualisation'
 import CbatDpt from './pages/CbatDpt'
 import CbatAct from './pages/CbatAct'
@@ -331,6 +332,7 @@ function AppRoutes() {
           <Route path="/cbat/instruments-orientation" element={<Navigate to="/cbat/instruments?mode=orientation" replace />} />
           <Route path="/cbat/ant"             element={<PageWrapper><CbatGameGuard gameKey="ant"             gameTitle="ANT"            ><CbatAnt            /></CbatGameGuard></PageWrapper>} />
           <Route path="/cbat/flag"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="flag"              gameTitle="FLAG"            ><CbatFlag            /></CbatGameGuard></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/clan"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="clan"              gameTitle="CLAN"            ><CbatClan            /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/visualisation"    element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="visualisation"     gameTitle="Visualisation 2D/3D"><CbatVisualisation /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/visualisation-2d" element={<Navigate to="/cbat/visualisation" replace />} />
           <Route path="/cbat/visualisation-3d" element={<Navigate to="/cbat/visualisation" replace />} />
@@ -362,6 +364,10 @@ function AppRoutes() {
               then reconciles them as one component instead of unmounting and
               remounting, so opening a conversation keeps the rail and its data
               alive. Paired with transitionKeyFor() — both are needed. */}
+          {/* A problem report opened from the rail's Support tickets section:
+              same two-pane shell, the ticket in place of a thread. Declared
+              before the id route so "ticket" is never read as a conversation. */}
+          <Route path="/chat/ticket/:ticketId" element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/chat/:conversationId" element={<RequireAuth><PageWrapper><Chat /></PageWrapper></RequireAuth>} />
           <Route path="/contact"          element={<PageWrapper><Contact /></PageWrapper>} />
           {/* The CBAT community guide is deliberately NOT a route. It is a
@@ -414,79 +420,6 @@ function AppRoutes() {
   )
 }
 
-// ── Report notification banner ─────────────────────────────────────────────
-// Fetches unread in-app notifications on login, shows them one at a time.
-function ReportNotifBanner() {
-  const { user } = useAuth()
-  const API = import.meta.env.VITE_API_URL || ''
-  const [notifs,  setNotifs]  = useState([])
-  const [visible, setVisible] = useState(false)
-
-  // Fetch unread notifications whenever the user logs in
-  useEffect(() => {
-    if (!user) return
-    fetch(`${API}/api/users/me/notifications`, { credentials: 'include' })
-      .then(r => r.json())
-      .then(d => {
-        const list = d.data?.notifications ?? []
-        if (list.length > 0) { setNotifs(list); setVisible(true) }
-      })
-      .catch(() => {})
-  }, [user?._id])
-
-  const dismiss = async () => {
-    const current = notifs[0]
-    if (!current) return
-    setVisible(false)
-    // Mark as read
-    await fetch(`${API}/api/users/me/notifications/${current._id}/read`, {
-      method: 'POST', credentials: 'include',
-    }).catch(() => {})
-    // Advance queue after brief delay
-    setTimeout(() => {
-      setNotifs(prev => {
-        const next = prev.slice(1)
-        if (next.length > 0) setVisible(true)
-        return next
-      })
-    }, 300)
-  }
-
-  const current = notifs[0]
-  if (!current || !visible) return null
-
-  return (
-    <div
-      style={{
-        position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-        zIndex: 9000, maxWidth: 440, width: 'calc(100% - 32px)',
-        background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16,
-        boxShadow: '0 8px 32px rgba(0,0,0,0.12)', padding: '16px 20px',
-        display: 'flex', gap: 12, alignItems: 'flex-start',
-      }}
-    >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#1d4ed8', margin: '0 0 4px' }}>
-          {current.title}
-        </p>
-        <p style={{ fontSize: 13, color: '#334155', margin: 0, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-          {current.message}
-        </p>
-      </div>
-      <button
-        onClick={dismiss}
-        style={{
-          flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer',
-          color: '#94a3b8', fontSize: 18, lineHeight: 1, padding: '2px 4px',
-        }}
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-    </div>
-  )
-}
-
 // ── Root ───────────────────────────────────────────────────────────────────
 export default function App() {
   return (
@@ -509,7 +442,6 @@ export default function App() {
                     <UpdateNotificationModal />
                     <LearnNavFlasher />
                     <PlayNavFlasher />
-                    <ReportNotifBanner />
                     <TutorialPickerOverlay />
                   </GameChromeProvider>
                 </ChatUnreadProvider>
