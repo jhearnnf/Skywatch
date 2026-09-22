@@ -1,5 +1,5 @@
 import { render, fireEvent, within } from '@testing-library/react'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Cbat from '../Cbat'
 
 // The FLAG tile also holds CLAN, the test the RAF replaced with FLAG in 2021
@@ -44,8 +44,11 @@ function dataOnly(props) {
   return Object.fromEntries(Object.entries(props).filter(([k]) => k.startsWith('data-')))
 }
 
+// `(hover: none)` is what the tile asks to know whether a tap has to stand in
+// for hover; flipped to true by the touch tests below.
+let touchDevice = false
 window.matchMedia = (query) => ({
-  media: query, matches: false,
+  media: query, matches: query === '(hover: none)' ? touchDevice : false,
   addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
 })
 
@@ -95,8 +98,8 @@ describe('the FLAG tile with CLAN on offer', () => {
     renderHub()
     const card = flagCard()
     // The overlay's two halves, distinct from the title's two spans.
-    const halves = [...card.querySelectorAll('.cursor-pointer.select-none')]
-    expect(halves.map(h => h.textContent)).toEqual(['FLAG', 'CLAN'])
+    const halves = [...card.querySelectorAll('[data-tile-half]')]
+    expect(halves.map(h => h.getAttribute('data-tile-half'))).toEqual(['flag', 'clan'])
     fireEvent.click(halves[1])
     expect(mockNavigate).toHaveBeenCalledWith('/cbat/clan')
     fireEvent.click(halves[0])
@@ -107,17 +110,41 @@ describe('the FLAG tile with CLAN on offer', () => {
 
   it('badges each half with the flag of the country whose battery sits it', () => {
     renderHub()
-    const halves = [...flagCard().querySelectorAll('.cursor-pointer.select-none')]
+    const halves = [...flagCard().querySelectorAll('[data-tile-half]')]
     expect(halves[0].querySelector('[data-flag]').getAttribute('data-flag')).toBe('GB')
     expect(halves[1].querySelector('[data-flag]').getAttribute('data-flag')).toBe('CA')
     // Drawn, not an emoji: Windows renders flag emoji as two letters in a box.
     expect(halves[1].querySelector('svg[data-flag]')).toBeTruthy()
-    expect(halves[1].textContent).toBe('CLAN')
+  })
+
+  it('captions each half with whose battery sits it, swiping in from the left on hover', () => {
+    renderHub()
+    const hints = [...flagCard().querySelectorAll('[data-tile-hint]')]
+    expect(hints.map(h => [...h.querySelectorAll('span')].find(el => el.className.includes('sm:inline')).textContent))
+      .toEqual(['Sat in the UK: RAF and Royal Navy', 'Sat in Canada on CFAST'])
+    // The phone tile is 83px wide, so it gets the same in fewer characters.
+    expect(hints.map(h => [...h.querySelectorAll('span')].find(el => el.className === 'sm:hidden').textContent)).toEqual(['UK: RAF and RN', 'Canada: CFAST'])
+    // Parked off the left edge until the half is hovered, then it slides
+    // across into place. The half clips it, so it enters from the edge.
+    for (const h of hints) {
+      expect(h.className).toContain('sm:opacity-0')
+      expect(h.className).toContain('sm:-translate-x-[130%]')
+      expect(h.className).toContain('sm:group-hover/half:opacity-100')
+      expect(h.className).toContain('sm:group-hover/half:translate-x-0')
+      expect(h.className).toContain('sm:transition-all')
+      // Unhurried, and held back a beat so a pointer crossing the tile on its
+      // way somewhere else never sets it off.
+      expect(h.className).toContain('sm:duration-[550ms]')
+      expect(h.className).toContain('sm:delay-[120ms]')
+      expect(h.className).not.toContain('translate-y')
+    }
+    const half = flagCard().querySelector('[data-tile-half]')
+    expect(half.className).toContain('sm:overflow-hidden')
   })
 
   it('right-clicking a half opens that test\'s own all-time board', () => {
     renderHub()
-    const halves = [...flagCard().querySelectorAll('.cursor-pointer.select-none')]
+    const halves = [...flagCard().querySelectorAll('[data-tile-half]')]
     fireEvent.contextMenu(halves[1])
     expect(mockNavigate).toHaveBeenCalledWith('/cbat/clan/leaderboard?period=all-time')
   })
@@ -126,5 +153,44 @@ describe('the FLAG tile with CLAN on offer', () => {
     renderHub()
     expect(flagCard().textContent).toContain('Colours, Letters and Numbers')
     expect(within(flagCard()).getByTestId('est-time-flag').textContent).toBe('⏱ 1–1.5 min')
+  })
+})
+
+describe('the FLAG | CLAN tile on a touch screen', () => {
+  beforeEach(() => { vi.clearAllMocks(); mockClanOffered.mockReturnValue(true); touchDevice = true })
+  afterEach(() => { touchDevice = false })
+
+  it('opens the chooser on a tap instead of going straight to FLAG, and a second tap picks', () => {
+    renderHub()
+    const card = flagCard()
+    const chooser = card.querySelector('[data-testid="tile-chooser-flag"]')
+    expect(chooser.className).toContain('opacity-0')
+    // Laid out for the phone grid: the halves stack, not sit side by side.
+    expect(chooser.className).toContain('flex-col')
+    expect(chooser.className).not.toContain('hidden')
+
+    fireEvent.click(card.querySelector('a'))
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(chooser.className).toContain('opacity-100')
+    expect(chooser.className).toContain('pointer-events-auto')
+
+    fireEvent.click(card.querySelector('[data-tile-half="clan"]'))
+    expect(mockNavigate).toHaveBeenCalledWith('/cbat/clan')
+  })
+
+  it('closes the chooser on a tap elsewhere', () => {
+    renderHub()
+    const card = flagCard()
+    fireEvent.click(card.querySelector('a'))
+    expect(card.querySelector('[data-testid="tile-chooser-flag"]').className).toContain('opacity-100')
+    fireEvent.pointerDown(document.body)
+    expect(card.querySelector('[data-testid="tile-chooser-flag"]').className).toContain('opacity-0')
+  })
+
+  it('leaves the Visualisation tile tapping straight through, as before', () => {
+    renderHub()
+    const vis = document.querySelector('[data-cbat-card="visualisation"]')
+    expect(vis.querySelector('[data-testid="tile-chooser-visualisation"]').className).toContain('hidden')
+    expect(vis.querySelector('a').getAttribute('href')).toBe('/cbat/visualisation')
   })
 })

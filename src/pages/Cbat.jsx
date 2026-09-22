@@ -277,18 +277,23 @@ const persistMode = (key, mode) => { try { localStorage.setItem(key, mode) } cat
 // it). The tile reads FLAG | CLAN and fans out into the two on hover the way
 // Visualisation does. The halves are two different pages rather than two modes
 // of one, so each carries its own `path`; nothing is persisted. Touch devices,
-// where there is no hover, tap through to FLAG as before and reach CLAN from
-// the link on its card.
+// where there is no hover, get the same two buttons on a tap (`tapToChoose`),
+// and the FLAG and CLAN cards link across to each other as well.
 const FLAG_CLAN_SPLIT = {
   titleParts: ['FLAG', 'CLAN'],
+  // Two pages, not two modes of one, so a phone needs a chooser on the tile
+  // itself (see CombinedGameTile).
+  tapToChoose: true,
   // FLAG is a minute, CLAN a minute and a half.
   estMinutes: [1, 1.5],
   desc: 'FLAG: track aircraft, answer maths and identification questions, hit target shapes. CLAN: the Colours, Letters and Numbers test, still sat in Canada.',
   // `flag` is the country whose battery sits that test, drawn in the corner of
   // its half (inline SVG, not an emoji: Windows has no flag glyphs).
+  // `hint` is the caption that says whose battery sits it; `shortHint` is the
+  // same in the few characters an 83px phone tile has room for.
   halves: [
-    { label: 'FLAG', mode: 'flag', path: '/cbat/flag', lbKey: 'flag', flag: 'GB' },
-    { label: 'CLAN', mode: 'clan', path: '/cbat/clan', lbKey: 'clan', flag: 'CA' },
+    { label: 'FLAG', mode: 'flag', path: '/cbat/flag', lbKey: 'flag', flag: 'GB', hint: 'Sat in the UK: RAF and Royal Navy', shortHint: 'UK: RAF and RN' },
+    { label: 'CLAN', mode: 'clan', path: '/cbat/clan', lbKey: 'clan', flag: 'CA', hint: 'Sat in Canada on CFAST',             shortHint: 'Canada: CFAST' },
   ],
 }
 
@@ -299,14 +304,54 @@ const FLAG_CLAN_SPLIT = {
 // its clicks never trip the anchor's navigation and touch devices — where the
 // overlay stays inert — fall through to the Link's tap / long-press exactly as
 // before. Whichever half is hovered is the active (brand) one; the other dims.
+// True on a device with no pointer that hovers (a phone, a tablet), where the
+// hover split above can never open and a tap has to do the job instead.
+function hoverless() {
+  try { return window.matchMedia('(hover: none)').matches } catch { return false }
+}
+
 function CombinedGameTile({ game: tileGame, i, split, flickeringKey, enabled, isAdmin, navigate, baseHandlers }) {
   // A split that holds two run lengths states the range on the tile.
   const game = split.estMinutes ? { ...tileGame, estMinutes: split.estMinutes } : tileGame
+  // The touch chooser (FLAG | CLAN only). Trace and Visualisation pick their
+  // mode on the game page, so a tap on those tiles goes straight through; the
+  // FLAG tile's halves are two different pages, so on a device with no hover
+  // the tap opens the same two buttons in place and a second tap picks one.
+  const chooser = !!split.tapToChoose
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e) => { if (!wrapRef.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+  const onBaseClick = (e) => {
+    baseHandlers.onClick(e)
+    if (e.defaultPrevented || !chooser || !hoverless()) return
+    e.preventDefault()
+    setOpen(o => !o)
+  }
+
+  // The overlay: hover-revealed on a desktop; on a chooser tile it is also
+  // laid out for the phone grid (stacked, a row of ~30px per half) and opened
+  // by `open`. `group-hover` never fires without a hovering pointer (Tailwind
+  // gates it behind @media (hover: hover)), so on touch only `open` counts.
+  const overlayClass = chooser
+    ? `absolute inset-0 z-20 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-1 sm:gap-2 p-1 sm:p-3
+        rounded-xl sm:rounded-2xl bg-[#050d1a]/85 transition-opacity duration-150
+        ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
+        group-hover:opacity-100 group-hover:pointer-events-auto`
+    : `absolute inset-0 z-20 hidden sm:flex items-center justify-center gap-2 p-3 rounded-2xl bg-[#050d1a]/85
+        opacity-0 pointer-events-none transition-opacity duration-150
+        group-hover:opacity-100 group-hover:pointer-events-auto`
+
   return (
-    <div className="relative h-full group">
+    <div className="relative h-full group" ref={wrapRef} data-chooser-open={chooser ? open : undefined}>
       <Link
         to={game.path}
         {...baseHandlers}
+        onClick={onBaseClick}
         className={`${TILE_BASE} ${TILE_HOVER}`}
       >
         <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
@@ -321,15 +366,12 @@ function CombinedGameTile({ game: tileGame, i, split, flickeringKey, enabled, is
       </Link>
 
       {/* Hover split — greys the base card and overlays the two mode buttons. */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 z-20 hidden sm:flex items-center justify-center gap-2 p-3 rounded-2xl bg-[#050d1a]/85
-          opacity-0 pointer-events-none transition-opacity duration-150
-          group-hover:opacity-100 group-hover:pointer-events-auto"
-      >
+      <div aria-hidden={open ? undefined : 'true'} className={overlayClass} data-testid={`tile-chooser-${game.key}`}>
         {split.halves.map((h) => (
           <div
             key={h.mode}
+            role={chooser ? 'button' : undefined}
+            data-tile-half={h.mode}
             onClick={() => {
               // Left-click → open the game with this mode pre-selected, or
               // the half's own page where the halves are separate games.
@@ -341,13 +383,37 @@ function CombinedGameTile({ game: tileGame, i, split, flickeringKey, enabled, is
               e.preventDefault()
               navigate(`/cbat/${h.lbKey}/leaderboard?period=all-time`)
             }}
-            className="relative flex-1 max-w-[40%] flex items-center justify-center px-5 py-6 rounded-xl cursor-pointer select-none
+            className={`group/half relative flex-1 flex flex-col items-center justify-center cursor-pointer select-none sm:overflow-hidden
               border border-game-line bg-game-panel text-slate-400 opacity-60 transition-all
               hover:opacity-100 hover:bg-brand-600 hover:text-white hover:border-brand-400
-              hover:shadow-[0_0_16px_rgba(91,170,255,0.45)]"
+              hover:shadow-[0_0_16px_rgba(91,170,255,0.45)]
+              ${chooser
+                ? 'px-1 py-0.5 rounded-lg sm:max-w-[40%] sm:px-5 sm:py-6 sm:rounded-xl'
+                : 'max-w-[40%] px-5 py-6 rounded-xl'}`}
           >
-            {h.flag && <CountryFlag code={h.flag} width={22} className="absolute top-2 left-2" />}
-            <span className="text-base font-extrabold tracking-wide uppercase">{h.label}</span>
+            {h.flag && <CountryFlag code={h.flag} width={22} className="absolute top-1 left-1 w-3.5 h-auto sm:top-2 sm:left-2 sm:w-[22px]" />}
+            <span className={`font-extrabold tracking-wide uppercase ${chooser ? 'text-[10px] sm:text-base' : 'text-base'}`}>{h.label}</span>
+            {/* Whose battery sits this test. On hover the caption swipes in
+                from the left edge of the half: it starts off-screen to the
+                left and slides across, clipped by the button, so it reads as
+                a card sliding in rather than a label fading on. It waits a
+                beat before it starts and takes its time crossing, so a
+                pointer passing over the tile never fires it. In the touch
+                chooser it simply sits under the label, since nothing hovers
+                there. */}
+            {h.hint && (
+              <span
+                data-tile-hint={h.mode}
+                className="text-[7px] leading-tight sm:text-[9px] tracking-wide uppercase text-current/80 whitespace-nowrap
+                  sm:absolute sm:left-1 sm:right-1 sm:bottom-1.5 sm:text-left
+                  sm:opacity-0 sm:-translate-x-[130%]
+                  sm:transition-all sm:duration-[550ms] sm:delay-[120ms] sm:ease-[cubic-bezier(0.16,1,0.3,1)]
+                  sm:group-hover/half:opacity-100 sm:group-hover/half:translate-x-0"
+              >
+                <span className="sm:hidden">{h.shortHint ?? h.hint}</span>
+                <span className="hidden sm:inline">{h.hint}</span>
+              </span>
+            )}
           </div>
         ))}
       </div>
