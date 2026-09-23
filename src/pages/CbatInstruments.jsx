@@ -546,7 +546,7 @@ export default function CbatInstruments({ forcedMode = null }) {
           fullTitle="Instrument Comprehension"
           intro={phase === 'intro'}
           onQuit={goToIntro}
-          confirmNeeded={['calibrating', 'playing', 'feedback', 'drill'].includes(phase)}
+          confirmNeeded={inRound || drillFlying}
           test={testBar}
         />
       )}

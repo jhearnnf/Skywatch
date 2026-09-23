@@ -23,7 +23,9 @@ vi.mock('../../context/GameChromeContext', () => ({
 const mockSettings = vi.hoisted(() => ({ current: {} }))
 vi.mock('../../context/AppSettingsContext', () => ({ useAppSettings: () => ({ settings: mockSettings.current }) }))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
-vi.mock('../../components/CbatQuitButton', () => ({ default: () => null }))
+vi.mock('../../components/CbatQuitButton', () => ({
+  default: ({ confirmNeeded }) => <span data-testid="quit" data-confirm={String(!!confirmNeeded)} />,
+}))
 vi.mock('../../components/CbatGameOver', () => ({
   default: ({ children, gameKey, score }) => (
     <div data-testid="game-over" data-game-key={gameKey} data-score={score}>{children}</div>
@@ -191,6 +193,18 @@ describe('Instruments Practice Drill', () => {
     expect(body).toMatchObject({ totalTime: DRILL_SECONDS })
     expect(typeof body.totalScore).toBe('number')
     expect(Number(over.getAttribute('data-score'))).toBe(body.totalScore)
+  })
+
+  // The drill's results live inside the page's 'drill' phase, and the quit
+  // prompt used to cover the whole phase: backing out after the minute asked
+  // "Quit this game?" over a game that was already over and saved.
+  it('asks before quitting mid-flight but not from the results', async () => {
+    const { container } = renderPage()
+    await openAndStart(container)
+    expect(screen.getByTestId('quit').getAttribute('data-confirm')).toBe('true')
+    flySeconds(DRILL_SECONDS + 0.5, 0.1)
+    await screen.findByTestId('game-over')
+    expect(screen.getByTestId('quit').getAttribute('data-confirm')).toBe('false')
   })
 
   // The results used to sit flush left: CbatGameOver is a max-w-md column that
