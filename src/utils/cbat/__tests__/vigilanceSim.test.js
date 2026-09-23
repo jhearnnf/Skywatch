@@ -334,6 +334,11 @@ describe('Practise drill load', () => {
     }
   })
 
+  it('charges 50 a mis-key on the drill', () => {
+    expect(VIGILANCE_PRACTISE_MISKEY_PENALTY).toBe(50)
+    expect(drill.load.miskeyPenalty).toBe(50)
+  })
+
   it('pays the standard 10 a star and charges the heavier mis-key penalty', () => {
     const sim = createVigilanceSim({ rng: mulberry32(33), load: drill.load })
     const s = sim.snapshot().stars[0]

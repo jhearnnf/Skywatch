@@ -109,11 +109,11 @@ export const VIGILANCE_TUNING = {
 //
 // The mis-key penalty is raised here, and it has to be. With ~70% of cells
 // starred, the standard 5 makes a random coordinate worth +6 on average, so
-// hammering the pad would out-score reading the board. At 30 a random guess
-// loses points (0.69 × 10 − 0.31 × 30 ≈ −2.4), so the fastest way up the
+// hammering the pad would out-score reading the board. At 50 a random guess
+// loses points (0.69 × 10 − 0.31 × 50 ≈ −8.6), so the fastest way up the
 // board is still keying what you see.
 export const VIGILANCE_PRACTISE_STARS = 56
-export const VIGILANCE_PRACTISE_MISKEY_PENALTY = 30
+export const VIGILANCE_PRACTISE_MISKEY_PENALTY = 50
 
 export const VIGILANCE_PRACTISE = {
   key: 'practise',
