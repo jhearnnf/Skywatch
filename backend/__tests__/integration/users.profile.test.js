@@ -187,7 +187,7 @@ describe('GET /api/users/:id/profile — leaderboard medals', () => {
     await seedRun('flag', 500);
     const res = await get();
     expect(res.body.data.medals).toEqual([
-      { gameKey: 'flag', gameLabel: 'FLAG (Hard)', rank: 1 },
+      { gameKey: 'flag', gameLabel: 'FLAG (Hard)', rank: 1, hard: true },
     ]);
   });
 
@@ -196,7 +196,7 @@ describe('GET /api/users/:id/profile — leaderboard medals', () => {
     await seedRun('angles', 16);
     const res = await get();
     expect(res.body.data.medals).toEqual([
-      { gameKey: 'angles', gameLabel: 'Angles', rank: 3 },
+      { gameKey: 'angles', gameLabel: 'Angles', rank: 3, hard: false },
     ]);
   });
 

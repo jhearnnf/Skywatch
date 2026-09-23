@@ -21,7 +21,7 @@
  * anyone ever set.
  */
 
-const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty, isCbatHardKey } = require('../constants/cbatGames');
 const { bestPerUserTop20, paddedBoardFrom } = require('./cbatBoardRank');
 
 const CACHE_MS = 5 * 60 * 1000;
@@ -84,13 +84,15 @@ async function sweep() {
       // Difficulty-qualified: an avatar medal is read one tooltip at a time
       // ("Gold — FLAG"), with nothing beside it to say which board it was won
       // on. Same label the Medals channel announces.
-      list.push({ gameKey, gameLabel: cbatLabelWithDifficulty(gameKey), rank });
+      // `hard` lets the avatar dress a Hard-board medal up a little more.
+      list.push({ gameKey, gameLabel: cbatLabelWithDifficulty(gameKey), rank, hard: isCbatHardKey(gameKey) });
       holders.set(key, list);
     }
   }
 
   // Best medal first, so a truncated display shows the most impressive.
-  for (const list of holders.values()) list.sort((a, b) => a.rank - b.rank);
+  // At equal rank a Hard-board medal outranks an Easier one.
+  for (const list of holders.values()) list.sort((a, b) => a.rank - b.rank || b.hard - a.hard);
 
   cache = { at: Date.now(), holders };
   return holders;
@@ -112,7 +114,7 @@ function startSweep() {
 }
 
 /**
- * @returns {Promise<Map<string, Array<{gameKey, gameLabel, rank}>>>}
+ * @returns {Promise<Map<string, Array<{gameKey, gameLabel, rank, hard}>>>}
  *   userId string -> medals held, best first
  */
 async function getMedalHolders({ force = false } = {}) {

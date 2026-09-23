@@ -72,6 +72,7 @@ function BadgeTile({ badge, earned, wearing }) {
 
 const MEDAL_FACE = { 1: '\u{1F947}', 2: '\u{1F948}', 3: '\u{1F949}' }
 const MEDAL_WORD = { 1: 'Gold', 2: 'Silver', 3: 'Bronze' }
+const MEDAL_GLOW = { 1: 'rgba(255, 200, 60, 0.7)', 2: 'rgba(220, 230, 245, 0.6)', 3: 'rgba(230, 140, 70, 0.65)' }
 
 // A podium place, spelled out. Chat shows these as a tight overlapping stack on
 // an avatar because it has about twelve pixels to work with; this page has a
@@ -83,9 +84,15 @@ function MedalRow({ medal }) {
     2: 'bg-slate-100 border-slate-200',
     3: 'bg-amber-100/30 border-amber-200/40',
   }
+  // A Hard-board medal glows in its own metal's colour (main.css), the same
+  // mark chat puts on the avatar stack.
+  const glow = medal.hard ? { '--medal-glow': MEDAL_GLOW[medal.rank] ?? MEDAL_GLOW[3] } : undefined
   return (
-    <div className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 ${TONE[medal.rank] ?? TONE[3]}`}>
-      <span className="text-xl leading-none" aria-hidden="true">{MEDAL_FACE[medal.rank] ?? '\u{1F396}\uFE0F'}</span>
+    <div
+      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 ${TONE[medal.rank] ?? TONE[3]} ${medal.hard ? 'medal-hard-row' : ''}`}
+      style={glow}
+    >
+      <span className={`text-xl leading-none ${medal.hard ? 'medal-hard' : ''}`} aria-hidden="true">{MEDAL_FACE[medal.rank] ?? '\u{1F396}\uFE0F'}</span>
       <div className="min-w-0">
         <p className="text-xs font-extrabold text-slate-800 leading-tight">
           {MEDAL_WORD[medal.rank] ?? 'Podium'}

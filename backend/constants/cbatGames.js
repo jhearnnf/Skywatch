@@ -603,6 +603,12 @@ const EASIER_KEYS = new Set(Object.keys(CBAT_GAMES).filter(isCbatEasierKey));
 
 const HARD_KEYS = new Set([...EASIER_KEYS].map(cbatHardKeyFor));
 
+// The Hard half of a split game. A board that was never split (or a retired
+// pre-split one) is neither, so this is false for it.
+function isCbatHardKey(gameKey) {
+  return HARD_KEYS.has(gameKey) && !CBAT_GAMES[gameKey]?.legacyBoard;
+}
+
 function cbatLabelWithDifficulty(gameKey) {
   const cfg = CBAT_GAMES[gameKey];
   if (!cfg) return null;
@@ -633,5 +639,5 @@ function cbatLabelWithDifficulty(gameKey) {
 const CBAT_TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat', 'cut', 'dpt'];
 
 module.exports = {
-  CBAT_GAMES, CBAT_TUTORIAL_GAME_KEYS, cbatLabelWithDifficulty, cbatHardKeyFor, isCbatEasierKey,
+  CBAT_GAMES, CBAT_TUTORIAL_GAME_KEYS, cbatLabelWithDifficulty, cbatHardKeyFor, isCbatEasierKey, isCbatHardKey,
 };

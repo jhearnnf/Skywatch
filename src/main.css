@@ -4420,3 +4420,19 @@ body.play-mode .card-shadow {
   50%      { box-shadow: 0 0 22px 2px rgba(91, 170, 255, 0.55); border-color: rgba(91, 170, 255, 0.95); }
 }
 .drill-pad-prompt { animation: drill-pad-prompt 1.6s ease-in-out infinite; }
+
+/* Podium medals won on the Hard half of a split CBAT game: a breathing halo in
+   the medal's own colour, so they stand out from the Easier-board ones. The
+   colour arrives as --medal-glow, set per medal (gold / silver / bronze).
+   .medal-hard is the glyph itself (profile row face);
+   .medal-hard-row is the profile's whole medal card. */
+@keyframes medal-hard-glow {
+  0%, 100% { filter: drop-shadow(0 0 1px var(--medal-glow)) drop-shadow(0 0 2px var(--medal-glow)); }
+  50%      { filter: drop-shadow(0 0 2px var(--medal-glow)) drop-shadow(0 0 5px var(--medal-glow)); }
+}
+.medal-hard { animation: medal-hard-glow 2.4s ease-in-out infinite; }
+@keyframes medal-hard-row {
+  0%, 100% { box-shadow: 0 0 0 1px var(--medal-glow), 0 0 6px 0 var(--medal-glow); }
+  50%      { box-shadow: 0 0 0 1px var(--medal-glow), 0 0 16px 2px var(--medal-glow); }
+}
+.medal-hard-row { animation: medal-hard-row 2.4s ease-in-out infinite; }

@@ -234,7 +234,7 @@ describe('GET /api/admin/users/:id/profile — leaderboard standing', () => {
     const flag = res.body.data.cbatGames.find(g => g.gameKey === 'flag');
     expect(flag.boardRank).toBe(1);
     expect(res.body.data.medals).toEqual([
-      { gameKey: 'flag', gameLabel: 'FLAG (Hard)', rank: 1 },
+      { gameKey: 'flag', gameLabel: 'FLAG (Hard)', rank: 1, hard: true },
     ]);
   });
 
@@ -246,7 +246,7 @@ describe('GET /api/admin/users/:id/profile — leaderboard standing', () => {
     const angles = res.body.data.cbatGames.find(g => g.gameKey === 'angles');
     expect(angles.boardRank).toBe(3);
     expect(res.body.data.medals).toEqual([
-      { gameKey: 'angles', gameLabel: 'Angles', rank: 3 },
+      { gameKey: 'angles', gameLabel: 'Angles', rank: 3, hard: false },
     ]);
   });
 

@@ -1,4 +1,4 @@
-const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
+const { CBAT_GAMES, cbatLabelWithDifficulty, isCbatHardKey } = require('../constants/cbatGames');
 const { boardPositionFor } = require('./cbatBoardRank');
 
 // One agent's CBAT record: attempts, personal best and last play on every
@@ -57,8 +57,8 @@ async function withBoardRanks(cbatGames, uid) {
 function medalsFrom(cbatGames) {
   return cbatGames
     .filter(g => g.boardRank && g.boardRank <= 3)
-    .map(g => ({ gameKey: g.gameKey, gameLabel: g.label, rank: g.boardRank }))
-    .sort((a, b) => a.rank - b.rank);
+    .map(g => ({ gameKey: g.gameKey, gameLabel: g.label, rank: g.boardRank, hard: isCbatHardKey(g.gameKey) }))
+    .sort((a, b) => a.rank - b.rank || b.hard - a.hard);
 }
 
 module.exports = { cbatRecordFor, withBoardRanks, medalsFrom };

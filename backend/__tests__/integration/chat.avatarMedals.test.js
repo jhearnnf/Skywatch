@@ -64,6 +64,9 @@ describe('getMedalHolders', () => {
 
     expect(hardMedal.gameLabel).toBe('FLAG (Hard)');
     expect(easyMedal.gameLabel).toBe('FLAG (Easier)');
+    // The avatar dresses Hard-board medals up; the flag is what it reads.
+    expect(hardMedal.hard).toBe(true);
+    expect(easyMedal.hard).toBe(false);
   });
 
   it('counts a player once, not once per run', async () => {
