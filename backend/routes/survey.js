@@ -570,27 +570,62 @@ router.post('/:token/opt-out', throttle, async (req, res) => {
     const invite = await loadInvite(req.params.token);
     if (!invite) return res.status(404).json({ message: 'This link is not valid.' });
 
-    const userId = invite.userId?._id ?? invite.userId;
-    const now = new Date();
-
-    if (!invite.optedOutAt) {
-      invite.optedOutAt = now;
-      await invite.save();
-    }
-
-    // Same rule as the pass flag: a dry run shows the page but must not actually
-    // unsubscribe the admin walking through it.
-    if (!invite.isTest) {
-      await User.updateOne(
-        { _id: userId, 'researchEmailOptOut.at': null },
-        { researchEmailOptOut: { at: now, reason: null, campaign: invite.campaign } },
-      );
-    }
-
-    res.json({ status: 'success', data: { name: nameFor(invite.userId), optedOutAt: now } });
+    const optedOutAt = await applyOptOut(invite);
+    res.json({ status: 'success', data: { name: nameFor(invite.userId), optedOutAt } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
+});
+
+// Shared by the opt-out page above and the inbox's own Unsubscribe button
+// below, so both honour exactly the same thing.
+async function applyOptOut(invite) {
+  const userId = invite.userId?._id ?? invite.userId;
+  const now = new Date();
+
+  if (!invite.optedOutAt) {
+    invite.optedOutAt = now;
+    await invite.save();
+  }
+
+  // Same rule as the pass flag: a dry run shows the page but must not actually
+  // unsubscribe the admin walking through it.
+  if (!invite.isTest) {
+    await User.updateOne(
+      { _id: userId, 'researchEmailOptOut.at': null },
+      { researchEmailOptOut: { at: now, reason: null, campaign: invite.campaign } },
+    );
+  }
+  return invite.optedOutAt;
+}
+
+// POST /api/survey/:token/unsubscribe — RFC 8058 one-click unsubscribe.
+//
+// The target of the email's List-Unsubscribe header (see surveyEmail.js).
+// Gmail, Yahoo and Outlook.com show their own "Unsubscribe" button beside the
+// sender when that header is present, and pressing it POSTs here from the
+// mail provider's servers: no browser, no cookies, no JavaScript, and a body
+// of `List-Unsubscribe=One-Click` that we have no need to read. The token in
+// the URL is the whole authentication, same as the footer link. Bulk mail
+// without this header is treated as more likely to be spam.
+router.post('/:token/unsubscribe', throttle, async (req, res) => {
+  try {
+    const invite = await loadInvite(req.params.token);
+    // Nothing useful to say to a mail server about a bad token; a 404 is honest.
+    if (!invite) return res.status(404).end();
+    await applyOptOut(invite);
+    res.status(200).end();
+  } catch (err) {
+    res.status(500).end();
+  }
+});
+
+// GET of the same URL: a client that opens the header link in a browser
+// instead of POSTing. Send them to the normal opt-out page, which applies the
+// opt-out on arrival and asks its optional questions afterwards.
+router.get('/:token/unsubscribe', (req, res) => {
+  const base = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, '');
+  res.redirect(302, `${base}/survey/${encodeURIComponent(req.params.token)}/opt-out`);
 });
 
 // PATCH /api/survey/:token/opt-out — the optional questions asked *after* the

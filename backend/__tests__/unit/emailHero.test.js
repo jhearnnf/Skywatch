@@ -11,7 +11,7 @@
 
 const { radarHero, heroImageUrl, HERO_PATH, HERO_WIDTH, HERO_HEIGHT } = require('../../utils/emailHero');
 const { buildEmailHTML }  = require('../../utils/emailTemplate');
-const { renderSurveyEmail, SURVEY_DEFAULTS } = require('../../utils/surveyEmail');
+const { renderSurveyEmail, listUnsubscribeHeaders, SURVEY_DEFAULTS } = require('../../utils/surveyEmail');
 
 describe('radarHero', () => {
   const hero = radarHero({ baseUrl: 'https://skywatch.academy' });
@@ -67,19 +67,24 @@ describe('buildEmailHTML — hero slots', () => {
 });
 
 describe('renderSurveyEmail', () => {
-  it('carries the radar GIF and the shimmer bar', () => {
+  it('uses the plain header while the radar GIF is parked', () => {
     const fields = {
       subject: SURVEY_DEFAULTS.subject, heading: SURVEY_DEFAULTS.heading,
       subtitle: SURVEY_DEFAULTS.subtitle, body: SURVEY_DEFAULTS.body,
       ctaText: SURVEY_DEFAULTS.cta, footer: SURVEY_DEFAULTS.footer,
     };
     const { html } = renderSurveyEmail({ fields, user: { displayName: 'Pilot', agentNumber: '1' }, token: 't' });
-    expect(html).toContain(`${process.env.CLIENT_URL || 'http://localhost:5173'}${HERO_PATH}`);
-    expect(html).toContain('@keyframes sw-shimmer');
-    expect(html).toContain('class="sw-bar"');
+    expect(html).not.toContain(HERO_PATH);
+    expect(html).not.toContain('<style');
+    expect(html).not.toContain('sw-bar');
     expect(html).toContain('Classified Transmission');
-    // The hero sits inside the card, before the accent bar and the copy.
-    expect(html.indexOf(HERO_PATH)).toBeLessThan(html.indexOf('class="sw-bar"'));
-    expect(html.indexOf('sw-bar')).toBeLessThan(html.indexOf('Classified Transmission'));
+  });
+});
+
+describe('listUnsubscribeHeaders', () => {
+  it('points one-click unsubscribe at the backend over https', () => {
+    const h = listUnsubscribeHeaders('abc');
+    expect(h['List-Unsubscribe']).toMatch(/^<https:\/\/[^>]+\/api\/survey\/abc\/unsubscribe>$/);
+    expect(h['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
   });
 });

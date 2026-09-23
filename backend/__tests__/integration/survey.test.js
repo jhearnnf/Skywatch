@@ -261,6 +261,29 @@ describe('POST /api/survey/:token/opt-out', () => {
   });
 });
 
+describe('/api/survey/:token/unsubscribe — the inbox one-click Unsubscribe', () => {
+  it('opts out on the mail provider form-encoded POST, with no cookie', async () => {
+    const res = await request(app)
+      .post(`/api/survey/${token}/unsubscribe`)
+      .type('form')
+      .send('List-Unsubscribe=One-Click');
+    expect(res.status).toBe(200);
+    expect((await User.findById(user._id)).researchEmailOptOut.at).toBeTruthy();
+    expect((await SurveyInvite.findById(invite._id)).optedOutAt).toBeTruthy();
+  });
+
+  it('404s on an unknown token', async () => {
+    const res = await request(app).post(`/api/survey/${SurveyInvite.newToken()}/unsubscribe`);
+    expect(res.status).toBe(404);
+  });
+
+  it('sends a browser GET to the normal opt-out page', async () => {
+    const res = await request(app).get(`/api/survey/${token}/unsubscribe`);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toMatch(new RegExp(`/survey/${token}/opt-out$`));
+  });
+});
+
 describe('PATCH /api/survey/:token/opt-out — the optional questions after leaving', () => {
   it('records a reason and a pass answer', async () => {
     await request(app).post(`/api/survey/${token}/opt-out`);

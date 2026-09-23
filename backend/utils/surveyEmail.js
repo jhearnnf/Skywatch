@@ -22,7 +22,6 @@ const { Resend }         = require('resend');
 const AppSettings        = require('../models/AppSettings');
 const EmailLog           = require('../models/EmailLog');
 const { buildEmailHTML, buildCtaButton, formatComposedBody } = require('./emailTemplate');
-const { radarHero }      = require('./emailHero');
 const { SURVEY_CAMPAIGN } = require('../constants/survey');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -138,6 +137,27 @@ function assertMailableClientUrl() {
 function surveyUrl(token)  { return `${clientUrl()}/survey/${token}`; }
 function optOutUrl(token)  { return `${clientUrl()}/survey/${token}/opt-out`; }
 
+// The public API origin. Unlike the links above, the one-click unsubscribe
+// URL must hit the BACKEND: the mail provider POSTs to it directly, and
+// Vercel would answer a POST to the SPA with a 405. Production's API lives at
+// api.skywatch.academy (VITE_API_URL in .env.production); PUBLIC_API_URL
+// overrides it.
+function apiUrl() {
+  return (process.env.PUBLIC_API_URL || 'https://api.skywatch.academy').replace(/\/+$/, '');
+}
+function unsubscribeUrl(token) { return `${apiUrl()}/api/survey/${encodeURIComponent(token)}/unsubscribe`; }
+
+// RFC 8058 one-click unsubscribe. Gmail and Yahoo expect these on bulk mail
+// and show their own Unsubscribe button beside the sender when present; mail
+// without them is more likely to be filed as spam. The in-body footer link
+// stays as well: not every client shows the header.
+function listUnsubscribeHeaders(token) {
+  return {
+    'List-Unsubscribe':      `<${unsubscribeUrl(token)}>`,
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+  };
+}
+
 function displayNameFor(user) {
   return user.displayName?.trim() || `Agent ${user.agentNumber}`;
 }
@@ -163,10 +183,9 @@ function renderSurveyEmail({ fields, user, token }) {
   // without JavaScript and honours the opt-out on arrival.
   const footer = `${fill(fields.footer)}<br><a href="${optOutUrl(token)}" style="color:#94a3b8;text-decoration:underline;">Do not email me about this again</a>`;
 
-  // The animated radar header: a GIF fetched from the public site, so it plays
-  // in Gmail and Outlook as well as the admin preview. See emailHero.js.
-  const hero = radarHero({ baseUrl: clientUrl() });
-
+  // No hero image. The animated radar GIF (emailHero.js) is parked: some
+  // inboxes block remote images by default or show only its first frame, and
+  // the plain header renders identically everywhere.
   return {
     subject: fill(fields.subject),
     html: buildEmailHTML({
@@ -175,9 +194,6 @@ function renderSurveyEmail({ fields, user, token }) {
       body:     bodyHtml,
       ctaText:  '', // the button is placed inline by {{button}}
       footer,
-      hero:        hero.html,
-      headCss:     hero.css,
-      animatedBar: true,
     }),
   };
 }
@@ -204,6 +220,7 @@ async function sendSurveyBatch(recipients, { variant = DEFAULT_VARIANT } = {}) {
       to: user.email,
       subject,
       html,
+      headers: listUnsubscribeHeaders(token),
       ...(REPLY_TO ? { replyTo: REPLY_TO } : {}),
     };
   });
@@ -287,5 +304,7 @@ module.exports = {
   sendSurveyBatch,
   surveyUrl,
   optOutUrl,
+  unsubscribeUrl,
+  listUnsubscribeHeaders,
   displayNameFor,
 };
