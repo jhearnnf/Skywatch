@@ -1,10 +1,11 @@
-import { useEffect, useState, useMemo, Suspense, lazy } from 'react'
+import { useEffect, useRef, useState, useMemo, Suspense, lazy } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { useSlimMode } from '../hooks/useSlimMode'
 import { captureEvent } from '../lib/posthog'
+import { hardNavigate } from '../utils/hardNavigate'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
 import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
@@ -82,8 +83,26 @@ function CornerBrackets({ size = 18, color = '#5baaff', opacity = 0.4 }) {
   )
 }
 
+// How long a client-side route change off this page may take before we give up
+// on it and load the page for real. The exit animation is 0.2s, so this only
+// fires when it has stalled.
+const STALLED_NAV_MS = 2000
+
 export default function Landing() {
   const { user, API } = useAuth()
+
+  // The CBAT buttons navigate in-app, which waits on AnimatePresence's
+  // exit animation before /cbat mounts. With nine live games running here,
+  // Safari could stall that, so a tap changed nothing on screen. Landing stays
+  // mounted until the exit finishes, so if this timer is still alive after
+  // STALLED_NAV_MS the switch never happened and a real page load takes over.
+  // A normal switch unmounts Landing first and the cleanup cancels it.
+  const stalledNavTimer = useRef(null)
+  useEffect(() => () => clearTimeout(stalledNavTimer.current), [])
+  const guardNav = href => () => {
+    clearTimeout(stalledNavTimer.current)
+    stalledNavTimer.current = setTimeout(() => hardNavigate(href), STALLED_NAV_MS)
+  }
   const { settings } = useAppSettings()
   const slim = useSlimMode()
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -142,9 +161,13 @@ export default function Landing() {
             <span className="font-bold tracking-widest text-brand-600 text-sm">SKYWATCH</span>
           </div>
           <div className="flex items-center gap-3">
-            {user ? (
-              <Link to={slim ? '/cbat' : '/home'} className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
-                {slim ? 'Play CBAT' : 'Continue Learning'}
+            {user && slim ? (
+              <Link to="/cbat" onClick={guardNav('/cbat')} data-testid="landing-header-cbat-cta" className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors touch-manipulation">
+                Play CBAT
+              </Link>
+            ) : user ? (
+              <Link to="/home" className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors">
+                Continue Learning
               </Link>
             ) : (
               <>
@@ -211,23 +234,27 @@ export default function Landing() {
           )}
 
           <motion.div variants={fadeUp} custom={4} className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center items-center">
-            {user ? (
+            {/* No hover lift on the CBAT CTAs: on a Mac the 2px jump can pull the
+                button out from under a cursor on its bottom edge and swallow
+                the click. guardNav covers a stalled route change (see above). */}
+            {slim ? (
               <Link
-                to={slim ? '/cbat' : '/home'}
-                className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
-                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
-              >
-                {slim ? 'Play CBAT Games' : 'Continue Learning'}
-              </Link>
-            ) : slim ? (
-              <a
-                href="/cbat"
+                to="/cbat"
+                onClick={guardNav('/cbat')}
                 data-testid="landing-primary-cbat-cta"
                 className="relative z-10 inline-flex min-h-14 cursor-pointer touch-manipulation select-none items-center justify-center bg-brand-600 hover:bg-brand-700 active:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-[background-color,box-shadow] hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-400"
                 style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)', WebkitTapHighlightColor: 'rgba(91,170,255,0.2)' }}
               >
-                Start Practising Free →
-              </a>
+                {user ? 'Play CBAT Games' : 'Start Practising Free →'}
+              </Link>
+            ) : user ? (
+              <Link
+                to="/home"
+                className="bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-all hover:shadow-lg hover:-translate-y-0.5"
+                style={{ boxShadow: '0 0 24px rgba(91,170,255,0.25)' }}
+              >
+                Continue Learning
+              </Link>
             ) : (
               <button
                 onClick={() => setShowOnboarding(true)}

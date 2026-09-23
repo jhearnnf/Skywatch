@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Landing from '../Landing'
 import { CBAT_GUIDE_HREF } from '../../utils/guideHref'
@@ -9,11 +9,18 @@ import { CBAT_GUIDE_HREF } from '../../utils/guideHref'
 vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => true }))
 
 vi.mock('react-router-dom', () => ({
-  Link: ({ children, to }) => <a href={to}>{children}</a>,
+  // Cancels the default like the real Link, so jsdom does not try to navigate.
+  Link: ({ children, to, onClick, ...rest }) => (
+    <a href={to} data-router-link="" {...rest} onClick={e => { e.preventDefault(); onClick?.(e) }}>{children}</a>
+  ),
 }))
 
+const hardNavigate = vi.fn()
+vi.mock('../../utils/hardNavigate', () => ({ hardNavigate: (...a) => hardNavigate(...a) }))
+
+let mockUser = null
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: null, API: '' }),
+  useAuth: () => ({ user: mockUser, API: '' }),
 }))
 
 vi.mock('../../context/AppSettingsContext', () => ({
@@ -63,7 +70,7 @@ describe('Landing — slim (CBAT-only) mode', () => {
   beforeEach(() => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => { mockUser = null; vi.restoreAllMocks() })
 
   it('shows a CBAT-focused hero', () => {
     render(<Landing />)
@@ -124,9 +131,51 @@ describe('Landing — slim (CBAT-only) mode', () => {
 
   it('opens the guest CBAT menu from the primary CTA and keeps the closing signup CTA', () => {
     render(<Landing />)
-    expect(screen.getByTestId('landing-primary-cbat-cta').getAttribute('href')).toBe('/cbat')
+    const hero = screen.getByTestId('landing-primary-cbat-cta')
+    expect(hero.getAttribute('href')).toBe('/cbat')
+    expect(hero.hasAttribute('data-router-link')).toBe(true)
     const ctas = screen.getAllByText('Start Practising Free →')
     expect(ctas.some(cta => cta.closest('a')?.getAttribute('href') === '/login?tab=register')).toBe(true)
+  })
+
+  // Signed-in players keep the instant in-app route change (a full reload felt
+  // wrong), but the change waits on AnimatePresence's exit animation, which
+  // Safari could stall under the live game wall. If Landing is still mounted
+  // after the grace period, a real page load takes over.
+  describe('signed-in CBAT buttons', () => {
+    beforeEach(() => { mockUser = { _id: 'u1' }; hardNavigate.mockClear(); vi.useFakeTimers() })
+    afterEach(() => vi.useRealTimers())
+
+    it('navigate in-app, without the hover lift that swallows Mac clicks', () => {
+      render(<Landing />)
+      const hero = screen.getByTestId('landing-primary-cbat-cta')
+      expect(hero.textContent).toBe('Play CBAT Games')
+      expect(hero.getAttribute('href')).toBe('/cbat')
+      expect(hero.hasAttribute('data-router-link')).toBe(true)
+      expect(hero.className).not.toMatch(/translate-y/)
+      expect(hero.className).toMatch(/touch-manipulation/)
+      expect(screen.getByTestId('landing-header-cbat-cta').hasAttribute('data-router-link')).toBe(true)
+    })
+
+    it.each(['landing-primary-cbat-cta', 'landing-header-cbat-cta'])(
+      '%s falls back to a full page load when the route change stalls',
+      testId => {
+        render(<Landing />)
+        fireEvent.click(screen.getByTestId(testId))
+        act(() => vi.advanceTimersByTime(1999))
+        expect(hardNavigate).not.toHaveBeenCalled()
+        act(() => vi.advanceTimersByTime(1))
+        expect(hardNavigate).toHaveBeenCalledWith('/cbat')
+      },
+    )
+
+    it('does not reload once the route change has unmounted Landing', () => {
+      const { unmount } = render(<Landing />)
+      fireEvent.click(screen.getByTestId('landing-primary-cbat-cta'))
+      unmount()
+      act(() => vi.advanceTimersByTime(5000))
+      expect(hardNavigate).not.toHaveBeenCalled()
+    })
   })
 })
 
