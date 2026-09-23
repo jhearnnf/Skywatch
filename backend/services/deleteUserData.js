@@ -20,6 +20,7 @@ const OWNED_BY_USER = [
   'AirstarLog',
   'AppOpen',
   'AptitudeSyncUsage',
+  'CbatMatfPrint',
   'GameSessionCaseFileResult',
   'GameSessionCbatActResult',
   'GameSessionCbatAnglesResult',

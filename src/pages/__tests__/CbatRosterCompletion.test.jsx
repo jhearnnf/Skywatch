@@ -524,11 +524,15 @@ describe('MATF — two speeded parts', () => {
     expect(screen.getByText(/±17 grid/)).toBeTruthy()
   })
 
-  it('starts part one on a grid question after the launch flash', () => {
+  it('starts part one on a grid question after the launch flash and the print question', () => {
+    // The launch flash hands over to "Print the reference tables?" rather than
+    // straight to the run; playing on screen is the skip.
     renderPage(CbatMatf)
     act(() => { press(screen.getByText('Start')) })
     act(() => { vi.advanceTimersByTime(1100) })
-    expect(screen.getByText(/Part/)).toBeTruthy()
+    expect(screen.getByText(/Print the reference tables\?/)).toBeTruthy()
+    act(() => { press(screen.getByText('No, play on screen')) })
+    expect(screen.getAllByText(/Part/).length).toBeGreaterThan(0)
   })
 })
 
