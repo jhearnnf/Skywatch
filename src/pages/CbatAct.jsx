@@ -55,6 +55,8 @@ import CbatArcadeNotice from '../components/cbat/CbatArcadeNotice'
 import { useStickPresence } from '../utils/cbat/useStickPresence'
 import ActCraftPicker from '../components/cbat/ActCraftPicker'
 import ActPlayerCraft from '../components/cbat/ActPlayerCraft'
+import TouchSteerPad from '../components/cbat/TouchSteerPad'
+import { useIsTouch } from '../hooks/useIsTouch'
 import { getAircraftRoster } from '../lib/offlineRoster'
 import {
   actCraftOptions,
@@ -113,34 +115,7 @@ const SCORE = {
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
 
-// True when the device is touch-first OR the viewport is mobile-narrow. The
-// touch-steer pad renders on this; the canvas keeps its own pointer handlers
-// regardless (the pad is additive). Re-evaluates on matchMedia change + resize
-// so rotating/resizing a hybrid device updates the UI live.
-function useIsTouch() {
-  const compute = () => {
-    if (typeof window === 'undefined') return false
-    const coarse = typeof window.matchMedia === 'function'
-      && window.matchMedia('(hover: none) and (pointer: coarse)').matches
-    const narrow = window.innerWidth <= 600
-    return coarse || narrow
-  }
-  const [isTouch, setIsTouch] = useState(compute)
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const update = () => setIsTouch(compute())
-    const mql = typeof window.matchMedia === 'function'
-      ? window.matchMedia('(hover: none) and (pointer: coarse)')
-      : null
-    mql?.addEventListener?.('change', update)
-    window.addEventListener('resize', update)
-    return () => {
-      mql?.removeEventListener?.('change', update)
-      window.removeEventListener('resize', update)
-    }
-  }, [])
-  return isTouch
-}
+// useIsTouch lives in hooks/useIsTouch.js (shared with the Instruments drill).
 
 // ── Tunnel geometry ──────────────────────────────────────────────────────────
 
@@ -1347,52 +1322,8 @@ function ActScene({ state, craftUrl, realCbat }) {
 }
 
 // ── Touch steer pad ──────────────────────────────────────────────────────────
-
-// Below-canvas drag surface for touch devices, so the player doesn't have to
-// drag on top of the gameplay (which would obscure the tunnel with a finger).
-// The same pointer handlers used by <Canvas> are bound here — pad input is
-// additive, not exclusive. While idle (no active drag anywhere), a slow
-// swipe-cue animates left↔right so first-time users discover the gesture.
-function TouchSteerPad({ onPointerDown, onPointerMove, onPointerUp, isDragging }) {
-  return (
-    <div
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      className="relative w-full h-36 mt-3 bg-game-panel border border-game-line rounded-xl overflow-hidden"
-      style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
-      aria-label="Touch steering pad — drag to steer"
-      role="application"
-    >
-      <AnimatePresence>
-        {!isDragging && (
-          <motion.div
-            key="hint"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-          >
-            <motion.div
-              animate={{ x: [-44, 44, -44] }}
-              transition={{ duration: 2.4, ease: 'easeInOut', repeat: Infinity }}
-              className="flex items-center gap-2"
-            >
-              <motion.div
-                animate={{ opacity: [0.55, 1, 0.55], scale: [0.92, 1.04, 0.92] }}
-                transition={{ duration: 2.4, ease: 'easeInOut', repeat: Infinity }}
-                className="w-9 h-9 rounded-full bg-brand-400/25 border-2 border-brand-300 shadow-[0_0_18px_rgba(91,170,255,0.45)]"
-              />
-            </motion.div>
-            <p className="mt-3 text-[11px] uppercase tracking-widest text-slate-400">Drag to steer</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
+// TouchSteerPad lives in components/cbat/TouchSteerPad.jsx (shared with the
+// Instruments drill). ACT uses its defaults.
 
 // ── Round-end recap card ─────────────────────────────────────────────────────
 function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
