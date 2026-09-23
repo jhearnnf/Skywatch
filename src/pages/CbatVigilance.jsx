@@ -107,6 +107,23 @@ function ClearBurst({ priority, delta }) {
   )
 }
 
+// How long the drill's miss popup lives. Must outlast its animation in main.css.
+export const MISS_POPUP_MS = 900
+
+// Drill only. The drill's mis-key penalty is heavy on purpose, so a miss has to
+// be impossible to overlook: a big red cost stamped over the board, with the
+// board itself shaking. The test proper keeps its quiet cell tint, because an
+// effect this loud on an attention test would compete with the task.
+function MissPopup({ delta, row, col }) {
+  return (
+    <div className="vig-miss-popup" aria-hidden="true">
+      <span className="vig-miss-popup-label">MISS!</span>
+      <span className="vig-miss-popup-points">{delta}</span>
+      <span className="vig-miss-popup-coord">No star at {row + 1}, {col + 1}</span>
+    </div>
+  )
+}
+
 function StarGrid({ stars, pendingRow, lastEvent, clears }) {
   const byCell = new Map(stars.map(s => [`${s.row},${s.col}`, s]))
   // Grouped once per render rather than filtered inside all 81 cells — this
@@ -330,6 +347,7 @@ export default function CbatVigilance() {
   // Live clear effects, one per star cleared. Held here rather than in StarGrid
   // so they survive that component's re-render on every frame of the run.
   const [clears, setClears] = useState([])
+  const [missPopup, setMissPopup] = useState(null)
   const [finalStats, setFinalStats] = useState(null)
   const cbat = useCbatTheme()
   const [scoreSaved, setScoreSaved] = useState(false)
@@ -370,6 +388,18 @@ export default function CbatVigilance() {
       setClears(prev => prev.filter(c => c.id !== id))
       clearTimersRef.current.delete(timer)
     }, CLEAR_EFFECT_MS)
+    clearTimersRef.current.add(timer)
+  }, [])
+
+  // The drill's miss popup. Only the latest is shown: a new miss replaces the
+  // old one (a fresh id remounts it, restarting the animation and the shake).
+  const addMiss = useCallback((event) => {
+    const id = ++clearIdRef.current
+    setMissPopup({ id, row: event.row, col: event.col, delta: event.delta })
+    const timer = setTimeout(() => {
+      setMissPopup(prev => (prev?.id === id ? null : prev))
+      clearTimersRef.current.delete(timer)
+    }, MISS_POPUP_MS)
     clearTimersRef.current.add(timer)
   }, [])
 
@@ -450,7 +480,8 @@ export default function CbatVigilance() {
     setPendingRow(null)
     setLastEvent(event)
     if (event.type === 'star' || event.type === 'priority') addClear(event)
-  }, [addClear])
+    if (event.type === 'miss' && runTuningRef.current.key === 'practise') addMiss(event)
+  }, [addClear, addMiss])
 
   const clearPending = useCallback(() => {
     pendingRowRef.current = null
@@ -493,6 +524,7 @@ export default function CbatVigilance() {
     setPendingRow(null)
     setLastEvent(null)
     setClears([])
+    setMissPopup(null)
     setFinalStats(null)
     setSnapshot(sim.snapshot())
     startTracking(played.gameKey)
@@ -674,7 +706,13 @@ export default function CbatVigilance() {
                   and stacked under a 400px board it pushes the board off the top
                   of the screen on a laptop. */}
               <div className="flex flex-col lg:flex-row lg:items-start lg:gap-8 items-center">
-                <StarGrid stars={snapshot.stars} pendingRow={pendingRow} lastEvent={lastEvent} clears={clears} />
+                {/* Two identical shake animations, alternated per miss, so back
+                    to back misses restart the shake without remounting the board
+                    (which would restart every clear burst still in flight). */}
+                <div className={`relative ${missPopup ? (missPopup.id % 2 ? 'vig-board-shake-a' : 'vig-board-shake-b') : ''}`}>
+                  <StarGrid stars={snapshot.stars} pendingRow={pendingRow} lastEvent={lastEvent} clears={clears} />
+                  {missPopup && <MissPopup key={missPopup.id} delta={missPopup.delta} row={missPopup.row} col={missPopup.col} />}
+                </div>
                 <Keypad onDigit={submitDigit} onClear={clearPending} pendingRow={pendingRow} />
               </div>
 

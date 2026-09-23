@@ -2239,6 +2239,82 @@ body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
   100% { background-color: transparent; }
 }
 
+/* Practise drill only: a mis-key costs 50 there, so it is stamped over the
+   board loud and red, and the board shakes. Two identically defined shake
+   animations so the page can alternate them and restart the shake on back to
+   back misses without remounting the board. Lifetime is MISS_POPUP_MS (900ms). */
+.vig-board-shake-a { animation: vig-shake-a 360ms ease-in-out; }
+.vig-board-shake-b { animation: vig-shake-b 360ms ease-in-out; }
+@keyframes vig-shake-a {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-10px) rotate(-1deg); }
+  35% { transform: translateX(9px) rotate(1deg); }
+  55% { transform: translateX(-6px); }
+  75% { transform: translateX(4px); }
+}
+@keyframes vig-shake-b {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-10px) rotate(-1deg); }
+  35% { transform: translateX(9px) rotate(1deg); }
+  55% { transform: translateX(-6px); }
+  75% { transform: translateX(4px); }
+}
+
+.vig-miss-popup {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  box-shadow: inset 0 0 0 3px #ef4444, inset 0 0 60px rgba(239, 68, 68, 0.55);
+  background: radial-gradient(circle, rgba(127, 29, 29, 0.55) 0%, rgba(127, 29, 29, 0.15) 70%);
+  animation: vig-miss-fade 900ms ease-out forwards;
+}
+@keyframes vig-miss-fade {
+  0%   { opacity: 0; }
+  8%   { opacity: 1; }
+  70%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+.vig-miss-popup-label,
+.vig-miss-popup-points {
+  font-weight: 900;
+  line-height: 1;
+  color: #ff4d4d;
+  text-shadow: 0 0 18px rgba(255, 60, 60, 0.9), 0 3px 0 #450a0a, 0 5px 10px rgba(0, 0, 0, 0.9);
+  animation: vig-miss-slam 900ms cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+}
+.vig-miss-popup-label {
+  font-size: clamp(1.5rem, 6vw, 2.75rem);
+  letter-spacing: 0.12em;
+  color: #fff;
+}
+.vig-miss-popup-points {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(3rem, 14vw, 6.5rem);
+}
+@keyframes vig-miss-slam {
+  0%   { transform: scale(2.4); opacity: 0; }
+  18%  { transform: scale(0.92); opacity: 1; }
+  30%  { transform: scale(1.05); }
+  40%  { transform: scale(1); }
+  75%  { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-24px) scale(0.95); opacity: 0; }
+}
+.vig-miss-popup-coord {
+  margin-top: 0.5rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fecaca;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 /* ── RTT reticle ───────────────────────────────────────────────────────────
    Pinned to the centre of the sensor picture and sized as a PERCENTAGE of the
    arena height, not in pixels: the capture cone is an angle, the camera's
