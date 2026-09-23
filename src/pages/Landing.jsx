@@ -543,6 +543,7 @@ export default function Landing() {
           {user ? (
             <Link
               to={slim ? '/cbat' : '/home'}
+              onClick={slim ? guardNav('/cbat') : undefined}
               className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
               style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
             >
@@ -554,7 +555,10 @@ export default function Landing() {
               className="inline-block bg-brand-600 hover:bg-brand-700 text-slate-50 font-bold px-8 py-4 rounded-2xl text-lg transition-colors"
               style={{ boxShadow: '0 0 20px rgba(91,170,255,0.3)' }}
             >
-              Start Practising Free →
+              {/* Not the hero's "Start Practising Free": that one opens the
+                  games, this one opens sign-up, so the same words on both read
+                  as a broken button. */}
+              Sign Up Free →
             </Link>
           ) : (
             <button

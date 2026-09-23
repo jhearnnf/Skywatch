@@ -126,7 +126,8 @@ describe('Landing — slim (CBAT-only) mode', () => {
   it('does not repeat the button verb across the closing card', () => {
     render(<Landing />)
     const card = screen.getByText("Get on this week's leaderboard.").closest('div')
-    expect(card.textContent.match(/Start/gi) ?? []).toHaveLength(1)
+    expect(card.textContent.match(/Start/gi) ?? []).toHaveLength(0)
+    expect(card.textContent.match(/Sign Up/gi) ?? []).toHaveLength(1)
   })
 
   it('opens the guest CBAT menu from the primary CTA and keeps the closing signup CTA', () => {
@@ -134,8 +135,14 @@ describe('Landing — slim (CBAT-only) mode', () => {
     const hero = screen.getByTestId('landing-primary-cbat-cta')
     expect(hero.getAttribute('href')).toBe('/cbat')
     expect(hero.hasAttribute('data-router-link')).toBe(true)
-    const ctas = screen.getAllByText('Start Practising Free →')
-    expect(ctas.some(cta => cta.closest('a')?.getAttribute('href') === '/login?tab=register')).toBe(true)
+    expect(hero.textContent).toBe('Start Practising Free →')
+    expect(screen.getByText('Sign Up Free →').closest('a').getAttribute('href')).toBe('/login?tab=register')
+  })
+
+  // The two buttons go to different places, so they must not share a label.
+  it('labels the hero and closing CTAs differently', () => {
+    render(<Landing />)
+    expect(screen.getAllByText('Start Practising Free →')).toHaveLength(1)
   })
 
   // Signed-in players keep the instant in-app route change (a full reload felt
