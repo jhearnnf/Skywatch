@@ -84,14 +84,29 @@ describe('CUT sim — load drop', () => {
     expect(sim.mission.nextDropAt).toBeLessThanOrEqual(sim.elapsedMs + t.dropGapMs[1])
   })
 
-  it('faults each load value not entered by the drop time', () => {
+  it('says nothing is missed on the drop second: load orders stand through the release window', () => {
     const sim = makeSim('hard')
     startDrop(sim, 5_000)
     while (sim.mission.drop.issued < LOAD_ORDER.length) orderLoadField(sim)
     run(sim, 5_200)
     for (const f of LOAD_FIELDS) {
-      expect(logged(sim, `${f.order} not set`)).toHaveLength(1)
-      expect(sim.mission.fields[f.key].order).toBeNull()
+      expect(logged(sim, `${f.order} not set`)).toHaveLength(0)
+      expect(sim.mission.fields[f.key].order).not.toBeNull()
+    }
+    expect(sim.messages.some(m => m.text.includes('missed'))).toBe(false)
+  })
+
+  it('faults each load value still not entered when the drop lapses', () => {
+    const sim = makeSim('hard')
+    startDrop(sim, 5_000)
+    while (sim.mission.drop.issued < LOAD_ORDER.length) orderLoadField(sim)
+    sim.mission.fields.loadLat.order = null   // entered in time
+    run(sim, 5_000 + RELEASE_WINDOW + 200)
+    expect(logged(sim, `${MISSION_FIELD_BY_KEY.loadLat.order} not set`)).toHaveLength(0)
+    for (const k of ['loadLon', 'loadTime']) {
+      const fault = logged(sim, `${MISSION_FIELD_BY_KEY[k].order} not set`)
+      expect(fault).toHaveLength(1)
+      expect(fault[0].delta).toBe(SCORE.fieldMissed)
     }
     expect(sim.tasksMissed).toBeGreaterThanOrEqual(3)
   })

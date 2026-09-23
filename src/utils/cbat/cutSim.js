@@ -221,7 +221,9 @@ export function startDrop(sim, leadMs) {
 }
 
 // Order the drop's next value (latitude, longitude, then the time). Every load
-// value is wanted by the drop time itself. Returns the field ordered.
+// value is wanted by the drop time itself (the speed bonus runs out there), but
+// a standing load order only lapses with the drop, so a value entered in the
+// release window still arms RELEASE. Returns the field ordered.
 export function orderLoadField(sim) {
   const drop = sim.mission.drop
   const field = MISSION_FIELD_BY_KEY[LOAD_ORDER[drop.issued]]
@@ -387,8 +389,10 @@ export function advanceSim(sim, dt) {
   }
 
   // Mission — a load drop is ordered a value at a time (latitude, longitude,
-  // then the time), the load values lapsing at the drop time itself; the
-  // RELEASE press is expected as the Clock reaches it, within RELEASE_WINDOW.
+  // then the time); the RELEASE press is expected as the Clock reaches it,
+  // within RELEASE_WINDOW. Load values still standing lapse with the drop, not
+  // at the drop time: a "missed" line on the ordered second read as the drop
+  // itself being missed, with the window still open.
   // Video values are ordered on their own cadence and lapse after FIELD_WINDOW.
   const m = sim.mission
   if (!m.drop && sim.elapsedMs >= m.nextDropAt) {
@@ -408,6 +412,11 @@ export function advanceSim(sim, dt) {
   if (m.drop && sim.elapsedMs > m.drop.dueAt + RELEASE_WINDOW) {
     award(sim, SCORE.releaseMissed, `load drop at ${clockAt(sim, m.drop.dueAt)} missed`)
     sim.tasksMissed += 1
+    for (const f of LOAD_FIELDS) {
+      if (!m.fields[f.key].order) continue
+      award(sim, SCORE.fieldMissed, `${f.order} not set`)
+      sim.tasksMissed += 1
+    }
     pushMessage(sim, `MISSION: load drop at ${clockAt(sim, m.drop.dueAt)} missed`)
     clearDrop(sim, randRange(...tuning.dropGapMs))
   }
@@ -415,7 +424,7 @@ export function advanceSim(sim, dt) {
     orderMissionField(sim)
     m.nextOrderAt = sim.elapsedMs + randRange(...tuning.fieldGapMs)
   }
-  for (const f of MISSION_FIELDS) {
+  for (const f of VIDEO_FIELDS) {
     const st = m.fields[f.key]
     if (st.order && sim.elapsedMs > st.dueAt) {
       award(sim, SCORE.fieldMissed, `${f.order} not set`)
