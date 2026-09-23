@@ -377,7 +377,7 @@ describe('Vigilance — Practise drill', () => {
     expect(screen.getByText(/View Leaderboard/).getAttribute('href')).toBe('/cbat/vigilance-practise/leaderboard')
     expect(screen.getByText(/^60 seconds\./)).toBeTruthy()
     expect(screen.getByText(/A star is worth 10 points/)).toBeTruthy()
-    expect(screen.getByText(/costs 30 points/)).toBeTruthy()
+    expect(screen.getByText(/costs 50 points/)).toBeTruthy()
     // No priority tasks on the drill, so the card must not promise one.
     expect(screen.queryByText(/A priority task is worth/)).toBeNull()
   })
