@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { lazy, Suspense, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -18,10 +18,22 @@ import { CbatModeRow } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import InstrumentsOrientationRun from '../components/cbat/InstrumentsOrientationRun'
+import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import StickSetup from '../components/cbat/StickSetup'
+import ThrottleSetup from '../components/cbat/ThrottleSetup'
+import { useMockStick } from '../utils/cbat/useMockStick'
+import ActCraftPicker from '../components/cbat/ActCraftPicker'
+import { getAircraftRoster } from '../lib/offlineRoster'
+import { drillCraftOptions, drillCraftUrl, readStoredDrillCraft, storeDrillCraft } from '../utils/cbat/drillCraft'
 import {
   INSTRUMENTS_MODES, instrumentsMode, instrumentsModes, readStoredInstrumentsMode, storeInstrumentsMode,
 } from '../utils/cbat/instrumentsModes'
 import { orientationGrade, ORIENTATION_QUESTIONS, ORIENTATION_TIME_LIMIT } from '../utils/cbat/instrumentsOrientation'
+import { DRILL_SECONDS, MAX_POINTS, MIN_POINTS } from '../utils/cbat/instrumentsDrill'
+
+// The practice drill pulls in three.js and the aircraft models, so it only
+// loads when someone opens it.
+const InstrumentsDrill = lazy(() => import('../components/cbat/InstrumentsDrill'))
 
 const MODE_KEYS = INSTRUMENTS_MODES.map(m => m.key)
 
@@ -236,19 +248,25 @@ export default function CbatInstruments({ forcedMode = null }) {
   const tuning = instrumentsMode(mode)
   const gameKey = tuning.gameKey
   const isOrientation = mode === 'orientation'
+  const isPractise = mode === 'practise'
 
-  const [phase, setPhase] = useState('intro') // intro | calibrating | playing | feedback | orientation | results
+  const [phase, setPhase] = useState('intro') // intro | calibrating | playing | feedback | orientation | drill | results
   // The board the answers on screen were played on. Set when a run starts, so
   // the results and the score post go to the board that was PLAYED even if
   // the row is flipped afterwards.
   const [resultKey, setResultKey] = useState('instruments')
   const [resultTime, setResultTime] = useState(0)
   const { enterImmersive, exitImmersive } = useGameChrome()
+  // The drill has its own results screen inside the 'drill' phase. Only the
+  // flying part gets the wide stage and immersive chrome; the results go back
+  // to the normal centred column, like every other game's.
+  const [drillStage, setDrillStage] = useState('flying')
+  const drillFlying = phase === 'drill' && drillStage === 'flying'
   useEffect(() => {
-    if (phase === 'calibrating' || phase === 'playing' || phase === 'feedback') enterImmersive()
+    if (phase === 'calibrating' || phase === 'playing' || phase === 'feedback' || drillFlying) enterImmersive()
     else exitImmersive()
     return exitImmersive
-  }, [phase, enterImmersive, exitImmersive])
+  }, [phase, drillFlying, enterImmersive, exitImmersive])
   const [round, setRound] = useState(null)
   const [answers, setAnswers] = useState([])
   const [pickedIdx, setPickedIdx] = useState(null)
@@ -269,6 +287,32 @@ export default function CbatInstruments({ forcedMode = null }) {
   const [queued, setQueued] = useState(false)
   const [highlightedKey, setHighlightedKey] = useState(null)
   const cbat = useCbatTheme()
+  // Admin ?stick=mock: the synthetic stick (its parked throttle axis is a
+  // handy lever to calibrate against).
+  const mockStick = useMockStick()
+
+  // Practise drill aircraft (SkyWatch theme; cosmetic, see drillCraft.js). The
+  // roster is only fetched once Practise is picked, and only for the tiles:
+  // the Typhoon needs none of it, so a failed fetch leaves the default.
+  const [roster, setRoster] = useState([])
+  const [rosterState, setRosterState] = useState('idle') // idle | loading | done
+  const [craftId, setCraftId] = useState(readStoredDrillCraft)
+  const craftOptions = useMemo(() => drillCraftOptions(roster), [roster])
+  const craftUrl = drillCraftUrl(craftOptions, craftId)
+  const changeCraft = useCallback((id) => {
+    setCraftId(id)
+    storeDrillCraft(id)
+  }, [])
+  const wantRoster = !!user && isPractise && !cbat && !forcedMode && rosterState === 'idle'
+  useEffect(() => {
+    if (!wantRoster) return
+    let alive = true
+    getAircraftRoster('aircraft-cutouts', { apiFetch, API })
+      .then(d => { if (alive) setRoster(d.data || []) })
+      .catch(() => {})
+      .finally(() => { if (alive) setRosterState('done') })
+    return () => { alive = false }
+  }, [wantRoster, apiFetch, API])
   // The dial hint sits under the dials for the whole run. It starts pulsing
   // when a round has gone STUCK_MS without an answer or a dial press, which
   // is when someone has forgotten the dials are there to help.
@@ -408,7 +452,19 @@ export default function CbatInstruments({ forcedMode = null }) {
     setPhase('results')
   }, [submitScore])
 
-  const startSelected = isOrientation ? startOrientation : startGame
+  const openDrill = useCallback(() => {
+    setDrillStage('flying')
+    setPhase('drill')
+  }, [])
+  const startSelected = isPractise ? openDrill : isOrientation ? startOrientation : startGame
+
+  // The Practise drill runs, scores and posts to its own board inside its own
+  // component, the way AntPractise does; the page just opens and closes it.
+  // Back on the intro, the Practise best is re-read so a new one shows.
+  const closeDrill = useCallback(() => {
+    refreshBest('instruments-practise')
+    setPhase('intro')
+  }, [refreshBest])
 
   const goToIntro = useCallback(() => {
     if (calibrationTimeoutRef.current) clearTimeout(calibrationTimeoutRef.current)
@@ -424,7 +480,9 @@ export default function CbatInstruments({ forcedMode = null }) {
 
   // Desktop: dials on the left, statements on the right, wider than the
   // shell's max-w-3xl. See main.css.
-  useGameBodyClass('cbat-stage-wide', phase === 'calibrating' || phase === 'playing' || phase === 'feedback')
+  // Room for the joystick + throttle rail beside the Practise card.
+  useGameBodyClass('cbat-stick-wide', phase === 'intro' && isPractise && !forcedMode)
+  useGameBodyClass('cbat-stage-wide', phase === 'calibrating' || phase === 'playing' || phase === 'feedback' || drillFlying)
 
   const handlePick = useCallback((idx) => {
     if (phase !== 'playing' || !round) return
@@ -488,7 +546,7 @@ export default function CbatInstruments({ forcedMode = null }) {
           fullTitle="Instrument Comprehension"
           intro={phase === 'intro'}
           onQuit={goToIntro}
-          confirmNeeded={['calibrating', 'playing', 'feedback'].includes(phase)}
+          confirmNeeded={['calibrating', 'playing', 'feedback', 'drill'].includes(phase)}
           test={testBar}
         />
       )}
@@ -511,6 +569,17 @@ export default function CbatInstruments({ forcedMode = null }) {
 
           {/* Intro */}
           {phase === 'intro' && (
+            // Practise is the one mode flown on a stick, so it is the one with
+            // the joystick + throttle rail beside the card (SMA's arrangement
+            // with its pedals). The other modes get the plain centred card.
+            <CbatStickLayout
+              stick={isPractise ? (
+                <>
+                  <StickSetup title="Joystick" mockActive={mockStick} />
+                  <ThrottleSetup />
+                </>
+              ) : null}
+            >
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -519,18 +588,35 @@ export default function CbatInstruments({ forcedMode = null }) {
               <p className="text-4xl lg:text-5xl mb-3">{'\u{1F6EB}'}</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-1">Instruments</p>
               <CbatModeRow
-                modes={instrumentsModes(isModeEnabled)}
+                modes={instrumentsModes(isModeEnabled).filter(m => !forcedMode || m.key !== 'practise')}
                 value={mode}
                 onSelect={setMode}
               />
               <p className="text-[11px] text-brand-600 mb-3">{tuning.blurb}</p>
               <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
-                {isOrientation
+                {isPractise
+                  ? `Fly an aircraft for ${DRILL_SECONDS} seconds with all six instruments live beside you, and learn what each one does by moving it.`
+                  : isOrientation
                   ? 'You are shown an attitude indicator and a heading indicator. Pick the one aircraft picture out of four that is flying the way they show.'
                   : 'Read the six cockpit instruments and pick the statement that correctly describes the flight state. As many rounds as you can in 90 seconds.'}
               </p>
 
-              {isOrientation ? (
+              {isPractise ? (
+                <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
+                    <span className="pt-0.5">Every few seconds one instrument lights up and the rest grey out. Fly until its needle sits on the pink target and hold it there</span>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
+                    <span className="pt-0.5">A quick match scores {MAX_POINTS}, a slow one down to {MIN_POINTS}. The clock keeps running, so faster matches mean more targets</span>
+                  </div>
+                  <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+                    <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F579}\uFE0F'}</span>
+                    <span className="pt-0.5">Arrow keys, WASD, a joystick or drag on the view to bank and pitch. Up pushes the nose down, like a real stick. For throttle, use R and F, the + and - buttons, or your joystick&rsquo;s throttle lever or buttons (set up in the Throttle panel)</span>
+                  </div>
+                </div>
+              ) : isOrientation ? (
                 <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                   <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                     <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
@@ -562,8 +648,21 @@ export default function CbatInstruments({ forcedMode = null }) {
                 </div>
               )}
 
+              {/* Pick what you fly, as in ACT. SkyWatch only: the Real CBAT
+                  theme always flies the red Hawk. */}
+              {isPractise && !cbat && (
+                <ActCraftPicker
+                  options={craftOptions}
+                  value={craftId}
+                  onChange={changeCraft}
+                  loading={rosterState !== 'done'}
+                />
+              )}
+
               <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading}>
-                {best => isOrientation ? `${best.bestScore}/${ORIENTATION_QUESTIONS}` : `${best.bestScore} correct`}
+                {best => isPractise ? `${best.bestScore} pts`
+                  : isOrientation ? `${best.bestScore}/${ORIENTATION_QUESTIONS}`
+                  : `${best.bestScore} correct`}
               </CbatPersonalBest>
 
               <div className="text-center mb-4">
@@ -580,6 +679,7 @@ export default function CbatInstruments({ forcedMode = null }) {
                 Start
               </button>
             </motion.div>
+            </CbatStickLayout>
           )}
 
           {/* Playing / Calibrating / Feedback */}
@@ -754,6 +854,15 @@ export default function CbatInstruments({ forcedMode = null }) {
                 onSubmit={commit}
                 canSubmit={pending != null}
               />
+            </div>
+          )}
+
+          {/* Practice Drill */}
+          {phase === 'drill' && (
+            <div className="w-full lg:max-w-7xl">
+              <Suspense fallback={<p className="text-xs text-slate-500 text-center py-10">Loading the drill...</p>}>
+                <InstrumentsDrill onExit={closeDrill} craftUrl={craftUrl} onStageChange={setDrillStage} />
+              </Suspense>
             </div>
           )}
 

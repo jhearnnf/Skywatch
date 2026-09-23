@@ -19,6 +19,7 @@ export const GAME_LABELS = {
   'target':           'Target',
   'instruments':      'Instruments Reading',
   'instruments-orientation': 'Instruments Orientation',
+  'instruments-practise':    'Instruments Practise',
   'ant':              'Airborne Numerical Test (Easier)',
   'ant-hard':         'Airborne Numerical Test (Hard)',
   'ant-practise':     'ANT Practise',

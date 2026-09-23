@@ -43,6 +43,18 @@ function useUnwrappedAngle(targetDeg) {
   return angle
 }
 
+// Live mode. The practice drill feeds the dials a reading every frame and
+// passes durationMs={0}: the needles then sit exactly where the prop says,
+// with no transition and none of the settling wobble the Reading game uses
+// to hide the answer while it "calibrates".
+const isLive = durationMs => durationMs === 0
+const needleTransition = (durationMs) => (isLive(durationMs) ? 'none' : `transform ${durationMs}ms ${SPRING}`)
+
+// The target reading the drill asks the player to fly to. Magenta, as target
+// bugs are on real glass cockpits, so it never reads as one of the amber
+// aircraft symbols already on the faces.
+export const TARGET_COLOUR = '#ff4fd8'
+
 // Linear interpolation — used for deflections that shouldn't wrap.
 function useInterp(target, randomRange = 0) {
   const [v, setV] = useState(() => (Math.random() * 2 - 1) * randomRange)
@@ -56,18 +68,29 @@ function useLocalId(prefix) {
   return `${prefix}-${useId().replace(/:/g, '')}`
 }
 
-function InstrumentFace({ label, children, onClick, active }) {
+// `tone` is the practice drill's: 'dim' greys a face out, 'target' lights the
+// one being asked about, 'match' turns it green once the reading is on.
+const TONE_CLASS = {
+  dim: 'border-game-line opacity-25 grayscale',
+  target: 'border-amber-700 ring-2 ring-amber-700/40',
+  match: 'border-green-500 ring-2 ring-green-500/50',
+}
+
+function InstrumentFace({ label, children, onClick, active, tone }) {
   const clickable = typeof onClick === 'function'
   const faceBg = useLocalId('faceBg')
   const wrapperClass = [
     'bg-game-arena border rounded-xl p-2 flex flex-col items-center transition-colors w-full',
-    active ? 'border-amber-700 ring-2 ring-amber-700/40' : 'border-game-line',
+    tone ? TONE_CLASS[tone] : active ? 'border-amber-700 ring-2 ring-amber-700/40' : 'border-game-line',
     clickable && !active ? 'hover:border-brand-500' : '',
     clickable ? 'cursor-pointer active:scale-[0.98] transition-transform' : '',
   ].filter(Boolean).join(' ')
+  const labelClass = tone === 'match' ? 'text-green-400'
+    : (active || tone === 'target') ? 'text-amber-700'
+    : 'text-slate-500'
   const inner = (
     <>
-      <p className={`text-[9px] uppercase tracking-wide mb-1 text-center w-full ${active ? 'text-amber-700' : 'text-slate-500'}`}>{label}</p>
+      <p className={`text-[9px] uppercase tracking-wide mb-1 text-center w-full ${labelClass}`}>{label}</p>
       <svg viewBox="0 0 100 100" className="w-full max-w-[120px] aspect-square pointer-events-none">
         <defs>
           <radialGradient id={faceBg} cx="50%" cy="50%" r="50%">
@@ -91,14 +114,17 @@ function InstrumentFace({ label, children, onClick, active }) {
 }
 
 // ── Altimeter ────────────────────────────────────────────────────────────────
-export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
+export function Altimeter({ altitude, durationMs = 2000, onClick, active, tone, target }) {
   const smallTarget = (altitude / 10000) * 360
   const bigTarget = ((altitude % 1000) / 1000) * 360
-  const smallAngle = useUnwrappedAngle(smallTarget)
-  const bigAngle = useUnwrappedAngle(bigTarget)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
+  const live = isLive(durationMs)
+  const smallUnwrapped = useUnwrappedAngle(smallTarget)
+  const bigUnwrapped = useUnwrappedAngle(bigTarget)
+  const smallAngle = live ? smallTarget : smallUnwrapped
+  const bigAngle = live ? bigTarget : bigUnwrapped
+  const t = { transition: needleTransition(durationMs), ...PIVOT }
   return (
-    <InstrumentFace label="Altimeter" onClick={onClick} active={active}>
+    <InstrumentFace label="Altimeter" onClick={onClick} active={active} tone={tone}>
       {/* Major ticks + numerals 0–9 */}
       {Array.from({ length: 10 }).map((_, i) => {
         const theta = (i / 10) * 2 * Math.PI - Math.PI / 2
@@ -126,6 +152,19 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
         const y2 = 50 + 46 * Math.sin(theta)
         return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#3a4a60" strokeWidth="0.5" />
       })}
+      {/* Target hands, under the live ones */}
+      {target != null && (
+        <g data-target="altimeter">
+          <g style={{ ...PIVOT, transform: `rotate(${((target % 1000) / 1000) * 360}deg)` }}>
+            <Pivot />
+            <line x1="50" y1="50" x2="50" y2="12" stroke={TARGET_COLOUR} strokeWidth="2.2" strokeLinecap="round" />
+          </g>
+          <g style={{ ...PIVOT, transform: `rotate(${(target / 10000) * 360}deg)` }}>
+            <Pivot />
+            <line x1="50" y1="50" x2="50" y2="26" stroke={TARGET_COLOUR} strokeWidth="5" strokeLinecap="round" opacity="0.8" />
+          </g>
+        </g>
+      )}
       {/* Big hand — hundreds (longer, thinner) */}
       <g style={{ ...t, transform: `rotate(${bigAngle}deg)` }}>
         <Pivot />
@@ -147,7 +186,13 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active }) {
 // In a real cockpit this is the primary instrument; clicking it highlights
 // both the climb/descend phrase AND the turn phrase in the answers, because
 // it reflects both pieces of flight state at once.
-export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active }) {
+// Horizon travel per degree of pitch. The Reading game's climb shows as 12
+// units, which reads as about 20° of pitch.
+const PITCH_UNITS_PER_DEG = 0.6
+
+// Live mode takes `pitchDeg` / `bankDeg` instead of the `vs` / `turn` words,
+// and `target` = { pitch, bank } draws the horizon the drill wants.
+export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active, tone, pitchDeg, bankDeg, target }) {
   // Pitch translates the horizon — positive moves it down (nose-up climb).
   const targetPitch = vs === 'Ascend' ? 12 : vs === 'Descend' ? -12 : 0
   // Roll rotates the horizon opposite the bank — right bank shows as horizon
@@ -167,20 +212,23 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
     })
     return () => cancelAnimationFrame(id1)
   }, [durationMs, targetPitch, targetRoll])
-  const t = `transform ${durationMs}ms ${SPRING}`
+  const t = needleTransition(durationMs)
+  const live = isLive(durationMs) && pitchDeg != null
+  const shownPitch = live ? pitchDeg * PITCH_UNITS_PER_DEG : pitch
+  const shownRoll = live ? -(bankDeg ?? 0) : roll
   return (
-    <InstrumentFace label="Attitude" onClick={onClick} active={active}>
+    <InstrumentFace label="Attitude" onClick={onClick} active={active} tone={tone}>
       <defs>
         <clipPath id={attClip}>
           <circle cx="50" cy="50" r="40" />
         </clipPath>
       </defs>
       <g clipPath={`url(#${attClip})`}>
-        <g style={{ transition: t, ...PIVOT, transform: `rotate(${roll}deg)` }}>
+        <g style={{ transition: t, ...PIVOT, transform: `rotate(${shownRoll}deg)` }}>
           <Pivot />
           {/* Pitch only translates, and a translation ignores the origin, so
               this inner group needs no pivot of its own. */}
-          <g style={{ transition: t, transform: `translateY(${pitch}px)` }}>
+          <g style={{ transition: t, transform: `translateY(${shownPitch}px)` }}>
             {/* Sky and ground overhang the face on every side. They are clipped
                 to a circle spanning 10..90, and pitch slides them up to 12 away
                 from centre while roll turns them, so a band that merely filled
@@ -199,6 +247,15 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
             <line x1="42" y1="60" x2="58" y2="60" stroke="var(--color-game-text)" strokeWidth="0.5" />
           </g>
         </g>
+        {/* The horizon the drill wants, drawn where the real one would sit */}
+        {target && (
+          <g style={{ ...PIVOT, transform: `rotate(${-target.bank}deg)` }} data-target="attitude">
+            <Pivot />
+            <g style={{ transform: `translateY(${target.pitch * PITCH_UNITS_PER_DEG}px)` }}>
+              <line x1="4" y1="50" x2="96" y2="50" stroke={TARGET_COLOUR} strokeWidth="2.2" strokeDasharray="5 3" />
+            </g>
+          </g>
+        )}
       </g>
       {/* Fixed aircraft silhouette */}
       <line x1="30" y1="50" x2="42" y2="50" stroke="#ffc857" strokeWidth="2.5" strokeLinecap="round" />
@@ -211,12 +268,13 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
 }
 
 // ── Airspeed Indicator ───────────────────────────────────────────────────────
-export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
-  const target = (knots / 360) * 360  // 0–360 kt mapped 1:1 to degrees
-  const angle = useInterp(target, 180)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
+export function Airspeed({ knots, durationMs = 2000, onClick, active, tone, target }) {
+  const needle = (knots / 360) * 360  // 0–360 kt mapped 1:1 to degrees
+  const settling = useInterp(needle, 180)
+  const angle = isLive(durationMs) ? needle : settling
+  const t = { transition: needleTransition(durationMs), ...PIVOT }
   return (
-    <InstrumentFace label="Airspeed (kt)" onClick={onClick} active={active}>
+    <InstrumentFace label="Airspeed (kt)" onClick={onClick} active={active} tone={tone}>
       {/* Major ticks at 0, 60, 120, ... 300 */}
       {[0, 60, 120, 180, 240, 300].map(v => {
         const theta = (v / 360) * 2 * Math.PI - Math.PI / 2
@@ -245,6 +303,12 @@ export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
         const y2 = 50 + 46 * Math.sin(theta)
         return <line key={v} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#3a4a60" strokeWidth="0.5" />
       })}
+      {target != null && (
+        <g style={{ ...PIVOT, transform: `rotate(${target}deg)` }} data-target="airspeed">
+          <Pivot />
+          <polygon points="50,50 46,50 50,9 54,50" fill={TARGET_COLOUR} opacity="0.85" />
+        </g>
+      )}
       {/* Needle */}
       <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
         <Pivot />
@@ -257,12 +321,18 @@ export function Airspeed({ knots, durationMs = 2000, onClick, active }) {
 
 // ── Vertical Speed Indicator (Ascend/Descend) ────────────────────────────────
 // Needle rests at 9 o'clock (pointing left). Up = climb, down = descend.
-export function VSI({ vs, durationMs = 2000, onClick, active }) {
-  const target = vs === 'Ascend' ? -60 : vs === 'Descend' ? -120 : -90
-  const angle = useUnwrappedAngle(target)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
+// Live mode takes `fpm`: each scale mark is 1,000 ft/min, so the Reading
+// game's "Ascend" needle is a 1,000 ft/min climb.
+const vsiAngle = fpm => -90 + Math.max(-2.5, Math.min(2.5, fpm / 1000)) * 30
+
+export function VSI({ vs, durationMs = 2000, onClick, active, tone, fpm, target }) {
+  const word = vs === 'Ascend' ? -60 : vs === 'Descend' ? -120 : -90
+  const settling = useUnwrappedAngle(word)
+  const live = isLive(durationMs) && fpm != null
+  const angle = live ? vsiAngle(fpm) : settling
+  const t = { transition: needleTransition(durationMs), ...PIVOT }
   return (
-    <InstrumentFace label="V. Speed" onClick={onClick} active={active}>
+    <InstrumentFace label="V. Speed" onClick={onClick} active={active} tone={tone}>
       {/* Scale marks along the left arc */}
       {[-150, -120, -90, -60, -30].map(deg => {
         const theta = (deg * Math.PI) / 180 - Math.PI / 2
@@ -276,6 +346,20 @@ export function VSI({ vs, durationMs = 2000, onClick, active }) {
       <text x="22" y="26" fill="var(--color-game-faint)" fontSize="6" fontFamily="monospace" fontWeight="bold">UP</text>
       <text x="22" y="79" fill="var(--color-game-faint)" fontSize="6" fontFamily="monospace" fontWeight="bold">DN</text>
       <text x="8" y="54" fill="var(--color-game-text)" fontSize="7" fontFamily="monospace" fontWeight="bold">0</text>
+      {/* Thousands of feet a minute, on the live dial only */}
+      {live && [[-60, '1'], [-30, '2'], [-120, '1'], [-150, '2']].map(([deg, label]) => {
+        const theta = (deg * Math.PI) / 180 - Math.PI / 2
+        return (
+          <text key={deg} x={50 + 35 * Math.cos(theta)} y={50 + 35 * Math.sin(theta) + 2.5}
+                fill="var(--color-game-faint)" fontSize="6" textAnchor="middle" fontFamily="monospace" fontWeight="bold">{label}</text>
+        )
+      })}
+      {target != null && (
+        <g style={{ ...PIVOT, transform: `rotate(${vsiAngle(target)}deg)` }} data-target="vs">
+          <Pivot />
+          <line x1="50" y1="50" x2="50" y2="11" stroke={TARGET_COLOUR} strokeWidth="3.5" strokeLinecap="round" opacity="0.85" />
+        </g>
+      )}
       {/* Needle */}
       <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
         <Pivot />
@@ -288,11 +372,16 @@ export function VSI({ vs, durationMs = 2000, onClick, active }) {
 
 // ── Heading Indicator (Directional Gyro) ─────────────────────────────────────
 // Compass rose rotates so the current heading sits at the top.
-export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
-  const headingDeg = { N: 0, E: 90, S: 180, W: 270 }[heading] ?? 0
+// Live mode takes `headingDeg` (0-360) instead of the N/E/S/W word; `target`
+// is a heading bug on the card, which sits under the top index when the
+// aircraft is on that heading.
+export function HeadingDG({ heading, durationMs = 2000, onClick, active, tone, headingDeg: liveHeading, target }) {
+  const live = isLive(durationMs) && liveHeading != null
+  const headingDeg = live ? liveHeading : ({ N: 0, E: 90, S: 180, W: 270 }[heading] ?? 0)
   // Rotate rose so heading sits at top: rose rotation = -heading
-  const roseAngle = useUnwrappedAngle(-headingDeg)
-  const t = { transition: `transform ${durationMs}ms ${SPRING}`, ...PIVOT }
+  const settling = useUnwrappedAngle(-headingDeg)
+  const roseAngle = live ? -headingDeg : settling
+  const t = { transition: needleTransition(durationMs), ...PIVOT }
   const cardinals = [
     { label: 'N', deg: 0 },
     { label: 'E', deg: 90 },
@@ -300,9 +389,15 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
     { label: 'W', deg: 270 },
   ]
   return (
-    <InstrumentFace label="Heading" onClick={onClick} active={active}>
+    <InstrumentFace label="Heading" onClick={onClick} active={active} tone={tone}>
       <g style={{ ...t, transform: `rotate(${roseAngle}deg)` }}>
         <Pivot />
+        {target != null && (
+          <g style={{ ...PIVOT, transform: `rotate(${target}deg)` }} data-target="heading">
+            <Pivot />
+            <polygon points="44,4 56,4 56,11 52,11 50,15 48,11 44,11" fill={TARGET_COLOUR} />
+          </g>
+        )}
         {/* Tick marks every 30° */}
         {Array.from({ length: 12 }).map((_, i) => {
           const deg = i * 30
@@ -338,14 +433,20 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active }) {
 // ── Turn Coordinator ─────────────────────────────────────────────────────────
 // Needle deflects right for a turn. "Level" box below shows a white dot when
 // no turn is applied; deflected when turning.
-export function TurnCoordinator({ turn, durationMs = 2000, onClick, active }) {
+// Live mode takes `needleDeg`, the aircraft symbol's deflection (20 is the
+// standard-rate mark, negative is left); `target` is a symbol at the rate the
+// drill wants. The drill flies coordinated turns, so the ball stays centred.
+export function TurnCoordinator({ turn, durationMs = 2000, onClick, active, tone, needleDeg, target }) {
   const needleTarget = turn === 'Standard' ? 20 : turn === 'Non-standard' ? 40 : 0
   const ballTarget = turn === 'Standard' ? 8 : turn === 'Non-standard' ? 16 : 0
-  const needleAngle = useUnwrappedAngle(needleTarget)
-  const ballX = useInterp(ballTarget, 10)
-  const t = `transform ${durationMs}ms ${SPRING}`
+  const live = isLive(durationMs) && needleDeg != null
+  const settlingNeedle = useUnwrappedAngle(needleTarget)
+  const settlingBall = useInterp(ballTarget, 10)
+  const needleAngle = live ? needleDeg : settlingNeedle
+  const ballX = live ? 0 : settlingBall
+  const t = needleTransition(durationMs)
   return (
-    <InstrumentFace label="Turn" onClick={onClick} active={active}>
+    <InstrumentFace label="Turn" onClick={onClick} active={active} tone={tone}>
       {/* L / R labels */}
       <text x="18" y="38" fill="var(--color-game-faint)" fontSize="7" fontFamily="monospace" fontWeight="bold">L</text>
       <text x="78" y="38" fill="var(--color-game-faint)" fontSize="7" fontFamily="monospace" fontWeight="bold">R</text>
@@ -355,6 +456,12 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active }) {
       {/* Standard-rate turn marks */}
       <line x1="25" y1="40" x2="29" y2="44" stroke="var(--color-game-faint)" strokeWidth="1" />
       <line x1="71" y1="44" x2="75" y2="40" stroke="var(--color-game-faint)" strokeWidth="1" />
+      {target != null && (
+        <g style={{ ...PIVOT, transform: `rotate(${target}deg)` }} data-target="turn" opacity="0.85">
+          <Pivot />
+          <rect x="28" y="47.5" width="44" height="4" fill={TARGET_COLOUR} rx="1" />
+        </g>
+      )}
       {/* Aircraft silhouette — rotates with the turn rate */}
       <g style={{ transition: t, ...PIVOT, transform: `rotate(${needleAngle}deg)` }}>
         <Pivot />

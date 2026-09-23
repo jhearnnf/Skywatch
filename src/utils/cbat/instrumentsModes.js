@@ -19,6 +19,10 @@ export const INSTRUMENTS_MODE_KEYS = {
 export const INSTRUMENTS_MODES = [
   { key: 'reading',     label: 'Reading',     gameKey: 'instruments',             blurb: 'Read six dials and pick the statement that matches' },
   { key: 'orientation', label: 'Orientation', gameKey: 'instruments-orientation', blurb: 'Match the attitude indicator and compass to the right aircraft picture' },
+  // The drill, ANT Practise's arrangement: a third pill in the same row with a
+  // Drill badge, Start launches it, and it ranks on its own board with its own
+  // admin toggle.
+  { key: 'practise',    label: 'Practise',    gameKey: 'instruments-practise', badge: 'Drill', blurb: 'Fly an aircraft and match the dials one at a time' },
 ]
 
 export const DEFAULT_INSTRUMENTS_MODE = 'reading'

@@ -515,17 +515,17 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('points at Vigilance, which has gained a Practise drill', () => {
-    // The drill is a third mode on a tile whose mode row a returning player has
-    // already seen, so nothing else tells them it is there. Drop this once it
-    // has been true long enough to stop being news.
+  it('points at Vigilance and Instruments, which have each gained a Practise drill', () => {
+    // Each drill is a third mode on a tile whose mode row a returning player
+    // has already seen, so nothing else tells them it is there. Drop these
+    // once they have been true long enough to stop being news.
     //
-    // One badge at a time, or the slot stops meaning "look here" — DPT's "New
+    // Keep the slot rare, or it stops meaning "look here" — DPT's "New
     // Tutorial", ANT's and then Vigilance's "New Hard Mode" and ANT's earlier
-    // practise badge each gave the slot up in turn.
+    // practise badge each gave the slot up in turn. Two drills landed together.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['vigilance'])
-    expect(screen.getByText('New Practise Mode')).toBeTruthy()
+    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['instruments', 'vigilance'])
+    expect(screen.getAllByText('New Practise Mode')).toHaveLength(2)
     expect(screen.queryByText('New Hard Mode')).toBeNull()
     expect(screen.queryByText('New Tutorial')).toBeNull()
   })
