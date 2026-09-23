@@ -155,6 +155,7 @@ const CBAT_SEGMENT_TO_CARD = {
   'visualisation-2d': 'visualisation',
   'visualisation-3d': 'visualisation',
   'ant-practise':     'ant',
+  'vigilance-practise':  'vigilance',
   'instruments-orientation': 'instruments',
   // CLAN is the second test behind the FLAG tile (offered to players in
   // Canada), so a player on it is standing on the FLAG card.

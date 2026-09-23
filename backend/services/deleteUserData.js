@@ -63,6 +63,7 @@ const OWNED_BY_USER = [
   'GameSessionCbatTutorial',
   'GameSessionCbatVigilanceResult',
   'GameSessionCbatVigilanceHardResult',
+  'GameSessionCbatVigilancePractiseResult',
   'GameSessionCbatVisualisation2DResult',
   'GameSessionCbatVisualisation3DResult',
   'GameSessionCbatVltResult',

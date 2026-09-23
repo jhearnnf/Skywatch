@@ -515,20 +515,19 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('points at Vigilance, which has gained a Hard mode', () => {
-    // Vigilance shipped single-difficulty on purpose and a player reported it
-    // as too easy; Hard is the answer, and a returning player who last saw a
-    // card with no mode row has no reason to look for one. Drop this once it
+  it('points at Vigilance, which has gained a Practise drill', () => {
+    // The drill is a third mode on a tile whose mode row a returning player has
+    // already seen, so nothing else tells them it is there. Drop this once it
     // has been true long enough to stop being news.
     //
     // One badge at a time, or the slot stops meaning "look here" — DPT's "New
-    // Tutorial", ANT's "New Hard Mode" and the earlier practise badge each gave
-    // the slot up in turn.
+    // Tutorial", ANT's and then Vigilance's "New Hard Mode" and ANT's earlier
+    // practise badge each gave the slot up in turn.
     renderWithUser()
     expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['vigilance'])
-    expect(screen.getByText('New Hard Mode')).toBeTruthy()
+    expect(screen.getByText('New Practise Mode')).toBeTruthy()
+    expect(screen.queryByText('New Hard Mode')).toBeNull()
     expect(screen.queryByText('New Tutorial')).toBeNull()
-    expect(screen.queryByText('New Practise Mode')).toBeNull()
   })
 
   it('no longer flags any game as new — the badge is gone entirely', () => {

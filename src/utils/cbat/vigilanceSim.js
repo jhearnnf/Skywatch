@@ -80,6 +80,11 @@ export const VIGILANCE_BASE_LOAD = Object.freeze({
   starPoints: STAR_POINTS,
   priorityBasePoints: PRIORITY_BASE_POINTS,
   priorityBonusPoints: PRIORITY_BONUS_POINTS,
+  // Stars already on the board when the clock starts. Zero on both boards —
+  // an empty opening is part of the test. The Practise drill floods the grid
+  // from the first frame instead, so the whole run is keying.
+  initialStars: 0,
+  miskeyPenalty: MISKEY_PENALTY,
 })
 
 // `durationMs` as its own option still wins over the load's, for the tests
@@ -89,6 +94,7 @@ export function createVigilanceSim({ rng = Math.random, durationMs, load = {} } 
     spawnStartMs, spawnEndMs, spawnRampMs, maxStars,
     priorityFirstMs, priorityIntervalMs, priorityWindowMs,
     starPoints, priorityBasePoints, priorityBonusPoints,
+    initialStars, miskeyPenalty,
     durationMs: loadDurationMs,
   } = { ...VIGILANCE_BASE_LOAD, ...load }
 
@@ -127,6 +133,8 @@ export function createVigilanceSim({ rng = Math.random, durationMs, load = {} } 
     }
   }
 
+  for (let i = 0; i < initialStars; i++) spawn(false)
+
   function spawnIntervalAt(ms) {
     const t = Math.min(1, ms / spawnRampMs)
     return spawnStartMs + (spawnEndMs - spawnStartMs) * t
@@ -159,8 +167,8 @@ export function createVigilanceSim({ rng = Math.random, durationMs, load = {} } 
 
     if (!star) {
       state.misKeyed += 1
-      state.score -= MISKEY_PENALTY
-      const event = { type: 'miss', row, col, delta: -MISKEY_PENALTY }
+      state.score -= miskeyPenalty
+      const event = { type: 'miss', row, col, delta: -miskeyPenalty }
       state.lastEvent = event
       return event
     }

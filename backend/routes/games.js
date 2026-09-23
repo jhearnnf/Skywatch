@@ -74,6 +74,7 @@ const GameSessionCbatMatfResult            = CBAT_GAMES['matf'].Model;
 const GameSessionCbatMatfEasierResult      = CBAT_GAMES['matf-easier'].Model;
 const GameSessionCbatVigilanceResult       = CBAT_GAMES['vigilance'].Model;
 const GameSessionCbatVigilanceHardResult   = CBAT_GAMES['vigilance-hard'].Model;
+const GameSessionCbatVigilancePractiseResult  = CBAT_GAMES['vigilance-practise'].Model;
 const GameSessionCbatSmaResult             = CBAT_GAMES['sma'].Model;
 const GameSessionCbatSmaEasierResult       = CBAT_GAMES['sma-easier'].Model;
 
@@ -2582,10 +2583,11 @@ router.post('/cbat/matf/print', protect, async (req, res) => {
   }
 });
 
-// POST /api/games/cbat/vigilance/result and /vigilance-hard/result
+// POST /api/games/cbat/vigilance/result, /vigilance-hard/result and /vigilance-practise/result
 // Plain 'vigilance' is the Easier board (the original, under its original
 // key); Hard is its own collection with the same shape — the two differ only
-// in how often stars appear.
+// in how often stars appear. The Practise drill posts the same shape to a third
+// collection.
 async function submitVigilanceResult(req, res, Model) {
   try {
     const { totalScore, starsCleared, prioritiesCleared, misKeyed, totalTime } = req.body;
@@ -2603,6 +2605,7 @@ async function submitVigilanceResult(req, res, Model) {
 }
 router.post('/cbat/vigilance/result',      protect, (req, res) => submitVigilanceResult(req, res, GameSessionCbatVigilanceResult));
 router.post('/cbat/vigilance-hard/result', protect, (req, res) => submitVigilanceResult(req, res, GameSessionCbatVigilanceHardResult));
+router.post('/cbat/vigilance-practise/result', protect, (req, res) => submitVigilanceResult(req, res, GameSessionCbatVigilancePractiseResult));
 
 // POST /api/games/cbat/sma/result and /sma-easier/result
 // `totalScore` is what the board ranks on, but it is a SkyWatch construction —
@@ -3439,6 +3442,7 @@ router.get('/cbat/matf/leaderboard', protect, (req, res) => cbatLeaderboard(req,
 router.get('/cbat/matf-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'matf-easier'));
 router.get('/cbat/vigilance/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'vigilance'));
 router.get('/cbat/vigilance-hard/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'vigilance-hard'));
+router.get('/cbat/vigilance-practise/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'vigilance-practise'));
 router.get('/cbat/sma/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sma'));
 router.get('/cbat/sma-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sma-easier'));
 
@@ -3662,6 +3666,7 @@ router.get('/cbat/matf/personal-best', protect, (req, res) => cbatPersonalBest(r
 router.get('/cbat/matf-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'matf-easier'));
 router.get('/cbat/vigilance/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'vigilance'));
 router.get('/cbat/vigilance-hard/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'vigilance-hard'));
+router.get('/cbat/vigilance-practise/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'vigilance-practise'));
 router.get('/cbat/sma/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sma'));
 router.get('/cbat/sma-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sma-easier'));
 

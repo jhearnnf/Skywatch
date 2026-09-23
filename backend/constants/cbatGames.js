@@ -39,6 +39,7 @@ const GameSessionCbatMatfResult          = require('../models/GameSessionCbatMat
 const GameSessionCbatMatfEasierResult    = require('../models/GameSessionCbatMatfEasierResult');
 const GameSessionCbatVigilanceResult     = require('../models/GameSessionCbatVigilanceResult');
 const GameSessionCbatVigilanceHardResult = require('../models/GameSessionCbatVigilanceHardResult');
+const GameSessionCbatVigilancePractiseResult = require('../models/GameSessionCbatVigilancePractiseResult');
 const GameSessionCbatSmaResult           = require('../models/GameSessionCbatSmaResult');
 const GameSessionCbatSmaEasierResult     = require('../models/GameSessionCbatSmaEasierResult');
 
@@ -520,6 +521,16 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Vigilance Test',   // cbatLabelWithDifficulty appends "(Hard)"
+  },
+  // The Practise drill behind the Vigilance tile — one minute on a flooded grid.
+  // Its own board, the way 'ant-practise' is: not a difficulty, so no hardKey
+  // and nothing is appended to its label.
+  'vigilance-practise': {
+    Model: GameSessionCbatVigilancePractiseResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Vigilance Practise',
   },
   'sma': {
     Model: GameSessionCbatSmaResult,

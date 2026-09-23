@@ -23,11 +23,17 @@
 // entered as those two digits") and all three are load-bearing: the pad is a
 // plain 3×3 with no zero, and the corpus's worked example — 2,1 then 2,2 then
 // 2,3 — only reads as a walk along a row if the row is the digit you key first.
+//
+// A third mode sits in the row beside the pair: the Practise drill, one
+// minute on a grid that starts mostly full and refills as fast as it is
+// cleared. It is its own board (`vigilance-practise`) with its own admin toggle,
+// the same arrangement as ANT's Practise.
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
@@ -41,10 +47,10 @@ import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
-import { createVigilanceSim, VIGILANCE_GRID, MISKEY_PENALTY } from '../utils/cbat/vigilanceSim'
+import { createVigilanceSim, VIGILANCE_GRID } from '../utils/cbat/vigilanceSim'
 import {
-  VIGILANCE_DIFFICULTIES, VIGILANCE_LAUNCH_MS, vigilanceTuning, computeGrade,
-  readStoredVigilanceDifficulty, storeVigilanceDifficulty,
+  vigilanceModes, VIGILANCE_LAUNCH_MS, vigilanceTuning, computeGrade,
+  readStoredVigilanceDifficulty, storeVigilanceDifficulty, DEFAULT_VIGILANCE_DIFFICULTY,
 } from '../utils/cbat/vigilanceDifficulty'
 
 // Cell indices, 0-based. The LABEL drawn for index i is i + 1, so the axes read
@@ -233,6 +239,7 @@ function Keypad({ onDigit, onClear, pendingRow }) {
 
 function ResultsScreen({ stats, tuning }) {
   const grade = computeGrade(stats.score, tuning)
+  const drill = tuning.key === 'practise'
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '⭐' : grade === 'Needs Work' ? '🔧' : '💥'
   const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
@@ -252,10 +259,21 @@ function ResultsScreen({ stats, tuning }) {
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Stars</p>
           <p className="text-xl font-mono font-bold text-brand-600">{stats.starsCleared}</p>
         </div>
-        <div className="bg-game-arena rounded-lg border border-game-line p-3">
-          <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Priority</p>
-          <p className="text-xl font-mono font-bold text-amber-300">{stats.prioritiesCleared}</p>
-        </div>
+        {/* The drill has no priority tasks. What it trains is keying speed, so
+            that is the number it reports in their place. */}
+        {drill ? (
+          <div className="bg-game-arena rounded-lg border border-game-line p-3">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Per second</p>
+            <p className="text-xl font-mono font-bold text-amber-300">
+              {(stats.starsCleared / (tuning.load.durationMs / 1000)).toFixed(1)}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-game-arena rounded-lg border border-game-line p-3">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Priority</p>
+            <p className="text-xl font-mono font-bold text-amber-300">{stats.prioritiesCleared}</p>
+          </div>
+        )}
         <div className="bg-game-arena rounded-lg border border-game-line p-3">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">Mis-keyed</p>
           <p className="text-xl font-mono font-bold text-red-400">{stats.misKeyed}</p>
@@ -263,7 +281,7 @@ function ResultsScreen({ stats, tuning }) {
       </div>
       {stats.misKeyed > 3 && (
         <p className="text-[11px] text-slate-500 mt-3">
-          Each mis-key cost {MISKEY_PENALTY} points. Work along a row in sequence rather than jumping
+          Each mis-key cost {tuning.load.miskeyPenalty} points. Work along a row in sequence rather than jumping
           about. The row is the digit you key first, so you re-key only the second one that way.
         </p>
       )}
@@ -278,8 +296,16 @@ export default function CbatVigilance() {
   const isDemo = !!useCbatDemo()
 
   const [phase, setPhase] = useState('intro') // intro | launching | playing | results
-  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredVigilanceDifficulty))
+  // The drill ranks on its own board, so it has its own admin toggle. A
+  // disabled drill drops out of the row, and a remembered choice of it falls
+  // back to the default rather than opening on a mode that is not offered.
+  const { settings } = useAppSettings() ?? {}
+  const drillEnabled = (settings?.cbatGameEnabled ?? {})['vigilance-practise'] !== false
+  const modes = vigilanceModes(drillEnabled)
+  const [storedDifficulty, setStoredDifficulty] = useState(() => initialDifficulty(readStoredVigilanceDifficulty))
+  const difficulty = modes.some(m => m.key === storedDifficulty) ? storedDifficulty : DEFAULT_VIGILANCE_DIFFICULTY
   const tuning = vigilanceTuning(difficulty)
+  const drill = tuning.key === 'practise'
   // The difficulty the run on screen is being played at. Pinned at launch so a
   // mid-results switch can't relabel or misfile a finished run. Held twice on
   // purpose: the ref is what the frame loop reads, the state is what the render
@@ -495,9 +521,9 @@ export default function CbatVigilance() {
   }, [phase])
 
   const chooseDifficulty = useCallback((key) => {
-    setDifficulty(key)
+    setStoredDifficulty(key)
     storeVigilanceDifficulty(key)
-  }, [])
+  }, [setStoredDifficulty])
 
   const goToIntro = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
@@ -554,14 +580,16 @@ export default function CbatVigilance() {
               <p className={`text-4xl lg:text-5xl mb-3${dim}`}>⭐</p>
               <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Vigilance Test</p>
               <CbatModeRow
-                modes={VIGILANCE_DIFFICULTIES}
+                modes={modes}
                 value={difficulty}
                 onSelect={chooseDifficulty}
                 launching={launching}
               />
               <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
               <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
-                Stars appear on a 9 by 9 grid. Clear each one by keying its coordinates: the row number first, then the column. It is the simplest thing on the battery, and it runs for {tuning.key === 'hard' ? 'three minutes, which is the point of it' : 'one minute on Easier'}.
+                {drill
+                  ? 'A drill for the keying on its own. The 9 by 9 grid starts mostly full of stars and refills as fast as you clear it, so there is nothing to search for. Key the row number, then the column, as fast as you can for one minute.'
+                  : <>Stars appear on a 9 by 9 grid. Clear each one by keying its coordinates: the row number first, then the column. It is the simplest thing on the battery, and it runs for {tuning.key === 'hard' ? 'three minutes, which is the point of it' : 'one minute on Easier'}.</>}
               </p>
 
               <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
@@ -569,13 +597,16 @@ export default function CbatVigilance() {
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'★'}</span>
                   <span className="pt-0.5">A star is worth {tuning.load.starPoints} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
                 </div>
-                <div className="flex items-start gap-3">
+                {!drill && <div className="flex items-start gap-3">
                   <span className="shrink-0 w-8 text-center text-amber-300 lg:text-lg" aria-hidden>{'◆'}</span>
                   <span className="pt-0.5">A priority task is worth {tuning.load.priorityBasePoints} and up to {tuning.load.priorityBasePoints + tuning.load.priorityBonusPoints} if you break off for it straight away. Deal with it the moment it appears.</span>
-                </div>
+                </div>}
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 w-8 text-center text-red-400 lg:text-lg" aria-hidden>{'−'}</span>
-                  <span className="pt-0.5">A coordinate with no star on it costs {MISKEY_PENALTY} points, so guessing is worse than looking.</span>
+                  <span className="pt-0.5">
+                    A coordinate with no star on it costs {tuning.load.miskeyPenalty} points, so guessing is worse than looking.
+                    {drill && ' That is higher than in the test, because on a board this full a random guess would otherwise pay.'}
+                  </span>
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⌨'}</span>
@@ -589,7 +620,9 @@ export default function CbatVigilance() {
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">
                     {tuning.load.durationMs / 1000} seconds.{' '}
-                    {tuning.key === 'hard'
+                    {drill
+                      ? 'No priority tasks. A new star appears every quarter of a second, so the board never runs dry. Its own leaderboard.'
+                      : tuning.key === 'hard'
                       ? 'The full test at the standard points, with far more stars appearing. A star stays where it is until you key it.'
                       : 'A one-minute run at the original pace, with every clear paying triple. Hard is the full three minutes at standard points with far more stars appearing. A star stays where it is until you key it.'}
                   </span>

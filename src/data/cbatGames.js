@@ -60,7 +60,7 @@ export const CBAT_GAMES = [
   { key: 'matf',             emoji: '📋', title: 'MATF',             desc: 'Table Reading Test. A coordinate grid running minus 17 to plus 17, then a wind sheet read in three steps, both against the clock.', path: '/cbat/matf',            image: '/images/MATF.png', estMinutes: [3, 4] },
   // Easier is a one-minute run at triple points; Hard is the full three minutes
   // with far more stars. Hence the range.
-  { key: 'vigilance',        emoji: '⭐', title: 'Vigilance',        desc: 'The star grid. Clear coordinates off a 9 by 9, row first then column, with priority tasks that appear when the job has gone quiet. Easier is one minute at triple points; Hard is the full three minutes with far more stars.', path: '/cbat/vigilance',       image: '/images/Vigilance.png', estMinutes: [1, 3], badge: 'New Hard Mode' },
+  { key: 'vigilance',        emoji: '⭐', title: 'Vigilance',        desc: 'The star grid. Clear coordinates off a 9 by 9, row first then column, with priority tasks that appear when the job has gone quiet. Easier is one minute at triple points; Hard is the full three minutes with far more stars. Practise is a one-minute drill on a flooded grid that trains the keying on its own.', path: '/cbat/vigilance',       image: '/images/Vigilance.png', estMinutes: [1, 3], badge: 'New Practise Mode' },
   // The psychomotor test the Aptitude Report had no game for. SMA carries 15% of
   // the Pilot battery and 12% of Pilot ISR (RPAS) through the Psychomotor domain,
   // so it was the largest single uncovered weight left on the report.
@@ -219,6 +219,9 @@ export const CBAT_LEADERBOARD_CONFIG = {
   // column is hidden on both; neither has a ceiling.
   'vigilance':       { title: 'Vigilance Test', emoji: '⭐', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/vigilance', hideTime: true, difficultyGroup: 'vigilance' },
   'vigilance-hard':  { title: 'Vigilance Test', emoji: '⭐', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/vigilance', hideTime: true, difficultyGroup: 'vigilance' },
+  // The Practise drill behind the Vigilance tile — its own board, like ANT
+  // Practise, so no difficultyGroup: it is not a half of the pair.
+  'vigilance-practise': { title: 'Vigilance Practise', emoji: '⭐', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/vigilance', hideTime: true },
   // Accumulating score over a fixed clock, so no "/N" — and the clock is the
   // same every run, so the time column is hidden for RTT's and CUT's reason.
   // The two difficulties do NOT share a ceiling (1500 against 1000) and are not
@@ -348,6 +351,14 @@ export const CBAT_ADMIN_GAMES = CBAT_GAMES.flatMap(g => {
     return [
       { ...g, key: 'ant',          title: 'ANT' },
       { ...g, key: 'ant-practise', title: 'ANT Practise' },
+    ]
+  }
+  // Same arrangement as ANT's: the pair shares `vigilance`'s toggle, and the
+  // Practise drill, being its own board, gets one of its own.
+  if (g.key === 'vigilance') {
+    return [
+      { ...g, key: 'vigilance',       title: 'Vigilance' },
+      { ...g, key: 'vigilance-practise', title: 'Vigilance Practise' },
     ]
   }
   // FLAG's tile also holds CLAN for players in Canada (src/pages/Cbat.jsx).

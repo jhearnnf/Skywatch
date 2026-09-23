@@ -60,6 +60,7 @@ const GAME_OFFSET = {
   'instruments-orientation': 41,
   'clan':            42,
   'clan-easier':     43,
+  'vigilance-practise': 44,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -472,6 +473,15 @@ const FAKE_TUNING = {
     floor: 250, ceiling: 1300, seedTime: 180.2, timeStep: 0.1,
     scoreSequence: [1240, 1170, 1105, 1040, 980, 920, 860, 800, 745, 690, 640, 590, 540, 495, 450, 405, 360, 320, 285, 255],
   },
+  'vigilance-practise': {
+    // The Practise drill: 60s on a flooded grid at 10 a star, 30 off a mis-key,
+    // so every total is a multiple of 10. Set from a real run (2026-09-23): 220
+    // on the old 20-second drill, 11 points a second, so about 660 over the
+    // minute. A good player at 1.5x that pace makes about 990, which tops the
+    // band; the 660 pace sits mid-board. Reseat once production history exists.
+    floor: 150, ceiling: 1050, seedTime: 60.1, timeStep: 0.1,
+    scoreSequence: [990, 940, 900, 860, 820, 780, 740, 700, 660, 630, 600, 560, 520, 480, 440, 400, 350, 300, 250, 200],
+  },
 
   // ── Sensory Motor Apparatus Test ────────────────────────────────────────────
   // Accumulating totalScore over a fixed clock, so no ceiling on the board even
@@ -716,6 +726,9 @@ const WEEKLY_PER_PLAY = {
   // No production history yet — set from the demo band's middle. Reseat once
   // real runs exist.
   'vigilance-hard':  700,
+  // Just under the 660-a-minute pace of a measured real run. Reseat once real
+  // runs exist.
+  'vigilance-practise': 600,
   'sma':             280,  // accumulating totalScore over 60 scored seconds (max 600)
   'sma-easier':      155,  // 30 scored seconds, but a wider ring pays more per second
 };

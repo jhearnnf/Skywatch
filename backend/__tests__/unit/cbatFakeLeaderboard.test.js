@@ -49,6 +49,7 @@ const GAME_MAX = {
   'matf-easier':     null,
   'vigilance':       null,   // accumulating score, no fixed ceiling
   'vigilance-hard':  null,
+  'vigilance-practise': null,   // accumulating, no fixed ceiling
 };
 const LOWER_BETTER = { 'plane-turn-2d': true, 'plane-turn-3d': true };
 

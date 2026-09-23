@@ -26,6 +26,12 @@ vi.mock('react-router-dom', () => ({
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
 }))
 vi.mock('../../context/AuthContext', () => ({ useAuth: mockUseAuth }))
+// Only Vigilance reads app settings (the Practise drill's own admin toggle).
+// null = no settings loaded, which leaves every mode enabled.
+const mockSettings = vi.hoisted(() => ({ current: null }))
+vi.mock('../../context/AppSettingsContext', () => ({
+  useAppSettings: () => ({ settings: mockSettings.current }),
+}))
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 vi.mock('../../components/CbatGameOver', () => ({
   default: ({ children, gameKey }) => <div data-game-key={gameKey}>{children}</div>,
@@ -347,6 +353,63 @@ describe('Vigilance — difficulty wiring, with the Easier half on the plain key
 
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: '3', ctrlKey: true })) })
     expect(screen.getByText(/Enter row/)).toBeTruthy()
+  })
+})
+
+describe('Vigilance — Practise drill', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    mockSettings.current = null
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); mockSettings.current = null })
+
+  it('sits in the same row as the pair, after Hard, badged as a drill', () => {
+    const { container } = renderPage(CbatVigilance)
+    const keys = [...container.querySelectorAll('[data-mode]')].map(b => b.getAttribute('data-mode'))
+    expect(keys).toEqual(['easier', 'hard', 'practise'])
+    expect(difficultyButton(container, 'practise').textContent).toMatch(/Practise\s*Drill/)
+  })
+
+  it('points the leaderboard link at its own board and describes the drill', () => {
+    const { container } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'practise')) })
+    expect(screen.getByText(/View Leaderboard/).getAttribute('href')).toBe('/cbat/vigilance-practise/leaderboard')
+    expect(screen.getByText(/^60 seconds\./)).toBeTruthy()
+    expect(screen.getByText(/A star is worth 10 points/)).toBeTruthy()
+    expect(screen.getByText(/costs 30 points/)).toBeTruthy()
+    // No priority tasks on the drill, so the card must not promise one.
+    expect(screen.queryByText(/A priority task is worth/)).toBeNull()
+  })
+
+  it('opens on a board that is already full of stars', () => {
+    const { container } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'practise')) })
+    startVigilance()
+    expect(container.querySelector('[data-mode-marker="practise"]')).toBeTruthy()
+    const starred = [...container.querySelectorAll('[data-cell]')].filter(td => /★/.test(td.textContent))
+    expect(starred.length).toBeGreaterThan(40)
+  })
+
+  it('files a drill run under vigilance-practise with its one-minute clock', async () => {
+    const { container } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'practise')) })
+    startVigilance()
+    await act(async () => { vi.advanceTimersByTime(70000) })
+    expect(submitCbatResult).toHaveBeenCalled()
+    expect(submitCbatResult.mock.calls[0][0]).toBe('vigilance-practise')
+    expect(submitCbatResult.mock.calls[0][1].totalTime).toBe(60)
+    expect(container.querySelector('[data-game-key="vigilance-practise"]')).toBeTruthy()
+    expect(screen.getByText('Per second')).toBeTruthy()
+  })
+
+  it('drops out of the row when an admin switches it off, and a remembered choice falls back to Easier', () => {
+    localStorage.setItem('sw_cbat_vigilance_difficulty', 'practise')
+    mockSettings.current = { cbatGameEnabled: { 'vigilance-practise': false } }
+    const { container } = renderPage(CbatVigilance)
+    expect(difficultyButton(container, 'practise')).toBeNull()
+    expect(difficultyButton(container, 'easier').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText(/View Leaderboard/).getAttribute('href')).toBe('/cbat/vigilance/leaderboard')
   })
 })
 

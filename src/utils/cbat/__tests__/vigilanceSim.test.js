@@ -3,7 +3,10 @@ import {
   createVigilanceSim, VIGILANCE_GRID, VIGILANCE_DURATION_MS, VIGILANCE_BASE_LOAD,
   STAR_POINTS, PRIORITY_BASE_POINTS, PRIORITY_BONUS_POINTS, MISKEY_PENALTY,
 } from '../vigilanceSim'
-import { VIGILANCE_TUNING, EASIER_POINTS_MULTIPLIER } from '../vigilanceDifficulty'
+import {
+  VIGILANCE_TUNING, EASIER_POINTS_MULTIPLIER, VIGILANCE_PRACTISE_STARS, VIGILANCE_PRACTISE_MISKEY_PENALTY,
+  VIGILANCE_MODES, vigilanceModes,
+} from '../vigilanceDifficulty'
 
 function mulberry32(seed) {
   let a = seed >>> 0
@@ -287,5 +290,90 @@ describe('difficulty load', () => {
     run(a, 40000)
     run(b, 40000)
     expect(a.snapshot()).toEqual(b.snapshot())
+  })
+})
+
+describe('Practise drill load', () => {
+  const { practise: drill } = VIGILANCE_TUNING
+
+  it('is one minute on a board that is already flooded when the clock starts', () => {
+    expect(drill.load.durationMs).toBe(60000)
+    const sim = createVigilanceSim({ rng: mulberry32(30), load: drill.load })
+    // Before a single step: the stars are there, so there is nothing to wait for.
+    expect(sim.snapshot().stars.length).toBe(VIGILANCE_PRACTISE_STARS)
+    expect(VIGILANCE_PRACTISE_STARS / (VIGILANCE_GRID * VIGILANCE_GRID)).toBeGreaterThan(0.6)
+    run(sim, 59900)
+    expect(sim.state.finished).toBe(false)
+    run(sim, 200)
+    expect(sim.state.finished).toBe(true)
+  })
+
+  it('refills as fast as a quick keyer clears it', () => {
+    // Clear three stars a second — faster than anyone keys — and the board
+    // must still never run low. The drill only works if there is always a star
+    // under your eye.
+    const sim = createVigilanceSim({ rng: mulberry32(31), load: drill.load })
+    let lowest = Infinity
+    for (let t = 0; t < drill.load.durationMs; t += 100) {
+      sim.step(100)
+      if (t % 300 === 0) {
+        const s = sim.snapshot().stars[0]
+        sim.submitCoord(s.row, s.col)
+      }
+      lowest = Math.min(lowest, sim.snapshot().stars.length)
+    }
+    expect(sim.state.starsCleared).toBeGreaterThan(180)
+    expect(lowest).toBeGreaterThanOrEqual(VIGILANCE_PRACTISE_STARS - 5)
+  })
+
+  it('has no priority tasks', () => {
+    const sim = createVigilanceSim({ rng: mulberry32(32), load: drill.load })
+    for (let t = 0; t < drill.load.durationMs; t += 100) {
+      sim.step(100)
+      expect(sim.snapshot().stars.some(s => s.priority)).toBe(false)
+    }
+  })
+
+  it('pays the standard 10 a star and charges the heavier mis-key penalty', () => {
+    const sim = createVigilanceSim({ rng: mulberry32(33), load: drill.load })
+    const s = sim.snapshot().stars[0]
+    expect(sim.submitCoord(s.row, s.col).delta).toBe(STAR_POINTS)
+    const empty = []
+    for (let r = 0; r < VIGILANCE_GRID; r++) for (let c = 0; c < VIGILANCE_GRID; c++) empty.push([r, c])
+    const occupied = new Set(sim.snapshot().stars.map(x => `${x.row},${x.col}`))
+    const [r, c] = empty.find(([er, ec]) => !occupied.has(`${er},${ec}`))
+    expect(sim.submitCoord(r, c).delta).toBe(-VIGILANCE_PRACTISE_MISKEY_PENALTY)
+  })
+
+  it('makes mashing random coordinates a losing strategy on the flooded board', () => {
+    // The reason the penalty is raised: at the standard 5, a random coordinate
+    // on a board this full is worth about +6, and hammering the pad would beat
+    // reading it. Four random keys a second for the whole drill must lose.
+    for (const seed of [40, 41, 42, 43, 44]) {
+      const rng = mulberry32(seed)
+      const guess = mulberry32(seed + 100)
+      const sim = createVigilanceSim({ rng, load: drill.load })
+      for (let t = 0; t < drill.load.durationMs; t += 250) {
+        sim.step(250)
+        sim.submitCoord(Math.floor(guess() * VIGILANCE_GRID), Math.floor(guess() * VIGILANCE_GRID))
+      }
+      expect([seed, sim.state.score < 0]).toEqual([seed, true])
+    }
+  })
+
+  it('leaves the two real boards untouched: empty at the start, standard penalty', () => {
+    for (const tuning of [VIGILANCE_TUNING.easier, VIGILANCE_TUNING.hard]) {
+      expect(tuning.load.initialStars).toBe(0)
+      expect(tuning.load.miskeyPenalty).toBe(MISKEY_PENALTY)
+      expect(createVigilanceSim({ rng: mulberry32(45), load: tuning.load }).snapshot().stars).toEqual([])
+    }
+  })
+
+  it('sits in the mode row as a badged drill, never with difficulty bars', () => {
+    expect(VIGILANCE_MODES.map(m => m.key)).toEqual(['easier', 'hard', 'practise'])
+    expect(drill.bars).toBeUndefined()
+    expect(drill.badge).toBe('Drill')
+    expect(drill.gameKey).toBe('vigilance-practise')
+    expect(vigilanceModes(false).map(m => m.key)).toEqual(['easier', 'hard'])
   })
 })

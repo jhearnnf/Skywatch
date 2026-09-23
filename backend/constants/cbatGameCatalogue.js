@@ -259,6 +259,14 @@ const CBAT_GAME_CATALOGUE = [
     difficulties: ['Easier', 'Hard'],
   },
   {
+    name: 'Vigilance Practise',
+    tile: 'Vigilance Test',
+    registryKeys: ['vigilance-practise'],
+    simulates: null,
+    aliases: ['vigilance practise', 'vigilance practice', 'vigilance drill'],
+    what: 'one minute on the Vigilance grid with it already mostly full of stars and refilling as fast as you clear it, so there is nothing to search for. A drill for keying coordinates on the number pad quickly, with no priority tasks. A wrong coordinate costs more than in the test so guessing never pays.',
+  },
+  {
     name: 'Sensory Motor Apparatus Test',
     registryKeys: ['sma', 'sma-easier'],
     simulates: 'SMA',

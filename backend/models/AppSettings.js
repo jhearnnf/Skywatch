@@ -254,7 +254,7 @@ const appSettingsSchema = new mongoose.Schema({
       slt: true, 'slt-easier': true,
       vlt: true, 'vlt-easier': true,
       matf: true, 'matf-easier': true,
-      vigilance: true, 'vigilance-hard': true,
+      vigilance: true, 'vigilance-hard': true, 'vigilance-practise': true,
       sma: true, 'sma-easier': true,
     }),
   },
@@ -524,7 +524,7 @@ appSettingsSchema.statics.getSettings = async function () {
         slt: true, 'slt-easier': true,
         vlt: true, 'vlt-easier': true,
         matf: true, 'matf-easier': true,
-        vigilance: true, 'vigilance-hard': true,
+        vigilance: true, 'vigilance-hard': true, 'vigilance-practise': true,
         sma: true, 'sma-easier': true,
       };
       const current = settings.cbatGameEnabled;

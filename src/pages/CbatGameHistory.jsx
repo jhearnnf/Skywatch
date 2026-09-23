@@ -53,6 +53,7 @@ export const GAME_LABELS = {
   'matf-easier':      'Table Reading Test (Easier)',
   'vigilance':        'Vigilance Test (Easier)',
   'vigilance-hard':   'Vigilance Test (Hard)',
+  'vigilance-practise':  'Vigilance Practise',
   'sma':              'Sensory Motor Apparatus Test (Hard)',
   'sma-easier':       'Sensory Motor Apparatus Test (Easier)',
 }

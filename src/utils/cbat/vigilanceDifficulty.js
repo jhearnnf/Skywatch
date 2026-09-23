@@ -99,8 +99,56 @@ export const VIGILANCE_TUNING = {
   },
 }
 
+// ── Practise drill ─────────────────────────────────────────────────────────────
+// Not a difficulty — a separate exercise on its own board, the way ANT's
+// Practise is, so it carries a badge and never bars. The corpus is blunt that
+// "the bottleneck is the keying, not the finding", and this is the keying on
+// its own: one minute on a grid that is already mostly full and refills
+// almost as fast as it is cleared, so there is never a star to hunt for. No
+// priority tasks — breaking off is a different skill from keying fast.
+//
+// The mis-key penalty is raised here, and it has to be. With ~70% of cells
+// starred, the standard 5 makes a random coordinate worth +6 on average, so
+// hammering the pad would out-score reading the board. At 30 a random guess
+// loses points (0.69 × 10 − 0.31 × 30 ≈ −2.4), so the fastest way up the
+// board is still keying what you see.
+export const VIGILANCE_PRACTISE_STARS = 56
+export const VIGILANCE_PRACTISE_MISKEY_PENALTY = 30
+
+export const VIGILANCE_PRACTISE = {
+  key: 'practise',
+  label: 'Practise',
+  badge: 'Drill',
+  gameKey: 'vigilance-practise',
+  blurb: 'One minute on a flooded grid, just keying',
+
+  load: {
+    ...VIGILANCE_BASE_LOAD,
+    durationMs: 60000,
+    initialStars: VIGILANCE_PRACTISE_STARS,
+    maxStars: VIGILANCE_PRACTISE_STARS,
+    spawnStartMs: 250,
+    spawnEndMs: 250,
+    priorityFirstMs: Infinity,
+    miskeyPenalty: VIGILANCE_PRACTISE_MISKEY_PENALTY,
+  },
+
+  // A good player scores around 400 in the minute.
+  grades: { outstanding: 400, good: 280, needsWork: 150 },
+}
+
+VIGILANCE_TUNING.practise = VIGILANCE_PRACTISE
+
 // Ordered for the mode row: Easier left, Hard right.
 export const VIGILANCE_DIFFICULTIES = [VIGILANCE_TUNING.easier, VIGILANCE_TUNING.hard]
+
+// Everything the row offers: the pair, then the drill. The drill has its own
+// admin toggle (it is its own board), so a disabled drill drops out of the row.
+export const VIGILANCE_MODES = [...VIGILANCE_DIFFICULTIES, VIGILANCE_PRACTISE]
+
+export function vigilanceModes(drillEnabled = true) {
+  return drillEnabled ? VIGILANCE_MODES : VIGILANCE_DIFFICULTIES
+}
 
 export function vigilanceTuning(difficulty) {
   return VIGILANCE_TUNING[difficulty] || VIGILANCE_TUNING[DEFAULT_VIGILANCE_DIFFICULTY]
