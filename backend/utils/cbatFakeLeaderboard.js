@@ -61,6 +61,7 @@ const GAME_OFFSET = {
   'clan':            42,
   'clan-easier':     43,
   'vigilance-practise': 44,
+  'instruments-practise': 45,
 };
 
 // Per-game score/time tuning. Every fake score stays inside [floor, ceiling]:
@@ -135,6 +136,15 @@ const FAKE_TUNING = {
     // (mirror-image wings on a nose view). Reseat once real runs exist.
     floor: 2, ceiling: 10, seedTime: 74.5, timeStep: 3.1,
     scoreSequence: [9, 9, 8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 4, 4, 3, 3, 2],
+  },
+  'instruments-practise': {
+    // One minute: 10 for a quick dial match sliding to 5 for a slow one, plus 1
+    // a ring (2 through the bullseye). Every run is the fixed 60s.
+    // Pinned under the user's own 64 (2026-09-23: "my score 64 as the top
+    // score for now, all demo scores below it"), so no demo may reach 64.
+    // Reseat once production history exists.
+    floor: 10, ceiling: 63, seedTime: 60.1, timeStep: 0.1,
+    scoreSequence: [62, 59, 56, 53, 50, 47, 44, 41, 38, 36, 34, 32, 30, 27, 24, 21, 18, 16, 14, 12],
   },
   'ant': {
     floor: 15, ceiling: 75, seedTime: 210.6, timeStep: 9.3,
@@ -674,6 +684,10 @@ const WEEKLY_PER_PLAY = {
   // No production history yet — set from the demo band's middle (6/10).
   // Reseat once real runs exist.
   'instruments-orientation': 6,
+  // Weekly demos are SUMS over plays (up to 3 plays x 1.18 of this), so this
+  // is kept low enough that no weekly demo reaches the user's 64 either:
+  // 17 x 3 x 1.18 = 60. Reseat once real runs exist.
+  'instruments-practise': 17,
   'ant':              45,  // real med 50
   // No production history yet — the board starts empty. Set from the demo
   // band's middle (65/120), which is the same share of the ceiling as ANT's 45

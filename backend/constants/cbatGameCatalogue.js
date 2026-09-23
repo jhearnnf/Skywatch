@@ -104,6 +104,14 @@ const CBAT_GAME_CATALOGUE = [
     what: 'two modes on one tile. Reading: read six cockpit dials against the clock and pick the statement that says what the aircraft is doing. Orientation: read an attitude indicator and a compass and pick which of four aircraft pictures is flying that way, seen from behind an aircraft heading north.',
   },
   {
+    name: 'Instruments Practise',
+    tile: 'Instruments',
+    registryKeys: ['instruments-practise'],
+    simulates: null,
+    aliases: ['instruments practise', 'instruments practice', 'instruments drill', 'instrument drill', 'dials drill'],
+    what: 'one minute flying an aircraft with all six cockpit dials live beside the view. Every few seconds one dial lights up with a pink target reading and the rest grey out, and you fly until the needle sits on it: a quick match scores 10, a slow one down to 5, and each ring flown scores 1. A drill for learning what each dial does, on its own leaderboard.',
+  },
+  {
     name: 'Trace Practise 2D',
     tile: 'Trace 1/2',
     registryKeys: ['plane-turn-2d'],

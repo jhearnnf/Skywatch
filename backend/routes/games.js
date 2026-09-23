@@ -42,6 +42,7 @@ const GameSessionCbatSymbolsResult        = CBAT_GAMES['symbols'].Model;
 const GameSessionCbatTargetResult         = CBAT_GAMES['target'].Model;
 const GameSessionCbatInstrumentsResult    = CBAT_GAMES['instruments'].Model;
 const GameSessionCbatInstrumentsOrientationResult = CBAT_GAMES['instruments-orientation'].Model;
+const GameSessionCbatInstrumentsPractiseResult = CBAT_GAMES['instruments-practise'].Model;
 const GameSessionCbatAntResult            = CBAT_GAMES['ant'].Model;
 const GameSessionCbatAntPractiseResult    = CBAT_GAMES['ant-practise'].Model;
 const GameSessionCbatAntHardResult        = CBAT_GAMES['ant-hard'].Model;
@@ -2707,6 +2708,26 @@ async function submitInstrumentsResult(req, res, Model) {
 router.post('/cbat/instruments/result', protect, (req, res) => submitInstrumentsResult(req, res, GameSessionCbatInstrumentsResult));
 router.post('/cbat/instruments-orientation/result', protect, (req, res) => submitInstrumentsResult(req, res, GameSessionCbatInstrumentsOrientationResult));
 
+// POST /api/games/cbat/instruments-practise/result
+// The Practise drill ranks on points (dial matches plus rings), not on correct
+// answers, so it has its own payload.
+router.post('/cbat/instruments-practise/result', protect, async (req, res) => {
+  try {
+    const { totalScore, dialsMatched, dialsSet, ringsHit, avgMatchTime, totalTime } = req.body;
+    const result = await saveCbatResult(GameSessionCbatInstrumentsPractiseResult, req, {
+      totalScore: totalScore ?? 0,
+      dialsMatched,
+      dialsSet,
+      ringsHit,
+      avgMatchTime,
+      totalTime,
+    });
+    res.status(201).json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // POST /api/games/cbat/ant/result, /ant-hard/result and /ant-practise/result
 // Identical payloads — Practise is the same four calculations as plain
 // questions, and Hard is a twelve-round board out of 120 rather than eight out
@@ -3408,6 +3429,7 @@ router.get('/cbat/symbols/leaderboard', protect, (req, res) => cbatLeaderboard(r
 router.get('/cbat/target/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'target'));
 router.get('/cbat/instruments/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments'));
 router.get('/cbat/instruments-orientation/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments-orientation'));
+router.get('/cbat/instruments-practise/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'instruments-practise'));
 router.get('/cbat/ant/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant'));
 router.get('/cbat/ant-hard/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant-hard'));
 router.get('/cbat/ant-practise/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'ant-practise'));
@@ -3632,6 +3654,7 @@ router.get('/cbat/symbols/personal-best', protect, (req, res) => cbatPersonalBes
 router.get('/cbat/target/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'target'));
 router.get('/cbat/instruments/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments'));
 router.get('/cbat/instruments-orientation/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments-orientation'));
+router.get('/cbat/instruments-practise/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'instruments-practise'));
 router.get('/cbat/ant/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant'));
 router.get('/cbat/ant-hard/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant-hard'));
 router.get('/cbat/ant-practise/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'ant-practise'));

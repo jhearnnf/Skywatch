@@ -5,6 +5,7 @@ const GameSessionCbatSymbolsResult        = require('../models/GameSessionCbatSy
 const GameSessionCbatTargetResult         = require('../models/GameSessionCbatTargetResult');
 const GameSessionCbatInstrumentsResult    = require('../models/GameSessionCbatInstrumentsResult');
 const GameSessionCbatInstrumentsOrientationResult = require('../models/GameSessionCbatInstrumentsOrientationResult');
+const GameSessionCbatInstrumentsPractiseResult = require('../models/GameSessionCbatInstrumentsPractiseResult');
 const GameSessionCbatAntResult            = require('../models/GameSessionCbatAntResult');
 const GameSessionCbatAntPractiseResult    = require('../models/GameSessionCbatAntPractiseResult');
 const GameSessionCbatAntHardResult        = require('../models/GameSessionCbatAntHardResult');
@@ -183,6 +184,16 @@ const CBAT_GAMES = {
     sortDir: -1,
     bestOp: '$max',
     label: 'Instruments Orientation',
+  },
+  // The Practise drill behind the Instruments tile: a minute of free flight,
+  // flying whichever dial lights up onto its target. Its own board, the way
+  // 'ant-practise' is: not a difficulty, so nothing is appended to its label.
+  'instruments-practise': {
+    Model: GameSessionCbatInstrumentsPractiseResult,
+    primaryField: 'totalScore',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Instruments Practise',
   },
   // ANT's split is the only one where the two halves are different GAMES rather
   // than one game at two loads. Easier is the original eight-round board — this
