@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useCbatGameInProgress } from '../hooks/useCbatGameInProgress'
 
@@ -17,10 +18,15 @@ import { useCbatGameInProgress } from '../hooks/useCbatGameInProgress'
 // Hidden mid-test. The games are timed, full-attention tasks and nothing may
 // sit over the play area while one runs; the link shows on the instructions
 // and score screens, which is also when anyone would actually use it.
+//
+// Portalled to <body>. Every route sits inside a framer-motion PageWrapper that
+// slides in with a transform, and a transformed ancestor becomes the containing
+// block for `position: fixed` — so in-tree, the link rode the bottom of the page
+// for the length of the transition and then jumped to the viewport corner.
 export default function CbatGameReportLink() {
   const inProgress = useCbatGameInProgress()
   if (inProgress) return null
-  return (
+  return createPortal(
     <Link
       to="/report"
       data-testid="cbat-game-report"
@@ -29,6 +35,7 @@ export default function CbatGameReportLink() {
         underline underline-offset-2 transition-colors"
     >
       Report a problem
-    </Link>
+    </Link>,
+    document.body,
   )
 }
