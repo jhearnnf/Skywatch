@@ -203,18 +203,35 @@ export function pickPad(pads, preferredId) {
   }
   const sticks = loadProfiles()
   const pedals = loadPedalProfiles()
+  // A device whose lever is the learned throttle, and which is not a known
+  // stick, is ranked below anything that is not — but never skipped the way
+  // pedals are. A throttle lever is very often on the stick's own base, and
+  // on an uncalibrated stick that is the same id; skipping it would lose the
+  // only stick there is. Ranking it down still keeps a separate throttle unit
+  // from being taken for the stick when both are plugged in.
+  const throttleId = loadThrottleProfile()?.lever?.id ?? null
   let best = null
   let bestRank = null
   for (const p of pads) {
     const isStick = !!sticks[p.id]?.calibrated
     if (pedals[p.id] && !sticks[p.id]) continue
-    const rank = [isStick ? 1 : 0, p.buttons ? p.buttons.length : 0]
-    if (!best || rank[0] > bestRank[0] || (rank[0] === bestRank[0] && rank[1] > bestRank[1])) {
+    const throttleOnly = p.id === throttleId && !sticks[p.id]
+    const rank = [isStick ? 1 : 0, throttleOnly ? 0 : 1, p.buttons ? p.buttons.length : 0]
+    if (!best || beats(rank, bestRank)) {
       best = p
       bestRank = rank
     }
   }
   return best
+}
+
+// Lexicographic: the first place two ranks differ decides it; a full tie keeps
+// the driver's order.
+function beats(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i]
+  }
+  return false
 }
 
 // ── Persistence ──────────────────────────────────────────────────────────────
@@ -305,6 +322,40 @@ export function clearPedalProfile(id) {
   const all = { ...loadPedalProfiles() }
   delete all[id]
   writeStore(PEDAL_STORE_KEY, all)
+}
+
+// ── Throttle profile ─────────────────────────────────────────────────────────
+// How the player works the throttle in the Instruments Practise drill. One
+// profile per browser rather than one per device, because the two ways of
+// doing it can live on different devices (a lever on a throttle unit, buttons
+// on the stick):
+//
+//   { version, mode: 'lever' | 'buttons',
+//     lever:   { id, axis: { index, idle, full } } | null,
+//     buttons: { faster: { id, index }, slower: { id, index } } | null }
+//
+// Both calibrations are kept, so switching mode back never throws one away.
+// Lever is the default; buttons are the player's override. The calibration
+// lives in throttle.js; the store is here so pickPad can consult it without a
+// circular import, as with the pedals.
+const THROTTLE_STORE_KEY = 'sw_cbat_throttle'
+export const THROTTLE_PROFILE_VERSION = 1
+export const THROTTLE_MODES = ['lever', 'buttons']
+
+export function loadThrottleProfile() {
+  const p = readStore(THROTTLE_STORE_KEY)
+  if (!p || p.version !== THROTTLE_PROFILE_VERSION) return null
+  if (!THROTTLE_MODES.includes(p.mode)) return null
+  return p
+}
+
+export function saveThrottleProfile(profile) {
+  if (!profile) return
+  writeStore(THROTTLE_STORE_KEY, { ...profile, version: THROTTLE_PROFILE_VERSION })
+}
+
+export function clearThrottleProfile() {
+  try { localStorage.removeItem(THROTTLE_STORE_KEY) } catch { /* storage unavailable */ }
 }
 
 // ── Calibration ──────────────────────────────────────────────────────────────
