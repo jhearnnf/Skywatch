@@ -55,7 +55,7 @@ const BLIPS = [
 
 const SWEEP_DEG   = 120;   // length of the trailing wedge
 const SWEEP_STEPS = 64;    // stacked wedges used to fake a conic gradient
-const SWEEP_PEAK  = 0.5;   // beam opacity at the leading edge
+const SWEEP_PEAK  = 0.62;  // beam opacity at the leading edge
 
 const deg2rad = (d) => (d * Math.PI) / 180;
 
@@ -117,6 +117,41 @@ function ping(progress) {
   return `<circle cx="${CX}" cy="${CY}" r="${radius.toFixed(2)}" fill="none" stroke="${BLUE}" stroke-width="1.2" opacity="${opacity.toFixed(3)}"/>`;
 }
 
+// The scope is drawn as the SkyWatch crosshair logo (public/favicon.svg)
+// scaled up, so the brand mark IS the radar rather than a badge stuck on it.
+// The logo is a 40×40 box with the ring at r=17; LOGO maps its units onto
+// the hero so the outer ring lands on R. Same geometry, same two blues: the
+// deep #1d4ed8 ring and cardinal ticks, the light #5baaff inner ring and dot.
+// A faint intermediate range ring keeps it reading as a scope.
+const LOGO = R / 17;
+const DEEP = '#1d4ed8';
+
+function logoScope() {
+  const tick = (angle) => {
+    const o = polar(angle, 19 * LOGO);
+    const i = polar(angle, 8 * LOGO);
+    return `<line x1="${o.x.toFixed(2)}" y1="${o.y.toFixed(2)}" x2="${i.x.toFixed(2)}" y2="${i.y.toFixed(2)}"/>`;
+  };
+  // Drawn twice: a soft blurred copy underneath for a neon glow, then the
+  // crisp strokes on top.
+  const mark = (extra) => `
+      <g fill="none" stroke-linecap="round" ${extra}>
+        <circle cx="${CX}" cy="${CY}" r="${R}" stroke="${DEEP}" stroke-width="${(2.2 * LOGO * 0.3).toFixed(2)}"/>
+        <g stroke="${DEEP}" stroke-width="${(2.2 * LOGO * 0.3).toFixed(2)}">${[0, 90, 180, 270].map(tick).join('')}</g>
+        <circle cx="${CX}" cy="${CY}" r="${(7 * LOGO).toFixed(2)}" stroke="${BLUE}" stroke-width="${(1.8 * LOGO * 0.3).toFixed(2)}"/>
+      </g>`;
+  return `
+    <circle cx="${CX}" cy="${CY}" r="${(R * 0.62).toFixed(2)}" fill="none" stroke="${BLUE}" stroke-opacity="0.16" stroke-width="1" stroke-dasharray="2 4"/>
+    ${mark('filter="url(#neon)" opacity="0.8"')}
+    ${mark('')}`;
+}
+
+// Letter-spaced wordmark tucked inside the top-left bracket, matching the
+// TopBar's "SKYWATCH" treatment.
+function wordmark() {
+  return `<text x="40" y="47" font-family="Segoe UI, Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="3.2" fill="${BLUE}">SKYWATCH</text>`;
+}
+
 // Everything that does not move: background glow, tactical grid, corner
 // brackets, rings, ticks and crosshair. Identical on every frame so the
 // encoder drops it after the first.
@@ -126,7 +161,8 @@ function staticLayer() {
   for (let y = 30; y < H; y += 40) grid.push(`<line x1="0" y1="${y}" x2="${W}" y2="${y}"/>`);
 
   const ticks = [];
-  for (let a = 0; a < 360; a += 30) {
+  for (let a = 30; a < 360; a += 30) {
+    if (a % 90 === 0) continue; // the logo's cardinal ticks sit here
     const len = a % 90 === 0 ? 7 : 4;
     const o = polar(a, R - 1);
     const i = polar(a, R - 1 - len);
@@ -147,16 +183,9 @@ function staticLayer() {
     <g stroke="${BLUE}" stroke-opacity="0.07" stroke-width="1">${grid.join('')}</g>
     <g stroke="${BLUE}" stroke-opacity="0.35" stroke-width="1.5" fill="none" stroke-linecap="square">${brackets}</g>
     <circle cx="${CX}" cy="${CY}" r="${R}" fill="${NAVY}" fill-opacity="0.35"/>
-    <g stroke="${BLUE}" stroke-opacity="0.38" stroke-width="1" fill="none">
-      <circle cx="${CX}" cy="${CY}" r="${R}"/>
-      <circle cx="${CX}" cy="${CY}" r="${R * 2 / 3}"/>
-      <circle cx="${CX}" cy="${CY}" r="${R / 3}"/>
-    </g>
-    <g stroke="${BLUE}" stroke-opacity="0.18" stroke-width="1">
-      <line x1="${CX - R}" y1="${CY}" x2="${CX + R}" y2="${CY}"/>
-      <line x1="${CX}" y1="${CY - R}" x2="${CX}" y2="${CY + R}"/>
-    </g>
-    <g stroke="${BLUE}" stroke-opacity="0.5" stroke-width="1">${ticks.join('')}</g>`;
+    ${logoScope()}
+    <g stroke="${LIGHT}" stroke-opacity="0.45" stroke-width="1">${ticks.join('')}</g>
+    ${wordmark()}`;
 }
 
 function frameSvg(i) {
@@ -164,6 +193,9 @@ function frameSvg(i) {
   const lead = progress * 360;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W * SCALE}" height="${H * SCALE}" viewBox="0 0 ${W} ${H}">
   <defs>
+    <filter id="neon" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5"/>
+    </filter>
     <radialGradient id="bg" cx="50%" cy="45%" r="55%">
       <stop offset="0%" stop-color="${BLUE}" stop-opacity="0.22"/>
       <stop offset="100%" stop-color="${BLUE}" stop-opacity="0"/>
@@ -181,8 +213,8 @@ function frameSvg(i) {
   ${ping(progress)}
   ${sweep(lead)}
   ${blips(lead)}
-  <circle cx="${CX}" cy="${CY}" r="6" fill="url(#glow)"/>
-  <circle cx="${CX}" cy="${CY}" r="2.5" fill="${BLUE}"/>
+  <circle cx="${CX}" cy="${CY}" r="14" fill="url(#glow)"/>
+  <circle cx="${CX}" cy="${CY}" r="${(2.5 * LOGO * 0.45).toFixed(2)}" fill="${BLUE}"/>
 </svg>`;
 }
 
