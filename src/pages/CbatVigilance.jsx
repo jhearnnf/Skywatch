@@ -56,6 +56,16 @@ import {
 // Cell indices, 0-based. The LABEL drawn for index i is i + 1, so the axes read
 // 1–9 and every coordinate is two keystrokes off a pad with no zero on it.
 const CELLS = Array.from({ length: VIGILANCE_GRID }, (_, i) => i)
+const EMPTY_STARS = []
+
+// Drill fast-restart countdown: 3 / 2 / 1 at half a second each, then a short
+// GO flash, the same beat as Symbols.
+const COUNTDOWN_FROM = 3
+const COUNTDOWN_STEP_MS = 500
+const COUNTDOWN_GO_MS = 400
+// Stars hopping about behind the count
+const SCATTER_TICK_MS = 110
+const SCATTER_MOVES_PER_TICK = 3
 
 // ── Grid ─────────────────────────────────────────────────────────────────────
 // Top-level so it never remounts mid-run.
@@ -306,13 +316,71 @@ function ResultsScreen({ stats, tuning }) {
   )
 }
 
+// ── Fast-restart countdown ───────────────────────────────────────────────────
+// Stars hopping between cells while the count runs, so the wait reads as the
+// board warming up rather than as dead time. Purely decorative: it starts from
+// the opening board of the run about to begin and hands back the real one at
+// GO, so the player can read the board during the GO flash.
+function useStarScatter(active, stars) {
+  // Tagged with the board it was scattered from, so a new opening board starts
+  // a fresh scatter instead of carrying the last one on.
+  const [scatter, setScatter] = useState({ from: stars, stars })
+  useEffect(() => {
+    if (!active) return undefined
+    const id = setInterval(() => {
+      setScatter(prev => {
+        const next = prev.from === stars ? [...prev.stars] : [...stars]
+        const taken = new Set(next.map(s => `${s.row},${s.col}`))
+        for (let k = 0; k < SCATTER_MOVES_PER_TICK && next.length; k++) {
+          const i = Math.floor(Math.random() * next.length)
+          const row = Math.floor(Math.random() * VIGILANCE_GRID)
+          const col = Math.floor(Math.random() * VIGILANCE_GRID)
+          if (taken.has(`${row},${col}`)) continue
+          taken.delete(`${next[i].row},${next[i].col}`)
+          taken.add(`${row},${col}`)
+          next[i] = { ...next[i], row, col }
+        }
+        return { from: stars, stars: next }
+      })
+    }, SCATTER_TICK_MS)
+    return () => clearInterval(id)
+  }, [active, stars])
+  return active && scatter.from === stars ? scatter.stars : stars
+}
+
+function CountdownBeat({ count }) {
+  const isGo = count <= 0
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center rounded-lg bg-[#06101a]/55 pointer-events-none"
+      data-testid="vigilance-countdown-beat"
+    >
+      <motion.div
+        key={count}
+        initial={{ scale: 1.7, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.22 }}
+        className={`font-mono font-extrabold drop-shadow-[0_0_18px_rgba(6,16,26,0.9)] ${
+          isGo ? 'text-5xl sm:text-6xl lg:text-8xl text-green-400' : 'text-7xl sm:text-8xl lg:text-9xl text-brand-600'
+        }`}
+      >
+        {isGo ? 'GO' : count}
+      </motion.div>
+      <p className="text-[10px] text-slate-300 uppercase tracking-[0.2em] mt-2 drop-shadow-[0_0_10px_rgba(6,16,26,0.9)]">
+        {isGo ? 'Row, then column' : 'Get ready'}
+      </p>
+    </div>
+  )
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function CbatVigilance() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const isDemo = !!useCbatDemo()
 
-  const [phase, setPhase] = useState('intro') // intro | launching | playing | results
+  const [phase, setPhase] = useState('intro') // intro | launching | countdown | playing | results
+  const [countdown, setCountdown] = useState(COUNTDOWN_FROM)
   // The drill ranks on its own board, so it has its own admin toggle. A
   // disabled drill drops out of the row, and a remembered choice of it falls
   // back to the default rather than opening on a mode that is not offered.
@@ -333,10 +401,13 @@ export default function CbatVigilance() {
   // The board is the test, and at 22px a cell it is a 200px square to hold
   // attention on for three minutes. See the rule in main.css — the app shell
   // caps every route at max-w-3xl, so this page cannot widen itself alone.
-  useGameBodyClass('cbat-vigilance-wide', phase === 'playing')
+  // The fast-restart countdown draws the play screen, so it takes the same
+  // layout: the board must not jump when the run takes over.
+  const onBoard = phase === 'playing' || phase === 'countdown'
+  useGameBodyClass('cbat-vigilance-wide', onBoard)
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
-    if (phase === 'playing') enterImmersive()
+    if (phase === 'playing' || phase === 'countdown') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -361,6 +432,9 @@ export default function CbatVigilance() {
   // The sim is stepped from a rAF loop and read through a snapshot each frame —
   // the same pattern CUT uses. React never renders off the live simulation.
   const simRef = useRef(null)
+  // The fast restart's run, built when the countdown starts so the board behind
+  // the count is the board the run opens on.
+  const pendingSimRef = useRef(null)
   const rafRef = useRef(null)
   const lastTsRef = useRef(null)
   const pendingRowRef = useRef(null)
@@ -517,7 +591,8 @@ export default function CbatVigilance() {
 
   const startGame = useCallback(() => {
     const played = runTuningRef.current
-    const sim = createVigilanceSim({ load: played.load })
+    const sim = pendingSimRef.current ?? createVigilanceSim({ load: played.load })
+    pendingSimRef.current = null
     simRef.current = sim
     lastTsRef.current = null
     pendingRowRef.current = null
@@ -552,6 +627,43 @@ export default function CbatVigilance() {
     return () => clearTimeout(t)
   }, [phase])
 
+  // Fast restart, drill only. Abandons whatever is on screen and runs the
+  // countdown into a fresh drill. Deliberately not confirmed: the point of the
+  // button is to be instant.
+  const startCountdown = useCallback(() => {
+    cancelAnimationFrame(rafRef.current)
+    for (const t of clearTimersRef.current) clearTimeout(t)
+    clearTimersRef.current.clear()
+    const played = vigilanceTuning('practise')
+    runTuningRef.current = played
+    setRunDifficulty(played.key)
+    const sim = createVigilanceSim({ load: played.load })
+    pendingSimRef.current = sim
+    simRef.current = null
+    pendingRowRef.current = null
+    setPendingRow(null)
+    setLastEvent(null)
+    setClears([])
+    setMissPopup(null)
+    setSnapshot(sim.snapshot())
+    setCountdown(COUNTDOWN_FROM)
+    setPhase('countdown')
+  }, [])
+
+  // Drive the countdown: COUNTDOWN_FROM..1, then a short GO flash at 0.
+  useEffect(() => {
+    if (phase !== 'countdown') return undefined
+    const isGo = countdown <= 0
+    const t = setTimeout(
+      () => { if (isGo) startGameRef.current(); else setCountdown(c => c - 1) },
+      isGo ? COUNTDOWN_GO_MS : COUNTDOWN_STEP_MS
+    )
+    return () => clearTimeout(t)
+  }, [phase, countdown])
+
+  const counting = phase === 'countdown'
+  const boardStars = useStarScatter(counting && countdown > 0, snapshot?.stars ?? EMPTY_STARS)
+
   const chooseDifficulty = useCallback((key) => {
     setStoredDifficulty(key)
     storeVigilanceDifficulty(key)
@@ -560,6 +672,7 @@ export default function CbatVigilance() {
   const goToIntro = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
     simRef.current = null
+    pendingSimRef.current = null
     setPhase('intro')
     setSnapshot(null)
     setPendingRow(null)
@@ -570,6 +683,9 @@ export default function CbatVigilance() {
 
   const launching = phase === 'launching'
   const dim = launching ? ' cbat-launch-dim' : ''
+  // Offered on the drill alone: in the intro while it is the mode picked, and
+  // afterwards while the run on screen is a drill.
+  const showFastRestart = !!user && ((phase === 'intro' || launching) ? drill : runTuning.key === 'practise')
 
   return (
     <div>
@@ -582,13 +698,28 @@ export default function CbatVigilance() {
         onQuit={goToIntro}
         confirmNeeded={phase === 'playing'}
         className={dim.trim()}
-        test={phase === 'playing' && snapshot ? {
+        test={onBoard && snapshot ? {
           stage: 'Testing',
           timeFrac: snapshot.remainingMs / runTuning.load.durationMs,
           progressFrac: 1 - snapshot.remainingMs / runTuning.load.durationMs,
         } : null}
       >
-        {phase === 'playing' && <ModeMarker mode={runTuning} />}
+        {onBoard && <ModeMarker mode={runTuning} />}
+        {showFastRestart && (
+          // Stays mounted while counting, so the header never reflows.
+          <button
+            type="button"
+            onClick={startCountdown}
+            disabled={counting || launching}
+            className={`ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-game-line bg-game-panel text-[11px] font-bold text-brand-600 transition-colors ${
+              counting || launching
+                ? 'opacity-40 cursor-default'
+                : 'hover:text-brand-700 hover:border-brand-400'
+            }`}
+          >
+            <span aria-hidden="true">{'⚡'}</span> Fast Restart
+          </button>
+        )}
       </CbatGameHeader>
 
       {!user && (
@@ -682,8 +813,13 @@ export default function CbatVigilance() {
             </motion.div>
           )}
 
-          {phase === 'playing' && snapshot && (
-            <div className="w-full max-w-md lg:max-w-4xl flex flex-col items-center">
+          {/* Playing, and the fast-restart countdown, which draws this same
+              screen dimmed under the count so nothing moves at the handoff. */}
+          {onBoard && snapshot && (
+            <div
+              className="w-full max-w-md lg:max-w-4xl flex flex-col items-center"
+              data-testid={counting ? 'vigilance-countdown' : undefined}
+            >
               {/* HUD — under the Real CBAT theme the title bar carries this */}
               {!cbat && <div className="w-full max-w-md flex items-center justify-between text-xs font-mono mb-2 px-1">
                 <span className="text-slate-400">Score <span className="text-brand-600">{snapshot.score}</span></span>
@@ -710,10 +846,13 @@ export default function CbatVigilance() {
                     to back misses restart the shake without remounting the board
                     (which would restart every clear burst still in flight). */}
                 <div className={`relative ${missPopup ? (missPopup.id % 2 ? 'vig-board-shake-a' : 'vig-board-shake-b') : ''}`}>
-                  <StarGrid stars={snapshot.stars} pendingRow={pendingRow} lastEvent={lastEvent} clears={clears} />
+                  <StarGrid stars={boardStars} pendingRow={pendingRow} lastEvent={lastEvent} clears={clears} />
                   {missPopup && <MissPopup key={missPopup.id} delta={missPopup.delta} row={missPopup.row} col={missPopup.col} />}
+                  {counting && <CountdownBeat count={countdown} />}
                 </div>
-                <Keypad onDigit={submitDigit} onClear={clearPending} pendingRow={pendingRow} />
+                <div className={counting ? 'pointer-events-none opacity-40' : undefined} aria-hidden={counting || undefined}>
+                  <Keypad onDigit={submitDigit} onClear={clearPending} pendingRow={pendingRow} />
+                </div>
               </div>
 
               {/* Real CBAT theme: the instruction strip */}

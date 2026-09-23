@@ -403,6 +403,82 @@ describe('Vigilance — Practise drill', () => {
     expect(screen.getByText('Per second')).toBeTruthy()
   })
 
+  const fastRestart = () => screen.queryByRole('button', { name: /fast restart/i })
+  // Beat by beat: one large advance does not pick up each newly scheduled
+  // timeout, so the countdown chain has to be stepped.
+  const runCountdown = () => {
+    for (let s = 0; s < 4; s++) act(() => { vi.advanceTimersByTime(500) })
+  }
+
+  it('offers Fast Restart on the drill only', () => {
+    const { container } = renderPage(CbatVigilance)
+    expect(fastRestart()).toBeNull()
+    act(() => { press(difficultyButton(container, 'practise')) })
+    expect(fastRestart()).toBeTruthy()
+    act(() => { press(difficultyButton(container, 'hard')) })
+    expect(fastRestart()).toBeNull()
+  })
+
+  it('counts 3 - 2 - 1 - GO over the opening board, then starts a drill', () => {
+    const { container } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'practise')) })
+    act(() => { press(fastRestart()) })
+
+    const beat = () => screen.getByTestId('vigilance-countdown-beat').textContent
+    expect(screen.getByTestId('vigilance-countdown')).toBeTruthy()
+    expect(beat()).toContain('3')
+    // Stays mounted while counting, so the header never reflows, but is inert
+    expect(fastRestart().disabled).toBe(true)
+    // The board behind the count is already full
+    const starred = [...container.querySelectorAll('[data-cell]')].filter(td => /★/.test(td.textContent))
+    expect(starred.length).toBeGreaterThan(40)
+    // Keys do nothing until GO has passed
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: '2' })) })
+    expect(screen.getByText(/Enter row/)).toBeTruthy()
+
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(beat()).toContain('2')
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(beat()).toContain('1')
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(beat()).toContain('GO')
+    act(() => { vi.advanceTimersByTime(500) })
+
+    expect(screen.queryByTestId('vigilance-countdown')).toBeNull()
+    expect(container.querySelector('[data-mode-marker="practise"]')).toBeTruthy()
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: '2' })) })
+    expect(screen.getByText(/Enter column/)).toBeTruthy()
+  })
+
+  it('hops the stars about behind the count', () => {
+    const { container } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'practise')) })
+    act(() => { press(fastRestart()) })
+    const readBoard = () => [...container.querySelectorAll('[data-cell]')]
+      .filter(td => /★/.test(td.textContent)).map(td => td.getAttribute('data-cell')).join('|')
+    const first = readBoard()
+    act(() => { vi.advanceTimersByTime(440) })
+    expect(readBoard()).not.toBe(first)
+  })
+
+  it('restarts a drill in progress without filing the abandoned run', async () => {
+    const { container } = renderPage(CbatVigilance)
+    act(() => { press(difficultyButton(container, 'practise')) })
+    startVigilance()
+    act(() => { vi.advanceTimersByTime(30000) })
+
+    act(() => { press(fastRestart()) })
+    runCountdown()
+    expect(screen.queryByTestId('vigilance-countdown')).toBeNull()
+
+    // A fresh minute: 40s in, the abandoned run would have ended at 60s
+    await act(async () => { vi.advanceTimersByTime(40000) })
+    expect(submitCbatResult).not.toHaveBeenCalled()
+    await act(async () => { vi.advanceTimersByTime(30000) })
+    expect(submitCbatResult).toHaveBeenCalledTimes(1)
+    expect(submitCbatResult.mock.calls[0][0]).toBe('vigilance-practise')
+  })
+
   it('drops out of the row when an admin switches it off, and a remembered choice falls back to Easier', () => {
     localStorage.setItem('sw_cbat_vigilance_difficulty', 'practise')
     mockSettings.current = { cbatGameEnabled: { 'vigilance-practise': false } }
