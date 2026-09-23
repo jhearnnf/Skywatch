@@ -16,7 +16,8 @@
 //
 // Deliberately shared: the two-part structure, the symmetric grid (the "either
 // way round" shortcut is the real technique and applies on both), the three-step
-// lookup in part two, the five numbered options, and the scoring.
+// lookup in part two, the five numbered options, and the scoring (a point off
+// per wrong answer: see matfScore).
 //
 // No grade bands keyed to a fixed total, for the same reason — the grade comes
 // from the count, and the thresholds differ because the clocks do.
@@ -68,11 +69,20 @@ export function matfGameKey(difficulty) {
   return matfTuning(difficulty).gameKey
 }
 
-export function computeMatfGrade(correct, tuning) {
+// One point per right answer, one off per wrong one, never below zero. A free
+// wrong answer made mashing the buttons the best strategy on a speeded test
+// with five options. Mirrored in backend/utils/matfScore.js, which is what the
+// boards actually rank on: change both.
+export function matfScore(correct, attempted) {
+  const wrong = Math.max(0, attempted - correct)
+  return Math.max(0, correct - wrong)
+}
+
+export function computeMatfGrade(score, tuning) {
   const g = tuning.grades
-  if (correct >= g.outstanding) return 'Outstanding'
-  if (correct >= g.good) return 'Good'
-  if (correct >= g.needsWork) return 'Needs Work'
+  if (score >= g.outstanding) return 'Outstanding'
+  if (score >= g.good) return 'Good'
+  if (score >= g.needsWork) return 'Needs Work'
   return 'Failed'
 }
 

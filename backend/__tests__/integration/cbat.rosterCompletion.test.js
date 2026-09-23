@@ -26,7 +26,10 @@ const ALL_KEYS = [...DIFFICULTY_PAIRS.flat(), 'vigilance'];
 
 function bodyFor(gameKey) {
   if (gameKey.startsWith('matf')) {
-    return { correctCount: 24, attempted: 30, gridCorrect: 13, tableCorrect: 11, totalTime: 180 };
+    // `score` is what the board ranks on. The server works it out itself
+    // (24 right, 6 wrong = 18); it is here so the generic checks can read the
+    // primaryField off this body like every other game's.
+    return { score: 18, correctCount: 24, attempted: 30, gridCorrect: 13, tableCorrect: 11, totalTime: 180 };
   }
   if (gameKey === 'vigilance') {
     return { totalScore: 620, starsCleared: 48, prioritiesCleared: 5, misKeyed: 3, totalTime: 180 };
@@ -126,6 +129,23 @@ describe('CBAT roster completion — SIT / SLT / VLT / MATF / Vigilance', () => 
     expect(res.body.data.gridCorrect).toBe(13);
     expect(res.body.data.tableCorrect).toBe(11);
     expect(res.body.data.attempted).toBe(30);
+  });
+
+  it('ranks MATF on correct minus wrong, worked out by the server', async () => {
+    // A free wrong answer made mashing the buttons the best strategy. The score
+    // is computed server-side, so a client that sends its own is ignored.
+    const res = await request(app)
+      .post('/api/games/cbat/matf/result')
+      .set('Cookie', cookie)
+      .send({ ...bodyFor('matf'), score: 999 });
+    expect(res.body.data.score).toBe(18); // 24 right, 6 wrong
+
+    const spam = await request(app)
+      .post('/api/games/cbat/matf-easier/result')
+      .set('Cookie', cookie)
+      .send({ correctCount: 40, attempted: 200, gridCorrect: 20, tableCorrect: 20, totalTime: 220 });
+    expect(spam.body.data.score).toBe(0);
+    expect(spam.body.data.correctCount).toBe(40);
   });
 
   it('stores the Vigilance breakdown alongside the score', async () => {

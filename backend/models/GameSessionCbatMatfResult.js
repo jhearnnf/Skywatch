@@ -5,6 +5,8 @@ const mongoose = require('mongoose');
 // `attempted` is stored alongside `correctCount` to make accuracy readable.
 const schema = new mongoose.Schema({
   userId:       { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  // Ranked value: correct minus wrong, floored at 0. See matfScore.
+  score:        { type: Number },
   correctCount: { type: Number },
   attempted:    { type: Number },
   gridCorrect:  { type: Number },   // part one — the coordinate grid
@@ -14,6 +16,6 @@ const schema = new mongoose.Schema({
 });
 
 schema.index({ userId: 1, createdAt: -1 });
-schema.index({ correctCount: -1, totalTime: 1 });
+schema.index({ score: -1, totalTime: 1 });
 
 module.exports = mongoose.model('GameSessionCbatMatfResult', schema);

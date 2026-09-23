@@ -23,6 +23,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { normalizeInputMethod, normalizePedals } = require('../constants/cbatInputMethods');
 const { saveCbatResult } = require('../utils/cbatResult');
+const { matfScore } = require('../utils/matfScore');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
 const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
@@ -2544,10 +2545,15 @@ router.post('/cbat/vlt-easier/result', protect, (req, res) => submitQuestionCoun
 // Speeded rather than fixed-length, so `attempted` comes up with the score —
 // without it a 20 tells you nothing about whether the player was accurate or
 // simply fast. gridCorrect + tableCorrect split the two parts.
+//
+// The ranked `score` is worked out HERE from correctCount and attempted, never
+// taken from the body, so an older client that doesn't know about the wrong-
+// answer penalty still gets it applied.
 async function submitMatfResult(req, res, Model) {
   try {
     const { correctCount, attempted, gridCorrect, tableCorrect, totalTime } = req.body;
     const result = await saveCbatResult(Model, req, {
+      score: matfScore(correctCount, attempted),
       correctCount,
       attempted,
       gridCorrect,

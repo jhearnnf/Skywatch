@@ -49,7 +49,7 @@ import {
 } from '../utils/cbat/matfPrint'
 import {
   MATF_DIFFICULTIES, MATF_LAUNCH_MS, DEFAULT_MATF_DIFFICULTY,
-  matfTuning, computeMatfGrade,
+  matfTuning, computeMatfGrade, matfScore,
   readStoredMatfDifficulty, storeMatfDifficulty,
 } from '../utils/cbat/matfDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
@@ -246,7 +246,8 @@ function PrintAskCard({ onPrint, onSkip }) {
 
 function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade, replayedSheet }) {
   const correct = gridCorrect + tableCorrect
-  const accuracy = attempted ? Math.round((correct / attempted) * 100) : 0
+  const wrong = attempted - correct
+  const score = matfScore(correct, attempted)
   const emoji = grade === 'Outstanding' ? '🎖️' : grade === 'Good' ? '📋' : grade === 'Needs Work' ? '🔧' : '💥'
   const color = grade === 'Outstanding' ? 'text-green-400' : grade === 'Good' ? 'text-brand-600' : grade === 'Needs Work' ? 'text-amber-400' : 'text-red-400'
 
@@ -265,15 +266,20 @@ function ResultsScreen({ gridCorrect, tableCorrect, attempted, totalTime, grade,
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex flex-wrap justify-center gap-4 sm:gap-8 items-end">
           <div>
-            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{correct}</p>
-            <p className="text-sm text-slate-400">correct</p>
+            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{score}</p>
+            <p className="text-sm text-slate-400">score</p>
           </div>
           <div className="w-px h-12 bg-game-line" />
           <div>
-            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{accuracy}%</p>
-            <p className="text-sm text-slate-400">of {attempted} attempted</p>
+            <p className="text-3xl sm:text-4xl font-mono font-bold text-green-400 mb-1">{correct}</p>
+            <p className="text-sm text-slate-400">right</p>
+          </div>
+          <div>
+            <p className="text-3xl sm:text-4xl font-mono font-bold text-red-400 mb-1">{wrong}</p>
+            <p className="text-sm text-slate-400">wrong</p>
           </div>
         </div>
+        <p className="text-[11px] text-slate-500 mt-3">Each wrong answer takes a point off your score.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -382,7 +388,7 @@ export default function CbatMatf() {
     const correctCount = totals.grid + totals.table
     setScoreSaved(false)
     setQueued(false)
-    markGameCompleted({ score: correctCount })
+    markGameCompleted({ score: matfScore(correctCount, totals.attempted) })
     // A run on a sheet the player printed earlier is a run on numbers they have
     // already looked at, so it never reaches a board. Same rule as the admin
     // round-skip cheat: play it, see it, don't rank it.
@@ -569,6 +575,7 @@ export default function CbatMatf() {
 
   const playing = phase === 'part1' || phase === 'part2'
   const correctSoFar = gridCorrect + tableCorrect
+  const scoreSoFar = matfScore(correctSoFar, attempted)
   // A part is a countdown with no fixed problem count, so the title bar shows
   // no item count and the Time meter carries the part.
   const testBar = playing ? {
@@ -635,7 +642,7 @@ export default function CbatMatf() {
               <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{introTuning.blurb}</p>
 
               <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
-                Two parts against the clock. Answer as many as you can. Nothing here is hard to understand, and everything here is hard to do quickly.
+                Two parts against the clock. Answer as many as you can, but a wrong answer takes a point off, so don't guess. Nothing here is hard to understand, and everything here is hard to do quickly.
               </p>
 
               <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
@@ -666,7 +673,7 @@ export default function CbatMatf() {
               </div>
 
               <CbatPersonalBest label={introTuning.label} best={personalBest} loading={bestLoading} className={dim}>
-                {best => <>{best.bestScore} correct</>}
+                {best => <>{best.bestScore} points</>}
               </CbatPersonalBest>
 
               <div className={`text-center mb-4${dim}`}>
@@ -775,7 +782,7 @@ export default function CbatMatf() {
               {/* HUD — under the Real CBAT theme the title bar carries this */}
               {!cbat && <div className="flex items-center justify-between text-xs font-mono mb-2 px-1 max-w-2xl mx-auto">
                 <span className="text-slate-400">Part <span className="text-brand-600">{phase === 'part1' ? 1 : 2}</span>/2</span>
-                <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span>/{attempted}</span>
+                <span className="text-slate-400">Score <span className="text-brand-600">{scoreSoFar}</span> · <span className="text-green-400">✓ {correctSoFar}</span> <span className="text-red-400">✗ {attempted - correctSoFar}</span></span>
                 <span className="text-slate-400">
                   ⏱ <span className={remainingMs < 15000 ? 'text-red-400' : 'text-brand-600'}>{Math.ceil(remainingMs / 1000)}s</span>
                 </span>
@@ -859,7 +866,7 @@ export default function CbatMatf() {
           {phase === 'results' && (
             <CbatGameOver
               gameKey={gameKey}
-              score={correctSoFar}
+              score={scoreSoFar}
               time={(runTuning.partMs * 2) / 1000}
               scoreSaved={scoreSaved}
               queued={queued}
@@ -871,7 +878,7 @@ export default function CbatMatf() {
                 tableCorrect={tableCorrect}
                 attempted={attempted}
                 totalTime={(runTuning.partMs * 2) / 1000}
-                grade={computeMatfGrade(correctSoFar, runTuning)}
+                grade={computeMatfGrade(scoreSoFar, runTuning)}
                 replayedSheet={replayed ? matfSheetCode(seed) : null}
               />
             </CbatGameOver>

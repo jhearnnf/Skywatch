@@ -211,8 +211,8 @@ export const CBAT_LEADERBOARD_CONFIG = {
   // Speeded — the score is how many you got through, so there is no "/N" and no
   // maxScore. The time column is hidden for the same reason RTT's and CUT's are:
   // both parts always run their full clock, so every real time is identical.
-  'matf':            { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
-  'matf-easier':     { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Correct', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
+  'matf':            { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
+  'matf-easier':     { title: 'Table Reading Test', emoji: '📋', scoreLabel: 'Score', lowerIsBetter: false, formatScore: (s) => `${s}`, backPath: '/cbat/matf', hideTime: true, difficultyGroup: 'matf' },
   // Like ANT, plain 'vigilance' IS the Easier half, keeping the key every score
   // ever set on it sits on (a minute at triple points lands in the same region
   // as the old full run). Hard is a new board from zero: three minutes with

@@ -489,11 +489,15 @@ const CBAT_GAMES = {
     label: 'Verbal Logic Test (Easier)',
   },
   // Speeded, so there is no question ceiling — a better player simply answers
-  // more inside the same clock. Ranks on correctCount like the fixed-length
-  // games, but its board carries no "/N".
+  // more inside the same clock. Its board carries no "/N".
+  //
+  // Ranks on `score` (correct minus wrong, floored at 0), NOT correctCount. On
+  // a speeded test with five options, a free wrong answer made mashing the
+  // buttons the best strategy: ~1 in 5 lands, at whatever speed you can click.
+  // See utils/matfScore.js.
   'matf': {
     Model: GameSessionCbatMatfResult,
-    primaryField: 'correctCount',
+    primaryField: 'score',
     sortDir: -1,
     bestOp: '$max',
     label: 'Table Reading Test',
@@ -502,7 +506,7 @@ const CBAT_GAMES = {
   // smaller wind sheet, and a longer clock on each of the two parts.
   'matf-easier': {
     Model: GameSessionCbatMatfEasierResult,
-    primaryField: 'correctCount',
+    primaryField: 'score',
     sortDir: -1,
     bestOp: '$max',
     label: 'Table Reading Test (Easier)',
