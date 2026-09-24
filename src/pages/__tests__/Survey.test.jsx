@@ -999,3 +999,51 @@ describe('Survey test selection', () => {
     expect(patches).toContainEqual(expect.objectContaining({ testType: 'other', testOther: 'Another aircrew test' }))
   })
 })
+
+describe('Survey — pre-filled from the Aptitude Report', () => {
+  const reachTestStep = async () => {
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'))
+    await advance()
+  }
+
+  it('shows the test and role chosen on the report, without saving either', async () => {
+    mockApi({ prefill: { testType: 'cfast', role: 'rcaf-pilot' } })
+    renderSurvey()
+    await reachTestStep()
+    expect(await screen.findByTestId('survey-test-cfast')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('survey-role-prefilled')).toBeInTheDocument()
+    expect(screen.getByTestId('survey-role-rcaf-pilot').className).toMatch(/bg-brand-600/)
+    // An untouched pre-fill is not an answer.
+    expect(patches.some(p => 'testType' in p || 'role' in p)).toBe(false)
+  })
+
+  it('saves the test along with the role once the pre-filled role is confirmed', async () => {
+    mockApi({ prefill: { testType: 'cfast', role: 'rcaf-pilot' } })
+    renderSurvey()
+    await reachTestStep()
+    fireEvent.click(await screen.findByTestId('survey-role-rcaf-pilot'))
+    await advance()
+    await waitFor(() => expect(patches).toContainEqual(expect.objectContaining({ testType: 'cfast', role: 'rcaf-pilot' })))
+  })
+
+  it('drops the pre-fill when a different test is picked', async () => {
+    mockApi({ prefill: { testType: 'cfast', role: 'rcaf-pilot' } })
+    renderSurvey()
+    await reachTestStep()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat'))
+    await advance()
+    expect(screen.queryByTestId('survey-role-prefilled')).not.toBeInTheDocument()
+  })
+
+  it('never overrides an answer already given', async () => {
+    mockApi({
+      prefill: { testType: 'cfast', role: 'rcaf-pilot' },
+      response: { satTest: true, testType: 'raf-cbat', role: 'wso' },
+    })
+    renderSurvey()
+    await reachTestStep()
+    expect(await screen.findByTestId('survey-test-raf-cbat')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByTestId('survey-role-prefilled')).not.toBeInTheDocument()
+  })
+})

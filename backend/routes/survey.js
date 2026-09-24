@@ -7,6 +7,7 @@ const SurveyInvite   = require('../models/SurveyInvite');
 const SurveyResponse = require('../models/SurveyResponse');
 const surveyRoles    = require('../constants/surveyRoles.json');
 const surveyTests    = require('../constants/surveyTests.json');
+const { BATTERY_BY_KEY, REGIONS } = require('../constants/cbatBatteries');
 const { uploadBuffer, destroyAsset, signedUrl } = require('../utils/cloudinary');
 const {
   SURVEY_CAMPAIGN,
@@ -103,7 +104,19 @@ setInterval(() => {
 async function loadInvite(token) {
   if (!token || typeof token !== 'string' || token.length < 16) return null;
   return SurveyInvite.findOne({ token })
-    .populate('userId', 'displayName agentNumber cbatPassed osSeen.android cbatResultImages');
+    .populate('userId', 'displayName agentNumber cbatPassed osSeen.android cbatResultImages cbatTargetBattery');
+}
+
+// The test and role this person told the Aptitude Report they are aiming for, as answers the
+// questionnaire can offer back. Battery keys are the questionnaire's role keys on purpose (see
+// cbatBatteries.json), and a role's country picks the test. Null when they never chose a role,
+// or chose one the questionnaire no longer lists.
+const SURVEY_ROLE_KEYS = new Set(surveyRoles.groups.flatMap(g => g.roles.map(r => r.key)));
+function prefillFor(user) {
+  const battery = BATTERY_BY_KEY[user?.cbatTargetBattery];
+  const testType = battery ? REGIONS[battery.region]?.surveyTest : null;
+  if (!testType || !SURVEY_ROLE_KEYS.has(battery.key)) return null;
+  return { testType, role: battery.key };
 }
 
 function nameFor(user) {
@@ -420,6 +433,9 @@ router.get('/:token', throttle, async (req, res) => {
         resultImages: ownSheets(invite.userId),
         // Answers so far, so a reopened link resumes rather than restarts.
         response: response ?? null,
+        // What they chose on the Aptitude Report, offered as the starting answer to "which test"
+        // and "which role". Only offered, never saved: it lands in `response` when they confirm it.
+        prefill: prefillFor(invite.userId),
       },
     });
   } catch (err) {

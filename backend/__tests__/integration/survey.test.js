@@ -116,6 +116,33 @@ describe('GET /api/survey/:token', () => {
     const res = await get();
     expect(res.body.data.response.role).toBe('pilot');
   });
+
+  describe('pre-fill from the Aptitude Report', () => {
+    it('offers the test and role chosen on the report', async () => {
+      await User.updateOne({ _id: user._id }, { cbatTargetBattery: 'wso' });
+      const res = await get();
+      expect(res.body.data.prefill).toEqual({ testType: 'raf-cbat', role: 'wso' });
+    });
+
+    it("picks the test from the role's country", async () => {
+      await User.updateOne({ _id: user._id }, { cbatTargetBattery: 'rcaf-acso' });
+      expect((await get()).body.data.prefill).toEqual({ testType: 'cfast', role: 'rcaf-acso' });
+      await User.updateOne({ _id: user._id }, { cbatTargetBattery: 'raaf-air-battle-manager' });
+      expect((await get()).body.data.prefill).toEqual({ testType: 'adf-asp', role: 'raaf-air-battle-manager' });
+    });
+
+    it('offers nothing when no role was chosen, or the role no longer exists', async () => {
+      expect((await get()).body.data.prefill).toBeNull();
+      await User.updateOne({ _id: user._id }, { cbatTargetBattery: 'retired-role' });
+      expect((await get()).body.data.prefill).toBeNull();
+    });
+
+    it('never saves the pre-fill as an answer', async () => {
+      await User.updateOne({ _id: user._id }, { cbatTargetBattery: 'pilot' });
+      await get();
+      expect(await SurveyResponse.findOne({ inviteId: invite._id })).toBeNull();
+    });
+  });
 });
 
 describe('PATCH /api/survey/:token — progressive saving', () => {

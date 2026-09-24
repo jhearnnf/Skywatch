@@ -338,6 +338,19 @@ export default function Survey() {
     }
   }, [answers])
 
+  // The test and role they chose on the Aptitude Report, shown as the starting answers to "which
+  // test" and "which role" until they give their own. Never saved as it stands: an untouched
+  // pre-fill is not an answer, so it only reaches the server when they tap to confirm it. Off as
+  // soon as any role is on record, or once they pick a different test.
+  const prefill = meta?.prefill ?? null
+  const prefillActive = !!prefill && !answers.role && !answers.roleOther
+    && (!answers.testType || answers.testType === prefill.testType)
+  const shown = prefillActive
+    ? { ...answers, testType: answers.testType ?? prefill.testType, role: prefill.role }
+    : answers
+  // A role answer carries the test with it while the test is still only pre-filled.
+  const withTest = (patch) => (answers.testType ? patch : { testType: shown.testType, testOther: null, ...patch })
+
   const answerAndAdvance = useCallback((from, patch, value) => {
     const next = advanceFrom(from, value)
     // Completion is marked when the last QUESTION is answered, not when the
@@ -491,23 +504,28 @@ export default function Survey() {
           )}
 
           {step === 'test' && (
-            <TestCard answers={answers} onSelect={(patch) => save({
+            <TestCard answers={shown} onSelect={(patch) => save({
               ...patch,
-              ...(patch.testType !== answers.testType ? { role: null, roleOther: null, passedForRole: null, passedAnyRole: null, passedAnyRoleWhich: null } : {}),
+              ...(patch.testType !== shown.testType ? { role: null, roleOther: null, passedForRole: null, passedAnyRole: null, passedAnyRoleWhich: null } : {}),
             })}>
               <section className="mt-4 border-l-2 border-brand-400 pl-4" aria-labelledby="survey-role-heading">
                 <h2 id="survey-role-heading" className="text-base font-bold text-slate-900 mb-1">Which role were you aiming for?</h2>
                 <p className="text-xs text-slate-500 mb-3">If you were aiming for more than one role, choose your first choice.</p>
+                {prefillActive && (
+                  <p className="text-xs text-brand-700 mb-3" data-testid="survey-role-prefilled">
+                    We filled this in from your Aptitude Report. Tap it to confirm, or choose another.
+                  </p>
+                )}
                 <RoleCombobox
-                  key={answers.testType}
-                  testType={answers.testType}
-                  value={answers.role}
-                  other={answers.roleOther}
+                  key={shown.testType}
+                  testType={shown.testType}
+                  value={shown.role}
+                  other={shown.roleOther}
                   onSelect={(key) => {
-                    if (key === OTHER_ROLE_KEY || key === null) save({ role: key, roleOther: null })
-                    else answerAndAdvance('test', { role: key, roleOther: null }, key)
+                    if (key === OTHER_ROLE_KEY || key === null) save(withTest({ role: key, roleOther: null }))
+                    else answerAndAdvance('test', withTest({ role: key, roleOther: null }), key)
                   }}
-                  onOtherSubmit={(text) => answerAndAdvance('test', { role: OTHER_ROLE_KEY, roleOther: text }, OTHER_ROLE_KEY)}
+                  onOtherSubmit={(text) => answerAndAdvance('test', withTest({ role: OTHER_ROLE_KEY, roleOther: text }), OTHER_ROLE_KEY)}
                 />
               </section>
             </TestCard>
