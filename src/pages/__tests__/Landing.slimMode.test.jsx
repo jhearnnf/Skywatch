@@ -5,8 +5,9 @@ import { CBAT_GUIDE_HREF } from '../../utils/guideHref'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
-// Force slim ("CBAT-only") mode for this whole file.
-vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => true }))
+// Slim mode is deliberately NOT mocked on: the CBAT page is the only landing
+// page now, whatever slim mode says. Pinning it off proves that.
+vi.mock('../../hooks/useSlimMode', () => ({ useSlimMode: () => false }))
 
 vi.mock('react-router-dom', () => ({
   // Cancels the default like the real Link, so jsdom does not try to navigate.
@@ -66,7 +67,7 @@ vi.mock('framer-motion', () => ({
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-describe('Landing — slim (CBAT-only) mode', () => {
+describe('Landing — the CBAT-focused page, shown even with slim mode off', () => {
   beforeEach(() => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
   })
@@ -211,5 +212,24 @@ describe('Landing — native app', () => {
   it('links the guide through the platform-aware href', () => {
     render(<Landing />)
     expect(screen.getByText('CBAT Guide').getAttribute('href')).toBe(CBAT_GUIDE_HREF)
+  })
+})
+
+describe('Landing — legacy full-site page (admin-only /homepagelegacy)', () => {
+  beforeEach(() => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) })
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('renders the old hero, preview windows and learning sections', () => {
+    render(<Landing legacy />)
+    expect(screen.getByText('Aviation Knowledge')).toBeDefined()
+    expect(screen.queryByText('Aircrew CBAT')).toBeNull()
+    expect(screen.queryByTestId('live-game-grid')).toBeNull()
+  })
+
+  it('does not show the player progress charts, which the old page never had', () => {
+    render(<Landing legacy />)
+    expect(screen.queryByTestId('player-progress-wall')).toBeNull()
   })
 })

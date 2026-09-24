@@ -32,6 +32,7 @@ export const SLIM_APP = (() => {
 // allow-listed separately below).
 const SLIM_ALLOWED_PREFIXES = [
   '/',                   // slimmed CBAT-focused landing page (Landing.jsx)
+  '/homepagelegacy',     // old full-site landing page, admin-only (App.jsx LegacyLandingRoute)
   '/login',              // register + sign in
   '/cbat',               // games home + all games + leaderboards
   '/profile',            // profile + badge picker

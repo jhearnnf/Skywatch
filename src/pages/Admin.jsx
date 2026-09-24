@@ -4048,7 +4048,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled', 'previewWindowIntelBriefEnabled', 'previewWindowCbatEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -4094,27 +4094,6 @@ function SettingsTab({ API }) {
           hint="When on, the header logo links to the landing/welcome page (the live game wall and the player progress charts) in the Android app and on a slimmed website. When off, the logo stops being a link and the site URL goes straight to the CBAT game selection page, so there is no way to reach it. The app opens on the games either way, apart from the very first launch before signing up."
           checked={draft.slimLandingEnabled !== false}
           onChange={v => set('slimLandingEnabled', v)}
-        />
-        {/* Landing-page preview windows. Slim mode has no preview windows at all
-            — Landing.jsx gates both on !slim — so these are dead controls while
-            it is on, and say so rather than pretending to work. Read off the
-            draft, not the saved settings, so turning slim mode on above greys
-            them out straight away instead of waiting for a save. */}
-        <Toggle
-          label="Intel Brief preview window"
-          hint="Shows a looping montage of the intel-brief games (Priority pathway, Intel Recall, Flashcards, Where's That Aircraft, Battle of Order, Aptitude Sync, Case Files) on the public landing page. Per-game gates (e.g. aptitudeSyncEnabled) still filter individual scenes."
-          checked={draft.previewWindowIntelBriefEnabled !== false}
-          onChange={v => set('previewWindowIntelBriefEnabled', v)}
-          disabled={draft.slimModeEnabled ?? false}
-          disabledHint="Unavailable while Slim (CBAT-only) Site Mode is on — the slim site shows no preview windows."
-        />
-        <Toggle
-          label="CBAT preview window"
-          hint="Shows a looping montage of the CBAT practice games on the public landing page. Per-game cbatGameEnabled flags still filter individual scenes."
-          checked={draft.previewWindowCbatEnabled !== false}
-          onChange={v => set('previewWindowCbatEnabled', v)}
-          disabled={draft.slimModeEnabled ?? false}
-          disabledHint="Unavailable while Slim (CBAT-only) Site Mode is on — the slim site shows no preview windows."
         />
       </Section>
 

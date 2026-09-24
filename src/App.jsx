@@ -201,6 +201,15 @@ function LegacyAgentProfileRedirect() {
   return <Navigate to={`/agent/${id}`} replace state={location.state} />
 }
 
+// The old full-site landing page, kept for admins only. Everyone else is sent
+// to the live landing page at `/`, so the URL gives nothing away.
+function LegacyLandingRoute() {
+  const { user, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!user?.isAdmin) return <Navigate to="/" replace />
+  return <Landing legacy />
+}
+
 function LoginRoute() {
   const { user, loading } = useAuth()
   const isPresent = useIsPresent()
@@ -296,6 +305,7 @@ function AppRoutes() {
 
           {/* Public */}
           <Route path="/" element={<PageWrapper><Landing /></PageWrapper>} />
+          <Route path="/homepagelegacy" element={<PageWrapper><LegacyLandingRoute /></PageWrapper>} />
           <Route path="/login" element={<LoginRoute />} />
 
           {/* Core learning (accessible without login, progress tracked when logged in) */}

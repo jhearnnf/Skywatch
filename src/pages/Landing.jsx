@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
-import { useSlimMode } from '../hooks/useSlimMode'
 import { captureEvent } from '../lib/posthog'
 import { hardNavigate } from '../utils/hardNavigate'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
@@ -88,7 +87,13 @@ function CornerBrackets({ size = 18, color = '#5baaff', opacity = 0.4 }) {
 // fires when it has stalled.
 const STALLED_NAV_MS = 2000
 
-export default function Landing() {
+// The CBAT-focused page is the only landing page the site shows now, whatever
+// slim mode is set to. The old full-site page (intel briefs, subject areas,
+// preview windows) is kept as `legacy` for admins to view at /homepagelegacy
+// and is reachable from nowhere else. Most branches below still read `slim`,
+// which here just means "not the legacy page". The legacy page is frozen: do
+// not add anything new to its branches (the proof wall is gated off it too).
+export default function Landing({ legacy = false }) {
   const { user, API } = useAuth()
 
   // The CBAT buttons navigate in-app, which waits on AnimatePresence's
@@ -104,7 +109,7 @@ export default function Landing() {
     stalledNavTimer.current = setTimeout(() => hardNavigate(href), STALLED_NAV_MS)
   }
   const { settings } = useAppSettings()
-  const slim = useSlimMode()
+  const slim = !legacy
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [liveStats, setLiveStats] = useState(null)
   // Imported lazily inside the registry; here we just need the metadata list
@@ -492,9 +497,11 @@ export default function Landing() {
           before it had shown any reason to say yes, and left the page trailing
           off on charts with no button — a visitor the charts convinced had to
           scroll back up to act. */}
-      <Suspense fallback={null}>
-        <PlayerProgressWall />
-      </Suspense>
+      {slim && (
+        <Suspense fallback={null}>
+          <PlayerProgressWall />
+        </Suspense>
+      )}
 
       {/* ── CTA ───────────────────────────────────────────── */}
       <section className="py-12 sm:py-20 px-5">

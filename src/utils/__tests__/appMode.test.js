@@ -78,6 +78,11 @@ describe('appMode', () => {
       expect(isSlimAllowed('/donate')).toBe(true)
     })
 
+    // Admin-only; the route itself sends everyone else to `/`.
+    it('allows the legacy landing page so admins can view it in slim mode', () => {
+      expect(isSlimAllowed('/homepagelegacy')).toBe(true)
+    })
+
     it('allows chat, which slim mode keeps', () => {
       // Slim mode keeps chat on every platform. The chatEnabled feature flag is
       // the only thing that takes Community away now.
