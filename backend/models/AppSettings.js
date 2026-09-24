@@ -498,8 +498,15 @@ appSettingsSchema.statics.getSettings = async function () {
       const current = settings.featureFlags;
       let touched = false;
       const next = {};
+      // Retired flags (e.g. `world3d`, replaced by hangarGameEnabled) are
+      // pruned rather than carried over. The admin Feature Flags section
+      // sends the whole map back on save and the PATCH route rejects unknown
+      // keys, so one leftover key made that section impossible to save.
       if (current && typeof current.forEach === 'function') {
-        current.forEach((v, k) => { next[k] = v; });
+        current.forEach((v, k) => {
+          if (k in KNOWN_FLAG_KEYS) next[k] = v;
+          else touched = true;
+        });
       }
       for (const [k, v] of Object.entries(KNOWN_FLAG_KEYS)) {
         if (!(k in next)) { next[k] = v; touched = true; }
