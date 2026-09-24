@@ -157,7 +157,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['clan', 'clan-easier'],
     simulates: 'CLAN',
     aliases: ['clan', 'colours letters and numbers', 'colours, letters and numbers', 'colors letters and numbers', 'diamonds'],
-    what: 'ninety seconds of three tasks at once: press R, Y or G as each coloured diamond crosses its colour band, memorise a letter code and pick it out of four near-identical options in the corners (A to D), and type the sums as they appear. The test the RAF replaced with FLAG in 2021; still sat in Canada, so it shares the FLAG tile for players there.',
+    what: 'ninety seconds of three tasks at once: press R, Y or G as each coloured diamond crosses its colour band, memorise a letter code and pick it out of four near-identical options in the corners (A to D), and type the sums as they appear. The test the RAF replaced with FLAG in 2021; still sat in Canada and Australia, and it shares the FLAG tile.',
     difficulties: ['Easier', 'Hard'],
   },
   {

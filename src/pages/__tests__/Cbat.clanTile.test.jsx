@@ -111,8 +111,10 @@ describe('the FLAG tile with CLAN on offer', () => {
   it('badges each half with the flag of the country whose battery sits it', () => {
     renderHub()
     const halves = [...flagCard().querySelectorAll('[data-tile-half]')]
-    expect(halves[0].querySelector('[data-flag]').getAttribute('data-flag')).toBe('GB')
-    expect(halves[1].querySelector('[data-flag]').getAttribute('data-flag')).toBe('CA')
+    const flagsOf = half => [...half.querySelectorAll('[data-flag]')].map(f => f.getAttribute('data-flag'))
+    expect(flagsOf(halves[0])).toEqual(['GB'])
+    // CLAN is sat in both Canada (CFAST) and Australia (MACTS).
+    expect(flagsOf(halves[1])).toEqual(['CA', 'AU'])
     // Drawn, not an emoji: Windows renders flag emoji as two letters in a box.
     expect(halves[1].querySelector('svg[data-flag]')).toBeTruthy()
   })
@@ -121,9 +123,9 @@ describe('the FLAG tile with CLAN on offer', () => {
     renderHub()
     const hints = [...flagCard().querySelectorAll('[data-tile-hint]')]
     expect(hints.map(h => [...h.querySelectorAll('span')].find(el => el.className.includes('sm:inline')).textContent))
-      .toEqual(['Sat in the UK: RAF and Royal Navy', 'Sat in Canada on CFAST'])
+      .toEqual(['Sat in the UK: RAF and Royal Navy', 'Sat in Canada and Australia'])
     // The phone tile is 83px wide, so it gets the same in fewer characters.
-    expect(hints.map(h => [...h.querySelectorAll('span')].find(el => el.className === 'sm:hidden').textContent)).toEqual(['UK: RAF and RN', 'Canada: CFAST'])
+    expect(hints.map(h => [...h.querySelectorAll('span')].find(el => el.className === 'sm:hidden').textContent)).toEqual(['UK: RAF and RN', 'Canada, Australia'])
     // Parked off the left edge until the half is hovered, then it slides
     // across into place. The half clips it, so it enters from the edge.
     for (const h of hints) {

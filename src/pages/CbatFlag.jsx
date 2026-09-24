@@ -184,12 +184,12 @@ function IntroScreen({
         </button>
       </div>
 
-      {/* The other test on the same tile (Canada's CFAST sits CLAN, not FLAG).
+      {/* The other test on the same tile (Canada and Australia sit CLAN, not FLAG).
           The hub's hover split does the same job on a desktop; this is how a
           phone gets there. */}
       {clanOffered && (
         <p className={`mt-5 text-[11px] text-slate-500${dim}`}>
-          Sitting the Canadian battery? That one uses CLAN, not FLAG.{' '}
+          Sitting the Canadian or Australian test? Those use CLAN, not FLAG.{' '}
           <Link to="/cbat/clan" data-testid="flag-to-clan" className="text-brand-600 hover:text-brand-700 transition-colors">Play CLAN →</Link>
         </p>
       )}

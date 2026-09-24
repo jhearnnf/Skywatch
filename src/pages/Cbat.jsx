@@ -274,7 +274,7 @@ const SPLIT_TILES = {
 const persistMode = (key, mode) => { try { localStorage.setItem(key, mode) } catch { /* storage unavailable */ } }
 
 // The FLAG tile also holds CLAN, the test the RAF replaced with FLAG and that
-// Canada's CFAST still sits (see utils/cbat/clanOffer.js for why everyone gets
+// Canada's CFAST and Australia's MACTS still sit (see utils/cbat/clanOffer.js for why everyone gets
 // it). The tile reads FLAG | CLAN and fans out into the two on hover the way
 // Visualisation does. The halves are two different pages rather than two modes
 // of one, so each carries its own `path`; nothing is persisted. Touch devices,
@@ -287,14 +287,14 @@ const FLAG_CLAN_SPLIT = {
   tapToChoose: true,
   // FLAG is a minute, CLAN a minute and a half.
   estMinutes: [1, 1.5],
-  desc: 'FLAG: track aircraft, answer maths and identification questions, hit target shapes. CLAN: the Colours, Letters and Numbers test, still sat in Canada.',
-  // `flag` is the country whose battery sits that test, drawn in the corner of
-  // its half (inline SVG, not an emoji: Windows has no flag glyphs).
+  desc: 'FLAG: track aircraft, answer maths and identification questions, hit target shapes. CLAN: the Colours, Letters and Numbers test, still sat in Canada and Australia.',
+  // `flags` are the countries whose battery sits that test, drawn side by side
+  // in the corner of its half (inline SVG, not an emoji: Windows has no flag glyphs).
   // `hint` is the caption that says whose battery sits it; `shortHint` is the
   // same in the few characters an 83px phone tile has room for.
   halves: [
-    { label: 'FLAG', mode: 'flag', path: '/cbat/flag', lbKey: 'flag', flag: 'GB', hint: 'Sat in the UK: RAF and Royal Navy', shortHint: 'UK: RAF and RN' },
-    { label: 'CLAN', mode: 'clan', path: '/cbat/clan', lbKey: 'clan', flag: 'CA', hint: 'Sat in Canada on CFAST',             shortHint: 'Canada: CFAST' },
+    { label: 'FLAG', mode: 'flag', path: '/cbat/flag', lbKey: 'flag', flags: ['GB'], hint: 'Sat in the UK: RAF and Royal Navy', shortHint: 'UK: RAF and RN' },
+    { label: 'CLAN', mode: 'clan', path: '/cbat/clan', lbKey: 'clan', flags: ['CA', 'AU'], hint: 'Sat in Canada and Australia', shortHint: 'Canada, Australia' },
   ],
 }
 
@@ -392,7 +392,11 @@ function CombinedGameTile({ game: tileGame, i, split, flickeringKey, enabled, is
                 ? 'px-1 py-0.5 rounded-lg sm:max-w-[40%] sm:px-5 sm:py-6 sm:rounded-xl'
                 : 'max-w-[40%] px-5 py-6 rounded-xl'}`}
           >
-            {h.flag && <CountryFlag code={h.flag} width={22} className="absolute top-1 left-1 w-3.5 h-auto sm:top-2 sm:left-2 sm:w-[22px]" />}
+            {h.flags && (
+              <span className="absolute top-1 left-1 flex gap-0.5 sm:top-2 sm:left-2 sm:gap-1">
+                {h.flags.map(code => <CountryFlag key={code} code={code} width={22} className="w-3.5 h-auto sm:w-[22px]" />)}
+              </span>
+            )}
             <span className={`font-extrabold tracking-wide uppercase ${chooser ? 'text-[10px] sm:text-base' : 'text-base'}`}>{h.label}</span>
             {/* Whose battery sits this test. On hover the caption swipes in
                 from the left edge of the half: it starts off-screen to the
