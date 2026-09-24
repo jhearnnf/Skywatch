@@ -21,7 +21,7 @@ vi.mock('framer-motion', () => ({
 }))
 
 const setUser = vi.fn()
-let currentUser = { _id: 'u1', cbatTargetBattery: null }
+let currentUser = { _id: 'u1', cbatTargetBattery: 'nco-control-atc' }
 
 vi.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: currentUser, setUser, API: '', apiFetch: (...args) => fetch(...args) }),
@@ -87,7 +87,7 @@ const reportUsers = [
 
 beforeEach(() => {
   searchParams = new URLSearchParams()
-  currentUser = { _id: 'u1', cbatTargetBattery: null }
+  currentUser = { _id: 'u1', cbatTargetBattery: 'nco-control-atc' }
   global.fetch = vi.fn((url) => {
     let body = summary
     if (url.includes('/report-users')) body = { users: reportUsers }
@@ -463,6 +463,7 @@ describe('CbatAptitudeReport', () => {
   })
 
   it('shows every role scored when the picker is opened, and saves a target', async () => {
+    searchParams = new URLSearchParams('role=pilot')
     render(<CbatAptitudeReport />)
     await screen.findByText('100')
 
@@ -489,7 +490,7 @@ describe('CbatAptitudeReport', () => {
   })
 
   describe('as an admin', () => {
-    beforeEach(() => { currentUser = { _id: 'a1', isAdmin: true, cbatTargetBattery: null } })
+    beforeEach(() => { currentUser = { _id: 'a1', isAdmin: true, cbatTargetBattery: 'nco-control-atc' } })
 
     it('says plainly whose report is on screen', async () => {
       render(<CbatAptitudeReport />)
@@ -744,5 +745,123 @@ describe('CbatAptitudeReport — your scores on a phone', () => {
     const desktop = [...container.querySelectorAll('.hidden.sm\\:block')]
       .find(el => el.textContent.includes('Last 3:'))
     expect(desktop).toBeDefined()
+  })
+})
+
+
+describe('CbatAptitudeReport: choosing a role for the first time', () => {
+  const withSummary = (extra) => {
+    global.fetch = vi.fn((url) => {
+      let body = { ...summary, ...extra }
+      if (url.includes('/report/')) body = report
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+  }
+  beforeEach(() => { currentUser = { _id: 'u1', cbatTargetBattery: null } })
+
+  it('asks for a role before showing any report', async () => {
+    withSummary({ region: 'GB', detectedRegion: 'GB' })
+    render(<CbatAptitudeReport />)
+    expect(await screen.findByText('Which role are you aiming for?')).toBeInTheDocument()
+    expect(screen.getByTestId('aptitude-role-pilot')).toBeInTheDocument()
+    // Nothing is fetched for a role nobody chose.
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/report/'), expect.anything())
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('/report/'))
+  })
+
+  it('fills in the detected region and lists only its roles', async () => {
+    withSummary({ region: 'CA', detectedRegion: 'CA' })
+    render(<CbatAptitudeReport />)
+    const box = await screen.findByTestId('aptitude-question-region')
+    expect(box.getAttribute('data-value')).toBe('CA')
+    expect(screen.getByTestId('aptitude-role-rcaf-pilot')).toBeInTheDocument()
+    expect(screen.getByTestId('aptitude-role-rcaf-aec')).toBeInTheDocument()
+    expect(screen.queryByTestId('aptitude-role-pilot')).not.toBeInTheDocument()
+  })
+
+  it('switches the role list when the region is changed', async () => {
+    withSummary({ region: 'GB', detectedRegion: 'GB' })
+    render(<CbatAptitudeReport />)
+    fireEvent.click(await screen.findByTestId('aptitude-question-region-AU'))
+    // The test's apiFetch is a new function every render, so the summary reloads; wait for it.
+    expect(await screen.findByTestId('aptitude-role-raaf-air-battle-manager')).toBeInTheDocument()
+    expect(screen.queryByTestId('aptitude-role-pilot')).not.toBeInTheDocument()
+  })
+
+  it('saves the role picked, which carries its country', async () => {
+    withSummary({ region: 'AU', detectedRegion: 'AU' })
+    render(<CbatAptitudeReport />)
+    fireEvent.click(await screen.findByTestId('aptitude-role-raaf-pilot'))
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/users/me/target-battery',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ batteryKey: 'raaf-pilot' }) }),
+      )
+    })
+  })
+
+  it('never asks a player who has already chosen a role', async () => {
+    currentUser = { _id: 'u1', cbatTargetBattery: 'pilot' }
+    withSummary({ region: 'GB', detectedRegion: 'CA' })
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(screen.queryByText('Which role are you aiming for?')).not.toBeInTheDocument()
+  })
+})
+
+describe('CbatAptitudeReport: a Canadian or Australian role', () => {
+  it('says the weights are borrowed from the closest UK role, with CLAN for FLAG', async () => {
+    currentUser = { _id: 'u1', cbatTargetBattery: 'rcaf-pilot' }
+    global.fetch = vi.fn((url) => {
+      const body = url.includes('/report/')
+        ? { ...report, key: 'rcaf-pilot', region: 'CA', basedOn: 'pilot' }
+        : { ...summary, region: 'CA', detectedRegion: 'CA' }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+    render(<CbatAptitudeReport />)
+    const note = await screen.findByTestId('aptitude-borrowed-note')
+    expect(note.textContent).toMatch(/Canada doesn.t publish how each test is weighted/)
+    expect(note.textContent).toMatch(/closest UK role \(Pilot\), with CLAN in place of FLAG/)
+    expect(note.textContent).toMatch(/not part of the CFAST are left out/)
+  })
+
+  it('offers the region box in the role picker too', async () => {
+    currentUser = { _id: 'u1', cbatTargetBattery: 'rcaf-pilot' }
+    global.fetch = vi.fn((url) => {
+      const body = url.includes('/report/') ? report : { ...summary, region: 'CA', detectedRegion: 'CA' }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    fireEvent.click(screen.getByText('Change role'))
+    expect((await screen.findByTestId('aptitude-picker-region')).getAttribute('data-value')).toBe('CA')
+    expect(screen.getByText('Air Combat Systems Officer (ACSO)')).toBeInTheDocument()
+  })
+})
+
+
+describe('CbatAptitudeReport: an admin simulating a region', () => {
+  afterEach(() => localStorage.clear())
+
+  it('asks the simulated country\'s role question even though the admin has a UK role', async () => {
+    localStorage.setItem('sw_cbat_admin_region', 'CA')
+    currentUser = { _id: 'a1', isAdmin: true, cbatTargetBattery: 'pilot' }
+    global.fetch = vi.fn((url) => {
+      let body = { ...summary, region: 'CA', detectedRegion: 'CA' }
+      if (url.includes('/report-users')) body = { users: reportUsers }
+      else if (url.includes('/report/')) body = report
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success', data: body }) })
+    })
+    render(<CbatAptitudeReport />)
+    expect(await screen.findByTestId('aptitude-role-rcaf-pilot')).toBeInTheDocument()
+    expect(screen.getByText(/as a new player in/)).toBeInTheDocument()
+    expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('simRegion=CA'))
+  })
+
+  it('never sends a stored region for a player', async () => {
+    localStorage.setItem('sw_cbat_admin_region', 'CA')
+    render(<CbatAptitudeReport />)
+    await screen.findByText('100')
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('simRegion'))
   })
 })

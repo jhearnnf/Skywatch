@@ -261,3 +261,66 @@ describe('the ceiling on a bounded game', () => {
     }
   });
 });
+
+
+// Canada and Australia publish no weights, so their roles borrow a UK one. These pin what the
+// borrowing may and may not change.
+describe('Canadian and Australian roles', () => {
+  const { REGIONS, normaliseRegion, detectRegion, reportRegionFor } = require('../../constants/cbatBatteries');
+  const surveyRoles = require('../../constants/surveyRoles.json');
+  const derived = BATTERIES.filter(b => b.basedOn);
+  const codes = b => b.domains.flatMap(d => d.tests.map(t => t.code));
+
+  it('gives every role a known region, and every UK role GB', () => {
+    for (const b of BATTERIES) expect([b.key, !!REGIONS[b.region]]).toEqual([b.key, true]);
+    for (const b of BATTERIES.filter(x => !x.basedOn)) expect([b.key, b.region]).toEqual([b.key, 'GB']);
+    expect(new Set(derived.map(b => b.region))).toEqual(new Set(['CA', 'AU']));
+  });
+
+  it("keeps the borrowed role's domain weights and pass mark", () => {
+    for (const b of derived) {
+      const base = BATTERY_BY_KEY[b.basedOn];
+      expect([b.key, b.cutoff]).toEqual([b.key, base.cutoff]);
+      expect([b.key, b.domains.map(d => [d.key, d.weight])]).toEqual([b.key, base.domains.map(d => [d.key, d.weight])]);
+    }
+  });
+
+  it('scores CLAN in place of FLAG', () => {
+    for (const b of derived) {
+      expect([b.key, codes(b).includes('FLAG')]).toEqual([b.key, false]);
+      expect([b.key, codes(b).includes('CLAN')]).toEqual([b.key, true]);
+    }
+  });
+
+  it('leaves out the tests that are not on the CFAST list', () => {
+    for (const b of derived.filter(x => x.region === 'CA')) {
+      for (const gone of ['DAD', 'DPT', 'VLT']) expect([b.key, gone, codes(b).includes(gone)]).toEqual([b.key, gone, false]);
+    }
+    // Australia's list is not reliable enough to drop anything on.
+    expect(codes(BATTERY_BY_KEY['raaf-pilot']).includes('DAD')).toBe(true);
+  });
+
+  it("uses the questionnaire's role keys, so a survey answer can be pre-filled from one", () => {
+    const surveyKeys = new Set(surveyRoles.groups.flatMap(g => g.roles.map(r => r.key)));
+    for (const b of BATTERIES) expect([b.key, surveyKeys.has(b.key)]).toEqual([b.key, true]);
+  });
+
+  it('reads any country it has no roles for as the UK', () => {
+    expect(normaliseRegion('ca')).toBe('CA');
+    expect(normaliseRegion('NZ')).toBe('GB');
+    expect(normaliseRegion(null)).toBe('GB');
+  });
+
+  it('detects the region from the test-date region first, then where the player was first seen', () => {
+    expect(detectRegion({ upcomingCbatRegion: 'AU', firstSeenCountry: 'CA' })).toBe('AU');
+    expect(detectRegion({ firstSeenCountry: 'CA', geo: { country: 'GB' } })).toBe('CA');
+    expect(detectRegion({ geo: { country: 'AU' } })).toBe('AU');
+    expect(detectRegion({})).toBe('GB');
+  });
+
+  it("takes the report's region from the chosen role before anything detected", () => {
+    expect(reportRegionFor({ cbatTargetBattery: 'rcaf-pilot', firstSeenCountry: 'GB' })).toBe('CA');
+    expect(reportRegionFor({ cbatTargetBattery: 'pilot', firstSeenCountry: 'CA' })).toBe('GB');
+    expect(reportRegionFor({ cbatTargetBattery: null, firstSeenCountry: 'AU' })).toBe('AU');
+  });
+});

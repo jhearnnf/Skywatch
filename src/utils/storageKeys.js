@@ -22,6 +22,11 @@ export const cbatLastRankKey    = (gameKey) => `sw_cbat_last_rank_${gameKey}`
 // the CBAT hub; see src/utils/cbatAdminView.js.
 export const CBAT_ADMIN_VIEW_KEY = 'sw_cbat_admin_view'
 
+// Admin-only: the country an admin is simulating on the CBAT hub and the
+// Aptitude Report ('GB' | 'CA' | 'AU'; absent = their own). Set from the hub
+// beside the admin view toggle; see src/utils/cbatAdminRegion.js.
+export const CBAT_ADMIN_REGION_KEY = 'sw_cbat_admin_region'
+
 // FLAG's difficulty selection ('easier' | 'hard'). Defaults to 'easier'; once a
 // user switches, their most recent choice is what the instructions screen opens
 // on next visit.

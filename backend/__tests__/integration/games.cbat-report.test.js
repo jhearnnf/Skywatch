@@ -896,14 +896,16 @@ describe('GET /api/games/cbat/report-users', () => {
     const res = await request(app).get('/api/games/cbat/report-users').set('Cookie', adminCookie);
     const row = res.body.data.users.find(u => u.agentNumber === '6000001');
 
-    expect(row.totalRoles).toBe(BATTERIES.length);
+    // Counted over the player's own country's roles. No country on record reads as the UK.
+    const ukRoles = BATTERIES.filter(b => b.region === 'GB');
+    expect(row.totalRoles).toBe(ukRoles.length);
     expect(row.rolesPassed).toBeGreaterThan(0);
-    expect(row.rolesPassed).toBeLessThan(BATTERIES.length);
+    expect(row.rolesPassed).toBeLessThan(ukRoles.length);
 
     // Cross-checked against the per-role endpoint, so the pill can never drift from the report it
     // is advertising.
     let counted = 0;
-    for (const b of BATTERIES) {
+    for (const b of ukRoles) {
       const one = await request(app)
         .get(`/api/games/cbat/report/${b.key}?userId=${capable._id}`)
         .set('Cookie', adminCookie);
@@ -974,5 +976,75 @@ describe('PATCH /api/users/me/target-battery', () => {
   it('requires a signed-in user', async () => {
     const res = await request(app).patch('/api/users/me/target-battery').send({ batteryKey: 'pilot' });
     expect(res.status).toBe(401);
+  });
+});
+
+
+describe('Canadian and Australian reports', () => {
+  it('says which region the report is for, defaulting to where the player was first seen', async () => {
+    await User.findByIdAndUpdate(user._id, { firstSeenCountry: 'CA' });
+    const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+    expect(res.body.data.region).toBe('CA');
+    expect(res.body.data.detectedRegion).toBe('CA');
+    for (const b of res.body.data.batteries) expect([b.key, !!b.region]).toEqual([b.key, true]);
+  });
+
+  it("follows the chosen role's country over the detected one", async () => {
+    await User.findByIdAndUpdate(user._id, { firstSeenCountry: 'GB', cbatTargetBattery: 'raaf-pilot' });
+    const res = await request(app).get('/api/games/cbat/report').set('Cookie', cookie);
+    expect(res.body.data.region).toBe('AU');
+    expect(res.body.data.detectedRegion).toBe('GB');
+  });
+
+  it('counts CLAN runs and ignores FLAG runs on a Canadian role', async () => {
+    const cip = r => r.body.data.domains.find(d => d.key === 'CIP');
+    await play('flag', stanines(1));
+    let res = await request(app).get('/api/games/cbat/report/rcaf-pilot').set('Cookie', cookie);
+    expect(cip(res).tests.map(t => t.code)).toEqual(['CLAN']);
+    expect(cip(res).stanine).toBeNull();
+    expect(res.body.data.basedOn).toBe('pilot');
+    expect(res.body.data.region).toBe('CA');
+
+    await play('clan', stanines(1));
+    res = await request(app).get('/api/games/cbat/report/rcaf-pilot').set('Cookie', cookie);
+    expect(cip(res).stanine).not.toBeNull();
+  });
+
+  it('still counts FLAG and not CLAN on the UK role it borrows from', async () => {
+    await play('clan', stanines(1));
+    const res = await request(app).get('/api/games/cbat/report/pilot').set('Cookie', cookie);
+    const cip = res.body.data.domains.find(d => d.key === 'CIP');
+    expect(cip.tests.map(t => t.code)).toEqual(['FLAG']);
+    expect(cip.stanine).toBeNull();
+  });
+
+  describe('an admin simulating a region', () => {
+    it('reads as a new player there, setting aside a role from another country', async () => {
+      const admin = await createUser({ agentNumber: '1000009', isAdmin: true, cbatTargetBattery: 'pilot', firstSeenCountry: 'GB' });
+      const res = await request(app).get('/api/games/cbat/report?simRegion=CA').set('Cookie', authCookie(admin._id));
+      expect(res.body.data.region).toBe('CA');
+      expect(res.body.data.detectedRegion).toBe('CA');
+      expect(res.body.data.targetBattery).toBeNull();
+    });
+
+    it("keeps the admin's role when it belongs to the simulated country", async () => {
+      const admin = await createUser({ agentNumber: '1000010', isAdmin: true, cbatTargetBattery: 'raaf-atc' });
+      const res = await request(app).get('/api/games/cbat/report?simRegion=AU').set('Cookie', authCookie(admin._id));
+      expect(res.body.data.targetBattery).toBe('raaf-atc');
+    });
+
+    it('is ignored for a player', async () => {
+      await User.findByIdAndUpdate(user._id, { cbatTargetBattery: 'pilot', firstSeenCountry: 'GB' });
+      const res = await request(app).get('/api/games/cbat/report?simRegion=CA').set('Cookie', cookie);
+      expect(res.body.data.region).toBe('GB');
+      expect(res.body.data.targetBattery).toBe('pilot');
+    });
+  });
+
+  it('accepts a Canadian or Australian role as the target', async () => {
+    for (const key of ['rcaf-aec', 'raaf-atc']) {
+      const res = await request(app).patch('/api/users/me/target-battery').set('Cookie', cookie).send({ batteryKey: key });
+      expect([key, res.status, res.body.data.user.cbatTargetBattery]).toEqual([key, 200, key]);
+    }
   });
 });

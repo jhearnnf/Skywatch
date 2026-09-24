@@ -78,7 +78,8 @@
 
 const mongoose = require('mongoose');
 const { CBAT_GAMES } = require('../constants/cbatGames');
-const { MAX_SCORE, MAX_STANINE, MIN_COVERAGE_FOR_VERDICT, DOMAINS, TESTS, BATTERY_BY_KEY, SCORED_GAME_KEYS } = require('../constants/cbatBatteries');
+const { MAX_SCORE, MAX_STANINE, MIN_COVERAGE_FOR_VERDICT, DOMAINS, TESTS, BATTERIES, BATTERY_BY_KEY, SCORED_GAME_KEYS,
+        reportRegionFor } = require('../constants/cbatBatteries');
 const { scoreToStanine, scoreForStanine, MEDIAN_STANINE } = require('./cbatStanine');
 
 // Matches the recent-form window used by the leaderboard percentile, for the reasons given there:
@@ -448,6 +449,9 @@ function buildBatteryReport(battery, form) {
     key: battery.key,
     label: battery.label,
     group: battery.group,
+    region: battery.region,
+    // Set on a Canadian or Australian role: the UK role whose weights and pass mark it borrows.
+    basedOn: battery.basedOn ?? null,
     note: battery.note ?? null,
     cutoff: battery.cutoff,
     maxScore: MAX_SCORE,
@@ -703,10 +707,10 @@ async function buildAllBatteryScores(userId, targetKey = null) {
   let targetFocus = null;
   const batteries = Object.values(BATTERY_BY_KEY).map((b) => {
     const report = buildBatteryReport(b, form);
-    const { key, label, group, cutoff, score, scoreLow, scoreHigh, firm, margin, status, coverage,
+    const { key, label, group, region, cutoff, score, scoreLow, scoreHigh, firm, margin, status, coverage,
             runsBanked, runsForFirmScore, firmTests } = report;
     if (targetKey && key === targetKey) targetFocus = topFocus(report);
-    return { key, label, group, cutoff, maxScore: MAX_SCORE, score, scoreLow, scoreHigh, firm,
+    return { key, label, group, region, cutoff, maxScore: MAX_SCORE, score, scoreLow, scoreHigh, firm,
              margin, status, coverage, runsBanked, runsForFirmScore, firmTests };
   });
   const target = targetKey ? BATTERY_BY_KEY[targetKey] : null;
@@ -844,7 +848,10 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
   // Pull identity for the ranked ids. On a search we also want the zero-play matches, so the id
   // set is the union of both.
   const ids = [...new Set([...byId.keys(), ...(matchedIds ?? []).map(String)])];
-  const users = await User.find({ _id: { $in: ids } }, 'agentNumber email displayName isAdmin cbatTargetBattery').lean();
+  const users = await User.find(
+    { _id: { $in: ids } },
+    'agentNumber email displayName isAdmin cbatTargetBattery upcomingCbatRegion firstSeenCountry geo.country',
+  ).lean();
 
   const ranked = users
     .map(u => ({
@@ -857,6 +864,7 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
       // list itself so the picker can say which players have chosen a role before one is opened,
       // and so opening a player lands on their role rather than a default.
       targetBattery: u.cbatTargetBattery ?? null,
+      region: reportRegionFor(u),
       plays: byId.get(String(u._id)) ?? 0,
     }))
     .sort((a, b) => b.plays - a.plays || String(a.agentNumber).localeCompare(String(b.agentNumber)))
@@ -874,15 +882,19 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
     ? await loadFormForUsers(withPlays.map(u => new mongoose.Types.ObjectId(u._id)))
     : {};
 
-  const batteries = Object.values(BATTERY_BY_KEY);
-  return ranked.map(u => ({
-    ...u,
-    // A player with no runs clears nothing — no need to score them to find that out.
-    rolesPassed: form[u._id]
-      ? batteries.filter(b => buildBatteryReport(b, form[u._id]).status === 'pass').length
-      : 0,
-    totalRoles: batteries.length,
-  }));
+  // Counted over the player's own country's roles only: a Canadian is judged on the three CFAST
+  // trades, not on thirteen UK roles they will never sit as well.
+  return ranked.map((u) => {
+    const batteries = BATTERIES.filter(b => b.region === u.region);
+    return {
+      ...u,
+      // A player with no runs clears nothing — no need to score them to find that out.
+      rolesPassed: form[u._id]
+        ? batteries.filter(b => buildBatteryReport(b, form[u._id]).status === 'pass').length
+        : 0,
+      totalRoles: batteries.length,
+    };
+  });
 }
 
 // ── Admin: one line per person ───────────────────────────────────────────────────────────────

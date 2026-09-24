@@ -448,5 +448,60 @@
         { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     }
+  ],
+
+  "_regionsComment": [
+    "Which country's test a player is sitting. Every battery above is a UK one (region GB), taken",
+    "from real OASC sheets. Canada (CFAST) and Australia (MACTS) publish no weights or pass marks",
+    "at all, so their roles below are DERIVED: each borrows the nearest UK role's domains, weights",
+    "and pass mark, then applies `swap` (test code -> test code) and `drop` (test codes that are",
+    "not in that country's battery). The backend builds the full battery at load time in",
+    "constants/cbatBatteries.js, so a change to a UK role's weights carries through on its own.",
+    "",
+    "CLAN replaces FLAG for both countries: the official CFASC candidate guide (canada.ca, 2022)",
+    "lists CLAN and no FLAG, and the user's call (2026-09-24) is that Australia sits CLAN too.",
+    "Canada also drops DAD, DPT and VLT, which are not on the CFASC guide's list of 20 tests.",
+    "Australia keeps every test: the only published MACTS list is a prep site's and not reliable.",
+    "",
+    "Keys match the CBAT outcome questionnaire's role keys (surveyRoles.json) on purpose, so a",
+    "survey answer and a report role are the same string and the questionnaire can be pre-filled.",
+    "`surveyTest` is the matching surveyTests.json key for the same reason."
+  ],
+  "regions": {
+    "GB": { "label": "United Kingdom", "testName": "CBAT",  "surveyTest": "raf-cbat" },
+    "CA": { "label": "Canada",         "testName": "CFAST", "surveyTest": "cfast" },
+    "AU": { "label": "Australia",      "testName": "MACTS", "surveyTest": "adf-asp" }
+  },
+  "derivedBatteries": [
+    {
+      "key": "rcaf-pilot", "label": "Pilot", "group": "Royal Canadian Air Force", "region": "CA",
+      "basedOn": "pilot", "swap": { "FLAG": "CLAN" }, "drop": ["DAD", "DPT", "VLT"],
+      "note": "The toughest of the three trades. The real test also sets a minimum on some individual tests, which this estimate cannot check."
+    },
+    {
+      "key": "rcaf-acso", "label": "Air Combat Systems Officer (ACSO)", "group": "Royal Canadian Air Force", "region": "CA",
+      "basedOn": "wso", "swap": { "FLAG": "CLAN" }, "drop": ["DAD", "DPT", "VLT"]
+    },
+    {
+      "key": "rcaf-aec", "label": "Aerospace Control Officer (AEC)", "group": "Royal Canadian Air Force", "region": "CA",
+      "basedOn": "control-officer-atc", "swap": { "FLAG": "CLAN" }, "drop": ["DAD", "DPT", "VLT"]
+    },
+    {
+      "key": "raaf-pilot", "label": "Pilot", "group": "Royal Australian Air Force", "region": "AU",
+      "basedOn": "pilot", "swap": { "FLAG": "CLAN" }, "drop": [],
+      "note": "The toughest role to get. Offers are also ranked against everyone else who sat the test that year."
+    },
+    {
+      "key": "raaf-air-combat-officer", "label": "Air Combat Officer", "group": "Royal Australian Air Force", "region": "AU",
+      "basedOn": "wso", "swap": { "FLAG": "CLAN" }, "drop": []
+    },
+    {
+      "key": "raaf-air-battle-manager", "label": "Air Battle Manager", "group": "Royal Australian Air Force", "region": "AU",
+      "basedOn": "control-officer-wc", "swap": { "FLAG": "CLAN" }, "drop": []
+    },
+    {
+      "key": "raaf-atc", "label": "Air Traffic Controller", "group": "Royal Australian Air Force", "region": "AU",
+      "basedOn": "control-officer-atc", "swap": { "FLAG": "CLAN" }, "drop": []
+    }
   ]
 }

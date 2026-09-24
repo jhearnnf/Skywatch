@@ -29,6 +29,7 @@ const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
 const { startOfWeekUTC, nextResetAt } = require('../utils/weekWindow');
 const { buildCbatProgress, parseProgressLimit } = require('../utils/cbatProgressSeries');
 const { buildAptitudeReport, buildAllBatteryScores, buildCbatUserList } = require('../utils/cbatAptitudeReport');
+const { detectRegion, reportRegionFor, REGIONS, BATTERY_BY_KEY } = require('../constants/cbatBatteries');
 const { tierToAward, donationPromptDue } = require('../utils/cbatProgressAward');
 const { buildCbatShowcase } = require('../utils/cbatShowcase');
 const { scoreSharingMatch } = require('../utils/cbatScoreSharing');
@@ -3717,9 +3718,23 @@ router.get('/cbat/sma-easier/personal-best', protect, (req, res) => cbatPersonal
 // admin their own numbers under someone else's name.
 async function resolveReportSubject(req) {
   const wanted = req.query.userId;
-  if (!wanted || !req.user.isAdmin) return { userId: req.user._id, viewingAs: null };
+  if (!wanted || !req.user.isAdmin) {
+    // Admin-only `simRegion`: see your own report as a NEW player in that country would. A role
+    // of yours from another country is set aside for the length of the simulation, so the page
+    // opens on that country's role question, exactly as theirs does. Ignored for anyone else.
+    const sim = req.user.isAdmin && REGIONS[req.query.simRegion] ? req.query.simRegion : null;
+    const target = req.user.cbatTargetBattery ?? null;
+    if (sim) {
+      const keepTarget = BATTERY_BY_KEY[target]?.region === sim;
+      return { userId: req.user._id, viewingAs: null, region: sim, detectedRegion: sim,
+               targetBattery: keepTarget ? target : null };
+    }
+    return { userId: req.user._id, viewingAs: null, region: reportRegionFor(req.user), detectedRegion: detectRegion(req.user),
+             targetBattery: target };
+  }
 
-  const subject = await User.findById(wanted).select('agentNumber displayName email cbatTargetBattery').lean();
+  const subject = await User.findById(wanted)
+    .select('agentNumber displayName email cbatTargetBattery upcomingCbatRegion firstSeenCountry geo.country').lean();
   if (!subject) return null;
 
   return {
@@ -3731,6 +3746,8 @@ async function resolveReportSubject(req) {
       email: subject.email ?? null,
     },
     targetBattery: subject.cbatTargetBattery ?? null,
+    region: reportRegionFor(subject),
+    detectedRegion: detectRegion(subject),
   };
 }
 
@@ -3757,7 +3774,7 @@ router.get('/cbat/report', protect, async (req, res) => {
     if (!subject) return res.status(404).json({ message: 'Unknown user' });
 
     // The subject's saved target, not the admin's — the page is showing their report.
-    const targetBattery = subject.viewingAs ? subject.targetBattery : (req.user.cbatTargetBattery ?? null);
+    const targetBattery = subject.targetBattery ?? null;
     const { batteries, targetFocus, nearestUnlock, runsToCount } = await buildAllBatteryScores(subject.userId, targetBattery);
     res.json({ status: 'success', data: {
       batteries,
@@ -3769,6 +3786,11 @@ router.get('/cbat/report', protect, async (req, res) => {
       targetFocus,
       nearestUnlock,
       runsToCount,
+      // Whose test the report is for: the chosen role's country, else where we think they are.
+      // Every battery carries its own `region`, and the clients show only this one's roles.
+      // `detectedRegion` is the default for the region box above the role question.
+      region: subject.region,
+      detectedRegion: subject.detectedRegion,
       viewingAs: subject.viewingAs,
     } });
   } catch (err) {

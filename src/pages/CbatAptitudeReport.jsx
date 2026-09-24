@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useCbatAdminRegion, withCbatRegion } from '../utils/cbatAdminRegion'
 import SEO from '../components/SEO'
 import {
-  MAX_SCORE, MAX_STANINE, BATTERY_GROUPS, BATTERY_BY_KEY,
+  MAX_SCORE, MAX_STANINE, BATTERY_BY_KEY, REGIONS, REGION_CODES, normaliseRegion, batteryGroupsFor,
   gamePath, gameTitle, gameEmoji, scoredDifficulty, onHard,
   stanineBand, stanineBeatsPct, stanineTone, reportVerdict, statusColour, TONE_TEXT,
 } from '../data/cbatBatteries'
@@ -316,7 +317,76 @@ function DomainRow({ domain, targetStanine }) {
 // sheet answers at a glance and no other part of SkyWatch answers at all. The pass marks span 32
 // points, so the same play clears NCO Control and misses Pilot. Seeing that side by side is most of
 // the value.
-function RolePicker({ batteries, selected, targetBattery, onSelect, onSetTarget, onClose, canSetTarget = true }) {
+// Which country's test the roles below belong to. Set from where we think the player is, and
+// only there to be changed by someone abroad, on a VPN, or sitting another country's test.
+// Three buttons rather than a native <select>, whose list the browser draws white and unstyled
+// over the dark theme. `data-value` on the group lets a test read the current answer.
+function RegionSelect({ value, onChange, id }) {
+  return (
+    <div className="mb-3">
+      <p id={`${id}-label`} className="text-[11px] text-slate-600 mb-1.5">Test you&apos;re sitting</p>
+      <div role="radiogroup" aria-labelledby={`${id}-label`} data-testid={id} data-value={value} className="grid grid-cols-3 gap-1.5">
+        {REGION_CODES.map(code => {
+          const selected = code === value
+          return (
+            <button
+              key={code}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              data-testid={`${id}-${code}`}
+              onClick={() => onChange(code)}
+              className={`px-2 py-2 rounded-lg border text-center transition-colors ${
+                selected
+                  ? 'border-brand-400 bg-brand-50 text-brand-700'
+                  : 'border-game-line bg-game-arena text-slate-600 hover:border-brand-300 hover:text-slate-800'
+              }`}
+            >
+              <span className="block text-xs font-bold">{REGIONS[code].label}</span>
+              <span className="block text-[10px] font-mono opacity-80">{REGIONS[code].testName}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// The page's opening question for a player who has never chosen a role: one question, with the
+// country already answered from where we think they are. Picking a role saves it and opens the
+// report; the role's own country is what the report is for from then on.
+function RoleQuestion({ region, onRegionChange, onPick, saving }) {
+  return (
+    <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-shadow" data-testid="aptitude-role-question">
+      <RegionSelect id="aptitude-question-region" value={region} onChange={onRegionChange} />
+      <h2 className="text-base font-extrabold text-slate-900 mb-1">Which role are you aiming for?</h2>
+      <p className="text-[11px] text-slate-600 mb-3">
+        Every role has its own pass mark, so we score you against the one you choose. You can change it later.
+      </p>
+      {batteryGroupsFor(region).map(group => (
+        <div key={group.label} className="mb-3 last:mb-0">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold mb-1.5">{group.label}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {group.batteries.map(b => (
+              <button
+                key={b.key}
+                type="button"
+                disabled={saving}
+                onClick={() => onPick(b.key)}
+                data-testid={`aptitude-role-${b.key}`}
+                className="px-3 py-2.5 rounded-lg border border-game-line bg-game-arena hover:border-brand-300 hover:bg-game-panel text-left text-xs font-bold text-slate-800 transition-colors disabled:opacity-50"
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RolePicker({ batteries, selected, targetBattery, onSelect, onSetTarget, onClose, canSetTarget = true, region = 'GB', onRegionChange = null }) {
   return (
     <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-5 card-shadow">
       <div className="flex items-center justify-between mb-1">
@@ -327,7 +397,9 @@ function RolePicker({ batteries, selected, targetBattery, onSelect, onSetTarget,
         Every role has its own pass mark, so the same score can pass one and fail another. Tap one to see it in full.
       </p>
 
-      {BATTERY_GROUPS.map(group => (
+      {onRegionChange && <RegionSelect id="aptitude-picker-region" value={region} onChange={onRegionChange} />}
+
+      {batteryGroupsFor(region).map(group => (
         <div key={group.label} className="mb-4 last:mb-0">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold mb-1.5">{group.label}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -526,6 +598,10 @@ export default function CbatAptitudeReport() {
   const [error, setError] = useState(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [userPickerOpen, setUserPickerOpen] = useState(false)
+  // The region box, once the reader has touched it. Until then it follows the report's own region
+  // (the chosen role's country, else where we think they are).
+  const [regionPick, setRegionPick] = useState(null)
+  const [savingRole, setSavingRole] = useState(false)
   // The explainer answers the questions a first-timer has and nobody else's. Null means "decide
   // from the report": open for a reader with no score, shut for one who has one and has almost
   // certainly read it. An explicit tap wins over both, for the life of the page.
@@ -537,17 +613,30 @@ export default function CbatAptitudeReport() {
   const asParam = viewingId ? `?userId=${encodeURIComponent(viewingId)}` : ''
   const viewingAs = report?.viewingAs ?? summary?.viewingAs ?? null
 
+  // Admin only, own report only: the country set on the hub's Region tab. The page then behaves
+  // as it would for a new player there, so a role of the admin's from another country is set
+  // aside (the server does the same to the summary). See utils/cbatAdminRegion.js.
+  const simRegion = useCbatAdminRegion(!!user?.isAdmin && !viewingId)
+  const ownTarget = user?.cbatTargetBattery ?? null
+  const simTarget = simRegion && BATTERY_BY_KEY[ownTarget]?.region !== simRegion ? null : ownTarget
+
   // When viewing another player it's THEIR saved target the page should open on, not the admin's.
-  const targetBattery = (viewingId ? summary?.targetBattery : user?.cbatTargetBattery) ?? null
+  const targetBattery = (viewingId ? summary?.targetBattery : simTarget) ?? null
 
   // Our own target is on the user object and known immediately; another player's only arrives with
   // their summary. Until it does there is no role worth fetching — guessing one would render a
   // report for a role nobody asked for and then swap it out from under the reader — so `selected`
   // stays null and the page holds on its loading line.
   const subjectReady = !viewingId || summary != null
+  const region = normaliseRegion(regionPick ?? BATTERY_BY_KEY[targetBattery]?.region ?? (simRegion || null) ?? summary?.region)
+  // A player who has never chosen a role is asked for one before any report is shown: the pass
+  // mark differs by 32 points across the roles, and a report for a role they never picked would
+  // measure them against a bar they never asked about. Their own page only; an admin reading
+  // another player's report still sees it, with the "not chosen yet" warning on the role bar.
+  const askForRole = !viewingId && !targetBattery
   // URL wins (so a report is linkable), then the saved target, then the first role on the sheet.
-  const selected = params.get('role')
-    ?? (subjectReady ? (targetBattery ?? BATTERY_GROUPS[0].batteries[0].key) : null)
+  const selected = askForRole ? null : (params.get('role')
+    ?? (subjectReady ? (targetBattery ?? batteryGroupsFor(region)[0].batteries[0].key) : null))
 
   // The sheet is wide — a domain row carries a name, a weight, a nine-cell bar and a verdict.
   // Same shell override the CBAT picker uses.
@@ -565,13 +654,13 @@ export default function CbatAptitudeReport() {
     setSummary(null)
     ;(async () => {
       try {
-        const res = await apiFetch(`${API}/api/games/cbat/report${asParam}`)
+        const res = await apiFetch(withCbatRegion(`${API}/api/games/cbat/report${asParam}`, simRegion))
         const json = await res.json()
         if (!cancelled && res.ok) setSummary(json.data)
       } catch { /* the per-role report below is what the page needs to render */ }
     })()
     return () => { cancelled = true }
-  }, [user, API, apiFetch, asParam])
+  }, [user, API, apiFetch, asParam, simRegion])
 
   useEffect(() => {
     if (!user) return
@@ -623,6 +712,17 @@ export default function CbatAptitudeReport() {
     } catch { /* leaving the target unchanged is a safe failure */ }
   }, [API, apiFetch, setUser])
 
+  // The opening question's answer: save it, then open that role's report. The role carries its
+  // country, so there is no separate region to save. A role in the URL is dropped so it can't
+  // override the answer just given.
+  const answerRole = useCallback(async (key) => {
+    setSavingRole(true)
+    await setTarget(key)
+    setParams(prev => { const next = new URLSearchParams(prev); next.delete('role'); return next }, { replace: true })
+    setRegionPick(null)
+    setSavingRole(false)
+  }, [setTarget, setParams])
+
   // The stanine every domain would need for the battery to land exactly on its cutoff — the red
   // tick on each row. It's a flat line rather than a per-domain figure because the real per-domain
   // targets aren't published anywhere; what IS derivable is that a candidate sitting on this
@@ -670,7 +770,9 @@ export default function CbatAptitudeReport() {
           <p className="flex-1 min-w-0 text-xs text-slate-700 truncate">
             {viewingAs
               ? <>Viewing <span className="font-bold text-amber-700">{viewingAs.displayName || `Agent ${viewingAs.agentNumber}`}</span>&apos;s report, not your own.</>
-              : <>Viewing your own report.</>}
+              : simRegion
+                ? <>Viewing your own report as a new player in <span className="font-bold text-amber-700">{REGIONS[simRegion].label}</span>. Change it on the CBAT page&apos;s Region tab.</>
+                : <>Viewing your own report.</>}
           </p>
           {viewingAs && (
             <button type="button" onClick={() => pickUser(null)} className="shrink-0 text-xs font-bold text-slate-600 hover:text-brand-700 transition-colors">
@@ -690,6 +792,14 @@ export default function CbatAptitudeReport() {
       {user.isAdmin && userPickerOpen && (
         <AdminUserPicker current={viewingId} onPick={pickUser} onClose={() => setUserPickerOpen(false)} />
       )}
+
+      {/* No role chosen yet: the one question comes first and nothing else is shown. It waits for
+          the summary, which is what carries the region we detected. */}
+      {askForRole ? (
+        summary || error
+          ? <RoleQuestion region={region} onRegionChange={setRegionPick} onPick={answerRole} saving={savingRole} />
+          : <p className="text-sm text-slate-400 py-8 text-center">Loading...</p>
+      ) : (<>
 
       {/* Role bar. One line: which role the numbers below are being judged against, and the way to
           change it. It was three lines and a label, which is a lot of chrome to cross before
@@ -726,6 +836,8 @@ export default function CbatAptitudeReport() {
           onSetTarget={setTarget}
           onClose={() => setPickerOpen(false)}
           canSetTarget={!viewingAs}
+          region={region}
+          onRegionChange={viewingAs ? null : setRegionPick}
         />
       )}
 
@@ -833,6 +945,14 @@ export default function CbatAptitudeReport() {
                        tested on. The rest is greyed out below.</>}
                 </p>
                 {report.note && <p className="text-[11px] text-brand-700 mt-1">{report.note}</p>}
+                {report.basedOn && (
+                  <p className="text-[11px] text-slate-600 mt-1" data-testid="aptitude-borrowed-note">
+                    {REGIONS[report.region]?.label ?? 'This country'} doesn&apos;t publish how each test is weighted, so this
+                    uses the weights and pass mark of the closest UK role ({BATTERY_BY_KEY[report.basedOn]?.label}), with
+                    CLAN in place of FLAG.
+                    {report.region === 'CA' && ' Tests that are not part of the CFAST are left out.'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1035,6 +1155,7 @@ export default function CbatAptitudeReport() {
           </div>
         </>
       )}
+      </>)}
     </div>
   )
 }

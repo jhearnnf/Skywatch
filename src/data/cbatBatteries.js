@@ -9,19 +9,43 @@
 import batteryData from '../../backend/constants/cbatBatteries.json'
 import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_BY_KEY } from './cbatGames'
 
-export const { maxScore: MAX_SCORE, maxStanine: MAX_STANINE, domains: DOMAINS, tests: TESTS, batteries: BATTERIES } = batteryData
+export const { maxScore: MAX_SCORE, maxStanine: MAX_STANINE, domains: DOMAINS, tests: TESTS, regions: REGIONS } = batteryData
+
+// Every role, UK first. The Canadian and Australian roles are derived from a UK one (see
+// `_regionsComment` in the JSON); the backend builds their domains, and all the page needs of
+// them is who they are and the pass mark they borrow, so that is all this side reads.
+const UK_BATTERIES = batteryData.batteries.map(b => ({ ...b, region: 'GB' }))
+const UK_BY_KEY = Object.fromEntries(UK_BATTERIES.map(b => [b.key, b]))
+export const BATTERIES = [
+  ...UK_BATTERIES,
+  ...batteryData.derivedBatteries.map(({ swap: _s, drop: _d, ...b }) => ({ ...b, cutoff: UK_BY_KEY[b.basedOn]?.cutoff })),
+]
 
 export const BATTERY_BY_KEY = Object.fromEntries(BATTERIES.map(b => [b.key, b]))
 
-// Role picker grouping, in the order the sheet itself lists them: officer aircrew first, then Air
-// & Space Ops, then non-commissioned. Derived from the data so a new battery appears without
-// touching this file, as long as it reuses an existing group name.
-export const BATTERY_GROUPS = BATTERIES.reduce((acc, b) => {
-  const group = acc.find(g => g.label === b.group)
-  if (group) group.batteries.push(b)
-  else acc.push({ label: b.group, batteries: [b] })
-  return acc
-}, [])
+// The countries a report can be for, in the order the region box lists them.
+export const REGION_CODES = Object.keys(REGIONS)
+
+// GB, CA or AU; anything else reads as the UK. Mirrors normaliseRegion in the backend.
+export function normaliseRegion(code) {
+  const c = String(code ?? '').toUpperCase()
+  return REGIONS[c] ? c : 'GB'
+}
+
+// Role picker grouping for one country, in the order the sheet itself lists them: officer aircrew
+// first, then Air & Space Ops, then non-commissioned. Derived from the data so a new battery
+// appears without touching this file, as long as it reuses an existing group name.
+export function batteryGroupsFor(region = 'GB') {
+  return BATTERIES.filter(b => b.region === region).reduce((acc, b) => {
+    const group = acc.find(g => g.label === b.group)
+    if (group) group.batteries.push(b)
+    else acc.push({ label: b.group, batteries: [b] })
+    return acc
+  }, [])
+}
+
+// The UK groups, which is what every caller saw before there was more than one country.
+export const BATTERY_GROUPS = batteryGroupsFor('GB')
 
 // Whether a game ships an Easier/Hard split. Read off the leaderboard config's difficultyGroup —
 // the same field the leaderboard's pill pair is built from — so a newly split game is covered here

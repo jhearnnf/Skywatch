@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useCbatAdminRegion, withCbatRegion } from '../utils/cbatAdminRegion'
 import {
   MAX_SCORE, MIN_COVERAGE_FOR_VERDICT, BATTERY_BY_KEY,
   gameTitle, onHard, reportVerdict, statusColour, TONE_TEXT,
@@ -131,6 +132,8 @@ export default function AptitudeReportCard({ userId = null }) {
   // every account tweak (a theme switch, a streak tick), and re-fetching on
   // each one put the skeleton back over a report that had not changed.
   const userKey = user?._id ?? null
+  // An admin simulating another country sees their own card as a new player there would.
+  const simRegion = useCbatAdminRegion(!!user?.isAdmin && !userId)
   useEffect(() => {
     // No user means no fetch will ever run, so the skeleton has to come down or
     // it would sit there for the life of the page.
@@ -139,14 +142,14 @@ export default function AptitudeReportCard({ userId = null }) {
     setLoading(true)
     ;(async () => {
       try {
-        const res = await apiFetch(`${API}/api/games/cbat/report${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`)
+        const res = await apiFetch(withCbatRegion(`${API}/api/games/cbat/report${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`, simRegion))
         const json = await res.json()
         if (!cancelled && res.ok) setData(json.data)
       } catch { /* the card is an extra; the games below are the page */ }
       finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [userKey, API, apiFetch, userId])
+  }, [userKey, API, apiFetch, userId, simRegion])
 
   // Guards the SHAPE, not just the absence. `data` is whatever the endpoint returned, and every
   // branch below walks `batteries` — so a response that came back without it (an error body, an
@@ -240,8 +243,11 @@ function progressState(data, target, label, voice = VOICES.own) {
 
   // No role chosen. Someone with real scores gets the most persuasive true thing we can say, which
   // is how many roles they would already clear; someone with nothing gets the price of entry.
-  const scored = data.batteries.filter(b => b.score != null).length
-  const passing = data.batteries.filter(b => b.status === 'pass').length
+  // Only the roles of the country they are sitting in: a Canadian clears CFAST trades, not UK roles.
+  // A response from before batteries carried a region counts them all, as it always did.
+  const own = data.batteries.filter(b => !data.region || !b.region || b.region === data.region)
+  const scored = own.filter(b => b.score != null).length
+  const passing = own.filter(b => b.status === 'pass').length
   if (scored) {
     return {
       label: null,

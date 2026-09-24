@@ -8,6 +8,7 @@ import { publicPageInitial } from '../utils/publicPagePreview'
 import RecentCbatScores from '../components/RecentCbatScores'
 import AptitudeReportCard from '../components/AptitudeReportCard'
 import CbatAdminViewToggle from '../components/CbatAdminViewToggle'
+import CbatAdminRegionSelect from '../components/CbatAdminRegionSelect'
 import CbatLoungeChat from '../components/CbatLoungeChat'
 import CbatPresenceDots from '../components/cbat/CbatPresenceDots'
 import useChatPresence from '../hooks/useChatPresence'
@@ -927,7 +928,8 @@ export default function Cbat() {
                   straight part of the card's edge rather than its rounded corner.
                   No gap under it — it is meant to read as part of the card. */}
               {user.isAdmin && (
-                <div className="shrink-0 flex justify-end pr-4">
+                <div className="shrink-0 flex justify-end gap-1 pr-4">
+                  <CbatAdminRegionSelect />
                   <CbatAdminViewToggle />
                 </div>
               )}
