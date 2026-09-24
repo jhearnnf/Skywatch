@@ -14,6 +14,7 @@ const User = require('../models/User');
 const AirstarLog = require('../models/AirstarLog');
 const SystemLog = require('../models/SystemLog');
 const { awardCoins } = require('../utils/awardCoins');
+const { getLearnSettings } = require('../utils/learnScope');
 const { sectionBody, normalizeSections } = require('../utils/descriptionSections');
 const IntelligenceBrief     = require('../models/IntelligenceBrief');
 const IntelligenceBriefRead = require('../models/IntelligenceBriefRead');
@@ -155,7 +156,7 @@ router.post('/quiz/start', protect, async (req, res) => {
 
     const user = await User.findById(req.user._id);
     const difficulty  = user.difficultySetting ?? 'easy';
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = effectiveTier(user);
 
@@ -410,7 +411,7 @@ router.post('/quiz/attempt/:id/finish', protect, async (req, res) => {
         breakdown.push({ label: 'Perfect score bonus', amount: bonus });
       }
       if (airstarsEarned > 0) {
-        coinResult = await awardCoins(req.user._id, airstarsEarned, 'quiz', `Intel Recall (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId);
+        coinResult = await awardCoins(req.user._id, airstarsEarned, 'quiz', `Intel Recall (${attempt.difficulty}): ${brief?.title ?? 'Unknown Brief'} — ${correct}/${total} correct`, attempt.intelBriefId, { req });
         attempt.rankPromotion = coinResult.rankPromotion;
         attempt.cycleAirstars = coinResult.cycleAirstars;
       }
@@ -572,7 +573,7 @@ router.get('/quiz/briefs', protect, async (req, res) => {
 
     const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
     const diff     = req.user.difficultySetting ?? 'easy';
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier     = effectiveTier(req.user);
 
@@ -671,7 +672,7 @@ router.get('/battle-of-order/briefs', protect, async (req, res) => {
     const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
     const diff     = req.user.difficultySetting ?? 'easy';
     const needed   = diff === 'medium' ? 5 : 3;
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier     = effectiveTier(req.user);
 
@@ -803,7 +804,7 @@ router.get('/battle-of-order/recommended-briefs', protect, async (req, res) => {
     const diff     = user.difficultySetting ?? 'easy';
     const needed   = diff === 'medium' ? 5 : 3;
     const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = effectiveTier(user);
 
@@ -916,7 +917,7 @@ router.get('/quiz/recommended-briefs', protect, async (req, res) => {
     const user     = await User.findById(req.user._id).lean();
     const diff     = user.difficultySetting ?? 'easy';
     const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = effectiveTier(user);
 
@@ -1277,7 +1278,7 @@ router.post('/battle-of-order/submit', protect, async (req, res) => {
           : (settings.airstarsOrderOfBattleEasy   ?? 8);
         const brief      = await IntelligenceBrief.findById(game.anchorBriefId).select('title').lean();
         const coinResult = await awardCoins(req.user._id, airstarsEarned, 'battle_of_order',
-          `Battle of Order - Mini Game (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId);
+          `Battle of Order - Mini Game (${game.difficulty}): ${brief?.title ?? 'Unknown'} — ${game.orderType}`, game.anchorBriefId, { req });
         rankPromotion          = coinResult.rankPromotion;
         cycleAirstars          = coinResult.cycleAirstars;
         totalAirstars          = coinResult.totalAirstars;
@@ -1339,7 +1340,7 @@ router.post('/wheres-that-aircraft/result', protect, async (req, res) => {
     let unlockedCategories     = [];
     let categoryUnlocksGranted = [];
     if (airstarsEarned > 0) {
-      const coinResult = await awardCoins(req.user._id, airstarsEarned, 'wheres_that_aircraft', "Where's That Aircraft — correct identification");
+      const coinResult = await awardCoins(req.user._id, airstarsEarned, 'wheres_that_aircraft', "Where's That Aircraft — correct identification", null, { req });
       rankPromotion          = coinResult.rankPromotion;
       cycleAirstars          = coinResult.cycleAirstars;
       totalAirstars          = coinResult.totalAirstars;
@@ -1364,7 +1365,7 @@ router.get('/flashcard-recall/available-briefs', protect, async (req, res) => {
   try {
     const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
     const [settings, rawLevels] = await Promise.all([
-      AppSettings.getSettings(),
+      getLearnSettings(req),
       Level.find().sort({ levelNumber: 1 }).lean(),
     ]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
@@ -1406,7 +1407,7 @@ router.post('/flashcard-recall/start', protect, async (req, res) => {
     // dealt into the deck (Fix 1).
     const { effectiveTier, canAccessCategory, isPathwayUnlocked, buildCumulativeThresholds } = require('../utils/subscription');
     const [settings, rawLevels] = await Promise.all([
-      AppSettings.getSettings(),
+      getLearnSettings(req),
       Level.find().sort({ levelNumber: 1 }).lean(),
     ]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
@@ -1545,7 +1546,7 @@ router.post('/flashcard-recall/result', protect, async (req, res) => {
     });
 
     const label = `Flashcards — ${correctCount}/${cardResults.length}${allCorrect ? ' (perfect)' : ''}`;
-    const coinResult = await awardCoins(req.user._id, airstarsEarned, 'flashcard', label);
+    const coinResult = await awardCoins(req.user._id, airstarsEarned, 'flashcard', label, null, { req });
 
     res.status(201).json({
       status: 'success',
@@ -1862,7 +1863,7 @@ router.post('/wheres-aircraft/submit', protect, async (req, res) => {
       const coinResult = await awardCoins(
         req.user._id, airstarsEarned, 'wheres_aircraft',
         `Where's That Aircraft — ${won ? 'full completion' : 'partial'}`,
-        aircraftBriefId
+        aircraftBriefId, { req }
       );
       rankPromotion          = coinResult.rankPromotion;
       cycleAirstars          = coinResult.cycleAirstars;

@@ -34,9 +34,9 @@ import PlayNavFlasher                      from './components/PlayNavFlasher'
 import UpdateNotificationModal             from './components/UpdateNotificationModal'
 import OfflineStatus                        from './components/OfflineStatus'
 import { captureLoginReturn, resolveLoginDest } from './utils/loginRedirect'
-import { isSlimAllowed } from './utils/appMode'
+import { isSlimAllowed, isSlimLearnPath } from './utils/appMode'
 import { transitionKeyFor } from './utils/navSections'
-import { useSlimMode, useLandingPageEnabled } from './hooks/useSlimMode'
+import { useSlimMode, useLandingPageEnabled, useSlimLearnEnabled } from './hooks/useSlimMode'
 import { useNativeLaunchRoute } from './hooks/useNativeLaunch'
 
 // v2 pages
@@ -227,6 +227,7 @@ function AppRoutes() {
   const location    = useLocation()
   const navigate    = useNavigate()
   const slim        = useSlimMode()
+  const slimLearnEnabled = useSlimLearnEnabled()
   const landingEnabled = useLandingPageEnabled()
   // Native only: whether a launch at `/` should skip the landing page. Called
   // here with every other hook, ahead of the early returns below.
@@ -294,6 +295,12 @@ function AppRoutes() {
   // slimmed landing at `/` is allow-listed and rendered; on native the launch
   // redirect above decides whether it is shown.
   if (slim && !isSlimAllowed(location.pathname)) {
+    return <Navigate to="/cbat" replace />
+  }
+
+  // Learn is allow-listed in slim mode, but the admin can switch the whole
+  // group off with the "Learn in Slim Mode" flag.
+  if (slim && !slimLearnEnabled && isSlimLearnPath(location.pathname)) {
     return <Navigate to="/cbat" replace />
   }
 

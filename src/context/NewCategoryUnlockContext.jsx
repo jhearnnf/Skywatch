@@ -1,5 +1,6 @@
 import { createContext, useContext, useCallback, useMemo, useState } from 'react'
 import { useAuth } from './AuthContext'
+import { useAppSettings } from './AppSettingsContext'
 
 const NewCategoryUnlockContext = createContext({
   newCategories:           new Set(),
@@ -28,15 +29,22 @@ export function NewCategoryUnlockProvider({ children }) {
 
   const categoryUnlocks = user?.categoryUnlocks ?? {}
 
+  // Slim mode only opens some categories. An unseen unlock for one that is
+  // still "coming soon" would badge the Learn button and fly a NEW pill onto a
+  // locked pathway, so those wait until slim mode brings the category back.
+  const { settings } = useAppSettings() ?? {}
+  const openInSlim = settings?.learnCategoriesOverride ?? null
+
   const { newCategories, firstNewCategory } = useMemo(() => {
     const entries = entriesOf(categoryUnlocks)
       .filter(([, v]) => v?.unlockedAt && !v?.badgeSeen)
+      .filter(([k]) => !openInSlim || openInSlim.includes(k))
       .sort(([, a], [, b]) => new Date(a.unlockedAt) - new Date(b.unlockedAt))
     return {
       newCategories:    new Set(entries.map(([k]) => k)),
       firstNewCategory: entries[0]?.[0] ?? null,
     }
-  }, [categoryUnlocks])
+  }, [categoryUnlocks, openInSlim])
 
   const hasAnyNew = newCategories.size > 0
 

@@ -9,6 +9,7 @@ import LockedCategoryModal from '../components/LockedCategoryModal'
 import { requiredTier, isFreeUser, isUpgradeUnlockable } from '../utils/subscription'
 import { CATEGORY_ICONS } from '../data/mockData'
 import { useAppSettings } from '../context/AppSettingsContext'
+import { useSlimMode } from '../hooks/useSlimMode'
 import { playSound } from '../utils/sound'
 import SEO from '../components/SEO'
 import { useNewGameUnlock } from '../context/NewGameUnlockContext'
@@ -67,11 +68,14 @@ function DifficultyNudge({ user, won, difficulty }) {
   const navigate                    = useNavigate()
   const { hasSeen, startAfterNav }  = useAppTutorial()
   const [nudgeVisible, setVisible]  = useState(false)
+  // The nudge sends the player to Profile's Recall Difficulty setting, which
+  // slim mode hides, so it would lead nowhere.
+  const slim                        = useSlimMode()
 
   const nudgeKey = `sw_tut_v2_${user?._id ?? 'anon'}_quiz_difficulty_nudge`
 
   useEffect(() => {
-    if (!user || !won || difficulty !== 'easy') return
+    if (slim || !user || !won || difficulty !== 'easy') return
     if (localStorage.getItem(nudgeKey)) return
     const t = setTimeout(() => setVisible(true), 1200)
     return () => clearTimeout(t)

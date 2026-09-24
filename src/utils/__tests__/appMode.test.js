@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SLIM_APP, isSlimAllowed, slimNavActiveTo, SLIM_NAV_ITEMS, HANGAR_NAV_ITEM } from '../appMode'
+import { SLIM_APP, isSlimAllowed, slimNavActiveTo, SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, slimNavItems, isSlimLearnPath } from '../appMode'
 
 describe('appMode', () => {
   it('defaults to full app (not slim) under test/web', () => {
@@ -9,7 +9,20 @@ describe('appMode', () => {
   it('exposes exactly CBAT + Profile as slim nav items', () => {
     // Hangar is deliberately NOT in here — it is settings-driven, so the nav
     // components append HANGAR_NAV_ITEM themselves when the toggle is on.
-    expect(SLIM_NAV_ITEMS.map((i) => i.to)).toEqual(['/cbat', '/profile'])
+    expect(SLIM_NAV_ITEMS.map((i) => i.to)).toEqual(['/cbat', '/learn-priority', '/profile'])
+  })
+
+  it('drops Learn from the slim nav when the admin switches it off', () => {
+    expect(slimNavItems({ learnEnabled: true }).map(i => i.to)).toEqual(['/cbat', '/learn-priority', '/profile'])
+    expect(slimNavItems({ learnEnabled: false }).map(i => i.to)).toEqual(['/cbat', '/profile'])
+  })
+
+  it('recognises the Learn routes the flag switches off', () => {
+    expect(isSlimLearnPath('/learn-priority')).toBe(true)
+    expect(isSlimLearnPath('/brief/abc')).toBe(true)
+    expect(isSlimLearnPath('/battle-of-order/abc')).toBe(true)
+    expect(isSlimLearnPath('/cbat')).toBe(false)
+    expect(isSlimLearnPath('/briefing')).toBe(false)
   })
 
   it('exposes the Hangar nav item separately from the mode-driven lists', () => {
@@ -56,17 +69,31 @@ describe('appMode', () => {
       expect(isSlimAllowed('/case-files/russia-ukraine/road-to-invasion')).toBe(true)
     })
 
-    it('blocks learning content and other games', () => {
+    it('blocks the rest of the old site', () => {
       for (const p of [
         '/home',
-        '/learn-priority',
         '/play',
         '/play/quiz',
         '/rankings',
-        '/quiz/abc',
+        '/subscribe',
         '/intel-brief-history',
       ]) {
         expect(isSlimAllowed(p)).toBe(false)
+      }
+    })
+
+    // Learn is back; which categories can be read is decided by the slim
+    // category list, not by the route.
+    it('allows Learn and every flow a brief leads to', () => {
+      for (const p of [
+        '/learn-priority',
+        '/brief/abc',
+        '/quiz/abc',
+        '/battle-of-order/abc',
+        '/aptitude-sync/abc',
+        '/wheres-that-aircraft/abc',
+      ]) {
+        expect(isSlimAllowed(p)).toBe(true)
       }
     })
 
@@ -128,6 +155,12 @@ describe('appMode', () => {
       expect(slimNavActiveTo('/chat')).toBe('/chat')
       expect(slimNavActiveTo('/chat/admin')).toBe('/chat')
       expect(slimNavActiveTo('/chat/507f1f77bcf86cd799439011')).toBe('/chat')
+    })
+
+    it('highlights Learn for the pathway page and everything a brief leads to', () => {
+      for (const p of ['/learn-priority', '/brief/abc', '/quiz/abc', '/battle-of-order/abc', '/aptitude-sync/abc', '/wheres-that-aircraft/abc']) {
+        expect(slimNavActiveTo(p)).toBe('/learn-priority')
+      }
     })
 
     it('highlights CBAT for everything else', () => {

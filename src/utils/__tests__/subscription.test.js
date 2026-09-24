@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { displayTier, getAccessibleCategories, isCategoryLocked, pathwayTierRequired } from '../subscription'
+import { displayTier, getAccessibleCategories, isCategoryLocked, pathwayTierRequired, isPathwayUnlocked, isUpgradeUnlockable, lockReason } from '../subscription'
 
 // ── displayTier ───────────────────────────────────────────────────────────────
 
@@ -143,5 +143,41 @@ describe('pathwayTierRequired', () => {
   it('free tier takes precedence even if also in silverCategories', () => {
     // News is in both free and silver — should be treated as free
     expect(pathwayTierRequired('News', PATHWAY_SETTINGS)).toBe('free')
+  })
+})
+
+// ── Slim mode (learnCategoriesOverride) ──────────────────────────────────────
+// AppSettingsContext stamps the slim category list onto settings. It must win
+// over tiers and pathway levels, in both directions.
+describe('slim mode — learnCategoriesOverride', () => {
+  const SLIM = {
+    learnCategoriesOverride: ['Aircrafts'],
+    freeCategories:   ['News'],
+    silverCategories: ['News', 'Aircrafts', 'Bases'],
+    pathwayUnlocks:   [{ category: 'Aircrafts', levelRequired: 2, rankRequired: 1 }],
+  }
+  const freeLevel1 = { subscriptionTier: 'free', cycleAirstars: 0, rank: { rankNumber: 1 } }
+  const gold       = { subscriptionTier: 'gold', cycleAirstars: 0, rank: { rankNumber: 1 } }
+
+  it('opens the slim categories to a free level-1 player', () => {
+    expect(isCategoryLocked('Aircrafts', freeLevel1, SLIM, [0, 100])).toBe(false)
+    expect(isPathwayUnlocked('Aircrafts', freeLevel1, SLIM, [0, 100])).toBe(true)
+    expect(lockReason('Aircrafts', freeLevel1, SLIM, [0, 100])).toBeNull()
+    expect(pathwayTierRequired('Aircrafts', SLIM)).toBe('free')
+  })
+
+  it('marks every other category coming soon, even for Gold', () => {
+    expect(isCategoryLocked('News', gold, SLIM, [0, 100])).toBe(true)
+    expect(lockReason('News', gold, SLIM, [0, 100])).toBe('soon')
+    expect(getAccessibleCategories(gold, SLIM)).toEqual(['Aircrafts'])
+  })
+
+  it('asks guests to sign in for a slim category', () => {
+    expect(lockReason('Aircrafts', null, SLIM, [0, 100])).toBe('signin')
+    expect(isCategoryLocked('Aircrafts', null, SLIM, [0, 100])).toBe(true)
+  })
+
+  it('never offers an upgrade', () => {
+    expect(isUpgradeUnlockable('Bases', freeLevel1, SLIM, [0, 100])).toBe(false)
   })
 })

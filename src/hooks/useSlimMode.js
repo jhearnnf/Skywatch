@@ -17,6 +17,15 @@ export function useSlimMode() {
   return SLIM_APP || Boolean(settings?.slimModeEnabled)
 }
 
+// Whether slim mode shows Learn: the nav button and the pathway, brief, quiz
+// and game routes behind it. Governed by the AppSettings.slimLearnEnabled flag
+// (on by default). Only asked in slim mode — the full site always has Learn.
+// The nav (Sidebar, BottomNav) and the route gate (App.jsx) both read this.
+export function useSlimLearnEnabled() {
+  const { settings } = useAppSettings() ?? {}
+  return settings?.slimLearnEnabled !== false
+}
+
 // Whether the landing / welcome page is reachable at all.
 //
 // The full site always has one. Slim mode — native app and web slim alike —

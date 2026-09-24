@@ -24,6 +24,27 @@ export const SLIM_APP = (() => {
 // (User.blockedUserIds). Nothing gates on the platform any more, so the export
 // went with the gates rather than sitting here unused.
 
+// Learn in slim mode: the pathway page behind the Learn nav button plus every
+// flow a brief leads to. Only the categories in backend/constants/slimLearn.json
+// are open (the rest show as "coming soon"). The whole group can be switched
+// off with the admin's "Learn in Slim Mode" flag (useSlimLearnEnabled), which
+// App.jsx applies on top of this list — the list itself can't see settings.
+const SLIM_LEARN_PREFIXES = [
+  '/learn-priority',       // the pathway page behind the Learn nav button
+  '/brief',                // reading a brief
+  '/quiz',                 // Intel Recall quiz after a brief
+  '/battle-of-order',      // Battle of Order after a brief
+  '/aptitude-sync',        // Aptitude Sync debrief after a brief
+  '/wheres-that-aircraft', // Where's That Aircraft, offered after an aircraft brief
+]
+
+const matchesPrefix = (pathname, p) => pathname === p || pathname.startsWith(p + '/')
+
+// True for the Learn routes above.
+export function isSlimLearnPath(pathname) {
+  return SLIM_LEARN_PREFIXES.some(p => matchesPrefix(pathname, p))
+}
+
 // Path prefixes reachable in slim mode. Anything else redirects to /cbat.
 // A prefix matches the pathname exactly OR when the pathname starts with
 // `prefix + '/'` — so '/cbat' covers every game and leaderboard, '/profile'
@@ -50,7 +71,16 @@ const SLIM_ALLOWED_PREFIXES = [
   '/chat',               // channels + DMs — see note below
   '/agent',              // another player's profile, opened from chat and the recent-scores feed
   '/survey',             // emailed CBAT outcome questionnaire — see note below
+  // Learn — see SLIM_LEARN_PREFIXES and the note below.
+  ...SLIM_LEARN_PREFIXES,
 ]
+
+// Note on Learn: slim mode is being widened one feature at a time, and Learn
+// came back first. The routes are open, but which categories can be read is
+// decided by the slim category list, enforced by the backend (utils/learnScope.js)
+// and mirrored on the client (utils/subscription.js via AppSettingsContext).
+// Play, Progression and the subscription pages are still out, so nothing on
+// these routes should link to them in slim mode.
 
 // Note on '/survey': the questionnaire arrives by emailed link and identifies
 // the respondent by token rather than by session, so it has to answer for a
@@ -93,9 +123,15 @@ export function isSlimAllowed(pathname) {
 
 // Nav items shown in slim mode (both Sidebar and BottomNav).
 export const SLIM_NAV_ITEMS = [
-  { to: '/cbat',    emoji: '🎮', label: 'CBAT'    },
-  { to: '/profile', emoji: '👤', label: 'Profile' },
+  { to: '/cbat',           emoji: '🎮', label: 'CBAT'    },
+  { to: '/learn-priority', emoji: '✈️', label: 'Learn'   },
+  { to: '/profile',        emoji: '👤', label: 'Profile' },
 ]
+
+// The slim nav with Learn dropped when the admin has switched it off.
+export function slimNavItems({ learnEnabled }) {
+  return learnEnabled ? SLIM_NAV_ITEMS : SLIM_NAV_ITEMS.filter(i => i.to !== '/learn-priority')
+}
 
 // Place a nav item immediately before Profile, which is the last item in both
 // the full and slim lists. Community sits there rather than being appended, so
@@ -125,6 +161,9 @@ export function slimNavActiveTo(pathname) {
   }
   if (pathname === '/chat' || pathname.startsWith('/chat/')) {
     return '/chat'
+  }
+  if (isSlimLearnPath(pathname)) {
+    return '/learn-priority'
   }
   if (
     pathname === '/profile' || pathname.startsWith('/profile/') ||

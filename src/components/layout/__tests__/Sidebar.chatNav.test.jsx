@@ -7,6 +7,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 //   2. It shows on every platform — slim mode and the native app included.
 //      Only the chatEnabled feature flag takes it away.
 const mockSlim        = vi.hoisted(() => ({ value: false }))
+const mockLearn       = vi.hoisted(() => ({ value: true }))
 const mockChat        = vi.hoisted(() => ({ hasUnread: false, badgeCount: 0 }))
 const mockChatEnabled = vi.hoisted(() => ({ value: true }))
 const mockUseAuth     = vi.hoisted(() => vi.fn())
@@ -24,7 +25,7 @@ vi.mock('../../../context/NewGameUnlockContext', () => ({ useNewGameUnlock: () =
 vi.mock('../../../context/NewCategoryUnlockContext', () => ({ useNewCategoryUnlock: () => ({ hasAnyNew: false, firstNewCategory: null }) }))
 vi.mock('../../../context/UnsolvedReportsContext', () => ({ useUnsolvedReports: () => ({ unsolvedCount: 0 }) }))
 vi.mock('../../../context/ChatUnreadContext', () => ({ useChatUnread: () => mockChat }))
-vi.mock('../../../hooks/useSlimMode', () => ({ useSlimMode: () => mockSlim.value }))
+vi.mock('../../../hooks/useSlimMode', () => ({ useSlimMode: () => mockSlim.value, useSlimLearnEnabled: () => mockLearn.value }))
 vi.mock('../../world3d/state/useWorld3dEnabled', () => ({ useWorld3dNavVisible: () => false }))
 vi.mock('../../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({
@@ -87,7 +88,16 @@ describe('Sidebar — chat nav entry', () => {
     render(<Sidebar />)
     // textContent includes the leading emoji — strip to the word label.
     const labels = navLabels()
-    expect(labels).toEqual(['CBAT', 'Community', 'Profile'])
+    expect(labels).toEqual(['CBAT', 'Learn', 'Community', 'Profile'])
+  })
+
+  it('drops Learn from the slim nav when the admin switches it off', () => {
+    mockSlim.value = true
+    mockLearn.value = false
+    setupUser()
+    render(<Sidebar />)
+    expect(navLabels()).toEqual(['CBAT', 'Community', 'Profile'])
+    mockLearn.value = true
   })
 
   it('shows chat in slim (CBAT-only) mode', () => {

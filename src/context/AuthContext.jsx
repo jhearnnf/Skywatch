@@ -26,10 +26,12 @@ const getStoredToken = () => localStorage.getItem(AUTH_TOKEN_KEY)
 const storeToken = (token) => { if (token) localStorage.setItem(AUTH_TOKEN_KEY, token); }
 const clearToken = () => localStorage.removeItem(AUTH_TOKEN_KEY)
 
-// Inject Bearer header for native requests
+// Inject Bearer header for native requests. X-Slim-App tells the backend this
+// is the always-slim native app, which it cannot otherwise detect (see
+// backend/utils/learnScope.js).
 const nativeHeaders = () => {
   const token = getStoredToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
+  return { 'X-Slim-App': '1', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
 }
 
 // Cache the last-known signed-in user so the app stays authenticated offline.

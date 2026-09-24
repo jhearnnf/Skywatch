@@ -306,6 +306,13 @@ const appSettingsSchema = new mongoose.Schema({
   // has its landing page. The native app never shows it either way.
   slimLandingEnabled:         { type: Boolean,  default: true },
 
+  // Whether slim mode shows Learn (the nav button, the pathway page and the
+  // brief/quiz/game routes behind it). Which categories it opens lives in
+  // constants/slimLearn.json. Off hides the button, sends those routes to
+  // /cbat and closes every category in the backend too (utils/learnScope.js).
+  // Only meaningful alongside slim mode; the full site always has Learn.
+  slimLearnEnabled:           { type: Boolean,  default: true },
+
   // Home-page preview windows (Landing.jsx). Each window can be hidden
   // independently by an admin. Per-game gates inside each window still apply
   // (e.g. disabling Aptitude Sync via aptitudeSyncEnabled drops its scene).

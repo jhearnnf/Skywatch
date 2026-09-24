@@ -24,7 +24,13 @@ function effectiveTier(user) {
 // Returns null (all categories) or string[] of accessible category names.
 // Tier arrays are inclusive — silverCategories contains everything silver can see
 // (guest + free + silver categories); freeCategories contains guest + free, etc.
+//
+// Slim mode (settings.learnCategoriesOverride, set by utils/learnScope.js)
+// replaces the tier lists outright, for every tier. Guests get the list too so
+// they can see what is on offer; reading a brief still needs a sign-in, which
+// GET /api/briefs/:id enforces.
 function getAccessibleCategories(tier, settings) {
+  if (settings?.learnCategoriesOverride) return [...settings.learnCategoriesOverride];
   if (tier === 'gold') return null;
   if (tier === 'silver' || tier === 'trial') return settings.silverCategories ?? [];
   if (tier === 'free') return settings.freeCategories ?? [];
@@ -77,7 +83,10 @@ function getUserLevel(cycleAirstars, levelThresholds) {
 // the rank at which this category first unlocks, so cycle-level resets are irrelevant
 // and prior unlocks stay sticky across rank promotions).
 // If userRank === rankRequired, both level and rank must be met.
+// In slim mode the level/rank requirements do not apply: a category is open
+// exactly when it is in the slim list.
 function isPathwayUnlocked(category, user, settings, levelThresholds) {
+  if (settings?.learnCategoriesOverride) return settings.learnCategoriesOverride.includes(category);
   if (!user) return true;
   const unlock = (settings.pathwayUnlocks ?? []).find(p => p.category === category);
   if (!unlock) return true;
@@ -89,7 +98,10 @@ function isPathwayUnlocked(category, user, settings, levelThresholds) {
 // Returns an array of categories accessible to the user based on pathway requirements.
 // Returns null if the user is a guest (no pathway restriction applies to guests).
 // Useful for building DB query $in filters.
+// In slim mode it is the slim list, for guests and players alike, and levelling
+// up never changes it (so no category-unlock notices fire).
 function getPathwayAccessibleCategories(user, settings, levelThresholds) {
+  if (settings?.learnCategoriesOverride) return [...settings.learnCategoriesOverride];
   if (!user) return null;
   const userLevel = getUserLevel(user.cycleAirstars, levelThresholds);
   const userRank  = user.rank?.rankNumber ?? 1;

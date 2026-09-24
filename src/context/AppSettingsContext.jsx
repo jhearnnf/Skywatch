@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { buildCumulativeThresholds } from '../utils/subscription'
+import { SLIM_APP } from '../utils/appMode'
+import { SLIM_LEARN_CATEGORIES } from '../../backend/constants/slimLearn.json'
 
 const Ctx = createContext(null)
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
@@ -56,7 +58,21 @@ export function AppSettingsProvider({ children }) {
 
   useEffect(() => { fetchSettings() }, [fetchSettings])
 
-  return <Ctx.Provider value={{ settings, levels, levelThresholds, loading, refreshSettings: fetchSettings }}>{children}</Ctx.Provider>
+  // Slim mode opens Learn one category at a time (backend/constants/slimLearn.json).
+  // Stamped onto the settings every consumer reads, so the lock helpers in
+  // utils/subscription.js apply the slim rule wherever they are called, the
+  // same way the backend's learnScope.js does. Worked out here rather than via
+  // useSlimMode because that hook reads this context.
+  const slim = SLIM_APP || Boolean(settings?.slimModeEnabled)
+  // With the "Learn in Slim Mode" flag off the list is empty, closing everything.
+  const scopedSettings = useMemo(
+    () => (settings && slim
+      ? { ...settings, learnCategoriesOverride: settings.slimLearnEnabled === false ? [] : SLIM_LEARN_CATEGORIES }
+      : settings),
+    [settings, slim],
+  )
+
+  return <Ctx.Provider value={{ settings: scopedSettings, levels, levelThresholds, loading, refreshSettings: fetchSettings }}>{children}</Ctx.Provider>
 }
 
 export const useAppSettings = () => useContext(Ctx)

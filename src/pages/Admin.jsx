@@ -4048,7 +4048,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled', 'slimLearnEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -4094,6 +4094,14 @@ function SettingsTab({ API }) {
           hint="When on, the header logo links to the landing/welcome page (the live game wall and the player progress charts) in the Android app and on a slimmed website. When off, the logo stops being a link and the site URL goes straight to the CBAT game selection page, so there is no way to reach it. The app opens on the games either way, apart from the very first launch before signing up."
           checked={draft.slimLandingEnabled !== false}
           onChange={v => set('slimLandingEnabled', v)}
+        />
+        {/* Shown alongside the landing toggle for the same reason: it governs
+            the native app too, which is always slim. */}
+        <Toggle
+          label="Learn in Slim Mode"
+          hint="When on, the Learn button shows in the Android app and on a slimmed website, with only the pathways opened so far readable (the others show as coming soon). When off, the button disappears, the Learn, brief, quiz and brief-game pages send players to the CBAT games page, and no category can be read. The full site is not affected."
+          checked={draft.slimLearnEnabled !== false}
+          onChange={v => set('slimLearnEnabled', v)}
         />
       </Section>
 

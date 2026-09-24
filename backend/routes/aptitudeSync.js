@@ -354,6 +354,7 @@ router.post('/:briefId/award', protect, async (req, res) => {
       'aptitude_sync',
       'APTITUDE_SYNC',
       briefId,
+      { req },
     );
 
     // Record coin total on session

@@ -4,6 +4,7 @@ const Rank        = require('../models/Rank');
 const Level       = require('../models/Level');
 const AppSettings = require('../models/AppSettings');
 const { buildCumulativeThresholds, getPathwayAccessibleCategories, effectiveTier, canAccessCategory } = require('./subscription');
+const { scopeLearnToSlim } = require('./learnScope');
 
 // Deprecated — use getCycleThreshold() for the live value from Level docs.
 const CYCLE_THRESHOLD = 14700;
@@ -33,8 +34,12 @@ async function getCycleThreshold() {
  *   rankPromotion: null | { from: RankDoc|null, to: RankDoc } (the final promotion)
  *   unlockedCategories: string[] of category names newly accessible after this award
  *   categoryUnlocksGranted: [{ category, unlockedAt, badgeSeen }] persisted to user.categoryUnlocks
+ *
+ * Pass the request as `{ req }` so a slim-mode award diffs against the slim
+ * category list, which levelling never changes — no unlock notices for
+ * categories that are still "coming soon". See utils/learnScope.js.
  */
-async function awardCoins(userId, amount, reason, label, briefId = null) {
+async function awardCoins(userId, amount, reason, label, briefId = null, { req } = {}) {
   // Atomic increment first — this cannot be lost to a concurrent awardCoins call.
   const incremented = await User.findByIdAndUpdate(
     userId,
@@ -115,7 +120,7 @@ async function awardCoins(userId, amount, reason, label, briefId = null) {
   let unlockedCategories     = [];
   let categoryUnlocksGranted = [];
   try {
-    const settings   = await AppSettings.getSettings();
+    const settings   = scopeLearnToSlim(req, await AppSettings.getSettings());
     const levelsList = await Level.find().sort({ levelNumber: 1 }).lean();
     const thresholds = buildCumulativeThresholds(levelsList);
 

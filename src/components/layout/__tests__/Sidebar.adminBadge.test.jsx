@@ -21,7 +21,7 @@ vi.mock('../../../context/NewGameUnlockContext', () => ({ useNewGameUnlock: () =
 vi.mock('../../../context/NewCategoryUnlockContext', () => ({ useNewCategoryUnlock: () => ({ hasAnyNew: false, firstNewCategory: null }) }))
 vi.mock('../../../context/UnsolvedReportsContext', () => ({ useUnsolvedReports: () => mockReports }))
 vi.mock('../../../context/ChatUnreadContext', () => ({ useChatUnread: () => ({ hasUnread: false, badgeCount: 0 }) }))
-vi.mock('../../../hooks/useSlimMode', () => ({ useSlimMode: () => false }))
+vi.mock('../../../hooks/useSlimMode', () => ({ useSlimMode: () => false, useSlimLearnEnabled: () => true }))
 vi.mock('../../world3d/state/useWorld3dEnabled', () => ({ useWorld3dNavVisible: () => false }))
 vi.mock('../../../context/AppSettingsContext', () => ({
   useAppSettings: () => ({

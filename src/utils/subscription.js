@@ -1,4 +1,10 @@
 // Mirrors backend/utils/subscription.js for client-side gating
+//
+// Slim mode: AppSettingsContext stamps `settings.learnCategoriesOverride` with
+// the categories slim mode has brought back (backend/constants/slimLearn.json).
+// When it is set, those categories are open to every signed-in player whatever
+// their level or plan, and every other category is "coming soon". Each helper
+// below checks it first, the same as the backend.
 
 /**
  * Returns a human-readable tier label for display.
@@ -15,6 +21,7 @@ export function displayTier(user) {
 }
 
 export function getAccessibleCategories(user, settings) {
+  if (settings?.learnCategoriesOverride) return [...settings.learnCategoriesOverride]
   if (!settings) return []                   // not loaded yet — show nothing locked (fail open)
   if (!user) return settings.guestCategories ?? ['News']
   const sub = user.subscriptionTier ?? 'free'
@@ -34,6 +41,7 @@ export function requiredTier(category, settings) {
 // Returns 'free', 'silver', or 'gold' — the tier required to unlock a pathway.
 // Derived from freeCategories/silverCategories so it stays in sync with category access.
 export function pathwayTierRequired(category, settings) {
+  if (settings?.learnCategoriesOverride) return 'free'  // slim mode never asks for an upgrade
   if (!settings) return 'free'  // fail open — show nothing as requiring upgrade
   const free   = settings.freeCategories   ?? []
   const silver = settings.silverCategories ?? []
@@ -86,6 +94,7 @@ export function getUserLevel(cycleAirstars, levelThresholds) {
 // having surpassed the unlock rank means cycle-level resets from prior cycles are irrelevant
 // and prior unlocks stay sticky across rank promotions.
 export function isPathwayUnlocked(category, user, settings, levelThresholds) {
+  if (settings?.learnCategoriesOverride) return settings.learnCategoriesOverride.includes(category)
   if (!user) return true
   if (!settings?.pathwayUnlocks) return true
   const unlock = settings.pathwayUnlocks.find(p => p.category === category)
@@ -102,6 +111,7 @@ export function getPathwayRequirements(category, settings) {
 }
 
 export function isCategoryLocked(category, user, settings, levelThresholds) {
+  if (settings?.learnCategoriesOverride) return !user || !settings.learnCategoriesOverride.includes(category)
   const accessible = getAccessibleCategories(user, settings)
   if (accessible === null) {
     // Gold subscription — only pathway can lock it
@@ -115,6 +125,7 @@ export function isCategoryLocked(category, user, settings, levelThresholds) {
 // True when upgrading to Silver would immediately unlock this category for the user:
 // locked by subscription, silver includes it, and the pathway gate is already met.
 export function isUpgradeUnlockable(category, user, settings, levelThresholds) {
+  if (settings?.learnCategoriesOverride) return false  // nothing to buy in slim mode
   const accessible = getAccessibleCategories(user, settings)
   if (!accessible || accessible.includes(category)) return false
   if (!(settings?.silverCategories ?? []).includes(category)) return false
@@ -125,8 +136,13 @@ export function isUpgradeUnlockable(category, user, settings, levelThresholds) {
 //   'signin'  — guest (not logged in)
 //   'upgrade' — subscription tier too low
 //   'pathway' — level or rank requirement not met
+//   'soon'    — slim mode has not brought this category back yet
 //   null      — accessible
 export function lockReason(category, user, settings, levelThresholds) {
+  if (settings?.learnCategoriesOverride) {
+    if (!settings.learnCategoriesOverride.includes(category)) return 'soon'
+    return user ? null : 'signin'
+  }
   const accessible = getAccessibleCategories(user, settings)
   if (accessible === null) {
     // Gold subscription — only pathway can lock it

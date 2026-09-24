@@ -43,6 +43,8 @@ export function authFetch(url, options = {}) {
   return fetch(url, {
     ...options,
     headers: {
+      // The native app is always slim; see nativeHeaders in AuthContext.
+      'X-Slim-App': '1',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },

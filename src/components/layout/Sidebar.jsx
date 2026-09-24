@@ -12,8 +12,8 @@ import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
 import { isLocalEnvironment } from '../../utils/localEnvironment'
 import { prefetchOverview } from '../../utils/chatCache'
-import { SLIM_NAV_ITEMS, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
-import { useSlimMode } from '../../hooks/useSlimMode'
+import { slimNavItems, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
+import { useSlimMode, useSlimLearnEnabled } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 
 const NAV_ITEMS = [
@@ -47,9 +47,10 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const slim = useSlimMode()
+  const slimLearnEnabled = useSlimLearnEnabled()
   // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
   const showHangarNav = useWorld3dNavVisible()
-  const baseNavItems = slim ? SLIM_NAV_ITEMS : NAV_ITEMS
+  const baseNavItems = slim ? slimNavItems({ learnEnabled: slimLearnEnabled }) : NAV_ITEMS
   const withHangar = showHangarNav ? [...baseNavItems, HANGAR_NAV_ITEM] : baseNavItems
   const activeNavTo = slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
   const clipperAvailable = isLocalEnvironment()

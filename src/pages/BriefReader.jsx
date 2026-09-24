@@ -154,14 +154,16 @@ function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false, is
                   if (isLocked) {
                     // Inline lock card — keeps the user in their current brief instead of
                     // navigating into a 403 and bouncing them to /learn-priority.
-                    if (lockReason === 'pathway') {
+                    if (lockReason === 'pathway' || lockReason === 'soon') {
                       const userRankNum = user?.rank?.rankNumber ?? 1
                       const rankNeeded  = pathwayReq?.rankRequired ?? 1
                       const rankShort   = rankNeeded > userRankNum
                         ? (MOCK_RANKS.find(r => r.rankNumber === rankNeeded)?.rankName ?? `Rank ${rankNeeded}`)
                         : null
                       const levelNeeded = pathwayReq?.levelRequired ?? null
-                      const summary     = rankShort
+                      const summary     = lockReason === 'soon'
+                        ? 'Coming soon'
+                        : rankShort
                         ? `Unlocks at ${rankShort}`
                         : levelNeeded
                           ? `Reach Agent Level ${levelNeeded}`
@@ -319,7 +321,7 @@ function KeywordSheet({ kw, onClose, navigate, disableLinkedBriefNav = false, is
               </button>
             )}
           </motion.div>
-          {showLockModal && isLocked && lockReason !== 'pathway' && linkedCategory && (
+          {showLockModal && isLocked && lockReason !== 'pathway' && lockReason !== 'soon' && linkedCategory && (
             <LockedCategoryModal
               category={linkedCategory}
               tier={lockReason === 'upgrade' ? requiredTier(linkedCategory, settings) : 'silver'}
@@ -1632,6 +1634,7 @@ export default function BriefReader() {
   const [locked, setLocked]     = useState(false)
   const [lockedCategory, setLockedCategory] = useState(null)
   const [lockedPathway, setLockedPathway]   = useState(null) // { category, levelRequired, rankRequired }
+  const [lockedSoon, setLockedSoon]         = useState(null) // slim mode: category not brought back yet
   const [sectionIdx, setSection] = useState(0)
   const [isFirstCompletion, setIsFirstCompletion] = useState(false)
   const [done, setDone]          = useState(
@@ -1770,6 +1773,16 @@ export default function BriefReader() {
       .then(r => {
         if (r.status === 403) {
           r.json().then(d => {
+            // Slim mode (backend utils/learnScope.js): guests must sign in to
+            // read, and categories outside the slim list are "coming soon".
+            if (d?.reason === 'signin') {
+              navigate(`/login?tab=signin&pendingBrief=${briefId}`, { replace: true })
+              return
+            }
+            if (d?.reason === 'soon') {
+              setLockedSoon(d.category ?? '')
+              return
+            }
             if (d?.reason === 'pathway') {
               setLockedPathway({ category: d.category, levelRequired: d.levelRequired, rankRequired: d.rankRequired })
             } else {
@@ -2412,6 +2425,29 @@ export default function BriefReader() {
   }
 
   if (locked) {
+    if (lockedSoon != null) {
+      return (
+        <>
+          <button
+            onClick={() => navigate('/learn-priority')}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-5 transition-colors"
+          >
+            ← Back
+          </button>
+          <div className="rounded-2xl border border-slate-200 bg-surface p-6 text-center max-w-sm mx-auto mt-8">
+            <div className="text-4xl mb-3">🔒</div>
+            {lockedSoon && <p className="font-extrabold text-slate-900 text-lg mb-1">{lockedSoon}</p>}
+            <p className="text-sm text-slate-600 mb-4">Coming soon</p>
+            <button
+              onClick={() => navigate('/learn-priority')}
+              className="w-full py-2.5 rounded-2xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-sm transition-colors"
+            >
+              Back to Learn
+            </button>
+          </div>
+        </>
+      )
+    }
     if (lockedPathway) {
       return (
         <>

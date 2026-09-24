@@ -7,6 +7,7 @@ const User = require('../models/User');
 const AirstarLog = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold } = require('../utils/awardCoins');
 const { effectiveTier, getAccessibleCategories, isPathwayUnlocked, getPathwayAccessibleCategories, buildCumulativeThresholds, canAccessCategory } = require('../utils/subscription');
+const { getLearnSettings } = require('../utils/learnScope');
 const { enrichWithMatchTerms } = require('../utils/mentionedBriefs');
 const { normalizeSections, sectionBody } = require('../utils/descriptionSections');
 // Required to register the schema so populate('quizQuestionsEasy/Medium') works
@@ -39,9 +40,9 @@ function isTrackable(brief, user, settings, levelThresholds) {
   return true;
 }
 
-async function loadAccessContext() {
+async function loadAccessContext(req) {
   const [settings, rawLevels] = await Promise.all([
-    AppSettings.getSettings(),
+    getLearnSettings(req),
     Level.find().sort({ levelNumber: 1 }).lean(),
   ]);
   return { settings, levelThresholds: buildCumulativeThresholds(rawLevels) };
@@ -123,7 +124,7 @@ router.get('/', optionalAuth, async (req, res) => {
       IntelligenceBrief.countDocuments(filter),
     ]);
 
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier       = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings);
@@ -261,7 +262,7 @@ router.get('/category-stats', optionalAuth, async (req, res) => {
 router.get('/random-sample', optionalAuth, async (req, res) => {
   try {
     const count    = Math.min(parseInt(req.query.count) || 5, 20);
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier     = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings);
@@ -297,7 +298,7 @@ router.get('/random-sample', optionalAuth, async (req, res) => {
 
 router.get('/random-unlocked', optionalAuth, async (req, res) => {
   try {
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier       = req.user ? effectiveTier(req.user) : 'guest';
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
@@ -362,7 +363,7 @@ router.get('/random-unlocked', optionalAuth, async (req, res) => {
 router.get('/random-in-progress', protect, async (req, res) => {
   try {
     const [settings, rawLevels, reads] = await Promise.all([
-      AppSettings.getSettings(),
+      getLearnSettings(req),
       Level.find().sort({ levelNumber: 1 }).lean(),
       IntelligenceBriefRead.find({ userId: req.user._id, completed: false })
         .populate('intelBriefId', 'title category _id status priorityNumber')
@@ -426,7 +427,7 @@ router.get('/random-in-progress', protect, async (req, res) => {
 // Daily Mission surfaces a fresh next-stepping-stone, Jump Back In covers resume.
 router.get('/next-pathway-brief', protect, async (req, res) => {
   try {
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier       = effectiveTier(req.user);
     const accessible = getAccessibleCategories(tier, settings); // null = gold (all access)
@@ -499,7 +500,7 @@ router.get('/unread-categories', optionalAuth, async (req, res) => {
       { $group: { _id: '$category', total: { $sum: 1 }, briefIds: { $push: '$_id' } } },
     ]);
 
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
 
     if (!req.user) {
@@ -601,7 +602,7 @@ router.get('/history', protect, async (req, res) => {
 router.get('/pathway-counts', optionalAuth, async (req, res) => {
   try {
     const [settings, rawLevels] = await Promise.all([
-      AppSettings.getSettings(),
+      getLearnSettings(req),
       Level.find().sort({ levelNumber: 1 }).lean(),
     ]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
@@ -674,9 +675,12 @@ router.get('/pathway/:category', optionalAuth, async (req, res) => {
 
     // Enforce both subscription-tier and pathway (level + rank) access
     {
-      const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+      const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
       const levelThresholds = buildCumulativeThresholds(rawLevels);
       const tier = req.user ? effectiveTier(req.user) : 'guest';
+      if (settings.learnCategoriesOverride && !settings.learnCategoriesOverride.includes(category)) {
+        return res.status(403).json({ message: 'This category is coming soon.', category, reason: 'soon' });
+      }
       const accessible = getAccessibleCategories(tier, settings);
       if (accessible !== null && !accessible.includes(category)) {
         return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category });
@@ -781,9 +785,19 @@ router.get('/:id', optionalAuth, async (req, res) => {
     let tierAmmo = 0;
 
     // Category access check — subscription tier then pathway (level + rank)
-    const [settings, rawLevels] = await Promise.all([AppSettings.getSettings(), Level.find().sort({ levelNumber: 1 }).lean()]);
+    const [settings, rawLevels] = await Promise.all([getLearnSettings(req), Level.find().sort({ levelNumber: 1 }).lean()]);
     const levelThresholds = buildCumulativeThresholds(rawLevels);
     const tier = req.user ? effectiveTier(req.user) : 'guest';
+    // Slim mode: categories outside the slim list are "coming soon" rather
+    // than an upgrade, and guests may browse the pathway but must sign in to read.
+    if (settings.learnCategoriesOverride) {
+      if (!settings.learnCategoriesOverride.includes(brief.category)) {
+        return res.status(403).json({ message: 'This category is coming soon.', category: brief.category, reason: 'soon' });
+      }
+      if (!req.user) {
+        return res.status(403).json({ message: 'Sign in to read this brief.', category: brief.category, reason: 'signin' });
+      }
+    }
     const accessible = getAccessibleCategories(tier, settings);
     if (accessible !== null && !accessible.includes(brief.category)) {
       return res.status(403).json({ message: 'Upgrade your subscription to access this category.', category: brief.category });
@@ -912,7 +926,7 @@ router.get('/:id/reward-preview', protect, async (req, res) => {
       return res.status(400).json({ message: 'Brief has no content yet' });
     }
 
-    const settings   = await AppSettings.getSettings();
+    const settings   = await getLearnSettings(req);
     const readRecord = await IntelligenceBriefRead.findOne({
       userId:       req.user._id,
       intelBriefId: brief._id,
@@ -993,7 +1007,7 @@ router.post('/:id/complete', protect, async (req, res) => {
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
     if (brief.status === 'stub' || !brief.descriptionSections?.length) return res.status(400).json({ message: 'Brief has no content yet' });
 
-    const { settings, levelThresholds } = await loadAccessContext();
+    const { settings, levelThresholds } = await loadAccessContext(req);
     if (!isTrackable(brief, req.user, settings, levelThresholds)) {
       return res.status(403).json({ message: 'Brief is not accessible for this user' });
     }
@@ -1029,7 +1043,7 @@ router.post('/:id/complete', protect, async (req, res) => {
       airstarsEarned = settings.airstarsPerBriefRead ?? 5;
       const briefResult = await awardCoins(
         req.user._id, airstarsEarned, 'brief_read',
-        `Intel Brief Read: ${brief.title}`, brief._id
+        `Intel Brief Read: ${brief.title}`, brief._id, { req }
       );
       newTotalAirstars = briefResult.totalAirstars;
       newCycleAirstars = briefResult.cycleAirstars;
@@ -1056,7 +1070,7 @@ router.post('/:id/complete', protect, async (req, res) => {
           ? `Daily Brief — ${newStreak}-day streak!`
           : 'Daily Brief';
         const dailyResult   = await awardCoins(
-          req.user._id, dailyCoinsEarned, 'daily_brief', dailyLabel
+          req.user._id, dailyCoinsEarned, 'daily_brief', dailyLabel, null, { req }
         );
         newTotalAirstars    = dailyResult.totalAirstars;
         newCycleAirstars    = dailyResult.cycleAirstars;
@@ -1142,7 +1156,7 @@ router.patch('/:id/time', protect, async (req, res) => {
     const { seconds, currentSection } = req.body;
     const brief = await IntelligenceBrief.findById(req.params.id).select('status category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
-    const { settings, levelThresholds } = await loadAccessContext();
+    const { settings, levelThresholds } = await loadAccessContext(req);
     if (!isTrackable(brief, req.user, settings, levelThresholds)) {
       return res.status(400).json({ message: 'Brief is not trackable for this user' });
     }
@@ -1163,7 +1177,7 @@ router.post('/:id/use-ammo', protect, async (req, res) => {
   try {
     const stubCheck = await IntelligenceBrief.findById(req.params.id).select('status category');
     if (!stubCheck) return res.status(404).json({ message: 'Brief not found' });
-    const { settings, levelThresholds } = await loadAccessContext();
+    const { settings, levelThresholds } = await loadAccessContext(req);
     if (!isTrackable(stubCheck, req.user, settings, levelThresholds)) {
       return res.status(400).json({ message: 'Brief is not trackable for this user' });
     }
@@ -1211,7 +1225,7 @@ router.post('/:id/mnemonic-viewed', protect, async (req, res) => {
     if (!statKey) return res.status(400).json({ message: 'statKey required' });
     const brief = await IntelligenceBrief.findById(req.params.id).select('status category');
     if (!brief) return res.status(404).json({ message: 'Brief not found' });
-    const { settings, levelThresholds } = await loadAccessContext();
+    const { settings, levelThresholds } = await loadAccessContext(req);
     if (!isTrackable(brief, req.user, settings, levelThresholds)) {
       return res.status(400).json({ message: 'Brief is not trackable for this user' });
     }
@@ -1316,10 +1330,10 @@ async function computeFlashcardReachOutcome(user, briefId, { commit, brief, sett
   return { wasNew: true, flashcardCount, gameUnlocksGranted };
 }
 
-async function loadFlashcardReachContext(briefId) {
+async function loadFlashcardReachContext(req, briefId) {
   const brief = await IntelligenceBrief.findById(briefId).select('status category descriptionSections');
   if (!brief) return { brief: null };
-  const { settings, levelThresholds } = await loadAccessContext();
+  const { settings, levelThresholds } = await loadAccessContext(req);
   return { brief, settings, levelThresholds };
 }
 
@@ -1328,7 +1342,7 @@ async function loadFlashcardReachContext(briefId) {
 // animation the instant the user swipes to section 4, with no network wait.
 router.get('/:id/reached-flashcard-preview', protect, async (req, res) => {
   try {
-    const ctx = await loadFlashcardReachContext(req.params.id);
+    const ctx = await loadFlashcardReachContext(req, req.params.id);
     if (!ctx.brief) return res.status(404).json({ message: 'Brief not found' });
     if (ctx.brief.status === 'stub') return res.status(400).json({ message: 'Brief has no content yet' });
 
@@ -1344,7 +1358,7 @@ router.get('/:id/reached-flashcard-preview', protect, async (req, res) => {
 // Returns wasNew: true only the first time (drives the deck notification on the client).
 router.post('/:id/reached-flashcard', protect, async (req, res) => {
   try {
-    const ctx = await loadFlashcardReachContext(req.params.id);
+    const ctx = await loadFlashcardReachContext(req, req.params.id);
     if (!ctx.brief) return res.status(404).json({ message: 'Brief not found' });
     const outcome = await computeFlashcardReachOutcome(req.user, req.params.id, { commit: true, ...ctx });
     res.json({ status: 'success', ...outcome });

@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useAnimationControls } from 'framer-motion'
 import Overlay from '../components/ui/Overlay'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
 import TutorialModal from '../components/tutorial/TutorialModal'
@@ -955,7 +956,7 @@ function PathwayHeader({ category, colors }) {
 const INITIAL_RENDER_COUNT = 12
 const RENDER_BATCH_SIZE    = 20
 
-function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction, nextBriefImages, nextBriefId, loading }) {
+function PathwayView({ category, briefs, colors, pathwayUnlocked, comingSoon = false, signInToRead = false, lockReason, readSet, inProgressSet, quizPassedSet, aptitudeSyncEnabled, onStoneTap, onLockedTap, direction, nextBriefImages, nextBriefId, loading }) {
   const navigate = useNavigate()
   const [openSyncId, setOpenSyncId] = useState(null)
   const [revealedStubId, setRevealedStubId] = useState(null)
@@ -1140,15 +1141,18 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
           >
             🔒
           </div>
-          <p className="text-base font-bold text-slate-700 mb-1">{category} Pathway Locked</p>
+          <p className="text-base font-bold text-slate-700 mb-1">{category} Pathway {comingSoon ? 'Coming Soon' : 'Locked'}</p>
           <p className="text-sm text-slate-500 mb-5">{lockReason}</p>
-          <button
-            onClick={onLockedTap}
-            className="px-5 py-2.5 rounded-xl text-sm font-bold transition-colors"
-            style={{ background: colors.stone + '22', color: colors.ring, border: `1px solid ${colors.stone}44` }}
-          >
-            How to Unlock
-          </button>
+          {/* A coming-soon pathway has nothing to unlock yet, so no button. */}
+          {!comingSoon && (
+            <button
+              onClick={onLockedTap}
+              className="px-5 py-2.5 rounded-xl text-sm font-bold transition-colors"
+              style={{ background: colors.stone + '22', color: colors.ring, border: `1px solid ${colors.stone}44` }}
+            >
+              How to Unlock
+            </button>
+          )}
         </div>
       </>
     )
@@ -1258,7 +1262,9 @@ function PathwayView({ category, briefs, colors, pathwayUnlocked, lockReason, re
           colors,
           milestone,
           index: i,
-          onTap: () => navigate(`/brief/${brief._id}`),
+          // Slim mode lets guests see the pathway but reading needs an account.
+          // pendingBrief sends them straight to this brief after signing in.
+          onTap: () => navigate(signInToRead ? `/login?tab=signin&pendingBrief=${brief._id}` : `/brief/${brief._id}`),
           onSyncTap: () => navigate(`/aptitude-sync/${brief._id}`, { state: { briefTitle: brief.title, category: brief.category } }),
           quizPassed: quizPassedSet.has(brief._id),
           aptitudeSyncEnabled,
@@ -1520,6 +1526,11 @@ export default function LearnPriority() {
   const { user, API, apiFetch } = useAuth()
   const navigate      = useNavigate()
   const location      = useLocation()
+  // Slim mode: only these categories are open, the rest are "coming soon".
+  // null on the full site. See backend/constants/slimLearn.json.
+  const appSettingsCtx = useAppSettings()
+  const appSettings    = appSettingsCtx?.settings ?? null
+  const slimCategories = appSettings?.learnCategoriesOverride ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const { start, visible, hasSeen } = useAppTutorial()
 
@@ -1628,6 +1639,16 @@ export default function LearnPriority() {
   const TIER_ORDER = { free: 0, silver: 1, gold: 2 }
   const pathways = pathwayUnlocks
     .map(unlock => {
+      if (slimCategories) {
+        const open = slimCategories.includes(unlock.category)
+        return {
+          ...unlock,
+          tierRequired: 'free',
+          colors:     PATHWAY_COLORS[unlock.category] ?? DEFAULT_COLORS,
+          unlocked:   open,
+          comingSoon: !open,
+        }
+      }
       const tierRequired = pathwayTierRequired(unlock.category, catSettings)
       return {
         ...unlock,
@@ -1637,6 +1658,8 @@ export default function LearnPriority() {
       }
     })
     .sort((a, b) =>
+      // Slim mode: open pathways first, so the carousel starts on something readable.
+      (slimCategories ? (b.unlocked ? 1 : 0) - (a.unlocked ? 1 : 0) : 0) ||
       ((10 * a.rankRequired + a.levelRequired) - (10 * b.rankRequired + b.levelRequired)) ||
       ((TIER_ORDER[a.tierRequired] ?? 0) - (TIER_ORDER[b.tierRequired] ?? 0))
     )
@@ -1646,8 +1669,12 @@ export default function LearnPriority() {
   // ── Jump to category passed via navigation state (e.g. back from BriefReader) ─
   // Fires once, after settings fetch settles, so pathways reflect server order.
   // Skipped if the unlock sequence has already taken over — it controls the index.
+  // Also waits for the app settings, which decide whether slim mode's
+  // pathway order applies — snapping before they land could pick a pathway
+  // that slim mode then moves.
+  const appSettingsReady = !appSettingsCtx || appSettings != null
   useEffect(() => {
-    if (!settingsLoaded) return
+    if (!settingsLoaded || !appSettingsReady) return
     if (sequenceStartedRef.current) return
     // URL `?category=` takes precedence — this is what browser back/forward
     // restores. Deep links and in-page swipes both land here.
@@ -1662,8 +1689,9 @@ export default function LearnPriority() {
       if (idx !== -1) setActiveCatIndex(idx)
       return
     }
-    // Snap to the user's first accessible pathway (e.g. News for guests/free)
-    const accessible = getAccessibleCategories(user, catSettings)
+    // Snap to the user's first accessible pathway (e.g. News for guests/free).
+    // Slim mode sorts its open pathways first, so the fallback below covers it.
+    const accessible = slimCategories ? null : getAccessibleCategories(user, catSettings)
     if (accessible !== null && accessible.length > 0) {
       const idx = pathways.findIndex(p => accessible.includes(p.category))
       if (idx !== -1) { setActiveCatIndex(idx); return }
@@ -1671,7 +1699,7 @@ export default function LearnPriority() {
     // Fallback: first unlocked pathway, or just 0
     const firstUnlocked = pathways.findIndex(p => p.unlocked)
     setActiveCatIndex(firstUnlocked !== -1 ? firstUnlocked : 0)
-  }, [settingsLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settingsLoaded, appSettingsReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Start the new-category unlock sequence (once per mount) ───────────────
   // After settings load and pathways are known, if there are any unseen category
@@ -1918,6 +1946,7 @@ export default function LearnPriority() {
 
   // ── Lock reason string ──────────────────────────────────────────────────────
   function getLockReason(unlock) {
+    if (unlock.comingSoon) return 'Coming soon'
     if (userRankNumber < (unlock.rankRequired ?? 1)) {
       return `Unlocks at ${getRankName(unlock.rankRequired)}`
     }
@@ -2095,6 +2124,8 @@ export default function LearnPriority() {
               briefs={activeBriefs}
               colors={activePathway.colors}
               pathwayUnlocked={activePathway.unlocked}
+              comingSoon={!!activePathway.comingSoon}
+              signInToRead={!!slimCategories && !user}
               lockReason={getLockReason(activePathway)}
               readSet={readSet}
               inProgressSet={inProgressSet}
