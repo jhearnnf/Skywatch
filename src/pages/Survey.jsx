@@ -115,6 +115,17 @@ function wantsSheetAsk(answers = {}) {
     && (answers.passedForRole === 'yes' || answers.passedForRole === 'no')
 }
 
+// Where a reopened, already finished run lands. The emailed link keeps working
+// after the questionnaire is done, and the reason to come back is the score
+// sheet: someone who skipped it, or who was still waiting on a result. So:
+// still waiting -> ask whether the result has come through; has a result ->
+// straight to the upload; anyone else -> the closing screen as before.
+function returningStep(answers = {}) {
+  if (answers.satTest === true && answers.passedForRole === 'waiting') return 'result'
+  if (wantsSheetAsk(answers)) return 'upload'
+  return 'done'
+}
+
 // The demo. `/survey/preview` walks the whole questionnaire with nothing behind
 // it: no invite is looked up, no answer is saved, no donation session is opened
 // and no account is touched. It exists so the flow can be checked (and shown to
@@ -163,6 +174,9 @@ export default function Survey() {
   const [step,    setStep]      = useState('intro')
   const [history, setHistory]   = useState([])
   const [badge,   setBadge]     = useState(false)
+  // Reopened a run that was already finished. Only changes the wording of the
+  // upload screen, which otherwise opens with "one last thing".
+  const [returning, setReturning] = useState(false)
   const [saving,  setSaving]    = useState(false)
   // Score sheets this person has sent. Server-owned in a real run, local-only
   // in the demo.
@@ -241,7 +255,10 @@ export default function Survey() {
             setBadge(true)
           }
         }
-        if (data.data.completed) setStep('done')
+        if (data.data.completed) {
+          setReturning(true)
+          setStep(returningStep(data.data.response ?? {}))
+        }
       } catch (err) {
         if (!cancelled) setFatal(err.message)
       } finally {
@@ -574,11 +591,41 @@ export default function Survey() {
             />
           )}
 
+          {/* A returning "still waiting" respondent. Same answers as the
+              original question, so the saved response reads the same whichever
+              visit it came from, and a pass still earns the badge. */}
+          {step === 'result' && (
+            <QuestionCard
+              title="Has your result come through?"
+              hint={answers.role ? roleLabel(answers.role, answers.roleOther) : ''}
+            >
+              {[
+                ['yes',     'Yes, I passed',                     { passedForRole: 'yes', passedAnyRole: null }],
+                ['other',   'No, but I passed for another role', { passedForRole: 'no',  passedAnyRole: 'yes' }],
+                ['no',      'No, I did not pass',                { passedForRole: 'no',  passedAnyRole: 'no' }],
+                ['waiting', 'Still waiting to hear',             { passedForRole: 'waiting', passedAnyRole: null }],
+              ].map(([key, label, patch]) => (
+                <ChoiceButton
+                  key={key}
+                  testId={`survey-result-${key}`}
+                  onClick={() => {
+                    const full = { ...patch, passedAnyRoleWhich: null }
+                    save(full)
+                    setTimeout(() => goTo(wantsSheetAsk({ ...answers, ...full }) ? 'upload' : 'done'), 220)
+                  }}
+                >
+                  {label}
+                </ChoiceButton>
+              ))}
+            </QuestionCard>
+          )}
+
           {step === 'upload' && (
             <SheetUploadCard
               API={API}
               token={token}
               preview={isPreview}
+              returning={returning}
               sheets={sheets}
               onSheets={setSheets}
               onDone={() => goTo('done')}
@@ -593,6 +640,8 @@ export default function Survey() {
               preview={isPreview}
               usedAndroid={!!meta?.usedAndroid}
               awaitingResult={answers.passedForRole === 'waiting'}
+              canAddSheet={wantsSheetAsk(answers) && sheets.length === 0}
+              onAddSheet={() => goTo('upload')}
               onDonationClick={() => save({ donationClicked: true })}
               onPlayReviewClick={() => save({ playReviewClicked: true })}
               onComment={(text) => save({ comment: text })}
@@ -878,7 +927,7 @@ function SurveyClosed({ title, body }) {
  * costs nothing, which is why the skip is a plain visible button rather than
  * something to hunt for.
  */
-function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, onDone }) {
+function SheetUploadCard({ API, token, preview = false, returning = false, sheets = [], onSheets, onDone }) {
   const [busy,  setBusy]  = useState(false)
   const [error, setError] = useState('')
   const fileRef = useRef(null)
@@ -953,10 +1002,12 @@ function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, o
       <div className="text-center mb-5">
         <div className="text-4xl mb-3">📄</div>
         <h1 className="text-xl font-extrabold text-slate-900 mb-2">
-          One last thing, and it is optional
+          {returning ? 'Welcome back' : 'One last thing, and it is optional'}
         </h1>
         <p className="text-sm text-slate-500 leading-relaxed">
-          Would you send us photos of your score sheet?
+          {returning && sheets.length
+            ? 'Here are the score sheet photos you sent. You can add more pages or remove one.'
+            : 'Would you send us photos of your score sheet?'}
         </p>
       </div>
 
@@ -1073,7 +1124,7 @@ function SheetUploadCard({ API, token, preview = false, sheets = [], onSheets, o
   )
 }
 
-function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awaitingResult = false, onDonationClick, onPlayReviewClick, onComment }) {
+function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awaitingResult = false, canAddSheet = false, onAddSheet, onDonationClick, onPlayReviewClick, onComment }) {
   const [amount, setAmount] = useState(null)
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
@@ -1258,6 +1309,24 @@ function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awai
           When your result comes through, we would love a photo of your score sheet. It is what
           our score estimates are built from. Just open this same link again.
         </p>
+      )}
+
+      {/* For someone who said "No thanks" to the sheet. A quiet link, not a
+          second ask: the one-ask-at-a-time rule above still holds. */}
+      {canAddSheet && (
+        <div className="text-center mt-5" data-testid="survey-sheet-add">
+          <button
+            type="button"
+            onClick={onAddSheet}
+            data-testid="survey-sheet-add-button"
+            className="text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors"
+          >
+            Changed your mind? Add your score sheet
+          </button>
+          <p className="text-[11px] text-slate-500 leading-relaxed mt-1">
+            You can also send it any time later by opening this same link again.
+          </p>
+        </div>
       )}
 
       <CommentBox onSubmit={onComment} />

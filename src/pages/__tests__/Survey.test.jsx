@@ -887,6 +887,76 @@ describe('Survey — the score sheet ask', () => {
   })
 })
 
+describe('Survey — sending a score sheet later', () => {
+  const answered = (over = {}) => ({
+    satTest: true, testType: 'raf-cbat', role: 'pilot', passedForRole: 'yes',
+    realismRating: 4, helpedRating: 5, ...over,
+  })
+
+  it('offers the sheet again on the thank-you screen after "No thanks"', async () => {
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'));            await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat'));      await advance()
+    fireEvent.click(await screen.findByTestId('survey-role-pilot'));         await advance()
+    fireEvent.click(await screen.findByTestId('survey-passed-no'));          await advance()
+    fireEvent.click(await screen.findByTestId('survey-realism-4'));          await advance()
+    fireEvent.click(await screen.findByTestId('survey-helped-5'));           await advance()
+    fireEvent.click(await screen.findByTestId('survey-gaps-submit'));        await advance()
+    await skipSheet()
+
+    fireEvent.click(await screen.findByTestId('survey-sheet-add-button'))
+    await advance()
+    expect(await screen.findByTestId('survey-upload')).toBeInTheDocument()
+  })
+
+  it('opens a finished run with a result straight on the upload', async () => {
+    mockApi({ completed: true, response: answered({ passedForRole: 'no', passedAnyRole: 'no' }) })
+    renderSurvey()
+    expect(await screen.findByTestId('survey-upload')).toBeInTheDocument()
+    expect(screen.getByText('Welcome back')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('survey-upload-skip'))
+    await advance()
+    expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
+  })
+
+  it('shows the sheets already sent when a finished run is reopened', async () => {
+    mockApi({
+      completed: true,
+      response: answered(),
+      resultImages: [{ _id: 'old1', url: 'https://cdn/old.jpg' }],
+    })
+    renderSurvey()
+    expect(await screen.findByTestId('survey-upload-list')).toBeInTheDocument()
+    expect(screen.getByTestId('survey-upload-remove-old1')).toBeInTheDocument()
+  })
+
+  it('asks a returning "still waiting" respondent for their result, then the sheet', async () => {
+    mockApi({ completed: true, response: answered({ passedForRole: 'waiting' }) })
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-result-yes'))
+    await advance()
+    await waitFor(() => expect(patches).toContainEqual(expect.objectContaining({ passedForRole: 'yes' })))
+    expect(await screen.findByTestId('survey-upload')).toBeInTheDocument()
+  })
+
+  it('leaves someone still waiting on the thank-you screen', async () => {
+    mockApi({ completed: true, response: answered({ passedForRole: 'waiting' }) })
+    renderSurvey()
+    fireEvent.click(await screen.findByTestId('survey-result-waiting'))
+    await advance()
+    expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
+    expect(screen.getByTestId('survey-sheet-later')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-upload')).not.toBeInTheDocument()
+  })
+
+  it('opens a finished run with no result to send on the thank-you screen', async () => {
+    mockApi({ completed: true, response: answered({ satTest: false, passedForRole: null }) })
+    renderSurvey()
+    expect(await screen.findByTestId('survey-done')).toBeInTheDocument()
+  })
+})
+
 describe('Survey test selection', () => {
   it('clears the previous role and outcome when the test changes', async () => {
     mockApi({ response: { satTest: true, testType: 'raf-cbat', role: 'pilot', passedForRole: 'yes' } })
