@@ -4158,30 +4158,93 @@ body.play-mode .card-shadow {
 }
 
 
-/* ── Case Files map tooltips ──────────────────────────────────────────────────
-   Leaflet ships a white tooltip with a white arrow, which lands as a bright
-   card on top of the dark basemap the two map stages use. Restyle it onto the
-   dark surface tokens; the arrow border colour has to be set separately because
-   Leaflet draws it as a CSS triangle. */
-.leaflet-tooltip.cf-map-tooltip {
-  background: #0c1829;               /* surface-raised */
-  border: 1px solid rgba(72, 98, 130, 0.5);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
-  color: #ddeaf8;                    /* text */
-  padding: 8px 10px;
-  border-radius: 8px;
+/* ── Case Files tactical map ──────────────────────────────────────────────────
+   The war-room LED table MapCanvas draws: a deep glass panel, LEDs for land
+   (on a canvas), glowing borders, mono labels and a slow scan sweep. */
+.cf-tactical-map {
+  background:
+    radial-gradient(120% 90% at 50% 45%, #0b1a30 0%, #071224 55%, #040b16 100%);
+  box-shadow: inset 0 0 0 1px rgba(91,170,255,0.08), 0 0 30px rgba(91,170,255,0.08);
 }
-.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-top::before    { border-top-color: #0c1829; }
-.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-bottom::before { border-bottom-color: #0c1829; }
-.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-left::before   { border-left-color: #0c1829; }
-.leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-right::before  { border-right-color: #0c1829; }
-
+.cf-map-vignette {
+  background: radial-gradient(130% 100% at 50% 50%, transparent 55%, rgba(2,6,14,0.7) 100%);
+}
+@keyframes cf-map-scan {
+  0%   { transform: translateY(-120%); }
+  100% { transform: translateY(900%); }
+}
+.cf-map-scan {
+  top: 0;
+  background: linear-gradient(to bottom, transparent, rgba(91,170,255,0.07) 70%, rgba(150,210,255,0.16) 98%, transparent);
+  animation: cf-map-scan 7s linear infinite;
+}
+.cf-map-grid-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  fill: rgba(91,170,255,0.45);
+}
+.cf-map-sea-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  font-style: italic;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  fill: rgba(91,170,255,0.35);
+}
+.cf-map-country-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  fill: rgba(160,205,255,0.6);
+  stroke: #040b16;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+.cf-map-country-label--hot {
+  font-size: 11px;
+  fill: rgba(215,235,255,0.95);
+}
+.cf-map-hotspot { outline: none; }
+.cf-map-hotspot--clickable { cursor: pointer; }
+.cf-map-hotspot--clickable:hover circle:nth-of-type(2),
+.cf-map-hotspot--clickable:focus-visible circle:nth-of-type(2) {
+  stroke: #ffffff;
+}
+.cf-map-hotspot-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  fill: #d6ebff;
+  stroke: #040b16;
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+.cf-map-hotspot-label--focus { fill: #ffffff; }
 /* Case Files stage scroll areas. The gutter is held whether or not the
    content scrolls, so a scrollbar appearing (a stamp mid-slam, a card
    growing) never narrows the stage and jolts everything in it sideways. */
 .cf-stage-scroll {
   scrollbar-gutter: stable both-edges;
   overflow-x: hidden;
+}
+
+/* Missile exhaust on the live map: a fast, uneven flicker. */
+@keyframes cf-missile-flame {
+  0%, 100% { transform: scaleX(1);    opacity: 0.95; }
+  30%      { transform: scaleX(0.7);  opacity: 0.8; }
+  60%      { transform: scaleX(1.15); opacity: 1; }
+}
+.cf-missile-flame {
+  transform-box: fill-box;
+  transform-origin: right center;
+  animation: cf-missile-flame 0.14s linear infinite;
 }
 
 /* Evidence-wall string drawing itself between two cards. */
@@ -4194,12 +4257,30 @@ body.play-mode .card-shadow {
   animation: cf-string-draw 380ms cubic-bezier(.3, .8, .4, 1) both;
 }
 
+/* The table re-rendering: on first mount and whenever the map is refitted
+   to a new size, the drawing flickers up from a bright, soft flash instead of
+   snapping to its new layout. */
+@keyframes cf-map-recal {
+  0%   { opacity: 0;    filter: brightness(2.2) blur(3px); }
+  35%  { opacity: 0.85; filter: brightness(1.5) blur(1px); }
+  55%  { opacity: 0.55; }
+  100% { opacity: 1;    filter: none; }
+}
+.cf-map-recal {
+  animation: cf-map-recal 420ms ease-out both;
+}
+@keyframes cf-map-unit-spin { to { transform: rotate(360deg); } }
+.cf-map-unit-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cf-map-unit-spin 9s linear infinite;
+}
+
 /* ── Case Files map motion layer ──────────────────────────────────────────────
-   MapMotionLayer mounts as a child of the Leaflet container and covers it, so
-   the SVG's user units are the same screen-space container points Leaflet's
-   own projection hands back. It sits above the overlay pane (400) that carries
-   the hotspot markers but below the tooltip pane (650), and takes no pointer
-   events so clicking a hotspot still works straight through it. */
+   MapMotionLayer covers MapCanvas, so the SVG's user units are the same
+   container points the map's projection hands back. It sits above the hotspot
+   layer and takes no pointer events, so clicking a hotspot still works
+   straight through it. */
 .cf-motion-layer {
   position: absolute;
   inset: 0;
@@ -4293,6 +4374,7 @@ body.play-mode .card-shadow {
   transform-origin: center;
   animation: cf-hotspot-pulse 1.8s ease-out infinite;
 }
+
 /* Case Files primary action: a light sweep every few seconds, so the eye
    always finds "next" on a busy stage. */
 @keyframes cf-action-sheen {

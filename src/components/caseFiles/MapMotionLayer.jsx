@@ -14,19 +14,20 @@
  *   showLabels boolean — draw the plain-English kind label beside each route
  *
  * How it renders
- *   An absolutely positioned <svg> laid over the Leaflet container (children of
- *   MapContainer mount inside it), so screen-space container points are SVG
- *   user units with no extra transform.
+ *   An absolutely positioned <svg> laid over MapCanvas, which provides the
+ *   projection through MapProjectionContext with the same two methods Leaflet's
+ *   map object had (getSize, latLngToContainerPoint), so screen-space container
+ *   points are SVG user units with no extra transform.
  *
  *   One requestAnimationFrame loop mutates SVG attributes directly through refs
  *   and never calls setState. That matters twice over: it keeps a 60fps
  *   animation out of React's render path, and because the loop re-projects
  *   lat/lng every frame, the artwork stays glued to the map through pans and
- *   zooms without subscribing to a single Leaflet event.
+ *   zooms without subscribing to a single map event.
  */
 
 import React, { useEffect, useMemo, useRef, useId } from 'react'
-import { useMap } from 'react-leaflet'
+import { useMapProjection } from '../../utils/caseFiles/mapProjection'
 import { lookupHotspot } from '../../utils/caseFiles/mapHelpers'
 import {
   kindStyle,
@@ -53,7 +54,20 @@ const DROP_COUNT   = 3
 // Drawn nose-right at the origin; the loop rotates each one to its heading.
 
 function HeadGlyph({ kind, color }) {
-  if (kind === 'missile' || kind === 'air') {
+  if (kind === 'missile') {
+    // A missile you can actually see: pale body, coloured nose and fins, and
+    // a flickering exhaust. The old 12px dart vanished under its own trail.
+    return (
+      <g transform="scale(1.25)">
+        <path className="cf-missile-flame" d="M -9 0 L -15 -2.6 L -21 0 L -15 2.6 Z" fill="#ffb347" />
+        <path className="cf-missile-flame" d="M -9 0 L -13 -1.3 L -16 0 L -13 1.3 Z" fill="#fff4d6" />
+        <path d="M -9 -1.7 L -12.5 -5.2 L -6.5 -1.7 Z M -9 1.7 L -12.5 5.2 L -6.5 1.7 Z" fill={color} stroke="#ffffff" strokeWidth="0.4" strokeLinejoin="round" />
+        <rect x="-9.5" y="-1.8" width="15" height="3.6" rx="1.2" fill="#e8eef7" stroke={color} strokeWidth="0.6" />
+        <path d="M 5.5 -1.8 Q 10.5 -0.6 11.5 0 Q 10.5 0.6 5.5 1.8 Z" fill={color} stroke="#ffffff" strokeWidth="0.4" />
+      </g>
+    )
+  }
+  if (kind === 'air') {
     // A dart: long nose, swept fins.
     return (
       <path
@@ -217,7 +231,7 @@ function Movement({ movement, index, color, style, register, showLabel }) {
 // ── MapMotionLayer ───────────────────────────────────────────────────────────
 
 export default function MapMotionLayer({ movements = [], hotspots = [], showLabels = true }) {
-  const map      = useMap()
+  const map      = useMapProjection()
   const svgRef   = useRef(null)
   const nodeRefs = useRef([])
   const frameRef = useRef(null)
@@ -267,7 +281,7 @@ export default function MapMotionLayer({ movements = [], hotspots = [], showLabe
       const svg = svgRef.current
 
       if (svg) {
-        // getSize is Leaflet's own container measurement, so the overlay tracks
+        // getSize is the map's own container measurement, so the overlay tracks
         // a resized map (sidebar opening, orientation change) for free.
         const size = map.getSize?.() ?? { x: 0, y: 0 }
         svg.setAttribute('width', String(size.x))

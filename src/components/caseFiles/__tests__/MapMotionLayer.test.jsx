@@ -2,18 +2,18 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 import MapMotionLayer from '../MapMotionLayer'
 
-// ── Leaflet mock ──────────────────────────────────────────────────────────────
-// Only useMap is needed: the layer projects lat/lng itself and touches no other
-// Leaflet API. The projection below is a plain linear one, which is enough for
-// the geometry assertions and keeps the expected pixel values readable.
+// ── Projection mock ───────────────────────────────────────────────────────────
+// The layer reads MapCanvas's projection through useMapProjection and needs
+// only getSize and latLngToContainerPoint. A plain linear projection is enough
+// for the geometry assertions and keeps the expected pixel values readable.
 
 const map = {
   getSize: () => ({ x: 600, y: 400 }),
   latLngToContainerPoint: ([lat, lng]) => ({ x: lng * 10, y: (60 - lat) * 10 }),
 }
 
-vi.mock('react-leaflet', () => ({
-  useMap: () => map,
+vi.mock('../../../utils/caseFiles/mapProjection', () => ({
+  useMapProjection: () => map,
 }))
 
 const HOTSPOTS = [
@@ -62,7 +62,7 @@ describe('MapMotionLayer', () => {
     expect(d.endsWith('320 140')).toBe(true)
   })
 
-  it('sizes the overlay to the Leaflet container', async () => {
+  it('sizes the overlay to the map container', async () => {
     render(<MapMotionLayer movements={MOVEMENTS} hotspots={HOTSPOTS} />)
     await waitFor(() => {
       expect(screen.getByTestId('map-motion-layer').getAttribute('width')).toBe('600')
@@ -99,5 +99,15 @@ describe('MapMotionLayer', () => {
       expect(screen.getByTestId('map-motion-layer')).toBeDefined()
     })
     throwing.mockRestore()
+  })
+})
+
+describe('MapMotionLayer — the missile itself', () => {
+  it('draws a strike as a missile with an exhaust flame, not a bare dart', () => {
+    const { container } = render(<MapMotionLayer movements={[MOVEMENTS[0]]} hotspots={HOTSPOTS} />)
+    const group = screen.getByTestId('map-motion-u1')
+    expect(group.querySelectorAll('.cf-missile-flame').length).toBeGreaterThan(0)
+    expect(group.querySelector('rect')).not.toBeNull()
+    expect(container).toBeDefined()
   })
 })
