@@ -248,3 +248,49 @@ describe('CaseFilePlay', () => {
     })
   })
 })
+
+// "Stage 1 / 3" said how far along you were but not what was still to come.
+describe('CaseFilePlay — case progress tracker', () => {
+  it('lists every stage by name and marks the current one', () => {
+    useCaseFileSession.mockReturnValue(makeHookReturn())
+    render(<CaseFilePlay />)
+    const steps = screen.getByTestId('case-progress').querySelectorAll('li')
+    expect(steps).toHaveLength(3)
+    expect(steps[0].getAttribute('aria-current')).toBe('step')
+    expect(steps[1].getAttribute('aria-current')).toBeNull()
+    expect(steps[1].textContent).toMatch(/Evidence Wall/)
+  })
+
+  it('ticks off the stages already done', () => {
+    useCaseFileSession.mockReturnValue(makeHookReturn({ currentStageIndex: 1 }))
+    render(<CaseFilePlay />)
+    const steps = screen.getByTestId('case-progress').querySelectorAll('li')
+    expect(steps[0].textContent).toMatch(/✓/)
+    expect(steps[1].getAttribute('aria-current')).toBe('step')
+  })
+
+  it('stamps a title card for the stage being opened, then clears it', () => {
+    vi.useFakeTimers()
+    try {
+      useCaseFileSession.mockReturnValue(makeHookReturn())
+      render(<CaseFilePlay />)
+      expect(screen.getByTestId('stage-title-card').textContent).toMatch(/STAGE 01 \/ 03/)
+      act(() => { vi.advanceTimersByTime(1500) })
+      expect(screen.queryByTestId('stage-title-card')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// Deducting only 6.5rem left an 80px page scroll under every stage on desktop:
+// AppShell takes 11.5rem on a non-/cbat route (see the comment in the page).
+describe('CaseFilePlay — pinned to the height AppShell leaves', () => {
+  it('deducts the full 11.5rem plus the safe area, from the same 601px edge as the phone layout', () => {
+    useCaseFileSession.mockReturnValue(makeHookReturn())
+    render(<CaseFilePlay />)
+    const cls = screen.getByTestId('case-file-play').className
+    expect(cls).toContain('min-[601px]:h-[calc(100dvh-11.5rem-env(safe-area-inset-bottom))]')
+    expect(cls).toContain('max-[600px]:fixed')
+  })
+})

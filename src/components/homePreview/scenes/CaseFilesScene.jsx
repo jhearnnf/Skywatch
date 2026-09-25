@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 
 // Case Files preview — manila folder opens onto a corkboard with evidence
 // pinned + red string connecting clues, mirroring the real Case Files game
-// (src/pages/CaseFiles.jsx + components/caseFiles/CorkboardView).
+// (src/pages/CaseFiles.jsx + components/caseFiles/stages/EvidenceWallStage).
 const EVIDENCE = [
   { id: 'e1', label: 'Witness',  emoji: '👤',  x: 18, y: 32 },
   { id: 'e2', label: 'Photo',    emoji: '📷',  x: 70, y: 22 },

@@ -171,3 +171,15 @@ describe('EvidenceCard', () => {
     expect(screen.queryByTestId('evidence-why-item-001')).toBeNull()
   })
 })
+
+describe('EvidenceCard — file header', () => {
+  it('numbers the exhibit when given a number', () => {
+    render(<EvidenceCard item={BASE_ITEM} isSelected={false} onClick={() => {}} exhibitNo={3} />)
+    expect(screen.getByText('EXHIBIT 03')).toBeDefined()
+  })
+
+  it('names the evidence type', () => {
+    render(<EvidenceCard item={BASE_ITEM} isSelected={false} onClick={() => {}} />)
+    expect(screen.getByText('Satellite imagery')).toBeDefined()
+  })
+})

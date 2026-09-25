@@ -18,6 +18,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import EvidenceCard from '../EvidenceCard'
+import { Stamp, StageFooter, ActionButton } from '../CaseFileKit'
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -47,10 +48,11 @@ function PhaseLabel({ label }) {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: 'easeOut' }}
-      className="flex flex-col items-start gap-1"
+      className="flex flex-col items-start gap-1.5"
     >
-      <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-text-muted font-mono">
-        Phase Update
+      <span className="inline-flex items-center gap-2 text-[10px] font-bold tracking-[0.25em] uppercase text-[#ff6b63] font-mono">
+        <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#e0413a] cf-flash-blink" />
+        Incoming intelligence
       </span>
       <h2 className="text-2xl sm:text-3xl font-black text-brand-600 leading-tight">
         {label}
@@ -59,29 +61,29 @@ function PhaseLabel({ label }) {
   )
 }
 
-// ── Verdict badge ─────────────────────────────────────────────────────────
-function VerdictBadge({ verdict }) {
+// ── Verdict stamp ─────────────────────────────────────────────────────────
+// Each verdict lands as a rubber stamp, one after another down the list, so
+// the page plays out as a run of results rather than arriving as a table.
+function VerdictBadge({ verdict, index = 0 }) {
   const isConfirmed = verdict === 'confirmed'
   return (
-    <span
-      data-testid={`verdict-badge-${verdict}`}
-      className={[
-        'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border',
-        isConfirmed
-          ? 'bg-emerald-100/20 border-emerald-300/50 text-emerald-600'
-          : 'bg-red-100/20 border-red-400/40 text-danger',
-      ].join(' ')}
+    <Stamp
+      testId={`verdict-badge-${verdict}`}
+      tone={isConfirmed ? 'green' : 'red'}
+      size="sm"
+      rotate={isConfirmed ? -6 : 5}
+      delay={0.45 + index * 0.35}
     >
-      <span aria-hidden="true">{isConfirmed ? '✓' : '✗'}</span>
-      {isConfirmed ? 'Confirmed' : 'Refuted'}
-    </span>
+      {isConfirmed ? '✓ Confirmed' : '✗ Refuted'}
+    </Stamp>
   )
 }
 
 // ── Single connection resolution row ─────────────────────────────────────
-function ResolutionRow({ resolution, itemTitles }) {
+function ResolutionRow({ resolution, itemTitles, index, playerLinked }) {
   const { pairItemIds = [], verdict, explanation } = resolution
   const [idA, idB] = pairItemIds
+  const isConfirmed = verdict === 'confirmed'
 
   // These rows used to print the raw database ids — "ev_yelnya_armor —
   // ev_field_hospitals" — which meant nothing to anyone who had not read the
@@ -92,25 +94,57 @@ function ResolutionRow({ resolution, itemTitles }) {
   return (
     <div
       data-testid={`resolution-row-${verdict}`}
-      className="flex flex-col gap-2 p-4 rounded-2xl border border-slate-200/30 bg-surface-raised"
+      className={[
+        'relative flex flex-col gap-3 p-4 rounded-sm border border-l-4 bg-surface-raised card-shadow',
+        isConfirmed ? 'border-slate-300/25 border-l-emerald-500/70' : 'border-slate-300/25 border-l-[#e0413a]/70',
+      ].join(' ')}
     >
-      {/* Connection pair labels */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold text-text bg-surface px-2 py-0.5 rounded">
+      {/* The two cards, tied by string. A refuted pair shows the string cut. */}
+      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+        <span className="text-xs font-semibold text-text bg-surface px-2 py-1 rounded-sm border border-slate-300/25 min-w-0">
           {labelFor(idA)}
         </span>
-        <span className="text-slate-500 text-xs" aria-hidden="true">+</span>
-        <span className="text-xs font-semibold text-text bg-surface px-2 py-0.5 rounded">
+        <span
+          aria-hidden="true"
+          className={[
+            'hidden sm:block flex-1 min-w-6 h-0 border-t-2',
+            isConfirmed ? 'border-[#e0413a]' : 'border-dashed border-slate-500/60',
+          ].join(' ')}
+        />
+        <span className="sm:hidden text-slate-500 text-xs" aria-hidden="true">+</span>
+        <span className="text-xs font-semibold text-text bg-surface px-2 py-1 rounded-sm border border-slate-300/25 min-w-0">
           {labelFor(idB)}
         </span>
-        <VerdictBadge verdict={verdict} />
+        <span className="sm:ml-2 shrink-0">
+          <VerdictBadge verdict={verdict} index={index} />
+        </span>
       </div>
+
+      {/* Did the player pin this pair themselves? That is the whole payoff
+          of the evidence wall, so say it in plain words. */}
+      {playerLinked && (
+        <span
+          data-testid={`resolution-yours-${index}`}
+          className={[
+            'self-start font-mono text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-sm',
+            isConfirmed ? 'bg-emerald-500/15 text-emerald-600' : 'bg-[#e0413a]/15 text-[#ff6b63]',
+          ].join(' ')}
+        >
+          {isConfirmed ? '★ You linked these. Good call' : 'You linked these'}
+        </span>
+      )}
 
       {/* Explanation */}
       {explanation && (
         <p className="text-xs text-text-muted leading-relaxed">{explanation}</p>
       )}
     </div>
+  )
+}
+
+function pairLinked(connections, [a, b] = []) {
+  return connections.some(c =>
+    (c.fromItemId === a && c.toItemId === b) || (c.fromItemId === b && c.toItemId === a)
   )
 }
 
@@ -153,21 +187,34 @@ export default function PhaseRevealStage({ stage, sessionContext, onSubmit }) {
   }
 
   const hasResolutions = connectionResolutions.length > 0
+  const confirmedCount = connectionResolutions.filter(r => r.verdict === 'confirmed').length
+  const calledCount    = connectionResolutions.filter(r => r.verdict === 'confirmed' && pairLinked(priorConnections, r.pairItemIds)).length
   const hasNewItems    = newItems.length > 0
 
   return (
     <div className="flex flex-col h-full min-h-0 w-full">
-      <div className="flex-1 min-h-0 overflow-y-auto">
-      <div className="flex flex-col gap-8 w-full max-w-3xl mx-auto px-4 py-6">
+      <div className="flex-1 min-h-0 overflow-y-auto cf-stage-scroll">
+      <div className="relative flex flex-col gap-8 w-full max-w-3xl mx-auto px-4 py-6">
+      {/* One scan line sweeps down the page as the update arrives */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="cf-scan-sweep absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-transparent via-brand-600/10 to-transparent" />
+      </div>
       {/* Phase label header */}
       <PhaseLabel label={newPhaseLabel} />
 
       {/* ── Section 1: Connection Resolutions ─────────────────────────── */}
       {hasResolutions && (
         <section className="flex flex-col gap-3">
-          <h3 className="text-[11px] font-bold tracking-widest uppercase text-text-muted">
-            Intelligence Assessments
-          </h3>
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <h3 className="text-[11px] font-bold tracking-widest uppercase text-text-muted">
+              Intelligence Assessments
+            </h3>
+            {confirmedCount > 0 && (
+              <span data-testid="resolution-summary" className="intel-mono text-[10px] text-text-muted">
+                You linked <span className="text-emerald-600 font-bold">{calledCount}</span> of the {confirmedCount} confirmed pair{confirmedCount === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
           <motion.div
             className="flex flex-col gap-3"
             variants={listVariants}
@@ -176,7 +223,12 @@ export default function PhaseRevealStage({ stage, sessionContext, onSubmit }) {
           >
             {connectionResolutions.map((res, i) => (
               <motion.div key={`${res.pairItemIds?.[0]}-${res.pairItemIds?.[1]}-${i}`} variants={itemVariants}>
-                <ResolutionRow resolution={res} itemTitles={itemTitles} />
+                <ResolutionRow
+                  resolution={res}
+                  itemTitles={itemTitles}
+                  index={i}
+                  playerLinked={pairLinked(priorConnections, res.pairItemIds)}
+                />
               </motion.div>
             ))}
           </motion.div>
@@ -197,13 +249,12 @@ export default function PhaseRevealStage({ stage, sessionContext, onSubmit }) {
           >
             {newItems.map(item => (
               <motion.div key={item.id} variants={itemVariants} className="relative">
-                {/* NEW sticker */}
-                <span
-                  data-testid={`new-sticker-${item.id}`}
-                  className="absolute top-2 right-2 z-10 text-[9px] font-black tracking-widest uppercase px-2 py-0.5 rounded-full bg-brand-600 text-white shadow-sm"
-                >
-                  NEW
-                </span>
+                {/* NEW stamp, clear of the card's own pushpin */}
+                <div className="absolute -top-2 right-6 z-20 pointer-events-none">
+                  <Stamp testId={`new-sticker-${item.id}`} tone="amber" size="xs" rotate={6}>
+                    New intel
+                  </Stamp>
+                </div>
                 <EvidenceCard item={item} />
               </motion.div>
             ))}
@@ -226,27 +277,22 @@ export default function PhaseRevealStage({ stage, sessionContext, onSubmit }) {
       </div>
 
       {/* Sticky footer — Continue button */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex items-center justify-end gap-3">
-        {error && (
-          <p role="alert" data-testid="continue-error" className="text-xs text-danger mr-auto">
+      <StageFooter
+        left={error ? (
+          <p role="alert" data-testid="continue-error" className="text-xs text-danger">
             {error}
           </p>
-        )}
-        <button
-          type="button"
-          data-testid="continue-btn"
-          disabled={submitting}
+        ) : null}
+      >
+        <ActionButton
+          testId="continue-btn"
+          busy={submitting}
+          busyLabel="Loading…"
           onClick={handleContinue}
-          className={[
-            'px-6 py-3 rounded-2xl font-bold text-sm tracking-wide transition-all duration-200',
-            !submitting
-              ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-[0_0_18px_rgba(91,170,255,0.35)]'
-              : 'bg-surface-raised text-text-faint border border-slate-200 cursor-not-allowed',
-          ].join(' ')}
         >
-          {submitting ? 'Loading…' : 'Continue'}
-        </button>
-      </div>
+          Continue
+        </ActionButton>
+      </StageFooter>
     </div>
   )
 }

@@ -427,3 +427,45 @@ describe('MapPredictiveStage — submit', () => {
     expect(screen.getByTestId('axes-animated').textContent.trim()).toBe('all')
   })
 })
+
+describe('MapPredictiveStage — fits the screen instead of scrolling', () => {
+  it('lets the map flex into the height left over, with a floor', () => {
+    render(<MapPredictiveStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
+    const mapBox = screen.getByTestId('map-canvas').parentElement
+    expect(mapBox.className).toMatch(/\bflex-1\b/)
+    expect(mapBox.className).toMatch(/min-h-\[240px\]/)
+  })
+})
+
+// The list used to grow a row per route, shrinking the map above it in a jump
+// every time one was drawn. Every slot is now on screen from the start.
+describe('MapPredictiveStage — fixed route slots', () => {
+  function renderIt() {
+    render(<MapPredictiveStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
+  }
+
+  it('shows one empty slot per route before anything is drawn', () => {
+    renderIt()
+    expect(screen.getByTestId('route-slot-empty-0')).toBeDefined()
+    expect(screen.getByTestId('route-slot-empty-1')).toBeDefined()
+    expect(screen.getByTestId('route-slot-empty-2')).toBeDefined()
+  })
+
+  it('fills a slot in place when a route is drawn, keeping the slot count', async () => {
+    renderIt()
+    fireEvent.click(screen.getByTestId('hotspot-bel'))
+    fireEvent.click(screen.getByTestId('hotspot-kyv'))
+    // The placeholder fades out rather than vanishing, so wait for it.
+    await waitFor(() => expect(screen.queryByTestId('route-slot-empty-0')).toBeNull())
+    expect(screen.getByTestId('route-slot-empty-1')).toBeDefined()
+    expect(screen.getByTestId('route-slot-empty-2')).toBeDefined()
+    expect(screen.getAllByRole('listitem')).toHaveLength(3)
+  })
+
+  it('points the next empty slot at the map once a start point is picked', () => {
+    renderIt()
+    expect(screen.getByTestId('route-slot-empty-0').textContent).toMatch(/click a start point/i)
+    fireEvent.click(screen.getByTestId('hotspot-bel'))
+    expect(screen.getByTestId('route-slot-empty-0').textContent).toMatch(/where the attack would go/i)
+  })
+})

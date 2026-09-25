@@ -353,3 +353,52 @@ describe('MapLiveStage — animated movements', () => {
     expect(screen.queryByTestId('movement-legend')).toBeNull()
   })
 })
+
+// A fixed 45vh map with the question stacked under it made the stage scroll
+// on an ordinary laptop. The map now takes the height that is left and the
+// question docks beside it on wide screens. Walk the flex chain so a missing
+// link cannot quietly bring the scroll back.
+describe('MapLiveStage — fits the screen instead of scrolling', () => {
+  it('lets the map flex into the space the header and question leave', () => {
+    renderStage([{ id: 'p1', timeLabel: 'Feb 24, 04:00', units: [UNIT_1], subDecision: SUB_DECISION_SINGLE }])
+    const mapBox = screen.getByTestId('map-canvas').parentElement
+    expect(mapBox.className).toMatch(/\bflex-1\b/)
+    expect(mapBox.className).toMatch(/min-h-\[160px\]/)
+
+    const column = mapBox.parentElement
+    expect(column.className).toMatch(/\bflex-1\b/)
+    const row = column.parentElement
+    expect(row.className).toMatch(/\bflex-1\b/)
+    expect(row.className).toMatch(/min-\[900px\]:flex-row/)
+    expect(row.className).toMatch(/min-\[900px\]:min-h-0/)
+  })
+
+  it('docks the question beside the map, scrolling inside itself only if it must', () => {
+    renderStage([{ id: 'p1', timeLabel: 'Feb 24, 04:00', units: [UNIT_1], subDecision: SUB_DECISION_SINGLE }])
+    fireEvent.click(screen.getByTestId('advance-phase-btn'))
+    const dock = screen.getByTestId('sub-decision-card').parentElement
+    expect(dock.className).toMatch(/min-\[900px\]:w-\[340px\]/)
+    expect(dock.className).toMatch(/min-\[900px\]:overflow-y-auto/)
+  })
+})
+
+// Dismissing the question in the same click meant its LOGGED stamp was never
+// seen, and the map widened under the pointer mid-click.
+describe('MapLiveStage — an answered question lingers long enough to read', () => {
+  it('keeps the card up, stamped, for a beat before the clock moves on', async () => {
+    renderStage([
+      { id: 'p1', timeLabel: 'Feb 24, 04:00', units: [UNIT_1], subDecision: SUB_DECISION_SINGLE },
+      { id: 'p2', timeLabel: 'Feb 24, 08:00', units: [UNIT_2], subDecision: null },
+    ])
+    fireEvent.click(screen.getByTestId('advance-phase-btn'))
+    fireEvent.click(screen.getByTestId('sub-option-opt-a'))
+
+    // Straight after the click: still there, still on the same phase.
+    expect(screen.getByTestId('sub-decision-card')).toBeDefined()
+    expect(screen.getByText('Logged')).toBeDefined()
+    expect(screen.getByTestId('phase-chip').textContent).toMatch('Feb 24, 04:00')
+
+    await waitFor(() => expect(screen.queryByTestId('sub-decision-card')).toBeNull())
+    expect(screen.getByTestId('phase-chip').textContent).toMatch('Feb 24, 08:00')
+  })
+})

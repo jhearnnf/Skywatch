@@ -23,7 +23,9 @@
  */
 
 import React, { useState, useCallback, useId } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import MapCanvas from '../MapCanvas'
+import { StageHeader, StageFooter, ActionButton, Stamp } from '../CaseFileKit'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,37 +41,51 @@ function isDuplicateAxis(axes, fromId, toId) {
   )
 }
 
-// ── AxisList — sidebar list of committed axes ─────────────────────────────────
+// ── AxisList — one slot per route the player may draw ────────────────────────
+// Every slot is on screen from the start, empty ones as dashed placeholders.
+// The list used to grow a row per route, which shrank the map above it in one
+// jump every time a route was drawn. Fixed slots keep the map still, and read
+// as a loadout to fill.
 
-function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain }) {
+const SLOT_CLASS = 'h-[52px] rounded-sm'
+
+function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain, tokenCount, selecting }) {
   function label(hs, id) {
     const h = hs.find(h => h.id === id)
     return h?.label ?? id
   }
 
-  if (axes.length === 0) {
-    return (
-      <p className="text-sm text-slate-500 italic py-2">
-        No routes yet. Click one place on the map, then click another.
-      </p>
-    )
-  }
+  const empties = Array.from({ length: Math.max(0, tokenCount - axes.length) }, (_, k) => axes.length + k)
 
   return (
     <ul className="flex flex-col gap-2">
-      {axes.map(axis => {
+      <AnimatePresence initial={false} mode="popLayout">
+      {axes.map((axis, i) => {
         const isMain = axis.id === mainAxisId
         return (
-          <li
+          <motion.li
             key={axis.id}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 bg-surface border border-slate-300/30"
+            layout
+            initial={{ opacity: 0, x: -16, scale: 0.97 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 16, transition: { duration: 0.15 } }}
+            transition={{ type: 'spring', stiffness: 420, damping: 30 }}
+            className={[
+              SLOT_CLASS,
+              'relative flex items-center gap-2 pl-3 pr-2 bg-surface-raised border border-l-4 transition-colors',
+              isMain ? 'border-amber-600/50 border-l-amber-500' : 'border-slate-300/25 border-l-[#e0413a]',
+            ].join(' ')}
           >
             {/* Axis label */}
-            <span className="flex-1 text-sm intel-mono text-text">
-              <span style={{ color: '#c0392b' }}>→</span>{' '}
-              {label(hotspots, axis.fromHotspotId)}
-              <span className="text-slate-500 mx-1">›</span>
-              {label(hotspots, axis.toHotspotId)}
+            <span className="flex-1 min-w-0 flex flex-col">
+              <span className="font-mono text-[9px] tracking-[0.2em] text-text-muted uppercase">
+                Route {String(i + 1).padStart(2, '0')}
+              </span>
+              <span className="text-sm intel-mono text-text">
+                {label(hotspots, axis.fromHotspotId)}
+                <span className="mx-1.5" style={{ color: '#e0413a' }}>➔</span>
+                {label(hotspots, axis.toHotspotId)}
+              </span>
             </span>
 
             {/* Main effort toggle */}
@@ -99,9 +115,39 @@ function AxisList({ axes, hotspots, mainAxisId, onDelete, onToggleMain }) {
             >
               ×
             </button>
-          </li>
+          </motion.li>
         )
       })}
+      {empties.map((slot) => {
+        // The next slot to fill says what to do; the rest just wait.
+        const isNext = slot === axes.length
+        return (
+          <motion.li
+            key={`empty-${slot}`}
+            layout
+            data-testid={`route-slot-empty-${slot}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.12 } }}
+            transition={{ duration: 0.2 }}
+            className={[
+              SLOT_CLASS,
+              'flex items-center gap-3 pl-3 pr-2 border border-dashed transition-colors duration-200',
+              isNext && selecting ? 'border-brand-600/70 bg-brand-100/20' : 'border-slate-500/40',
+            ].join(' ')}
+          >
+            <span className="font-mono text-[9px] tracking-[0.2em] text-text-muted uppercase shrink-0">
+              Route {String(slot + 1).padStart(2, '0')}
+            </span>
+            <span className={['text-xs intel-mono truncate', isNext ? (selecting ? 'text-brand-600 animate-pulse' : 'text-text-muted') : 'text-slate-500/70'].join(' ')}>
+              {isNext
+                ? (selecting ? 'Now click where the attack would go' : 'Empty. Click a start point on the map')
+                : 'Empty'}
+            </span>
+          </motion.li>
+        )
+      })}
+      </AnimatePresence>
     </ul>
   )
 }
@@ -221,35 +267,43 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
   return (
     <div className="flex flex-col h-full min-h-0 w-full" data-testid="map-predictive-stage">
       {/* Scrollable content */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+      <div className="flex-1 min-h-0 overflow-y-auto cf-stage-scroll px-4 py-4 flex flex-col gap-4">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h3 className="text-base font-bold text-text">{prompt}</h3>
-            {/* Always occupies its line. Mounting this only once a hotspot was
-                picked shoved the map down by its height mid-interaction, so the
-                second click landed on empty sea instead of the hotspot the
-                player was aiming at. */}
-            <p
-              aria-hidden={!selectedHsId}
-              className={[
-                'text-xs mt-0.5 intel-mono',
-                selectedHsId ? 'text-brand-600' : 'invisible',
-              ].join(' ')}
+        <StageHeader
+          eyebrow="Threat assessment"
+          title={prompt}
+          aside={
+            <div
+              className="text-sm intel-mono text-slate-500 shrink-0"
+              data-testid="token-counter"
             >
-              Start point set. Now click where the attack would go
-            </p>
-          </div>
-          <div
-            className="text-sm intel-mono text-slate-500 shrink-0"
-            data-testid="token-counter"
+              <span className="text-text font-bold">{tokensUsed}</span>
+              <span className="mx-1">/</span>
+              <span>{tokenCount}</span>
+              <span className="ml-1 text-slate-500">routes drawn</span>
+            </div>
+          }
+        >
+          {/* Always occupies its line. Mounting this only once a hotspot was
+              picked shoved the map down by its height mid-interaction, so the
+              second click landed on empty sea instead of the hotspot the
+              player was aiming at. */}
+          <p
+            aria-hidden={!selectedHsId && canDraw}
+            className={[
+              'text-xs intel-mono flex items-center gap-1.5 transition-colors',
+              selectedHsId ? 'text-brand-600' : !canDraw ? 'text-amber-600' : 'invisible',
+            ].join(' ')}
           >
-            <span className="text-text font-bold">{tokensUsed}</span>
-            <span className="mx-1">/</span>
-            <span>{tokenCount}</span>
-            <span className="ml-1 text-slate-500">routes drawn</span>
-          </div>
-        </div>
+            <span
+              aria-hidden="true"
+              className={['w-1.5 h-1.5 rounded-full animate-pulse', !selectedHsId && !canDraw ? 'bg-amber-600' : 'bg-brand-600'].join(' ')}
+            />
+            {!selectedHsId && !canDraw
+              ? `All ${tokenCount} routes used. Remove one to draw another`
+              : 'Start point set. Now click where the attack would go'}
+          </p>
+        </StageHeader>
 
         {/* Token pips */}
         <div className="flex gap-1.5" aria-label="Tokens">
@@ -257,29 +311,47 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
             <div
               key={i}
               className={[
-                'h-1.5 flex-1 rounded-full transition-colors duration-200',
-                i < tokensUsed ? 'bg-red-400' : 'bg-slate-300/30',
+                'h-2 flex-1 rounded-sm transition-all duration-300',
+                i < tokensUsed
+                  ? 'bg-[#e0413a] shadow-[0_0_8px_rgba(224,65,58,0.55)]'
+                  : 'bg-slate-500/15 border border-slate-500/50',
               ].join(' ')}
             />
           ))}
         </div>
 
-        {/* Map — capped at 45vh so the axes list + footer remain reachable on short viewports */}
+        {/* Map: fills the height the header and route list leave, rather than
+            a fixed 45vh that made the stage scroll on a tall screen. */}
+        <div className="relative flex-1 min-h-[240px]">
         <MapCanvas
           bounds={mapBounds}
           hotspots={hotspots}
           axes={mapAxes}
           focusedHotspotId={selectedHsId}
           onHotspotClick={handleHotspotClick}
-          height="45vh"
+          height="100%"
         />
+        {/* Once a main attack is picked, say so on the map itself. */}
+        <AnimatePresence>
+          {mainAxisId && (
+            <motion.div
+              key="main-stamp"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              // Clipped to the map: mid-slam the stamp is 2.6x its size, and
+              // poking past the stage it summoned a scrollbar that narrowed
+              // the map and made it flash as if reloading.
+              className="absolute inset-0 z-[500] pointer-events-none overflow-hidden rounded-md"
+            >
+              <div className="absolute top-3 right-3">
+                <Stamp tone="amber" size="xs" rotate={-6}>Main attack marked</Stamp>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        </div>
 
-        {/* No-tokens warning */}
-        {!canDraw && tokensUsed > 0 && (
-          <p className="text-xs text-amber-600 intel-mono">
-            All {tokenCount} routes used. Remove one to draw another.
-          </p>
-        )}
 
         {/* Committed axes list */}
         <div>
@@ -292,26 +364,23 @@ export default function MapPredictiveStage({ stage, sessionContext: _ctx, onSubm
             mainAxisId={mainAxisId}
             onDelete={handleDelete}
             onToggleMain={handleToggleMain}
+            tokenCount={tokenCount}
+            selecting={!!selectedHsId}
           />
         </div>
       </div>
 
       {/* Sticky footer: Submit */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex justify-end">
-        <button
-          type="button"
-          data-testid="submit-analysis"
-          disabled={pending}
+      <StageFooter>
+        <ActionButton
+          testId="submit-analysis"
+          busy={pending}
+          busyLabel="Saving…"
           onClick={handleSubmit}
-          className={[
-            'px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-opacity duration-150',
-            'bg-brand-600 text-white',
-            pending ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90',
-          ].join(' ')}
         >
-          {pending ? 'Saving…' : 'Save Routes and Continue'}
-        </button>
-      </div>
+          Save Routes and Continue
+        </ActionButton>
+      </StageFooter>
     </div>
   )
 }

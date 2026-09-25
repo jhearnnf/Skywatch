@@ -52,12 +52,6 @@ vi.mock('../../../caseFiles/RedStringConnector.jsx', () => ({
   },
 }))
 
-// CorkboardView (mobile path): never rendered in desktop tests, but mocked
-// defensively in case matchMedia stubs change in the future.
-vi.mock('../../../caseFiles/CorkboardView.jsx', () => ({
-  default: () => <div data-testid="corkboard-view-mobile" />,
-}))
-
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 const ITEMS = [
   { id: 'item-a', title: 'Alpha Doc',  type: 'document',   description: 'Alpha desc',  imageUrl: null, imageCredit: null, sourceUrl: null },
@@ -88,8 +82,8 @@ beforeEach(() => {
     unobserve()  {}
     disconnect() {}
   }
-  // Default: desktop path (matches=false). Tests that exercise the mobile
-  // CorkboardView would override this before render().
+  // Default: wide viewport (matches=false). The phone test overrides this
+  // before render() to check the two-column grid.
   if (typeof window !== 'undefined') {
     window.matchMedia = window.matchMedia || ((query) => ({
       matches: false,
@@ -267,26 +261,46 @@ describe('EvidenceWallStage', () => {
     })
   })
 
-  it('renders the desktop grid (not the mobile corkboard) when viewport is wide', () => {
+  it('renders the card grid when the viewport is wide', () => {
     render(<EvidenceWallStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
     expect(screen.getByTestId('evidence-wall-board')).toBeDefined()
-    expect(screen.queryByTestId('corkboard-view-mobile')).toBeNull()
   })
 
-  it('renders the mobile corkboard when matchMedia reports mobile width', () => {
-    // Override matchMedia so the hook reports mobile
+  // Phones used to get a separate pan/zoom corkboard with compact cards; it
+  // spread the cards thinly and looked nothing like desktop. Same board now.
+  it('uses the same board on a phone, two cards wide', () => {
     window.matchMedia = (query) => ({
-      matches: query.includes('max-width'),
-      media:   query,
-      onchange: null,
-      addEventListener:    () => {},
-      removeEventListener: () => {},
-      addListener:    () => {},
-      removeListener: () => {},
-      dispatchEvent:  () => false,
+      matches: true, media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {},
+      addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
     })
     render(<EvidenceWallStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
-    expect(screen.getByTestId('corkboard-view-mobile')).toBeDefined()
-    expect(screen.queryByTestId('evidence-wall-board')).toBeNull()
+    expect(screen.getByTestId('evidence-wall-board')).toBeDefined()
+    expect(screen.getByTestId('evidence-card-grid').style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))')
+    for (const item of ITEMS) expect(screen.getByTestId(`evidence-card-${item.id}`)).toBeDefined()
+  })
+})
+
+// The hint strip used to grow in from nothing when a card was picked, which
+// shoved the whole board down under the cursor mid-click. It must always be
+// there, and only its wording may change.
+describe('EvidenceWallStage — selection hint never moves the board', () => {
+  it('is present before anything is selected, and swaps its wording on select', () => {
+    // Desktop board: an earlier test leaves matchMedia answering "mobile".
+    window.matchMedia = (query) => ({
+      matches: false, media: query, onchange: null,
+      addEventListener: () => {}, removeEventListener: () => {},
+      addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+    })
+    render(<EvidenceWallStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
+    const strip = screen.getByTestId('selection-hint')
+    expect(strip.textContent).toMatch(/tap a card, then tap another/i)
+
+    fireEvent.click(screen.getByTestId('evidence-card-item-a'))
+    expect(screen.getByTestId('selection-hint')).toBe(strip)
+    expect(strip.textContent).toMatch(/card selected/i)
+
+    fireEvent.click(screen.getByTestId('evidence-card-item-a'))
+    expect(strip.textContent).toMatch(/tap a card, then tap another/i)
   })
 })

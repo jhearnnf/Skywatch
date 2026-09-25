@@ -375,3 +375,73 @@ describe('DebriefStage — making the score readable', () => {
     expect(screen.getByText(/S is 95% and up/i)).toBeDefined()
   })
 })
+
+describe('DebriefStage — overall grade stamp', () => {
+  const scoringOf = (totalScore) => ({
+    totalScore,
+    breakdown: [
+      { stageIndex: 1, stageType: 'evidence_wall', score: 0, maxScore: 250, notes: '' },
+      { stageIndex: 2, stageType: 'map_live',      score: 0, maxScore: 250, notes: '' },
+    ],
+  })
+
+  it('grades the whole run against what it was out of', () => {
+    render(<DebriefStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} scoring={scoringOf(420)} />)
+    // 420 / 500 = 84%
+    expect(screen.getByTestId('overall-grade-stamp').textContent).toBe('A')
+  })
+
+  it('awards S at the top of the range', () => {
+    render(<DebriefStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} scoring={scoringOf(490)} />)
+    expect(screen.getByTestId('overall-grade-stamp').textContent).toBe('S')
+  })
+
+  it('stamps nothing when the chapter had no marks to give', () => {
+    render(<DebriefStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} scoring={{ totalScore: 0, breakdown: [] }} />)
+    expect(screen.queryByTestId('overall-grade-stamp')).toBeNull()
+  })
+})
+
+describe('DebriefStage — the teaser collects interest', () => {
+  const withTeaser = (props) => render(
+    <DebriefStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} scoring={null} {...props} />
+  )
+
+  it('is a plain card when nobody is listening', () => {
+    withTeaser()
+    expect(screen.getByTestId('teaser-next-chapter').getAttribute('role')).toBeNull()
+    expect(screen.queryByTestId('interest-prompt')).toBeNull()
+  })
+
+  it('invites a tap, and registers on one', () => {
+    const onToggleInterest = vi.fn()
+    withTeaser({ interest: { interested: false }, onToggleInterest })
+    const card = screen.getByTestId('teaser-next-chapter')
+    expect(card.getAttribute('role')).toBe('button')
+    expect(screen.getByTestId('interest-prompt').textContent).toMatch(/register your interest/i)
+    fireEvent.click(card)
+    expect(onToggleInterest).toHaveBeenCalledWith(true)
+  })
+
+  it('confirms the registration and offers the way back', () => {
+    const onToggleInterest = vi.fn()
+    withTeaser({ interest: { interested: true }, onToggleInterest })
+    expect(screen.getByTestId('interest-registered').textContent).toMatch(/registered your interest/i)
+    expect(screen.getByTestId('interest-registered').textContent).toMatch(/tap again if you are not interested/i)
+    expect(screen.getByTestId('teaser-next-chapter').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.keyDown(screen.getByTestId('teaser-next-chapter'), { key: 'Enter' })
+    expect(onToggleInterest).toHaveBeenCalledWith(false)
+  })
+
+  it('ignores taps while a save is in flight', () => {
+    const onToggleInterest = vi.fn()
+    withTeaser({ interest: { interested: false, pending: true }, onToggleInterest })
+    fireEvent.click(screen.getByTestId('teaser-next-chapter'))
+    expect(onToggleInterest).not.toHaveBeenCalled()
+  })
+
+  it('says so when the save failed', () => {
+    withTeaser({ interest: { interested: false, error: true }, onToggleInterest: vi.fn() })
+    expect(screen.getByTestId('interest-error').textContent).toMatch(/could not save/i)
+  })
+})

@@ -2,6 +2,8 @@
 // CONTRACT-AMBIGUITY: "chapter count" label: spec says '3 chapters' — using
 // `${chapterCount} chapter${chapterCount !== 1 ? 's' : ''}` for correct pluralisation.
 
+import { Stamp } from './CaseFileKit'
+
 function PadlockIcon() {
   return (
     <svg
@@ -54,28 +56,35 @@ export default function CaseFileCard({ caseFile, onClick, tierLocked, minTier })
       aria-disabled={isLocked || undefined}
       data-testid={`case-file-card-${caseFile.slug}`}
       className={[
-        'relative flex flex-col rounded-2xl border bg-surface-raised card-shadow overflow-hidden',
-        'transition-transform duration-200',
+        'group relative flex flex-col mt-4 rounded-md rounded-tl-none border bg-surface-raised card-shadow',
+        'transition-all duration-200',
         isLocked
           ? 'opacity-55 cursor-not-allowed'
           : isTierLocked
             ? 'opacity-55 cursor-pointer hover:-translate-y-1 hover:border-brand-400 border-slate-200'
-            : 'cursor-pointer hover:-translate-y-1 hover:border-brand-400 border-slate-200',
+            : 'cursor-pointer hover:-translate-y-1 hover:-rotate-[0.4deg] hover:border-brand-400 hover:shadow-[0_10px_30px_rgba(91,170,255,0.18)] border-slate-200',
         !isLocked && !isTierLocked && 'border-slate-200',
       ]
         .filter(Boolean)
         .join(' ')}
     >
+      {/* Folder tab, sticking up off the top-left like a real file */}
+      <span
+        aria-hidden="true"
+        className="absolute -top-4 left-[-1px] h-4 px-3 flex items-center rounded-t-md border border-b-0 border-slate-200 bg-surface-raised font-mono text-[9px] font-bold tracking-[0.25em] text-text-muted transition-colors group-hover:text-brand-600"
+      >
+        CASE FILE
+      </span>
+
       {/* Status-locked (coming soon) overlay badges */}
       {isLocked && (
         <>
           {/* Coming Soon pill — top-right */}
-          <span
-            data-testid="coming-soon-badge"
-            className="absolute top-2 right-2 z-10 text-[9px] font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-slate-300/20 border border-slate-500/40 text-slate-600 uppercase"
-          >
-            Coming Soon
-          </span>
+          <div className="absolute top-3 right-3 z-10">
+            <Stamp testId="coming-soon-badge" tone="blue" size="xs" rotate={6} slam={false}>
+              Coming Soon
+            </Stamp>
+          </div>
           {/* Padlock — top-left */}
           <span className="absolute top-2 left-2 z-10">
             <PadlockIcon />
@@ -91,12 +100,12 @@ export default function CaseFileCard({ caseFile, onClick, tierLocked, minTier })
       )}
 
       {/* Cover image — 16:9 */}
-      <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+      <div className="relative w-full overflow-hidden rounded-tr-md" style={{ paddingBottom: '56.25%' }}>
         {coverImageUrl ? (
           <img
             src={coverImageUrl}
             alt={title}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
             draggable={false}
           />
         ) : (
@@ -106,6 +115,15 @@ export default function CaseFileCard({ caseFile, onClick, tierLocked, minTier })
         )}
         {/* Gradient fade from image into card body */}
         <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-surface-raised to-transparent pointer-events-none" />
+
+        {/* A case you have finished carries the stamp */}
+        {!isLocked && !isTierLocked && completedCount > 0 && (
+          <div className="absolute bottom-3 right-3 pointer-events-none" aria-hidden="true">
+            <Stamp testId={`case-closed-${caseFile.slug}`} tone="green" size="sm" rotate={-8} slam={false}>
+              Case Closed
+            </Stamp>
+          </div>
+        )}
       </div>
 
       {/* Card body */}

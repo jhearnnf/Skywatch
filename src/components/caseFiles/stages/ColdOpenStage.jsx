@@ -15,20 +15,37 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Stamp, StickyNote, StageFooter, ActionButton } from '../CaseFileKit'
 
 // ── Typewriter hook ───────────────────────────────────────────────────────────
+// While `enabled` is false the text stays blank. It used to show in full while
+// it waited, then blank itself and type out again, which read as a glitch:
+// the whole briefing flashed up under the date and vanished.
 function useTypewriter(text, charDelay = 30, enabled = true) {
   const [displayed, setDisplayed] = useState('')
   const [done, setDone] = useState(false)
   const timerIdRef = useRef(null)
   const cancelledRef = useRef(false)
+  // Once skipped, stay skipped: skipping the date flips the briefing's
+  // `enabled`, and without this the briefing would blank and retype itself.
+  const skippedForRef = useRef(null)
 
   useEffect(() => {
     cancelledRef.current = false
 
-    if (!enabled || !text) {
-      setDisplayed(text ?? '')
+    if (text && skippedForRef.current === text) {
+      setDisplayed(text)
       setDone(true)
+      return () => {}
+    }
+    if (!text) {
+      setDisplayed('')
+      setDone(true)
+      return () => {}
+    }
+    if (!enabled) {
+      setDisplayed('')
+      setDone(false)
       return () => {}
     }
 
@@ -60,10 +77,25 @@ function useTypewriter(text, charDelay = 30, enabled = true) {
     }
   }, [text, charDelay, enabled])
 
-  return { displayed, done }
+  // Drop the rest of the line in at once.
+  const skip = useCallback(() => {
+    skippedForRef.current = text
+    cancelledRef.current = true
+    if (timerIdRef.current !== null) {
+      clearTimeout(timerIdRef.current)
+      timerIdRef.current = null
+    }
+    setDisplayed(text ?? '')
+    setDone(true)
+  }, [text])
+
+  return { displayed, done, skip }
 }
 
 // ── Thumbnail card (starting items) ──────────────────────────────────────────
+// Clues tossed onto the folder rather than squared up in a grid.
+const THUMB_TILT = [-2, 1.5, -1]
+
 function ThumbnailItem({ item, index }) {
   const [hovered, setHovered] = useState(false)
   const [pinned,  setPinned]  = useState(false)
@@ -85,6 +117,7 @@ function ThumbnailItem({ item, index }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3 + index * 0.1, duration: 0.4 }}
+      whileHover={{ y: -3, rotate: 0 }}
       role={oneLineHint ? 'button' : undefined}
       tabIndex={oneLineHint ? 0 : undefined}
       onMouseEnter={() => setHovered(true)}
@@ -100,10 +133,12 @@ function ThumbnailItem({ item, index }) {
       } : undefined}
       data-testid={`cold-open-thumb-${id}`}
       className={[
-        'relative flex flex-col rounded overflow-hidden border border-slate-300/20 bg-surface select-none',
-        oneLineHint ? 'cursor-pointer' : 'cursor-default',
+        // Always the plain cursor: the click only exists to pin the hint on
+        // touch (no hover there). With a mouse, hover already shows it, so a
+        // pointer promised an action that never came.
+        'relative flex flex-col rounded overflow-hidden border border-slate-300/20 bg-surface select-none cursor-default',
       ].join(' ')}
-      style={{ minWidth: 0 }}
+      style={{ minWidth: 0, rotate: THUMB_TILT[index % THUMB_TILT.length] }}
       aria-label={`${title}${oneLineHint ? `. ${oneLineHint}` : ''}`}
     >
       {/* Thumbnail image or placeholder */}
@@ -137,11 +172,11 @@ function ThumbnailItem({ item, index }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="absolute inset-0 flex items-center justify-center bg-surface/90 px-2"
+            className="absolute inset-0 flex items-center justify-center bg-surface/70 p-1.5"
           >
-            <p className="text-[10px] text-brand-600 font-medium text-center leading-snug">
+            <StickyNote tilt={index % 2 ? 1.5 : -1.5} className="w-full text-center !text-[11px]">
               {oneLineHint}
-            </p>
+            </StickyNote>
           </motion.div>
         )}
       </AnimatePresence>
@@ -165,9 +200,9 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
   } = payload
 
   // Typewriter for dateLabel — short, quick
-  const { displayed: dateDisplayed, done: dateDone } = useTypewriter(dateLabel, 28)
+  const { displayed: dateDisplayed, done: dateDone, skip: skipDate } = useTypewriter(dateLabel, 28)
   // Typewriter for briefing — starts after date finishes
-  const { displayed: briefDisplayed } = useTypewriter(
+  const { displayed: briefDisplayed, done: briefDone, skip: skipBrief } = useTypewriter(
     directorBriefing,
     20,
     dateDone
@@ -175,6 +210,15 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]           = useState(null)
+
+  // Clicking anywhere on the folder finishes the typing, like every dialogue
+  // box in every game: a fast reader should never be made to wait for it.
+  const typing = !dateDone || !briefDone
+  function skipTyping() {
+    if (!typing) return
+    skipDate()
+    skipBrief()
+  }
 
   async function handleBegin() {
     setSubmitting(true)
@@ -197,7 +241,7 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
           folder sat pinned to the top of a full-height stage with a few hundred
           pixels of empty board beneath it on a desktop viewport. */}
       <div
-        className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center px-4 py-6"
+        className="flex-1 min-h-0 overflow-y-auto cf-stage-scroll flex flex-col items-center px-4 py-6"
         style={{
           // Vignette — dark inset shadow on all edges
           boxShadow: 'inset 0 0 120px rgba(0,0,0,0.65)',
@@ -223,7 +267,8 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 0.2, duration: 0.5, ease: 'easeOut' }}
-        className="w-full max-w-xl mb-auto rounded-lg border border-amber-200/10 bg-surface-raised card-shadow"
+        onClick={skipTyping}
+        className="relative w-full max-w-xl mb-auto mt-4 rounded-lg rounded-tl-none border border-amber-200/15 bg-surface-raised card-shadow"
         style={{
           // Warm paper tint layered on top of the dark surface token
           backgroundImage:
@@ -232,8 +277,19 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
           backgroundSize: 'auto, 200px 200px',
         }}
       >
-        {/* Folder tab accent */}
-        <div className="h-1 rounded-t-lg bg-gradient-to-r from-amber-200/20 via-amber-200/10 to-transparent" />
+        {/* Folder tab, sticking up off the top-left like a real file */}
+        <div
+          aria-hidden="true"
+          className="absolute -top-4 left-[-1px] h-4 px-3 flex items-center rounded-t-md border border-b-0 border-amber-200/15 bg-surface-raised font-mono text-[9px] tracking-[0.25em] text-amber-700/80 font-bold"
+        >
+          CASE FILE
+        </div>
+        <div className="h-1 rounded-tr-lg bg-gradient-to-r from-amber-200/20 via-amber-200/10 to-transparent" />
+
+        {/* Classification stamp */}
+        <div className="absolute top-3 right-4 pointer-events-none" aria-hidden="true">
+          <Stamp tone="red" size="sm" rotate={-7} delay={0.55}>Eyes Only</Stamp>
+        </div>
 
         <div className="px-6 py-5">
           {/* CLASSIFIED header */}
@@ -279,6 +335,11 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
               <span className="inline-block w-[2px] h-[1em] bg-slate-500 ml-0.5 align-middle animate-pulse" />
             )}
           </blockquote>
+          {typing && directorBriefing && (
+            <p className="mt-1.5 text-right font-mono text-[9px] tracking-widest uppercase text-slate-500">
+              Tap or click to skip
+            </p>
+          )}
 
           {/* ── Starting item thumbnails ──────────────────────────────── */}
           {startingItems.length > 0 && (
@@ -302,38 +363,23 @@ export default function ColdOpenStage({ stage, sessionContext, onSubmit }) {
       </div>
 
       {/* ── Sticky footer: continue button ────────────────────────────── */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex flex-col items-center gap-2">
-        <button
+      <StageFooter className="!justify-center flex-col !gap-2">
+        <ActionButton
           onClick={handleBegin}
-          disabled={submitting}
-          data-testid="begin-briefing-btn"
-          className={[
-            'px-8 py-3 rounded-btn font-semibold text-sm text-white tracking-wide',
-            'bg-brand-600 hover:bg-brand-700 active:bg-brand-500',
-            'transition-colors duration-150',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'flex items-center gap-2',
-          ].join(' ')}
+          busy={submitting}
+          busyLabel="Accessing…"
+          testId="begin-briefing-btn"
+          className="px-8"
         >
-          {submitting ? (
-            <>
-              <span
-                className="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"
-                aria-hidden="true"
-              />
-              <span>Accessing…</span>
-            </>
-          ) : (
-            'Open the Evidence Wall'
-          )}
-        </button>
+          Open the Evidence Wall
+        </ActionButton>
 
         {error && (
           <p role="alert" className="text-xs text-danger text-center">
             {error}
           </p>
         )}
-      </div>
+      </StageFooter>
     </div>
   )
 }

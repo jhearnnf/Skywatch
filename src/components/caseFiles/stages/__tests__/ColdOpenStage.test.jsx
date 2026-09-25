@@ -148,3 +148,20 @@ describe('ColdOpenStage — starting-clue hints on touch', () => {
     expect(tile.getAttribute('aria-label')).toContain(first.oneLineHint)
   })
 })
+
+// Typing is flavour, never a wait: a click on the folder drops the rest in.
+describe('ColdOpenStage — skipping the typewriter', () => {
+  it('keeps the briefing blank while the date types, rather than flashing it in full', () => {
+    render(<ColdOpenStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
+    expect(screen.queryByText(STAGE.payload.directorBriefing)).toBeNull()
+  })
+
+  it('shows the whole briefing at once when the folder is clicked', () => {
+    render(<ColdOpenStage stage={STAGE} sessionContext={SESSION_CONTEXT} onSubmit={vi.fn()} />)
+    expect(screen.getByText(/to skip/i)).toBeDefined()
+    fireEvent.click(screen.getByText('DIRECTOR BRIEFING'))
+    expect(screen.getByText(STAGE.payload.directorBriefing)).toBeDefined()
+    expect(screen.getByText(STAGE.payload.dateLabel)).toBeDefined()
+    expect(screen.queryByText(/to skip/i)).toBeNull()
+  })
+})

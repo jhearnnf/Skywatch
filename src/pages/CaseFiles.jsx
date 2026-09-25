@@ -48,7 +48,7 @@ export function sortPlayableFirst(list) {
 
 function SkeletonCard() {
   return (
-    <div className="rounded-2xl border border-slate-200/30 bg-surface-raised overflow-hidden animate-pulse">
+    <div className="mt-4 rounded-md border border-slate-200/30 bg-surface-raised overflow-hidden animate-pulse">
       {/* Cover placeholder */}
       <div className="w-full bg-slate-200/10" style={{ paddingBottom: '56.25%' }} />
       <div className="px-4 pt-3 pb-4 space-y-2">

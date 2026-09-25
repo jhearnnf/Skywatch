@@ -190,3 +190,15 @@ describe('CaseFileCard — how long it takes', () => {
     expect(screen.queryByTestId(`case-minutes-${PUBLISHED_CASE.slug}`)).toBeNull()
   })
 })
+
+describe('CaseFileCard — case closed stamp', () => {
+  it('stamps a case the player has finished', () => {
+    render(<CaseFileCard caseFile={{ ...PUBLISHED_CASE, bestScore: 900, completedCount: 1 }} onClick={vi.fn()} />)
+    expect(screen.getByTestId(`case-closed-${PUBLISHED_CASE.slug}`)).toBeDefined()
+  })
+
+  it('leaves an unplayed case unstamped', () => {
+    render(<CaseFileCard caseFile={PUBLISHED_CASE} onClick={vi.fn()} />)
+    expect(screen.queryByTestId(`case-closed-${PUBLISHED_CASE.slug}`)).toBeNull()
+  })
+})

@@ -77,3 +77,17 @@ describe('RedStringConnector', () => {
     expect(paths.length).toBe(2)
   })
 })
+
+describe('RedStringConnector — drawing in', () => {
+  it('draws a committed string across rather than blinking it in', () => {
+    const { container } = render(<RedStringConnector from={{ x: 0, y: 0 }} to={{ x: 100, y: 50 }} committed />)
+    const drawn = container.querySelectorAll('path.cf-string-draw')
+    expect(drawn.length).toBeGreaterThan(0)
+    drawn.forEach((p) => expect(p.getAttribute('pathLength')).toBe('1'))
+  })
+
+  it('leaves the in-progress string alone', () => {
+    const { container } = render(<RedStringConnector from={{ x: 0, y: 0 }} to={{ x: 100, y: 50 }} committed={false} />)
+    expect(container.querySelector('path.cf-string-draw')).toBeNull()
+  })
+})

@@ -24,8 +24,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import EvidenceCard from '../EvidenceCard.jsx'
+import { StageFooter, ActionButton } from '../CaseFileKit'
+
+// The target the objective banner sets: 4 to 6 links.
+const LINK_TARGET_MIN = 4
+const LINK_TARGET_MAX = 6
 import RedStringConnector from '../RedStringConnector.jsx'
-import CorkboardView from '../CorkboardView.jsx'
 
 // Cheap mobile-vs-desktop probe. SSR-safe and jsdom-safe (defaults to desktop
 // when matchMedia is missing, so existing tests run the original grid path).
@@ -97,19 +101,19 @@ export default function EvidenceWallStage({ stage, sessionContext, onSubmit }) {
   // In-progress string endpoint — follows mouse while first card is selected (desktop)
   const [mousePos, setMousePos] = useState(null)
 
-  // Layout choice — mobile gets the pan/zoom corkboard, desktop keeps grid
+  // Phones get a denser two-column grid; everything else is the same board.
   const isMobile = useIsMobile(600)
 
-  // ── ResizeObserver: recompute board size so SVG matches (desktop only) ──
+  // ── ResizeObserver: recompute board size so SVG matches ──────────────────
   useEffect(() => {
-    if (isMobile || !boardRef.current) return
+    if (!boardRef.current) return
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect
       setBoardSize({ width, height })
     })
     ro.observe(boardRef.current)
     return () => ro.disconnect()
-  }, [isMobile])
+  }, [])
 
   // ── Mouse tracking for in-progress string (desktop only) ────────────────
   useEffect(() => {
@@ -195,136 +199,162 @@ export default function EvidenceWallStage({ stage, sessionContext, onSubmit }) {
         <span className="intel-mono text-brand-600">{phaseLabel}</span>
         {/* "0 / ∞ connections" read as a broken counter. There is no cap, so
             state the count plainly and repeat the target the objective set. */}
-        <span className="intel-mono text-slate-500" aria-live="polite">
-          {connections.length} link{connections.length === 1 ? '' : 's'} made
-          <span className="text-slate-400"> · aim for 4 to 6</span>
-        </span>
+        <div className="flex items-center gap-2.5">
+          {/* One knot of red string per link, up to the target of six. The
+              row turns green once the player is inside the 4 to 6 band, so
+              "have I done enough?" is answered without reading. */}
+          <div className="hidden sm:flex items-center gap-1" aria-hidden="true">
+            {Array.from({ length: LINK_TARGET_MAX }).map((_, i) => {
+              const filled   = i < connections.length
+              const onTarget = connections.length >= LINK_TARGET_MIN
+              return (
+                <span
+                  key={i}
+                  className={[
+                    'w-2 h-2 rounded-full transition-all duration-300',
+                    filled
+                      ? (onTarget ? 'bg-emerald-500 shadow-[0_0_6px_rgba(34,197,94,0.7)]' : 'bg-[#e0413a] shadow-[0_0_6px_rgba(224,65,58,0.7)] scale-110')
+                      : (i < LINK_TARGET_MIN ? 'border border-[#e0413a]/60' : 'border border-slate-500/60'),
+                  ].join(' ')}
+                />
+              )
+            })}
+          </div>
+          {/* "0 / ∞ connections" read as a broken counter. There is no cap, so
+              state the count plainly and repeat the target the objective set. */}
+          <span
+            className={[
+              'intel-mono transition-colors',
+              connections.length >= LINK_TARGET_MIN ? 'text-emerald-600' : 'text-slate-500',
+            ].join(' ')}
+            aria-live="polite"
+          >
+            {connections.length} link{connections.length === 1 ? '' : 's'} made
+            <span className="text-slate-400"> · aim for 4 to 6</span>
+          </span>
+        </div>
       </div>
 
       {/* ── Selection hint banner ─────────────────────────────────────── */}
-      <AnimatePresence>
-        {selectedItemId && (
-          <motion.div
-            key="hint"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
+      {/* Always rendered at a fixed height and only the wording swaps: it used
+          to grow in from nothing on select, which shoved the whole board down
+          mid-click. */}
+      <div
+        data-testid="selection-hint"
+        className={[
+          'relative h-7 flex items-center justify-center overflow-hidden px-4 border-b transition-colors duration-150',
+          selectedItemId ? 'bg-brand-100/40 border-brand-600/20' : 'bg-transparent border-slate-300/10',
+        ].join(' ')}
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.p
+            key={selectedItemId ? 'selected' : 'idle'}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            className={[
+              'text-[11px] intel-mono text-center truncate',
+              selectedItemId ? 'text-brand-600' : 'text-slate-500',
+            ].join(' ')}
           >
-            <p className="px-4 py-1.5 text-[11px] text-brand-600 intel-mono bg-brand-100/40 border-b border-brand-600/20 text-center">
-              CARD SELECTED. Tap another card to link, or tap the same card to cancel
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {selectedItemId
+              ? 'CARD SELECTED. Tap another card to link, or tap the same card to cancel'
+              : 'Tap a card, then tap another to link them with string'}
+          </motion.p>
+        </AnimatePresence>
+      </div>
 
       {/* ── Corkboard ─────────────────────────────────────────────────── */}
-      {isMobile ? (
-        <CorkboardView
-          items={items}
-          connections={connections}
-          selectedItemId={selectedItemId}
-          onCardClick={handleCardClick}
-          onRemoveConnection={handleRemoveConnection}
-        />
-      ) : (
+      {/* One board on every screen. Phones used to get a separate pan/zoom
+          corkboard with compact cards clustered by category, which spread
+          eight cards thinly across a huge board and dropped the stamps and
+          sticky notes, so the wall looked like a different game on mobile.
+          Now phones get the same cards in a tight two-column grid and scroll. */}
+      <div
+        ref={boardRef}
+        className="relative flex-1 min-h-0 overflow-auto"
+        style={{ ...CORKBOARD_BG }}
+        data-testid="evidence-wall-board"
+      >
+        {/* Evidence cards grid */}
         <div
-          ref={boardRef}
-          className="relative flex-1 min-h-0 overflow-auto"
-          style={{ ...CORKBOARD_BG }}
-          data-testid="evidence-wall-board"
+          className={['relative z-10 grid', isMobile ? 'p-2.5 gap-2.5' : 'p-4 gap-3'].join(' ')}
+          style={{
+            // Exactly two columns on a phone, as many as fit on a wider screen.
+            gridTemplateColumns: isMobile
+              ? 'repeat(2, minmax(0, 1fr))'
+              : 'repeat(auto-fill, minmax(220px, 1fr))',
+          }}
+          data-testid="evidence-card-grid"
         >
-          {/* Evidence cards grid */}
-          <div
-            className="relative z-10 p-4 grid gap-3"
-            style={{
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            }}
-            data-testid="evidence-card-grid"
-          >
-            {items.map(item => (
-              <EvidenceCard
-                key={item.id}
-                item={item}
-                isSelected={selectedItemId === item.id}
-                onClick={() => handleCardClick(item.id)}
-                onPositionChange={handlePositionChange}
-              />
-            ))}
-          </div>
+          {items.map((item, i) => (
+            <EvidenceCard
+              key={item.id}
+              item={item}
+              exhibitNo={i + 1}
+              isSelected={selectedItemId === item.id}
+              onClick={() => handleCardClick(item.id)}
+              onPositionChange={handlePositionChange}
+            />
+          ))}
+        </div>
 
-          {/* String layer — drawn AFTER the cards, at a higher stacking level,
-              so a link between two non-adjacent cards reads as one continuous
-              string instead of two red stubs poking out of the gutters. This
-              matches the mobile corkboard, which already draws strings in
-              front. The SVGs are pointer-events:none except on the stroke
-              itself, so cards underneath stay clickable. */}
-          {connections.map(({ fromItemId, toItemId }) => {
-            const from = posMapRef.current.get(fromItemId)
-            const to   = posMapRef.current.get(toItemId)
-            if (!from || !to) return null
-            return (
-              <RedStringConnector
-                key={makeConnectionKey(fromItemId, toItemId)}
-                from={from}
-                to={to}
-                committed
-                onClick={() => handleRemoveConnection(fromItemId, toItemId)}
-                width={boardSize.width}
-                height={boardSize.height}
-                style={{ zIndex: 20 }}
-              />
-            )
-          })}
-
-          {/* In-progress string (selected card → mouse position) */}
-          {selectedItemId && mousePos && posMapRef.current.get(selectedItemId) && (
+        {/* String layer — drawn AFTER the cards, at a higher stacking level,
+            so a link between two non-adjacent cards reads as one continuous
+            string instead of two red stubs poking out of the gutters. This
+            matches the mobile corkboard, which already draws strings in
+            front. The SVGs are pointer-events:none except on the stroke
+            itself, so cards underneath stay clickable. */}
+        {connections.map(({ fromItemId, toItemId }) => {
+          const from = posMapRef.current.get(fromItemId)
+          const to   = posMapRef.current.get(toItemId)
+          if (!from || !to) return null
+          return (
             <RedStringConnector
-              key="in-progress"
-              from={posMapRef.current.get(selectedItemId)}
-              to={mousePos}
-              committed={false}
+              key={makeConnectionKey(fromItemId, toItemId)}
+              from={from}
+              to={to}
+              committed
+              onClick={() => handleRemoveConnection(fromItemId, toItemId)}
               width={boardSize.width}
               height={boardSize.height}
               style={{ zIndex: 20 }}
             />
-          )}
-        </div>
-      )}
+          )
+        })}
+
+        {/* In-progress string (selected card → mouse position) */}
+        {selectedItemId && mousePos && posMapRef.current.get(selectedItemId) && (
+          <RedStringConnector
+            key="in-progress"
+            from={posMapRef.current.get(selectedItemId)}
+            to={mousePos}
+            committed={false}
+            width={boardSize.width}
+            height={boardSize.height}
+            style={{ zIndex: 20 }}
+          />
+        )}
+      </div>
 
       {/* ── Footer: submit + error ─────────────────────────────────────── */}
-      <div className="shrink-0 flex flex-col items-end gap-2 px-4 py-3 border-t border-slate-300/10 bg-surface">
-        {error && (
-          <p role="alert" className="text-xs text-danger self-start">
+      <StageFooter
+        left={error ? (
+          <p role="alert" className="text-xs text-danger">
             {error}
           </p>
-        )}
-        <button
+        ) : null}
+      >
+        <ActionButton
           onClick={handleSubmit}
-          disabled={submitting}
-          data-testid="submit-analysis-btn"
-          className={[
-            'px-6 py-2.5 rounded-btn font-semibold text-sm text-white',
-            'bg-brand-600 hover:bg-brand-700 active:bg-brand-500',
-            'transition-colors duration-150',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'flex items-center gap-2',
-          ].join(' ')}
+          busy={submitting}
+          busyLabel="Saving…"
+          testId="submit-analysis-btn"
         >
-          {submitting ? (
-            <>
-              <span
-                className="inline-block w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"
-                aria-hidden="true"
-              />
-              Saving…
-            </>
-          ) : (
-            'Save Links and Continue'
-          )}
-        </button>
-      </div>
+          Save Links and Continue
+        </ActionButton>
+      </StageFooter>
     </div>
   )
 }

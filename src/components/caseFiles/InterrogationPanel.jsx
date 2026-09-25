@@ -353,19 +353,29 @@ export default function InterrogationPanel({
         {transcript.map(({ q, a, askedAt }, idx) => (
           <div key={idx} className="flex flex-col gap-2">
             {/* Player question — right aligned */}
-            <div className="flex justify-end">
+            <motion.div
+              className="flex justify-end"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+            >
               <div
                 className="max-w-[75%] px-3 py-2 rounded-xl rounded-tr-sm bg-brand-200 border border-brand-400/30 text-sm text-text leading-relaxed"
                 data-testid={`transcript-q-${idx}`}
               >
                 {q}
               </div>
-            </div>
+            </motion.div>
 
             {/* Actor answer — left aligned. The newest one types itself out
                 while the portrait's mouth moves; tap to drop the rest in. */}
             {a != null && (
-              <div className="flex justify-start">
+              <motion.div
+                className="flex justify-start"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+              >
                 <div
                   className="max-w-[75%] px-3 py-2 rounded-xl rounded-tl-sm bg-surface-raised border border-slate-300/20 text-sm text-text leading-relaxed"
                   data-testid={`transcript-a-${idx}`}
@@ -375,7 +385,7 @@ export default function InterrogationPanel({
                     <span aria-hidden="true" className="cf-dialogue-caret text-brand-600">▍</span>
                   )}
                 </div>
-              </div>
+              </motion.div>
             )}
           </div>
         ))}

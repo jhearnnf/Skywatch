@@ -38,10 +38,14 @@
  * Presentation-only — no fetch.
  */
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import MapCanvas from '../MapCanvas'
+import { Stamp, StageHeader, StageFooter, ActionButton } from '../CaseFileKit'
 import { kindStyle, sideColor } from '../../../utils/caseFiles/motionGeometry'
+
+// How long an answered question stays up, stamped LOGGED, before it clears.
+const LOGGED_HOLD_MS = 650
 
 // ── Phase header chip ─────────────────────────────────────────────────────────
 
@@ -119,25 +123,35 @@ function SubDecisionCard({ subDecision, onCommit }) {
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 60, opacity: 0 }}
       transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-      className="rounded-2xl border border-brand-400/40 bg-surface p-5 flex flex-col gap-4 shadow-[0_4px_32px_rgba(91,170,255,0.18)]"
+      className="relative rounded-sm border border-[#e0413a]/40 bg-surface-raised flex flex-col overflow-hidden shadow-[0_4px_32px_rgba(224,65,58,0.18)]"
     >
+      {/* Flash message header: the signal that the clock has stopped for you */}
+      <div className="flex items-center gap-2 px-4 py-1.5 bg-[#e0413a]/15 border-b border-[#e0413a]/30">
+        <span aria-hidden="true" className="w-2 h-2 rounded-full bg-[#e0413a] cf-flash-blink" />
+        <span className="font-mono text-[10px] font-black tracking-[0.3em] uppercase text-[#ff6b63]">
+          Flash message
+        </span>
+        <span className="ml-auto font-mono text-[9px] tracking-widest uppercase text-text-muted">
+          {isMulti ? 'Pick all that apply' : 'Pick one'}
+        </span>
+      </div>
+
       {/* Lock stamp overlay when committed */}
       {committed && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 rounded-2xl overflow-hidden">
-          <span className="text-[10px] font-black tracking-[0.3em] uppercase px-4 py-2 rounded border-4 border-brand-600/80 text-brand-600/90 rotate-[-12deg] select-none font-mono">
-            Logged
-          </span>
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <Stamp tone="blue" size="md" rotate={-12}>Logged</Stamp>
         </div>
       )}
 
+      <div className="p-4 pt-3 flex flex-col gap-3">
       <p
         data-testid="sub-decision-prompt"
-        className="text-sm font-bold text-text leading-snug"
+        className="text-sm sm:text-base font-bold text-text leading-snug"
       >
         {prompt}
       </p>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         {options.map(opt => {
           const isSelected = isMulti
             ? multiSelected.has(opt.id)
@@ -153,11 +167,11 @@ function SubDecisionCard({ subDecision, onCommit }) {
                 isMulti ? handleMultiToggle(opt.id) : handleSingleClick(opt.id)
               }
               className={[
-                'flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm text-left transition-all duration-150 w-full',
-                committed ? 'cursor-default opacity-70' : 'cursor-pointer',
+                'flex items-center gap-3 rounded-sm border px-3 py-2 text-sm text-left transition-all duration-150 w-full',
+                committed ? 'cursor-default opacity-70' : 'cursor-pointer active:scale-[0.99]',
                 isSelected
                   ? 'border-brand-500 bg-brand-100/50 text-text'
-                  : 'border-slate-300/30 bg-surface-raised text-text hover:border-brand-400/50',
+                  : 'border-slate-300/30 bg-surface text-text hover:border-brand-400/60 hover:translate-x-0.5',
               ].join(' ')}
             >
               {/* Indicator */}
@@ -190,7 +204,7 @@ function SubDecisionCard({ subDecision, onCommit }) {
             disabled={multiSelected.size === 0}
             onClick={handleMultiSubmit}
             className={[
-              'px-5 py-2 rounded-xl text-sm font-bold tracking-wide transition-opacity duration-150',
+              'px-5 py-2 rounded-btn text-sm font-bold tracking-wide transition-opacity duration-150',
               multiSelected.size > 0
                 ? 'bg-brand-600 text-white hover:opacity-90'
                 : 'bg-surface-raised text-text-faint border border-slate-300/30 cursor-not-allowed',
@@ -200,6 +214,7 @@ function SubDecisionCard({ subDecision, onCommit }) {
           </button>
         </div>
       )}
+      </div>
     </motion.div>
   )
 }
@@ -224,6 +239,7 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
   const [subDecisionAnswers, setSubDecisionAnswers]  = useState([])
   const [awaitingDecision,   setAwaitingDecision]    = useState(false)
   const [submitting,         setSubmitting]          = useState(false)
+  const dismissTimerRef = useRef(null)
 
   const currentPhase = phases[currentPhaseIndex] ?? null
   const isLastPhase  = currentPhaseIndex === totalPhases - 1
@@ -258,14 +274,22 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
         ...prev,
         { subDecisionId, selectedOptionIds },
       ])
-      setAwaitingDecision(false)
-      // The clock only moves once the call has been made. Answering is what
-      // reveals the next phase's units, so the read is "you predicted this —
-      // here is what actually happened".
-      setCurrentPhaseIndex(i => (i < totalPhases - 1 ? i + 1 : i))
+      // Hold the card long enough for its LOGGED stamp to land. Dismissing it
+      // in the same click meant the stamp was never seen and the map lurched
+      // wider underneath the pointer.
+      clearTimeout(dismissTimerRef.current)
+      dismissTimerRef.current = setTimeout(() => {
+        setAwaitingDecision(false)
+        // The clock only moves once the call has been made. Answering is what
+        // reveals the next phase's units, so the read is "you predicted this —
+        // here is what actually happened".
+        setCurrentPhaseIndex(i => (i < totalPhases - 1 ? i + 1 : i))
+      }, LOGGED_HOLD_MS)
     },
     [totalPhases]
   )
+
+  useEffect(() => () => clearTimeout(dismissTimerRef.current), [])
 
   // ── Advance to next phase ─────────────────────────────────────────────────
 
@@ -317,19 +341,12 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
       data-testid="map-live-stage"
     >
       {/* Scrollable content */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+      <div className="flex-1 min-h-0 overflow-y-auto cf-stage-scroll px-4 py-4 flex flex-col gap-4">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          {chapterTitle && (
-            <p className="text-[10px] font-bold tracking-widest uppercase text-text-muted font-mono mb-1">
-              {chapterTitle}
-            </p>
-          )}
-          <h3 className="text-base font-bold text-text">Live Situation Map</h3>
-        </div>
-
-        {currentPhase && (
+      <StageHeader
+        eyebrow={chapterTitle || 'Live situation'}
+        title="Live Situation Map"
+        aside={currentPhase && (
           <PhaseChip
             phaseIndex={currentPhaseIndex}
             totalPhases={totalPhases}
@@ -337,117 +354,128 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
             isLive={isLive}
           />
         )}
-      </div>
+      />
 
-      {/* ── Map — capped at 45vh so sub-decision card + footer remain visible */}
       {/* UnitsLayer draws a ring at each unit's `fromHotspotId`, so the settled
           history is passed with that field rewritten to the destination. The
           live phase goes through `movements` untouched, because MapMotionLayer
           needs both ends of the journey to fly it. */}
-      <MapCanvas
-        bounds={mapBounds}
-        hotspots={hotspots}
-        units={visibleUnits.map(u => ({
-          ...u,
-          fromHotspotId: u.toHotspotId,   // snap to destination
-        }))}
-        movements={activeMovements}
-        height="45vh"
-      />
-
-      {/* Key for what is moving on the map right now. */}
-      {movementLegend.length > 0 && (
-        <div
-          data-testid="movement-legend"
-          className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1"
-        >
-          <span className="text-[10px] uppercase tracking-widest text-slate-500 intel-mono">
-            On the map now
-          </span>
-          {movementLegend.map(item => (
-            <span
-              key={item.key}
-              className="flex items-center gap-1.5 text-[11px] text-text-muted"
-            >
-              <span
-                aria-hidden="true"
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: item.color, boxShadow: `0 0 8px ${item.color}` }}
-              />
-              {item.label}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* ── Sub-decision card (slides in when phase has one) ───────────── */}
-      <AnimatePresence>
-        {awaitingDecision && activeSubDecision && (
-          <div className="relative">
-            <SubDecisionCard
-              key={activeSubDecision.id}
-              subDecision={activeSubDecision}
-              onCommit={handleSubDecisionCommit}
+      {/* The map takes whatever height is left rather than a fixed 45vh, and
+          sits beside the question on wide screens, above it on narrow ones.
+          Stacked, a 4-option question under a fixed map could not fit a
+          laptop screen, so the stage scrolled for no reason. The floors keep
+          the map usable on a very short screen, where scrolling is fair. */}
+      <div className="flex-1 flex flex-col gap-4 min-[900px]:flex-row min-[900px]:min-h-0">
+        <div className="flex-1 min-w-0 flex flex-col gap-2">
+          <div className="relative flex-1 min-h-[160px] min-[900px]:min-h-[240px]">
+            {/* Live-feed tag in the map corner */}
+            <div className="absolute top-2 right-2 z-[500] pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#06101e]/80 border border-[#e0413a]/40">
+              <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#e0413a] cf-flash-blink" />
+              <span className="font-mono text-[9px] font-black tracking-[0.25em] text-[#ff6b63]">LIVE</span>
+            </div>
+            <MapCanvas
+              bounds={mapBounds}
+              hotspots={hotspots}
+              units={visibleUnits.map(u => ({
+                ...u,
+                fromHotspotId: u.toHotspotId,   // snap to destination
+              }))}
+              movements={activeMovements}
+              // The moving piece is now a drawn missile / convoy / aircraft and
+              // the key under the map names each one, so the per-route labels
+              // only landed on top of place names.
+              showMovementLabels={false}
+              height="100%"
             />
           </div>
-        )}
-      </AnimatePresence>
+
+          {/* Key for what is moving on the map right now. */}
+          {movementLegend.length > 0 && (
+            <motion.div
+              key={`legend-${currentPhaseIndex}`}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              data-testid="movement-legend"
+              className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1"
+            >
+              <span className="text-[10px] uppercase tracking-widest text-slate-500 intel-mono">
+                On the map now
+              </span>
+              {movementLegend.map(item => (
+                <span
+                  key={item.key}
+                  className="flex items-center gap-1.5 text-[11px] text-text-muted"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: item.color, boxShadow: `0 0 8px ${item.color}` }}
+                  />
+                  {item.label}
+                </span>
+              ))}
+            </motion.div>
+          )}
+        </div>
+
+        {/* ── Sub-decision card (slides in when phase has one) ───────────── */}
+        <AnimatePresence>
+          {awaitingDecision && activeSubDecision && (
+            <motion.div
+              key={activeSubDecision.id}
+              exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.2 } }}
+              className="relative min-[900px]:w-[340px] min-[900px]:shrink-0 min-[900px]:overflow-y-auto"
+            >
+              <SubDecisionCard
+                subDecision={activeSubDecision}
+                onCommit={handleSubDecisionCommit}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
       </div>
 
       {/* ── Sticky footer controls ─────────────────────────────────────── */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex items-center justify-between gap-4">
-        {/* Phase indicator dots */}
-        <div className="flex gap-1.5" aria-label="Phase progress">
-          {phases.map((_, i) => (
-            <div
-              key={i}
-              className={[
-                'h-1.5 w-6 rounded-full transition-colors duration-300',
-                completedPhases.has(i)
-                  ? 'bg-brand-600'
-                  : i === currentPhaseIndex
-                    ? 'bg-brand-400 animate-pulse'
-                    : 'bg-slate-300/30',
-              ].join(' ')}
-            />
-          ))}
-        </div>
+      <StageFooter
+        left={
+          <div className="flex items-center gap-1.5" aria-label="Phase progress">
+            {phases.map((_, i) => (
+              <div
+                key={i}
+                className={[
+                  'h-2 w-5 sm:w-7 rounded-sm transition-all duration-300',
+                  completedPhases.has(i)
+                    ? 'bg-brand-600 shadow-[0_0_6px_rgba(91,170,255,0.6)]'
+                    : i === currentPhaseIndex
+                      ? 'bg-brand-400 animate-pulse'
+                      : 'bg-slate-500/15 border border-slate-500/50',
+                ].join(' ')}
+              />
+            ))}
+          </div>
+        }
+      >
+        {/* Advance button — shown when not on last phase OR last phase not yet complete */}
+        {!allPhasesComplete && !awaitingDecision && (
+          <ActionButton testId="advance-phase-btn" onClick={handleAdvance}>
+            {isLastPhase ? 'Finish the Timeline' : 'Next Step ›'}
+          </ActionButton>
+        )}
 
-        {/* Action buttons */}
-        <div className="flex gap-3">
-          {/* Advance button — shown when not on last phase OR last phase not yet complete */}
-          {!allPhasesComplete && !awaitingDecision && (
-            <button
-              type="button"
-              data-testid="advance-phase-btn"
-              onClick={handleAdvance}
-              className="px-5 py-2 rounded-xl text-sm font-bold tracking-wide bg-surface-raised border border-slate-300/40 text-text hover:border-brand-400/50 transition-colors duration-150"
-            >
-              {isLastPhase ? 'Finish the Timeline' : 'Next Step ›'}
-            </button>
-          )}
-
-          {/* Final submit — shown after all phases complete */}
-          {allPhasesComplete && (
-            <motion.button
-              type="button"
-              data-testid="submit-analysis"
-              disabled={submitting}
-              onClick={handleFinalSubmit}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-              className={[
-                'px-6 py-2.5 rounded-xl text-sm font-bold tracking-wide transition-opacity duration-150',
-                'bg-brand-600 text-white shadow-[0_0_18px_rgba(91,170,255,0.35)]',
-                submitting ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90',
-              ].join(' ')}
-            >
-              {submitting ? 'Saving…' : 'See Your Debrief'}
-            </motion.button>
-          )}
-        </div>
-      </div>
+        {/* Final submit — shown after all phases complete */}
+        {allPhasesComplete && (
+          <ActionButton
+            testId="submit-analysis"
+            busy={submitting}
+            busyLabel="Saving…"
+            onClick={handleFinalSubmit}
+          >
+            See Your Debrief
+          </ActionButton>
+        )}
+      </StageFooter>
     </div>
   )
 }

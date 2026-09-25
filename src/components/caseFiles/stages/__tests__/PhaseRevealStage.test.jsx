@@ -248,3 +248,36 @@ describe('PhaseRevealStage — empty payload', () => {
     expect(screen.getByTestId('continue-btn').disabled).toBe(false)
   })
 })
+
+// The evidence wall's whole payoff is finding out whether YOUR links held up.
+// Each assessment used to read the same whether or not you had pinned that pair.
+describe('PhaseRevealStage — which assessments were your links', () => {
+  const withLinks = (connections) => ({
+    ...SESSION_CONTEXT_EMPTY,
+    priorResults: [{ stageIndex: 1, stageType: 'evidence_wall', payload: { connections } }],
+  })
+
+  it('tags a confirmed pair the player linked, in either direction', () => {
+    renderStage(withLinks([{ fromItemId: 'ev-beta', toItemId: 'ev-alpha' }]))
+    expect(screen.getByTestId('resolution-yours-0').textContent).toMatch(/good call/i)
+    expect(screen.queryByTestId('resolution-yours-1')).toBeNull()
+  })
+
+  it('tags a refuted pair the player linked without praising it', () => {
+    renderStage(withLinks([{ fromItemId: 'ev-gamma', toItemId: 'ev-delta' }]))
+    const tag = screen.getByTestId('resolution-yours-1')
+    expect(tag.textContent).toMatch(/you linked these/i)
+    expect(tag.textContent).not.toMatch(/good call/i)
+  })
+
+  it('counts how many confirmed pairs the player found', () => {
+    renderStage(withLinks([{ fromItemId: 'ev-alpha', toItemId: 'ev-beta' }]))
+    expect(screen.getByTestId('resolution-summary').textContent).toMatch(/You linked 1 of the 1 confirmed pair/)
+  })
+
+  it('tags nothing when the player made no links', () => {
+    renderStage()
+    expect(screen.queryByTestId('resolution-yours-0')).toBeNull()
+    expect(screen.getByTestId('resolution-summary').textContent).toMatch(/You linked 0 of the 1/)
+  })
+})

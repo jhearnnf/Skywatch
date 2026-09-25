@@ -101,3 +101,27 @@ describe('ActorPortrait', () => {
     expect(el.getAttribute('aria-pressed')).toBe('true')
   })
 })
+
+// The board doubles as a checklist of who you have already questioned.
+describe('ActorPortrait — interview progress', () => {
+  it('draws one pip per question in the allowance', () => {
+    render(<ActorPortrait actor={ACTOR} isSelected={false} onClick={vi.fn()} questionsUsed={1} maxQuestions={3} />)
+    const pips = screen.getByTestId(`actor-questions-${ACTOR.id}`)
+    expect(pips.children).toHaveLength(3)
+    expect(pips.getAttribute('aria-label')).toBe('1 of 3 questions used')
+  })
+
+  it('stamps the card once the person has been asked something', () => {
+    const { rerender } = render(
+      <ActorPortrait actor={ACTOR} isSelected={false} onClick={vi.fn()} questionsUsed={0} maxQuestions={3} />
+    )
+    expect(screen.queryByTestId(`actor-interviewed-${ACTOR.id}`)).toBeNull()
+    rerender(<ActorPortrait actor={ACTOR} isSelected={false} onClick={vi.fn()} questionsUsed={2} maxQuestions={3} />)
+    expect(screen.getByTestId(`actor-interviewed-${ACTOR.id}`)).toBeDefined()
+  })
+
+  it('shows no pips when no allowance is passed', () => {
+    render(<ActorPortrait actor={ACTOR} isSelected={false} onClick={vi.fn()} />)
+    expect(screen.queryByTestId(`actor-questions-${ACTOR.id}`)).toBeNull()
+  })
+})

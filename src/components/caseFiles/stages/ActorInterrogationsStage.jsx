@@ -35,6 +35,13 @@ import { AnimatePresence } from 'framer-motion'
 import ActorPortrait from '../ActorPortrait'
 import RelationshipLine from '../RelationshipLine'
 import InterrogationPanel from '../InterrogationPanel'
+import { StageHeader, StageFooter, ActionButton } from '../CaseFileKit'
+
+// Same dark board as the evidence wall, so the two read as one room.
+const PINBOARD_BG = {
+  backgroundColor: '#0e1c30',
+  backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E\")",
+}
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -219,37 +226,30 @@ export default function ActorInterrogationsStage({
   return (
     <div className="flex flex-col h-full min-h-0 w-full" data-testid="actor-interrogations-stage">
       {/* Scrollable content */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+      <div className="flex-1 min-h-0 overflow-y-auto cf-stage-scroll px-4 py-3 flex flex-col gap-3">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-brand-600 intel-mono mb-0.5">
-            Who to ask
-          </p>
-          <h2 className="text-base font-extrabold text-text leading-snug">
-            Ask the people involved
-            {contextDateLabel ? (
-              <span className="font-normal text-text-muted">, {contextDateLabel}</span>
-            ) : null}
-          </h2>
-        </div>
-        <div className="text-xs text-text-muted intel-mono shrink-0">
-          <span data-testid="actors-interrogated-count">
-            {interrogatedActors.length} of {actors.length} people asked
-          </span>
-          {' · '}
-          <span data-testid="questions-used-count">
-            {totalQuestionsUsed} question{totalQuestionsUsed !== 1 ? 's' : ''} used, up to {maxQuestionsPerActor} each
-          </span>
-        </div>
-      </div>
+      <StageHeader
+        eyebrow="Field interviews"
+        title="Ask the people involved"
+        date={contextDateLabel || null}
+        aside={
+          <div className="text-xs text-text-muted intel-mono shrink-0 sm:text-right flex flex-col gap-0.5">
+            <span data-testid="actors-interrogated-count">
+              {interrogatedActors.length} of {actors.length} people asked
+            </span>
+            <span data-testid="questions-used-count">
+              {totalQuestionsUsed} question{totalQuestionsUsed !== 1 ? 's' : ''} used, up to {maxQuestionsPerActor} each
+            </span>
+          </div>
+        }
+      />
 
       {/* Pinboard */}
       <div
         ref={boardRef}
         data-testid="pinboard"
-        className="relative rounded-2xl border border-slate-300/20 bg-surface p-4"
-        style={{ paddingBottom: 16 + CARD_STAGGER_MAX }}
+        className="relative rounded-md border border-slate-300/20 p-4 shadow-[inset_0_0_60px_rgba(0,0,0,0.5)]"
+        style={{ ...PINBOARD_BG, paddingBottom: 16 + CARD_STAGGER_MAX }}
       >
         {/* Actor card grid */}
         {/* Wider gutters as well as the stagger: a longer run between two cards
@@ -272,6 +272,8 @@ export default function ActorInterrogationsStage({
                 actor={actor}
                 isSelected={selectedActorId === actor.id}
                 onClick={handlePortraitClick}
+                questionsUsed={(transcripts[actor.id] ?? []).length}
+                maxQuestions={maxQuestionsPerActor}
                 onHoverChange={(hovering) => setHoveredActorId(hovering ? actor.id : null)}
               />
             </div>
@@ -333,28 +335,22 @@ export default function ActorInterrogationsStage({
         </div>
       )}
 
-      {/* Hint text */}
-      <p className="text-xs text-text-muted text-center">
-        Click a person to open their interview panel. You get up to {maxQuestionsPerActor} question{maxQuestionsPerActor !== 1 ? 's' : ''} each.
-      </p>
+      {/* No separate "click a person" hint line: the objective banner above
+          already says it, and the repeat was what tipped this stage into a
+          pointless scroll on an ordinary desktop screen. */}
       </div>
 
       {/* Sticky footer: Done button */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex justify-end">
-        <button
-          data-testid="done-button"
+      <StageFooter>
+        <ActionButton
+          testId="done-button"
           onClick={handleDone}
-          disabled={isSubmitting}
-          className={[
-            'px-6 py-2.5 rounded-xl font-bold text-sm transition-all duration-150',
-            isSubmitting
-              ? 'bg-slate-300/20 text-slate-500 cursor-not-allowed'
-              : 'bg-brand-600 text-white hover:bg-brand-700 active:scale-95',
-          ].join(' ')}
+          busy={isSubmitting}
+          busyLabel="Submitting…"
         >
-          {isSubmitting ? 'Submitting…' : 'Done, Continue'}
-        </button>
-      </div>
+          Done, Continue
+        </ActionButton>
+      </StageFooter>
 
       {/* Interrogation panel overlay */}
       <AnimatePresence>

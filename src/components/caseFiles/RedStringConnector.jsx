@@ -71,6 +71,8 @@ export default function RedStringConnector({
           stroke="rgba(192, 57, 43, 0.28)"
           strokeWidth={strokeWidth + 4}
           strokeLinecap="round"
+          pathLength="1"
+          className="cf-string-draw"
           style={{ pointerEvents: 'none' }}
         />
       )}
@@ -83,6 +85,11 @@ export default function RedStringConnector({
         strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeDasharray={strokeDasharray}
+        // A committed string pulls itself taut from one card to the other
+        // instead of blinking into place. pathLength=1 lets the CSS animate
+        // any length of string with the same dash numbers.
+        pathLength={committed ? '1' : undefined}
+        className={committed ? 'cf-string-draw' : undefined}
         onClick={committed && onClick ? onClick : undefined}
         style={{
           pointerEvents: committed && onClick ? 'stroke' : 'none',

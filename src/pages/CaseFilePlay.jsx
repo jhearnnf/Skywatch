@@ -16,6 +16,7 @@ import StageRouter from '../components/caseFiles/StageRouter'
 import CaseFilesGate from '../components/caseFiles/CaseFilesGate'
 import TutorialModal from '../components/tutorial/TutorialModal'
 import SEO from '../components/SEO'
+import { stageTypeLabel } from '../utils/caseFiles/scoringDisplay'
 
 // ── Tiny spinner ──────────────────────────────────────────────────────────────
 function Spinner({ label = 'Loading case file…' }) {
@@ -27,29 +28,125 @@ function Spinner({ label = 'Loading case file…' }) {
   )
 }
 
-// ── Header (Abort · Title · Stage X/N) ────────────────────────────────────────
+// ── Header (Abort · Title · Stage X/N) + case progress tracker ─────────────────
+// The bare "Stage 3 / 8" pill said how far along you were but not what was
+// left. The tracker underneath names each stage, so a player can see the
+// interviews are still to come before they rush the map.
 function PlayHeader({ chapter, currentStageIndex, totalStages, onAbort }) {
+  const stages = chapter.stages ?? []
   return (
-    <div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-slate-200/10 bg-surface/95 backdrop-blur-sm">
-      <button
-        type="button"
-        onClick={onAbort}
-        data-testid="abort-case-btn"
-        className="shrink-0 text-xs font-semibold text-slate-500 hover:text-danger transition-colors px-2 py-1 rounded"
-        aria-label="Abort case"
-      >
-        ✕ Abort
-      </button>
-      <div className="flex-1 min-w-0 text-center">
-        <p className="text-xs font-semibold text-slate-600 truncate">{chapter.title}</p>
-        {chapter.dateRangeLabel && (
-          <p className="text-[10px] text-slate-500 truncate">{chapter.dateRangeLabel}</p>
-        )}
+    <div className="shrink-0 border-b border-slate-200/10 bg-surface/95 backdrop-blur-sm">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button
+          type="button"
+          onClick={onAbort}
+          data-testid="abort-case-btn"
+          className="shrink-0 text-xs font-semibold text-slate-500 hover:text-danger transition-colors px-2 py-1 rounded"
+          aria-label="Abort case"
+        >
+          ✕ Abort
+        </button>
+        <div className="flex-1 min-w-0 text-center">
+          <p className="text-xs font-semibold text-slate-600 truncate">{chapter.title}</p>
+          {chapter.dateRangeLabel && (
+            <p className="text-[10px] text-slate-500 truncate">{chapter.dateRangeLabel}</p>
+          )}
+        </div>
+        <span className="shrink-0 text-[11px] font-mono text-brand-600 bg-brand-600/10 px-2 py-0.5 rounded-full">
+          Stage {currentStageIndex + 1} / {totalStages}
+        </span>
       </div>
-      <span className="shrink-0 text-[11px] font-mono text-brand-600 bg-brand-600/10 px-2 py-0.5 rounded-full">
-        Stage {currentStageIndex + 1} / {totalStages}
-      </span>
+
+      {stages.length > 1 && (
+        <ol
+          data-testid="case-progress"
+          aria-label="Case progress"
+          className="flex gap-1 px-3 pb-2"
+        >
+          {stages.map((s, i) => {
+            const done    = i < currentStageIndex
+            const current = i === currentStageIndex
+            return (
+              <li
+                key={s.id ?? i}
+                aria-current={current ? 'step' : undefined}
+                className="flex-1 min-w-0 flex flex-col gap-1"
+              >
+                <span
+                  className={[
+                    'relative h-1 rounded-full overflow-hidden transition-colors duration-500',
+                    done ? 'bg-brand-600' : current ? 'bg-brand-600/25' : 'bg-slate-500/25',
+                  ].join(' ')}
+                >
+                  {current && (
+                    <motion.span
+                      key={`fill-${i}`}
+                      className="absolute inset-y-0 left-0 bg-brand-600 rounded-full"
+                      initial={{ width: '0%' }}
+                      animate={{ width: '55%' }}
+                      transition={{ duration: 0.8, ease: 'easeOut' }}
+                    />
+                  )}
+                </span>
+                <span
+                  className={[
+                    'hidden sm:block truncate font-mono text-[9px] uppercase tracking-wider transition-colors',
+                    current ? 'text-brand-600 font-bold' : done ? 'text-text-muted' : 'text-slate-500/70',
+                  ].join(' ')}
+                >
+                  {done ? '✓ ' : ''}{stageTypeLabel(s.type)}
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+      )}
     </div>
+  )
+}
+
+// ── Stage title card ──────────────────────────────────────────────────────────
+// A beat of ceremony between stages: "STAGE 04 · INTERROGATIONS" stamps across
+// the screen and clears itself. It never takes a click (pointer-events-none),
+// so a player who already knows the drill is not held up by it.
+function StageTitleCard({ index, total, type }) {
+  const [visible, setVisible] = useState(true)
+  useEffect(() => {
+    const t = setTimeout(() => setVisible(false), 1150)
+    return () => clearTimeout(t)
+  }, [])
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          key="stage-title-card"
+          data-testid="stage-title-card"
+          aria-hidden="true"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-[#06101e]/55"
+        >
+          <motion.div
+            initial={{ scale: 1.6, opacity: 0, rotate: -6 }}
+            animate={{ scale: 1, opacity: 1, rotate: -3 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 480, damping: 22 }}
+            className="flex flex-col items-center gap-1 px-6 py-3 border-[3px] border-brand-600/80 rounded-sm bg-surface/80 cf-stamp-ink"
+            style={{ outline: '1px solid rgba(91,170,255,0.5)', outlineOffset: '3px', boxShadow: '0 0 40px rgba(91,170,255,0.25)' }}
+          >
+            <span className="font-mono text-[10px] tracking-[0.35em] text-brand-600/80 font-bold">
+              STAGE {String(index + 1).padStart(2, '0')} / {String(total).padStart(2, '0')}
+            </span>
+            <span className="font-mono text-xl sm:text-2xl font-black tracking-[0.2em] uppercase text-brand-600">
+              {stageTypeLabel(type)}
+            </span>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -311,15 +408,19 @@ export default function CaseFilePlay() {
           • Mobile (≤600px): fixed-position full-viewport flex column. AppShell's
             chrome is hidden by enterImmersive(); this overlay covers the page so
             the stage UI always fits 100dvh without page-level scrolling.
-          • Desktop (>600px): natural relative flow inside AppShell. We still
-            use a flex column with a min-height so each stage's internal scroll
-            kicks in if its content is taller than the viewport.
+          • Desktop (>600px): pinned to exactly the height AppShell leaves, so
+            only a stage's own content area ever scrolls, never the page. On a
+            non-/cbat route AppShell takes 11.5rem: 3.5 topbar + 1.5 top and
+            1.5 bottom content padding + 5 on .app-shell-main, whose unlayered
+            rule beats md:pb-6 even on desktop. This used to deduct 6.5rem,
+            which left an 80px page scroll under every stage. The edge is 601px
+            (not sm:) so it meets the phone layout with no gap between.
       */}
       <div
         className={[
           'flex flex-col w-full',
           'max-[600px]:fixed max-[600px]:inset-0 max-[600px]:z-40 max-[600px]:bg-[#06101e] max-[600px]:h-[100dvh]',
-          'sm:relative sm:h-[calc(100dvh-3.5rem-3rem)] sm:min-h-[60vh]',
+          'min-[601px]:relative min-[601px]:h-[calc(100dvh-11.5rem-env(safe-area-inset-bottom))] min-[601px]:min-h-[26rem]',
         ].join(' ')}
         data-testid="case-file-play"
       >
@@ -341,7 +442,15 @@ export default function CaseFilePlay() {
         )}
 
         {/* Stage area — flexes to fill remaining height, stage handles internal scroll */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+          {stage && !isAutoDebrief && (
+            <StageTitleCard
+              key={`title-${currentStageIndex}`}
+              index={currentStageIndex}
+              total={totalStages}
+              type={stage.type}
+            />
+          )}
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={`stage-${currentStageIndex}`}

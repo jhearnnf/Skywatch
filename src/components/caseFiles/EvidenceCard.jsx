@@ -1,8 +1,9 @@
 /**
  * EvidenceCard
- * A pinned evidence item on the corkboard — photo/document aesthetic with
- * subtle paper-grain CSS texture, slight random rotation jitter, and a
- * brand-600 ring when selected.
+ * A pinned evidence file on the corkboard — dossier sheet with a pushpin,
+ * exhibit header, rubber-stamp category, typed excerpt and a sticky note for
+ * "why it matters". Subtle paper-grain texture, slight random rotation jitter,
+ * and a brand-600 ring when selected.
  *
  * Props
  *   item               { id, title, type, description, imageUrl, imageCredit, sourceUrl }
@@ -15,10 +16,12 @@
  *   cardSize?          { width, height }  — required when absolutePosition set
  *   compact?           boolean — tightens font sizes / padding for the small
  *                      mobile board card. Defaults true when absolutePosition set.
+ *   exhibitNo?         number — shown as "EXHIBIT 03" in the file header.
  */
 
 import { useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
+import { StickyNote } from './CaseFileKit'
 
 // ── Type icons ────────────────────────────────────────────────────────────────
 const TYPE_ICONS = {
@@ -28,6 +31,15 @@ const TYPE_ICONS = {
   document:     '📄',
   osint:        '🌐',
   map_overlay:  '🗺️',
+}
+
+const TYPE_LABELS = {
+  satellite:    'Satellite imagery',
+  transcript:   'Transcript',
+  photo:        'Photograph',
+  document:     'Document',
+  osint:        'Open source',
+  map_overlay:  'Map overlay',
 }
 
 function typeIcon(type) {
@@ -53,6 +65,12 @@ const PAPER_GRAIN_STYLE = {
   backgroundSize:  '200px 200px',
 }
 
+// Faint typed-page rules behind the document excerpt (18px = its line height).
+const RULED_LINES_STYLE = {
+  backgroundImage:    'repeating-linear-gradient(to bottom, transparent 0, transparent 17px, rgba(91,170,255,0.08) 17px, rgba(91,170,255,0.08) 18px)',
+  backgroundPosition: '0 8px',
+}
+
 // ── Framer Motion variants ────────────────────────────────────────────────────
 const cardVariants = {
   hidden: { scale: 0.7, opacity: 0 },
@@ -72,6 +90,7 @@ export default function EvidenceCard({
   absolutePosition,
   cardSize,
   compact: compactProp,
+  exhibitNo,
 }) {
   const cardRef = useRef(null)
   const rotation = hashRotation(item?.id)
@@ -121,6 +140,8 @@ export default function EvidenceCard({
       }
     : {}
 
+  const exhibitLabel = exhibitNo != null ? `EXHIBIT ${String(exhibitNo).padStart(2, '0')}` : 'EXHIBIT'
+
   return (
     <motion.div
       ref={cardRef}
@@ -146,20 +167,38 @@ export default function EvidenceCard({
         isSelected
           ? 'border-brand-600 ring-2 ring-brand-600/60'
           : 'border-slate-300/30 hover:border-slate-400/50',
-        // Mobile / grid: reduce rotation effect by zeroing it in CSS (override inline style)
-        '@media (max-width: 600px) { rotate: 0deg }',
       ].join(' ')}
     >
-      {/* ── Type icon badge — top-left ─────────────────────────────────── */}
+      {/* ── File header: type icon + exhibit number + type ───────────────
+          The icon must stay the first aria-hidden node (tests look it up). */}
+      <div
+        className={[
+          'flex items-center gap-1.5 border-b border-dashed border-slate-300/30 font-mono uppercase text-text-muted',
+          compact ? 'px-2 pt-1 pb-0.5 text-[8px] tracking-wider' : 'px-2.5 pt-1.5 pb-1 text-[9px] tracking-[0.15em]',
+        ].join(' ')}
+      >
+        <span aria-hidden="true" className="text-xs leading-none" title={type}>
+          {typeIcon(type)}
+        </span>
+        <span className="font-bold text-text whitespace-nowrap shrink-0">{exhibitLabel}</span>
+        {!compact && TYPE_LABELS[type] && (
+          <span className="ml-auto truncate pr-4">{TYPE_LABELS[type]}</span>
+        )}
+      </div>
+
+      {/* ── Pushpin: red to match the string, blue while selected ────── */}
       <span
         aria-hidden="true"
-        className="absolute top-1.5 left-1.5 z-10 text-xs leading-none"
-        title={type}
-      >
-        {typeIcon(type)}
-      </span>
+        className="absolute top-1 right-1.5 z-10 w-3 h-3 rounded-full pointer-events-none"
+        style={{
+          background: isSelected
+            ? 'radial-gradient(circle at 35% 30%, #cfe6ff 0%, #5baaff 45%, #1d4f8f 100%)'
+            : 'radial-gradient(circle at 35% 30%, #ffb3b3 0%, #e0413a 45%, #7a1512 100%)',
+          boxShadow: '1px 2px 3px rgba(0,0,0,0.6)',
+        }}
+      />
 
-      {/* ── Image area or description excerpt ─────────────────────────── */}
+      {/* ── Image area or typed document excerpt ─────────────────────── */}
       {imageUrl ? (
         <div className="relative w-full flex-shrink-0" style={compact ? { height: '45%' } : { paddingBottom: '56.25%' }}>
           <img
@@ -175,30 +214,36 @@ export default function EvidenceCard({
         <div
           className={[
             compact
-              ? 'px-2 pt-5 pb-1 font-mono text-[10px] leading-snug text-text line-clamp-4 flex-1'
-              : 'px-3 pt-6 pb-2 font-mono text-[12px] leading-snug text-text line-clamp-6 min-h-[120px]',
+              ? 'px-2 pt-1 pb-1 font-mono text-[10px] leading-snug text-text line-clamp-4 flex-1'
+              : 'mx-2.5 mt-2 px-2.5 py-2 font-mono text-[12px] leading-[18px] text-text min-h-[120px] border-l-2 border-[#e0413a]/50 bg-surface/60',
           ].join(' ')}
+          style={compact ? undefined : RULED_LINES_STYLE}
           aria-label="Evidence excerpt"
         >
           {description}
         </div>
       )}
 
-      {/* ── Image credit ───────────────────────────────────────────────── */}
+      {/* ── Source line ──────────────────────────────────────────────── */}
       {imageCredit && !compact && (
-        <p className="px-2.5 text-[10px] italic text-text-muted leading-tight mt-1">
-          {imageCredit}
+        <p className="px-2.5 mt-1.5 font-mono text-[9px] uppercase tracking-wider text-text-muted leading-tight">
+          <span className="font-bold">Source:</span>{' '}
+          <span className="normal-case tracking-normal italic">{imageCredit}</span>
         </p>
       )}
 
-      {/* ── Card body: title ───────────────────────────────────────────── */}
-      <div className={compact ? 'px-2 pt-1 pb-1.5 flex flex-col gap-0.5 flex-1 min-h-0' : 'px-2.5 pt-1.5 pb-2.5 flex flex-col gap-1'}>
-        {/* Plain-language category tag — helps players spot themes without
-            domain knowledge. Optional. */}
+      {/* ── Card body ────────────────────────────────────────────────── */}
+      <div className={compact ? 'px-2 pt-1 pb-1.5 flex flex-col gap-0.5 flex-1 min-h-0' : 'px-2.5 pt-2 pb-3 flex flex-col gap-1.5 flex-1'}>
+        {/* Category as a rubber stamp. Optional. */}
         {category && !compact && (
           <span
             data-testid={`evidence-category-${id}`}
-            className="self-start text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-brand-100/40 border border-brand-600/30 text-brand-600"
+            className="self-start font-mono text-[9px] font-black uppercase tracking-[0.2em] px-1.5 py-0.5 rounded-sm border-2 border-[#e0413a]/70 text-[#ff6b63] opacity-90"
+            style={{
+              transform:     `rotate(${rotation > 0 ? -3 : 2}deg)`,
+              outline:       '1px solid rgba(224,65,58,0.35)',
+              outlineOffset: '1px',
+            }}
           >
             {category}
           </span>
@@ -206,7 +251,7 @@ export default function EvidenceCard({
         <p className={[
           compact
             ? 'text-[11px] font-semibold text-text leading-tight line-clamp-2'
-            : 'text-sm font-semibold text-text leading-snug line-clamp-2',
+            : 'text-sm font-semibold text-text leading-snug',
         ].join(' ')}>
           {title}
         </p>
@@ -215,19 +260,20 @@ export default function EvidenceCard({
           <p className={[
             compact
               ? 'font-mono text-[9px] leading-tight text-text-muted line-clamp-2 mt-0.5'
-              : 'font-mono text-[11px] leading-snug text-text-muted line-clamp-3 mt-0.5',
+              : 'font-mono text-[11px] leading-snug text-text-muted mt-0.5',
           ].join(' ')}>
             {description}
           </p>
         )}
-        {/* Why it matters — one-line plain-English signal call-out. Optional. */}
+        {/* Why it matters: a sticky note taped to the bottom of the file. Optional. */}
         {whyItMatters && !compact && (
-          <p
-            data-testid={`evidence-why-${id}`}
-            className="text-[11px] leading-snug text-amber-300/90 mt-1 italic"
+          <StickyNote
+            testId={`evidence-why-${id}`}
+            tilt={rotation > 0 ? 1.5 : -1.5}
+            className="mt-auto mx-1"
           >
-            Why it matters: {whyItMatters}
-          </p>
+            <span className="font-bold">Why it matters:</span> {whyItMatters}
+          </StickyNote>
         )}
       </div>
 

@@ -4176,6 +4176,24 @@ body.play-mode .card-shadow {
 .leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-left::before   { border-left-color: #0c1829; }
 .leaflet-tooltip.cf-map-tooltip.leaflet-tooltip-right::before  { border-right-color: #0c1829; }
 
+/* Case Files stage scroll areas. The gutter is held whether or not the
+   content scrolls, so a scrollbar appearing (a stamp mid-slam, a card
+   growing) never narrows the stage and jolts everything in it sideways. */
+.cf-stage-scroll {
+  scrollbar-gutter: stable both-edges;
+  overflow-x: hidden;
+}
+
+/* Evidence-wall string drawing itself between two cards. */
+@keyframes cf-string-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+.cf-string-draw {
+  stroke-dasharray: 1;
+  animation: cf-string-draw 380ms cubic-bezier(.3, .8, .4, 1) both;
+}
+
 /* ── Case Files map motion layer ──────────────────────────────────────────────
    MapMotionLayer mounts as a child of the Leaflet container and covers it, so
    the SVG's user units are the same screen-space container points Leaflet's
@@ -4274,6 +4292,47 @@ body.play-mode .card-shadow {
   transform-box: fill-box;
   transform-origin: center;
   animation: cf-hotspot-pulse 1.8s ease-out infinite;
+}
+/* Case Files primary action: a light sweep every few seconds, so the eye
+   always finds "next" on a busy stage. */
+@keyframes cf-action-sheen {
+  0%, 62% { transform: translateX(-120%) skewX(-20deg); }
+  100%    { transform: translateX(260%)  skewX(-20deg); }
+}
+.cf-action-sheen::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+  animation: cf-action-sheen 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Rubber-stamp ink: speckled gaps so a stamp reads as pressed, not printed. */
+.cf-stamp-ink {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.55'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.6 1.55'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+  -webkit-mask-size: 120px 120px;
+          mask-size: 120px 120px;
+}
+
+/* "Flash traffic" header on an incoming live-map question. */
+@keyframes cf-flash-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0.25; }
+}
+.cf-flash-blink {
+  animation: cf-flash-blink 1s steps(1, end) infinite;
+}
+
+/* Scan sweep across a freshly arrived intelligence update. */
+@keyframes cf-scan-sweep {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(100vh); }
+}
+.cf-scan-sweep {
+  animation: cf-scan-sweep 1.6s cubic-bezier(.4, 0, .2, 1) 1 both;
 }
 @keyframes cbat-room-enter {
   from { opacity: 0; transform: translate3d(18px, 0, 0) scale(.992); filter: blur(3px); }

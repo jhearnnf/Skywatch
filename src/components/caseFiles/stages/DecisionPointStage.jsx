@@ -11,47 +11,31 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Stamp, StickyNote, StageHeader, StageFooter, ActionButton } from '../CaseFileKit'
 
-// ── Small typewriter chip for the context date ────────────────────────────
-function DateChip({ label }) {
-  return (
-    <motion.span
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4 }}
-      className="inline-block text-[11px] font-bold tracking-widest uppercase px-3 py-1 rounded-full border border-brand-400/40 bg-brand-100/60 text-brand-600 font-mono mb-3"
-    >
-      {label}
-    </motion.span>
-  )
-}
-
-// ── Stamp overlay that plays on commit ────────────────────────────────────
+// ── Stamp that slams onto the chosen card on commit ───────────────────────
 function StampOverlay({ show }) {
   return (
     <AnimatePresence>
       {show && (
         <motion.div
           key="stamp"
-          initial={{ scale: 2, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.8, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
         >
-          <span className="text-[10px] font-black tracking-[0.3em] uppercase px-4 py-2 rounded border-4 border-brand-600/80 text-brand-600/90 rotate-[-12deg] select-none"
-            style={{ fontFamily: 'var(--font-family-mono)' }}
-          >
-            Decision Locked
-          </span>
+          <Stamp tone="blue" size="md" rotate={-12}>Decision Locked</Stamp>
         </motion.div>
       )}
     </AnimatePresence>
   )
 }
 
+const OPTION_LETTERS = 'ABCDEFGH'
+
 // ── Individual option card ────────────────────────────────────────────────
-function OptionCard({ option, selected, committed, dimmed, onSelect }) {
+function OptionCard({ option, index, selected, committed, dimmed, onSelect }) {
   // Hints default to OPEN so knowledge-light players see the context up front.
   const [hintOpen, setHintOpen] = useState(true)
 
@@ -91,69 +75,67 @@ function OptionCard({ option, selected, committed, dimmed, onSelect }) {
       }
       transition={{ duration: 0.25 }}
       className={[
-        'relative flex flex-col gap-2 rounded-2xl border p-5 cursor-pointer select-none',
-        'transition-colors duration-200',
+        'relative flex flex-col gap-3 rounded-sm border border-l-4 p-4 pt-3 cursor-pointer select-none card-shadow',
+        'transition-all duration-200',
         committed
           ? 'cursor-default'
-          : 'hover:border-brand-400 hover:bg-brand-100/30',
+          : 'hover:-translate-y-0.5 hover:border-brand-400',
         selected
-          ? 'border-brand-500 bg-brand-100/50 shadow-[0_0_0_2px_rgba(91,170,255,0.25)]'
-          : 'border-slate-200 bg-surface-raised',
+          ? 'border-brand-500 border-l-brand-600 bg-brand-100/40 shadow-[0_0_0_2px_rgba(91,170,255,0.25)]'
+          : 'border-slate-300/30 border-l-slate-400/50 bg-surface-raised',
       ].filter(Boolean).join(' ')}
     >
       {/* Stamp overlay for committed card */}
       {selected && <StampOverlay show={committed} />}
 
-      {/* Selected indicator */}
-      <div className="flex items-start gap-3">
+      {/* File label: "Course of action A" */}
+      <div className="flex items-center justify-between gap-2 border-b border-dashed border-slate-300/25 pb-1.5">
+        <span className="font-mono text-[9px] font-bold tracking-[0.2em] uppercase text-text-muted">
+          Course of action
+        </span>
         <span
           aria-hidden="true"
           className={[
-            'mt-0.5 shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors',
+            'w-6 h-6 rounded-sm flex items-center justify-center font-mono text-xs font-black border-2 transition-colors',
             selected
-              ? 'border-brand-500 bg-brand-500'
-              : 'border-slate-400',
+              ? 'border-brand-600 bg-brand-600 text-white'
+              : 'border-slate-400/60 text-slate-500',
           ].join(' ')}
         >
-          {selected && (
-            <motion.span
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="w-2 h-2 rounded-full bg-white block"
-            />
-          )}
+          {OPTION_LETTERS[index] ?? index + 1}
         </span>
-
-        <p className="text-sm font-bold text-text leading-snug flex-1">{option.text}</p>
       </div>
+
+      <p className="text-sm sm:text-[15px] font-bold text-text leading-snug">{option.text}</p>
 
       {/* Hint toggle */}
       {option.hint && (
-        <div className="pl-8">
+        <div>
           <button
             type="button"
             data-testid={`hint-toggle-${option.id}`}
             onClick={toggleHint}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleHint(e) } }}
-            className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 transition-colors flex items-center gap-1"
+            className="text-[11px] font-semibold text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-1 font-mono uppercase tracking-wider"
           >
             <span aria-hidden="true">{hintOpen ? '▲' : '▼'}</span>
-            {hintOpen ? 'Hide hint' : 'Hint'}
+            {hintOpen ? 'Hide analyst note' : 'Analyst note'}
           </button>
 
           <AnimatePresence>
             {hintOpen && (
-              <motion.p
+              <motion.div
                 key="hint"
-                data-testid={`hint-text-${option.id}`}
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.2 }}
-                className="mt-1.5 text-xs text-text-muted leading-relaxed overflow-hidden"
+                className="overflow-hidden px-1 pt-3 pb-1"
               >
-                {option.hint}
-              </motion.p>
+                <StickyNote testId={`hint-text-${option.id}`} tilt={index % 2 ? 1 : -1}>
+                  {option.hint}
+                </StickyNote>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -171,8 +153,13 @@ function SignalsRecap({ signals }) {
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2, duration: 0.35 }}
-      className="rounded-xl border border-brand-600/20 bg-brand-100/20 px-4 py-3"
+      className="relative rounded-sm border border-slate-300/25 border-l-2 border-l-[#e0413a]/60 bg-surface-raised px-4 py-3 card-shadow"
     >
+      <span
+        aria-hidden="true"
+        className="absolute top-2 right-2 w-3 h-3 rounded-full"
+        style={{ background: 'radial-gradient(circle at 35% 30%, #ffb3b3 0%, #e0413a 45%, #7a1512 100%)', boxShadow: '1px 2px 3px rgba(0,0,0,0.6)' }}
+      />
       <p className="intel-mono text-[10px] tracking-widest uppercase text-brand-600 mb-1.5">
         What you've seen so far
       </p>
@@ -226,20 +213,10 @@ export default function DecisionPointStage({ stage, sessionContext: _sessionCont
 
   return (
     <div className="flex flex-col h-full min-h-0 w-full">
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto cf-stage-scroll">
       <div className="flex flex-col gap-6 w-full max-w-3xl mx-auto px-4 py-6">
       {/* Header */}
-      <header className="flex flex-col items-start gap-1">
-        {contextDateLabel && <DateChip label={contextDateLabel} />}
-        <motion.h2
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15, duration: 0.4 }}
-          className="text-xl sm:text-2xl font-black text-text leading-snug"
-        >
-          {prompt}
-        </motion.h2>
-      </header>
+      <StageHeader eyebrow="Your call" date={contextDateLabel || null} title={prompt} />
 
       {/* Pinned recap of key signals from earlier stages — optional. */}
       <SignalsRecap signals={signalsRecap} />
@@ -254,7 +231,7 @@ export default function DecisionPointStage({ stage, sessionContext: _sessionCont
           visible: { transition: { staggerChildren: 0.08 } },
         }}
       >
-        {options.map(option => {
+        {options.map((option, index) => {
           const isSelected = selectedOptionId === option.id
           const isDimmed   = committed && !isSelected
           return (
@@ -267,6 +244,7 @@ export default function DecisionPointStage({ stage, sessionContext: _sessionCont
             >
               <OptionCard
                 option={option}
+                index={index}
                 selected={isSelected}
                 committed={committed}
                 dimmed={isDimmed}
@@ -281,27 +259,23 @@ export default function DecisionPointStage({ stage, sessionContext: _sessionCont
       </div>
 
       {/* Sticky footer — Lock In button */}
-      <div className="shrink-0 border-t border-slate-300/10 bg-surface px-4 py-3 flex items-center justify-end gap-3">
-        {error && (
-          <p role="alert" data-testid="lock-in-error" className="text-xs text-danger mr-auto">
+      <StageFooter
+        left={error ? (
+          <p role="alert" data-testid="lock-in-error" className="text-xs text-danger">
             {error}
           </p>
-        )}
-        <button
-          type="button"
-          data-testid="lock-in-btn"
-          disabled={!selectedOptionId || committed || submitting}
+        ) : null}
+      >
+        <ActionButton
+          testId="lock-in-btn"
+          disabled={!selectedOptionId || committed}
+          busy={submitting}
+          busyLabel="Locking In…"
           onClick={handleLockIn}
-          className={[
-            'px-6 py-3 rounded-2xl font-bold text-sm tracking-wide transition-all duration-200',
-            selectedOptionId && !committed
-              ? 'bg-brand-600 text-white hover:bg-brand-700 shadow-[0_0_18px_rgba(91,170,255,0.35)]'
-              : 'bg-surface-raised text-text-faint border border-slate-200 cursor-not-allowed',
-          ].join(' ')}
         >
-          {submitting ? 'Locking In…' : 'Lock In Decision'}
-        </button>
-      </div>
+          Lock In Decision
+        </ActionButton>
+      </StageFooter>
     </div>
   )
 }
