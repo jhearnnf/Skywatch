@@ -983,6 +983,17 @@ router.get('/lounge', async (req, res) => {
     // dot is a different signal and must ignore it.
     const unread = Boolean(convo.messageCount)
       && (!readRow || new Date(readRow.lastReadAt) < new Date(convo.lastMessageAt));
+    // The number on the Lounge pill while another room is selected. Only
+    // counted when there is something unread, so the common case costs nothing.
+    const unreadCount = unread
+      ? await ChatMessage.countDocuments({
+        conversationId: convo._id,
+        deletedAt: null,
+        senderRole: { $ne: 'system' },
+        senderUserId: { $ne: req.user._id },
+        ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+      })
+      : 0;
 
     const refusal = postRefusal(convo, req.user);
     const code = refusal?.body?.code ?? null;
@@ -991,6 +1002,7 @@ router.get('/lounge', async (req, res) => {
       conversationId:      convo._id,
       title:               channelTitle(convo),
       unread,
+      unreadCount,
       lastMessageAt:       convo.lastMessageAt,
       canPost:             !refusal,
       displayNameRequired: code === 'DISPLAY_NAME_REQUIRED',

@@ -405,6 +405,28 @@ describe('private CBAT group', () => {
     expect(screen.queryByRole('button', { name: /Load previous/ })).toBeNull()
   })
 
+  it('opens an admin on All groups, with the unread lounge count on the Lounge pill', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    stubFetch({
+      lounge: { ...LOUNGE, unread: true, unreadCount: 5 },
+      group: { groups: [{ conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 1, messageCount: 0, unread: 0 }] },
+    })
+    renderOpen()
+
+    expect(screen.getByRole('tab', { name: /All groups/ }).getAttribute('aria-selected')).toBe('true')
+    expect(await screen.findByLabelText('5 new lounge messages')).toBeTruthy()
+
+    // Inside the lounge its own read state takes over, so the number goes.
+    fireEvent.click(screen.getByRole('tab', { name: /^Lounge/ }))
+    await waitFor(() => expect(screen.queryByLabelText('5 new lounge messages')).toBeNull())
+  })
+
+  it('still opens a member on the lounge', async () => {
+    stubFetch()
+    renderOpen()
+    expect(screen.getByRole('tab', { name: /^Lounge/ }).getAttribute('aria-selected')).toBe('true')
+  })
+
   it('aggregates unread messages onto the admin All groups pill', async () => {
     mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
     stubFetch({ group: { groups: [
@@ -949,6 +971,7 @@ describe('seen by', () => {
     })
     stubFetch({ messages: [THEIRS] })
     renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: /^Lounge/ }))
     await screen.findByText('anyone about?')
     expect(screen.getByLabelText('Seen by')).toBeTruthy()
   })
@@ -1057,6 +1080,7 @@ describe('editing and removing', () => {
     })
     stubFetch({ messages: [own({ deleted: true, deletedByUserId: 'u1', canEdit: false, canDelete: false })] })
     renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: /^Lounge/ }))
 
     const body = await screen.findByText('helo')
     expect(body.className).toContain('line-through')
@@ -1069,6 +1093,7 @@ describe('editing and removing', () => {
     })
     stubFetch({ messages: [own({ deleted: true, deletedByUserId: 'u9', canEdit: false, canDelete: false })] })
     renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: /^Lounge/ }))
 
     await screen.findByText('helo')
     expect(screen.getByText('Removed by a moderator')).toBeTruthy()
@@ -1089,6 +1114,7 @@ describe('editing and removing', () => {
     })
     stubFetch({ messages: [own({ edited: true, edits: [{ body: 'helo', editedAt: null }] })] })
     renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: /^Lounge/ }))
 
     fireEvent.click(await screen.findByTitle('Show edit history'))
     expect(screen.getByText('Edit history')).toBeTruthy()

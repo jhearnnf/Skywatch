@@ -225,7 +225,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
   // The offset of an "@" the user dismissed with Escape, so it stays dismissed
   // until they start a different mention.
   const [mentionDismissed, setMentionDismissed] = useState(null)
-  const [room, setRoom] = useState('lounge')
+  // Admins land on All groups; everyone else on the lounge.
+  const [room, setRoom] = useState(() => (user?.isAdmin ? 'groups' : 'lounge'))
+  const [loungeUnreadCount, setLoungeUnreadCount] = useState(0)
   const [dateChoice, setDateChoice] = useState('')
   const [confirmingDate, setConfirmingDate] = useState(false)
   const [dateBusy, setDateBusy] = useState(false)
@@ -317,6 +319,16 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
     if (next !== 'groups') setAdminGroupId(null)
   }, [room])
 
+  // Auth can resolve after the first render, in which case the lazy default
+  // above saw no user. Move an admin to All groups once, the first time we
+  // learn they are one, and never again, so a later manual choice sticks.
+  const adminDefaultAppliedRef = useRef(Boolean(user?.isAdmin))
+  useEffect(() => {
+    if (!user?.isAdmin || adminDefaultAppliedRef.current) return
+    adminDefaultAppliedRef.current = true
+    changeRoom('groups')
+  }, [changeRoom, user?.isAdmin])
+
   // ── Loading ────────────────────────────────────────────────────────────────
 
   // Plain fetch rather than apiFetch for everything that runs on its own: the
@@ -364,6 +376,24 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
       get('/api/chat/cbat-group')
         .then(({ ok, data }) => {
           if (!cancelled && ok) setGroupUnreadCount(Number(data?.unreadCount) || 0)
+        })
+        .catch(() => {})
+    }
+    load()
+    const id = setInterval(load, GROUP_UNREAD_POLL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [enabled, get, room])
+
+  // Same for the Lounge pill while another room is selected. Inside the lounge
+  // its own load + stream own the read state, so the pill hides its number.
+  useEffect(() => {
+    if (!enabled || room === 'lounge') return
+    let cancelled = false
+    const load = () => {
+      if (document.hidden) return
+      get('/api/chat/lounge')
+        .then(({ ok, data }) => {
+          if (!cancelled && ok) setLoungeUnreadCount(Number(data?.unreadCount) || 0)
         })
         .catch(() => {})
     }
@@ -895,6 +925,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
             >
               <span className="inline-flex items-center justify-center gap-1.5">
                 <span>{key === 'lounge' ? 'Lounge' : key === 'group' ? 'My group' : 'All groups'}</span>
+                {key === 'lounge' && room !== 'lounge' && loungeUnreadCount > 0 && (
+                  <span
+                    aria-label={`${loungeUnreadCount} new lounge ${loungeUnreadCount === 1 ? 'message' : 'messages'}`}
+                    className="min-w-4 h-4 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[8px] leading-none font-black shadow-[0_0_8px_rgba(239,68,68,.55)]"
+                  >
+                    {loungeUnreadCount > 99 ? '99+' : loungeUnreadCount}
+                  </span>
+                )}
                 {key === 'group' && groupUnreadCount > 0 && (
                   <span
                     aria-label={`${groupUnreadCount} new group ${groupUnreadCount === 1 ? 'message' : 'messages'}`}
