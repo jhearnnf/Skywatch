@@ -137,4 +137,24 @@ describe('GET /api/admin/case-files/stats', () => {
     expect(body.data.totals.interested).toBe(1);
     expect(body.data.interest[0]).toMatchObject({ teaserTitle: 'Battle of Kyiv', interested: 1, withdrawn: 1 });
   });
+
+  it("leaves admins' own runs and interest out of every figure", async () => {
+    await chapter();
+    const a = await createUser();
+    await run(a._id, { score: 300 });
+    await run(admin._id, { score: 490, startedAgo: MIN, minutes: 0 });
+    await run(admin._id, { stage: 1 });
+    await CaseFileInterest.create({ userId: admin._id, caseSlug: 'russia-ukraine', chapterSlug: 'road-to-invasion', teaserTitle: 'Battle of Kyiv', interested: true });
+
+    const { body } = await request(app).get(URL).set('Cookie', adminCookie);
+    const d = body.data;
+    expect(d.totals.runsStarted).toBe(1);
+    expect(d.totals.players).toBe(1);
+    expect(d.totals.interested).toBe(0);
+    expect(d.interest).toEqual([]);
+    expect(d.chapters[0].starts).toBe(1);
+    expect(d.chapters[0].bestScore).toBe(300);
+    expect(d.topScores.map((r) => r.userId)).toEqual([String(a._id)]);
+    expect(d.daily.reduce((n, x) => n + x.starts, 0)).toBe(1);
+  });
 });

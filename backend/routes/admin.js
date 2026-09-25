@@ -1286,6 +1286,7 @@ router.get('/case-files/interest', async (_req, res) => {
 // the interest tally. Playtime is the median of start-to-finish, ignoring
 // runs that sat open for more than LONG_RUN_MS (a player who resumed the next
 // day is not a six-hour sitting); those are counted separately instead.
+// Admins' own runs and interest are left out: they are playtesting, not usage.
 const CF_STATS_DAYS = 14;
 const LONG_RUN_MS   = 3 * 60 * 60 * 1000;
 const DAY_MS        = 24 * 60 * 60 * 1000;
@@ -1303,14 +1304,18 @@ router.get('/case-files/stats', async (_req, res) => {
     const since   = new Date(now.getTime() - CF_STATS_DAYS * DAY_MS);
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
 
+    const adminIds = await User.distinct('_id', { isAdmin: true });
+    const notAdmin = { userId: { $nin: adminIds } };
+
     const [runs, chapters, interestRows] = await Promise.all([
-      GameSessionCaseFileResult.find({}, {
+      GameSessionCaseFileResult.find(notAdmin, {
         userId: 1, caseSlug: 1, chapterSlug: 1, startedAt: 1, completedAt: 1,
         abandoned: 1, currentStageIndex: 1, 'scoring.totalScore': 1, 'scoring.breakdown': 1,
         interrogationTranscripts: 1,
       }).lean(),
       GameCaseFileChapter.find({}, { caseSlug: 1, chapterSlug: 1, title: 1, 'stages.type': 1 }).lean(),
       CaseFileInterest.aggregate([
+        { $match: notAdmin },
         { $group: {
           _id:         { caseSlug: '$caseSlug', chapterSlug: '$chapterSlug' },
           teaserTitle: { $last: '$teaserTitle' },
