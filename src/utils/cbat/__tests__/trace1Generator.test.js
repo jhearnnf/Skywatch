@@ -15,6 +15,11 @@ import {
   buildTrace1Selection,
   applyLocalRot,
   getForward,
+  TRACE1_CBAT_COLORS,
+  TRACE1_CBAT_TRACKED_HEX,
+  TRACE1_FLEET,
+  trace1CbatHex,
+  pickTrace1Fleet,
 } from '../trace1Generator'
 
 const GRID = 10, LAYERS = 10
@@ -247,5 +252,45 @@ describe('trace1Generator — tracked aircraft', () => {
       expect(built.selection).toHaveLength(TRACE1_TURNS_PER_ROUND)
       for (const i of built.selection) expect(i).toBeLessThan(count)
     }
+  })
+})
+
+describe('Real CBAT theme colouring', () => {
+  it('never uses red as a base colour, so the tracked jet is unmistakable', () => {
+    expect(TRACE1_CBAT_COLORS.map(c => c.key)).toEqual(['yellow', 'green', 'blue', 'purple'])
+    expect(TRACE1_CBAT_COLORS.map(c => c.hex)).not.toContain(TRACE1_CBAT_TRACKED_HEX)
+  })
+
+  it('has a base colour for every aircraft in the busiest round', () => {
+    expect(TRACE1_CBAT_COLORS.length).toBeGreaterThanOrEqual(Math.max(...TRACE1_PLANE_COUNT))
+  })
+
+  it('turns only the tracked aircraft red and leaves the rest their own colour', () => {
+    for (let sel = 0; sel < 4; sel++) {
+      const hexes = [0, 1, 2, 3].map(i => trace1CbatHex(i, sel))
+      expect(hexes.filter(h => h === TRACE1_CBAT_TRACKED_HEX)).toHaveLength(1)
+      expect(hexes[sel]).toBe(TRACE1_CBAT_TRACKED_HEX)
+      hexes.forEach((h, i) => { if (i !== sel) expect(h).toBe(TRACE1_CBAT_COLORS[i].hex) })
+    }
+  })
+
+  it('flies a lone aircraft red', () => {
+    expect(trace1CbatHex(0, 0)).toBe(TRACE1_CBAT_TRACKED_HEX)
+  })
+})
+
+describe('pickTrace1Fleet', () => {
+  it("returns distinct airframes and never the player's own", () => {
+    for (let seed = 1; seed <= 50; seed++) {
+      const own = TRACE1_FLEET[seed % TRACE1_FLEET.length].slug
+      const fleet = pickTrace1Fleet(3, own, mulberry32(seed))
+      expect(fleet).toHaveLength(3)
+      expect(new Set(fleet.map(a => a.slug)).size).toBe(3)
+      expect(fleet.map(a => a.slug)).not.toContain(own)
+    }
+  })
+
+  it('has enough airframes to fill the final round beside any pick', () => {
+    expect(TRACE1_FLEET.length - 1).toBeGreaterThanOrEqual(Math.max(...TRACE1_PLANE_COUNT) - 1)
   })
 })

@@ -1,8 +1,9 @@
-import { useRef, useEffect, Suspense, Component, useMemo } from 'react'
+import { useRef, useEffect, useLayoutEffect, Suspense, Component, useMemo } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { useCbatDemoCanvas } from '../utils/cbat/demoMode'
+import { TRACE1_HORIZON } from '../utils/cbat/trace1Generator'
 
 const GRID = 10
 const LAYERS = 10
@@ -33,7 +34,7 @@ class ErrorCatcher extends Component {
   static getDerivedStateFromError() { return { hasError: true } }
   componentDidCatch() { this.props.onError?.() }
   render() {
-    if (this.state.hasError) return null
+    if (this.state.hasError) return this.props.fallback ?? null
     return this.props.children
   }
 }
@@ -124,32 +125,64 @@ function CameraRig({ z, fov, lookY }) {
 // grid-cell to grid-cell. Rotation still slerps to the target quaternion.
 //
 // `hex` tints the airframe so multiple jets can be told apart (null = the
-// model's own livery, used for the single-aircraft rounds). `startWorld` is the
-// spawn point, which must match the schedule generator's start slot so the
-// planner's bounds projections and the visible position stay aligned.
-function SmoothFlightAircraft({ url, quat, hex, startWorld, selected, speed, active, resetKey, onReady }) {
+// model's own livery). The tint can change mid-flight — under the Real CBAT
+// theme the tracked jet turns red and hands the colour back when the selection
+// moves — so the materials are cloned once and recoloured in place rather than
+// re-cloning the model on every switch. `startWorld` is the spawn point, which
+// must match the schedule generator's start slot so the planner's bounds
+// projections and the visible position stay aligned.
+//
+// `refUrl` is the player's own aircraft. When `url` is a different airframe
+// (SkyWatch theme's mixed fleet) it is scaled to the same longest dimension, so
+// an A400M doesn't dwarf the Hawk it is flying beside.
+function SmoothFlightAircraft({ url, refUrl, quat, hex, startWorld, selected, speed, active, resetKey, onReady }) {
   const { scene } = useGLTF(url)
+  const { scene: refScene } = useGLTF(refUrl || url)
+  const tinted = hex != null
   const clonedScene = useMemo(() => {
     const c = scene.clone(true)
-    if (!hex) return c
-    const tint = new THREE.Color(hex)
+    if (!tinted) return c
     c.traverse(o => {
       if (!o.isMesh || !o.material) return
       const applyTo = (mat) => {
         const m = mat.clone()
-        m.color = tint.clone()
-        m.emissive = tint.clone().multiplyScalar(0.4)
-        m.emissiveIntensity = 0.6
         m.metalness = 0.1
         m.roughness = 0.55
+        m.emissiveIntensity = 0.6
         m.map = null
+        m.userData.trace1Tint = true
         m.needsUpdate = true
         return m
       }
       o.material = Array.isArray(o.material) ? o.material.map(applyTo) : applyTo(o.material)
     })
     return c
-  }, [scene, hex])
+  }, [scene, tinted])
+
+  // Layout effect so the tint lands before R3F draws the next frame.
+  useLayoutEffect(() => {
+    if (!hex) return
+    const tint = new THREE.Color(hex)
+    clonedScene.traverse(o => {
+      if (!o.isMesh || !o.material) return
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (!m.userData.trace1Tint) continue
+        m.color = tint.clone()
+        m.emissive = tint.clone().multiplyScalar(0.4)
+      }
+    })
+  }, [clonedScene, hex])
+
+  const modelScale = useMemo(() => {
+    const base = 1.05
+    if (!refUrl || refUrl === url) return base
+    const longest = (obj) => {
+      const v = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3())
+      return Math.max(v.x, v.y, v.z)
+    }
+    const own = longest(scene)
+    return own > 0 ? base * (longest(refScene) / own) : base
+  }, [scene, refScene, url, refUrl])
 
   const meshRef     = useRef()
   const groupRef    = useRef()
@@ -209,9 +242,53 @@ function SmoothFlightAircraft({ url, quat, hex, startWorld, selected, speed, act
 
   return (
     <group ref={groupRef}>
-      <primitive ref={meshRef} object={clonedScene} scale={[1.05, 1.05, 1.05]} />
+      <primitive ref={meshRef} object={clonedScene} scale={[modelScale, modelScale, modelScale]} />
       {selected && <SelectionRing />}
     </group>
+  )
+}
+
+// Canvas-drawn repeating tile for the Trace 1 ground plane.
+function makeGroundTexture(variant) {
+  const size = 64
+  const cv = document.createElement('canvas')
+  cv.width = cv.height = size
+  const ctx = cv.getContext('2d')
+  if (variant === 'cbat') {
+    // The real test's floor: a faint lavender chequerboard fading into haze.
+    ctx.fillStyle = '#8f88b6'; ctx.fillRect(0, 0, size, size)
+    ctx.fillStyle = '#9d96c2'
+    ctx.fillRect(0, 0, size / 2, size / 2)
+    ctx.fillRect(size / 2, size / 2, size / 2, size / 2)
+  } else {
+    // SkyWatch: a bright arcade grid over deep blue.
+    ctx.fillStyle = '#0f4c8f'; ctx.fillRect(0, 0, size, size)
+    ctx.strokeStyle = '#7fe3ff'
+    ctx.lineWidth = 3
+    ctx.strokeRect(0, 0, size, size)
+  }
+  const tex = new THREE.CanvasTexture(cv)
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+  tex.repeat.set(250, 250)
+  tex.anisotropy = 8
+  tex.colorSpace = THREE.SRGBColorSpace
+  if (variant === 'cbat') tex.magFilter = THREE.NearestFilter
+  return tex
+}
+
+// Ground plane plus distance fog for Trace 1. Sits below the arena floor so it
+// never meets an aircraft; the fog colour matches the CSS horizon.
+function Trace1Ground({ variant }) {
+  const tex = useMemo(() => makeGroundTexture(variant), [variant])
+  useEffect(() => () => tex.dispose(), [tex])
+  return (
+    <>
+      <fog attach="fog" args={[TRACE1_HORIZON[variant], 16, variant === 'cbat' ? 120 : 140]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]}>
+        <planeGeometry args={[1000, 1000]} />
+        <meshBasicMaterial map={tex} />
+      </mesh>
+    </>
   )
 }
 
@@ -284,10 +361,19 @@ export default function PlaneTurn3DScene({
   traceFlightSpeed = 0,
   traceFlightActive = false,
   traceFlightResetKey = 0,
+  // 'cbat' | 'skywatch' — which Trace 1 ground to draw under the CSS sky.
+  traceBackdrop = 'skywatch',
+  // Distinct model URLs this run may fly, preloaded up front so an aircraft
+  // joining at round 3 doesn't pop in late.
+  tracePreloadUrls = [],
 }) {
   // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty
   // for real players.
   const demoCanvas = useCbatDemoCanvas()
+  const preloadKey = tracePreloadUrls.join('|')
+  useEffect(() => {
+    for (const u of tracePreloadUrls) useGLTF.preload(u)
+  }, [preloadKey]) // eslint-disable-line react-hooks/exhaustive-deps
   const [px, py, pz] = toWorld(plane.r, plane.c, plane.layer)
 
   // Movement direction (decoupled from visual pitch):
@@ -382,27 +468,41 @@ export default function PlaneTurn3DScene({
       )}
 
       {traceFlight && <CameraRig z={traceCamZ} fov={cameraFov} lookY={arenaY} />}
+      {traceFlight && <Trace1Ground variant={traceBackdrop} />}
 
       {modelUrl && (
         traceFlight ? (
-          traceAircraft.map((a, idx) => (
-            <Suspense key={`${modelUrl}-${a.id}`} fallback={null}>
-              <ErrorCatcher onError={onError}>
-                <SmoothFlightAircraft
-                  url={modelUrl}
-                  quat={a.quat}
-                  hex={a.hex}
-                  startWorld={a.startWorld}
-                  // A lone aircraft is implicitly the tracked one — no ring.
-                  selected={multiPlane && idx === traceSelected}
-                  speed={traceFlightSpeed}
-                  active={traceFlightActive}
-                  resetKey={traceFlightResetKey}
-                  onReady={idx === 0 ? onReady : undefined}
-                />
-              </ErrorCatcher>
-            </Suspense>
-          ))
+          traceAircraft.map((a, idx) => {
+            const flight = {
+              refUrl:     modelUrl,
+              quat:       a.quat,
+              hex:        a.hex,
+              startWorld: a.startWorld,
+              // A lone aircraft is implicitly the tracked one — no ring. The
+              // Real CBAT theme never rings: its tracked jet is the red one.
+              selected:   a.ringed !== false && multiPlane && idx === traceSelected,
+              speed:      traceFlightSpeed,
+              active:     traceFlightActive,
+              resetKey:   traceFlightResetKey,
+              onReady:    idx === 0 ? onReady : undefined,
+            }
+            const url = a.modelUrl || modelUrl
+            return (
+              <Suspense key={`${url}-${a.id}`} fallback={null}>
+                {/* A fleet model that fails to load (e.g. offline, where only
+                    the Hawk and Typhoon are cached) falls back to the player's
+                    own aircraft — a scored jet must never go missing. */}
+                <ErrorCatcher
+                  onError={onError}
+                  fallback={url !== modelUrl
+                    ? <Suspense fallback={null}><SmoothFlightAircraft url={modelUrl} {...flight} /></Suspense>
+                    : null}
+                >
+                  <SmoothFlightAircraft url={url} {...flight} />
+                </ErrorCatcher>
+              </Suspense>
+            )
+          })
         ) : (
           <group position={[px, py, pz]}>
             <Suspense fallback={null}>

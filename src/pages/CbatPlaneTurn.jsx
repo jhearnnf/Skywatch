@@ -10,7 +10,8 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
-import { getModelUrl, has3DModel } from '../data/aircraftModels'
+import { getModelUrl, has3DModel, titleToSlug } from '../data/aircraftModels'
+import { useCbatTheme } from '../hooks/useCbatTheme'
 import { useTraceMode, TRACE_MODES } from '../hooks/useTraceMode'
 import { useModeFromSearch } from '../hooks/useModeFromSearch'
 import { CbatModeRow } from '../components/CbatModeSelector'
@@ -34,6 +35,7 @@ import {
   TRACE1_ROUNDS, TRACE1_TURNS_PER_ROUND, TRACE1_SPEED_TABLE, TRACE1_PLANE_COUNT,
   TRACE1_SWITCH_PREVIEW_MS, TRACE1_TURN_DEFS, TRACE1_TOTAL_TURNS,
   trace1KeyToTurn, trace1InitialPlaneStates, buildTrace1Round,
+  TRACE1_CBAT_COLORS, TRACE1_HORIZON, trace1CbatHex, pickTrace1Fleet,
 } from '../utils/cbat/trace1Generator'
 import {
   PACKAGES_PER_LEVEL as TOTAL_PACKAGES, MAX_LEVEL, practiseInterval,
@@ -94,6 +96,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
   const gameModeTrace1 = mode === 'trace1'
   const gameModeTrace2 = mode === 'trace2'
   const gameMode2D     = !gameMode3D && !gameModeTrace1 && !gameModeTrace2
+  const cbat           = useCbatTheme()
 
   const heading = gameModeTrace1
     ? 'Trace 1'
@@ -137,7 +140,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
           {gameModeTrace1 ? (
             <>
               <span className="font-extrabold uppercase tracking-wide">Trace 1 — Recall.</span>{' '}
-              <span className="text-slate-800">Hawk T2 auto-flies the arena. Press the arrow matching each turn it just made. Extra aircraft join from round 3 — only the ringed one is scored. 5 rounds × 8 turns. +1 correct / −1 wrong.</span>
+              <span className="text-slate-800">Hawk T2 auto-flies the arena. Press the arrow matching each turn it just made. Extra aircraft join from round 3 — only the {cbat ? 'red' : 'ringed'} one is scored. 5 rounds × 8 turns. +1 correct / −1 wrong.</span>
             </>
           ) : gameMode3D ? (
             <>
@@ -361,6 +364,7 @@ function GameOverOverlay({ won, score, level, maxLevel, onRestart, onMenu }) {
 // `tracked` is null in the single-aircraft rounds — there's nothing to choose
 // between, so the HUD stays exactly as it was before multi-aircraft rounds.
 function Trace1HUD({ round, turn, tracked, debug }) {
+  const accent = tracked?.hex ?? 'var(--color-brand-600)'
   return (
     <div className="flex items-center justify-between text-xs lg:text-sm font-mono mb-2 px-1">
       <span className="text-slate-400">
@@ -372,9 +376,9 @@ function Trace1HUD({ round, turn, tracked, debug }) {
           TRACK
           <span
             className="inline-block w-2 h-2 rounded-full"
-            style={{ background: tracked.hex, boxShadow: `0 0 6px ${tracked.hex}` }}
+            style={{ background: accent, boxShadow: `0 0 6px ${accent}` }}
           />
-          <span className="font-bold uppercase" style={{ color: tracked.hex }}>{tracked.label}</span>
+          <span className="font-bold uppercase" style={{ color: accent }}>{tracked.label}</span>
         </span>
       )}
       <span className="text-slate-400">TURN <span className="text-brand-600">{Math.min(turn, TRACE1_TURNS_PER_ROUND)}</span>/{TRACE1_TURNS_PER_ROUND}</span>
@@ -415,6 +419,64 @@ function DpadBtn({ label, onPress, ariaLabel }) {
   )
 }
 
+// ── Trace 1 sky ──────────────────────────────────────────────────────────────
+// CSS sky behind the transparent canvas. The scene draws the ground below the
+// horizon (the vertical midpoint, since the camera looks level) and fogs it out
+// to TRACE1_HORIZON, so each gradient ends on that same colour at 50%.
+//
+// Real CBAT: the test's dusk sky, slate blue overhead through pale cloud down
+// to a peach haze. SkyWatch: a brighter arcade daytime sky.
+const TRACE1_SKY = {
+  cbat: [
+    // Wispy cloud banks
+    'radial-gradient(ellipse 38% 7% at 30% 14%, rgba(235,238,245,0.55), transparent 70%)',
+    'radial-gradient(ellipse 30% 5% at 72% 22%, rgba(235,238,245,0.45), transparent 70%)',
+    'radial-gradient(ellipse 45% 5% at 55% 34%, rgba(240,232,225,0.5), transparent 70%)',
+    'radial-gradient(ellipse 25% 4% at 18% 40%, rgba(240,228,215,0.45), transparent 70%)',
+    `linear-gradient(180deg, #34547f 0%, #5d7ea6 18%, #93a8bf 34%, #c4c3c2 44%, ${TRACE1_HORIZON.cbat} 50%, ${TRACE1_HORIZON.cbat} 100%)`,
+  ].join(', '),
+  skywatch: `linear-gradient(180deg, #1565c8 0%, #3d92e6 22%, #86c6f4 40%, ${TRACE1_HORIZON.skywatch} 50%, ${TRACE1_HORIZON.skywatch} 100%)`,
+}
+
+// Puffy clouds drifting across the SkyWatch sky. The strip is 200% wide and the
+// pattern tiles every 50% of it, so sliding it left by half loops seamlessly.
+const TRACE1_SKYWATCH_CLOUDS = [
+  'radial-gradient(ellipse 18% 8% at 24% 16%, rgba(255,255,255,0.95), transparent 70%)',
+  'radial-gradient(ellipse 12% 7% at 32% 12%, rgba(255,255,255,0.9), transparent 70%)',
+  'radial-gradient(ellipse 24% 8% at 72% 30%, rgba(255,255,255,0.85), transparent 70%)',
+  'radial-gradient(ellipse 14% 6% at 66% 26%, rgba(255,255,255,0.8), transparent 70%)',
+].join(', ')
+
+// ── Trace 1 controls, Real CBAT theme ────────────────────────────────────────
+// The real test's key legend: a black box with a white border listing each
+// arrow key and what it does. Every row is also a button for touch players.
+const TRACE1_CBAT_KEYS = [
+  { dir: 'left',  cap: '←', label: 'Left'  },
+  { dir: 'right', cap: '→', label: 'Right' },
+  { dir: 'up',    cap: '↑', label: 'Push'  },
+  { dir: 'down',  cap: '↓', label: 'Pull'  },
+]
+
+function Trace1CbatKeys({ onPress }) {
+  return (
+    <div className="trace1-cbat-keys mt-4 lg:mt-0">
+      {TRACE1_CBAT_KEYS.map(k => (
+        <button
+          key={k.dir}
+          type="button"
+          onPointerDown={() => onPress(k.dir)}
+          data-demo-answer
+          className="trace1-cbat-key"
+          aria-label={k.label}
+        >
+          <span className="trace1-cbat-keycap" aria-hidden="true">{k.cap}</span>
+          <span>{k.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // Header title per mode. The combined "Trace 1/2" identity only makes sense on
 // the mode-select menu; once a specific mode is being played the heading names
 // it (e.g. "Trace 1" rather than the umbrella "Trace 1/2").
@@ -435,6 +497,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
   const [aircraft, setAircraft]         = useState([])
   const [loadingAircraft, setLoadingAircraft] = useState(true)
   const [selected, setSelected]         = useState(null)
+  const cbat = useCbatTheme()
 
   // Mode (4 values: '2d' | '3d' | 'trace1' | 'trace2'). Single selector;
   // Practise modes drive the legacy plane-turn loop, Trace 1 drives the new
@@ -1102,20 +1165,48 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
     trace1CheatBufRef.current = emptyCheatBuffer()
   }, [])
 
-  // Per-aircraft render data. Colour is null in the single-aircraft rounds, so
-  // rounds 1–2 keep the model's own livery exactly as before.
+  // SkyWatch theme: the extra aircraft are other airframes, drawn fresh each run.
+  const trace1Fleet = useMemo(() => {
+    if (!selected) return []
+    const own = titleToSlug(selected.title)
+    return pickTrace1Fleet(TRACE1_PLANE_COUNT[TRACE1_PLANE_COUNT.length - 1] - 1, own)
+      .map(a => ({ ...a, modelUrl: `/models/${a.slug}.glb` }))
+  }, [selected, trace1Generation]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Per-aircraft render data, by theme:
+  //  - Real CBAT: every jet tinted, the tracked one red (even when flying
+  //    alone) and the rest in their own colours. No ring.
+  //  - SkyWatch: untinted models. The first jet is the player's pick and the
+  //    extras are the run's fleet in their own liveries. The ring marks the
+  //    tracked one.
   const trace1Aircraft = useMemo(
-    () => trace1InitialPlaneStates(trace1PlaneCount).map((p, i) => ({
-      id:         p.color?.key ?? 'solo',
-      hex:        p.color?.hex ?? null,
-      label:      p.color?.label ?? null,
-      startWorld: p.startWorld,
-      quat:       trace1Quats[i] ?? p.quat,
-    })),
-    [trace1PlaneCount, trace1Quats],
+    () => trace1InitialPlaneStates(trace1PlaneCount).map((p, i) => {
+      const base = { id: p.color?.key ?? 'solo', startWorld: p.startWorld, quat: trace1Quats[i] ?? p.quat }
+      if (cbat) {
+        return {
+          ...base,
+          hex:    trace1CbatHex(i, trace1Selected),
+          label:  TRACE1_CBAT_COLORS[i % TRACE1_CBAT_COLORS.length].label,
+          ringed: false,
+        }
+      }
+      const fleet = i > 0 ? trace1Fleet[i - 1] : null
+      return {
+        ...base,
+        hex:      null,
+        label:    fleet?.title ?? selected?.title ?? null,
+        modelUrl: fleet?.modelUrl,
+      }
+    }),
+    [trace1PlaneCount, trace1Quats, trace1Selected, trace1Fleet, cbat, selected],
   )
-  // Null in single-aircraft rounds — nothing to disambiguate, so no HUD chip.
-  const trace1Tracked = trace1PlaneCount > 1 ? trace1Aircraft[trace1Selected] : null
+  const trace1PreloadUrls = useMemo(
+    () => (cbat ? [] : trace1Fleet.map(a => a.modelUrl)),
+    [cbat, trace1Fleet],
+  )
+  // Null in single-aircraft rounds, where there's nothing to disambiguate. The
+  // Real CBAT theme never shows the chip: the red jet says it all.
+  const trace1Tracked = trace1PlaneCount > 1 && !cbat ? trace1Aircraft[trace1Selected] : null
 
   // Handlers
   const handleSelect = (a) => {
@@ -1398,17 +1489,37 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               {/* ── 3D Game (Practise 3D + Trace 1 share the 3D arena) ── */}
               {(gameMode3D || gameModeTrace1) ? (
                 <div
-                  className={`relative w-full lg:w-[min(42rem,calc(100vh_-_14rem))] lg:shrink-0 border-2 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(91,170,255,0.08)] ${
-                    gameModeTrace1 ? 'border-[#3a7bbf]' : 'bg-game-arena border-game-line'
+                  className={`relative w-full lg:w-[min(42rem,calc(100vh_-_14rem))] lg:shrink-0 border-2 overflow-hidden ${
+                    !gameModeTrace1
+                      ? 'bg-game-arena border-game-line rounded-xl shadow-[0_0_30px_rgba(91,170,255,0.08)]'
+                      : cbat
+                        // The real test: a plain square window with a white frame.
+                        ? 'border-[#e8e8e8] rounded-none'
+                        : 'border-[#7fe3ff] rounded-xl shadow-[0_0_30px_rgba(127,227,255,0.35)]'
                   }`}
                   style={{
                     aspectRatio: '1',
-                    // Sky gradient for Trace modes, dark surface for Practise.
-                    background: gameModeTrace1
-                      ? 'linear-gradient(180deg, #cfe8ff 0%, #8fc4ee 45%, #5398d3 80%, #3a7bbf 100%)'
-                      : undefined,
+                    // Sky for Trace modes (the scene draws the ground), dark
+                    // surface for Practise.
+                    background: gameModeTrace1 ? TRACE1_SKY[cbat ? 'cbat' : 'skywatch'] : undefined,
                   }}
                 >
+                  {gameModeTrace1 && !cbat && (
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+                      {/* Sun glow just above the horizon */}
+                      <div
+                        className="absolute"
+                        style={{
+                          left: '58%', top: '30%', width: '28%', height: '28%',
+                          background: 'radial-gradient(circle, rgba(255,246,200,0.95) 0%, rgba(255,226,140,0.55) 22%, rgba(255,210,120,0) 62%)',
+                        }}
+                      />
+                      <div
+                        className="absolute inset-y-0 left-0 w-[200%] trace1-clouds"
+                        style={{ backgroundImage: TRACE1_SKYWATCH_CLOUDS, backgroundSize: '50% 100%', backgroundRepeat: 'repeat-x' }}
+                      />
+                    </div>
+                  )}
                   {/* Aircraft name */}
                   <div className="absolute top-1 left-1 z-30 flex items-center gap-1">
                     {!gameModeTrace1 && (
@@ -1441,6 +1552,8 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
                       // its spread start slot when aircraft are added; the jump
                       // nonce covers admin skips that keep the same count.
                       traceFlightResetKey={`${trace1Generation}-${trace1PlaneCount}-${trace1JumpNonce}`}
+                      traceBackdrop={cbat ? 'cbat' : 'skywatch'}
+                      tracePreloadUrls={gameModeTrace1 ? trace1PreloadUrls : undefined}
                     />
                   </Suspense>
 
@@ -1737,7 +1850,9 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
               {/* ── Controls ── */}
               <div className="lg:flex lg:flex-col lg:items-center lg:shrink-0 lg:min-w-[16rem]">
-              {(gameMode3D || gameModeTrace1) ? (
+              {gameModeTrace1 && cbat ? (
+                <Trace1CbatKeys onPress={handleRotate} />
+              ) : (gameMode3D || gameModeTrace1) ? (
                 <div className="flex flex-col items-center gap-2 mt-4 lg:mt-0">
                   <DpadBtn label="↑" onPress={() => handleRotate('up')} ariaLabel={gameModeTrace1 ? 'Recall: dive' : 'Dive'} />
                   <div className="flex gap-2">
@@ -1771,9 +1886,11 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
               {/* Instructions hint */}
               <p className="text-center text-[10px] lg:text-xs text-slate-500 mt-3 lg:mt-5 lg:max-w-[18rem]">
-                {gameModeTrace1
+                {gameModeTrace1 && cbat
+                  ? <>After each turn, press the arrow the red aircraft just took</>
+                  : gameModeTrace1
                   ? (trace1PlaneCount > 1
-                      ? <>After each turn, press the arrow the <span className="font-bold" style={{ color: trace1Tracked?.hex }}>ringed</span> aircraft just took</>
+                      ? <>After each turn, press the arrow the <span className="font-bold text-brand-600">ringed</span> aircraft just took</>
                       : <>After each turn, press the arrow the plane just took</>)
                   : gameMode3D
                     ? <>Use <span className="font-mono text-slate-400">←→</span> to turn &middot; <span className="font-mono text-slate-400">↓</span> climb &middot; <span className="font-mono text-slate-400">↑</span> dive (stick)</>
@@ -1789,6 +1906,11 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
       {/* Radar sweep keyframe */}
       <style>{`
+        @keyframes trace1-cloud-drift {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+        .trace1-clouds { animation: trace1-cloud-drift 60s linear infinite; }
         @keyframes radar-sweep {
           from { transform: rotate(0deg); }
           to   { transform: rotate(360deg); }

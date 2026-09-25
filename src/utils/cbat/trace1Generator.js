@@ -31,6 +31,56 @@ export const TRACE1_COLORS = [
   { key: 'yellow', label: 'Yellow', hex: '#ffd23f' },
 ]
 
+// Real CBAT theme colouring. The real test marks the aircraft to follow by
+// turning it red, not with a ring, and every other jet keeps its own colour.
+// So red is reserved for the tracked jet and never used as a base colour: the
+// final round's four aircraft are yellow, green, blue and purple, and whichever
+// one is being scored shows red until the selection moves on.
+export const TRACE1_CBAT_TRACKED_HEX = '#e8262a'
+export const TRACE1_CBAT_COLORS = [
+  { key: 'yellow', label: 'Yellow', hex: '#ffd23f' },
+  { key: 'green',  label: 'Green',  hex: '#46d16b' },
+  { key: 'blue',   label: 'Blue',   hex: '#1e50d8' },
+  { key: 'purple', label: 'Purple', hex: '#8a4fd8' },
+]
+
+// Tint for aircraft `index` under the Real CBAT theme. A lone aircraft is always
+// the tracked one, so rounds 1 and 2 fly a red jet too.
+export function trace1CbatHex(index, selectedIndex) {
+  return index === selectedIndex
+    ? TRACE1_CBAT_TRACKED_HEX
+    : TRACE1_CBAT_COLORS[index % TRACE1_CBAT_COLORS.length].hex
+}
+
+// SkyWatch theme: the extra aircraft are other airframes in their own liveries
+// rather than tinted copies of the Hawk. Model slugs under public/models. The
+// Chinook is left out because its rotor geometry breaks up close.
+export const TRACE1_FLEET = [
+  { slug: 'eurofighter typhoon fgr4', title: 'Typhoon' },
+  { slug: 'f-35b lightning ii',       title: 'F-35B' },
+  { slug: 'a400m atlas c1',           title: 'A400M' },
+  { slug: 'c-17a globemaster iii',    title: 'C-17A' },
+  { slug: 'e-7a wedgetail',           title: 'E-7A' },
+  { slug: 'p-8a poseidon mra1',       title: 'P-8A' },
+]
+
+// `count` distinct fleet entries in random order, never the player's own aircraft.
+export function pickTrace1Fleet(count, excludeSlug, rng = Math.random) {
+  const pool = TRACE1_FLEET.filter(a => a.slug !== excludeSlug)
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+  }
+  return pool.slice(0, count)
+}
+
+// Horizon colour per theme. The scene fogs its ground plane out to this and the
+// page paints the CSS sky down to it, so ground meets sky with no seam.
+export const TRACE1_HORIZON = {
+  cbat:     '#dcc6a8',
+  skywatch: '#d4ecfa',
+}
+
 // How much quiet gap the player gets between the ring moving to a new aircraft
 // and that aircraft's next turn. Capped at 45% of the tick so the answer window
 // for the preceding turn never collapses.

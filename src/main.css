@@ -810,6 +810,54 @@ button.cbat-keycap:hover:not(:disabled) { background: #d2d2d2; }
 button.cbat-keycap:disabled { background: #6e6e7c; color: #1a1a1a; box-shadow: none; cursor: default; }
 .cbat-keycap-arrow { font-size: 1.05em; min-width: 1.8em; height: 1.7em; }
 
+/* Trace 1 under the Real CBAT theme: the test's key legend, a black box with a
+   white border listing Left / Right / Push / Pull beside a small key icon.
+   Rows are buttons so touch players can answer too; they grow to a tappable
+   height on narrow screens. */
+.trace1-cbat-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: max-content;
+  min-width: 9rem;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0.6rem 0.9rem 0.6rem 0.6rem;
+  background: #000000;
+  border: 2px solid #e8e8e8;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.trace1-cbat-key {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  padding: 0 0.2rem;
+  color: #ffffff;
+  font-size: 1.05rem;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+.trace1-cbat-key:active .trace1-cbat-keycap { background: #ffff99; }
+.trace1-cbat-keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  background: #d6d6d6;
+  border: 1px solid #ffffff;
+  color: #000000;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+@media (min-width: 601px) and (hover: hover) {
+  .trace1-cbat-key { min-height: 1.9rem; font-size: 1rem; }
+}
+
 /* A marked (not yet committed) option under the Real CBAT theme: the pale
    yellow outline the real software uses for the selected answer box */
 :root[data-theme="cbat"] .cbat-option-pending {
