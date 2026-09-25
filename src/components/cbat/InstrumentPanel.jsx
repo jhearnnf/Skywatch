@@ -1,37 +1,68 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+
+// Every moving part of these dials is placed with the SVG `transform`
+// ATTRIBUTE — `rotate(a 50 50)`, `translate(0 y)` — never a CSS transform.
+//
+// Safari has now broken these dials twice (21 and 25 Sept reports, macOS):
+// needles swung off the face and settled with their tails away from the hub.
+// A CSS transform on an SVG element pivots about `transform-origin`, resolved
+// against a `transform-box`, and Safari's idea of that box has not matched
+// Chrome's through either `view-box` or `fill-box` + a bounding-box pivot
+// square. The attribute form names its pivot in user-space numbers, so there
+// is no reference box to disagree about. OrientationInstruments has always
+// used it and never had the bug.
+//
+// The price is that CSS cannot transition an attribute, so the settling
+// animation is tweened in JS (useTweened) with the same spring curve the CSS
+// transition used.
 
 // Spring-ish easing with slight overshoot — feels like a real needle settling.
-const SPRING = 'cubic-bezier(0.34, 1.35, 0.64, 1)'
-
-// Safari will not rotate these dials around the middle of the face.
-//
-// `transform-origin` on an SVG element is resolved against a reference box,
-// and Safari does not reliably honour `transform-box: view-box` — it measures
-// the element's OWN bounding box instead. A needle's bounding box is the
-// needle, so `transform-origin: 50px 50px` resolved to a point roughly half a
-// face away from the dial centre: needles swung out of the instrument
-// entirely, settled with their tails off-centre, and the compass rose spun its
-// cardinals out past the bezel.
-//
-// `fill-box` is the one reference box every browser agrees on, so pin the
-// bounding box rather than argue about which box to use. Every transformed
-// group carries this invisible square: centred on (50,50) and large enough to
-// swallow the group whatever the animation is doing, so the bounding box stays
-// symmetric about the face centre. `fill-box` + `50% 50%` then means the dial
-// centre in every browser — including one that ignores transform-box
-// altogether, since the bounding box IS its fallback behaviour.
-const PIVOT = { transformBox: 'fill-box', transformOrigin: '50% 50%' }
-
-// Render inside any group that uses PIVOT. `fill="none"` paints nothing but
-// still counts as geometry, which is all a bounding box is made of.
-function Pivot() {
-  return <rect x="-50" y="-50" width="200" height="200" fill="none" />
+// Solves cubic-bezier(0.34, 1.35, 0.64, 1) for y at a given progress x.
+function springEase(x) {
+  const X1 = 0.34, Y1 = 1.35, X2 = 0.64, Y2 = 1
+  const bez = (t, a, b) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3
+  let lo = 0, hi = 1, t = x
+  for (let i = 0; i < 30; i++) {
+    t = (lo + hi) / 2
+    if (bez(t, X1, X2) < x) lo = t
+    else hi = t
+  }
+  return bez(t, Y1, Y2)
 }
 
-// Maintain an "unwrapped" angle so a CSS transition always takes the shortest
+// Animates towards `value` over durationMs on the spring curve, starting from
+// wherever the dial is currently showing (mid-animation included, as a CSS
+// transition would). durationMs 0 is live mode: the value is shown as-is.
+function useTweened(value, durationMs) {
+  const live = !(durationMs > 0)
+  const [shown, setShown] = useState(value)
+  const shownRef = useRef(value)
+  useEffect(() => {
+    if (live) { shownRef.current = value; return }
+    const from = shownRef.current
+    if (from === value) return
+    const start = performance.now()
+    let id
+    const step = (now) => {
+      const p = Math.min(1, Math.max(0, (now - start) / durationMs))
+      const v = p >= 1 ? value : from + (value - from) * springEase(p)
+      shownRef.current = v
+      setShown(v)
+      if (p < 1) id = requestAnimationFrame(step)
+    }
+    id = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(id)
+  }, [value, durationMs, live])
+  return live ? value : shown
+}
+
+// Rotation about the face centre, as an SVG transform attribute.
+const spin = deg => `rotate(${deg} 50 50)`
+
+// Maintain an "unwrapped" angle so the tween always takes the shortest
 // arc — otherwise a prop change from 350° to 10° would spin 340° backwards.
 // Initial state is randomised so the first paint places the needle off-target,
-// and the effect's setState triggers the CSS transition towards the real value.
+// and the effect's setState starts the tween towards the real value.
 function useUnwrappedAngle(targetDeg) {
   const [angle, setAngle] = useState(() => Math.random() * 360)
   useEffect(() => {
@@ -45,10 +76,9 @@ function useUnwrappedAngle(targetDeg) {
 
 // Live mode. The practice drill feeds the dials a reading every frame and
 // passes durationMs={0}: the needles then sit exactly where the prop says,
-// with no transition and none of the settling wobble the Reading game uses
+// with no tween and none of the settling wobble the Reading game uses
 // to hide the answer while it "calibrates".
 const isLive = durationMs => durationMs === 0
-const needleTransition = (durationMs) => (isLive(durationMs) ? 'none' : `transform ${durationMs}ms ${SPRING}`)
 
 // The target reading the drill asks the player to fly to. Magenta, as target
 // bugs are on real glass cockpits, so it never reads as one of the amber
@@ -120,9 +150,8 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active, tone, 
   const live = isLive(durationMs)
   const smallUnwrapped = useUnwrappedAngle(smallTarget)
   const bigUnwrapped = useUnwrappedAngle(bigTarget)
-  const smallAngle = live ? smallTarget : smallUnwrapped
-  const bigAngle = live ? bigTarget : bigUnwrapped
-  const t = { transition: needleTransition(durationMs), ...PIVOT }
+  const smallAngle = useTweened(live ? smallTarget : smallUnwrapped, durationMs)
+  const bigAngle = useTweened(live ? bigTarget : bigUnwrapped, durationMs)
   return (
     <InstrumentFace label="Altimeter" onClick={onClick} active={active} tone={tone}>
       {/* Major ticks + numerals 0–9 */}
@@ -155,25 +184,21 @@ export function Altimeter({ altitude, durationMs = 2000, onClick, active, tone, 
       {/* Target hands, under the live ones */}
       {target != null && (
         <g data-target="altimeter">
-          <g style={{ ...PIVOT, transform: `rotate(${((target % 1000) / 1000) * 360}deg)` }}>
-            <Pivot />
+          <g transform={spin(((target % 1000) / 1000) * 360)}>
             <line x1="50" y1="50" x2="50" y2="12" stroke={TARGET_COLOUR} strokeWidth="2.2" strokeLinecap="round" />
           </g>
-          <g style={{ ...PIVOT, transform: `rotate(${(target / 10000) * 360}deg)` }}>
-            <Pivot />
+          <g transform={spin((target / 10000) * 360)}>
             <line x1="50" y1="50" x2="50" y2="26" stroke={TARGET_COLOUR} strokeWidth="5" strokeLinecap="round" opacity="0.8" />
           </g>
         </g>
       )}
       {/* Big hand — hundreds (longer, thinner) */}
-      <g style={{ ...t, transform: `rotate(${bigAngle}deg)` }}>
-        <Pivot />
+      <g transform={spin(bigAngle)}>
         <line x1="50" y1="50" x2="50" y2="14" stroke="var(--color-game-text)" strokeWidth="2" strokeLinecap="round" />
         <polygon points="50,10 47,18 53,18" fill="var(--color-game-text)" />
       </g>
       {/* Small hand — thousands (shorter, thicker, brand colour) */}
-      <g style={{ ...t, transform: `rotate(${smallAngle}deg)` }}>
-        <Pivot />
+      <g transform={spin(smallAngle)}>
         <line x1="50" y1="50" x2="50" y2="28" stroke="var(--color-game-accent)" strokeWidth="4" strokeLinecap="round" />
       </g>
       <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
@@ -202,7 +227,7 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
   const [pitch, setPitch] = useState(() => -10 + Math.random() * 20)
   const [roll, setRoll] = useState(() => -18 + Math.random() * 36)
   useEffect(() => {
-    // Two rAFs ensure the initial wobble paints before we transition.
+    // Two rAFs ensure the initial wobble paints before we tween.
     const id1 = requestAnimationFrame(() => {
       const id2 = requestAnimationFrame(() => {
         setPitch(targetPitch)
@@ -212,10 +237,9 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
     })
     return () => cancelAnimationFrame(id1)
   }, [durationMs, targetPitch, targetRoll])
-  const t = needleTransition(durationMs)
   const live = isLive(durationMs) && pitchDeg != null
-  const shownPitch = live ? pitchDeg * PITCH_UNITS_PER_DEG : pitch
-  const shownRoll = live ? -(bankDeg ?? 0) : roll
+  const shownPitch = useTweened(live ? pitchDeg * PITCH_UNITS_PER_DEG : pitch, durationMs)
+  const shownRoll = useTweened(live ? -(bankDeg ?? 0) : roll, durationMs)
   return (
     <InstrumentFace label="Attitude" onClick={onClick} active={active} tone={tone}>
       <defs>
@@ -224,11 +248,8 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
         </clipPath>
       </defs>
       <g clipPath={`url(#${attClip})`}>
-        <g style={{ transition: t, ...PIVOT, transform: `rotate(${shownRoll}deg)` }}>
-          <Pivot />
-          {/* Pitch only translates, and a translation ignores the origin, so
-              this inner group needs no pivot of its own. */}
-          <g style={{ transition: t, transform: `translateY(${shownPitch}px)` }}>
+        <g transform={spin(shownRoll)}>
+          <g transform={`translate(0 ${shownPitch})`}>
             {/* Sky and ground overhang the face on every side. They are clipped
                 to a circle spanning 10..90, and pitch slides them up to 12 away
                 from centre while roll turns them, so a band that merely filled
@@ -249,9 +270,8 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
         </g>
         {/* The horizon the drill wants, drawn where the real one would sit */}
         {target && (
-          <g style={{ ...PIVOT, transform: `rotate(${-target.bank}deg)` }} data-target="attitude">
-            <Pivot />
-            <g style={{ transform: `translateY(${target.pitch * PITCH_UNITS_PER_DEG}px)` }}>
+          <g transform={spin(-target.bank)} data-target="attitude">
+            <g transform={`translate(0 ${target.pitch * PITCH_UNITS_PER_DEG})`}>
               <line x1="4" y1="50" x2="96" y2="50" stroke={TARGET_COLOUR} strokeWidth="2.2" strokeDasharray="5 3" />
             </g>
           </g>
@@ -271,8 +291,7 @@ export function AttitudeIndicator({ vs, turn, durationMs = 2000, onClick, active
 export function Airspeed({ knots, durationMs = 2000, onClick, active, tone, target }) {
   const needle = (knots / 360) * 360  // 0–360 kt mapped 1:1 to degrees
   const settling = useInterp(needle, 180)
-  const angle = isLive(durationMs) ? needle : settling
-  const t = { transition: needleTransition(durationMs), ...PIVOT }
+  const angle = useTweened(isLive(durationMs) ? needle : settling, durationMs)
   return (
     <InstrumentFace label="Airspeed (kt)" onClick={onClick} active={active} tone={tone}>
       {/* Major ticks at 0, 60, 120, ... 300 */}
@@ -304,14 +323,12 @@ export function Airspeed({ knots, durationMs = 2000, onClick, active, tone, targ
         return <line key={v} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#3a4a60" strokeWidth="0.5" />
       })}
       {target != null && (
-        <g style={{ ...PIVOT, transform: `rotate(${target}deg)` }} data-target="airspeed">
-          <Pivot />
+        <g transform={spin(target)} data-target="airspeed">
           <polygon points="50,50 46,50 50,9 54,50" fill={TARGET_COLOUR} opacity="0.85" />
         </g>
       )}
       {/* Needle */}
-      <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
-        <Pivot />
+      <g transform={spin(angle)}>
         <polygon points="50,50 47,50 50,12 53,50" fill="var(--color-game-accent)" />
       </g>
       <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
@@ -329,8 +346,7 @@ export function VSI({ vs, durationMs = 2000, onClick, active, tone, fpm, target 
   const word = vs === 'Ascend' ? -60 : vs === 'Descend' ? -120 : -90
   const settling = useUnwrappedAngle(word)
   const live = isLive(durationMs) && fpm != null
-  const angle = live ? vsiAngle(fpm) : settling
-  const t = { transition: needleTransition(durationMs), ...PIVOT }
+  const angle = useTweened(live ? vsiAngle(fpm) : settling, durationMs)
   return (
     <InstrumentFace label="V. Speed" onClick={onClick} active={active} tone={tone}>
       {/* Scale marks along the left arc */}
@@ -355,14 +371,12 @@ export function VSI({ vs, durationMs = 2000, onClick, active, tone, fpm, target 
         )
       })}
       {target != null && (
-        <g style={{ ...PIVOT, transform: `rotate(${vsiAngle(target)}deg)` }} data-target="vs">
-          <Pivot />
+        <g transform={spin(vsiAngle(target))} data-target="vs">
           <line x1="50" y1="50" x2="50" y2="11" stroke={TARGET_COLOUR} strokeWidth="3.5" strokeLinecap="round" opacity="0.85" />
         </g>
       )}
       {/* Needle */}
-      <g style={{ ...t, transform: `rotate(${angle}deg)` }}>
-        <Pivot />
+      <g transform={spin(angle)}>
         <line x1="50" y1="50" x2="50" y2="14" stroke="var(--color-game-accent)" strokeWidth="2.5" strokeLinecap="round" />
       </g>
       <circle cx="50" cy="50" r="3" fill="var(--color-game-accent)" />
@@ -380,8 +394,7 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active, tone, h
   const headingDeg = live ? liveHeading : ({ N: 0, E: 90, S: 180, W: 270 }[heading] ?? 0)
   // Rotate rose so heading sits at top: rose rotation = -heading
   const settling = useUnwrappedAngle(-headingDeg)
-  const roseAngle = live ? -headingDeg : settling
-  const t = { transition: needleTransition(durationMs), ...PIVOT }
+  const roseAngle = useTweened(live ? -headingDeg : settling, durationMs)
   const cardinals = [
     { label: 'N', deg: 0 },
     { label: 'E', deg: 90 },
@@ -390,11 +403,9 @@ export function HeadingDG({ heading, durationMs = 2000, onClick, active, tone, h
   ]
   return (
     <InstrumentFace label="Heading" onClick={onClick} active={active} tone={tone}>
-      <g style={{ ...t, transform: `rotate(${roseAngle}deg)` }}>
-        <Pivot />
+      <g transform={spin(roseAngle)}>
         {target != null && (
-          <g style={{ ...PIVOT, transform: `rotate(${target}deg)` }} data-target="heading">
-            <Pivot />
+          <g transform={spin(target)} data-target="heading">
             <polygon points="44,4 56,4 56,11 52,11 50,15 48,11 44,11" fill={TARGET_COLOUR} />
           </g>
         )}
@@ -442,9 +453,8 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active, tone
   const live = isLive(durationMs) && needleDeg != null
   const settlingNeedle = useUnwrappedAngle(needleTarget)
   const settlingBall = useInterp(ballTarget, 10)
-  const needleAngle = live ? needleDeg : settlingNeedle
-  const ballX = live ? 0 : settlingBall
-  const t = needleTransition(durationMs)
+  const needleAngle = useTweened(live ? needleDeg : settlingNeedle, durationMs)
+  const ballX = useTweened(live ? 0 : settlingBall, durationMs)
   return (
     <InstrumentFace label="Turn" onClick={onClick} active={active} tone={tone}>
       {/* L / R labels */}
@@ -457,14 +467,12 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active, tone
       <line x1="25" y1="40" x2="29" y2="44" stroke="var(--color-game-faint)" strokeWidth="1" />
       <line x1="71" y1="44" x2="75" y2="40" stroke="var(--color-game-faint)" strokeWidth="1" />
       {target != null && (
-        <g style={{ ...PIVOT, transform: `rotate(${target}deg)` }} data-target="turn" opacity="0.85">
-          <Pivot />
+        <g transform={spin(target)} data-target="turn" opacity="0.85">
           <rect x="28" y="47.5" width="44" height="4" fill={TARGET_COLOUR} rx="1" />
         </g>
       )}
       {/* Aircraft silhouette — rotates with the turn rate */}
-      <g style={{ transition: t, ...PIVOT, transform: `rotate(${needleAngle}deg)` }}>
-        <Pivot />
+      <g transform={spin(needleAngle)}>
         <rect x="32" y="48" width="36" height="3" fill="var(--color-game-accent)" rx="1" />
         <rect x="46" y="42" width="8" height="12" fill="var(--color-game-accent)" rx="1" />
       </g>
@@ -475,7 +483,7 @@ export function TurnCoordinator({ turn, durationMs = 2000, onClick, active, tone
         <line x1="54" y1="72" x2="54" y2="82" stroke="var(--color-game-line)" strokeWidth="0.5" />
         <circle cx="50" cy="77" r="3"
           fill="#ffffff"
-          style={{ transition: t, transform: `translateX(${ballX}px)` }} />
+          transform={`translate(${ballX} 0)`} />
       </g>
       <text x="50" y="66" fill="var(--color-game-faint)" fontSize="5" textAnchor="middle"
             fontFamily="monospace" fontWeight="bold">LEVEL</text>

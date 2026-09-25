@@ -1,73 +1,69 @@
-import { render } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
-import InstrumentPanel from '../InstrumentPanel'
+import { render, act } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import InstrumentPanel, { Airspeed } from '../InstrumentPanel'
 
-// Reported from Safari on macOS (21 Sept): needles swung off the face during
-// the calibration animation and settled with their tails away from the middle
-// of the dial, the attitude horizon sat in the wrong place, and the compass
-// cardinals were pushed out of view. Chrome was fine.
+// Reported twice from Safari on macOS (21 and 25 Sept): needles swung off the
+// face during the calibration animation and settled with their tails away from
+// the middle of the dial, the attitude horizon sat in the wrong place, and the
+// compass cardinals were pushed out of view. Chrome was fine.
 //
-// Cause: the dials rotated with `transform-origin: 50px 50px` + `transform-box:
-// view-box`. Chrome resolves that against the viewBox, so 50,50 is the face
-// centre; Safari measures the element's own bounding box instead, putting the
-// pivot most of a face away from where it belonged.
+// Cause: the dials rotated with a CSS transform, which pivots about
+// `transform-origin` resolved against a `transform-box`. Safari's reference box
+// disagreed with Chrome's under `view-box`, and the `fill-box` + pivot-square
+// workaround did not hold either.
 //
-// The fix is to rotate about `fill-box` + `50% 50%`, which every browser agrees
-// on, and give each rotating group an invisible square centred on (50,50) so
-// its bounding box centre IS the face centre. These tests hold that pairing
-// together: a rotation without its pivot square is the bug coming back.
+// The fix is to rotate with the SVG transform ATTRIBUTE, `rotate(a 50 50)`,
+// which names the pivot in user-space numbers and has no reference box at all.
+// These tests keep CSS transforms out of the dials: one coming back is the bug
+// coming back.
 
-const panel = () => render(
+const panel = (durationMs = 100) => render(
   <InstrumentPanel
     altitude={5000} airspeed={200} heading="N" vs="Ascend" turn="Standard"
-    durationMs={100}
+    durationMs={durationMs}
   />,
 ).container
 
 const rotating = (container) =>
-  [...container.querySelectorAll('[style]')]
-    .filter(el => /\brotate\(/.test(el.getAttribute('style') || ''))
+  [...container.querySelectorAll('[transform]')]
+    .filter(el => /^rotate\(/.test(el.getAttribute('transform')))
 
 describe('InstrumentPanel — dials rotate about the centre of the face', () => {
-  it('rotates every dial about fill-box 50% 50%, never view-box', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('uses no CSS transforms anywhere in the dials', () => {
     const container = panel()
-    const els = rotating(container)
+    const styled = [...container.querySelectorAll('svg [style]')]
+      .filter(el => /transform/.test(el.getAttribute('style')))
+    expect(styled).toHaveLength(0)
+    expect(container.innerHTML).not.toMatch(/transform-(box|origin)/)
+  })
+
+  it('rotates every dial about (50,50) with the transform attribute', () => {
+    const els = rotating(panel())
     // Altimeter x2, attitude roll, airspeed, VSI, heading rose, turn silhouette.
     expect(els).toHaveLength(7)
-
     for (const el of els) {
-      const style = el.getAttribute('style')
-      expect(style).toMatch(/transform-box:\s*fill-box/)
-      expect(style).toMatch(/transform-origin:\s*50%\s+50%/)
-    }
-    expect(container.innerHTML).not.toMatch(/view-box/)
-  })
-
-  it('gives every rotating group a pivot square centred on the face', () => {
-    for (const el of rotating(panel())) {
-      const rect = el.querySelector(':scope > rect[width="200"]')
-      expect(rect, `missing pivot rect in ${el.getAttribute('style')}`).not.toBeNull()
-
-      // The square must be symmetric about (50,50) — that is the whole point
-      // of it, and an off-centre one silently reintroduces the Safari bug.
-      const num = (a) => Number(rect.getAttribute(a))
-      expect(num('x') + num('width') / 2).toBe(50)
-      expect(num('y') + num('height') / 2).toBe(50)
-
-      // Invisible: it exists only to fix the bounding box.
-      expect(rect.getAttribute('fill')).toBe('none')
+      expect(el.getAttribute('transform')).toMatch(/^rotate\(-?[\d.e+-]+ 50 50\)$/)
     }
   })
 
-  it('leaves translate-only elements without a pivot, which they do not need', () => {
-    const container = panel()
-    const translated = [...container.querySelectorAll('[style]')]
-      .filter(el => /\btranslate[XY]\(/.test(el.getAttribute('style') || ''))
-    // The attitude pitch group and the turn coordinator's inclinometer ball.
+  it('moves the pitch band and inclinometer ball with translate attributes', () => {
+    const translated = [...panel().querySelectorAll('[transform]')]
+      .filter(el => /^translate\(/.test(el.getAttribute('transform')))
     expect(translated).toHaveLength(2)
-    for (const el of translated) {
-      expect(el.getAttribute('style')).not.toMatch(/transform-origin/)
-    }
+  })
+
+  it('shows a live reading exactly, with no tween', () => {
+    const { container } = render(<Airspeed knots={120} durationMs={0} />)
+    expect(rotating(container)[0].getAttribute('transform')).toBe('rotate(120 50 50)')
+  })
+
+  it('settles the needle on its reading once the animation has run', () => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] })
+    const { container } = render(<Airspeed knots={120} durationMs={500} />)
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(rotating(container)[0].getAttribute('transform')).toBe('rotate(120 50 50)')
   })
 })
 
