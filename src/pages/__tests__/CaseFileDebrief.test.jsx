@@ -33,8 +33,16 @@ vi.mock('../../components/SEO', () => ({ default: () => null }))
 
 // ── Mock DebriefStage ─────────────────────────────────────────────────────────
 vi.mock('../../components/caseFiles/stages/DebriefStage', () => ({
-  default: ({ scoring, onSubmit }) => (
+  default: ({ scoring, onSubmit, interest, onToggleInterest }) => (
     <div data-testid="debrief-stage">
+      {onToggleInterest && (
+        <button
+          data-testid="interest-toggle"
+          data-interested={String(!!interest?.interested)}
+          data-error={String(!!interest?.error)}
+          onClick={() => onToggleInterest(!interest?.interested)}
+        >interest</button>
+      )}
       {scoring
         ? <span data-testid="scoring-total">{scoring.totalScore}</span>
         : <span data-testid="no-scoring">no scoring</span>
@@ -186,5 +194,64 @@ describe('CaseFileDebrief', () => {
     screen.getByTestId('close-btn').click()
 
     expect(mockNavigate).toHaveBeenCalledWith('/case-files')
+  })
+})
+
+// The "Coming up" teaser collects interest in the next chapter.
+describe('CaseFileDebrief — register interest in the next chapter', () => {
+  const TEASED = {
+    ...CHAPTER,
+    stages: [
+      { id: 's0', type: 'cold_open', payload: {} },
+      { id: 's2', type: 'debrief', payload: { annotatedReplayBeats: [], teaserNextChapter: { title: 'Battle of Kyiv' } } },
+    ],
+  }
+  const INTEREST = '/interest'
+
+  it('offers nothing to tap when the chapter teases no next one', async () => {
+    global.fetch = mockFetchRoutes([
+      [BEST_ROUTE, makeOk({ ...BEST_SESSION, bestScore: 850, scoring: SCORING })],
+      [CHAPTER_ROUTE, makeOk(CHAPTER)],
+    ])
+    render(<CaseFileDebrief />)
+    await waitFor(() => expect(screen.getByTestId('debrief-stage')).toBeDefined())
+    // The toggle prop is always wired; the card itself hides without a teaser.
+    expect(global.fetch.mock.calls.some(([u]) => String(u).includes(INTEREST))).toBe(false)
+  })
+
+  it('loads the saved answer, then saves a change', async () => {
+    const calls = []
+    global.fetch = vi.fn((url, opts = {}) => {
+      calls.push([String(url), opts.method ?? 'GET', opts.body])
+      if (String(url).includes(INTEREST)) {
+        return Promise.resolve(makeOk({ interested: opts.method === 'PUT' ? JSON.parse(opts.body).interested : true }))
+      }
+      if (String(url).includes(BEST_ROUTE)) return Promise.resolve(makeOk({ ...BEST_SESSION, bestScore: 850, scoring: SCORING }))
+      if (String(url).includes(CHAPTER_ROUTE)) return Promise.resolve(makeOk(TEASED))
+      return Promise.resolve(make404())
+    })
+    render(<CaseFileDebrief />)
+    await waitFor(() => expect(screen.getByTestId('interest-toggle').getAttribute('data-interested')).toBe('true'))
+
+    screen.getByTestId('interest-toggle').click()
+    await waitFor(() => expect(screen.getByTestId('interest-toggle').getAttribute('data-interested')).toBe('false'))
+    const put = calls.find(([u, m]) => u.includes(INTEREST) && m === 'PUT')
+    expect(JSON.parse(put[2])).toEqual({ interested: false })
+  })
+
+  it('puts the answer back and flags an error when the save fails', async () => {
+    global.fetch = vi.fn((url, opts = {}) => {
+      if (String(url).includes(INTEREST)) {
+        return Promise.resolve(opts.method === 'PUT' ? { ok: false, status: 500, json: async () => ({}) } : makeOk({ interested: false }))
+      }
+      if (String(url).includes(BEST_ROUTE)) return Promise.resolve(makeOk({ ...BEST_SESSION, bestScore: 850, scoring: SCORING }))
+      if (String(url).includes(CHAPTER_ROUTE)) return Promise.resolve(makeOk(TEASED))
+      return Promise.resolve(make404())
+    })
+    render(<CaseFileDebrief />)
+    await waitFor(() => expect(screen.getByTestId('interest-toggle')).toBeDefined())
+    screen.getByTestId('interest-toggle').click()
+    await waitFor(() => expect(screen.getByTestId('interest-toggle').getAttribute('data-error')).toBe('true'))
+    expect(screen.getByTestId('interest-toggle').getAttribute('data-interested')).toBe('false')
   })
 })

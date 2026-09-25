@@ -3188,6 +3188,8 @@ function SettingsTab({ API }) {
 
   const [caseFilesList, setCaseFilesList] = useState(null) // null = loading, [] = empty, [...] = loaded
   const [caseFilesDraft, setCaseFilesDraft] = useState({}) // { [slug]: ['free','silver',...] }
+  // "Register your interest" tallies from the debrief teasers. null = loading.
+  const [caseFilesInterest, setCaseFilesInterest] = useState(null)
 
   // Browser-local, not an AppSettings field — see the Beta Testing section below.
   const [testerFx, setTesterFx] = useState(readTesterFx)
@@ -3203,6 +3205,15 @@ function SettingsTab({ API }) {
         setCaseFilesDraft(Object.fromEntries(arr.map(c => [c.slug, Array.isArray(c.tiers) ? [...c.tiers] : []])))
       })
       .catch(() => { if (!cancelled) setCaseFilesList([]) })
+    return () => { cancelled = true }
+  }, [API])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${API}/api/admin/case-files/interest`, { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : { data: [] }))
+      .then(d => { if (!cancelled) setCaseFilesInterest(Array.isArray(d?.data) ? d.data : []) })
+      .catch(() => { if (!cancelled) setCaseFilesInterest([]) })
     return () => { cancelled = true }
   }, [API])
 
@@ -3583,6 +3594,28 @@ function SettingsTab({ API }) {
               min={1} max={5}
               onChange={v => set('aptitudeSyncMaxRounds', v)}
             />
+            {/* Interest in the next chapter, from the debrief's "Coming up" card */}
+            <div className="py-2.5 border-b border-slate-100" data-testid="case-files-interest">
+              <p className="text-sm font-semibold text-slate-700 mb-1">Interest in the next chapter</p>
+              <p className="text-xs text-slate-400 mb-2">Players tap the "Coming up" card at the end of a debrief to say they want that chapter made. Withdrawn means they registered and then tapped again to take it back.</p>
+              {caseFilesInterest === null ? (
+                <p className="text-xs text-slate-400">Loading…</p>
+              ) : caseFilesInterest.length === 0 ? (
+                <p className="text-xs text-slate-400">No one has registered interest yet.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {caseFilesInterest.map(row => (
+                    <div key={`${row.caseSlug}/${row.chapterSlug}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1 border-b border-slate-100 last:border-0">
+                      <span className="text-sm font-semibold text-slate-700 min-w-[12rem]">{row.teaserTitle || row.chapterSlug}</span>
+                      <span className="text-sm text-emerald-600 font-bold">{row.interested} interested</span>
+                      {row.withdrawn > 0 && <span className="text-xs text-slate-500">{row.withdrawn} withdrawn</span>}
+                      <span className="text-xs text-slate-400">after {row.caseSlug} / {row.chapterSlug}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <NumInput
               label="Daily sessions — Free tier"
               hint="How many APTITUDE_SYNC sessions a free user can play per day"

@@ -6,6 +6,7 @@ const AppSettings = require('../models/AppSettings');
 const GameCaseFile = require('../models/GameCaseFile');
 const GameCaseFileChapter = require('../models/GameCaseFileChapter');
 const GameSessionCaseFileResult = require('../models/GameSessionCaseFileResult');
+const CaseFileInterest = require('../models/CaseFileInterest');
 const { scoreChapter } = require('../utils/caseFileScoring');
 const { sanitizeChapter, sanitizeChapterForList } = require('../utils/caseFileSanitize');
 const { callOpenRouter } = require('../utils/openRouter');
@@ -256,6 +257,54 @@ router.get('/:caseSlug/chapters/:chapterSlug/best', protect, async (req, res) =>
       scoring:        best ? best.scoring ?? null : null,
       completedAt:    best ? best.completedAt ?? null : null,
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── Interest in what comes next ──────────────────────────────────────────────
+// The debrief ends with a "Coming up" teaser for a chapter that usually does
+// not exist yet. Players tap it to say they want it; tapping again takes it
+// back. Keyed on the chapter whose debrief shows the teaser.
+
+function teaserTitleOf(chapter) {
+  const debrief = (chapter?.stages ?? []).find((s) => s.type === 'debrief');
+  return debrief?.payload?.teaserNextChapter?.title ?? '';
+}
+
+router.get('/:caseSlug/chapters/:chapterSlug/interest', protect, async (req, res) => {
+  try {
+    const { caseSlug, chapterSlug } = req.params;
+    const doc = await CaseFileInterest.findOne({ userId: req.user._id, caseSlug, chapterSlug }).lean();
+    res.json({ interested: doc ? !!doc.interested : false, updatedAt: doc?.updatedAt ?? null });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put('/:caseSlug/chapters/:chapterSlug/interest', protect, async (req, res) => {
+  try {
+    const { caseSlug, chapterSlug } = req.params;
+    const { interested } = req.body ?? {};
+    if (typeof interested !== 'boolean') {
+      return res.status(400).json({ message: 'interested must be true or false' });
+    }
+
+    // Only a real chapter with a teaser can collect interest; the title is
+    // read from it rather than trusted from the client.
+    const chapter = await GameCaseFileChapter.findOne({ caseSlug, chapterSlug }).lean();
+    const teaserTitle = teaserTitleOf(chapter);
+    if (!chapter || !teaserTitle) {
+      return res.status(404).json({ message: 'No upcoming chapter to register interest in' });
+    }
+
+    const doc = await CaseFileInterest.findOneAndUpdate(
+      { userId: req.user._id, caseSlug, chapterSlug },
+      { $set: { interested, teaserTitle } },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    ).lean();
+
+    res.json({ interested: doc.interested, updatedAt: doc.updatedAt });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

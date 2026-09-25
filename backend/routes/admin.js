@@ -22,6 +22,7 @@ const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames'
 const { buildCbatProgress, parseProgressLimit, PROGRESS_MIN_FOR_CHART } = require('../utils/cbatProgressSeries');
 const GameSessionCbatStart                = require('../models/GameSessionCbatStart');
 const GameCaseFile                        = require('../models/GameCaseFile');
+const CaseFileInterest                    = require('../models/CaseFileInterest');
 const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
@@ -1239,6 +1240,39 @@ router.patch('/settings', requireReason, async (req, res) => {
     });
 
     res.json({ status: 'success', data: { settings } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/case-files/interest — who wants the next chapter
+// One row per teaser: players currently interested, and players who
+// registered and then took it back.
+router.get('/case-files/interest', async (_req, res) => {
+  try {
+    const rows = await CaseFileInterest.aggregate([
+      {
+        $group: {
+          _id:         { caseSlug: '$caseSlug', chapterSlug: '$chapterSlug' },
+          teaserTitle: { $last: '$teaserTitle' },
+          interested:  { $sum: { $cond: ['$interested', 1, 0] } },
+          withdrawn:   { $sum: { $cond: ['$interested', 0, 1] } },
+          lastAt:      { $max: '$updatedAt' },
+        },
+      },
+      { $sort: { interested: -1, lastAt: -1 } },
+    ]);
+    res.json({
+      status: 'success',
+      data: rows.map((r) => ({
+        caseSlug:    r._id.caseSlug,
+        chapterSlug: r._id.chapterSlug,
+        teaserTitle: r.teaserTitle,
+        interested:  r.interested,
+        withdrawn:   r.withdrawn,
+        lastAt:      r.lastAt,
+      })),
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

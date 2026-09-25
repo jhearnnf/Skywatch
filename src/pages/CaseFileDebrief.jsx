@@ -154,6 +154,40 @@ export default function CaseFileDebrief() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // ── Interest in the next chapter ─────────────────────────────────────────
+  // Only asked for when this chapter's debrief actually teases one.
+  const [interest, setInterest] = useState({ interested: false, pending: false, error: false })
+  const hasTeaser = !!chapter?.stages?.find(s => s.type === 'debrief')?.payload?.teaserNextChapter
+  const interestUrl = `${API}/api/case-files/${caseSlug}/chapters/${chapterSlug}/interest`
+
+  useEffect(() => {
+    if (!hasTeaser) return undefined
+    let cancelled = false
+    authFetch(interestUrl)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled && d) setInterest(i => ({ ...i, interested: !!d.interested })) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [hasTeaser, interestUrl])
+
+  // Shown at once, saved behind it, and put back if the save fails.
+  async function handleToggleInterest(next) {
+    const before = interest.interested
+    setInterest({ interested: next, pending: true, error: false })
+    try {
+      const r = await authFetch(interestUrl, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ interested: next }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      setInterest({ interested: !!d.interested, pending: false, error: false })
+    } catch {
+      setInterest({ interested: before, pending: false, error: true })
+    }
+  }
+
   function handleClose() {
     navigate('/case-files')
   }
@@ -228,6 +262,8 @@ export default function CaseFileDebrief() {
         scoring={scoring}
         personalBest={personalBest}
         onReplay={() => navigate(`/case-files/${caseSlug}/${chapterSlug}`)}
+        interest={interest}
+        onToggleInterest={handleToggleInterest}
       />
     </>
   )
