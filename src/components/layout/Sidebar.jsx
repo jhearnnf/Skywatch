@@ -12,9 +12,11 @@ import { getLevelInfo } from '../../utils/levelUtils'
 import { getActiveNavTo } from '../../utils/navSections'
 import { isLocalEnvironment } from '../../utils/localEnvironment'
 import { prefetchOverview } from '../../utils/chatCache'
-import { slimNavItems, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
+import { slimNavItems, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo, insertCaseFiles, withCaseFilesActive } from '../../utils/appMode'
 import { useSlimMode, useSlimLearnEnabled } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
+import { useCaseFilesNavVisible, useCaseFilesNavUnseen } from '../../hooks/useCaseFilesNav'
+import { CaseFilesNavIcon, DecryptLabel } from './CaseFilesNav'
 
 const NAV_ITEMS = [
   { to: '/home',          emoji: '🏠', label: 'Home'       },
@@ -51,8 +53,16 @@ export default function Sidebar() {
   // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
   const showHangarNav = useWorld3dNavVisible()
   const baseNavItems = slim ? slimNavItems({ learnEnabled: slimLearnEnabled }) : NAV_ITEMS
-  const withHangar = showHangarNav ? [...baseNavItems, HANGAR_NAV_ITEM] : baseNavItems
-  const activeNavTo = slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)
+  const withHangarOnly = showHangarNav ? [...baseNavItems, HANGAR_NAV_ITEM] : baseNavItems
+  // Case Files is earned: it appears after enough finished CBAT games.
+  const showCaseFilesNav = useCaseFilesNavVisible()
+  const caseFilesUnseen  = useCaseFilesNavUnseen()
+  const withHangar = showCaseFilesNav ? insertCaseFiles(withHangarOnly) : withHangarOnly
+  const activeNavTo = withCaseFilesActive(
+    location.pathname,
+    slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname),
+    showCaseFilesNav,
+  )
   const clipperAvailable = isLocalEnvironment()
   const { hasAnyNew } = useNewGameUnlock()
   const { hasAnyNew: hasAnyNewCategory, firstNewCategory } = useNewCategoryUnlock()
@@ -74,7 +84,7 @@ export default function Sidebar() {
     <aside className="hidden md:flex flex-col fixed left-0 top-14 bottom-0 w-56 bg-slate-50 border-r border-slate-200 z-30">
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map(({ to, emoji, label }) => {
+        {navItems.map(({ to, emoji, label, caseFiles }) => {
           const isPlay     = to === '/play'
           const isLearn    = to === '/learn-priority'
           const isChat     = to === '/chat'
@@ -103,7 +113,7 @@ export default function Sidebar() {
           return (
             <Link
               key={to}
-              data-nav={isPlay ? 'play' : isLearn ? 'learn' : isChat ? 'chat' : undefined}
+              data-nav={isPlay ? 'play' : isLearn ? 'learn' : isChat ? 'chat' : caseFiles ? 'case-files' : undefined}
               to={to}
               onMouseEnter={warmChat}
               onFocus={warmChat}
@@ -116,8 +126,11 @@ export default function Sidebar() {
                   : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
                 }`}
             >
-              <span className="relative text-lg w-6 text-center shrink-0">
-                {emoji}
+              <span className={`relative text-lg w-6 text-center shrink-0${caseFiles ? ' flex justify-center' : ''}`}>
+                {caseFiles ? <CaseFilesNavIcon active={isActive} /> : emoji}
+                {caseFiles && caseFilesUnseen && (
+                  <span className="nav-new-badge" aria-label="Case Files unlocked" />
+                )}
                 {showPlayBadge && (
                   <span className="nav-new-badge" aria-label="New game unlocked" />
                 )}
@@ -133,7 +146,7 @@ export default function Sidebar() {
                   </span>
                 )}
               </span>
-              {label}
+              {caseFiles ? <DecryptLabel text={label} replayOnHover /> : label}
             </Link>
           )
         })}

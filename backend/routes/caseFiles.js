@@ -7,6 +7,7 @@ const GameCaseFile = require('../models/GameCaseFile');
 const GameCaseFileChapter = require('../models/GameCaseFileChapter');
 const GameSessionCaseFileResult = require('../models/GameSessionCaseFileResult');
 const CaseFileInterest = require('../models/CaseFileInterest');
+const { CBAT_GAMES } = require('../constants/cbatGames');
 const { scoreChapter } = require('../utils/caseFileScoring');
 const { sanitizeChapter, sanitizeChapterForList } = require('../utils/caseFileSanitize');
 const { callOpenRouter } = require('../utils/openRouter');
@@ -96,6 +97,37 @@ router.get('/status', optionalAuth, async (req, res) => {
         limitToday: limit === Infinity ? null : limit,
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ── GET /nav — does this player get the Case Files navbar tab? ─────────────
+// Needs the feature on, the nav toggle on, and more than
+// caseFilesNavCbatThreshold finished CBAT games. No admin exemption: the tab
+// shows exactly what players see (set the threshold to 0 to preview it).
+
+// Finished CBAT games, counted only as far as the threshold needs: each game's
+// count is capped, so a veteran with thousands of runs costs the same as a
+// player right at the line.
+async function cbatGamesFinished(userId, atLeast) {
+  const counts = await Promise.all(
+    Object.values(CBAT_GAMES).map((cfg) =>
+      cfg.Model.countDocuments({ ...(cfg.modeFilter ?? {}), userId }, { limit: atLeast })
+    )
+  );
+  return counts.reduce((sum, n) => sum + n, 0);
+}
+
+router.get('/nav', protect, async (req, res) => {
+  try {
+    const settings = await AppSettings.getSettings();
+    const threshold = settings.caseFilesNavCbatThreshold ?? 10;
+    if (!settings.caseFilesEnabled || settings.caseFilesNavEnabled === false) {
+      return res.json({ visible: false });
+    }
+    const finished = await cbatGamesFinished(req.user._id, threshold + 1);
+    res.json({ visible: finished > threshold });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

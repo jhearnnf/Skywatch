@@ -148,6 +148,25 @@ export function insertBeforeProfile(items, item) {
 // list because its visibility is settings-driven, not mode-driven.
 export const HANGAR_NAV_ITEM = { to: '/immerse', emoji: '🛩️', label: 'Hangar' }
 
+// Case Files nav entry. Earned rather than given: it appears once a player has
+// finished enough CBAT games (useCaseFilesNavVisible), in both slim and full
+// mode. It draws its own icon and decrypting label, so no emoji; shortLabel is
+// what fits the BottomNav's narrow cells.
+export const CASE_FILES_NAV_ITEM = { to: '/case-files', label: 'Case Files', shortLabel: 'Cases', caseFiles: true }
+
+// Case Files sits straight after the games entry (Play, or CBAT in slim mode).
+export function insertCaseFiles(items) {
+  const i = items.findIndex(x => x.to === '/play' || x.to === '/cbat')
+  if (i === -1) return insertBeforeProfile(items, CASE_FILES_NAV_ITEM)
+  return [...items.slice(0, i + 1), CASE_FILES_NAV_ITEM, ...items.slice(i + 1)]
+}
+
+// With the tab showing, /case-files pages light it instead of Play / CBAT.
+export function withCaseFilesActive(pathname, activeTo, tabVisible) {
+  if (tabVisible && (pathname === '/case-files' || pathname.startsWith('/case-files/'))) return '/case-files'
+  return activeTo
+}
+
 // Which slim nav item should be highlighted for a given pathname.
 export function slimNavActiveTo(pathname) {
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {

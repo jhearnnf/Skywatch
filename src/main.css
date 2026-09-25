@@ -4247,6 +4247,34 @@ body.play-mode .card-shadow {
   animation: cf-missile-flame 0.14s linear infinite;
 }
 
+/* Case Files navbar tab: the folder's eye glances about and blinks, and the
+   label decrypts in mono so the scramble never changes its width. */
+@keyframes cf-nav-pupil {
+  0%, 38%   { transform: translateX(0); }
+  44%, 60%  { transform: translateX(-1.6px); }
+  66%, 82%  { transform: translateX(1.6px); }
+  88%, 100% { transform: translateX(0); }
+}
+@keyframes cf-nav-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95%           { transform: scaleY(0.1); }
+}
+.cf-nav-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: cf-nav-blink 5.5s ease-in-out infinite;
+}
+.cf-nav-pupil {
+  animation: cf-nav-pupil 7s ease-in-out infinite;
+}
+.cf-nav-icon { overflow: visible; }
+.cf-nav-decrypt {
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 /* Evidence-wall string drawing itself between two cards. */
 @keyframes cf-string-draw {
   from { stroke-dashoffset: 1; }

@@ -3472,6 +3472,8 @@ function SettingsTab({ API }) {
           'caseFilesDailyLimitFree',
           'caseFilesDailyLimitSilver',
           'caseFilesDailyLimitGold',
+          'caseFilesNavEnabled',
+          'caseFilesNavCbatThreshold',
           'newsFlashcardsEnabled',
           'hangarGameEnabled',
         ]
@@ -3898,6 +3900,19 @@ function SettingsTab({ API }) {
               hint="Show the Case Files button on the Play page for qualifying users"
               checked={draft.caseFilesEnabled ?? false}
               onChange={v => set('caseFilesEnabled', v)}
+            />
+            <Toggle
+              label="Show Case Files in the navbar"
+              hint="Adds a Case Files tab to the sidebar and bottom bar for players who have finished enough CBAT games. Turning this off only hides the tab; Case Files stays playable from the Play page."
+              checked={draft.caseFilesNavEnabled ?? true}
+              onChange={v => set('caseFilesNavEnabled', v)}
+            />
+            <NumInput
+              label="Navbar tab: CBAT games needed"
+              hint="The tab appears once a player has finished MORE than this many CBAT games (all CBAT games count). Set 0 to show it after their first game."
+              value={draft.caseFilesNavCbatThreshold ?? 10}
+              min={0}
+              onChange={v => set('caseFilesNavCbatThreshold', v)}
             />
 
             {/* Tier access per case */}

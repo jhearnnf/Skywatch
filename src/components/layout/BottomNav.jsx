@@ -12,9 +12,11 @@ import { useGameChrome } from '../../context/GameChromeContext'
 import ProfileBadge from '../ProfileBadge'
 import { getActiveNavTo } from '../../utils/navSections'
 import { prefetchOverview } from '../../utils/chatCache'
-import { slimNavItems, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo } from '../../utils/appMode'
+import { slimNavItems, HANGAR_NAV_ITEM, insertBeforeProfile, slimNavActiveTo, insertCaseFiles, withCaseFilesActive } from '../../utils/appMode'
 import { useSlimMode, useSlimLearnEnabled } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
+import { useCaseFilesNavVisible, useCaseFilesNavUnseen } from '../../hooks/useCaseFilesNav'
+import { CaseFilesNavIcon, DecryptLabel } from './CaseFilesNav'
 
 // Slightly longer than the 300ms slide-in transition in main.css so the flash
 // starts after the BottomNav is on-screen.
@@ -49,9 +51,12 @@ export default function BottomNav() {
   const showChatNav = user && settings?.chatEnabled !== false
   // Hangar shows in slim mode too — it is the one non-CBAT game slim keeps.
   const showHangarNav = useWorld3dNavVisible()
+  const showCaseFilesNav = useCaseFilesNavVisible()
+  const caseFilesUnseen  = useCaseFilesNavUnseen()
 
   let items = slim ? slimNavItems({ learnEnabled: slimLearnEnabled }) : [...NAV_ITEMS]
   if (showHangarNav) items = [...items, HANGAR_NAV_ITEM]
+  if (showCaseFilesNav) items = insertCaseFiles(items)
   if (showChatNav) items = insertBeforeProfile(items, CHAT_ITEM)
   if (user?.isAdmin) items = [...items, ADMIN_ITEM]
   const location = useLocation()
@@ -82,8 +87,12 @@ export default function BottomNav() {
   return (
     <nav className="app-bottomnav fixed bottom-0 left-0 right-0 z-40 md:hidden bg-slate-50/95 backdrop-blur-md border-t border-slate-200 safe-area-bottom">
       <div className="flex items-stretch h-16">
-        {items.map(({ to, emoji, label }) => {
-          const active = (slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname)) === to
+        {items.map(({ to, emoji, label, shortLabel, caseFiles }) => {
+          const active = withCaseFilesActive(
+            location.pathname,
+            slim ? slimNavActiveTo(location.pathname) : getActiveNavTo(location.pathname),
+            showCaseFilesNav,
+          ) === to
           const isLearn = to === '/learn-priority'
           const showBadge = to === '/play' && hasAnyNew && user
           const showCategoryBadge = isLearn && hasAnyNewCategory && user
@@ -113,7 +122,7 @@ export default function BottomNav() {
             <NavLink
               key={to}
               ref={to === '/play' ? playBtnRef : undefined}
-              data-nav={to === '/play' ? 'play' : isLearn ? 'learn' : undefined}
+              data-nav={to === '/play' ? 'play' : isLearn ? 'learn' : caseFiles ? 'case-files' : undefined}
               to={slim || user || to === '/home' || to === '/rankings' ? to : '/login'}
               onTouchStart={warmChat}
               onMouseEnter={warmChat}
@@ -131,8 +140,13 @@ export default function BottomNav() {
               <span className={`relative text-xl leading-none transition-transform ${active ? 'scale-110' : ''}`}>
                 {isProfileItem && user
                   ? <ProfileBadge user={user} size={user?.selectedBadge?.cutoutUrl ? 26 : 20} color={active ? '#5baaff' : '#94a3b8'} />
-                  : emoji
+                  : caseFiles
+                    ? <CaseFilesNavIcon size={24} active={active} />
+                    : emoji
                 }
+                {caseFiles && caseFilesUnseen && (
+                  <span className="nav-new-badge" aria-label="Case Files unlocked" />
+                )}
                 {showBadge && (
                   <span className="nav-new-badge" aria-label="New game unlocked" />
                 )}
@@ -152,7 +166,7 @@ export default function BottomNav() {
                 )}
               </span>
               <span className={`text-[10px] font-semibold tracking-wide ${active ? 'text-brand-600' : ''}`}>
-                {label}
+                {caseFiles ? <DecryptLabel text={shortLabel ?? label} /> : label}
               </span>
 
               {active && (

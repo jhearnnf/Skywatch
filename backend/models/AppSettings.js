@@ -328,6 +328,12 @@ const appSettingsSchema = new mongoose.Schema({
   caseFilesDailyLimitFree:    { type: Number,   default: 0, min: 0 },
   caseFilesDailyLimitSilver:  { type: Number,   default: 1, min: 0 },
   caseFilesDailyLimitGold:    { type: Number,   default: 5, min: 0 },
+  // The Case Files navbar tab. Separate from caseFilesEnabled so the tab can
+  // be pulled without switching the feature off. It shows only to players who
+  // have finished MORE than caseFilesNavCbatThreshold CBAT games: Case Files is
+  // a reward for sticking with the core practice, not a first-visit sideshow.
+  caseFilesNavEnabled:        { type: Boolean,  default: true },
+  caseFilesNavCbatThreshold:  { type: Number,   default: 10, min: 0 },
 
   // Pathway unlock requirements — each entry gates a category behind level + rank.
   // levelRequired: Agent Level (1–10). rankRequired: RAF Rank number (1–19).
