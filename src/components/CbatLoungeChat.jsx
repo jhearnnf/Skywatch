@@ -51,6 +51,18 @@ const BOTTOM_SLACK_PX = 4
 // the panel is 60dvh on a phone but can be taller than the window in the
 // desktop side column, and a ratio threshold is unreachable in that case.
 const READ_BAND_MARGIN = '-20% 0px -20% 0px'
+// Admin All groups list: cohorts whose test date is more than this many days
+// gone are folded away behind "Load previous", which reveals them a page at a time.
+const GROUP_RECENT_DAYS = 3
+const GROUP_PREVIOUS_PAGE = 10
+
+// Cohort dates are plain YYYY-MM-DD calendar days, so compare against the
+// admin's own local calendar day in the same shape.
+function localDateKey(offsetDays = 0) {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 // How busy the site has been, under the lounge header.
 //
@@ -219,8 +231,15 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
   const [dateBusy, setDateBusy] = useState(false)
   const [dateError, setDateError] = useState('')
   const [adminGroupId, setAdminGroupId] = useState(null)
+  const [previousGroupsShown, setPreviousGroupsShown] = useState(0)
 
   const scrollRef = useRef(null)
+  // The All groups list opens parked at the bottom, where the most recent past
+  // cohort meets the next upcoming one. A stable callback ref fires once per
+  // mount, so later polls and "Load previous" leave the scroll position alone.
+  const groupsListRef = useCallback(node => {
+    if (node) node.scrollTop = node.scrollHeight
+  }, [])
   const inputRef  = useRef(null)
   // The panel element, held in state rather than a ref so the observer below
   // re-attaches when the collapsed tab is swapped for the open panel.
@@ -845,6 +864,16 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
   const mention = canPost ? activeMention(draft, caret) : null
   const showMentionPicker = Boolean(mention) && mention.start !== mentionDismissed
 
+  // Admin All groups list, newest first from the server. Recent cohorts stay in
+  // view; anything older than GROUP_RECENT_DAYS waits behind "Load previous".
+  const todayKey = localDateKey()
+  const recentCutoffKey = localDateKey(-GROUP_RECENT_DAYS)
+  const allGroups = lounge?.groups ?? []
+  const recentGroups = allGroups.filter(group => group.date >= recentCutoffKey)
+  const olderGroups = allGroups.filter(group => group.date < recentCutoffKey)
+  const shownGroups = [...recentGroups, ...olderGroups.slice(0, previousGroupsShown)]
+  const hiddenOlderCount = Math.max(0, olderGroups.length - previousGroupsShown)
+
   return (
     <div
       ref={setPanelEl}
@@ -946,22 +975,40 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
       )}
 
       {room === 'groups' && !loading && lounge?.groups ? (
-        <div className="cbat-room-enter flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+        <div ref={groupsListRef} className="cbat-room-enter flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
           {lounge.groups.length === 0 ? (
             <p className="text-xs text-slate-500 text-center py-8">No CBAT groups have been created yet.</p>
-          ) : lounge.groups.map(group => (
-            <button key={group.conversationId} type="button" onClick={() => { setAdminGroupId(group.conversationId); setLounge(null); setLoading(true) }} className="w-full rounded-xl border border-game-line bg-surface/70 px-3 py-2.5 flex items-center gap-3 text-left hover:border-brand-400 hover:bg-brand-500/[0.06] hover:-translate-y-px transition-all">
-              <span className="w-9 h-9 rounded-xl grid place-items-center bg-brand-500/10 text-brand-500">✈</span>
+          ) : <>
+            {shownGroups.length === 0 && (
+              <p className="text-xs text-slate-500 text-center py-6">No CBAT groups in the last {GROUP_RECENT_DAYS} days or coming up.</p>
+            )}
+            {shownGroups.map(group => {
+            const isToday = group.date === todayKey
+            const isPast = group.date < todayKey
+            return (
+            <button key={group.conversationId} type="button" onClick={() => { setAdminGroupId(group.conversationId); setLounge(null); setLoading(true) }} className={`w-full rounded-xl border border-game-line bg-surface/70 px-3 py-2.5 flex items-center gap-3 text-left hover:border-brand-400 hover:bg-brand-500/[0.06] hover:-translate-y-px transition-all ${isToday ? 'cbat-group-today' : ''} ${isPast ? 'opacity-50 grayscale hover:opacity-80' : ''}`}>
+              <span className={`w-9 h-9 rounded-xl grid place-items-center ${isToday ? 'bg-amber-500/15 text-amber-500' : 'bg-brand-500/10 text-brand-500'}`}>✈</span>
               <span className="min-w-0">
                 <span className="block text-xs font-extrabold text-game-text">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}</span>
-                <span className="block text-[10px] text-slate-500">Region {group.region}</span>
+                <span className={`block text-[10px] ${isToday ? 'text-amber-500 font-bold' : 'text-slate-500'}`}>{isToday ? `Test day · Region ${group.region}` : `Region ${group.region}`}</span>
               </span>
               <span className="ml-auto text-[10px] text-slate-500">
                 {group.participantCount ?? 0} participant{group.participantCount === 1 ? '' : 's'} · {group.messageCount} messages
               </span>
               {group.unread > 0 && <span aria-label={`${group.unread} new ${group.unread === 1 ? 'message' : 'messages'} in this group`} className="min-w-5 h-5 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[9px] font-black shadow-[0_0_12px_rgba(239,68,68,.45)]">{group.unread}</span>}
             </button>
-          ))}
+            )
+          })}
+            {hiddenOlderCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setPreviousGroupsShown(count => count + GROUP_PREVIOUS_PAGE)}
+                className="w-full rounded-xl border border-dashed border-game-line px-3 py-2 text-[11px] font-bold text-slate-500 hover:text-brand-600 hover:border-brand-400 transition-colors"
+              >
+                Load previous ({hiddenOlderCount} older)
+              </button>
+            )}
+          </>}
         </div>
       ) : room === 'group' && !loading && lounge && lounge.applicable === false ? (
         <div className="cbat-room-enter flex-1 min-h-0 px-6 py-8 flex flex-col items-center justify-center text-center">

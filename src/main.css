@@ -4292,6 +4292,17 @@ body.play-mode .card-shadow {
 .cbat-room-enter-right { animation: cbat-room-enter 420ms cubic-bezier(.22, 1, .36, 1) both; }
 .cbat-room-enter-left { animation: cbat-room-enter-left 420ms cubic-bezier(.22, 1, .36, 1) both; }
 
+/* Admin All groups list: a cohort sitting its test today breathes amber. */
+@keyframes cbat-group-today {
+  0%, 100% { border-color: rgba(251, 191, 36, .45); box-shadow: 0 0 0 0 rgba(251, 191, 36, 0), inset 0 0 0 0 rgba(251, 191, 36, 0); }
+  50%      { border-color: rgba(251, 191, 36, .95); box-shadow: 0 0 14px 1px rgba(251, 191, 36, .28), inset 0 0 10px rgba(251, 191, 36, .08); }
+}
+.cbat-group-today {
+  border-color: rgba(251, 191, 36, .6);
+  background: linear-gradient(90deg, rgba(251, 191, 36, .07), transparent 70%);
+  animation: cbat-group-today 2.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cbat-room-enter, .cbat-room-enter-right, .cbat-room-enter-left { animation: none; }
   .cbat-date-warning, .cbat-date-warning::after, .cbat-date-warning-icon { animation: none; }

@@ -372,6 +372,39 @@ describe('private CBAT group', () => {
     await waitFor(() => expect(screen.queryByTestId('group-members-dialog')).toBeNull())
   })
 
+  it('folds away admin groups older than 3 days, greys recent past ones and marks today', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    const key = offset => {
+      const d = new Date()
+      d.setDate(d.getDate() + offset)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    const older = Array.from({ length: 12 }, (_, i) => (
+      { conversationId: `old${i}`, date: key(-4 - i), region: 'GB', participantCount: 1, messageCount: 0, unread: 0 }
+    ))
+    stubFetch({ group: { groups: [
+      { conversationId: 'future', date: key(5), region: 'GB', participantCount: 1, messageCount: 0, unread: 0 },
+      { conversationId: 'today', date: key(0), region: 'GB', participantCount: 1, messageCount: 0, unread: 0 },
+      { conversationId: 'recent', date: key(-2), region: 'GB', participantCount: 1, messageCount: 0, unread: 0 },
+      ...older,
+    ] } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'All groups' }))
+
+    const today = (await screen.findByText('Test day · Region GB')).closest('button')
+    expect(today.className).toContain('cbat-group-today')
+    const rows = () => screen.getAllByText(/Region GB/).map(el => el.closest('button'))
+    expect(rows()).toHaveLength(3)
+    expect(rows()[2].className).toContain('opacity-50')
+    expect(rows()[0].className).not.toContain('opacity-50')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load previous (12 older)' }))
+    expect(rows()).toHaveLength(13)
+    fireEvent.click(screen.getByRole('button', { name: 'Load previous (2 older)' }))
+    expect(rows()).toHaveLength(15)
+    expect(screen.queryByRole('button', { name: /Load previous/ })).toBeNull()
+  })
+
   it('aggregates unread messages onto the admin All groups pill', async () => {
     mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
     stubFetch({ group: { groups: [
