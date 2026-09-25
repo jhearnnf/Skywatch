@@ -286,7 +286,9 @@ export function AppTutorialProvider({ children }) {
 
   // Resolve the active step list for a tutorial: prefer DB-sourced data, fall
   // back to hardcoded TUTORIAL_STEPS, then apply runtime filters in this order:
-  //   0. Slim mode — no tutorial applies, return null.
+  //   0. Slim mode — no tutorial applies, return null. Except Case Files:
+  //      slim mode keeps Case Files, and its stages are the least obvious
+  //      thing on the site, so their tutorials must still play there.
   //   1. Tutorial-level showToGuests — if false and user is a guest, return null
   //      so the tutorial never starts.
   //   2. Step-level showToGuests — drop steps the admin marked as logged-in-only
@@ -294,7 +296,7 @@ export function AppTutorialProvider({ children }) {
   //   3. Feature-flag filters for the briefReader tutorial (RSVP / mnemonics).
   // `isGuest` is whether the current viewer is logged-out.
   const resolveSteps = useCallback((name, { mnemonicsOn, rsvpOn, isGuest, slim, map }) => {
-    if (slim) return null
+    if (slim && !name.startsWith('caseFile_')) return null
     const fromMap = map && map[name]
     const fromCode = TUTORIAL_STEPS[name]
     // map values are { steps, showToGuests, ... }; code values are stepsArray
@@ -467,7 +469,7 @@ export function AppTutorialProvider({ children }) {
   }, [selector, advanceOnClick, next])
 
   return (
-    <Ctx.Provider value={{ start, next, skip, back, canGoBack, startAfterNav, replay, resetAll, step, total, current, visible, activeName, hasSeen, refreshTutorials: fetchTutorials }}>
+    <Ctx.Provider value={{ start, next, skip, back, canGoBack, startAfterNav, replay, resetAll, step, total, current, visible, activeName, hasSeen, getSteps, refreshTutorials: fetchTutorials }}>
       {children}
     </Ctx.Provider>
   )

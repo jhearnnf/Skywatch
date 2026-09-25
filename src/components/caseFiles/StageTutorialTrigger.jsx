@@ -13,14 +13,18 @@ const STAGE_TUTORIAL_MAP = {
 }
 
 export default function StageTutorialTrigger({ stageType }) {
-  const { start, replay } = useAppTutorial()
+  const { start, replay, getSteps } = useAppTutorial()
   const tutorialName = STAGE_TUTORIAL_MAP[stageType]
+  // Only offer the button when there is a tutorial to open. It used to show
+  // whenever the stage had a tutorial name, so anything that left it empty
+  // (slim mode did, for a while) turned it into a button that did nothing.
+  const hasSteps = tutorialName ? (getSteps?.(tutorialName)?.length ?? 0) > 0 : false
 
   useEffect(() => {
     if (tutorialName) start(tutorialName)
   }, [tutorialName]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!tutorialName) return null
+  if (!tutorialName || !hasSteps) return null
 
   return (
     <button

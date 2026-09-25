@@ -3,9 +3,10 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 
 const mockStart  = vi.fn()
 const mockReplay = vi.fn()
+const mockSteps  = vi.hoisted(() => ({ value: [{ title: 'Step one' }] }))
 
 vi.mock('../../../context/AppTutorialContext', () => ({
-  useAppTutorial: () => ({ start: mockStart, replay: mockReplay }),
+  useAppTutorial: () => ({ start: mockStart, replay: mockReplay, getSteps: () => mockSteps.value }),
 }))
 
 import StageTutorialTrigger from '../StageTutorialTrigger'
@@ -13,6 +14,7 @@ import StageTutorialTrigger from '../StageTutorialTrigger'
 beforeEach(() => {
   mockStart.mockClear()
   mockReplay.mockClear()
+  mockSteps.value = [{ title: 'Step one' }]
 })
 
 describe('StageTutorialTrigger', () => {
@@ -34,5 +36,12 @@ describe('StageTutorialTrigger', () => {
     const { container } = render(<StageTutorialTrigger stageType="totally_unknown" />)
     expect(container.firstChild).toBeNull()
     expect(mockStart).not.toHaveBeenCalled()
+  })
+
+  // A "?" that opens nothing reads as broken. Only offer it with steps to show.
+  it('hides the ? button when the tutorial has no steps to show', () => {
+    mockSteps.value = null
+    render(<StageTutorialTrigger stageType="evidence_wall" />)
+    expect(screen.queryByRole('button', { name: /replay stage tutorial/i })).toBeNull()
   })
 })
