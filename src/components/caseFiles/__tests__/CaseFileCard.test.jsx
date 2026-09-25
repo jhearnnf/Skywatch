@@ -16,8 +16,8 @@ const PUBLISHED_CASE = {
 const LOCKED_CASE = {
   slug:          'israel-iran',
   title:         'Israel / Iran',
-  affairLabel:   'Middle East · Emerging Flashpoint',
-  summary:       'Rising tension across the Levant and Persian Gulf.',
+  affairLabel:   'Middle East · Active Conflict',
+  summary:       'Open war between Israel, the US and Iran since February 2026.',
   coverImageUrl: null,
   status:        'locked',
   tags:          ['Israel', 'Iran'],
@@ -105,8 +105,8 @@ describe('CaseFileCard — locked card', () => {
     render(<CaseFileCard caseFile={LOCKED_CASE} onClick={undefined} />)
 
     expect(screen.getByText('Israel / Iran')).toBeDefined()
-    expect(screen.getByText('Middle East · Emerging Flashpoint')).toBeDefined()
-    expect(screen.getByText(/Rising tension across the Levant/)).toBeDefined()
+    expect(screen.getByText('Middle East · Active Conflict')).toBeDefined()
+    expect(screen.getByText(/Open war between Israel, the US and Iran/)).toBeDefined()
   })
 
   it('shows Coming Soon badge', () => {

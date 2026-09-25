@@ -31,8 +31,8 @@ const CASE_FILES = [
   {
     slug:        'israel-iran',
     title:       'Israel / Iran',
-    affairLabel: 'Middle East · Emerging Flashpoint',
-    summary:     'Levant and Gulf tension shaping the operational environment. Coming soon.',
+    affairLabel: 'Middle East · Active Conflict',
+    summary:     'Open war between Israel, the US and Iran since February 2026, now centred on shipping through the Strait of Hormuz. Coming soon.',
     status:      'locked',
     tags:        ['Israel', 'Iran', 'Hormuz', 'Proxy'],
     chapterSlugs: [],

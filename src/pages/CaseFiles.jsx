@@ -24,9 +24,9 @@ const MOCK_CASES = [
   {
     slug:          'israel-iran',
     title:         'Israel / Iran',
-    affairLabel:   'Middle East · Emerging Flashpoint',
+    affairLabel:   'Middle East · Active Conflict',
     summary:
-      'Rising tension across the Levant and Persian Gulf, with proxy networks, missile exchanges, and naval posturing shaping the operational environment.',
+      'Open war between Israel, the US and Iran since February 2026, now centred on shipping through the Strait of Hormuz.',
     coverImageUrl: null,
     status:        'locked',
     tags:          ['Israel', 'Iran', 'Hormuz', 'Proxy'],

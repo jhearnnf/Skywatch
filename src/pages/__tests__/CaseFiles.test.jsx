@@ -49,8 +49,8 @@ const API_CASES = [
   {
     slug:          'israel-iran',
     title:         'Israel / Iran',
-    affairLabel:   'Middle East · Emerging Flashpoint',
-    summary:       'Levant and Gulf tension.',
+    affairLabel:   'Middle East · Active Conflict',
+    summary:       'Open war between Israel, the US and Iran.',
     coverImageUrl: null,
     status:        'locked',
     tags:          ['Israel', 'Iran'],
