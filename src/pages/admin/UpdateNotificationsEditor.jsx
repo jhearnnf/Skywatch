@@ -789,7 +789,7 @@ export default function UpdateNotificationsEditor({ API, ConfirmModal, Toast }) 
                 Preview
               </div>
               {imgSrc && (
-                <img src={imgSrc} alt="" className="w-full max-h-48 object-cover rounded-t-2xl" />
+                <img src={imgSrc} alt="" className="w-full h-auto rounded-t-2xl" />
               )}
               <div className="p-5 sm:p-6">
                 <button

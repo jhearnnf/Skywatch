@@ -85,7 +85,7 @@ export default function UpdateNotificationModal() {
             <img
               src={imageSrc}
               alt=""
-              className="w-full max-h-48 object-cover rounded-t-2xl"
+              className="w-full h-auto rounded-t-2xl"
             />
           )}
           <div className="p-5 sm:p-6">
