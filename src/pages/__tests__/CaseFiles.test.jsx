@@ -228,3 +228,17 @@ describe('CaseFiles — orienting a first-timer', () => {
     expect(screen.getByText(/No prior knowledge needed/i)).toBeDefined()
   })
 })
+
+describe('CaseFiles page — admin usage panel', () => {
+  it('is shown to admins only', async () => {
+    render(<CaseFiles />)
+    await waitFor(() => screen.getByTestId('case-file-card-russia-ukraine'))
+    expect(screen.queryByTestId('case-files-admin-stats')).toBeNull()
+  })
+
+  it('appears for an admin, under the cases', async () => {
+    useAuth.mockReturnValue({ user: { _id: 'a1', isAdmin: true }, API: '', apiFetch: (...args) => fetch(...args) })
+    render(<CaseFiles />)
+    await waitFor(() => expect(screen.getByTestId('case-files-admin-stats')).toBeDefined())
+  })
+})

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import CaseFileCard from '../components/caseFiles/CaseFileCard'
 import CaseFilesGate from '../components/caseFiles/CaseFilesGate'
+import CaseFilesAdminStats from '../components/caseFiles/CaseFilesAdminStats'
 import LockedCategoryModal from '../components/LockedCategoryModal'
 import SEO from '../components/SEO'
 import { authFetch } from '../utils/authFetch'
@@ -182,6 +183,9 @@ export default function CaseFiles() {
             })}
           </div>
         )}
+
+        {/* Usage stats for admins, under the cases themselves. */}
+        {user?.isAdmin && <CaseFilesAdminStats API={API} />}
       </div>
 
       {upsellCase && (

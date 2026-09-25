@@ -23,6 +23,8 @@ const { buildCbatProgress, parseProgressLimit, PROGRESS_MIN_FOR_CHART } = requir
 const GameSessionCbatStart                = require('../models/GameSessionCbatStart');
 const GameCaseFile                        = require('../models/GameCaseFile');
 const CaseFileInterest                    = require('../models/CaseFileInterest');
+const GameCaseFileChapter                 = require('../models/GameCaseFileChapter');
+const GameSessionCaseFileResult           = require('../models/GameSessionCaseFileResult');
 const AirstarLog             = require('../models/AirstarLog');
 const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awardCoins');
 const { effectiveTier } = require('../utils/subscription');
@@ -1272,6 +1274,191 @@ router.get('/case-files/interest', async (_req, res) => {
         withdrawn:   r.withdrawn,
         lastAt:      r.lastAt,
       })),
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/admin/case-files/stats — how Case Files is being used
+// One call for the admin panel on the Case Files page: headline totals, a
+// daily activity series, per-chapter funnels and scores, the top runs and
+// the interest tally. Playtime is the median of start-to-finish, ignoring
+// runs that sat open for more than LONG_RUN_MS (a player who resumed the next
+// day is not a six-hour sitting); those are counted separately instead.
+const CF_STATS_DAYS = 14;
+const LONG_RUN_MS   = 3 * 60 * 60 * 1000;
+const DAY_MS        = 24 * 60 * 60 * 1000;
+
+function median(nums) {
+  if (!nums.length) return null;
+  const a = [...nums].sort((x, y) => x - y);
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+router.get('/case-files/stats', async (_req, res) => {
+  try {
+    const now     = new Date();
+    const since   = new Date(now.getTime() - CF_STATS_DAYS * DAY_MS);
+    const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
+
+    const [runs, chapters, interestRows] = await Promise.all([
+      GameSessionCaseFileResult.find({}, {
+        userId: 1, caseSlug: 1, chapterSlug: 1, startedAt: 1, completedAt: 1,
+        abandoned: 1, currentStageIndex: 1, 'scoring.totalScore': 1, 'scoring.breakdown': 1,
+        interrogationTranscripts: 1,
+      }).lean(),
+      GameCaseFileChapter.find({}, { caseSlug: 1, chapterSlug: 1, title: 1, 'stages.type': 1 }).lean(),
+      CaseFileInterest.aggregate([
+        { $group: {
+          _id:         { caseSlug: '$caseSlug', chapterSlug: '$chapterSlug' },
+          teaserTitle: { $last: '$teaserTitle' },
+          interested:  { $sum: { $cond: ['$interested', 1, 0] } },
+          withdrawn:   { $sum: { $cond: ['$interested', 0, 1] } },
+        } },
+      ]),
+    ]);
+
+    const isDone    = (r) => !!r.completedAt;
+    const minutesOf = (r) => (new Date(r.completedAt) - new Date(r.startedAt)) / 60000;
+    const sitting   = (r) => minutesOf(r) * 60000 <= LONG_RUN_MS;
+
+    // ── Totals ──────────────────────────────────────────────────────────────
+    const done         = runs.filter(isDone);
+    const finishCounts = {};
+    for (const r of done) finishCounts[r.userId] = (finishCounts[r.userId] ?? 0) + 1;
+    const recent         = runs.filter((r) => new Date(r.startedAt) >= weekAgo);
+    const sittingMinutes = done.filter(sitting).map(minutesOf);
+
+    const totals = {
+      runsStarted:    runs.length,
+      runsCompleted:  done.length,
+      runsAbandoned:  runs.filter((r) => !isDone(r) && r.abandoned).length,
+      runsInProgress: runs.filter((r) => !isDone(r) && !r.abandoned).length,
+      completionRate: runs.length ? done.length / runs.length : 0,
+      players:        new Set(runs.map((r) => String(r.userId))).size,
+      finishers:      new Set(done.map((r) => String(r.userId))).size,
+      repeatPlayers:  Object.values(finishCounts).filter((n) => n >= 2).length,
+      runsLast7d:     recent.length,
+      playersLast7d:  new Set(recent.map((r) => String(r.userId))).size,
+      medianMinutes:  median(sittingMinutes),
+      longRuns:       done.length - sittingMinutes.length,
+      interested:     interestRows.reduce((s, r) => s + r.interested, 0),
+    };
+
+    // ── Daily activity ─────────────────────────────────────────────────────
+    const dayKey = (d) => new Date(d).toISOString().slice(0, 10);
+    const daily = [];
+    for (let i = CF_STATS_DAYS - 1; i >= 0; i--) {
+      daily.push({ date: dayKey(now.getTime() - i * DAY_MS), starts: 0, completions: 0, players: new Set() });
+    }
+    const byDay = Object.fromEntries(daily.map((d) => [d.date, d]));
+    for (const r of runs) {
+      if (new Date(r.startedAt) >= since) {
+        const d = byDay[dayKey(r.startedAt)];
+        if (d) { d.starts += 1; d.players.add(String(r.userId)); }
+      }
+      if (r.completedAt && new Date(r.completedAt) >= since) {
+        const d = byDay[dayKey(r.completedAt)];
+        if (d) d.completions += 1;
+      }
+    }
+
+    // ── Per chapter ─────────────────────────────────────────────────────────
+    const chapterStats = chapters.map((ch) => {
+      const mine   = runs.filter((r) => r.caseSlug === ch.caseSlug && r.chapterSlug === ch.chapterSlug);
+      const fin    = mine.filter(isDone);
+      const scores = fin.map((r) => r.scoring?.totalScore).filter((n) => typeof n === 'number');
+      const maxScore = fin.length
+        ? (fin[0].scoring?.breakdown ?? []).reduce((s, b) => s + (b.maxScore ?? 0), 0)
+        : null;
+
+      // Runs that got at least as far as each stage (a finished run reached
+      // them all). The drop between two bars is where people leave.
+      const funnel = (ch.stages ?? []).map((s, i) => ({
+        stageIndex: i,
+        stageType:  s.type,
+        reached:    mine.filter((r) => isDone(r) || (r.currentStageIndex ?? 0) >= i).length,
+      }));
+
+      // Average share of the available marks, per scored stage.
+      const perStage = {};
+      for (const r of fin) {
+        for (const b of r.scoring?.breakdown ?? []) {
+          if (!(b.maxScore > 0)) continue;
+          perStage[b.stageType] = perStage[b.stageType] ?? { sum: 0, n: 0 };
+          perStage[b.stageType].sum += (b.score ?? 0) / b.maxScore;
+          perStage[b.stageType].n += 1;
+        }
+      }
+
+      const questions = fin.map((r) => (r.interrogationTranscripts ?? []).length);
+
+      return {
+        caseSlug:       ch.caseSlug,
+        chapterSlug:    ch.chapterSlug,
+        title:          ch.title,
+        starts:         mine.length,
+        completions:    fin.length,
+        players:        new Set(mine.map((r) => String(r.userId))).size,
+        completionRate: mine.length ? fin.length / mine.length : 0,
+        avgScore:       scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+        medianScore:    median(scores),
+        bestScore:      scores.length ? Math.max(...scores) : null,
+        maxScore,
+        medianMinutes:  median(fin.filter(sitting).map(minutesOf)),
+        avgQuestions:   questions.length ? questions.reduce((a, b) => a + b, 0) / questions.length : null,
+        funnel,
+        stageScores:    Object.entries(perStage).map(([stageType, v]) => ({ stageType, avgPct: v.sum / v.n })),
+      };
+    });
+
+    // ── Top runs: each player's best per chapter, highest first ─────────────
+    const best = new Map();
+    for (const r of done) {
+      if (typeof r.scoring?.totalScore !== 'number') continue;
+      const key  = `${r.userId}:${r.caseSlug}:${r.chapterSlug}`;
+      const prev = best.get(key);
+      if (!prev || r.scoring.totalScore > prev.scoring.totalScore) best.set(key, r);
+    }
+    const top = [...best.values()]
+      .sort((a, b) => b.scoring.totalScore - a.scoring.totalScore)
+      .slice(0, 10);
+    const users = await User.find(
+      { _id: { $in: top.map((r) => r.userId) } },
+      { agentNumber: 1, displayName: 1 },
+    ).lean();
+    const userById = Object.fromEntries(users.map((u) => [String(u._id), u]));
+
+    res.json({
+      status: 'success',
+      data: {
+        generatedAt: now,
+        days:        CF_STATS_DAYS,
+        totals,
+        daily:       daily.map(({ players, ...d }) => ({ ...d, players: players.size })),
+        chapters:    chapterStats,
+        topScores:   top.map((r) => ({
+          userId:      String(r.userId),
+          agentNumber: userById[String(r.userId)]?.agentNumber ?? null,
+          displayName: userById[String(r.userId)]?.displayName ?? null,
+          caseSlug:    r.caseSlug,
+          chapterSlug: r.chapterSlug,
+          score:       r.scoring.totalScore,
+          minutes:     Math.round(minutesOf(r)),
+          completedAt: r.completedAt,
+        })),
+        interest: interestRows
+          .map((r) => ({
+            caseSlug:    r._id.caseSlug,
+            chapterSlug: r._id.chapterSlug,
+            teaserTitle: r.teaserTitle,
+            interested:  r.interested,
+            withdrawn:   r.withdrawn,
+          }))
+          .sort((a, b) => b.interested - a.interested),
+      },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
