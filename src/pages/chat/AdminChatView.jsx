@@ -32,8 +32,18 @@ export default function AdminChatView() {
   const [typeFilter,    setTypeFilter]    = useState('support')
   const [statusFilter,  setStatusFilter]  = useState('all')
   const [selectedId,    setSelectedId]    = useState(null)
-  const [messages,      setMessages]      = useState([])
-  const [senders,       setSenders]       = useState({})
+  // The transcript on screen, tagged with the conversation it belongs to.
+  // Switching threads changes selectedId at once but the new messages arrive
+  // a request later; without the tag the old thread's messages sat under the
+  // new thread's header until then. See `threadReady` below.
+  const [thread,        setThread]        = useState({ id: null, messages: [], senders: {} })
+  // Last transcript seen per conversation, so going back to a thread shows it
+  // immediately while the fresh copy loads.
+  const threadCacheRef = useRef(new Map())
+  // The live selection, for async work to check it is still wanted when it
+  // lands. A reply for a thread the admin has since left is dropped.
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
   const [busy,          setBusy]          = useState(false)
   const [err,           setErr]           = useState('')
   // Which message's readership is open, if any. Admins can inspect any
@@ -115,32 +125,50 @@ export default function AdminChatView() {
     return () => { cancelled = true }
   }, [API, apiFetch, initialUserId, fetchConversations])
 
+  // Shows a fetched transcript, unless the admin has moved to another thread
+  // while it was in flight. `keepIfSameLength` is the poll's rule: an
+  // unchanged count keeps the existing array so the list does not re-render.
+  const applyThread = useCallback((id, d, { keepIfSameLength = false } = {}) => {
+    if (selectedIdRef.current !== id) return
+    const senders = d.senders ?? {}
+    setThread(prev => {
+      const messages = keepIfSameLength && prev.id === id && prev.messages.length === d.messages.length
+        ? prev.messages
+        : d.messages
+      const next = { id, messages, senders }
+      threadCacheRef.current.set(id, next)
+      return next
+    })
+  }, [])
+
   useEffect(() => {
-    if (!selectedId) { setMessages([]); return }
+    if (!selectedId) { setThread({ id: null, messages: [], senders: {} }); return }
+    // Clear the old thread straight away: the cached copy if we have one,
+    // otherwise nothing, and the pane shows a loading line until the fetch lands.
+    const cached = threadCacheRef.current.get(selectedId)
+    setThread(cached ?? { id: null, messages: [], senders: {} })
     let cancelled = false
     fetchMessages(selectedId).then(d => {
       if (cancelled) return
-      setMessages(d.messages)
-      setSenders(d.senders ?? {})
+      applyThread(selectedId, d)
       apiFetch(`${API}/api/chat/conversations/${selectedId}/read`, {
         method: 'POST', credentials: 'include',
       }).then(() => refreshUnread()).catch(() => {})
       fetchConversations().then(rows => { if (!cancelled) setConversations(rows) })
     })
     return () => { cancelled = true }
-  }, [API, apiFetch, selectedId, fetchMessages, fetchConversations, refreshUnread])
+  }, [API, apiFetch, selectedId, fetchMessages, fetchConversations, refreshUnread, applyThread])
 
   useEffect(() => {
     if (!selectedId) return
     const tick = async () => {
       if (document.hidden) return
       const d = await fetchMessages(selectedId)
-      setMessages(prev => (prev.length === d.messages.length ? prev : d.messages))
-      setSenders(d.senders ?? {})
+      applyThread(selectedId, d, { keepIfSameLength: true })
     }
     const id = setInterval(tick, POLL_MESSAGES_MS)
     return () => clearInterval(id)
-  }, [selectedId, fetchMessages])
+  }, [selectedId, fetchMessages, applyThread])
 
   useEffect(() => {
     if (!search.trim()) { setSearchResults([]); return }
@@ -157,11 +185,11 @@ export default function AdminChatView() {
   }, [API, apiFetch, search])
 
   const refreshBoth = useCallback(async () => {
-    const [d, rows] = await Promise.all([fetchMessages(selectedId), fetchConversations()])
-    setMessages(d.messages)
-    setSenders(d.senders ?? {})
+    const id = selectedId
+    const [d, rows] = await Promise.all([fetchMessages(id), fetchConversations()])
+    applyThread(id, d)
     setConversations(rows)
-  }, [fetchMessages, fetchConversations, selectedId])
+  }, [fetchMessages, fetchConversations, selectedId, applyThread])
 
   const handleSend = async (text) => {
     if (!selectedId) return
@@ -441,17 +469,26 @@ export default function AdminChatView() {
               </div>
             </div>
 
-            <MessageList
-              messages={messages}
-              currentUserId={user?._id}
-              conversationType={selected.type}
-              viewerIsAdmin
-              senders={senders}
-              onDelete={handleDelete}
-              onEdit={handleEdit}
-              onSeenBy={setSeenByMsg}
-              emptyLabel="No messages in this conversation."
-            />
+            {thread.id === selectedId ? (
+              <MessageList
+                // A fresh list per thread, so each one opens at its latest
+                // message rather than inheriting the last thread's scroll.
+                key={selectedId}
+                messages={thread.messages}
+                currentUserId={user?._id}
+                conversationType={selected.type}
+                viewerIsAdmin
+                senders={thread.senders}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+                onSeenBy={setSeenByMsg}
+                emptyLabel="No messages in this conversation."
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center" data-testid="thread-loading">
+                <p className="text-xs text-slate-400 animate-pulse">Loading messages…</p>
+              </div>
+            )}
 
             {err && (
               <p className="text-xs text-red-600 bg-red-50 border-t border-red-200 px-3 py-2">{err}</p>
