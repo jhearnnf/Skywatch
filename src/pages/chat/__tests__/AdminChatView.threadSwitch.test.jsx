@@ -102,3 +102,20 @@ describe('AdminChatView — switching threads', () => {
     expect(screen.getByText('body of c1')).toBeTruthy()
   })
 })
+
+describe('AdminChatView — resolved tickets in the rail', () => {
+  beforeEach(() => { mockApiFetch.mockReset(); route() })
+
+  it('dims, strikes through and ticks a resolved ticket only', async () => {
+    render(<AdminChatView />)
+    const resolved = (await screen.findByText('Table reading'))
+    const open = screen.getByText('Dials broken')
+
+    expect(resolved.className).toContain('line-through')
+    expect(resolved.closest('button').getAttribute('data-resolved')).toBe('true')
+    expect(resolved.closest('button').querySelector('[aria-label="Resolved"]')).toBeTruthy()
+
+    expect(open.className).not.toContain('line-through')
+    expect(open.closest('button').getAttribute('data-resolved')).toBeNull()
+  })
+})
