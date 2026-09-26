@@ -1,4 +1,4 @@
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
@@ -6,8 +6,8 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 //
 // Three things earn their tests here. First the split: a player gets the
 // public cards (name, badge, best scores) from the public endpoint and nothing
-// else, while an admin gets the whole account with every extra card marked
-// "Admin only". Second the trophy area, whose whole point is that "12 of 30"
+// else, while an admin sees that same page plus the whole account in the
+// floating Admin tools window. Second the trophy area, whose whole point is that "12 of 30"
 // is only meaningful next to the 18 they have not collected, so the locked
 // half has to be reachable. Third the routes onward, which must come back here.
 const mockApiFetch = vi.hoisted(() => vi.fn())
@@ -111,6 +111,10 @@ beforeEach(() => {
 })
 afterEach(() => cleanup())
 
+// The floating Admin tools window, and a way to open one of its folded sections.
+const toolPanel = () => screen.getByRole('region', { name: /admin tools: agent profile/i })
+const openSection = (name) => fireEvent.click(within(toolPanel()).getByRole('button', { name: new RegExp(`^${name}`) }))
+
 describe('AgentProfile — who fetches what', () => {
   it('asks the admin endpoint for an admin', async () => {
     renderPage()
@@ -126,14 +130,15 @@ describe('AgentProfile — who fetches what', () => {
     expect(mockApiFetch).not.toHaveBeenCalledWith('/api/admin/users/u2/profile', expect.anything())
   })
 
-  it('says on the page that it is an admin view, and only to an admin', async () => {
+  it('says in the tools window that the page is the player view, and only to an admin', async () => {
     renderPage()
-    expect(await screen.findByText('Admin View')).toBeInTheDocument()
+    await screen.findByText('Viper')
+    expect(within(toolPanel()).getByText(/as a player sees them/)).toBeInTheDocument()
     cleanup()
     asPlayer()
     renderPage()
     await screen.findByText('Viper')
-    expect(screen.queryByText('Admin View')).not.toBeInTheDocument()
+    expect(screen.queryByText(/as a player sees them/)).not.toBeInTheDocument()
   })
 })
 
@@ -162,6 +167,7 @@ describe('AgentProfile — what a player sees', () => {
     expect(screen.queryByText(/Briefs read/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\d+ finished/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'CBAT game history' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /admin tools/i })).not.toBeInTheDocument()
   })
 
   it('says the scores are private when the player has opted out, rather than "never played"', async () => {
@@ -183,13 +189,12 @@ describe('AgentProfile — what a player sees', () => {
   })
 })
 
-describe('AgentProfile — what an admin sees on top', () => {
-  it('shows rank, streak and level, marked admin only', async () => {
+describe('AgentProfile — what an admin sees in the tools window', () => {
+  it('shows rank, streak and level', async () => {
     renderPage()
     expect(await screen.findByText('Viper')).toBeInTheDocument()
-    expect(screen.getByText('Sergeant (Sgt)')).toBeInTheDocument()
-    expect(screen.getByText('6')).toBeInTheDocument()
-    expect(screen.getByText('Standing').parentElement).toHaveTextContent('Admin only')
+    expect(within(toolPanel()).getByText('Sergeant (Sgt)')).toBeInTheDocument()
+    expect(within(toolPanel()).getByText('6')).toBeInTheDocument()
   })
 
   it('flags a player who has opted out of score sharing, and still shows their record', async () => {
@@ -200,52 +205,31 @@ describe('AgentProfile — what an admin sees on top', () => {
     expect(screen.getByText('386')).toBeInTheDocument()
   })
 
-  it('shows the account facts a player never sees, marked admin only', async () => {
+  it('shows the account facts a player never sees', async () => {
     renderPage()
     expect(await screen.findByText('viper@test.com')).toBeInTheDocument()
-    expect(screen.getByText('gold')).toBeInTheDocument()
-    expect(screen.getByText('hard')).toBeInTheDocument()
-    expect(screen.getByText('Account').parentElement).toHaveTextContent('Admin only')
+    expect(within(toolPanel()).getByText('gold')).toBeInTheDocument()
+    expect(within(toolPanel()).getByText('hard')).toBeInTheDocument()
   })
 
-  it('marks every admin card, so an admin can tell which half a player sees', async () => {
+  it('keeps every admin section in the window and the public cards on the page', async () => {
     renderPage()
     await screen.findByText('Viper')
-    for (const label of ['Standing', 'Account', 'Aircraft badges', 'Aptitude report']) {
-      expect(screen.getByText(label).parentElement).toHaveTextContent('Admin only')
+    const panel = toolPanel()
+    for (const label of ['Standing', 'Account', 'Activity', 'CBAT record details', 'Aircraft badges', 'Aptitude report']) {
+      expect(within(panel).getByRole('button', { name: new RegExp(`^${label}`) })).toBeInTheDocument()
     }
-    expect(screen.getByText('Leaderboard medals').parentElement).not.toHaveTextContent('Admin only')
-    // The activity tiles share one mark above the row.
-    expect(screen.getByText('Activity').parentElement).toHaveTextContent('Admin only')
-  })
-})
-
-describe('AgentProfile — the admin rail', () => {
-  // The public half stays in the middle of the page, where a player sees it;
-  // every admin-only card sits in its own column to the right of it.
-  it('puts every admin card in the rail and the public cards outside it', async () => {
-    renderPage()
-    await screen.findByText('Viper')
-    const rail = screen.getByRole('complementary', { name: 'Admin only' })
-    for (const label of ['Standing', 'Account', 'Activity', 'Aircraft badges', 'Aptitude report']) {
-      expect(rail).toContainElement(screen.getByText(label))
-    }
-    expect(rail).not.toContainElement(screen.getByText('Viper'))
-    expect(rail).not.toContainElement(screen.getByText('Leaderboard medals'))
-    expect(rail).not.toContainElement(screen.getByText('CBAT record'))
+    expect(panel).not.toContainElement(screen.getByText('Viper'))
+    expect(panel).not.toContainElement(screen.getByText('Leaderboard medals'))
+    expect(panel).not.toContainElement(screen.getByText('CBAT record'))
+    // The page itself carries no admin marks or admin-only detail any more.
+    expect(screen.queryByText('Admin only')).not.toBeInTheDocument()
+    expect(screen.queryByText('Admin View')).not.toBeInTheDocument()
   })
 
-  it('widens the app shell for an admin, and only an admin', async () => {
+  it('no longer widens the app shell for an admin', async () => {
     renderPage()
     await screen.findByText('Viper')
-    expect(document.body.classList.contains('agent-profile-wide')).toBe(true)
-    cleanup()
-    expect(document.body.classList.contains('agent-profile-wide')).toBe(false)
-
-    asPlayer()
-    renderPage()
-    await screen.findByText('Viper')
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
     expect(document.body.classList.contains('agent-profile-wide')).toBe(false)
   })
 })
@@ -260,6 +244,7 @@ describe('AgentProfile — trophy area', () => {
   it('shows only what they have collected until asked for the rest', async () => {
     renderPage()
     await screen.findByText('Viper')
+    openSection('Aircraft badges')
     expect(screen.getByText('Typhoon')).toBeInTheDocument()
     expect(screen.queryByText('Hawk T2')).not.toBeInTheDocument()
 
@@ -271,6 +256,7 @@ describe('AgentProfile — trophy area', () => {
   it('marks the badge they are actually wearing', async () => {
     renderPage()
     await screen.findByText('Viper')
+    openSection('Aircraft badges')
     expect(screen.getByText('Worn')).toBeInTheDocument()
   })
 })
@@ -322,29 +308,33 @@ describe('AgentProfile — board position on each record row', () => {
   it('shows a plain place for a score below the podium', async () => {
     renderPage()
     await screen.findByText('Viper')
+    openSection('CBAT record details')
     expect(screen.getByText('#7')).toBeInTheDocument()
   })
 
   it('draws nothing at all for a score outside the top 20', async () => {
     renderPage()
     await screen.findByText('Viper')
+    openSection('CBAT record details')
     // Target is on the record with no board position; there must be no chip
     // implying a rank we do not actually know.
-    expect(screen.getByText('Target')).toBeInTheDocument()
+    expect(within(toolPanel()).getByText('Target')).toBeInTheDocument()
     expect(screen.queryByText('#null')).not.toBeInTheDocument()
     expect(screen.queryByText(/^#2[0-9]/)).not.toBeInTheDocument()
   })
 })
 
 describe('AgentProfile — CBAT record', () => {
-  it('lists each test with the attempts and the personal best for an admin', async () => {
+  it('lists each test with the personal best on the page, and attempts in the tools window', async () => {
     renderPage()
     await screen.findByText('Viper')
-    // Named twice now: once on its medal, once on this row.
+    // Named twice: once on its medal, once on this row.
     expect(screen.getAllByText('FLAG (Hard)')).toHaveLength(2)
     expect(screen.getByText('386')).toBeInTheDocument()
     expect(screen.getByText('18/20')).toBeInTheDocument()   // Angles formats out of 20
-    expect(screen.getByText(/6 finished/)).toBeInTheDocument()
+    expect(screen.queryByText(/6 finished/)).not.toBeInTheDocument()
+    openSection('CBAT record details')
+    expect(within(toolPanel()).getByText(/6 finished/)).toBeInTheDocument()
   })
 
   it('never draws a board place for a player, even if a row carried one', async () => {
@@ -368,6 +358,15 @@ describe('AgentProfile — CBAT record', () => {
 })
 
 describe('AgentProfile — routes onward', () => {
+  it('puts the admin actions in the floating admin tools window', async () => {
+    renderPage()
+    await screen.findByText('Viper')
+    const panel = screen.getByRole('region', { name: /admin tools: agent profile/i })
+    for (const name of ['CBAT game history', 'Score progress', 'Manage in Admin']) {
+      expect(within(panel).getByRole('button', { name })).toBeInTheDocument()
+    }
+  })
+
   it('opens their CBAT history in admin mode, and tells it to come back here', async () => {
     renderPage()
     await screen.findByText('Viper')
@@ -381,6 +380,16 @@ describe('AgentProfile — routes onward', () => {
         backLabel: 'Back to Profile',
       }),
     })
+  })
+
+  it('opens Admin > Users on this agent from Manage in Admin', async () => {
+    renderPage()
+    await screen.findByText('Viper')
+    fireEvent.click(within(toolPanel()).getByRole('button', { name: 'Manage in Admin' }))
+    expect(mockNavigate).toHaveBeenCalledWith('/admin', { state: {
+      tab: 'users',
+      focusUser: { id: 'u2', query: 'viper@test.com' },
+    } })
   })
 
   it('opens their brief and legacy game histories from the stat tiles', async () => {
@@ -407,7 +416,7 @@ describe('AgentProfile — routes onward', () => {
   })
 })
 
-// The CBAT record below says how much of the battery they have sat. This says
+// The CBAT record says how much of the battery they have sat. This says
 // what it would be worth, which is the question an admin opening a support
 // thread actually has. It is the agent's own card, fetched for them: the one
 // thing it must never do is show the reading admin their own numbers under
@@ -431,6 +440,7 @@ describe('AgentProfile — the aptitude report', () => {
   it('asks for that agent’s report and shows their estimate', async () => {
     routed()
     await screen.findByText('Viper')
+    openSection('Aptitude report')
     await waitFor(() => expect(screen.getByTestId('aptitude-card-score')).toHaveTextContent('128 / pass mark 112'))
     expect(mockApiFetch).toHaveBeenCalledWith('/api/games/cbat/report?userId=u2')
   })
@@ -438,6 +448,7 @@ describe('AgentProfile — the aptitude report', () => {
   it('opens the full report as them', async () => {
     routed()
     await screen.findByText('Viper')
+    openSection('Aptitude report')
     await waitFor(() => expect(screen.getByTestId('aptitude-card-score')).toBeInTheDocument())
     expect(screen.getByRole('link', { name: /Aptitude Report/ })).toHaveAttribute('href', '/cbat/report?as=u2')
   })

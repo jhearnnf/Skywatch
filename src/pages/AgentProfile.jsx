@@ -7,11 +7,11 @@ import { getLevelInfo } from '../utils/levelUtils'
 import { CBAT_LEADERBOARD_CONFIG, cbatTitleWithDifficulty } from '../data/cbatGames'
 import UserCbatProgressModal from '../components/admin/UserCbatProgressModal'
 import AptitudeReportCard from '../components/AptitudeReportCard'
+import AdminToolPanel, { AdminToolSection } from '../components/AdminToolPanel'
 import ProfileBadge from '../components/ProfileBadge'
 import CbatPassedBadge from '../components/CbatPassedBadge'
 import SupporterBadge from '../components/SupporterBadge'
 import SEO from '../components/SEO'
-import { useGameBodyClass } from '../hooks/useGameBodyClass'
 
 // One agent, read-only, for anyone who has just met a name in Community or in
 // the recent-scores feed.
@@ -20,10 +20,11 @@ import { useGameBodyClass } from '../hooks/useGameBodyClass'
 // agent number, which is nowhere near enough to place a post. This page is the
 // rest of the answer. What every signed-in agent gets is what the site already
 // shows beside a name elsewhere: who they are, the badge they wear, the
-// medals on their avatar, and their best score on each test. An admin gets the rest on top — how far in they
-// are, what they have collected, how much CBAT they have actually sat, and the
-// account facts — and every one of those cards carries an ADMIN ONLY mark, so
-// an admin reading the page always knows which half of it the player can see.
+// medals on their avatar, and their best score on each test. An admin sees the
+// page exactly as a player does, and gets the rest (how far in they are, what
+// they have collected, how much CBAT they have actually sat, and the account
+// facts) in the floating Admin tools window, so the split between what a
+// player can and cannot see is the split between page and window.
 //
 // Two endpoints back it, chosen by who is asking: the public one carries only
 // the public fields, so nothing admin-only is ever sent to a browser that
@@ -31,12 +32,6 @@ import { useGameBodyClass } from '../hooks/useGameBodyClass'
 // control (ban, tier, award, delete) stays on Admin ▸ Users, where it is
 // guarded by a written reason.
 //
-// For an admin the page is three columns on a wide screen: the public half
-// stays in the middle, exactly where a player sees it, and every ADMIN ONLY
-// card sits in a rail on the right, so the split the marks describe is also
-// the split on screen. The left column is empty for now. Below the xl
-// breakpoint the rail stacks under the public cards.
-
 // Locked badges are shown, not hidden. "12 of 30" only means something if you
 // can see the 18 — and the shape of what someone has NOT collected is the more
 // useful read (all trainers and no fast jets says something).
@@ -158,27 +153,10 @@ function Flag({ children, tone = 'slate' }) {
   )
 }
 
-// The same mark the user card wore on its View profile button while this page
-// was admin only. On a card here it means "the player cannot see this card".
-function AdminOnly() {
-  return (
-    <span className="text-[9px] font-extrabold uppercase tracking-wide bg-brand-600 text-white px-1.5 py-px rounded shrink-0">
-      Admin only
-    </span>
-  )
-}
-
-// Card heading with the admin mark beside it.
-function AdminCardTitle({ children, right }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 mb-1">
-      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-        {children}
-        <AdminOnly />
-      </p>
-      {right}
-    </div>
-  )
+// A record row's game, named the way the boards name it.
+function cbatGameName(g) {
+  const cfg = CBAT_LEADERBOARD_CONFIG[g.gameKey] ?? {}
+  return cfg.title ? cbatTitleWithDifficulty(g.gameKey, cfg.title) : g.label
 }
 
 const fmtDate = (iso) => (iso
@@ -270,32 +248,10 @@ export function AgentProfileContent({ id, embedded = false }) {
     ? `${agent.rank.rankName} (${agent.rank.rankAbbreviation})`
     : 'Unranked'
 
-  // AppShell caps every route at max-w-3xl, which is one column's worth; the
-  // body class lifts that on xl so the admin rail has room beside the public
-  // column instead of under it. Players keep the single centred column.
-  useGameBodyClass('agent-profile-wide', isAdmin)
-
-  // One column's worth of width, centred while the page is a single column.
-  const colClass = 'max-w-lg mx-auto w-full min-w-0 xl:max-w-none xl:mx-0'
-  // On xl the page is a grid of two rows: the header and identity card fill
-  // the first, and the CBAT record and admin rail share the second, so the
-  // rail's first card starts level with the top of the record.
-  const midTop    = `${colClass} xl:col-start-2 xl:row-start-1`
-  const midBottom = `${colClass} xl:col-start-2 xl:row-start-2`
-  const railClass = `${colClass} mt-4 xl:mt-0 xl:col-start-3 xl:row-start-2`
-
   return (
-    <div className={isAdmin
-      ? 'pb-8 xl:grid xl:grid-cols-[minmax(0,1fr)_minmax(0,32rem)_minmax(0,1fr)] xl:grid-rows-[auto_auto] xl:gap-x-6 xl:items-start'
-      : 'max-w-lg mx-auto pb-8'}
-    >
+    <div className="max-w-lg mx-auto pb-8">
       {!embedded && <SEO title="Agent Profile" description="One agent's profile." noIndex={true} />}
 
-      {/* Left column: nothing here yet. It exists so the public column sits in
-          the middle of the page, not against the sidebar. */}
-      {isAdmin && <div className="hidden xl:block xl:col-start-1 xl:row-span-2" aria-hidden="true" />}
-
-      <div className={isAdmin ? midTop : undefined}>
       {!embedded && <div className="mb-4">
         <button
           onClick={() => navigate(backTo, backState ? { state: backState } : undefined)}
@@ -303,16 +259,6 @@ export function AgentProfileContent({ id, embedded = false }) {
         >
           ← {backLabel}
         </button>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
-              Admin View
-            </span>
-            <span className="text-[10px] text-slate-400">
-              Read only. Cards marked Admin only are not visible to players.
-            </span>
-          </div>
-        )}
       </div>}
 
       {loading && <p className="text-sm text-slate-400 py-8 text-center">Loading agent…</p>}
@@ -351,10 +297,9 @@ export function AgentProfileContent({ id, embedded = false }) {
           </motion.div>}
         </>
       )}
-      </div>
 
       {!loading && !error && agent && (
-        <div className={isAdmin ? midBottom : undefined}>
+        <div>
           {/* Medals. Public: they are the same podium places already hanging
               off their avatar in Community, and a podium place can be lost the
               moment someone overtakes them, which is the thing worth reading
@@ -392,18 +337,7 @@ export function AgentProfileContent({ id, embedded = false }) {
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">CBAT record</p>
             <p className="text-[11px] text-slate-400 mb-3">
               Their best score on every test they have finished, most played first.
-              {showAdmin && (
-                <>
-                  {' '}The chip beside a name is where that score currently sits on the all time board,
-                  blank if it is outside the top 20.
-                </>
-              )}
             </p>
-            {showAdmin && (
-              <p className="text-[11px] text-slate-400 mb-3 flex items-center gap-1.5">
-                <AdminOnly /> attempts, last played and board place.
-              </p>
-            )}
             {data?.scoresHidden ? (
               // Opted out under Profile > Settings > Score Sharing. The public
               // endpoint sends no rows for them, and an empty list must not read
@@ -420,17 +354,9 @@ export function AgentProfileContent({ id, embedded = false }) {
                     <li key={g.gameKey} className="flex items-center gap-3 py-2">
                       <span className="text-base shrink-0" aria-hidden="true">{cfg.emoji ?? '🎯'}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-slate-700 truncate flex items-center gap-1.5">
-                          <span className="truncate">
-                            {cfg.title ? cbatTitleWithDifficulty(g.gameKey, cfg.title) : g.label}
-                          </span>
-                          {showAdmin && <BoardRankChip rank={g.boardRank} />}
+                        <p className="text-xs font-bold text-slate-700 truncate">
+                          {cbatGameName(g)}
                         </p>
-                        {showAdmin && (
-                          <p className="text-[10px] text-slate-400">
-                            {g.attempts} finished · last {fmtDate(g.lastPlayedAt)}
-                          </p>
-                        )}
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-extrabold text-slate-800">
@@ -447,32 +373,62 @@ export function AgentProfileContent({ id, embedded = false }) {
         </div>
       )}
 
-      {/* Admin rail. Every card here carries the ADMIN ONLY mark; a player is
-          never sent the fields behind them. Empty until the admin endpoint has
-          answered, so nothing admin-only ever draws off a stale flag. */}
-      {isAdmin && (
-        <aside className={railClass} aria-label="Admin only">
-          {showAdmin && (<>
+      {/* Everything admin only lives in the floating tools window, so the page
+          itself is exactly what a player sees. Drawn only once the admin
+          endpoint has answered, so nothing here ever renders off a stale flag. */}
+      {showAdmin && agent && (
+        <AdminToolPanel title="Agent profile" wide>
+          <p className="text-[11px] text-slate-500">
+            The page shows this agent as a player sees them. Everything here is admin only.
+          </p>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => navigate('/cbat-game-history', { state: historyState })}
+              className="col-span-2 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg text-xs transition-colors"
+            >
+              CBAT game history
+            </button>
+            <button
+              type="button"
+              onClick={() => setProgressOpen(true)}
+              disabled={!(data?.cbatGames?.length)}
+              className="px-2 py-2 text-brand-600 hover:text-brand-700 border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent font-bold rounded-lg text-xs transition-colors"
+            >
+              Score progress
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/admin', { state: {
+                tab: 'users',
+                // Opens Users searched for this agent, with their row expanded.
+                focusUser: { id: agent._id, query: agent.email || agent.agentNumber || '' },
+              } })}
+              className="px-2 py-2 text-slate-600 hover:text-slate-700 border border-slate-200 hover:bg-slate-100 font-bold rounded-lg text-xs transition-colors"
+            >
+              Manage in Admin
+            </button>
+          </div>
+
           {/* Standing: rank, streak, level. What the agent sees on their own
               Profile card, admin only here until it is decided otherwise. */}
-          <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
-            <AdminCardTitle>Standing</AdminCardTitle>
-            <div className="flex items-center gap-4 mt-2">
-              <p className="flex-1 min-w-0 text-slate-600 text-sm">{rankLine}</p>
-              <div className="shrink-0 flex items-center gap-1.5">
-                <p className="text-xs text-slate-500 intel-mono">Streak</p>
-                <p className="text-2xl font-extrabold text-brand-700">{agent.loginStreak ?? 0}</p>
-                <p className="text-lg flame-blue">🔥</p>
+          <AdminToolSection title="Standing">
+            <div className="flex items-center gap-3">
+              <p className="flex-1 min-w-0 text-slate-600 text-xs">{rankLine}</p>
+              <div className="shrink-0 flex items-center gap-1">
+                <p className="text-[10px] text-slate-500 intel-mono">Streak</p>
+                <p className="text-lg font-extrabold text-brand-700">{agent.loginStreak ?? 0}</p>
+                <p className="text-sm flame-blue">🔥</p>
               </div>
             </div>
-
             {levelInfo && (
-              <div className="mt-3">
-                <div className="flex justify-between text-xs text-slate-600 mb-1 intel-mono">
+              <div className="mt-2">
+                <div className="flex justify-between text-[10px] text-slate-600 mb-1 intel-mono">
                   <span>Level {levelInfo.level}</span>
                   <span>{levelInfo.coinsInLevel} / {levelInfo.coinsNeeded} Airstars</span>
                 </div>
-                <div className="h-2 bg-brand-200/50 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-brand-200/50 rounded-full overflow-hidden">
                   <motion.div
                     className="h-full bg-brand-600 rounded-full"
                     initial={{ width: 0 }}
@@ -482,12 +438,11 @@ export function AgentProfileContent({ id, embedded = false }) {
                 </div>
               </div>
             )}
-          </div>
+          </AdminToolSection>
 
           {/* Account facts an admin needs and the agent never sees on a card. */}
-          <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
-            <AdminCardTitle>Account</AdminCardTitle>
-            <div className="flex flex-wrap gap-1.5 mb-3 mt-2">
+          <AdminToolSection title="Account">
+            <div className="flex flex-wrap gap-1 mb-2">
               {agent.isAdmin   && <Flag tone="brand">Admin</Flag>}
               {agent.isBot     && <Flag tone="brand">Bot</Flag>}
               {agent.isTester  && <Flag tone="amber">Tester</Flag>}
@@ -499,7 +454,7 @@ export function AgentProfileContent({ id, embedded = false }) {
               </Flag>
               <Flag>{agent.difficultySetting}</Flag>
             </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+            <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px]">
               <div className="col-span-2 min-w-0">
                 <dt className="text-slate-400">Email</dt>
                 <dd className="font-semibold text-slate-700 truncate">{agent.email ?? '—'}</dd>
@@ -517,84 +472,78 @@ export function AgentProfileContent({ id, embedded = false }) {
                 <dd className="font-semibold text-slate-700">{fmtDateTime(stats.lastCbatAt)}</dd>
               </div>
             </dl>
-          </div>
+          </AdminToolSection>
 
           {/* Stats. The three that have a history page behind them are buttons,
               and say so — the same route Admin ▸ Users takes. */}
-          <div className="flex items-center gap-2 mb-1.5">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Activity</p>
-            <AdminOnly />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-2 gap-2 mb-4">
-            <StatTile label="Airstars" value={(agent.totalAirstars ?? 0).toLocaleString()} />
-            <StatTile
-              label="Briefs read"
-              value={stats.briefsRead ?? 0}
-              hint="Opens their brief history"
-              onClick={() => navigate('/intel-brief-history', { state: historyState })}
-            />
-            <StatTile
-              label="CBAT finished"
-              value={`${stats.cbatFinished ?? 0}/${stats.cbatStarted ?? 0}`}
-              hint="Finished out of started. Opens their CBAT history"
-              onClick={() => navigate('/cbat-game-history', { state: historyState })}
-            />
-            <StatTile
-              label="Other games"
-              value={(stats.quizzesPlayed ?? 0) + (stats.booPlayed ?? 0) + (stats.wtaPlayed ?? 0)
-                + (stats.wherePlayed ?? 0) + (stats.flashcardsPlayed ?? 0)}
-              hint="Quiz, Order of Battle, Where's That Aircraft and flashcards"
-              onClick={() => navigate('/game-history', { state: historyState })}
-            />
-          </div>
+          <AdminToolSection title="Activity">
+            <div className="grid grid-cols-2 gap-1.5">
+              <StatTile label="Airstars" value={(agent.totalAirstars ?? 0).toLocaleString()} />
+              <StatTile
+                label="Briefs read"
+                value={stats.briefsRead ?? 0}
+                hint="Opens their brief history"
+                onClick={() => navigate('/intel-brief-history', { state: historyState })}
+              />
+              <StatTile
+                label="CBAT finished"
+                value={`${stats.cbatFinished ?? 0}/${stats.cbatStarted ?? 0}`}
+                hint="Finished out of started. Opens their CBAT history"
+                onClick={() => navigate('/cbat-game-history', { state: historyState })}
+              />
+              <StatTile
+                label="Other games"
+                value={(stats.quizzesPlayed ?? 0) + (stats.booPlayed ?? 0) + (stats.wtaPlayed ?? 0)
+                  + (stats.wherePlayed ?? 0) + (stats.flashcardsPlayed ?? 0)}
+                hint="Quiz, Order of Battle, Where's That Aircraft and flashcards"
+                onClick={() => navigate('/game-history', { state: historyState })}
+              />
+            </div>
+          </AdminToolSection>
 
-          <div className="flex flex-wrap gap-2 mb-5">
-            <button
-              type="button"
-              onClick={() => navigate('/cbat-game-history', { state: historyState })}
-              className="flex-1 min-w-[140px] px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
-            >
-              CBAT game history
-            </button>
-            <button
-              type="button"
-              onClick={() => setProgressOpen(true)}
-              disabled={!(data?.cbatGames?.length)}
-              className="flex-1 min-w-[140px] px-4 py-2.5 text-brand-600 hover:text-brand-700 border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent font-bold rounded-xl text-sm transition-colors"
-            >
-              Score progress
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate('/admin', { state: { tab: 'users' } })}
-              className="flex-1 min-w-[140px] px-4 py-2.5 text-slate-600 hover:text-slate-700 border border-slate-200 hover:bg-slate-100 font-bold rounded-xl text-sm transition-colors"
-            >
-              Manage in Admin
-            </button>
-          </div>
+          {/* What the public CBAT record leaves out: how often, how recently,
+              and where the best currently sits on the all time board. */}
+          {!!data?.cbatGames?.length && (
+            <AdminToolSection title="CBAT record details" defaultOpen={false}>
+              <p className="text-[10px] text-slate-400 mb-1">
+                Attempts, last played and board place. No chip means outside the top 20.
+              </p>
+              <ul className="divide-y divide-slate-100">
+                {data.cbatGames.map(g => (
+                  <li key={g.gameKey} className="py-1.5">
+                    <p className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{cbatGameName(g)}</span>
+                      <BoardRankChip rank={g.boardRank} />
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {g.attempts} finished · last {fmtDate(g.lastPlayedAt)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </AdminToolSection>
+          )}
 
           {/* Trophy cabinet. Kept forever once the brief is read, unlike a medal. */}
-          <div className="bg-surface border border-slate-200 rounded-2xl p-4 mb-4 card-shadow">
-            <AdminCardTitle right={(
-              <p className="text-xs font-bold text-slate-700">
+          <AdminToolSection
+            title="Aircraft badges"
+            defaultOpen={false}
+            right={(
+              <span className="text-[10px] font-bold text-slate-700">
                 {earned.length} <span className="text-slate-400 font-semibold">of {collectable}</span>
-              </p>
-            )}>
-              Aircraft badges
-            </AdminCardTitle>
-            <p className="text-[11px] text-slate-400 mb-3">
+              </span>
+            )}
+          >
+            <p className="text-[10px] text-slate-400 mb-2">
               One per Aircraft brief they have finished reading. The worn badge replaces their rank
               badge everywhere their avatar appears.
             </p>
-
             {collectable === 0 ? (
-              <p className="text-sm text-slate-400 py-3 text-center">No aircraft badges exist yet.</p>
+              <p className="text-xs text-slate-400 py-2 text-center">No aircraft badges exist yet.</p>
             ) : earned.length === 0 && !showAllBadges ? (
-              <p className="text-sm text-slate-400 py-3 text-center">
-                No badges collected yet.
-              </p>
+              <p className="text-xs text-slate-400 py-2 text-center">No badges collected yet.</p>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
                 {shownBadges.map(b => (
                   <BadgeTile
                     key={String(b.briefId)}
@@ -605,42 +554,36 @@ export function AgentProfileContent({ id, embedded = false }) {
                 ))}
               </div>
             )}
-
             {locked.length > 0 && (
               <button
                 type="button"
                 onClick={() => setShowAllBadges(v => !v)}
-                className="mt-3 text-xs font-bold text-brand-600 hover:text-brand-700"
+                className="mt-2 text-[11px] font-bold text-brand-600 hover:text-brand-700"
               >
                 {showAllBadges ? 'Hide the ones they have not collected' : `Show the ${locked.length} not collected`}
               </button>
             )}
             {data?.badges?.pendingCount > 0 && (
-              <p className="text-[11px] text-slate-400 mt-2">
+              <p className="text-[10px] text-slate-400 mt-1.5">
                 {data.badges.pendingCount} Aircraft brief{data.badges.pendingCount === 1 ? '' : 's'} they
                 have read {data.badges.pendingCount === 1 ? 'has' : 'have'} no cutout yet, so there is no
                 badge to award for {data.badges.pendingCount === 1 ? 'it' : 'them'}.
               </p>
             )}
-          </div>
+          </AdminToolSection>
 
           {/* Aptitude Report. The CBAT record says how much CBAT they have sat; this says what it
               would be worth, which is the question an admin reading a support thread actually has.
               It is the same card the agent sees on /cbat, fetched for them and pointing at the
-              report page's admin view of them, so what an admin reads here and what the agent
-              reads on their own hub cannot drift apart. The wording switches to the third person:
-              every line on the player's own card names a game for them to go and play, and an
-              admin cannot play it for them. */}
-          <div className="mb-4">
-            <AdminCardTitle>Aptitude report</AdminCardTitle>
-            <p className="text-[11px] text-slate-400 mb-2">
+              report page's admin view of them, so the two cannot drift apart. */}
+          <AdminToolSection title="Aptitude report" defaultOpen={false}>
+            <p className="text-[10px] text-slate-400 mb-1.5">
               What their practice would score against the role they are aiming for. Opens the full
               report as them.
             </p>
             <AptitudeReportCard userId={id} />
-          </div>
-          </>)}
-        </aside>
+          </AdminToolSection>
+        </AdminToolPanel>
       )}
 
       {progressOpen && showAdmin && agent && (
