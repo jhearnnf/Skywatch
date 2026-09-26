@@ -1,5 +1,7 @@
 /**
- * CaseFilesAdminStats — admin-only usage panel under the Case Files list.
+ * CaseFilesAdminStats — admin-only usage stats, shown in the Case Files page's
+ * floating Admin tools window, so laid out for its ~20rem width and split into
+ * folding AdminToolSections.
  *
  * Answers "is anyone playing this, and how far do they get?" from one call to
  * GET /api/admin/case-files/stats: headline tiles, 14 days of activity, a
@@ -11,7 +13,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authFetch } from '../../utils/authFetch'
 import { stageTypeLabel } from '../../utils/caseFiles/scoringDisplay'
-import { Stamp } from './CaseFileKit'
+import { AdminToolSection } from '../AdminToolPanel'
 
 const BAR = '#5baaff'
 const pct = (n) => (n == null ? '–' : `${Math.round(n * 100)}%`)
@@ -26,12 +28,6 @@ function Tile({ label, value, sub, testId }) {
       <span className="text-xl font-black text-text tabular-nums leading-tight">{value}</span>
       {sub && <span className="text-[11px] text-text-muted leading-snug">{sub}</span>}
     </div>
-  )
-}
-
-function SectionTitle({ children }) {
-  return (
-    <h3 className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-brand-600 mb-2">{children}</h3>
   )
 }
 
@@ -97,7 +93,7 @@ function ActivityChart({ daily }) {
 // ── Horizontal bar row, used by the funnel and the stage scores ─────────────
 function BarRow({ label, value, fraction, right }) {
   return (
-    <div className="grid grid-cols-[7.5rem_1fr_3.5rem] items-center gap-2 text-[11px]">
+    <div className="grid grid-cols-[6.5rem_1fr_3.5rem] items-center gap-2 text-[11px]">
       <span className="text-text-muted truncate">{label}</span>
       <div className="h-2.5 rounded-sm bg-slate-500/15 overflow-hidden" title={`${label}: ${value}`}>
         <div className="h-full rounded-r-[4px]" style={{ width: `${Math.max(0, Math.min(1, fraction)) * 100}%`, background: BAR }} />
@@ -118,7 +114,7 @@ function ChapterBlock({ ch }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
         <span className="text-text-muted">Median score <b className="text-text">{num(ch.medianScore)}</b>{ch.maxScore ? <span> / {num(ch.maxScore)}</span> : null}</span>
         <span className="text-text-muted">Best <b className="text-text">{num(ch.bestScore)}</b></span>
         <span className="text-text-muted">Median time <b className="text-text">{mins(ch.medianMinutes)}</b></span>
@@ -181,61 +177,53 @@ export default function CaseFilesAdminStats({ API }) {
   const t = data?.totals
 
   return (
-    <section
-      data-testid="case-files-admin-stats"
-      className="mt-10 rounded-md border border-dashed border-[#e0413a]/40 bg-[#06101e]/60 p-4 flex flex-col gap-5"
-    >
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Stamp tone="red" size="xs" rotate={-4} slam={false}>Admin only</Stamp>
-          <h2 className="text-base font-extrabold text-text">Case Files usage</h2>
-        </div>
-        <div className="flex items-center gap-3">
-          {data?.generatedAt && (
-            <span className="font-mono text-[10px] text-text-muted">
-              as of {new Date(data.generatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            data-testid="cf-stats-refresh"
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-sm border border-brand-600/40 text-brand-600 hover:bg-brand-600/10 disabled:opacity-50"
-          >
-            {loading ? 'Loading…' : 'Refresh'}
-          </button>
-        </div>
-      </header>
+    <div data-testid="case-files-admin-stats" className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] text-text-muted">
+          {data?.generatedAt
+            ? `as of ${new Date(data.generatedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+            : 'Case Files usage'}
+        </span>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          data-testid="cf-stats-refresh"
+          className="text-[11px] font-semibold px-2.5 py-1 rounded-sm border border-brand-600/40 text-brand-600 hover:bg-brand-600/10 disabled:opacity-50"
+        >
+          {loading ? 'Loading…' : 'Refresh'}
+        </button>
+      </div>
 
       {error && <p role="alert" className="text-xs text-danger">{error}</p>}
       {!data && loading && <p className="text-xs text-text-muted">Loading…</p>}
 
       {t && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            <Tile testId="cf-stat-players" label="Players" value={num(t.players)} sub={`${num(t.playersLast7d)} in the last 7 days`} />
-            <Tile testId="cf-stat-runs" label="Runs started" value={num(t.runsStarted)} sub={`${num(t.runsLast7d)} in the last 7 days`} />
-            <Tile testId="cf-stat-completion" label="Finished" value={pct(t.completionRate)} sub={`${num(t.runsCompleted)} done · ${num(t.runsAbandoned)} restarted · ${num(t.runsInProgress)} open`} />
-            <Tile testId="cf-stat-playtime" label="Median playtime" value={mins(t.medianMinutes)} sub={t.longRuns ? `${t.longRuns} left open 3h+ not counted` : 'start to finish'} />
-            <Tile testId="cf-stat-repeat" label="Came back" value={num(t.repeatPlayers)} sub={`of ${num(t.finishers)} who finished a case`} />
-            <Tile testId="cf-stat-interest" label="Want the next one" value={num(t.interested)} sub="registered interest" />
-          </div>
+          <AdminToolSection title="Usage">
+            <div className="grid grid-cols-2 gap-1.5">
+              <Tile testId="cf-stat-players" label="Players" value={num(t.players)} sub={`${num(t.playersLast7d)} in the last 7 days`} />
+              <Tile testId="cf-stat-runs" label="Runs started" value={num(t.runsStarted)} sub={`${num(t.runsLast7d)} in the last 7 days`} />
+              <Tile testId="cf-stat-completion" label="Finished" value={pct(t.completionRate)} sub={`${num(t.runsCompleted)} done · ${num(t.runsAbandoned)} restarted · ${num(t.runsInProgress)} open`} />
+              <Tile testId="cf-stat-playtime" label="Median playtime" value={mins(t.medianMinutes)} sub={t.longRuns ? `${t.longRuns} left open 3h+ not counted` : 'start to finish'} />
+              <Tile testId="cf-stat-repeat" label="Came back" value={num(t.repeatPlayers)} sub={`of ${num(t.finishers)} who finished a case`} />
+              <Tile testId="cf-stat-interest" label="Want the next one" value={num(t.interested)} sub="registered interest" />
+            </div>
+          </AdminToolSection>
 
-          <div>
-            <SectionTitle>Runs started, last {data.days} days</SectionTitle>
+          <AdminToolSection title={`Runs started, last ${data.days} days`}>
             <ActivityChart daily={data.daily} />
-          </div>
+          </AdminToolSection>
 
-          <div className="flex flex-col gap-3">
-            <SectionTitle>By chapter</SectionTitle>
-            {data.chapters.length === 0
-              ? <p className="text-xs text-text-muted">No chapters yet.</p>
-              : data.chapters.map((ch) => <ChapterBlock key={`${ch.caseSlug}/${ch.chapterSlug}`} ch={ch} />)}
-          </div>
+          <AdminToolSection title="By chapter" defaultOpen={false}>
+            <div className="flex flex-col gap-2">
+              {data.chapters.length === 0
+                ? <p className="text-xs text-text-muted">No chapters yet.</p>
+                : data.chapters.map((ch) => <ChapterBlock key={`${ch.caseSlug}/${ch.chapterSlug}`} ch={ch} />)}
+            </div>
+          </AdminToolSection>
 
-          <div>
-            <SectionTitle>Top runs</SectionTitle>
+          <AdminToolSection title="Top runs" defaultOpen={false}>
             {data.topScores.length === 0 ? (
               <p className="text-xs text-text-muted">Nobody has finished a case yet.</p>
             ) : (
@@ -244,50 +232,52 @@ export default function CaseFilesAdminStats({ API }) {
                   <tr className="font-mono text-[9px] uppercase tracking-widest text-text-muted text-left">
                     <th className="py-1 pr-2 font-normal">#</th>
                     <th className="py-1 pr-2 font-normal">Agent</th>
-                    <th className="py-1 pr-2 font-normal hidden sm:table-cell">Chapter</th>
                     <th className="py-1 pr-2 font-normal text-right">Score</th>
-                    <th className="py-1 pr-2 font-normal text-right">Time</th>
-                    <th className="py-1 font-normal text-right hidden sm:table-cell">Finished</th>
+                    <th className="py-1 font-normal text-right">Time</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.topScores.map((r, i) => (
-                    <tr key={`${r.userId}-${r.chapterSlug}`} className="border-t border-slate-300/10">
+                    <tr key={`${r.userId}-${r.chapterSlug}`} className="border-t border-slate-300/10 align-top">
                       <td className="py-1.5 pr-2 text-text-muted tabular-nums">{i + 1}</td>
-                      <td className="py-1.5 pr-2 text-text truncate max-w-[10rem]">
-                        {r.displayName ?? (r.agentNumber ? `Agent ${r.agentNumber}` : 'Agent')}
+                      <td className="py-1.5 pr-2">
+                        <p className="text-text truncate max-w-[9rem]">
+                          {r.displayName ?? (r.agentNumber ? `Agent ${r.agentNumber}` : 'Agent')}
+                        </p>
+                        {/* Chapter and date, under the name: the window has no
+                            room for them as columns. */}
+                        <p className="text-[10px] text-text-muted truncate max-w-[9rem]">
+                          {r.chapterSlug} · {new Date(r.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                        </p>
                       </td>
-                      <td className="py-1.5 pr-2 text-text-muted hidden sm:table-cell">{r.chapterSlug}</td>
                       <td className="py-1.5 pr-2 text-text font-bold tabular-nums text-right">{num(r.score)}</td>
-                      <td className="py-1.5 pr-2 text-text-muted tabular-nums text-right">{mins(r.minutes)}</td>
-                      <td className="py-1.5 text-text-muted text-right hidden sm:table-cell">
-                        {new Date(r.completedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                      </td>
+                      <td className="py-1.5 text-text-muted tabular-nums text-right">{mins(r.minutes)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
-          </div>
+          </AdminToolSection>
 
-          <div data-testid="cf-stats-interest">
-            <SectionTitle>Interest in the next chapter</SectionTitle>
-            {data.interest.length === 0 ? (
-              <p className="text-xs text-text-muted">No one has registered interest yet.</p>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {data.interest.map((row) => (
-                  <div key={`${row.caseSlug}/${row.chapterSlug}`} className="flex flex-wrap items-baseline gap-x-3 text-[12px]">
-                    <span className="text-text font-semibold">{row.teaserTitle || row.chapterSlug}</span>
-                    <span className="text-text font-bold tabular-nums">{row.interested} interested</span>
-                    {row.withdrawn > 0 && <span className="text-text-muted">{row.withdrawn} changed their mind</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <AdminToolSection title="Interest in the next chapter" defaultOpen={false}>
+            <div data-testid="cf-stats-interest">
+              {data.interest.length === 0 ? (
+                <p className="text-xs text-text-muted">No one has registered interest yet.</p>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {data.interest.map((row) => (
+                    <div key={`${row.caseSlug}/${row.chapterSlug}`} className="flex flex-wrap items-baseline gap-x-3 text-[12px]">
+                      <span className="text-text font-semibold">{row.teaserTitle || row.chapterSlug}</span>
+                      <span className="text-text font-bold tabular-nums">{row.interested} interested</span>
+                      {row.withdrawn > 0 && <span className="text-text-muted">{row.withdrawn} changed their mind</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </AdminToolSection>
         </>
       )}
-    </section>
+    </div>
   )
 }

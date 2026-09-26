@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import CaseFileCard from '../components/caseFiles/CaseFileCard'
 import CaseFilesGate from '../components/caseFiles/CaseFilesGate'
 import CaseFilesAdminStats from '../components/caseFiles/CaseFilesAdminStats'
+import AdminToolPanel from '../components/AdminToolPanel'
 import LockedCategoryModal from '../components/LockedCategoryModal'
 import SEO from '../components/SEO'
 import { authFetch } from '../utils/authFetch'
@@ -184,9 +185,15 @@ export default function CaseFiles() {
           </div>
         )}
 
-        {/* Usage stats for admins, under the cases themselves. */}
-        {user?.isAdmin && <CaseFilesAdminStats API={API} />}
       </div>
+
+      {/* Usage stats for admins, in the floating Admin tools window rather
+          than on the page, so the page is what a player sees. */}
+      {user?.isAdmin && (
+        <AdminToolPanel title="Case Files" wide>
+          <CaseFilesAdminStats API={API} />
+        </AdminToolPanel>
+      )}
 
       {upsellCase && (
         <LockedCategoryModal

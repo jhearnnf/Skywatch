@@ -234,11 +234,14 @@ describe('CaseFiles page — admin usage panel', () => {
     render(<CaseFiles />)
     await waitFor(() => screen.getByTestId('case-file-card-russia-ukraine'))
     expect(screen.queryByTestId('case-files-admin-stats')).toBeNull()
+    expect(screen.queryByRole('region', { name: /admin tools/i })).toBeNull()
   })
 
-  it('appears for an admin, under the cases', async () => {
+  it('appears for an admin, in the floating Admin tools window', async () => {
     useAuth.mockReturnValue({ user: { _id: 'a1', isAdmin: true }, API: '', apiFetch: (...args) => fetch(...args) })
     render(<CaseFiles />)
     await waitFor(() => expect(screen.getByTestId('case-files-admin-stats')).toBeDefined())
+    const panel = screen.getByRole('region', { name: /admin tools: case files/i })
+    expect(panel.contains(screen.getByTestId('case-files-admin-stats'))).toBe(true)
   })
 })

@@ -40,6 +40,9 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
+// The longer sections start folded in the Admin tools window; open one by its heading.
+const open = async (title) => fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${title}`) }))
+
 describe('CaseFilesAdminStats', () => {
   it('shows the headline numbers', async () => {
     render(<CaseFilesAdminStats API="" />)
@@ -52,6 +55,7 @@ describe('CaseFilesAdminStats', () => {
 
   it('draws the funnel as a share of runs started', async () => {
     render(<CaseFilesAdminStats API="" />)
+    await open('By chapter')
     const block = await screen.findByTestId('cf-stats-chapter-road-to-invasion')
     expect(block.textContent).toMatch(/Evidence Wall/)
     expect(block.textContent).toMatch(/16 · 80%/)
@@ -60,13 +64,17 @@ describe('CaseFilesAdminStats', () => {
 
   it('names top runs by display name, falling back to agent number', async () => {
     render(<CaseFilesAdminStats API="" />)
+    await open('Top runs')
     const table = await screen.findByTestId('cf-stats-top')
     expect(table.textContent).toMatch(/Maverick/)
     expect(table.textContent).toMatch(/Agent 7654321/)
+    // Chapter sits under the name, as the window has no room for it as a column.
+    expect(table.textContent).toMatch(/road-to-invasion/)
   })
 
   it('shows interest per teaser', async () => {
     render(<CaseFilesAdminStats API="" />)
+    await open('Interest in the next chapter')
     const box = await screen.findByTestId('cf-stats-interest')
     expect(box.textContent).toMatch(/Battle of Kyiv/)
     expect(box.textContent).toMatch(/6 interested/)
@@ -88,5 +96,14 @@ describe('CaseFilesAdminStats', () => {
     globalThis.fetch = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ data: STATS }) }))
     fireEvent.click(screen.getByTestId('cf-stats-refresh'))
     await waitFor(() => screen.getByTestId('cf-stat-players'))
+  })
+
+  it('opens with the headline numbers and the chart showing, and the long sections folded', async () => {
+    render(<CaseFilesAdminStats API="" />)
+    await screen.findByTestId('cf-stat-players')
+    expect(screen.getByTestId('cf-stats-activity')).toBeDefined()
+    expect(screen.queryByTestId('cf-stats-chapter-road-to-invasion')).toBeNull()
+    expect(screen.queryByTestId('cf-stats-top')).toBeNull()
+    expect(screen.queryByTestId('cf-stats-interest')).toBeNull()
   })
 })
