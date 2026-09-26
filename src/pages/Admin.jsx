@@ -5163,14 +5163,20 @@ function UserCbatResultsPanel({ u, API, apiFetch, onChange, onToast }) {
   )
 }
 
-function UsersTab({ API, onViewEmailHistory }) {
+// `focusUser` ({ id, query }) arrives from "Manage in Admin" on an agent's
+// profile: the tab opens already searched for that agent, with their row the
+// one expanded, instead of at the top of the whole list.
+function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
   const { user: currentUser, refreshUser, apiFetch } = useAuth()
   const navigate = useNavigate()
   const slim = useSlimMode() // CBAT-only mode disables in-app messaging
   const [users,   setUsers]   = useState([])
-  const [q,       setQ]       = useState('')
+  const [q,       setQ]       = useState(() => focusUser?.query ?? '')
   const [userSort, setUserSort] = useState('default')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(() => focusUser?.query ?? '')
+  // Used once: the first search result set that contains the agent opens with
+  // only their row expanded; every search after that behaves as normal.
+  const pendingFocus = useRef(focusUser?.id ?? null)
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState(false) // is in search mode
   const [modal,   setModal]   = useState(null)
@@ -5287,8 +5293,12 @@ function UsersTab({ API, onViewEmailHistory }) {
   // moment they ticked a box — taking the checkbox they were using with it.
   const listKey = useMemo(() => users.map(u => u._id).join(','), [users])
   useEffect(() => {
-    if (search) {
-      setExpanded(new Set(listKey ? listKey.split(',') : []))
+    const ids = listKey ? listKey.split(',') : []
+    if (search && pendingFocus.current && ids.includes(pendingFocus.current)) {
+      setExpanded(new Set([pendingFocus.current]))
+      pendingFocus.current = null
+    } else if (search) {
+      setExpanded(new Set(ids))
     } else {
       setExpanded(new Set())
     }
@@ -12192,6 +12202,14 @@ export default function Admin() {
   // Set when we arrive back from the questionnaire results page: open Content
   // with the Potential CBAT Passers panel already expanded.
   const [openPassersOnMount, setOpenPassersOnMount] = useState(() => !!location.state?.openPassers)
+  // Sent by "Manage in Admin" on an agent's profile: open Users on that agent.
+  const [focusUserOnMount, setFocusUserOnMount] = useState(() => location.state?.focusUser ?? null)
+  // UsersTab reads it only in its first render, so it is dropped right after:
+  // coming back to Users from another tab is an ordinary visit. Waits for auth,
+  // because until then the page renders nothing and UsersTab has not mounted.
+  useEffect(() => {
+    if (!loading && user?.isAdmin && focusUserOnMount) setFocusUserOnMount(null)
+  }, [loading, user?.isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openEmailLog = (status) => {
     setIntelInitial({ sub: 'email-log', emailStatus: status, emailUser: null })
@@ -12285,7 +12303,7 @@ export default function Admin() {
               {tab === 'stats'    && <StatsTab    API={API} onViewEmailLog={openEmailLog} onViewUsers={() => setTab('users')} />}
               {tab === 'reports'  && <ReportsTab  API={API} />}
               {tab === 'settings' && <SettingsTab API={API} />}
-              {tab === 'users'    && <UsersTab    API={API} onViewEmailHistory={openUserEmailLog} />}
+              {tab === 'users'    && <UsersTab    API={API} onViewEmailHistory={openUserEmailLog} focusUser={focusUserOnMount} />}
               {tab === 'content'  && <ContentTab  API={API} openPassers={openPassersOnMount} onBootstrapConsumed={() => setOpenPassersOnMount(false)} />}
               {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
               {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} initialEmailUser={intelInitial.emailUser} onOpenBrief={openBriefFromReport} onBootstrapConsumed={() => setIntelInitial({ sub: null, emailStatus: null, emailUser: null })} />}
