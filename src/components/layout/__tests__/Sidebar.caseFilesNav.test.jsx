@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 // The Case Files tab is earned: the feature and nav switches must be on, and
@@ -55,6 +55,17 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('Sidebar — Case Files tab', () => {
+  it('marks the earned tab offline and restores navigation on reconnect', async () => {
+    serverSays(true)
+    render(<Sidebar />)
+    await waitFor(() => expect(tab()).not.toBeNull())
+    act(() => window.dispatchEvent(new Event('offline')))
+    expect(tab().getAttribute('aria-disabled')).toBe('true')
+    expect(tab().getAttribute('href')).toBeNull()
+    expect(tab().textContent).toContain('Offline')
+    act(() => window.dispatchEvent(new Event('online')))
+    expect(tab().getAttribute('href')).toBe('/case-files')
+  })
   it('appears for a player the server says has earned it, straight after Play', async () => {
     serverSays(true)
     render(<Sidebar />)

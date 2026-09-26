@@ -9,6 +9,7 @@ import TutorialModal from '../components/tutorial/TutorialModal'
 import FlashcardGameModal from '../components/FlashcardGameModal'
 import FlyingNewBadge from '../components/FlyingNewBadge'
 import SEO from '../components/SEO'
+import useOnline from '../hooks/useOnline'
 
 // BOO states that trigger the unlock notification (game is actually playable)
 const BOO_ACCESSIBLE_STATES = ['active']
@@ -134,6 +135,8 @@ const ACCENT = {
 }
 
 export default function Play() {
+  const online = useOnline()
+  const CaseFilesEntry = online ? Link : 'span'
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
   const { start, visible, hasSeen } = useAppTutorial()
@@ -500,18 +503,21 @@ export default function Play() {
 
         {settings?.caseFilesEnabled && (
           <div className="pt-2 pb-3">
-            <Link
-              to="/case-files"
+            <CaseFilesEntry
+              to={online ? '/case-files' : undefined}
+              role={online ? undefined : 'link'}
+              aria-disabled={online ? undefined : true}
+              title={online ? undefined : 'Case Files requires an internet connection'}
               data-testid="case-files-link"
-              className="relative flex items-center gap-3 rounded-2xl px-4 py-3 border-2 border-slate-400/50 bg-gradient-to-r from-slate-500/12 via-slate-500/6 to-slate-500/12 hover:border-slate-400 transition-colors group w-full text-left"
+              className={`relative flex items-center gap-3 rounded-2xl px-4 py-3 border-2 border-slate-400/50 bg-gradient-to-r from-slate-500/12 via-slate-500/6 to-slate-500/12 transition-colors group w-full text-left ${online ? 'hover:border-slate-400' : 'opacity-60 cursor-not-allowed'}`}
             >
               <span className="text-2xl shrink-0">🗂️</span>
               <div className="min-w-0 flex-1">
                 <p className="font-bold text-slate-800 text-sm leading-tight">Case Files</p>
-                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">Investigative intel scenarios on active conflicts</p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">{online ? 'Investigative intel scenarios on active conflicts' : 'Connect to the internet to play'}</p>
               </div>
-              <span className="text-slate-400 group-hover:translate-x-0.5 transition-transform shrink-0 text-lg">→</span>
-            </Link>
+              <span className="text-slate-400 shrink-0">{online ? '→' : 'Offline'}</span>
+            </CaseFilesEntry>
           </div>
         )}
 

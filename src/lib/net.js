@@ -24,7 +24,7 @@ if (isNative) {
   import('@capacitor/network')
     .then(({ Network }) => {
       Network.getStatus()
-        .then((s) => { nativeOnline = s.connected; nativeReady = true })
+        .then((s) => { nativeOnline = s.connected; nativeReady = true; emit(nativeOnline) })
         .catch(() => { nativeReady = true })
       Network.addListener('networkStatusChange', (s) => {
         const next = s.connected

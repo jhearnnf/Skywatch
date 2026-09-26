@@ -17,6 +17,8 @@ import { useSlimMode, useSlimLearnEnabled } from '../../hooks/useSlimMode'
 import { useWorld3dNavVisible } from '../world3d/state/useWorld3dEnabled'
 import { useCaseFilesNavVisible, useCaseFilesNavUnseen } from '../../hooks/useCaseFilesNav'
 import { CaseFilesNavIcon, DecryptLabel } from './CaseFilesNav'
+import CaseFilesOfflineNav from './CaseFilesOfflineNav'
+import useOnline from '../../hooks/useOnline'
 
 const NAV_ITEMS = [
   { to: '/home',          emoji: '🏠', label: 'Home'       },
@@ -45,6 +47,7 @@ function CrosshairLogo() {
 }
 
 export default function Sidebar() {
+  const online = useOnline()
   const { user, logout, API, apiFetch } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -85,6 +88,7 @@ export default function Sidebar() {
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map(({ to, emoji, label, caseFiles }) => {
+          if (caseFiles && !online) return <CaseFilesOfflineNav key={to} />
           const isPlay     = to === '/play'
           const isLearn    = to === '/learn-priority'
           const isChat     = to === '/chat'

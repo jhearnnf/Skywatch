@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import Play from '../Play'
 
@@ -68,6 +68,7 @@ function setSettings(over = {}) {
 // ── Setup ─────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true)
   window.scrollTo = vi.fn()
   global.fetch = vi.fn().mockImplementation((url) => {
     if (url.includes('flashcard-recall/available-briefs'))
@@ -83,6 +84,19 @@ afterEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('Play page — Case Files entry', () => {
+  it('disables Case Files offline and restores the link on reconnect', () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    setSettings({ caseFilesEnabled: true })
+    render(<Play />)
+    expect(screen.getByTestId('case-files-link').getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByTestId('case-files-link').getAttribute('href')).toBeNull()
+    expect(screen.getByText('Offline')).toBeDefined()
+    act(() => window.dispatchEvent(new Event('online')))
+    expect(screen.getByTestId('case-files-link').getAttribute('href')).toBe('/case-files')
+    expect(screen.queryByText('Offline')).toBeNull()
+    act(() => window.dispatchEvent(new Event('offline')))
+    expect(screen.getByTestId('case-files-link').getAttribute('href')).toBeNull()
+  })
   it('hides the Case Files link when caseFilesEnabled is false (admin too)', () => {
     setSettings({ caseFilesEnabled: false })
     useAuth.mockReturnValue({
