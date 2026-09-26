@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppTutorial } from '../context/AppTutorialContext'
@@ -22,8 +22,12 @@ import { useSlimMode } from '../hooks/useSlimMode'
 import { SLIM_APP } from '../utils/appMode'
 import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
-import { PLAY_STORE_URL, forceUpdateWebApp, isNativeUpdateAvailable } from '../utils/appUpdate'
+import { PLAY_STORE_URL, fetchLiveWebVersion, forceUpdateWebApp, isNativeUpdateAvailable, isWebUpdateAvailable } from '../utils/appUpdate'
 import BlockedAgents from './chat/components/BlockedAgents'
+import AppUpdateCover from '../components/AppUpdateCover'
+import AdminToolPanel from '../components/AdminToolPanel'
+
+const UPDATE_COVER_DISMISSED_KEY = 'skywatch:updateCoverDismissed'
 
 /* Share / Support sit directly under the monochrome social SVGs, so they are
    drawn the same way rather than with emoji. The OS colour-emoji font renders
@@ -95,10 +99,11 @@ const TUTORIAL_LABELS = [
 export default function Profile() {
   const { user, setUser, API, apiFetch, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const slim = useSlimMode()
   const { start, replay, resetAll } = useAppTutorial()
 
-  const { levels: liveLevels, settings: appSettings } = useAppSettings()
+  const { levels: liveLevels, settings: appSettings, refreshSettings } = useAppSettings()
   const [stats,       setStats]       = useState({ brifsRead: 0, gamesPlayed: 0, abandonedGames: 0, winPercent: 0, flashcardsCollected: 0 })
   const [statsLoading, setStatsLoading] = useState(!!user)
   const [leaderboard, setLeaderboard] = useState(MOCK_LEADERBOARD)
@@ -145,7 +150,78 @@ export default function Profile() {
     return () => { alive = false }
   }, [clientInfo?.platform, API, apiFetch])
 
-  const updateAvailable = isNativeUpdateAvailable(clientInfo, latestRelease)
+  // Web: the deploy that is live right now, from /version.json. Compared with
+  // the bundle's own stamp to catch a service worker holding an old deploy.
+  const [liveWeb, setLiveWeb] = useState(null)
+  useEffect(() => {
+    if (clientInfo?.platform !== 'web') return
+    let alive = true
+    fetchLiveWebVersion().then(v => { if (alive) setLiveWeb(v) })
+    return () => { alive = false }
+  }, [clientInfo?.platform])
+
+  const isWeb = clientInfo?.platform === 'web'
+  const updateAvailable = isWeb
+    ? isWebUpdateAvailable(clientInfo, liveWeb)
+    : isNativeUpdateAvailable(clientInfo, latestRelease)
+  // Newest release for this platform, whichever source it came from.
+  const newestRelease = isWeb ? liveWeb : latestRelease?.[clientInfo?.platform]
+  // Admin-only ?previewUpdate=web|android shows that platform's update cover on
+  // any device, so both can be checked without an out-of-date build to hand.
+  // Only while the switch below is on: off means the cover does nothing,
+  // preview included (the Preview links pulse the switch instead).
+  const previewParam = new URLSearchParams(location.search).get('previewUpdate')
+  const previewPlatform = user?.isAdmin && (previewParam === 'web' || previewParam === 'android')
+    ? previewParam : null
+  const wantsUpdatePreview = previewPlatform !== null
+
+  // "Not now" on the cover lasts for this app session and for this release
+  // only: the build it was dismissed for is remembered, so a newer release
+  // puts the cover back. The footer keeps the update control meanwhile.
+  const newestBuild = newestRelease?.build ?? null
+  const [dismissedBuild, setDismissedBuild] = useState(() => {
+    try { return sessionStorage.getItem(UPDATE_COVER_DISMISSED_KEY) } catch { return null }
+  })
+  const coverDismissed = newestBuild !== null && String(newestBuild) === dismissedBuild
+  // Admin switch (AppSettings.updateCoverEnabled), off until the new release is
+  // live on both the web and Google Play. Off means only the footer control.
+  const updateCoverOn = appSettings?.updateCoverEnabled === true
+  const previewUpdateCover = wantsUpdatePreview && updateCoverOn
+  const [coverTogglePulse, setCoverTogglePulse] = useState(false)
+  const pulseCoverToggle = () => {
+    setCoverTogglePulse(false)
+    // Next frame, so a second tap mid-pulse restarts the animation.
+    requestAnimationFrame(() => setCoverTogglePulse(true))
+    setTimeout(() => setCoverTogglePulse(false), 1300)
+  }
+  const [coverToggleBusy, setCoverToggleBusy] = useState(false)
+  const [coverToggleError, setCoverToggleError] = useState('')
+  const toggleUpdateCover = async () => {
+    if (coverToggleBusy) return
+    setCoverToggleBusy(true); setCoverToggleError('')
+    try {
+      const res = await apiFetch(`${API}/api/admin/settings`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updateCoverEnabled: !updateCoverOn,
+          reason: `${updateCoverOn ? 'Disable' : 'Enable'} the update screen for all users`,
+        }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.message || 'Could not save')
+      await refreshSettings?.()
+    } catch (err) {
+      setCoverToggleError(err.message || 'Could not save')
+    } finally {
+      setCoverToggleBusy(false)
+    }
+  }
+  const dismissUpdateCover = () => {
+    if (previewUpdateCover) { navigate('/profile'); return }
+    const build = String(newestBuild)
+    try { sessionStorage.setItem(UPDATE_COVER_DISMISSED_KEY, build) } catch { /* storage blocked */ }
+    setDismissedBuild(build)
+  }
 
   // No finally/reset: forceUpdateWebApp ends by replacing the document, so the
   // busy state is torn down with the page. Resetting it would only matter if
@@ -329,6 +405,82 @@ export default function Profile() {
   const rankDisplay = user?.rank && typeof user.rank === 'object' && user.rank.rankName
     ? `${user.rank.rankName} (${user.rank.rankAbbreviation})`
     : 'Unranked'
+
+  // Profile's admin tools, in the floating panel. Rendered over the update
+  // cover too, so the switch can be turned off straight from a preview.
+  const adminTools = user?.isAdmin ? (
+    <AdminToolPanel title="Profile">
+      <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">Update screen</p>
+      <div className="flex flex-col items-start">
+        {[['web', 'Preview update for web'], ['android', 'Preview update for Android']].map(([platform, label]) => (
+          <Link
+            key={platform}
+            to={`/profile?previewUpdate=${platform}`}
+            onClick={(e) => { if (!updateCoverOn) { e.preventDefault(); pulseCoverToggle() } }}
+            className="text-xs font-semibold text-brand-600 hover:text-brand-700 py-1"
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={updateCoverOn}
+        aria-label="Show update screen to all users"
+        onClick={toggleUpdateCover}
+        disabled={coverToggleBusy}
+        className={`w-full inline-flex items-center gap-2 py-1.5 px-2 -mx-2 disabled:opacity-50 group${coverTogglePulse ? ' flashcard-ring-active' : ''}`}
+      >
+        <span
+          aria-hidden="true"
+          className={`relative shrink-0 w-8 h-4 rounded-full transition-colors ${updateCoverOn ? 'bg-brand-600' : 'bg-slate-300'}`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full transition-transform
+              ${updateCoverOn ? 'translate-x-4 bg-white' : 'bg-slate-500'}`}
+          />
+        </span>
+        <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-800 text-left">
+          For all users: {updateCoverOn ? 'On' : 'Off'}
+        </span>
+      </button>
+      <p className="text-[11px] text-slate-500">
+        Turn on once the new version is live on the web and on Google Play.
+      </p>
+      {coverToggleError && (
+        <p className="text-[11px] text-rose-600 font-semibold">{coverToggleError}</p>
+      )}
+    </AdminToolPanel>
+  ) : null
+
+  // An out-of-date store build gets the whole Profile area replaced by the
+  // update prompt, not just the small link in the footer.
+  if ((updateAvailable && updateCoverOn && !coverDismissed) || previewUpdateCover) {
+    return (
+      <>
+      <SEO title="Profile" description="View your SkyWatch learning stats, level, and streak." />
+      <AppUpdateCover
+        platform={previewUpdateCover ? previewPlatform : clientInfo?.platform}
+        onWebUpdate={runForceUpdate}
+        webUpdateBusy={updateBusy}
+        {...(previewUpdateCover && previewPlatform !== clientInfo?.platform
+          // Previewing the other platform: this device's versions would be the
+          // wrong kind of number, so leave the version line out.
+          ? {}
+          : {
+              currentVersion: clientInfo?.version,
+              latestVersion:  newestRelease?.version,
+              currentBuild:   clientInfo?.build,
+              latestBuild:    newestRelease?.build,
+            })}
+        preview={previewUpdateCover}
+        onDismiss={dismissUpdateCover}
+      />
+      {adminTools}
+      </>
+    )
+  }
 
   return (
     <>
@@ -957,7 +1109,9 @@ export default function Profile() {
           The stamp carries the update control, because the two belong together:
           the version is the evidence, and the control is what to do about it.
           Which control depends on what actually stands in the way — the Play
-          Store on Android, the service worker's cached bundle on web. */}
+          Store on Android, the service worker's cached bundle on web. An
+          out-of-date build only reaches the footer after "Not now" on
+          AppUpdateCover, so the control stays here as the way back. */}
       {clientInfo && (
         <div className="mt-6 flex flex-col items-center gap-2">
           <p
@@ -967,11 +1121,8 @@ export default function Profile() {
             v{clientInfo.version}
           </p>
 
-          {updateAvailable ? (
+          {updateAvailable && !isWeb ? (
             <>
-              {/* Native: nothing in the app can install a build, so the honest
-                  control is a link to the store. Only rendered once we know a
-                  newer build exists — see isNativeUpdateAvailable. */}
               <a
                 href={PLAY_STORE_URL}
                 target="_blank"
@@ -1002,10 +1153,13 @@ export default function Profile() {
               </p>
             </>
           ) : null}
+
         </div>
       )}
 
       {showDelete && <DeleteAccountModal onClose={() => setShowDelete(false)} />}
+
+      {adminTools}
 
     </div>
     </>

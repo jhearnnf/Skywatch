@@ -4,6 +4,8 @@ import {
   setUpdateSW,
   forceUpdateWebApp,
   isNativeUpdateAvailable,
+  isWebUpdateAvailable,
+  fetchLiveWebVersion,
 } from '../appUpdate'
 
 // Stand-ins for the two browser APIs the force-refresh touches. Both are
@@ -143,5 +145,49 @@ describe('PLAY_STORE_URL', () => {
     // Must match applicationId in android/app/build.gradle and appId in
     // capacitor.config.ts, or the link lands on a Play 404.
     expect(PLAY_STORE_URL).toBe('https://play.google.com/store/apps/details?id=academy.skywatch.app')
+  })
+})
+
+describe('isWebUpdateAvailable', () => {
+  const web = (build) => ({ platform: 'web', version: '1.2.54', build })
+
+  it('is true when the live deploy differs from the running bundle', () => {
+    expect(isWebUpdateAvailable(web('aaaaaaa'), { version: '1.2.54', build: 'bbbbbbb' })).toBe(true)
+  })
+
+  it('is false when the running bundle is the live one', () => {
+    expect(isWebUpdateAvailable(web('aaaaaaa'), { version: '1.2.54', build: 'aaaaaaa' })).toBe(false)
+  })
+
+  it('never reports outdated when either side is unknown', () => {
+    expect(isWebUpdateAvailable(web('aaaaaaa'), null)).toBe(false)
+    expect(isWebUpdateAvailable(web('dev'), { build: 'bbbbbbb' })).toBe(false)
+    expect(isWebUpdateAvailable(web(''), { build: 'bbbbbbb' })).toBe(false)
+    expect(isWebUpdateAvailable(web('aaaaaaa'), { build: 'dev' })).toBe(false)
+  })
+
+  it('ignores native clients', () => {
+    expect(isWebUpdateAvailable({ platform: 'android', version: '1.2.54', build: '59' }, { build: 'bbbbbbb' })).toBe(false)
+  })
+})
+
+describe('fetchLiveWebVersion', () => {
+  const respond = (body, ok = true) => vi.fn().mockResolvedValue({ ok, json: async () => body })
+
+  it('reads the live stamp, bypassing every cache', async () => {
+    const fetchImpl = respond({ version: '1.2.55', build: 'bbbbbbb' })
+    expect(await fetchLiveWebVersion({ fetchImpl })).toEqual({ version: '1.2.55', build: 'bbbbbbb' })
+    const [url, opts] = fetchImpl.mock.calls[0]
+    expect(url).toMatch(/^\/version\.json\?t=\d+$/)
+    expect(opts).toEqual({ cache: 'no-store' })
+  })
+
+  it('resolves null on a failed request, a non-OK answer or a bad body', async () => {
+    expect(await fetchLiveWebVersion({ fetchImpl: vi.fn().mockRejectedValue(new Error('offline')) })).toBeNull()
+    expect(await fetchLiveWebVersion({ fetchImpl: respond({ build: 'x' }, false) })).toBeNull()
+    expect(await fetchLiveWebVersion({ fetchImpl: respond({ version: '1.2.55' }) })).toBeNull()
+    // Dev: the SPA fallback answers with index.html, so the JSON parse throws.
+    const html = vi.fn().mockResolvedValue({ ok: true, json: async () => { throw new SyntaxError('<') } })
+    expect(await fetchLiveWebVersion({ fetchImpl: html })).toBeNull()
   })
 })

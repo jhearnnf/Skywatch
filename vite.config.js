@@ -144,6 +144,26 @@ function publicModelsManifest() {
 // closes the same hole with a rewrite in vercel.json; this is the dev half, so
 // both environments answer the clean URL identically instead of dev being the
 // only place it fails.
+// Writes /version.json beside the bundle: the stamp of whatever is deployed
+// right now. A browser compares it with the stamp baked into the bundle it is
+// running (appVersion.js) to tell that the service worker has left it on an
+// old deploy. Build-only on purpose: the dev server has no deploy to lag
+// behind, and a missing file just reads as "can't tell" on the client.
+// Never precached (json is outside globPatterns) and fetched with no-store.
+function liveVersionFile() {
+  return {
+    name: 'live-version-file',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version: appVersion(), build: buildId() }),
+      })
+    },
+  }
+}
+
 function staticDocRoutes() {
   const DOCS = {
     '/cbat-guide':           '/cbat-guide.html',
@@ -170,6 +190,7 @@ export default defineConfig({
     tailwindcss(),
     publicModelsManifest(),
     staticDocRoutes(),
+    liveVersionFile(),
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false, // registered manually (web only) in src/main.jsx

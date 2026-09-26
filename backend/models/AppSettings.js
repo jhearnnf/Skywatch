@@ -167,6 +167,11 @@ const appSettingsSchema = new mongoose.Schema({
 
   // Feature flags
   useLiveLeaderboard:    { type: Boolean, default: false },
+  // Full-page "Update available" cover on Profile for anyone on an old build.
+  // Off by default and flipped by an admin from Profile once the new release is
+  // actually live on the web and on Google Play; until then the footer link is
+  // the only prompt.
+  updateCoverEnabled:    { type: Boolean, default: false },
   disableLoadingBar:     { type: Boolean, default: false },
   betaTesterAutoGold:    { type: Boolean, default: false },
   cbatEnabled:           { type: Boolean, default: false },

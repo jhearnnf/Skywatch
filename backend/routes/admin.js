@@ -1081,6 +1081,10 @@ router.patch('/settings', requireReason, async (req, res) => {
   try {
     const { reason, ...updates } = req.body;
 
+    if ('updateCoverEnabled' in updates && typeof updates.updateCoverEnabled !== 'boolean') {
+      return res.status(400).json({ message: 'updateCoverEnabled must be a boolean' });
+    }
+
     // cbatTiers must be a valid subset of ['free','silver','gold','admin']
     if ('cbatTiers' in updates) {
       if (!Array.isArray(updates.cbatTiers)) {

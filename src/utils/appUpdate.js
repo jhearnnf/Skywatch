@@ -79,6 +79,40 @@ function defaultReload() {
   window.location.replace(url.toString())
 }
 
+// ── Web: is a newer deploy live? ─────────────────────────────────────────────
+
+// The stamp of whatever is deployed right now, from the /version.json the build
+// writes beside the bundle (vite.config.js liveVersionFile). no-store plus a
+// one-shot query so neither the HTTP cache nor the service worker can answer
+// with the same stale deploy we are trying to detect.
+//
+// Resolves null on any failure: offline, dev (no file, so the SPA fallback
+// answers with HTML and the parse throws), or a malformed body.
+export async function fetchLiveWebVersion({ fetchImpl = globalThis.fetch } = {}) {
+  try {
+    const res = await fetchImpl(`/version.json?t=${Date.now()}`, { cache: 'no-store' })
+    if (!res?.ok) return null
+    const data = await res.json()
+    const build = typeof data?.build === 'string' ? data.build.trim() : ''
+    if (!build) return null
+    return { version: typeof data.version === 'string' ? data.version : null, build }
+  } catch {
+    return null
+  }
+}
+
+// A commit sha has no ordering, so "different from what is live" is the whole
+// test: a web bundle can only ever be behind the deploy, never ahead of it.
+// 'dev' (no git at build time) and a missing stamp on either side mean we
+// cannot tell, and that is never reported as outdated.
+export function isWebUpdateAvailable(clientInfo, live) {
+  if (clientInfo?.platform !== 'web') return false
+  const mine = typeof clientInfo.build === 'string' ? clientInfo.build.trim() : ''
+  const newest = live?.build
+  if (!mine || mine === 'dev' || !newest || newest === 'dev') return false
+  return mine !== newest
+}
+
 // ── Native: is there a newer build in the store? ─────────────────────────────
 
 // Compares the build this device is running against the newest one the server
