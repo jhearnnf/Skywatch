@@ -310,6 +310,10 @@ export function createClanSim({ tuning, rng = Math.random, durationMs = CLAN_DUR
         phase: letters.phase,
         code: letters.phase === 'showing' ? letters.code : null,
         options: letters.phase === 'asking' ? letters.options : [],
+        // For the tutorial (clanTutorial.js), which lights the right box once
+        // the options have been up a moment. Never drawn in a test run.
+        correctIndex: letters.phase === 'asking' ? letters.correctIndex : -1,
+        askingMs: letters.phase === 'asking' ? letterCfg.answerMs - (letters.phaseUntil - t) : 0,
         feedback: letters.feedback ? { correct: letters.feedback.correct, pickedIndex: letters.feedback.pickedIndex } : null,
       },
       maths: {

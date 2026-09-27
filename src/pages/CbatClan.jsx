@@ -3,15 +3,20 @@
 // The test the RAF replaced with FLAG in 2021 and that Canada's CFAST still
 // sits, which is why it is offered on the FLAG tile to players in Canada (see
 // utils/cbat/clanOffer.js). Three tasks at once for a fixed 90 seconds: press
-// R, Y or G as each coloured diamond crosses its colour band, memorise a
+// a colour's key as each coloured diamond crosses its colour band, memorise a
 // letter code and pick it out of four near-identical options in the corners,
-// and type the sums as they come up. The run itself is a pure simulation
+// and type the sums as they come up. Which keys do which is the player's
+// choice of layout (./CbatClan/keys.js), saved on the account. The run itself is a pure simulation
 // (utils/cbat/clanSim.js) driven from one rAF loop here; the board renders
 // its snapshot (./CbatClan/ClanBoard.jsx).
 //
 // Same page shape as FLAG: intro card with the mode row under the title, a
 // launch flash on Start, the Easier/Hard split on separate boards, and the
 // Real CBAT theme's title bar and footer strip while playing.
+//
+// The Tutorial button beside Start opens ./CbatClan/ClanTutorial.jsx: the same
+// board in slow motion, stopping for every press, to learn the keys on. It is
+// unranked; only its usage is reported, for the admin tutorial funnel.
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
@@ -28,16 +33,17 @@ import {
   readStoredClanDifficulty, storeClanDifficulty,
 } from '../utils/cbat/clanDifficulty'
 import { createClanSim } from '../utils/cbat/clanSim'
+import ClanTutorial from './CbatClan/ClanTutorial'
 import ClanBoard from './CbatClan/ClanBoard'
-import { keyAction } from './CbatClan/keys'
+import {
+  keyAction, clanKeyLayout, CLAN_KEY_LAYOUTS, CLAN_KEY_LAYOUT_DEFS, DEFAULT_CLAN_KEY_LAYOUT,
+} from './CbatClan/keys'
 import SEO from '../components/SEO'
 import { CbatGameHeader, CbatFooterStrip } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
-
-const GAME_DURATION_S = CLAN_DURATION_MS / 1000
 
 // ── Grade badge helper ────────────────────────────────────────────────────────
 const GRADE_STYLE = {
@@ -77,8 +83,49 @@ function ResultsScreen({ stats, tuning }) {
   )
 }
 
+// ── Key layout picker ─────────────────────────────────────────────────────────
+// A row of buttons, not a native <select> (the OS draws its list in white over
+// the dark theme).
+function KeyLayoutPicker({ value, onSelect, disabled }) {
+  return (
+    <div className="mb-5 lg:mb-7" data-testid="clan-key-layouts">
+      <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-2">Keys</p>
+      <div className="flex justify-center gap-2">
+        {CLAN_KEY_LAYOUTS.map(key => {
+          const on = key === value
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onSelect(key)}
+              disabled={disabled}
+              aria-pressed={on}
+              data-clan-key-layout={key}
+              className={`px-3 py-1.5 rounded-lg text-xs lg:text-sm font-bold transition-colors cursor-pointer disabled:cursor-not-allowed ${on ? 'bg-brand-600 text-white' : 'border border-game-line text-slate-400 hover:text-brand-600'}`}
+            >
+              {CLAN_KEY_LAYOUT_DEFS[key].label}
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-[11px] lg:text-xs text-slate-500 mt-2">{clanKeyLayout(value).hint}</p>
+    </div>
+  )
+}
+
+// "J, K or L" / "Q, W, A or S"
+function orList(keys) {
+  return keys.map((k, i) => (
+    <span key={k}>{i === 0 ? '' : i === keys.length - 1 ? ' or ' : ', '}<b>{k}</b></span>
+  ))
+}
+
 // ── Intro screen ──────────────────────────────────────────────────────────────
-function IntroScreen({ onStart, personalBest, bestLoading, difficulty, onDifficulty, tuning, launching }) {
+function IntroScreen({
+  onStart, onTutorial, personalBest, bestLoading, difficulty, onDifficulty, tuning, launching,
+  keyLayout, onKeyLayout,
+}) {
+  const layout = clanKeyLayout(keyLayout)
   // During the launch flash everything on the card except the chosen difficulty
   // button greys out, so the flashing button is the only thing left alive.
   const dim = launching ? ' cbat-launch-dim' : ''
@@ -108,15 +155,15 @@ function IntroScreen({ onStart, personalBest, bestLoading, difficulty, onDifficu
       <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
-          <span className="pt-0.5">{GAME_DURATION_S}-second run</span>
+          <span className="pt-0.5">{CLAN_DURATION_MS / 1000}-second run</span>
         </div>
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'💎'}</span>
-          <span className="pt-0.5">Diamonds cross the arena toward three colour bands. Press <b>R</b>, <b>Y</b> or <b>G</b> while a diamond is inside the band of its own colour</span>
+          <span className="pt-0.5">Diamonds cross the arena toward three colour bands. Press {orList(Object.values(layout.colours))} (red, yellow, green) while a diamond is inside the band of its own colour</span>
         </div>
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🔤'}</span>
-          <span className="pt-0.5">A letter code appears at the top. Memorise it. When four codes appear in the corners, press <b>A</b> to <b>D</b> for the one you saw</span>
+          <span className="pt-0.5">A letter code appears at the top. Memorise it. When four codes appear in the corners, press {orList(layout.options)} for the one you saw. Each box shows its key</span>
         </div>
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🔢'}</span>
@@ -126,6 +173,10 @@ function IntroScreen({ onStart, personalBest, bestLoading, difficulty, onDifficu
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Wrong presses and missed diamonds lose points. Score can go negative.</span>
         </div>
+      </div>
+
+      <div className={dim}>
+        <KeyLayoutPicker value={keyLayout} onSelect={onKeyLayout} disabled={launching} />
       </div>
 
       {/* Personal best and the leaderboard link both follow the selected
@@ -141,6 +192,14 @@ function IntroScreen({ onStart, personalBest, bestLoading, difficulty, onDifficu
       </div>
 
       <div className={`flex flex-wrap gap-3 lg:gap-4 justify-center${dim}`}>
+        <button
+          onClick={onTutorial}
+          disabled={launching}
+          data-cbat-tutorial-btn
+          className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
+        >
+          Tutorial
+        </button>
         <button
           onClick={onStart}
           disabled={launching}
@@ -168,13 +227,15 @@ function typingTarget(el) {
 }
 
 export default function CbatClan() {
-  const { user, apiFetch, API } = useAuth()
+  const { user, setUser, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
   const demo = useCbatDemo()
   const cbat = useCbatTheme()
   const { enterImmersive, exitImmersive } = useGameChrome()
 
-  const [phase, setPhase] = useState('intro')   // intro | launching | playing | results
+  const [phase, setPhase] = useState('intro')   // intro | launching | tutorial | playing | results
+  // Bumped by the tutorial's Try Again, which remounts it for a fresh run.
+  const [tutorialRun, setTutorialRun] = useState(0)
 
   // Defaults to 'easier'; a user who switches gets their most recent choice
   // back on the next visit. `?difficulty=` overrides both for one arrival.
@@ -195,6 +256,26 @@ export default function CbatClan() {
   const [queued, setQueued] = useState(false)
   const [finalStats, setFinalStats] = useState(null)
 
+  // Which keys the run answers to. Read off the account; a pick re-keys the
+  // page at once and the PATCH makes it stick, put back if the save fails.
+  const keyLayout = CLAN_KEY_LAYOUTS.includes(user?.clanKeyLayout) ? user.clanKeyLayout : DEFAULT_CLAN_KEY_LAYOUT
+  const layout = clanKeyLayout(keyLayout)
+  const chooseKeyLayout = useCallback(async (next) => {
+    if (next === keyLayout || !setUser) return
+    const previous = keyLayout
+    setUser(prev => (prev ? { ...prev, clanKeyLayout: next } : prev))
+    try {
+      const res = await apiFetch(`${API}/api/users/me/clan-keys`, {
+        method: 'PATCH', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout: next }),
+      })
+      if (!res.ok) throw new Error('save failed')
+    } catch {
+      setUser(prev => (prev ? { ...prev, clanKeyLayout: previous } : prev))
+    }
+  }, [keyLayout, setUser, apiFetch, API])
+
   // The live sim and the immutable snapshot the tree renders from.
   const simRef = useRef(null)
   const startedAtRef = useRef(0)
@@ -205,7 +286,8 @@ export default function CbatClan() {
   const resultSubmittedRef = useRef(false)
 
   useEffect(() => {
-    if (phase === 'playing') enterImmersive()
+    // Hide the nav chrome during the run and the tutorial.
+    if (phase === 'playing' || phase === 'tutorial') enterImmersive()
     else exitImmersive()
     return exitImmersive
   }, [phase, enterImmersive, exitImmersive])
@@ -236,7 +318,7 @@ export default function CbatClan() {
       mathCorrect: stats.mathCorrect,
       mathWrong: stats.mathWrong,
       mathTimeout: stats.mathTimeout,
-      totalTime: GAME_DURATION_S,
+      totalTime: CLAN_DURATION_MS / 1000,
       grade,
     }, { apiFetch, API })
       .then((r) => {
@@ -288,7 +370,7 @@ export default function CbatClan() {
     function onKey(e) {
       if (typingTarget(e.target)) return
       if (document.querySelector('[role="dialog"]')) return
-      const action = keyAction(e)
+      const action = keyAction(e, keyLayout)
       if (!action) return
       e.preventDefault()
       switch (action.kind) {
@@ -302,7 +384,7 @@ export default function CbatClan() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [phase, onColour, onOption, onDigit, onBackspace, onEnter])
+  }, [phase, keyLayout, onColour, onOption, onDigit, onBackspace, onEnter])
 
   // ── Start ──
   const startGame = useCallback(() => {
@@ -351,6 +433,17 @@ export default function CbatClan() {
     setPhase('intro')
   }, [])
 
+  // Fire-and-forget tutorial usage tracking (admin Reports per-step drop-off).
+  // Online-only by design, like FLAG's: a learning aid, not a score.
+  const reportTutorialProgress = useCallback((body) => {
+    if (!user) return
+    apiFetch(`${API}/api/games/cbat/clan/tutorial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(() => {})
+  }, [user, apiFetch, API])
+
   const elapsedMs = snapshot?.t ?? 0
   const remainingS = Math.max(0, (CLAN_DURATION_MS - elapsedMs) / 1000)
 
@@ -383,7 +476,7 @@ export default function CbatClan() {
               stage: 'Testing',
               timeFrac: 1 - elapsedMs / CLAN_DURATION_MS,
               progressFrac: elapsedMs / CLAN_DURATION_MS,
-            } : null}
+            } : phase === 'tutorial' ? { stage: 'Tutorial', timeFrac: null, progressFrac: null } : null}
           >
             {phase === 'playing' && <ModeMarker mode={runTuning} />}
           </CbatGameHeader>
@@ -392,12 +485,27 @@ export default function CbatClan() {
             {(phase === 'intro' || phase === 'launching') && (
               <IntroScreen
                 onStart={beginLaunch}
+                onTutorial={() => setPhase('tutorial')}
                 personalBest={personalBest}
                 bestLoading={bestLoading}
                 difficulty={difficulty}
                 onDifficulty={chooseDifficulty}
                 tuning={tuning}
                 launching={phase === 'launching'}
+                keyLayout={keyLayout}
+                onKeyLayout={chooseKeyLayout}
+              />
+            )}
+
+            {phase === 'tutorial' && (
+              <ClanTutorial
+                key={tutorialRun}
+                layoutKey={keyLayout}
+                layout={layout}
+                cbat={cbat}
+                onExit={goToIntro}
+                onRetry={() => setTutorialRun(n => n + 1)}
+                onProgress={reportTutorialProgress}
               />
             )}
 
@@ -418,6 +526,7 @@ export default function CbatClan() {
                 <ClanBoard
                   snapshot={snapshot}
                   cbat={cbat}
+                  layout={layout}
                   onColour={onColour}
                   onOption={onOption}
                   onDigit={onDigit}
@@ -428,7 +537,7 @@ export default function CbatClan() {
                 {/* Real CBAT theme: the instruction strip */}
                 <CbatFooterStrip
                   className="w-full"
-                  text="R, Y or G for a diamond in its band. A to D for the code. Type the sum, then press"
+                  text={`${Object.values(layout.colours).join(', ')} for a diamond in its band. ${layout.options.join(', ')} for the code. Type the sum, then press`}
                   answer={snapshot.maths.question ? snapshot.maths.entered : undefined}
                   onSubmit={onEnter}
                   canSubmit={!!snapshot.maths.question && snapshot.maths.entered !== ''}

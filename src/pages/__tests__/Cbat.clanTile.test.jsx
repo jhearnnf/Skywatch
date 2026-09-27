@@ -70,6 +70,17 @@ describe('the FLAG tile with CLAN switched off', () => {
     expect(within(card).queryByText('CLAN')).toBeNull()
     expect(within(card).queryByTestId('tile-title-split-flag')).toBeNull()
     expect(card.querySelector('a').getAttribute('href')).toBe('/cbat/flag')
+    // The tutorial's badge belongs to the split; a plain FLAG tile never says it.
+    expect(within(card).queryByText('New CLAN Tutorial')).toBeNull()
+  })
+})
+
+describe('the FLAG | CLAN tile announcing the CLAN tutorial', () => {
+  beforeEach(() => { vi.clearAllMocks(); mockClanOffered.mockReturnValue(true) })
+
+  it('carries the badge, naming CLAN so it is not read as news about FLAG', () => {
+    renderHub()
+    expect(within(flagCard()).getByText('New CLAN Tutorial')).toBeInTheDocument()
   })
 })
 

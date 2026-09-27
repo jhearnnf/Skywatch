@@ -293,6 +293,9 @@ const FLAG_CLAN_SPLIT = {
   // in the corner of its half (inline SVG, not an emoji: Windows has no flag glyphs).
   // `hint` is the caption that says whose battery sits it; `shortHint` is the
   // same in the few characters an 83px phone tile has room for.
+  // The split's own announcement badge. A combined tile has no single game to
+  // hang one on, and FLAG's `badge` would read as news about FLAG.
+  badge: 'New CLAN Tutorial',
   halves: [
     { label: 'FLAG', mode: 'flag', path: '/cbat/flag', lbKey: 'flag', flags: ['GB'], hint: 'Sat in the UK: RAF and Royal Navy', shortHint: 'UK: RAF and RN' },
     { label: 'CLAN', mode: 'clan', path: '/cbat/clan', lbKey: 'clan', flags: ['CA', 'AU'], hint: 'Sat in Canada and Australia', shortHint: 'Canada, Australia' },
@@ -358,6 +361,7 @@ function CombinedGameTile({ game: tileGame, i, split, flickeringKey, enabled, is
       >
         <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} />
         <EstTime game={game} />
+        {split.badge && enabled && <TileBadge text={split.badge} />}
         {!enabled && isAdmin && <TileBadge text="Disabled" tone="slate" />}
         <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
         <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
