@@ -387,6 +387,11 @@ function buildBatteryReport(battery, form) {
       blurb: DOMAINS[d.key].blurb,
       weight: d.weight,
       stanine,
+      // The red mark on the real sheet's row: fall below it and the battery fails whatever the
+      // score says. `belowMinimum` is judged on the ROUNDED stanine, like everything else the sheet
+      // prints. Null until the domain is scored at all.
+      minStanine: d.minStanine ?? null,
+      belowMinimum: stanine !== null && d.minStanine != null && stanine < d.minStanine,
       // The unrounded mean behind it. Nothing scores off this: it is what the row's BAR is drawn
       // to, so a player on 7.6 can see they are nearly an 8 while the sheet still calls them 8.
       // The real form has this too, in its way — its bars sit on gridlines, but ours is a training
@@ -424,6 +429,13 @@ function buildBatteryReport(battery, form) {
   // A firm report is one nothing is still guessing at: no part-played game anywhere in it. This is
   // what turns the range back into the single number the page leads with.
   const firm = score !== null && scoreSd === 0;
+
+  // Domain minimums. A FIRM domain under its minimum fails the battery outright, exactly as the
+  // real sheet does (Pilot 138 against a cutoff of 112 printed FAIL on a CIP of 3 under a minimum
+  // of 5). A domain still resting on part-played games is only an estimate, so under its minimum
+  // it holds the verdict at 'provisional' instead of calling a fail it cannot yet stand behind.
+  const failedMinimums = domains.filter(d => d.belowMinimum).map(d => d.key);
+  const firmMinimumFail = domains.some(d => d.belowMinimum && d.firm);
 
   // Weight-share of the battery the estimate rests on. Both legs matter: a domain can be fully
   // weighted in but only half its tests scored, so this walks tests rather than domains.
@@ -489,13 +501,22 @@ function buildBatteryReport(battery, form) {
     // straddling the cutoff is therefore provisional too, and the way out is the same as ever:
     // bank the runs, close the band, get an answer. Zero-width on a firm report, so this can never
     // touch a fully played battery.
+    //
+    // Third, the domain minimums: a firm domain under its minimum is a fail however high the score,
+    // and a thin one under its minimum is provisional. `failedMinimums` names them so the UI can say
+    // which row did it.
     status: score === null
       ? 'unscored'
       : coverage < MIN_COVERAGE_FOR_VERDICT
         ? 'provisional'
-        : (scoreLow < battery.cutoff && scoreHigh >= battery.cutoff)
-          ? 'provisional'
-          : score >= battery.cutoff ? 'pass' : 'fail',
+        : firmMinimumFail
+          ? 'fail'
+          : failedMinimums.length
+            ? 'provisional'
+            : (scoreLow < battery.cutoff && scoreHigh >= battery.cutoff)
+              ? 'provisional'
+              : score >= battery.cutoff ? 'pass' : 'fail',
+    failedMinimums,
     coverage,
     domains,
     focus: buildFocus(domains, measuredWeight, coverage),
@@ -708,10 +729,10 @@ async function buildAllBatteryScores(userId, targetKey = null) {
   const batteries = Object.values(BATTERY_BY_KEY).map((b) => {
     const report = buildBatteryReport(b, form);
     const { key, label, group, region, cutoff, score, scoreLow, scoreHigh, firm, margin, status, coverage,
-            runsBanked, runsForFirmScore, firmTests } = report;
+            runsBanked, runsForFirmScore, firmTests, failedMinimums } = report;
     if (targetKey && key === targetKey) targetFocus = topFocus(report);
     return { key, label, group, region, cutoff, maxScore: MAX_SCORE, score, scoreLow, scoreHigh, firm,
-             margin, status, coverage, runsBanked, runsForFirmScore, firmTests };
+             margin, status, coverage, runsBanked, runsForFirmScore, firmTests, failedMinimums };
   });
   const target = targetKey ? BATTERY_BY_KEY[targetKey] : null;
   // runsToCount travels with the data rather than being mirrored in the frontend. The card counts

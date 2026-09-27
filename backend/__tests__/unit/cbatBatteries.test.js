@@ -47,6 +47,24 @@ describe('battery definitions', () => {
     }
   });
 
+  it('gives every domain a whole-number minimum stanine inside the scale', () => {
+    // The red mark on each row of the real sheet. Derived roles inherit theirs from the UK role
+    // they are based on, so this walks the expanded list, not just the JSON.
+    for (const b of BATTERIES) {
+      for (const d of b.domains) {
+        expect([b.key, d.key, Number.isInteger(d.minStanine)]).toEqual([b.key, d.key, true]);
+        expect(d.minStanine).toBeGreaterThanOrEqual(1);
+        expect(d.minStanine).toBeLessThanOrEqual(MAX_STANINE);
+      }
+    }
+  });
+
+  it('keeps the Pilot minimums read off the real sheet', () => {
+    // Pilot 2026 and the older Pilot form both carry these marks, in domain order.
+    expect(BATTERY_BY_KEY.pilot.domains.map(d => d.minStanine)).toEqual([4, 4, 2, 5, 4, 4, 5]);
+    expect(BATTERY_BY_KEY['rcaf-pilot'].domains.map(d => d.minStanine)).toEqual([4, 4, 2, 5, 4, 4, 5]);
+  });
+
   it('exposes a lookup covering every battery', () => {
     expect(Object.keys(BATTERY_BY_KEY)).toHaveLength(BATTERIES.length);
   });

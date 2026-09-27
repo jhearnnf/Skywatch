@@ -12,7 +12,8 @@
     "two real sheets: the bars sit on gridlines and decode back to the printed score exactly), and",
     "the battery score is",
     "  round(sum(domainWeight * domainStanine) / 100 * 20)   -> max 180",
-    "Pass is score >= cutoff. Domain weights sum to 100 in every battery (asserted in tests)."
+    "Pass is score >= cutoff AND every domain at or above its minStanine (see _minStanineComment).",
+    "Domain weights sum to 100 in every battery (asserted in tests)."
   ],
 
   "maxScore": 180,
@@ -29,6 +30,20 @@
     "but it is not a pass or a fail and no part of the UI may present it as one."
   ],
   "minCoverageForVerdict": 80,
+
+  "_minStanineComment": [
+    "Every domain on the real sheet carries a red mark on its stanine row: the MINIMUM stanine for",
+    "that domain. Falling below it fails the battery however high the score is. Proven on two sheets:",
+    "Pilot 138 against a cutoff of 112 printed FAIL with CIP on 3 under a minimum of 5, and",
+    "Intelligence 100 against 95 printed FAIL with SpaR and SymR under theirs. The mark is drawn in",
+    "the centre of the minimum's column, as a small tick either side of the bar, and as a solid red",
+    "bar when the domain is below it.",
+    "",
+    "Transcribed 2026-09-27 from the red marks on the sheets in APPLICATION_INFO/cbat scores",
+    "(raf-cbat-passed-*.webp for every battery, cross-checked against Screenshot_20260108-154753.png",
+    "for Pilot, Pilot ISR and Intelligence, which agree). Canadian and Australian roles inherit the",
+    "minimums of the UK role they are based on."
+  ],
 
   "_domainsComment": [
     "Blurbs are shown to the user, so they are written for someone who has never heard of the CBAT:",
@@ -271,13 +286,13 @@
       "cutoff": 112,
       "note": "This is the toughest role to get. Its pass mark is 22 points higher than any Control role.",
       "domains": [
-        { "key": "StrgcTM", "weight": 17, "tests": [{ "code": "CUT", "mult": 3 }, { "code": "SAT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 14, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "MATF", "mult": 1 }] },
-        { "key": "STM_C",   "weight": 11, "tests": [{ "code": "ACT", "mult": 3 }, { "code": "TRAC2", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 15, "tests": [{ "code": "INSC", "mult": 2 }, { "code": "TRAC1", "mult": 2 }, { "code": "DAD", "mult": 1 }] },
-        { "key": "SymR",    "weight": 12, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "ANT", "mult": 3 }] },
-        { "key": "Psych",   "weight": 15, "tests": [{ "code": "SMA", "mult": 1 }, { "code": "RTT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 16, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 17, "minStanine": 4, "tests": [{ "code": "CUT", "mult": 3 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 14, "minStanine": 4, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 11, "minStanine": 2, "tests": [{ "code": "ACT", "mult": 3 }, { "code": "TRAC2", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 15, "minStanine": 5, "tests": [{ "code": "INSC", "mult": 2 }, { "code": "TRAC1", "mult": 2 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "SymR",    "weight": 12, "minStanine": 4, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "ANT", "mult": 3 }] },
+        { "key": "Psych",   "weight": 15, "minStanine": 4, "tests": [{ "code": "SMA", "mult": 1 }, { "code": "RTT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 16, "minStanine": 5, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -286,13 +301,13 @@
       "group": "Officer aircrew",
       "cutoff": 100,
       "domains": [
-        { "key": "StrgcTM", "weight": 15, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 16, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
-        { "key": "STM_C",   "weight": 10, "tests": [{ "code": "ACT", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 17, "tests": [{ "code": "INSC", "mult": 2 }, { "code": "DAD", "mult": 1 }] },
-        { "key": "SymR",    "weight": 14, "tests": [{ "code": "ANT", "mult": 2 }, { "code": "SLT", "mult": 1 }] },
-        { "key": "Psych",   "weight": 12, "tests": [{ "code": "SMA", "mult": 1 }, { "code": "RTT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 16, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 15, "minStanine": 4, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 16, "minStanine": 4, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 10, "minStanine": 4, "tests": [{ "code": "ACT", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 17, "minStanine": 4, "tests": [{ "code": "INSC", "mult": 2 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "SymR",    "weight": 14, "minStanine": 4, "tests": [{ "code": "ANT", "mult": 2 }, { "code": "SLT", "mult": 1 }] },
+        { "key": "Psych",   "weight": 12, "minStanine": 4, "tests": [{ "code": "SMA", "mult": 1 }, { "code": "RTT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 16, "minStanine": 5, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -301,13 +316,13 @@
       "group": "Officer aircrew",
       "cutoff": 100,
       "domains": [
-        { "key": "StrgcTM", "weight": 30, "tests": [{ "code": "CUT", "mult": 2 }, { "code": "SAT", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 15, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
-        { "key": "STM_C",   "weight":  8, "tests": [{ "code": "ACT", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 15, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "INSC", "mult": 1 }] },
-        { "key": "SymR",    "weight": 19, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
-        { "key": "Psych",   "weight":  3, "tests": [{ "code": "RTT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 30, "minStanine": 4, "tests": [{ "code": "CUT", "mult": 2 }, { "code": "SAT", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 15, "minStanine": 4, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight":  8, "minStanine": 2, "tests": [{ "code": "ACT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 15, "minStanine": 4, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "INSC", "mult": 1 }] },
+        { "key": "SymR",    "weight": 19, "minStanine": 4, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "Psych",   "weight":  3, "minStanine": 4, "tests": [{ "code": "RTT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "minStanine": 4, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -317,12 +332,12 @@
       "cutoff": 90,
       "note": "Almost half of this role rides on Strategic Task Management, so CUT and SAT matter most.",
       "domains": [
-        { "key": "StrgcTM", "weight": 49, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 14, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }] },
-        { "key": "STM_C",   "weight":  8, "tests": [{ "code": "ACT", "mult": 1 }] },
-        { "key": "SpaR",    "weight":  9, "tests": [{ "code": "SIT", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
-        { "key": "SymR",    "weight": 10, "tests": [{ "code": "NOP", "mult": 1 }] },
-        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 49, "minStanine": 4, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 14, "minStanine": 3, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "STM_C",   "weight":  8, "minStanine": 3, "tests": [{ "code": "ACT", "mult": 1 }] },
+        { "key": "SpaR",    "weight":  9, "minStanine": 3, "tests": [{ "code": "SIT", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 10, "minStanine": 2, "tests": [{ "code": "NOP", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -331,12 +346,12 @@
       "group": "Air & Space Operations",
       "cutoff": 90,
       "domains": [
-        { "key": "StrgcTM", "weight": 42, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 13, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VIG1", "mult": 1 }] },
-        { "key": "STM_C",   "weight": 12, "tests": [{ "code": "TRAC2", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 12, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
-        { "key": "SymR",    "weight": 11, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 42, "minStanine": 3, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 13, "minStanine": 3, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VIG1", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 12, "minStanine": 2, "tests": [{ "code": "TRAC2", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 12, "minStanine": 4, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 11, "minStanine": 3, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -345,12 +360,12 @@
       "group": "Air & Space Operations",
       "cutoff": 90,
       "domains": [
-        { "key": "StrgcTM", "weight": 20, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 21, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VGIL_SPEED", "mult": 1 }] },
-        { "key": "STM_C",   "weight": 11, "tests": [{ "code": "TRAC2", "mult": 2 }, { "code": "RCOG", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 14, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SymR",    "weight": 20, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 14, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 20, "minStanine": 3, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 21, "minStanine": 3, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VGIL_SPEED", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 11, "minStanine": 2, "tests": [{ "code": "TRAC2", "mult": 2 }, { "code": "RCOG", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 14, "minStanine": 3, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 20, "minStanine": 3, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 14, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -359,11 +374,11 @@
       "group": "Air & Space Operations",
       "cutoff": 95,
       "domains": [
-        { "key": "Percpt", "weight": 10, "tests": [{ "code": "MATF", "mult": 1 }, { "code": "TRT", "mult": 1 }] },
-        { "key": "STM_C",  "weight": 13, "tests": [{ "code": "SAT", "mult": 1 }] },
-        { "key": "SpaR",   "weight": 25, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SymR",   "weight": 41, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "VLT", "mult": 1 }] },
-        { "key": "CIP",    "weight": 11, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "Percpt", "weight": 10, "minStanine": 3, "tests": [{ "code": "MATF", "mult": 1 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "STM_C",  "weight": 13, "minStanine": 4, "tests": [{ "code": "SAT", "mult": 1 }] },
+        { "key": "SpaR",   "weight": 25, "minStanine": 4, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SymR",   "weight": 41, "minStanine": 5, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "VLT", "mult": 1 }] },
+        { "key": "CIP",    "weight": 11, "minStanine": 4, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -372,11 +387,11 @@
       "group": "Non-commissioned aircrew",
       "cutoff": 90,
       "domains": [
-        { "key": "VR", "weight": 20, "tests": [{ "code": "VLT", "mult": 1 }] },
-        { "key": "NR", "weight":  7, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "NOP", "mult": 1 }] },
-        { "key": "SR", "weight": 22, "tests": [{ "code": "ABD5", "mult": 1 }, { "code": "DAD", "mult": 1 }] },
-        { "key": "WR", "weight": 22, "tests": [{ "code": "MATF", "mult": 1 }, { "code": "TRT", "mult": 1 }] },
-        { "key": "AC", "weight": 29, "tests": [{ "code": "FLAG", "mult": 2 }, { "code": "RCOG", "mult": 1 }] }
+        { "key": "VR", "weight": 20, "minStanine": 5, "tests": [{ "code": "VLT", "mult": 1 }] },
+        { "key": "NR", "weight":  7, "minStanine": 3, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "NOP", "mult": 1 }] },
+        { "key": "SR", "weight": 22, "minStanine": 3, "tests": [{ "code": "ABD5", "mult": 1 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "WR", "weight": 22, "minStanine": 3, "tests": [{ "code": "MATF", "mult": 1 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "AC", "weight": 29, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 2 }, { "code": "RCOG", "mult": 1 }] }
       ]
     },
     {
@@ -385,12 +400,12 @@
       "group": "Non-commissioned aircrew",
       "cutoff": 90,
       "domains": [
-        { "key": "StrgcTM", "weight":  9, "tests": [{ "code": "CUT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 20, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "VISS", "mult": 1 }] },
-        { "key": "STM_C",   "weight": 16, "tests": [{ "code": "ACT", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 22, "tests": [{ "code": "ABD5", "mult": 1 }, { "code": "DAD", "mult": 1 }, { "code": "TRAC1", "mult": 1 }] },
-        { "key": "SymR",    "weight": 22, "tests": [{ "code": "ANT", "mult": 1 }, { "code": "SLT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 11, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight":  9, "minStanine": 3, "tests": [{ "code": "CUT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 20, "minStanine": 3, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "VISS", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 16, "minStanine": 4, "tests": [{ "code": "ACT", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 22, "minStanine": 2, "tests": [{ "code": "ABD5", "mult": 1 }, { "code": "DAD", "mult": 1 }, { "code": "TRAC1", "mult": 1 }] },
+        { "key": "SymR",    "weight": 22, "minStanine": 4, "tests": [{ "code": "ANT", "mult": 1 }, { "code": "SLT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 11, "minStanine": 4, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -399,12 +414,12 @@
       "group": "Non-commissioned aircrew",
       "cutoff": 90,
       "domains": [
-        { "key": "StrgcTM", "weight": 14, "tests": [{ "code": "CUT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 20, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
-        { "key": "STM_C",   "weight": 16, "tests": [{ "code": "ACT", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 22, "tests": [{ "code": "TRAC1", "mult": 1 }, { "code": "DAD", "mult": 1 }] },
-        { "key": "SymR",    "weight": 14, "tests": [{ "code": "ANT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 14, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 14, "minStanine": 3, "tests": [{ "code": "CUT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 20, "minStanine": 4, "tests": [{ "code": "TRT", "mult": 2 }, { "code": "MATF", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 16, "minStanine": 2, "tests": [{ "code": "ACT", "mult": 2 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 22, "minStanine": 4, "tests": [{ "code": "TRAC1", "mult": 1 }, { "code": "DAD", "mult": 1 }] },
+        { "key": "SymR",    "weight": 14, "minStanine": 3, "tests": [{ "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 14, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -413,10 +428,10 @@
       "group": "Non-commissioned aircrew",
       "cutoff": 90,
       "domains": [
-        { "key": "PrcptSTM", "weight": 44, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }, { "code": "CUT", "mult": 2 }] },
-        { "key": "SpaR",     "weight": 11, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "GSPA", "mult": 1 }] },
-        { "key": "SymR",     "weight": 36, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "VLT", "mult": 1 }] },
-        { "key": "StrgCIP",  "weight":  9, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "PrcptSTM", "weight": 44, "minStanine": 4, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }, { "code": "CUT", "mult": 2 }] },
+        { "key": "SpaR",     "weight": 11, "minStanine": 3, "tests": [{ "code": "DAD", "mult": 1 }, { "code": "GSPA", "mult": 1 }] },
+        { "key": "SymR",     "weight": 36, "minStanine": 4, "tests": [{ "code": "SLT", "mult": 1 }, { "code": "VLT", "mult": 1 }] },
+        { "key": "StrgCIP",  "weight":  9, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -426,12 +441,12 @@
       "cutoff": 80,
       "note": "Same tests as Control Officer (ATC), but with the lowest pass mark of any role.",
       "domains": [
-        { "key": "StrgcTM", "weight": 49, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 14, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }] },
-        { "key": "STM_C",   "weight":  8, "tests": [{ "code": "ACT", "mult": 1 }] },
-        { "key": "SpaR",    "weight":  9, "tests": [{ "code": "SIT", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
-        { "key": "SymR",    "weight": 10, "tests": [{ "code": "NOP", "mult": 1 }] },
-        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 49, "minStanine": 4, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "SAT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 14, "minStanine": 3, "tests": [{ "code": "MATF", "mult": 2 }, { "code": "TRT", "mult": 1 }] },
+        { "key": "STM_C",   "weight":  8, "minStanine": 3, "tests": [{ "code": "ACT", "mult": 1 }] },
+        { "key": "SpaR",    "weight":  9, "minStanine": 3, "tests": [{ "code": "SIT", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 10, "minStanine": 2, "tests": [{ "code": "NOP", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     },
     {
@@ -440,12 +455,12 @@
       "group": "Non-commissioned",
       "cutoff": 90,
       "domains": [
-        { "key": "StrgcTM", "weight": 42, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
-        { "key": "Percpt",  "weight": 13, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VIG1", "mult": 1 }] },
-        { "key": "STM_C",   "weight": 12, "tests": [{ "code": "TRAC2", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
-        { "key": "SpaR",    "weight": 12, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
-        { "key": "SymR",    "weight": 11, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
-        { "key": "CIP",     "weight": 10, "tests": [{ "code": "FLAG", "mult": 1 }] }
+        { "key": "StrgcTM", "weight": 42, "minStanine": 3, "tests": [{ "code": "CUT", "mult": 1 }, { "code": "ACT", "mult": 1 }] },
+        { "key": "Percpt",  "weight": 13, "minStanine": 3, "tests": [{ "code": "TRT", "mult": 1 }, { "code": "VIG1", "mult": 1 }] },
+        { "key": "STM_C",   "weight": 12, "minStanine": 2, "tests": [{ "code": "TRAC2", "mult": 1 }, { "code": "SIT", "mult": 1 }] },
+        { "key": "SpaR",    "weight": 12, "minStanine": 4, "tests": [{ "code": "TRAC1", "mult": 2 }, { "code": "DPT", "mult": 1 }] },
+        { "key": "SymR",    "weight": 11, "minStanine": 3, "tests": [{ "code": "SAT", "mult": 1 }, { "code": "ANT", "mult": 1 }] },
+        { "key": "CIP",     "weight": 10, "minStanine": 3, "tests": [{ "code": "FLAG", "mult": 1 }] }
       ]
     }
   ],

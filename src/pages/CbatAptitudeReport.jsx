@@ -36,10 +36,15 @@ function levelUpHint(gameKey) {
 // tick moves with the role. Domains where we couldn't measure anything render the grid empty
 // rather than at zero, because "we don't know" and "you scored the minimum" are not the same
 // claim and a zero-length bar would say the second.
-function StanineBar({ stanine, target, compact = false }) {
+//
+// `minimum` is the domain's own floor, the other red mark on the real sheet: a short tick above and
+// below the bar in the CENTRE of the minimum's cell, which is where the sheet draws it. Fall under
+// it and the role fails whatever the score, so it stays visible even when the bar covers it.
+function StanineBar({ stanine, target, minimum = null, compact = false }) {
   const tone = stanineTone(stanine)
   const pct = stanine == null ? 0 : (stanine / MAX_STANINE) * 100
   const targetPct = target == null ? null : (target / MAX_STANINE) * 100
+  const minimumPct = minimum == null ? null : ((minimum - 0.5) / MAX_STANINE) * 100
 
   // Built from spans throughout, not divs: a domain row is a <button> and a test row nests this
   // inside a <span>, and neither may legally contain flow content.
@@ -66,6 +71,12 @@ function StanineBar({ stanine, target, compact = false }) {
           style={{ left: `calc(${targetPct}% - 1px)` }}
           title={`This role wants stanine ${target} here`}
         />
+      )}
+      {minimumPct != null && (
+        <span className="absolute inset-y-0 w-[3px] pointer-events-none" style={{ left: `calc(${minimumPct}% - 1.5px)` }} title={`Minimum for this role: stanine ${minimum}`}>
+          <span className="absolute top-0 left-0 w-full h-[30%] bg-[#ff4d4d]" />
+          <span className="absolute bottom-0 left-0 w-full h-[30%] bg-[#ff4d4d]" />
+        </span>
       )}
     </span>
   )
@@ -264,7 +275,7 @@ function DomainRow({ domain, targetStanine }) {
         <span className="w-[104px] sm:w-[150px] shrink-0 min-w-0">
           <span className="block text-xs font-bold text-slate-800 truncate">{domain.label}</span>
           <span className={`block text-[10px] truncate ${TONE_TEXT[band.tone]}`}>
-            {unmeasured ? (noGameAtAll ? 'No game yet' : 'Not enough games') : band.label}
+            {unmeasured ? (noGameAtAll ? 'No game yet' : 'Not enough games') : domain.belowMinimum ? `Under the minimum of ${domain.minStanine}` : band.label}
           </span>
         </span>
         {/* The BAR is drawn to the unrounded mean and the NUMBER is the whole stanine the score is
@@ -272,7 +283,7 @@ function DomainRow({ domain, targetStanine }) {
             useful part: the number is what the real sheet would call you, the bar is how close you
             are to the next one. The bug this replaced was not the rounding here, it was the score
             being computed from the unrounded mean, so a row could read 9 inside a battery of 173. */}
-        <span className="flex-1 min-w-0"><StanineBar stanine={domain.stanineRaw ?? domain.stanine} target={targetStanine} /></span>
+        <span className="flex-1 min-w-0"><StanineBar stanine={domain.stanineRaw ?? domain.stanine} target={targetStanine} minimum={domain.minStanine} /></span>
         {/* The whole level, with the average it came from underneath. The small figure is the only
             place practice shows up between levels: grinding a skill area from 8.1 to 8.4 is real
             improvement that the level cannot show and the bar moves about three pixels for. It is

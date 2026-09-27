@@ -158,7 +158,26 @@ export function stanineTone(stanine) {
 // the backend, which sets status 'provisional' at the same threshold.
 export const MIN_COVERAGE_FOR_VERDICT = batteryData.minCoverageForVerdict
 
-export function reportVerdict({ status, margin, coverage, scoreLow, scoreHigh, cutoff } = {}) {
+// Plain names for the domains a battery fell short on, joined for a sentence: "Spatial Reasoning
+// and Symbolic Reasoning".
+function minimumsPhrase(keys) {
+  const names = keys.map(k => batteryData.domains[k]?.label ?? k)
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
+}
+
+export function reportVerdict({ status, margin, coverage, scoreLow, scoreHigh, cutoff, failedMinimums } = {}) {
+  // Every domain has a minimum as well as the battery having a pass mark, and falling under one
+  // fails the role however high the score (see _minStanineComment in cbatBatteries.json). That has
+  // to be said in words, because the score alone would read as a pass.
+  const underMinimum = Array.isArray(failedMinimums) && failedMinimums.length > 0
+  if (status === 'fail' && underMinimum) {
+    return {
+      label: 'Below a minimum',
+      tone: 'bad',
+      blurb: `Your ${minimumsPhrase(failedMinimums)} score is under the minimum this role needs, so it does not pass${margin != null && margin >= 0 ? ` even though you are ${margin} points above the pass mark` : ''}.`,
+    }
+  }
+
   // A provisional score is real arithmetic on too little evidence. It must never be coloured or
   // worded as a pass, because the number itself looks exactly as confident as a full one.
   //
@@ -168,6 +187,14 @@ export function reportVerdict({ status, margin, coverage, scoreLow, scoreHigh, c
   // user to "play more of its games" would be useless advice: they have played them, they just
   // have not played them enough times each.
   if (status === 'provisional') {
+    // Well covered, but a domain still resting on part-played games reads under its minimum.
+    if (underMinimum && coverage >= MIN_COVERAGE_FOR_VERDICT) {
+      return {
+        label: 'Under a minimum for now',
+        tone: 'muted',
+        blurb: `Your ${minimumsPhrase(failedMinimums)} score is under the minimum this role needs. It is still based on part-played games, so play them a few more times and we'll call it.`,
+      }
+    }
     const straddles = scoreLow != null && scoreHigh != null && cutoff != null
       && scoreLow < cutoff && scoreHigh >= cutoff && scoreLow !== scoreHigh
     return straddles
