@@ -157,8 +157,9 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['clan', 'clan-easier'],
     simulates: 'CLAN',
     aliases: ['clan', 'colours letters and numbers', 'colours, letters and numbers', 'colors letters and numbers', 'diamonds'],
-    what: 'ninety seconds of three tasks at once: press R, Y or G as each coloured diamond crosses its colour band, memorise a letter code and pick it out of four near-identical options in the corners (A to D), and type the sums as they appear. The test the RAF replaced with FLAG in 2021; still sat in Canada and Australia, and it shares the FLAG tile.',
+    what: 'ninety seconds of three tasks at once: press the matching colour key as each coloured diamond crosses its colour band, memorise a letter code and pick it out of four near-identical options in the corners (A to D), and type the sums as they appear. The test the RAF replaced with FLAG in 2021; still sat in Canada and Australia, and it shares the FLAG tile. Keys are a choice on the intro card: Grouped (colours J K L, codes Q W / A S, the default), Mirrored (colours S D F, codes I O / K L) or Letters (R Y G and A to D).',
     difficulties: ['Easier', 'Hard'],
+    tutorial: 'a slow-motion guided run for learning the keys. Whenever something needs pressing, the game slows almost to a stop, blurs everything else and zooms in on it, with the key to press lit up. It speeds back up once you answer, with big plus points for a right answer and minus points for a wrong one. It ends once you have caught four diamonds, picked two codes and answered two sums.',
   },
   {
     name: 'Visualisation 2D and 3D',

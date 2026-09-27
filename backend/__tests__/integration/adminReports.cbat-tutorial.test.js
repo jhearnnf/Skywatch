@@ -160,12 +160,12 @@ describe('GET /api/admin/reports/cbat — tutorial usage', () => {
     const { data } = res.body;
 
     expect(data.tutorials.map(t => t.key))
-      .toEqual(['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial', 'cut-tutorial', 'dpt-tutorial']);
+      .toEqual(['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial', 'cut-tutorial', 'dpt-tutorial', 'clan-tutorial']);
     // Labels are derived from CBAT_GAMES, so a game rename carries through.
     expect(data.gameLabels['flag-tutorial']).toBe('FLAG (tutorial)');
     expect(data.gameLabels['ant-tutorial']).toBe('Airborne Numerical Test (tutorial)');
     // All of them grey out and get a per-game row + stacked-chart series.
-    for (const key of ['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial', 'cut-tutorial', 'dpt-tutorial']) {
+    for (const key of ['target-tutorial', 'ant-tutorial', 'flag-tutorial', 'sat-tutorial', 'cut-tutorial', 'dpt-tutorial', 'clan-tutorial']) {
       expect(data.practiceKeys).toContain(key);
       expect(data.gameKeys).toContain(key);
       expect(data.perGame.find(g => g.key === key)?.isTutorial).toBe(true);

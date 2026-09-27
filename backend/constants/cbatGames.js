@@ -636,7 +636,7 @@ function cbatLabelWithDifficulty(gameKey) {
 // catalogue by a test, so a game that gains a tutorial and is not added here
 // fails the build rather than going unreported and unmentioned - which is
 // exactly what happened to CUT's for a day.
-const CBAT_TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat', 'cut', 'dpt'];
+const CBAT_TUTORIAL_GAME_KEYS = ['target', 'ant', 'flag', 'sat', 'cut', 'dpt', 'clan'];
 
 module.exports = {
   CBAT_GAMES, CBAT_TUTORIAL_GAME_KEYS, cbatLabelWithDifficulty, cbatHardKeyFor, isCbatEasierKey, isCbatHardKey,
