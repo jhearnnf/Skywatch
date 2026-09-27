@@ -24,6 +24,7 @@ const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { BATTERY_BY_KEY } = require('../constants/cbatBatteries');
 const { UI_THEMES } = require('../constants/uiThemes.json');
+const { CLAN_KEY_LAYOUTS } = require('../constants/clanKeyLayouts.json');
 const { withSelectedBadge, resolveSelectedBadge } = require('../utils/selectedBadge');
 const { cbatRecordFor } = require('../utils/cbatRecord');
 const { medalsForUsers, resetMedalHoldersCache } = require('../utils/cbatMedalHolders');
@@ -207,6 +208,31 @@ router.patch('/me/theme', protect, async (req, res) => {
     const updated = await User.findByIdAndUpdate(
       req.user._id,
       { uiTheme: theme },
+      { returnDocument: 'after' }
+    ).populate('rank');
+
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/clan-keys — which keys CLAN answers to.
+// Body { layout: 'grouped' | 'mirrored' | 'letters' }.
+//
+// On the account, like the theme, so a player who has built muscle memory on
+// one layout gets it on every device.
+router.patch('/me/clan-keys', protect, async (req, res) => {
+  try {
+    const { layout } = req.body ?? {};
+    if (!CLAN_KEY_LAYOUTS.includes(layout)) {
+      return res.status(400).json({ status: 'error', message: 'Unknown key layout' });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      req.user._id,
+      { clanKeyLayout: layout },
       { returnDocument: 'after' }
     ).populate('rank');
 

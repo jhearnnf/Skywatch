@@ -5,6 +5,7 @@ const { SUBSCRIPTION_TIERS } = require('../constants/subscriptionTiers');
 const { TUTORIAL_STATUS } = require('../constants/tutorialStatus');
 const { RESULT_IMAGE_SOURCES } = require('../constants/survey');
 const { UI_THEMES, DEFAULT_UI_THEME } = require('../constants/uiThemes.json');
+const { CLAN_KEY_LAYOUTS, DEFAULT_CLAN_KEY_LAYOUT } = require('../constants/clanKeyLayouts.json');
 
 const loginSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
@@ -251,6 +252,11 @@ const userSchema = new mongoose.Schema(
     // theme selector in the top bar and honoured on every page and game.
     // Visual only: it never changes how a game plays.
     uiTheme: { type: String, enum: UI_THEMES, default: DEFAULT_UI_THEME },
+
+    // Which keys CLAN answers to (see src/pages/CbatClan/keys.js). 'grouped'
+    // gives each task its own cluster of keys, the way the real test gives
+    // each task its own buttons; 'letters' is the original R/Y/G + A-D.
+    clanKeyLayout: { type: String, enum: CLAN_KEY_LAYOUTS, default: DEFAULT_CLAN_KEY_LAYOUT },
 
     // Subscription
     subscriptionTier: {
