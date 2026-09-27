@@ -99,7 +99,9 @@ describe('AptitudeReportCard — read on yourself', () => {
     const { apiFetch } = renderWith(RUNS)
     await settled()
     expect(apiFetch).toHaveBeenCalledWith('/api/games/cbat/report')
-    expect(screen.getByRole('link')).toHaveAttribute('href', '/cbat/report')
+    expect(screen.getByRole('link', { name: /Aptitude Report/ })).toHaveAttribute('href', '/cbat/report')
+    // Your own card also carries the Mock Assessment half.
+    expect(screen.getByTestId('aptitude-card-mock')).toHaveAttribute('href', '/cbat/mock')
     expect(screen.getByTestId('aptitude-card-score')).toHaveTextContent('2 / 3 runs to settle your first game')
     expect(screen.getByTestId('aptitude-card-action'))
       .toHaveTextContent('Play Cognitive Updating Test on Hard 1 more time to settle it.')

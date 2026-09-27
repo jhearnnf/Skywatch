@@ -1,0 +1,58 @@
+{
+  "_comment": [
+    "Mock Assessment: one sitting of every test a role (or every role in a region) is scored on,",
+    "then a score sheet laid out like the real one. Shared with the frontend, which imports this",
+    "file directly (same arrangement as cbatBatteries.json). The plan itself is built on the",
+    "server (backend/utils/cbatMockPlan.js) so the shuffle and the break points are fixed on the",
+    "mock the moment it starts and survive a refresh.",
+    "",
+    "The test list comes from cbatBatteries.json: every test code in the chosen batteries, mapped",
+    "to the Hard game(s) the Aptitude Report scores it on. Codes with no game (RCOG, GSPA) are left",
+    "out; two codes that share a game (VIG1 and VGIL_SPEED are both Vigilance Hard) are sat once;",
+    "a code with two games (VISS: Visualisation 2D and 3D) is one step played back to back."
+  ],
+
+  "_timingComment": [
+    "breakAfterMinutes: a break falls at the first test boundary once this much estimated test",
+    "time has passed since the start or the last break. breakMinutes: the break's countdown.",
+    "idleLimitMinutes: if the next test is not started within this long of the last activity,",
+    "the mock closes itself (scores already posted are kept). The user is told this before they",
+    "start and on every between-tests screen."
+  ],
+  "breakAfterMinutes": 30,
+  "breakMinutes": 10,
+  "idleLimitMinutes": 120,
+
+  "_minutesComment": [
+    "Estimated minutes for one run of each Hard board, INCLUDING reading its instructions card.",
+    "Drives the time shown before starting, the break points and the Estimated finish clock, so",
+    "err long rather than short. Every game any battery can draw on must have an entry (asserted",
+    "in tests)."
+  ],
+  "minutes": {
+    "cut":              4,
+    "sat":              6,
+    "act":              5,
+    "dad":              5,
+    "ant-hard":         12,
+    "flag":             1.5,
+    "clan":             2,
+    "dpt-hard":         6,
+    "rtt":              2,
+    "trace-1":          2,
+    "trace-2":          3,
+    "numerical-ops":    2,
+    "instruments":      2,
+    "visualisation-2d": 2,
+    "visualisation-3d": 2,
+    "target":           3,
+    "angles":           1.5,
+    "code-duplicates":  2,
+    "matf":             4,
+    "sit":              6,
+    "slt":              6,
+    "vlt":              15,
+    "vigilance-hard":   3.5,
+    "sma":              1
+  }
+}

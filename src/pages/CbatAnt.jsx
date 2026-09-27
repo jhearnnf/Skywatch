@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useTutorialFromSearch } from '../hooks/useTutorialFromSearch'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -861,6 +862,8 @@ export default function CbatAnt() {
   // rebuild in AntHardGame, so the difficulty picks a component rather than a
   // tuning object. See src/utils/cbat/antDifficulty.js.
   const [phase, setPhase] = useState('intro')
+  // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
+  useTutorialFromSearch(useCallback(() => setPhase('tutorial'), []))
   // The board below is laid out for max-w-5xl (map beside the tables), but the
   // shell caps every page at max-w-3xl, so on a desktop the two columns were
   // squeezed into 768px. Lifted while a round is up; see main.css.
@@ -1291,6 +1294,7 @@ export default function CbatAnt() {
                     that switches board belongs down here. */}
                 <button
                   onClick={() => setPhase('tutorial')}
+                  data-cbat-tutorial-btn
                   className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
                 >
                   Tutorial

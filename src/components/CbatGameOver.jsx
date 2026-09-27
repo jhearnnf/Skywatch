@@ -15,6 +15,8 @@ import { isOnline, onNetworkChange } from '../lib/net'
 import { onApiHealthChange, getApiHealth } from '../lib/apiHealth'
 import { onOutboxChange, pendingCount } from '../lib/cbatOutbox'
 import { captureEvent } from '../lib/posthog'
+import { useActiveMock, mockIdFor } from '../lib/cbatMockSession'
+import CbatMockGameOver from './cbat/CbatMockGameOver'
 
 // Shared CBAT game-completion screen. Every CBAT game renders this at
 // phase === 'results', passing its results breakdown as `children` (with its
@@ -388,7 +390,17 @@ function QueuedScoreNote() {
   )
 }
 
-export default function CbatGameOver({
+// During a Mock Assessment a finished test does not get the usual results screen (score, boards,
+// trend): the real test gives no feedback between tests, and the Real CBAT theme a mock forces
+// says the same. A run that is the one the mock is waiting on gets CbatMockGameOver instead.
+// Two components rather than an early return, so neither one's hooks depend on the other's.
+export default function CbatGameOver(props) {
+  const mock = useActiveMock()
+  if (mock && mockIdFor(props.gameKey)) return <CbatMockGameOver {...props} />
+  return <CbatGameOverStandard {...props} />
+}
+
+function CbatGameOverStandard({
   gameKey, score, time, scoreSaved, queued, personalBest, onPlayAgain, extraActions = [], children,
   previewAward = null,
 }) {

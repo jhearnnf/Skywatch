@@ -325,6 +325,10 @@ const appSettingsSchema = new mongoose.Schema({
   previewWindowCbatEnabled:       { type: Boolean, default: true },
 
   // Case Files feature
+  // Mock Assessment (/cbat/mock): one sitting of every test a role is scored on, then a score
+  // sheet. On by default; admins can always reach it, so switching it off hides it from players
+  // only.
+  cbatMockAssessmentEnabled:  { type: Boolean,  default: true },
   caseFilesEnabled:           { type: Boolean,  default: false },
   // Per-case tier gating lives on each GameCaseFile.tiers (admin always bypasses).
   // Daily session limits per tier (admin = unlimited, enforced in route).

@@ -21,6 +21,7 @@ const OWNED_BY_USER = [
   'AppOpen',
   'AptitudeSyncUsage',
   'CbatMatfPrint',
+  'CbatMockAssessment',
   'GameSessionCaseFileResult',
   'GameSessionCbatActResult',
   'GameSessionCbatAnglesResult',

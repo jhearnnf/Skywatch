@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
+import { useTutorialFromSearch } from '../hooks/useTutorialFromSearch'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -999,6 +1000,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
         <button
           type="button"
           onClick={onPractice}
+          data-cbat-tutorial-btn
           className="px-6 py-3 lg:px-8 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
@@ -1921,6 +1923,8 @@ export default function CbatDpt() {
     }).catch(() => {})
   }, [user, apiFetch, API])
   const openPractice  = useCallback(() => setPhase('practice'), [])
+  // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
+  useTutorialFromSearch(openPractice)
   const closePractice = useCallback(() => setPhase('select'), [])
 
   // Game state — wired up properly in Chunks 4–9

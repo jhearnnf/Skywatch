@@ -14,6 +14,7 @@ import { outboxPut, outboxDelete, outboxAll, outboxCount } from './offlineStore'
 import { makeClientId } from './clientId'
 import { getOutboxOwner, ownsQueuedItem } from './outboxOwner'
 import { currentUiTheme } from './uiTheme'
+import { mockIdFor } from './cbatMockSession'
 
 const resultUrl = (API, gameKey) => `${API}/api/games/cbat/${gameKey}/result`
 
@@ -61,10 +62,15 @@ export async function pendingCount(userId) {
 // here at game end so a queued score keeps the theme it was actually played in
 // rather than whatever is on screen when it finally syncs. A game that knows
 // better (its payload already carries uiTheme) wins.
+//
+// A run played inside a Mock Assessment also carries `mockId`, read here for the same reason:
+// it is the mock that was waiting on this game when it finished. The server records the run
+// against that mock and moves it to the next test (backend/utils/cbatMock.js).
 export async function submitCbatResult(gameKey, payload, { apiFetch, API }) {
   const clientResultId = makeClientId()
   const playedAt = new Date().toISOString()
-  const body = { uiTheme: currentUiTheme(), ...payload, clientResultId, playedAt }
+  const mockId = mockIdFor(gameKey)
+  const body = { uiTheme: currentUiTheme(), ...payload, clientResultId, playedAt, ...(mockId ? { mockId } : {}) }
   // userId stamps who this score belongs to, so a later flush can't post it as
   // somebody else on a shared device. See lib/outboxOwner.js.
   const item = { clientResultId, gameKey, body, queuedAt: Date.now(), userId: getOutboxOwner() }

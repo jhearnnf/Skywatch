@@ -52,6 +52,7 @@ app.use('/api/auth',       require('./routes/auth'));
 app.use('/api/briefs',     require('./routes/briefs'));
 app.use('/api/case-files', require('./routes/caseFiles'));
 app.use('/api/games',      require('./routes/games'));
+app.use('/api/cbat-mock',  require('./routes/cbatMock'));
 app.use('/api/admin/reports', require('./routes/adminReports'));
 // Mounted ahead of the catch-all admin router so its paths win.
 app.use('/api/admin/cbat-passers', require('./routes/adminSurvey'));

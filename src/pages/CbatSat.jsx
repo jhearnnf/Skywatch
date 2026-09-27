@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { useTutorialFromSearch } from '../hooks/useTutorialFromSearch'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -665,6 +666,8 @@ export default function CbatSat() {
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
   const [phase, setPhase] = useState('intro') // intro | tutorial | launching | observe | playing | feedback | results
+  // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
+  useTutorialFromSearch(useCallback(() => { primeSpeech(); setPhase('tutorial') }, []))
   // Desktop: the console sizes itself to the viewport height while a picture
   // is being memorised, wider than the shell's max-w-3xl. See main.css.
   useGameBodyClass('cbat-stage-wide', phase === 'observe')
@@ -1055,6 +1058,7 @@ export default function CbatSat() {
               <div className="flex items-center justify-center gap-3 lg:gap-4">
                 <button
                   onClick={() => { primeSpeech(); setPhase('tutorial') }}
+                  data-cbat-tutorial-btn
                   disabled={launching}
                   className={`px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base${dim}`}
                 >

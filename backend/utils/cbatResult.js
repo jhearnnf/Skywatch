@@ -69,7 +69,12 @@ async function saveCbatResult(Model, req, fields, extraFilter = {}) {
       clientResultId,
       ...extraFilter,
     });
-    if (existing) return existing; // idempotent — a retried flush is a no-op
+    if (existing) {
+      // A retry of a mock run whose first response was lost: the claim is idempotent, so make
+      // sure it landed rather than leaving the mock waiting on a run it already has.
+      await claimForMock(req, existing);
+      return existing; // idempotent — a retried flush is a no-op
+    }
   }
 
   const doc = { userId: req.user._id, uiTheme: normalizeUiTheme(uiTheme), ...fields };
@@ -86,7 +91,20 @@ async function saveCbatResult(Model, req, fields, extraFilter = {}) {
   // announcement must not fail the submission or delay the response.
   announceCbatMedal(Model, created.toObject ? created.toObject() : created).catch(() => {});
 
+  await claimForMock(req, created);
+
   return created;
+}
+
+// Mock Assessment. A run played inside a mock carries `mockId`; if it is the run that mock is
+// waiting on, the mock records it and moves to the next test (see utils/cbatMock.js). Awaited, so
+// the mock has moved on by the time the game's "Continue assessment" button appears. Required
+// lazily: cbatMock pulls in the Aptitude Report scorer, which this module has no other need of.
+async function claimForMock(req, result) {
+  const mockId = req.body?.mockId;
+  if (!mockId) return;
+  const { claimMockResult, gameKeyFromRequest } = require('./cbatMock');
+  await claimMockResult({ userId: req.user._id, mockId, gameKey: gameKeyFromRequest(req), result });
 }
 
 module.exports = { ensureCbatResultPaths, saveCbatResult };

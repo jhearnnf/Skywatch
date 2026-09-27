@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
+import { useTutorialFromSearch } from '../hooks/useTutorialFromSearch'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -852,6 +853,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
       <div className="flex flex-wrap gap-3 lg:gap-4 justify-center">
         <button
           onClick={onTutorial}
+          data-cbat-tutorial-btn
           className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
@@ -1676,6 +1678,8 @@ export default function CbatTarget() {
   const shapeScale = useShapeScale()
 
   const [phase, setPhase] = useState('intro')         // intro | playing | tutorial | results
+  // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
+  useTutorialFromSearch(useCallback(() => setPhase('tutorial'), []))
   // Desktop: the arena sizes itself to the viewport height, wider than the
   // shell's max-w-3xl. See main.css.
   useGameBodyClass('cbat-stage-wide', phase === 'playing' || phase === 'tutorial')

@@ -35,6 +35,8 @@
 //
 // A mode object: { key, label, gameKey, bars?, badge?, blurb }
 
+import { useActiveMock } from '../lib/cbatMockSession'
+
 const BAR_TONES = {
   solid:  ['bg-white',     'bg-white/25'],       // on a filled brand button
   muted:  ['bg-slate-600', 'bg-slate-400/40'],   // unselected button
@@ -104,6 +106,9 @@ export function ModeButton({ mode, selected, onSelect, flashing, dimmed }) {
 // The row itself. Wraps on a narrow screen rather than overflowing, which
 // matters on Trace — four modes do not fit a phone in one line.
 export function CbatModeRow({ modes, value, onSelect, launching = false, className = '' }) {
+  // A Mock Assessment opens each test on the board it scores and does not let it be switched.
+  const inMock = useActiveMock() != null
+  if (inMock) return null
   if (!modes || modes.length < 2) return null
   return (
     <div className={`flex flex-wrap items-center justify-center gap-3 mb-1 ${className}`.trim()}>

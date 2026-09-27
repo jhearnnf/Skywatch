@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { useAppSettings } from '../context/AppSettingsContext'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useCbatAdminRegion, withCbatRegion } from '../utils/cbatAdminRegion'
@@ -601,6 +602,8 @@ function AdminUserPicker({ current, onPick, onClose }) {
 
 export default function CbatAptitudeReport() {
   const { user, setUser, API, apiFetch } = useAuth()
+  const { settings: appSettings } = useAppSettings() ?? {}
+  const mockOn = appSettings?.cbatMockAssessmentEnabled !== false || !!user?.isAdmin
   const [params, setParams] = useSearchParams()
 
   const [summary, setSummary] = useState(null)     // every battery, headline figures
@@ -955,6 +958,16 @@ export default function CbatAptitudeReport() {
                     : <>We can measure <span className="font-bold text-slate-700">{report.coverage}%</span> of what this role is
                        tested on. The rest is greyed out below.</>}
                 </p>
+                {/* The fullest way to measure a role is to sit all of it at once. Own report only. */}
+                {mockOn && !viewingAs && (
+                  <Link
+                    to={`/cbat/mock?battery=${encodeURIComponent(report.key)}`}
+                    data-testid="aptitude-mock-link"
+                    className="inline-block mt-3 px-3 py-2 rounded-lg border border-brand-300 text-brand-700 hover:bg-brand-50 text-xs font-bold no-underline transition-colors"
+                  >
+                    Sit a Mock Assessment for {report.label} &rarr;
+                  </Link>
+                )}
                 {report.note && <p className="text-[11px] text-brand-700 mt-1">{report.note}</p>}
                 {report.basedOn && (
                   <p className="text-[11px] text-slate-600 mt-1" data-testid="aptitude-borrowed-note">

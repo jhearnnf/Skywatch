@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTutorialFromSearch } from '../hooks/useTutorialFromSearch'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGLTF } from '@react-three/drei'
@@ -170,6 +171,7 @@ function IntroScreen({
       <div className={`flex flex-wrap gap-3 lg:gap-4 justify-center${dim}`}>
         <button
           onClick={onTutorial}
+          data-cbat-tutorial-btn
           className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
@@ -650,6 +652,8 @@ export default function CbatFlag() {
   const clanOffered = useClanOffered()
 
   const [phase, setPhase] = useState('intro')   // intro | launching | tutorial | playing | results
+  // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
+  useTutorialFromSearch(useCallback(() => setPhase('tutorial'), []))
 
   // Desktop: let the run out of the shell's max-w-3xl so the controls can sit
   // BESIDE the play field rather than under it (see body.cbat-flag-wide and the

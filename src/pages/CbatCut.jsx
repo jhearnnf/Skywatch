@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { useTutorialFromSearch } from '../hooks/useTutorialFromSearch'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -1400,6 +1401,8 @@ export default function CbatCut() {
   }, [setUser, apiFetch, API])
 
   const openTutorial = useCallback(() => setPhase('tutorial'), [])
+  // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
+  useTutorialFromSearch(openTutorial)
   const closeTutorial = useCallback((status) => {
     setTutorialDismissed(true)
     markTutorialSeen(status)
@@ -1728,7 +1731,7 @@ export default function CbatCut() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 justify-center">
-                  <button onClick={openTutorial} disabled={launching} className={`px-6 py-3 lg:px-8 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong disabled:text-slate-500 text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Tutorial</button>
+                  <button data-cbat-tutorial-btn onClick={openTutorial} disabled={launching} className={`px-6 py-3 lg:px-8 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong disabled:text-slate-500 text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Tutorial</button>
                   <button onClick={beginLaunch} disabled={launching} data-demo-start className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}>Start</button>
                 </div>
               </motion.div>

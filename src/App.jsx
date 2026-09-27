@@ -85,6 +85,9 @@ import CbatVigilance from './pages/CbatVigilance'
 import CbatSma from './pages/CbatSma'
 import CbatLeaderboard from './pages/CbatLeaderboard'
 import CbatAptitudeReport from './pages/CbatAptitudeReport'
+import CbatMock, { CbatMockSheetPage } from './pages/CbatMock'
+import CbatMockLock from './components/cbat/CbatMockLock'
+import { useActiveMock } from './lib/cbatMockSession'
 import CbatGameGuard from './components/CbatGameGuard'
 import AirstarHistory from './pages/AirstarHistory'
 import GameHistory        from './pages/GameHistory'
@@ -133,9 +136,11 @@ function PageWrapper({ children }) {
 }
 
 // ── Notification layer (sits above all routes) ─────────────────────────────
+// Held, not dropped, during a Mock Assessment: the queue waits and plays out once it ends.
 function NotifLayer() {
   const { notifQueue, shiftNotif } = useAuth()
-  const current     = notifQueue[0] ?? null
+  const inMock      = useActiveMock() != null
+  const current     = inMock ? null : (notifQueue[0] ?? null)
   const prevIdRef   = useRef(null)
 
   useEffect(() => {
@@ -162,6 +167,13 @@ function NotifLayer() {
     return <CategoryUnlockNotification key={current.id} categories={current.categories} onDone={shiftNotif} />
   }
   return null
+}
+
+// Pop-ups that have no place in a Mock Assessment (update notes, nav flashes, the tutorial
+// picker). They come back as soon as the mock ends.
+function HiddenDuringMock({ children }) {
+  const inMock = useActiveMock() != null
+  return inMock ? null : children
 }
 
 // ── Loading screen ─────────────────────────────────────────────────────────
@@ -339,6 +351,8 @@ function AppRoutes() {
               behind RequireAuth: like /cbat itself, it renders its own sign-in card, which makes
               it a landing page for the feature rather than a redirect. */}
           <Route path="/cbat/report"            element={<PageWrapper><CbatAptitudeReport /></PageWrapper>} />
+          <Route path="/cbat/mock"              element={<RequireAuth><PageWrapper><CbatMock /></PageWrapper></RequireAuth>} />
+          <Route path="/cbat/mock/:id"          element={<RequireAuth><PageWrapper><CbatMockSheetPage /></PageWrapper></RequireAuth>} />
           <Route path="/cbat/trace"             element={<RequireAuth><PageWrapper><CbatGameGuard gameKey="plane-turn"        gameTitle="Trace 1/2"       ><CbatPlaneTurn       /></CbatGameGuard></PageWrapper></RequireAuth>} />
           <Route path="/cbat/plane-turn"        element={<Navigate to="/cbat/trace" replace />} />
           <Route path="/cbat/plane-turn/leaderboard" element={<Navigate to="/cbat/plane-turn-2d/leaderboard" replace />} />
@@ -448,15 +462,18 @@ export default function App() {
                 <ChatUnreadProvider>
                   <GameChromeProvider>
                     <UiThemeSync />
+                    <CbatMockLock />
                     <AppRoutes />
                     <CbatMenuMusic />
         <CommunityMusic />
                     <NotifLayer />
                     <OfflineStatus />
-                    <UpdateNotificationModal />
-                    <LearnNavFlasher />
-                    <PlayNavFlasher />
-                    <TutorialPickerOverlay />
+                    <HiddenDuringMock>
+                      <UpdateNotificationModal />
+                      <LearnNavFlasher />
+                      <PlayNavFlasher />
+                      <TutorialPickerOverlay />
+                    </HiddenDuringMock>
                   </GameChromeProvider>
                 </ChatUnreadProvider>
               </UnsolvedReportsProvider>

@@ -246,11 +246,18 @@ describe('AptitudeReportCard — loading skeleton', () => {
   // carry two copies of its verdict — one `sm:hidden` up beside the eyebrow, one
   // `hidden sm:block` under the score — and that shrink is what this pins against
   // coming back.
+  //
+  // Swapping the WORDS inside a line by width is allowed: the Mock Assessment half says
+  // "Mock" on a phone and "Mock Assessment" above it, and the report half drops its
+  // inline "Open" on a phone. Those are spans inside a line and the line count does not
+  // move. What is pinned is a whole line appearing at one width only.
   it('renders the same number of text lines at every width', async () => {
     const scored = renderWith(vi.fn().mockResolvedValue(summary()))
     await waitFor(() => expect(skeleton()).toBeNull())
-    expect(scored.container.querySelector('.sm\\:hidden')).toBeNull()
-    expect(scored.container.querySelector('.hidden')).toBeNull()
+    const hiddenBlocks = [...scored.container.querySelectorAll('.sm\\:hidden, .hidden')]
+      .filter(el => el.tagName !== 'SPAN')
+    expect(hiddenBlocks).toEqual([])
+    expect(scored.container.querySelector('.sm\\:block, .sm\\:flex')).toBeNull()
   })
 
   // The skeleton has never played the trick, and must not start: a hidden-on-mobile

@@ -2256,14 +2256,8 @@ router.get('/cbat/fighter-aircraft', protect, async (_req, res) => {
 
 // ── CBAT — Start tracking ────────────────────────────────────────────────────
 
-function canAccessCbat(user, settings) {
-  if (user?.isAdmin) return true;
-  const { effectiveTier } = require('../utils/subscription');
-  const tier = effectiveTier(user);
-  const checkTier = tier === 'trial' ? 'silver' : tier;
-  const tiers = Array.isArray(settings?.cbatTiers) ? settings.cbatTiers : [];
-  return tiers.includes(checkTier);
-}
+// Moved to utils/cbatAccess.js so the Mock Assessment routes share it.
+const { canAccessCbat } = require('../utils/cbatAccess');
 
 // POST /api/games/cbat/:gameKey/start
 router.post('/cbat/:gameKey/start', protect, async (req, res) => {

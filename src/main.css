@@ -4835,3 +4835,108 @@ body.play-mode .card-shadow {
   50%      { box-shadow: 0 0 0 1px var(--medal-glow), 0 0 16px 2px var(--medal-glow); }
 }
 .medal-hard-row { animation: medal-hard-row 2.4s ease-in-out infinite; }
+
+/* ── Mock Assessment ──────────────────────────────────────────────────────
+   While a mock runs, <html> carries data-cbat-mock (src/lib/cbatMockSession.js).
+   A test inside a mock is sat, not browsed: no jumping to a leaderboard, and no
+   in-game Tutorial button (the between-tests screen offers "Tutorial first"
+   instead, via ?tutorial=1). The mode row hides itself in CbatModeRow. */
+[data-cbat-mock] a[href*="/leaderboard"],
+[data-cbat-mock] [data-cbat-tutorial-btn] {
+  display: none !important;
+}
+
+/* ── Mock Assessment score sheet ──────────────────────────────────────────
+   Drawn as paper in every theme: it copies the layout of the real "Aptitude
+   Scores" sheet (components/cbat/CbatMockScoreSheet.jsx), and it is also what
+   the Print button sends to the printer. Colours are literal, not tokens, so the
+   dark theme's inverted scales can never reach it. */
+.mock-sheet {
+  background: #fbfbf8;
+  color: #1c1c1c;
+  border: 1px solid #c9c9c2;
+  border-radius: 6px;
+  padding: 20px 18px;
+  font-family: Arial, Helvetica, sans-serif;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.mock-sheet-head { text-align: center; margin-bottom: 14px; }
+.mock-sheet-brand { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #555; }
+.mock-sheet-title { font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
+.mock-sheet-sub { font-size: 11px; color: #555; margin-top: 2px; }
+
+.mock-sheet-candidate { border: 2px solid #333; padding: 8px 10px; margin-bottom: 14px; }
+.mock-sheet-candidate-title { text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+.mock-sheet-candidate dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 16px; font-size: 12px; }
+.mock-sheet-candidate dl > div { display: flex; gap: 6px; min-width: 0; }
+.mock-sheet-candidate dt { font-weight: 700; white-space: nowrap; }
+.mock-sheet-candidate dd { overflow: hidden; text-overflow: ellipsis; }
+
+/* The table keeps its real proportions and scrolls sideways inside its own box
+   on a phone, rather than squeezing nine stanine columns into nothing. */
+.mock-sheet-scroll { overflow-x: auto; }
+.mock-sheet-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 12px; }
+.mock-sheet-table th,
+.mock-sheet-table td { border: 1px solid #444; padding: 3px 6px; vertical-align: middle; }
+.mock-sheet-table thead th { font-weight: 700; text-align: center; background: #f1f1ec; }
+.mock-sheet-table thead { display: table-header-group; }
+.mock-sheet-stanine-num { width: 26px; padding: 2px 0 !important; }
+.mock-sheet-side-head { width: 26px; border: 0 !important; background: transparent !important; }
+
+.mock-sheet-battery { break-inside: avoid; page-break-inside: avoid; }
+.mock-sheet-battery tr:first-child td { border-top: 3px double #333; }
+.mock-sheet-side { width: 26px; padding: 0 !important; text-align: center; border: 0 !important; }
+.mock-sheet-side-word { display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 800; font-size: 13px; padding: 6px 0; margin: 0 3px; border-radius: 3px; }
+.mock-sheet-side-pass .mock-sheet-side-word { background: #6fb07c; color: #133d1c; }
+.mock-sheet-side-fail .mock-sheet-side-word { background: #e27f7a; color: #4a1512; }
+.mock-sheet-side-none .mock-sheet-side-word { background: #cfcfc8; color: #444; }
+.mock-sheet-battery-name { font-weight: 700; text-align: center; width: 150px; }
+.mock-sheet-battery-note { display: block; font-weight: 400; font-size: 10px; color: #666; margin-top: 3px; }
+.mock-sheet-domain { white-space: nowrap; }
+.mock-sheet-weight { white-space: nowrap; text-align: center; }
+.mock-sheet-tests { white-space: nowrap; }
+
+.mock-sheet-grid { padding: 0 !important; }
+.mock-sheet-grid-inner { position: relative; height: 22px; display: flex; }
+.mock-sheet-grid-cell { flex: 1 1 0; border-right: 1px solid #b9b9b2; }
+.mock-sheet-grid-cell:last-of-type { border-right: 0; }
+.mock-sheet-bar { position: absolute; left: 0; top: 5px; bottom: 5px; background: #178a3a; }
+.mock-sheet-not-sat { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #777; }
+.mock-sheet-min-tick { position: absolute; width: 3px; height: 4px; margin-left: -1.5px; background: #d42a2a; }
+.mock-sheet-min-top { top: 0; }
+.mock-sheet-min-bottom { bottom: 0; }
+.mock-sheet-min-fail { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: #d42a2a; }
+
+.mock-sheet-score-label { text-align: center; width: 70px; }
+.mock-sheet-score-value { text-align: center; width: 50px; font-size: 14px; }
+.mock-sheet-score-current { font-weight: 800; }
+
+.mock-sheet-foot { margin-top: 14px; font-size: 10.5px; line-height: 1.45; color: #444; }
+
+/* Desktop: the sheet wants more than the shell's 768px column. */
+@media (min-width: 1024px) {
+  body.cbat-mock-sheet .app-shell-content { max-width: 1040px; }
+}
+
+@media print {
+  body.cbat-mock-sheet .app-topbar,
+  body.cbat-mock-sheet .app-bottomnav,
+  body.cbat-mock-sheet .app-shell-body > aside,
+  body.cbat-mock-sheet .mock-sheet-chrome { display: none !important; }
+
+  body.cbat-mock-sheet .app-shell-body { padding-top: 0 !important; }
+  body.cbat-mock-sheet .app-shell-main { margin: 0 !important; padding: 0 !important; overflow: visible !important; }
+  body.cbat-mock-sheet .app-shell-content { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+  body.cbat-mock-sheet,
+  body.cbat-mock-sheet .app-shell { background: #fff !important; }
+
+  body.cbat-mock-sheet .mock-sheet { border: 0; border-radius: 0; padding: 0; background: #fff; }
+  body.cbat-mock-sheet .mock-sheet-scroll { overflow: visible; }
+  body.cbat-mock-sheet .mock-sheet-table { min-width: 0; font-size: 8.5pt; }
+  body.cbat-mock-sheet .mock-sheet-table th,
+  body.cbat-mock-sheet .mock-sheet-table td { padding: 1.5pt 3pt; }
+  body.cbat-mock-sheet .mock-sheet-grid-inner { height: 14pt; }
+  body.cbat-mock-sheet .mock-sheet-bar { top: 3.5pt; bottom: 3.5pt; }
+  body.cbat-mock-sheet .mock-sheet-battery-name { width: auto; }
+}

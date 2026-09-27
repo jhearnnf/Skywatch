@@ -4096,7 +4096,7 @@ function SettingsTab({ API }) {
       </Section>
 
       {/* ── Feature Flags ───────────────────────────────────── */}
-      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled', 'slimLearnEnabled'])}>
+      <Section title="Feature Flags" collapsible onSave={() => save('Update Feature Flags', ['useLiveLeaderboard', 'mnemonicsClickEnabled', 'chatEnabled', 'featureFlags', 'slimModeEnabled', 'slimLandingEnabled', 'slimLearnEnabled', 'cbatMockAssessmentEnabled'])}>
         <Toggle
           label="Live Leaderboard"
           hint="When off, mock placeholder data is shown on the Profile page"
@@ -4120,6 +4120,12 @@ function SettingsTab({ API }) {
           hint="AI-generated stickman animation per brief description section. Reels need admin review + Publish before they reach users. Admin-only is the safe default while seeding the review queue."
           value={draft.featureFlags?.briefReel ?? 'off'}
           onChange={v => set('featureFlags', { ...(draft.featureFlags ?? {}), briefReel: v })}
+        />
+        <Toggle
+          label="CBAT Mock Assessment"
+          hint="The full-sitting practice run at /cbat/mock, and its half of the Aptitude Report card on the CBAT page. When off, players cannot start one and the card goes back to the report alone. Admins can always reach it. A mock already in progress can still be finished."
+          checked={draft.cbatMockAssessmentEnabled !== false}
+          onChange={v => set('cbatMockAssessmentEnabled', v)}
         />
         <Toggle
           label="Chat"

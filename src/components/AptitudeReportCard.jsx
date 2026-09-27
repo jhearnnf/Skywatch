@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { useAppSettings } from '../context/AppSettingsContext'
+import { mockSummary, formatDuration } from '../lib/cbatMockSession'
 import { useCbatAdminRegion, withCbatRegion } from '../utils/cbatAdminRegion'
 import {
   MAX_SCORE, MIN_COVERAGE_FOR_VERDICT, BATTERY_BY_KEY,
@@ -107,6 +109,35 @@ const CARD_OPEN    = 'shrink-0 text-[10px] sm:text-xs font-bold'
 const CARD_RAIL    = 'relative mt-1 h-1.5 sm:mt-3 sm:h-2 bg-game-arena border border-game-line rounded-sm overflow-hidden'
 const CARD_SHELL   = 'block bg-surface border border-slate-200 rounded-xl sm:rounded-2xl overflow-hidden card-shadow'
 
+// THE MOCK ASSESSMENT HALF. The same card also offers the Mock Assessment, as a narrow second half
+// to the right of the report, split by a hairline: the report is where a player sees their
+// standing and the mock is the fullest way to measure it, so the two share one row rather than
+// the hub growing a second strip. ONE ROW AT EVERY WIDTH: the mock half is a fixed 88px on a
+// phone (three short lines that sit level with the report's three) and about 30% from `sm` up.
+// On a phone the report half drops its "Open" link to make room, since tapping anywhere on it
+// still opens the report, and two arrows side by side would read as two competing buttons.
+//
+// While split, the outer box is the shell and each half is a bare link inside it.
+const SplitCtx = createContext(false)
+//
+// EACH HALF ANSWERS FOR ITSELF. Two links in one box read as one button unless the box tells them
+// apart, so the shared border never lights up; instead the half under the pointer tints, its
+// arrow steps forward, and it gets its own pressed state (touch) and focus ring (keyboard).
+const HALF_SHELL = 'block flex-1 min-w-0 no-underline'
+const HALF_LINK  = 'group hover:bg-brand-50 active:bg-brand-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400'
+// The arrow that nudges on hover. inline-block, because a transform does nothing on an inline box.
+const NUDGE      = 'inline-block transition-transform duration-150 group-hover:translate-x-0.5'
+function useShell(extra = '', { link = false } = {}) {
+  const split = useContext(SplitCtx)
+  if (split) return `${HALF_SHELL} ${link ? HALF_LINK : ''} ${extra}`.trim()
+  return `${CARD_SHELL} ${link ? 'group' : ''} ${extra}`.trim()
+}
+function useOpenClass() {
+  return useContext(SplitCtx)
+    ? `${CARD_OPEN} hidden sm:inline-block transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-brand-800`
+    : `${CARD_OPEN} ${NUDGE} group-hover:text-brand-800`
+}
+
 // The states are built to be the same height, but "built to be" is not "guaranteed to be" — a
 // role name that wraps, a font that loads late, a future state — and a size change that lands in
 // one frame reads as a glitch. One persistent wrapper owns the outer box for every state, which is
@@ -121,6 +152,7 @@ const RUNS_TO_COUNT_FALLBACK = 3   // only for a payload served before runsToCou
 // ?as= view of that player. Absent, this is the signed-in user's own card, unchanged.
 export default function AptitudeReportCard({ userId = null }) {
   const { API, apiFetch, user } = useAuth()
+  const { settings } = useAppSettings() ?? {}
   const voice = userId ? VOICES.other : VOICES.own
   const to = userId ? `/cbat/report?as=${encodeURIComponent(userId)}` : '/cbat/report'
   const [data, setData] = useState(null)
@@ -158,6 +190,10 @@ export default function AptitudeReportCard({ userId = null }) {
   // unexpected payload is to show nothing and leave the page alone.
   if (!loading && !Array.isArray(data?.batteries)) return null
 
+  const card = loading ? <ReportSkeleton voice={voice} /> : <ReportCard data={data} voice={voice} to={to} />
+  // Only on the player's own card, and only while the admin switch is on (admins always see it).
+  const mockOn = !userId && (settings?.cbatMockAssessmentEnabled !== false || !!user?.isAdmin)
+
   return (
     <motion.div
       layout
@@ -166,8 +202,64 @@ export default function AptitudeReportCard({ userId = null }) {
       transition={LAYOUT_TRANSITION}
       className={CARD_WRAP}
     >
-      {loading ? <ReportSkeleton voice={voice} /> : <ReportCard data={data} voice={voice} to={to} />}
+      {mockOn ? (
+        <div className={CARD_SHELL.replace('block ', 'flex ')} data-testid="aptitude-card-split">
+          <SplitCtx.Provider value={true}>{card}</SplitCtx.Provider>
+          <MockHalf targetKey={data?.targetBattery ?? null} testDate={user?.upcomingCbatDate ?? null} />
+        </div>
+      ) : card}
     </motion.div>
+  )
+}
+
+// The Mock Assessment's half of the card. Links to the start page, which asks everything else.
+function MockHalf({ targetKey, testDate }) {
+  const summary = targetKey ? mockSummary(targetKey) : null
+  // Read once per mount: a day count does not need to tick while the hub is open.
+  const [now] = useState(() => Date.now())
+  const days = testDate ? Math.ceil((new Date(testDate).getTime() - now) / 86400000) : null
+  // The only status worth a line here: a test close enough that a full practice run is timely.
+  const prompt = days != null && days >= 0 && days <= 21
+    ? (days === 0 ? 'Your test is today' : `Your test is in ${days} day${days === 1 ? '' : 's'}`)
+    : null
+  return (
+    <Link
+      to="/cbat/mock"
+      className="group relative block shrink-0 w-[88px] sm:w-[30%] border-l border-slate-200 no-underline overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400"
+      data-testid="aptitude-card-mock"
+    >
+      {/* The panel is lit from the corner the button sits in, so this half reads as the thing to
+          press rather than a second readout. The light rises on hover. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand-600/20 via-brand-600/5 to-transparent opacity-80 group-hover:opacity-100 transition-opacity"
+      />
+      <div className="relative p-2 sm:p-4 h-full flex flex-col justify-between gap-1.5 sm:gap-2">
+        <p className={`${CARD_EYEBROW} flex-none text-brand-700 font-bold`}>
+          <span className="sm:hidden">Mock</span>
+          <span className="hidden sm:inline">Mock Assessment</span>
+        </p>
+
+        {/* The one filled button on the card. text-white on a filled button, per the app's rule. */}
+        <span
+          data-testid="aptitude-card-mock-start"
+          className="self-start inline-flex items-center gap-1 sm:gap-1.5 rounded-md sm:rounded-lg bg-brand-600 group-hover:bg-brand-700 group-active:scale-[0.97] text-white font-extrabold whitespace-nowrap text-[11px] px-2 py-1 sm:text-sm sm:px-4 sm:py-2 shadow-[0_0_14px_rgba(91,170,255,0.35)] group-hover:shadow-[0_0_22px_rgba(91,170,255,0.55)] transition-all"
+        >
+          <span className="sm:hidden">Start</span>
+          <span className="hidden sm:inline">Start mock</span>
+          <span className={NUDGE} aria-hidden="true">&rarr;</span>
+        </span>
+
+        {/* One line at every width, like the report half; only its wording changes. A test date
+            close enough to matter takes the desktop wording's place. */}
+        <p className={`${CARD_ACTION} ${prompt ? 'sm:text-amber-700' : ''} text-slate-600`} data-testid="aptitude-card-mock-line">
+          <span className="sm:hidden">{summary ? formatDuration(summary.minutes) : 'Full test'}</span>
+          <span className="hidden sm:inline">
+            {prompt ?? (summary ? `${summary.tests} tests · ${formatDuration(summary.minutes)}` : 'Every test, one sitting')}
+          </span>
+        </p>
+      </div>
+    </Link>
   )
 }
 
@@ -286,10 +378,12 @@ function focusAction(focus, goal, runsToCount, voice = VOICES.own) {
 // per state: the states differ only in their words and their fill, and giving each its own markup
 // is how three cards quietly drift into three heights.
 function ProgressCard({ label, headline, unit, action, pct, tick, to = '/cbat/report' }) {
+  const shell = useShell('no-underline hover:border-brand-300 transition-colors', { link: true })
+  const openClass = useOpenClass()
   return (
     <Link
       to={to}
-      className={`${CARD_SHELL} no-underline hover:border-brand-300 transition-colors`}
+      className={shell}
       title={action}
     >
       <div className="flex">
@@ -309,7 +403,7 @@ function ProgressCard({ label, headline, unit, action, pct, tick, to = '/cbat/re
                 {headline}<span className={`${CARD_UNIT} text-slate-600`}>{unit}</span>
               </p>
             </div>
-            <span className={`${CARD_OPEN} text-brand-700`}>Open &rarr;</span>
+            <span className={`${openClass} text-brand-700`}>Open &rarr;</span>
           </div>
 
           <p data-testid="aptitude-card-action" className={`${CARD_ACTION} text-brand-700`}>{action}</p>
@@ -344,11 +438,13 @@ function ProgressCard({ label, headline, unit, action, pct, tick, to = '/cbat/re
 function ScoredCard({ target, label, to = '/cbat/report' }) {
   const verdict = reportVerdict(target)
   const pct = Math.min(100, ((target.score ?? 0) / MAX_SCORE) * 100)
+  const shell = useShell('no-underline hover:border-brand-300 transition-colors', { link: true })
+  const openClass = useOpenClass()
 
   return (
     <Link
       to={to}
-      className={`${CARD_SHELL} no-underline hover:border-brand-300 transition-colors`}
+      className={shell}
     >
       <div className="flex">
         <div
@@ -390,7 +486,7 @@ function ScoredCard({ target, label, to = '/cbat/report' }) {
                 className={`${CARD_ACTION} ${TONE_TEXT[verdict.tone]}`}
               >{verdict.label}</p>
             </div>
-            <span className={`${CARD_OPEN} text-brand-700`}>Open &rarr;</span>
+            <span className={`${openClass} text-brand-700`}>Open &rarr;</span>
           </div>
 
           <div data-testid="aptitude-card-rail" className={CARD_RAIL}>
@@ -433,6 +529,8 @@ function ScoredCard({ target, label, to = '/cbat/report' }) {
 // the shared shimmer, the dots, and one indeterminate pass across the rail — none of which claims
 // to know anything.
 function ReportSkeleton({ voice = VOICES.own }) {
+  const shell = useShell('relative')
+  const openClass = useOpenClass()
   const dots = (
     <span aria-hidden="true">
       <span className="aptitude-dot">.</span>
@@ -442,7 +540,7 @@ function ReportSkeleton({ voice = VOICES.own }) {
   )
   return (
     <div
-      className={`relative ${CARD_SHELL}`}
+      className={shell}
       role="status"
       aria-busy="true"
       aria-label="Analysing aptitude results"
@@ -472,7 +570,7 @@ function ReportSkeleton({ voice = VOICES.own }) {
                 &ndash;&ndash;
               </p>
             </div>
-            <span className={`${CARD_OPEN} text-slate-500`} aria-hidden="true">Open &rarr;</span>
+            <span className={`${openClass} text-slate-500`} aria-hidden="true">Open &rarr;</span>
           </div>
 
           {/* Names the work, not the result. This used to promise "what to play next", which the
