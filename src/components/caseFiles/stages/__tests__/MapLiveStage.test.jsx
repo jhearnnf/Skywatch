@@ -354,16 +354,15 @@ describe('MapLiveStage — animated movements', () => {
   })
 })
 
-// A fixed 45vh map with the question stacked under it made the stage scroll
-// on an ordinary laptop. The map now takes the height that is left and the
-// question docks beside it on wide screens. Walk the flex chain so a missing
-// link cannot quietly bring the scroll back.
+// Mobile needs a stable map height even when a question opens; desktop
+// continues to share the available space with a question docked beside it.
 describe('MapLiveStage — fits the screen instead of scrolling', () => {
-  it('lets the map flex into the space the header and question leave', () => {
+  it('reserves readable map space on mobile and flexes on desktop', () => {
     renderStage([{ id: 'p1', timeLabel: 'Feb 24, 04:00', units: [UNIT_1], subDecision: SUB_DECISION_SINGLE }])
     const mapBox = screen.getByTestId('map-canvas').parentElement
-    expect(mapBox.className).toMatch(/\bflex-1\b/)
-    expect(mapBox.className).toMatch(/min-h-\[160px\]/)
+    expect(mapBox).toHaveClass('h-[clamp(320px,52svh,520px)]', 'shrink-0', 'min-[900px]:flex-1')
+    fireEvent.click(screen.getByTestId('advance-phase-btn'))
+    expect(screen.getByTestId('map-canvas').parentElement).toHaveClass('h-[clamp(320px,52svh,520px)]', 'shrink-0')
 
     const column = mapBox.parentElement
     expect(column.className).toMatch(/\bflex-1\b/)

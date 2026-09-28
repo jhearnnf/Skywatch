@@ -251,7 +251,12 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
     .flatMap(p => p.units ?? [])
 
   // Just the phase on screen — these are the ones that actually fly.
-  const activeMovements = currentPhase?.units ?? []
+  // Existing published chapters predate movement behaviours. Identify this
+  // authored event by its stable decision ID, not by matching display text.
+  const isStalledConvoy = currentPhase?.subDecision?.id === 'sd_convoy_diagnose'
+  const activeMovements = (currentPhase?.units ?? []).map(unit => (
+    isStalledConvoy && unit.kind === 'convoy' ? { ...unit, behavior: 'stall' } : unit
+  ))
 
   // Key for the moving pieces, built from what is actually in the air. Without
   // it a red dart arcing into Kyiv is atmosphere; with it, it is information.
@@ -261,7 +266,7 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
     if (movementLegend.some(l => l.key === key)) continue
     movementLegend.push({
       key,
-      label: kindStyle(unit.kind).label,
+      label: unit.behavior === 'stall' ? 'Convoy stalled north of Kyiv' : kindStyle(unit.kind).label,
       color: sideColor(unit.side),
     })
   }
@@ -360,14 +365,12 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
           history is passed with that field rewritten to the destination. The
           live phase goes through `movements` untouched, because MapMotionLayer
           needs both ends of the journey to fly it. */}
-      {/* The map takes whatever height is left rather than a fixed 45vh, and
-          sits beside the question on wide screens, above it on narrow ones.
-          Stacked, a 4-option question under a fixed map could not fit a
-          laptop screen, so the stage scrolled for no reason. The floors keep
-          the map usable on a very short screen, where scrolling is fair. */}
+      {/* Keep a stable, readable map above the question on narrow screens.
+          Let the stage scroll instead of squeezing the geography when a
+          question opens. Wide screens share the available height. */}
       <div className="flex-1 flex flex-col gap-4 min-[900px]:flex-row min-[900px]:min-h-0">
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
-          <div className="relative flex-1 min-h-[160px] min-[900px]:min-h-[240px]">
+        <div className="shrink-0 min-w-0 flex flex-col gap-2 min-[900px]:flex-1">
+          <div className="relative h-[clamp(320px,52svh,520px)] shrink-0 min-[900px]:h-auto min-[900px]:flex-1 min-[900px]:min-h-[240px]">
             {/* Live-feed tag in the map corner */}
             <div className="absolute top-2 right-2 z-[500] pointer-events-none flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#06101e]/80 border border-[#e0413a]/40">
               <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-[#e0413a] cf-flash-blink" />
@@ -376,7 +379,7 @@ export default function MapLiveStage({ stage, sessionContext, onSubmit }) {
             <MapCanvas
               bounds={mapBounds}
               hotspots={hotspots}
-              units={visibleUnits.map(u => ({
+              units={visibleUnits.filter(u => !(isStalledConvoy && u.kind === 'convoy')).map(u => ({
                 ...u,
                 fromHotspotId: u.toHotspotId,   // snap to destination
               }))}

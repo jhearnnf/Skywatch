@@ -189,6 +189,22 @@ function Movement({ movement, index, color, style, register, showLabel }) {
       )}
 
       {/* The moving piece itself. */}
+      {movement.behavior === 'stall' && (
+        <g data-testid="stalled-convoy" opacity="0" ref={el => { refs.current.convoy = el }}>
+          {Array.from({ length: 5 }, (_, i) => (
+            <g key={i} ref={el => { refs.current[`truck${i}`] = el }}>
+              <rect x="-5" y="-3" width="8" height="6" rx="1" fill={color} stroke="#fff" strokeWidth="0.7" />
+              <rect x="3" y="-2.5" width="3" height="5" rx="0.8" fill="#e2e8f0" />
+              <path d="M -3 -4 H 0 M -3 4 H 0" stroke="#06101e" strokeWidth="2" />
+            </g>
+          ))}
+          <g ref={el => { refs.current.stallBadge = el }} opacity="0">
+            <rect x="-48" y="-12" width="96" height="24" rx="5" fill="#06101e" stroke="#fbbf24" />
+            <path d="M -37 -5 V 5 M -32 -5 V 5" stroke="#fbbf24" strokeWidth="3" />
+            <text x="8" y="4" textAnchor="middle" fill="#fbbf24" fontSize="10" fontFamily="monospace" fontWeight="bold">STALLED</text>
+          </g>
+        </g>
+      )}
       <g ref={(el) => { refs.current.head = el }} filter={`url(#${glow})`} opacity="0">
         <HeadGlyph kind={movement.kind} color={color} />
       </g>
@@ -251,6 +267,7 @@ export default function MapMotionLayer({ movements = [], hotspots = [], showLabe
             from,
             to,
             style,
+            stalled: movement.behavior === 'stall',
             travelMs: movement.animationMs ?? style.travelMs,
             delayMs:  staggerDelay(index),
           }
@@ -308,6 +325,32 @@ export default function MapMotionLayer({ movements = [], hotspots = [], showLabe
 
         nodes.track?.setAttribute('d', d)
         nodes.trail?.setAttribute('d', d)
+
+        if (plan.stalled && nodes.convoy) {
+          // Play once: brake short of the destination, then remain queued.
+          // Each following vehicle brakes later, compressing the column.
+          nodes.started ??= now
+          const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+          const age = reduced ? 10000 : now - nodes.started
+          nodes.convoy.setAttribute('opacity', '1')
+          nodes.head?.setAttribute('opacity', '0')
+          nodes.trail?.setAttribute('stroke-opacity', '0')
+          nodes.blast?.setAttribute('opacity', '0')
+          for (let i = 0; i < 5; i++) {
+            const progress = Math.min(1, Math.max(0, (age - i * 220) / 3400))
+            const end = 0.70 - i * 0.115
+            const t = end * (1 - (1 - progress) ** 3)
+            const pt = bezierPoint(p0, c, p1, t)
+            nodes[`truck${i}`]?.setAttribute('transform', `translate(${pt.x} ${pt.y}) rotate(${bezierHeading(p0, c, p1, t)})`)
+            nodes[`truck${i}`]?.setAttribute('opacity', String(Math.min(1, progress * 8)))
+          }
+          const stop = bezierPoint(p0, c, p1, 0.70)
+          const size = map.getSize()
+          const badgeX = Math.max(52, Math.min(size.x - 52, stop.x + 62))
+          nodes.stallBadge?.setAttribute('transform', `translate(${badgeX} ${Math.max(16, stop.y - 24)})`)
+          nodes.stallBadge?.setAttribute('opacity', String(Math.min(1, Math.max(0, (age - 2800) / 600))))
+          continue
+        }
 
         const { t, phase, impactT } = cyclePhase({
           elapsedMs: elapsed,

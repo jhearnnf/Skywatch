@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { vi, describe, it, expect } from 'vitest'
 import MapMotionLayer from '../MapMotionLayer'
 
@@ -28,6 +28,34 @@ const MOVEMENTS = [
 ]
 
 describe('MapMotionLayer', () => {
+  it('brakes a stalled convoy before its destination and never restarts it', () => {
+    let frame
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+      frame = callback
+      return 1
+    })
+    const { unmount } = render(<MapMotionLayer movements={[{
+      id: 'convoy', side: 'ru', kind: 'convoy', behavior: 'stall',
+      fromHotspotId: 'hs_crimea', toHotspotId: 'hs_kyiv',
+    }]} hotspots={HOTSPOTS} showLabels={false} />)
+    try {
+      act(() => frame(100))
+      act(() => frame(1500))
+      const convoy = screen.getByTestId('stalled-convoy')
+      const moving = convoy.firstElementChild.getAttribute('transform')
+      act(() => frame(5100))
+      const stopped = convoy.firstElementChild.getAttribute('transform')
+      expect(stopped).not.toBe(moving)
+      expect(stopped).not.toContain('translate(300 100)')
+      expect(screen.getByText('STALLED').parentElement).toHaveAttribute('opacity', '1')
+      act(() => frame(30100))
+      expect(convoy.firstElementChild).toHaveAttribute('transform', stopped)
+    } finally {
+      unmount()
+      raf.mockRestore()
+    }
+  })
+
   it('renders one animated group per movement', () => {
     render(<MapMotionLayer movements={MOVEMENTS} hotspots={HOTSPOTS} />)
     expect(screen.getByTestId('map-motion-layer')).toBeDefined()
