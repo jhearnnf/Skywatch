@@ -47,8 +47,21 @@ export async function publicSettings() {
   const env = loadEnv('production', process.cwd(), 'VITE_')
   const api = process.env.VITE_API_URL || env.VITE_API_URL
   if (!api) throw new Error('VITE_API_URL is required to capture the current public game settings.')
-  const response = await fetch(`${api.replace(/\/$/, '')}/api/settings`, { signal: AbortSignal.timeout(20000) })
-  if (!response.ok) throw new Error(`Public settings returned HTTP ${response.status}`)
+  // The backend redeploys on the same push as the frontend, so a build can land
+  // mid-restart and get a 502. Retry for ~2 minutes before failing the deploy.
+  let response
+  for (let attempt = 1; ; attempt++) {
+    try {
+      response = await fetch(`${api.replace(/\/$/, '')}/api/settings`, { signal: AbortSignal.timeout(20000) })
+      if (response.ok) break
+      if (response.status < 500 || attempt >= 6) throw new Error(`Public settings returned HTTP ${response.status}`)
+      console.warn(`Public settings: HTTP ${response.status}, retrying (${attempt}/5)`)
+    } catch (error) {
+      if (attempt >= 6 || /HTTP [1-4]\d\d/.test(error.message)) throw error
+      console.warn(`Public settings: ${error.message}, retrying (${attempt}/5)`)
+    }
+    await new Promise(resolve => setTimeout(resolve, attempt * 8000))
+  }
   const settings = await response.json()
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) throw new Error('Invalid public settings')
   return settings
