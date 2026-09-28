@@ -5594,6 +5594,7 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
           <option value="default">Default</option>
           <option value="upcoming-cbat">Upcoming CBAT</option>
           <option value="supporter">Supporters</option>
+          <option value="scores-hidden">Scores hidden</option>
           <option value="created-newest">Account created (newest first)</option>
           <option value="created-oldest">Account created (oldest first)</option>
         </select>
@@ -5602,6 +5603,9 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
         )}
         {userSort === 'supporter' && (
           <p className="text-xs text-slate-400">Accounts that have donated while signed in, largest total first.</p>
+        )}
+        {userSort === 'scores-hidden' && (
+          <p className="text-xs text-slate-400">Accounts that have turned Score Sharing off, so their scores are kept off leaderboards and every other shared page.</p>
         )}
       </div>
 

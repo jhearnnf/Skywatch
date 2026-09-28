@@ -1837,6 +1837,13 @@ function supporterFilter() {
   return { 'donationPrompt.donatedAt': { $ne: null } };
 }
 
+// ?sort=scores-hidden — only the accounts that have switched Score Sharing off
+// (User.hideFromShowcase), in the list's default order. A pure filter: the
+// opt-out has no date or size to rank by.
+function scoresHiddenFilter() {
+  return { hideFromShowcase: true };
+}
+
 const SUPPORTER_SORT_SPEC = { 'donationPrompt.donatedTotalPence': -1, 'donationPrompt.donatedAt': -1, _id: 1 };
 
 function supporterComparator(a, b) {
@@ -1875,8 +1882,12 @@ router.get('/users', async (req, res) => {
     // document used to cost.
     const upcomingCbat = req.query.sort === 'upcoming-cbat';
     const supporters   = req.query.sort === 'supporter';
+    const scoresHidden = req.query.sort === 'scores-hidden';
     const ordering  = await User.find(
-      upcomingCbat ? upcomingCbatFilter() : supporters ? supporterFilter() : {},
+      upcomingCbat ? upcomingCbatFilter()
+        : supporters   ? supporterFilter()
+        : scoresHidden ? scoresHiddenFilter()
+        : {},
       '_id isAdmin isTester lastSeen createdAt lastClients cbatDate donationPrompt.donatedAt donationPrompt.donatedTotalPence',
     ).lean();
     const total     = ordering.length;
@@ -1988,6 +1999,7 @@ router.get('/users/search', async (req, res) => {
     const users = await User.find({
       ...(req.query.sort === 'upcoming-cbat' ? upcomingCbatFilter()
         : req.query.sort === 'supporter'    ? supporterFilter()
+        : req.query.sort === 'scores-hidden' ? scoresHiddenFilter()
         : {}),
       $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }],
     }).populate('rank').sort(req.query.sort === 'upcoming-cbat' ? { cbatDate: 1, _id: 1 }

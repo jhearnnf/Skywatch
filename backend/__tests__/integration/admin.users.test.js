@@ -213,6 +213,31 @@ describe('GET /api/admin/users — sort order', () => {
     expect(res.body.data.users.map(u => u._id)).toEqual([big.id, small.id]);
   });
 
+  it('lists only Score Sharing opt-outs under scores-hidden, in the default order', async () => {
+    const admin = await createAdminUser();
+    const older = await createUser({ hideFromShowcase: true, createdAt: new Date('2020-01-01T00:00:00Z') });
+    const newer = await createUser({ hideFromShowcase: true, createdAt: new Date('2024-01-01T00:00:00Z') });
+    await createUser({ hideFromShowcase: false });
+    await createUser();
+
+    const res = await listFor(admin, '?sort=scores-hidden');
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ total: 2, pageCount: 1 });
+    expect(res.body.data.users.map(u => u._id)).toEqual([older.id, newer.id]);
+    expect(res.body.data.users.every(u => u.hideFromShowcase === true)).toBe(true);
+  });
+
+  it('applies the scores-hidden filter to search', async () => {
+    const admin  = await createAdminUser({ displayName: 'Hidden match admin' });
+    const hidden = await createUser({ displayName: 'Hidden match yes', hideFromShowcase: true });
+    await createUser({ displayName: 'Hidden match no' });
+
+    const res = await request(app).get('/api/admin/users/search?q=Hidden%20match&sort=scores-hidden')
+      .set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data.users.map(u => u._id)).toEqual([hidden.id]);
+  });
+
   it('places admins before non-admins regardless of registration date', async () => {
     // Seed three non-admins with old createdAt and one admin with new createdAt;
     // admin must still appear ahead of all of them.
