@@ -5896,6 +5896,18 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
                   </div>
                 )}
 
+                {/* The Score Sharing opt-out from Profile › Settings. It takes
+                    them off every shared surface (boards, feed, medals,
+                    homepage), not just the leaderboards. Shown only when set,
+                    like Donated above. */}
+                {u.hideFromShowcase && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Score Sharing</p>
+                    <p className="text-xs font-bold text-amber-700">Off</p>
+                    <p className="text-[10px] text-slate-400">hidden from leaderboards</p>
+                  </div>
+                )}
+
                 {/* Country, with the two raw signals under it so a mismatch
                     can be read rather than just flagged. Nothing shown for an
                     account that has not sent a beat since country tracking

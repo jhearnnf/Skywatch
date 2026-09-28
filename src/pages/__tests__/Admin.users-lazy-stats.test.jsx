@@ -82,7 +82,7 @@ function makeUser(overrides) {
 const LIGHT_USERS = [
   makeUser({ _id: 'admin1', agentNumber: '001', email: 'me@test.com', isAdmin: true, subscriptionTier: 'gold' }),
   makeUser({ _id: 'user2',  agentNumber: '002', email: 'user2@test.com' }),
-  makeUser({ _id: 'user3',  agentNumber: '003', email: 'user3@test.com' }),
+  makeUser({ _id: 'user3',  agentNumber: '003', email: 'user3@test.com', hideFromShowcase: true }),
 ]
 
 const STATS = {
@@ -299,5 +299,26 @@ describe('Admin — Users tab: the skeleton holds the page height', () => {
 
     await waitFor(() => expect(screen.getByText('Agent 002')).toBeInTheDocument())
     expect(shimmerCount()).toBe(0)
+  })
+})
+
+describe('Admin — Users tab: the Score Sharing opt-out', () => {
+  beforeEach(() => { localStorage.clear(); global.fetch = setupFetch().fetchMock })
+  afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
+
+  it('says so in the expanded row of a player who hid their scores', async () => {
+    await openUsersTab()
+    fireEvent.click(screen.getByLabelText('Expand Agent 003'))
+
+    await waitFor(() => expect(screen.getByText('Score Sharing')).toBeInTheDocument())
+    expect(screen.getByText('hidden from leaderboards')).toBeInTheDocument()
+  })
+
+  it('shows nothing for a player who shares their scores', async () => {
+    await openUsersTab()
+    fireEvent.click(screen.getByLabelText('Expand Agent 002'))
+
+    await waitFor(() => expect(screen.getByText('Last online')).toBeInTheDocument())
+    expect(screen.queryByText('Score Sharing')).not.toBeInTheDocument()
   })
 })
