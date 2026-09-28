@@ -28,13 +28,18 @@ const PENDING_MS = 30_000
 // that the snapshot no longer has is gone for a reason (removed, or a held
 // send the server never got) and is let go. A message removed from a kept page
 // stays until the thread is reopened — the poll never looks that far back.
+//
+// Messages still on their way up (or that failed to go) exist only on this
+// client, so no snapshot can have them. They ride along on the end, newest of
+// all, until their own send settles them.
 const mergeOlder = (prev, snapshot) => {
-  if (!prev.length || !snapshot.length) return snapshot
+  const local = prev.filter(m => m.localState)
+  if (!prev.length || !snapshot.length) return local.length ? [...snapshot, ...local] : snapshot
   const oldest = new Date(snapshot[0].createdAt).getTime()
   const ids    = new Set(snapshot.map(m => String(m._id)))
   const kept   = prev.filter(m =>
-    !ids.has(String(m._id)) && new Date(m.createdAt).getTime() < oldest)
-  return kept.length ? [...kept, ...snapshot] : snapshot
+    !m.localState && !ids.has(String(m._id)) && new Date(m.createdAt).getTime() < oldest)
+  return kept.length || local.length ? [...kept, ...snapshot, ...local] : snapshot
 }
 
 // The right-hand pane. Owns its own messages and polling; everything it knows
@@ -280,57 +285,112 @@ export default function ChatThread({
     return () => clearTimeout(id)
   }, [askedBot])
 
-  const handleSend = async (text) => {
-    setBusy(true); setErr('')
+  // Sends are optimistic, as in any messaging app: the message goes into the
+  // thread the moment you press Enter, marked as sending, and is swapped for the
+  // server's copy when the POST answers. Sends are queued one behind another so
+  // two quick messages cannot land on the server in the wrong order.
+  const localSeq  = useRef(0)
+  const sendQueue = useRef(Promise.resolve())
+
+  const settleLocal = (localId, patch) => setMessages(prev => {
+    if (patch === null) return prev.filter(m => m._id !== localId)
+    return prev.map(m => (m._id === localId ? { ...m, ...patch } : m))
+  })
+
+  const postMessage = async (localId, text, replyToId) => {
     try {
       const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text, replyToId: replyTo?._id ?? null }),
+        body: JSON.stringify({ body: text, replyToId }),
       })
       const d = await r.json().catch(() => null)
       if (!r.ok) {
         // The server is the authority on whether a name is needed — a user can
         // arrive here with a stale client state.
-        if (d?.code === 'DISPLAY_NAME_REQUIRED') { setNeedsName(true); return }
+        if (d?.code === 'DISPLAY_NAME_REQUIRED') { settleLocal(localId, null); setNeedsName(true); return }
         throw new Error(d?.message || 'Failed to send')
       }
-      // The POST already returns the created message, so appending it beats
-      // re-downloading the whole thread. The 5s poll reconciles anything that
-      // arrived from someone else in the meantime.
-      setReplyTo(null)
       if (d?.data?.botReplyingName) setAskedBot(d.data.botReplyingName)
-      if (d?.data?.message) {
-        justSentRef.current.set(String(d.data.message._id), {
-          message: d.data.message,
-          at:      Date.now(),
+      const sent = d?.data?.message
+      if (sent) {
+        justSentRef.current.set(String(sent._id), { message: sent, at: Date.now() })
+        // Swapped in place, so it keeps its spot. A poll that already brought
+        // the server's copy in means the local one simply goes.
+        setMessages(prev => {
+          if (prev.some(m => String(m._id) === String(sent._id))) {
+            return prev.filter(m => m._id !== localId)
+          }
+          return prev.map(m => (m._id === localId ? sent : m))
         })
-        setMessages(prev => [...prev, d.data.message])
         // Replying to a resolved ticket reopened it server-side; say so now
         // rather than a poll later, so the Resolved pill and the note go.
         if (isClosed) { setConversation(c => (c ? { ...c, status: 'open' } : c)); setReopening(false) }
-        // Your first message in a thread wouldn't be in the sender map yet, so
-        // your avatar would pop in a poll later. Seed it from the live user.
-        setSenders(prev => prev[String(user?._id)] ? prev : {
-          ...prev,
-          [String(user?._id)]: {
-            _id:           user?._id,
-            displayName:   user?.displayName ?? null,
-            agentNumber:   user?.agentNumber ?? null,
-            selectedBadge: user?.selectedBadge ?? null,
-            rank:          user?.rank ?? null,
-            cbatPassed:    Boolean(user?.cbatPassed),
-            supporter:     Boolean(user?.supporter),
-          },
-        })
+      } else {
+        settleLocal(localId, null)
       }
       onChanged?.()
     } catch (e) {
+      // Left in the thread, marked, with Retry and Discard beside it, so the
+      // words you typed are never silently lost.
+      settleLocal(localId, { localState: 'failed' })
       setErr(e.message || 'Failed to send')
-    } finally {
-      setBusy(false)
     }
+  }
+
+  const queueSend = (localId, text, replyToId) => {
+    sendQueue.current = sendQueue.current.then(() => postMessage(localId, text, replyToId))
+  }
+
+  const handleSend = (text) => {
+    setErr('')
+    const quoted  = replyTo
+    const localId = `local-${++localSeq.current}`
+    setMessages(prev => [...prev, {
+      _id:               localId,
+      localState:        'sending',
+      localReplyToId:    quoted?._id ?? null,
+      body:              text,
+      senderUserId:      user?._id,
+      senderDisplayName: user?.displayName ?? null,
+      senderRole:        user?.isAdmin ? 'admin' : 'user',
+      createdAt:         new Date().toISOString(),
+      reactions: [], mentions: [], deleted: false, editedAt: null,
+      replyTo: quoted ? {
+        messageId:   quoted._id,
+        userId:      quoted.senderUserId ?? null,
+        displayName: quoted.senderDisplayName ?? null,
+        excerpt:     (quoted.body ?? '').slice(0, 160),
+      } : null,
+    }])
+    setReplyTo(null)
+    // Your first message in a thread wouldn't be in the sender map yet, so
+    // your avatar would pop in a poll later. Seed it from the live user.
+    setSenders(prev => prev[String(user?._id)] ? prev : {
+      ...prev,
+      [String(user?._id)]: {
+        _id:           user?._id,
+        displayName:   user?.displayName ?? null,
+        agentNumber:   user?.agentNumber ?? null,
+        selectedBadge: user?.selectedBadge ?? null,
+        rank:          user?.rank ?? null,
+        cbatPassed:    Boolean(user?.cbatPassed),
+        supporter:     Boolean(user?.supporter),
+      },
+    })
+    queueSend(localId, text, quoted?._id ?? null)
+  }
+
+  const handleRetrySend = (message) => {
+    setErr('')
+    settleLocal(message._id, { localState: 'sending' })
+    queueSend(message._id, message.body, message.localReplyToId ?? null)
+  }
+
+  const handleDiscardSend = (message) => {
+    setErr('')
+    settleLocal(message._id, null)
   }
 
   const handleClose = async () => {
@@ -587,6 +647,8 @@ export default function ChatThread({
           // the gate it used to be.
           onDelete={handleDelete}
           onEdit={handleEdit}
+          onRetrySend={handleRetrySend}
+          onDiscardSend={handleDiscardSend}
           onSeenBy={setSeenByMsg}
           onShowEdits={user?.isAdmin ? setEditsMsg : undefined}
           dividerAfter={entryState?.lastReadAt ?? null}
@@ -716,7 +778,9 @@ export default function ChatThread({
           onBlockChanged={(blocked) => {
             setBlockDone(blocked)
             fetchMessages()
-              .then(d => { setMessages(d.messages); setSenders(d.senders ?? {}) })
+              // Replaced outright (the blocked messages must go), but any send
+              // still in flight stays on the end.
+              .then(d => { setMessages(prev => [...d.messages, ...prev.filter(m => m.localState)]); setSenders(d.senders ?? {}) })
               .catch(() => {})
             onChanged?.()
           }}

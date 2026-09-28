@@ -288,12 +288,60 @@ function NewMessagesDivider() {
   )
 }
 
+// How long a send may take before it is worth showing that it is still going.
+// Most land well inside this, and a bar that flashed up on every message would
+// be noise.
+const SENDING_BAR_DELAY_MS = 1_000
+
+// Under a message you have sent that the server has not confirmed yet. Nothing
+// for the first second, then a thin sweeping bar; on failure, the reason and
+// what you can do about it.
+function SendStatus({ message, onRetry, onDiscard }) {
+  const [slow, setSlow] = useState(false)
+  const sending = message.localState === 'sending'
+  useEffect(() => {
+    if (!sending) { setSlow(false); return }
+    const id = setTimeout(() => setSlow(true), SENDING_BAR_DELAY_MS)
+    return () => clearTimeout(id)
+  }, [sending])
+
+  if (sending) {
+    if (!slow) return null
+    return (
+      <div
+        role="progressbar"
+        aria-label="Sending message"
+        data-testid="message-sending"
+        className="relative mt-1 h-0.5 w-24 overflow-hidden rounded-full bg-slate-200"
+      >
+        <div className="absolute top-0 bottom-0 w-1/3 bg-brand-600 report-loading-bar" />
+      </div>
+    )
+  }
+
+  return (
+    <p className="mt-0.5 text-[11px] text-red-600" data-testid="message-failed">
+      Not sent.
+      {onRetry && (
+        <button type="button" onClick={() => onRetry(message)} className="ml-1.5 font-bold underline underline-offset-2 hover:text-red-700">
+          Try again
+        </button>
+      )}
+      {onDiscard && (
+        <button type="button" onClick={() => onDiscard(message)} className="ml-1.5 font-bold underline underline-offset-2 hover:text-red-700">
+          Delete
+        </button>
+      )}
+    </p>
+  )
+}
+
 // Module scope, not nested — a component defined inside another's render
 // remounts its whole subtree on every parent render.
 function MessageRow({
   message, startsRun, profile, isSupportIdentity, mine, presence,
   viewerIsAdmin, onOpenUser, onReport, onBlock, onDelete, onEdit, onReply, onReact, onSeenBy,
-  onShowEdits,
+  onShowEdits, onRetrySend, onDiscardSend,
   onJump, highlighted, senders, currentUserId, datedStamps,
   // Whether this row's actions are pinned open, and how to ask for that. Held
   // by the list rather than the row so only one row can be open at a time.
@@ -473,7 +521,9 @@ function MessageRow({
           </p>
         )}
 
-        {!m.deleted && <Reactions message={m} onReact={onReact} />}
+        {m.localState
+          ? <SendStatus message={m} onRetry={onRetrySend} onDiscard={onDiscardSend} />
+          : !m.deleted && <Reactions message={m} onReact={onReact} />}
       </div>
 
       {/* The tap target that stands in for hovering. Only rendered where hover
@@ -561,6 +611,10 @@ export default function MessageList({
   onReact,
   onSeenBy,
   onShowEdits,
+  // A message of yours still on its way up, or one that failed to go. Only
+  // the failed ones use these.
+  onRetrySend,
+  onDiscardSend,
   // Runs collapse consecutive messages from one sender under a single avatar,
   // name and timestamp. That is right for a conversation and wrong for a feed:
   // in the medals channel every message is from the same bot, so grouping them
@@ -753,6 +807,30 @@ export default function MessageList({
           prev.senderRole === 'system' ||
           Boolean(m.replyTo) ||
           identityKey(prev, collapseAdmins) !== identityKey(m, collapseAdmins)
+
+        // Not on the server yet, so there is nothing to reply to, react to,
+        // edit or report. The row is drawn without any of those actions.
+        if (m.localState) {
+          return (
+            <Fragment key={m._id}>
+            {divider}
+            <MessageRow
+              message={m}
+              startsRun={startsRun}
+              mine
+              profile={senders[String(m.senderUserId)]}
+              senders={senders}
+              currentUserId={currentUserId}
+              datedStamps={datedStamps}
+              isSupportIdentity={collapseAdmins && m.senderRole === 'admin'}
+              viewerIsAdmin={viewerIsAdmin}
+              onRetrySend={onRetrySend}
+              onDiscardSend={onDiscardSend}
+              onJump={jumpTo}
+            />
+            </Fragment>
+          )
+        }
 
         return (
           <Fragment key={m._id}>
