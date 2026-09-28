@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import CbatInstruments from '../CbatInstruments'
+import CbatInstruments, { gradeFor } from '../CbatInstruments'
 import { ORIENTATION_QUESTIONS, ORIENTATION_OPTIONS } from '../../utils/cbat/instrumentsOrientation'
 
 // The Instruments tile holds two boards, Reading and Orientation, picked in
@@ -59,6 +59,18 @@ function renderPage(props = {}) {
 const modeButton = (container, key) => container.querySelector(`[data-mode="${key}"]`)
 const title = container => [...container.querySelectorAll('p')].find(p => p.textContent === 'Instruments')
 const leaderboardLink = () => screen.getByText(/View Leaderboard/).closest('a')
+
+// Reading's bands, sized to real play (the best 90s run is 10 correct).
+describe('Instruments Reading grade', () => {
+  it.each([
+    [0, 'Failed'], [2, 'Failed'],
+    [3, 'Needs Work'], [5, 'Needs Work'],
+    [6, 'Good'], [8, 'Good'],
+    [9, 'Outstanding'], [10, 'Outstanding'],
+  ])('%i correct is %s', (correct, grade) => {
+    expect(gradeFor(correct)).toBe(grade)
+  })
+})
 
 describe('CbatInstruments mode row', () => {
   beforeEach(() => {

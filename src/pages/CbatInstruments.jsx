@@ -150,10 +150,11 @@ function statementSegments(p) {
   ]
 }
 
-function gradeFor(correct) {
-  if (correct >= 15) return 'Outstanding'
-  if (correct >= 10) return 'Good'
-  if (correct >= 5) return 'Needs Work'
+// Bands sized to real play: the best 90s run on the board is 10 correct.
+export function gradeFor(correct) {
+  if (correct >= 9) return 'Outstanding'
+  if (correct >= 6) return 'Good'
+  if (correct >= 3) return 'Needs Work'
   return 'Failed'
 }
 
