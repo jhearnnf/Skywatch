@@ -13,7 +13,10 @@ const AppSettings = require('../models/AppSettings');
 const CbatMockAssessment = require('../models/CbatMockAssessment');
 const { BATTERY_BY_KEY, detectRegion, normaliseRegion } = require('../constants/cbatBatteries');
 const { buildMockPlan, mockBatteries, mockSteps, breakPoints, totalMinutes, unsatCodes, MOCK } = require('../utils/cbatMockPlan');
-const { findActiveMock, expireIfIdle, serialiseMock } = require('../utils/cbatMock');
+const { findActiveMock, expireIfIdle, serialiseMock, buildMockSheet } = require('../utils/cbatMock');
+const User = require('../models/User');
+const { simulateMock } = require('../utils/cbatMockSimulate');
+const { adminOnly } = require('../middleware/auth');
 const { loadForm } = require('../utils/cbatAptitudeReport');
 const { canAccessCbat } = require('../utils/cbatAccess');
 
@@ -213,6 +216,127 @@ router.post('/:id/notice-seen', protect, async (req, res) => {
     if (!mock) return res.status(404).json({ message: 'Assessment not found' });
     if (!mock.noticeSeenAt) { mock.noticeSeenAt = new Date(); await mock.save(); }
     res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /admin/stats — the page's admin tools: how many players started a mock, how many finished
+// one, and how the finished sittings scored, with the same split per player for the lists the
+// tiles open. Admins are left out of every number, so trying the mock out does not skew it.
+// Arrivals on the page are PostHog's job, not this endpoint's.
+//
+// A finished mock's verdict comes from its score sheet, worked out here the same way the player
+// sees it. A role mock takes its role's verdict. An "all roles" mock passes when it cleared at
+// least one role and fails when every role it could judge was a fail. Anything else (provisional
+// or unscored) is counted as "no verdict" and kept out of the pass rate rather than guessed at.
+function mockVerdict(batteries) {
+  const statuses = batteries.map(b => b.status);
+  if (statuses.includes('pass')) return 'pass';
+  if (statuses.length && statuses.every(s => s === 'fail')) return 'fail';
+  return 'none';
+}
+
+const rate = (pass, fail) => (pass + fail ? pass / (pass + fail) : null);
+
+router.get('/admin/stats', protect, adminOnly, async (req, res) => {
+  try {
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+    const weekAgo = new Date(Date.now() - WEEK_MS);
+    const adminIds = await User.find({ isAdmin: true }).distinct('_id');
+    const mocks = await CbatMockAssessment.find({ userId: { $nin: adminIds } })
+      .select('userId scope batteryKey region steps status startedAt endedAt').sort({ startedAt: 1 }).lean();
+
+    const startersLast7d = new Set();
+    const byStatus = { active: 0, completed: 0, abandoned: 0, expired: 0 };
+    const verdicts = { pass: 0, fail: 0, none: 0 };
+    const roles = new Map();
+    const people = new Map();
+
+    for (const m of mocks) {
+      const uid = String(m.userId);
+      if (m.startedAt >= weekAgo) startersLast7d.add(uid);
+      byStatus[m.status] = (byStatus[m.status] ?? 0) + 1;
+
+      const person = people.get(uid) ?? {
+        userId: uid, started: 0, completed: 0, pass: 0, fail: 0, none: 0, lastStartedAt: null, last: null,
+      };
+      person.started += 1;
+      person.lastStartedAt = m.startedAt;
+      people.set(uid, person);
+
+      const label = m.scope === 'role' ? (BATTERY_BY_KEY[m.batteryKey]?.label ?? m.batteryKey) : `All roles (${m.region})`;
+      if (m.status !== 'completed') {
+        person.last = { label, status: m.status, verdict: null, score: null, cutoff: null };
+        continue;
+      }
+      person.completed += 1;
+
+      const { batteries } = buildMockSheet(m);
+      for (const b of batteries) {
+        const row = roles.get(b.key) ?? { key: b.key, label: b.label, region: b.region, sat: 0, pass: 0, fail: 0 };
+        row.sat += 1;
+        if (b.status === 'pass') row.pass += 1;
+        if (b.status === 'fail') row.fail += 1;
+        roles.set(b.key, row);
+      }
+      const verdict = mockVerdict(batteries);
+      verdicts[verdict] += 1;
+      person[verdict] += 1;
+      // A role mock's score against its cutoff is worth showing; an all-roles sheet has one per role.
+      const only = m.scope === 'role' ? batteries[0] : null;
+      // A fail above the cutoff is a domain under its minimum; name the domain so it doesn't read
+      // as a wrong verdict.
+      const underMinimum = only ? only.domains.filter(d => d.belowMinimum)
+        .map(d => ({ label: d.label, stanine: d.stanine, minStanine: d.minStanine })) : [];
+      person.last = { label, status: m.status, verdict, score: only?.score ?? null, cutoff: only?.cutoff ?? null, underMinimum };
+    }
+
+    const users = await User.find({ _id: { $in: [...people.keys()] } }).select('agentNumber displayName').lean();
+    const names = new Map(users.map(u => [String(u._id), u]));
+    const peopleList = [...people.values()]
+      .map(p => ({
+        ...p,
+        agentNumber: names.get(p.userId)?.agentNumber ?? null,
+        displayName: names.get(p.userId)?.displayName ?? null,
+        passRate: rate(p.pass, p.fail),
+      }))
+      .sort((a, b) => new Date(b.lastStartedAt) - new Date(a.lastStartedAt));
+
+    res.json({ status: 'success', data: {
+      generatedAt: new Date(),
+      started: { people: people.size, last7d: startersLast7d.size, mocks: mocks.length },
+      completed: { people: peopleList.filter(p => p.completed > 0).length, mocks: byStatus.completed },
+      byStatus,
+      verdicts: { ...verdicts, passRate: rate(verdicts.pass, verdicts.fail) },
+      roles: [...roles.values()].sort((a, b) => b.sat - a.sat || a.label.localeCompare(b.label)),
+      people: peopleList,
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /admin/simulate?result=pass|fail — a made-up finished mock (random region, role and scores,
+// scored by the real sheet) for previewing the end-of-mock page. Nothing is saved.
+router.get('/admin/simulate', protect, adminOnly, (req, res) => {
+  const want = req.query.result === 'fail' ? 'fail' : 'pass';
+  const mock = simulateMock({ want, userId: req.user._id });
+  if (!mock) return res.status(500).json({ message: `Could not make a simulated ${want}.` });
+  res.json({ status: 'success', data: { mock } });
+});
+
+// GET /admin/users/:userId — one player's mocks for the admin tools, newest first, each with its
+// score sheet once it has ended (an active one has no sheet yet).
+router.get('/admin/users/:userId', protect, adminOnly, async (req, res) => {
+  try {
+    const target = await User.findById(req.params.userId).select('agentNumber displayName').lean().catch(() => null);
+    if (!target) return res.status(404).json({ message: 'Player not found' });
+    const mocks = await CbatMockAssessment.find({ userId: target._id }).sort({ startedAt: -1 }).limit(HISTORY_LIMIT);
+    res.json({ status: 'success', data: {
+      user: { userId: String(target._id), agentNumber: target.agentNumber ?? null, displayName: target.displayName ?? null },
+      mocks: mocks.map(m => serialiseMock(m, { withSheet: m.status !== 'active' })),
+    } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

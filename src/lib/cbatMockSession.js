@@ -15,6 +15,8 @@ import { gamePath } from '../data/cbatBatteries'
 export const MOCK_CONFIG = mockConfig
 export const MOCK_HTML_ATTR = 'data-cbat-mock'
 export const MOCK_ROUTE = '/cbat/mock'
+// The sheet-page id the admin tools' simulated pass / fail pages open under (/cbat/mock/simulated).
+export const SIMULATED_MOCK_ID = 'simulated'
 
 let active = null
 const listeners = new Set()

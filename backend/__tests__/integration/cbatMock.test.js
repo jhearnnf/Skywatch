@@ -193,3 +193,75 @@ describe('leaving, history and the score sheet', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('admin stats', () => {
+  it('counts starts, finishes and verdicts per player, leaving admins out', async () => {
+    const admin = await createAdminUser({ agentNumber: '2000010', email: 'mockstatsadmin@test.com' });
+    const adminCookie = authCookie(admin._id);
+
+    // The player finishes one mock; the admin starts one of their own.
+    const id = await startPinned([FLAG_STEP]);
+    await request(app).post('/api/games/cbat/flag/result').set('Cookie', cookie).send(flagRun({ mockId: id }));
+    await request(app).post('/api/cbat-mock/start').set('Cookie', adminCookie).send({ battery: 'pilot' }).expect(201);
+
+    const res = await request(app).get('/api/cbat-mock/admin/stats').set('Cookie', adminCookie);
+    expect(res.status).toBe(200);
+    const { data } = res.body;
+    expect(data.arrived).toBeUndefined();
+    expect(data.started).toMatchObject({ people: 1, mocks: 1 });
+    expect(data.completed).toEqual({ people: 1, mocks: 1 });
+    const { pass, fail, none } = data.verdicts;
+    expect(pass + fail + none).toBe(1);
+    expect(data.roles.map(r => r.key)).toEqual(['pilot']);
+
+    expect(data.people).toHaveLength(1);
+    const [p] = data.people;
+    expect(p).toMatchObject({ userId: String(user._id), agentNumber: '2000001', started: 1, completed: 1 });
+    expect(p.pass + p.fail + p.none).toBe(1);
+    expect(p.last).toMatchObject({ label: 'Pilot', status: 'completed' });
+  });
+
+  it('is admin only', async () => {
+    const res = await request(app).get('/api/cbat-mock/admin/stats').set('Cookie', cookie);
+    expect(res.status).toBe(403);
+    const one = await request(app).get(`/api/cbat-mock/admin/users/${user._id}`).set('Cookie', cookie);
+    expect(one.status).toBe(403);
+  });
+
+  it('gives an admin one player\'s mocks, with a sheet on each that has ended', async () => {
+    const admin = await createAdminUser({ agentNumber: '2000011', email: 'mockplayeradmin@test.com' });
+    const id = await startPinned([FLAG_STEP]);
+    await request(app).post('/api/games/cbat/flag/result').set('Cookie', cookie).send(flagRun({ mockId: id }));
+    await request(app).post('/api/cbat-mock/start').set('Cookie', cookie).send({ battery: 'intelligence' }).expect(201);
+
+    const res = await request(app).get(`/api/cbat-mock/admin/users/${user._id}`).set('Cookie', authCookie(admin._id));
+    expect(res.status).toBe(200);
+    expect(res.body.data.user).toMatchObject({ userId: String(user._id), agentNumber: '2000001' });
+    const [latest, first] = res.body.data.mocks;
+    expect(latest).toMatchObject({ batteryKey: 'intelligence', status: 'active' });
+    expect(latest.sheet).toBeUndefined();
+    expect(first).toMatchObject({ id, status: 'completed' });
+    expect(first.sheet.batteries[0].key).toBe('pilot');
+  });
+});
+
+describe('simulated pass / fail sheets', () => {
+  it('gives an admin a finished mock with the verdict asked for, and saves nothing', async () => {
+    const admin = await createAdminUser({ agentNumber: '2000012', email: 'mocksimadmin@test.com' });
+    for (const result of ['pass', 'fail']) {
+      const res = await request(app).get(`/api/cbat-mock/admin/simulate?result=${result}`).set('Cookie', authCookie(admin._id));
+      expect(res.status).toBe(200);
+      const { mock } = res.body.data;
+      expect(mock).toMatchObject({ id: 'simulated', status: 'completed', scope: 'role' });
+      expect(mock.testsDone).toBe(mock.testsTotal);
+      expect(mock.sheet.batteries).toHaveLength(1);
+      expect(mock.sheet.batteries[0].status).toBe(result);
+    }
+    expect(await CbatMockAssessment.countDocuments()).toBe(0);
+  });
+
+  it('is admin only', async () => {
+    const res = await request(app).get('/api/cbat-mock/admin/simulate?result=pass').set('Cookie', cookie);
+    expect(res.status).toBe(403);
+  });
+});

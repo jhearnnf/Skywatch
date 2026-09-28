@@ -18,14 +18,17 @@ import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
 import CbatMockScoreSheet from '../components/cbat/CbatMockScoreSheet'
+import CbatMockPractiseNext from '../components/cbat/CbatMockPractiseNext'
+import CbatMockAdminStats, { MockSimulateButtons, MockSimulatedNote } from '../components/cbat/CbatMockAdminStats'
+import AdminToolPanel from '../components/AdminToolPanel'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import {
-  BATTERY_BY_KEY, REGIONS, REGION_CODES, TESTS, batteryGroupsFor, gamePath, gameTitle, normaliseRegion,
+  BATTERY_BY_KEY, REGIONS, REGION_CODES, TESTS, batteryGroupsFor, gameTitle, normaliseRegion,
 } from '../data/cbatBatteries'
 import {
   MOCK_CONFIG, MOCK_ROUTE, useActiveMock, setActiveMock, refreshActiveMock, currentStep, nextGameKey,
   mockGamePath, hasTutorial, breakEndsAt, estimatedFinish, formatClock, formatDuration, mockUrl,
-  requestLeaveMock, grantGamePath,
+  requestLeaveMock, grantGamePath, SIMULATED_MOCK_ID,
 } from '../lib/cbatMockSession'
 import { captureEvent } from '../lib/posthog'
 
@@ -509,7 +512,7 @@ function MockRunner({ mock, onRefresh }) {
 // ── /cbat/mock ───────────────────────────────────────────────────────────────────────────────
 
 export default function CbatMock() {
-  const { apiFetch, API } = useAuth()
+  const { user, apiFetch, API } = useAuth()
   const mock = useActiveMock()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -542,66 +545,50 @@ export default function CbatMock() {
       {!mock && !state.loading && !state.failed && !after && (
         <MockStart defaults={state.data} closed={state.data?.closed ?? null} requested={searchParams.get('battery')} />
       )}
+      {user?.isAdmin && (
+        <AdminToolPanel title="Mock Assessment" wide>
+          <CbatMockAdminStats />
+        </AdminToolPanel>
+      )}
     </div>
   )
 }
 
 // ── /cbat/mock/:id ───────────────────────────────────────────────────────────────────────────
 
-// The weakest areas on the sheet, each with the games that feed it: under a minimum first, then
-// the lowest stanines. Screen only; the printed sheet is the sheet.
-function PractiseNext({ sheet }) {
-  const rows = new Map()
-  for (const b of sheet.batteries) {
-    for (const d of b.domains) {
-      if (d.stanine == null) continue
-      const prev = rows.get(d.key)
-      const weak = d.belowMinimum || d.stanine <= 4
-      if (!weak) continue
-      if (!prev || (d.belowMinimum && !prev.belowMinimum)) rows.set(d.key, d)
-    }
-  }
-  const list = [...rows.values()].sort((a, b) => (b.belowMinimum - a.belowMinimum) || (a.stanine - b.stanine)).slice(0, 4)
-  if (!list.length) return null
-  return (
-    <Card className="mt-5 mock-sheet-chrome" data-testid="mock-practise-next">
-      <h2 className="text-sm font-extrabold text-slate-900 mb-2">What to practise next</h2>
-      <ul className="space-y-2">
-        {list.map(d => (
-          <li key={d.key} className="text-xs text-slate-700">
-            <span className="font-bold text-slate-900">{d.label}</span>
-            {d.belowMinimum ? ` is under the minimum of ${d.minStanine} for a role you sat.` : ` came out at ${d.stanine}.`}
-            {' '}
-            {[...new Set(d.tests.flatMap(t => TESTS[t.code]?.games ?? []))].map((g, i) => (
-              <span key={g}>{i > 0 && ', '}<Link to={gamePath(g)} className="text-brand-600 hover:text-brand-700 font-bold">{gameTitle(g)}</Link></span>
-            ))}
-          </li>
-        ))}
-      </ul>
-    </Card>
-  )
-}
-
+// Also the admin tools' simulated pass / fail pages (id SIMULATED_MOCK_ID): the sheet comes from
+// the simulate endpoint instead of a saved mock; everything else on the page is what a player sees.
 export function CbatMockSheetPage() {
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const { user, apiFetch, API } = useAuth()
   const navigate = useNavigate()
-  const [state, setState] = useState({ loading: true, mock: null, failed: false })
   useGameBodyClass('cbat-mock-sheet')
+
+  const simulated = id === SIMULATED_MOCK_ID
+  const result = searchParams.get('result') === 'fail' ? 'fail' : 'pass'
+  // Changed by every press of the admin tools' simulate buttons, so pressing again draws a fresh sheet.
+  const draw = searchParams.get('draw')
+
+  // Loading is "the answer held is for a different request", so a fresh draw shows Loading…
+  // without resetting state inside the effect.
+  const request = `${id}|${result}|${draw}`
+  const [answer, setAnswer] = useState({ request: null, mock: null, failed: false })
+  const state = answer.request === request ? { loading: false, ...answer } : { loading: true, mock: null, failed: false }
 
   useEffect(() => {
     let cancelled = false
-    apiFetch(mockUrl(API, `/${id}`))
+    apiFetch(mockUrl(API, simulated ? `/admin/simulate?result=${result}` : `/${id}`))
       .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(d => {
         if (cancelled) return
         const mock = d?.data?.mock
         if (mock?.status === 'active') { navigate(MOCK_ROUTE, { replace: true }); return }
-        setState({ loading: false, mock, failed: false })
+        setAnswer({ request, mock, failed: false })
       })
-      .catch(() => { if (!cancelled) setState({ loading: false, mock: null, failed: true }) })
+      .catch(() => { if (!cancelled) setAnswer({ request, mock: null, failed: true }) })
     return () => { cancelled = true }
-  }, [id, apiFetch, API, navigate])
+  }, [request, id, simulated, result, apiFetch, API, navigate])
 
   return (
     <div className="pb-8">
@@ -611,7 +598,7 @@ export function CbatMockSheetPage() {
         {state.mock && (
           <button
             type="button"
-            onClick={() => { captureEvent('cbat_mock_printed', {}); window.print() }}
+            onClick={() => { if (!simulated) captureEvent('cbat_mock_printed', {}); window.print() }}
             data-testid="mock-print"
             className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg text-xs transition-colors"
           >
@@ -624,8 +611,14 @@ export function CbatMockSheetPage() {
       {state.mock && (
         <>
           <CbatMockScoreSheet mock={state.mock} agentNumber={user?.agentNumber} />
-          <PractiseNext sheet={state.mock.sheet} />
+          <CbatMockPractiseNext sheet={state.mock.sheet} />
         </>
+      )}
+      {simulated && user?.isAdmin && (
+        <AdminToolPanel title="Mock Assessment">
+          <MockSimulatedNote mock={state.mock} result={result} />
+          <MockSimulateButtons />
+        </AdminToolPanel>
       )}
     </div>
   )
