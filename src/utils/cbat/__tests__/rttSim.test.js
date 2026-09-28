@@ -291,6 +291,19 @@ describe('generateRttRun', () => {
       })
     })
 
+    // Cover is drawn as a fixed structure in front of the target, so a target
+    // that never moves can't honestly go behind it for part of a pass — it was
+    // simply blinking out of existence where it stood.
+    it('never hides a static target', () => {
+      let statics = 0
+      everyPass((t) => {
+        if (t.startAz !== t.endAz) return
+        statics++
+        expect(t.occlusions).toEqual([])
+      })
+      expect(statics).toBeGreaterThan(0)
+    })
+
     it('caps how much of a pass can be spent hidden', () => {
       everyPass((t) => {
         const hidden = t.occlusions.reduce((n, o) => n + (o.toMs - o.fromMs), 0)

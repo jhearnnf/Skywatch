@@ -299,17 +299,22 @@ export const MAX_SEPARATION_DEG = 70
 function buildOcclusions(windowMs, arc, tuning, rng) {
   const max = tuning.maxOcclusions ?? 0
   if (max <= 0) return []
+  // Something that isn't moving can't go behind cover. The scene draws cover as
+  // a fixed structure in front of the target, and a stationary target sits
+  // behind the same structure for the whole pass, so there is no honest way to
+  // show it being hidden for part of the window and not the rest. Player
+  // report: static targets "flickering in and out of existence" and costing a
+  // wasted frame when shot in one of those gaps.
+  if (Math.abs(arc) < 1e-9) return []
 
   const lo = OCCLUSION_HEAD_MS
   const hi = windowMs - OCCLUSION_TAIL_MS
   if (hi - lo < MIN_USEFUL_OCCLUSION_MS) return []
 
   // How long the target may be hidden before it would re-emerge outside the
-  // frame. Infinite for something that isn't going anywhere.
+  // frame.
   const ratePerMs = Math.abs(arc) / windowMs
-  const maxByArc = ratePerMs > 0
-    ? (MAX_OCCLUSION_ARC_FRAC * CAMERA_FOV_DEG * DEG) / ratePerMs
-    : Infinity
+  const maxByArc = (MAX_OCCLUSION_ARC_FRAC * CAMERA_FOV_DEG * DEG) / ratePerMs
   if (maxByArc < MIN_USEFUL_OCCLUSION_MS) return []
 
   const budget = windowMs * MAX_OCCLUDED_FRACTION

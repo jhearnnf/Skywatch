@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useEffect, Suspense, Component } from 'react'
+import { useRef, useMemo, useState, useEffect, useCallback, Suspense, Component } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
@@ -43,6 +43,11 @@ const GROUND_Y = -STATION_ALT_M
 const MODEL_JET_A = '/models/hawk t2.glb'
 const MODEL_JET_B = '/models/eurofighter typhoon fgr4.glb'
 const MODEL_HELI = '/models/chinook hc6 6a.glb'
+const AIRCRAFT_MODELS = [MODEL_JET_A, MODEL_JET_B, MODEL_HELI]
+// How long the run will wait for the aircraft models before starting anyway.
+// Past this, a pass whose model still isn't in draws the primitive stand-in
+// (see TargetBody) rather than nothing.
+const MODEL_WAIT_MS = 10000
 
 // Nose direction correction.
 //
@@ -915,7 +920,10 @@ function TargetBody({ target }) {
     const url = kind === 'helicopter' ? MODEL_HELI : (id % 2 === 0 ? MODEL_JET_A : MODEL_JET_B)
     return (
       <ErrorCatcher fallback={<PrimitiveBody kind="vehicle" size={size} />}>
-        <Suspense fallback={null}>
+        {/* Never `null`: a pass is shootable from its first frame, and a
+            helicopter that is still loading was an invisible target with the
+            cue arrow pointing at it. */}
+        <Suspense fallback={<PrimitiveBody kind="vehicle" size={size} />}>
           <GlbBody url={url} size={size} yaw={YAW_AIRCRAFT} />
         </Suspense>
       </ErrorCatcher>
@@ -1017,7 +1025,7 @@ function fmtClock(ms) {
 // not decoration: React 19's react-hooks/immutability rule forbids writing
 // through a prop, and pushing 60 Hz of text through React state instead would
 // cost a render a frame.
-function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, camRef, onHud, onShot, onEnd, setActiveIndex }) {
+function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, readyRef, camRef, onHud, onShot, onEnd, setActiveIndex }) {
   const endedRef = useRef(false)
   const activeRef = useRef(-2)
   // Reused every frame so the loop allocates nothing.
@@ -1037,6 +1045,17 @@ function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, camRef, onHud
     const sim = simRef.current
     const input = inputRef.current
     if (!sim || !input || !runningRef.current) return
+    // The clock does not start until the aircraft models are in, so no pass can
+    // go live before the thing the player is meant to track can be drawn.
+    // Shutter presses in the meantime are dropped, not banked.
+    if (!readyRef.current) {
+      input.consumeTriggerEdges()
+      const hud = hudOut.current
+      hud.label = 'LOADING'
+      hud.clock = fmtClock(sim.durationMs)
+      onHud?.(hud)
+      return
+    }
     // Clamped so a backgrounded tab doesn't return and teleport the run forward.
     const dt = Math.min(0.12, delta)
 
@@ -1185,6 +1204,20 @@ function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, camRef, onHud
 
 // ── Scene ────────────────────────────────────────────────────────────────────
 
+// Suspends until every aircraft model has loaded, then says so. Draws nothing.
+function ModelsReady({ urls, onReady }) {
+  useGLTF(urls)
+  useEffect(() => { onReady() }, [onReady])
+  return null
+}
+
+// The error fallback for ModelsReady: a model that fails to load releases the
+// run straight away, and TargetBody draws the primitive in its place.
+function ReadyNow({ onReady }) {
+  useEffect(() => { onReady() }, [onReady])
+  return null
+}
+
 // Only the active pass is mounted; the driver reports which one that is and this
 // swaps the body over. Kept in its own component so a target change remounts the
 // model without disturbing the driver.
@@ -1207,6 +1240,13 @@ function TargetStage({ sim, simRef, activeIndex }) {
 // the HUD already gets written directly by the frame loop.
 function SceneContents({ sim, simRef, inputRef, sensitivityRef, runningRef, camRef, onHud, onShot, onEnd }) {
   const [activeIndex, setActiveIndex] = useState(-1)
+  const readyRef = useRef(false)
+  const markReady = useCallback(() => { readyRef.current = true }, [])
+  // A slow or failed download must never hold the run on LOADING for good.
+  useEffect(() => {
+    const id = setTimeout(markReady, MODEL_WAIT_MS)
+    return () => clearTimeout(id)
+  }, [markReady])
   const targets = sim?.run?.targets ?? []
 
   return (
@@ -1242,12 +1282,18 @@ function SceneContents({ sim, simRef, inputRef, sensitivityRef, runningRef, camR
       <World targets={targets} />
       <Occluders targets={targets} />
       <TargetStage sim={sim} simRef={simRef} activeIndex={activeIndex} />
+      <ErrorCatcher fallback={<ReadyNow onReady={markReady} />}>
+        <Suspense fallback={null}>
+          <ModelsReady urls={AIRCRAFT_MODELS} onReady={markReady} />
+        </Suspense>
+      </ErrorCatcher>
 
       <RttDriver
         simRef={simRef}
         inputRef={inputRef}
         sensitivityRef={sensitivityRef}
         runningRef={runningRef}
+        readyRef={readyRef}
         camRef={camRef}
         onHud={onHud}
         onShot={onShot}
