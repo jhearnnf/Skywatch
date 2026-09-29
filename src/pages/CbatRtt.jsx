@@ -504,7 +504,7 @@ export default function CbatRtt() {
                 {/* HUD. Every value below is written by RttScene's frame loop
                     straight into these nodes — see the refs collected on
                     hudRef. Nothing here re-renders during a run. */}
-                <div className="absolute inset-0 pointer-events-none">
+                <div className="rtt-hud absolute inset-0 pointer-events-none">
                   <Reticle boxPercent={boxPercent} innerRef={el => (hudRef.current.reticle = el)} />
                   <TargetCue
                     innerRef={el => (hudRef.current.cue = el)}

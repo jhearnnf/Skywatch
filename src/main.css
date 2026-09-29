@@ -2570,11 +2570,19 @@ body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
 
    Amber while it points at the next target during a gap between passes, brand
    blue while it points at the one that is live. */
+/* The HUD overlay is a size container so the cue can measure both sides. */
+.rtt-hud {
+  container-type: size;
+}
+/* Sized off the arena's SHORTER side. It used to be 62% of the height, which on
+   a portrait phone (arena taller than wide) made the circle as wide as the
+   screen, so a left/right arrow was clipped or pushed off the picture entirely.
+   The 40px gutter keeps the arrow's tip inside the frame. */
 .rtt-cue {
   position: absolute;
   left: 50%;
   top: 50%;
-  height: 62%;
+  width: min(62cqh, 100cqw - 40px);
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
   pointer-events: none;
