@@ -123,6 +123,19 @@ const cohortMemberCount = (convo) => User.countDocuments({
   upcomingCbatRegion: convo.channel.cohortRegion,
 });
 
+// Whether anyone in a cohort other than the viewer is online right now: the
+// dot beside the date in the group strip. A yes/no rather than a count or a
+// list, so members learn that someone is around without learning who. Read at
+// the tight "here now" range, the same one the hub presence dots use.
+const cohortOthersOnline = async (convo, viewerId) => Boolean(await User.exists({
+  upcomingCbatDate: new Date(`${convo.channel.cohortDate}T00:00:00.000Z`),
+  upcomingCbatRegion: convo.channel.cohortRegion,
+  _id: { $ne: viewerId },
+  lastSeen: { $gte: new Date(Date.now() - PRESENCE_HERE_WINDOW_MS) },
+  isBot: { $ne: true },
+  isBanned: { $ne: true },
+}));
+
 // A cohort room nobody is in and nobody ever posted in.
 //
 // The room is created the moment someone locks a date, and membership is
@@ -195,7 +208,7 @@ async function serializeCbatGroup(user) {
   }
   const convo = await ensureCbatCohort(date, region);
   const readRow = await ChatRead.findOne({ userId: user._id, conversationId: convo._id }).lean();
-  const [unreadCount, memberCount] = await Promise.all([
+  const [unreadCount, memberCount, othersOnline] = await Promise.all([
     ChatMessage.countDocuments({
       conversationId: convo._id,
       deletedAt: null,
@@ -206,6 +219,7 @@ async function serializeCbatGroup(user) {
       ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
     }),
     cohortMemberCount(convo),
+    cohortOthersOnline(convo, user._id),
   ]);
   const refusal = postRefusal(convo, user);
   const code = refusal?.body?.code ?? null;
@@ -217,6 +231,7 @@ async function serializeCbatGroup(user) {
     conversationId: convo._id,
     title: channelTitle(convo),
     memberCount,
+    othersOnline,
     welcome: cohortWelcomeFor(convo),
     unread: unreadCount > 0,
     unreadCount,
@@ -1133,13 +1148,16 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
         upcomingCbatRegion: convo.channel.cohortRegion,
       }).select('displayName agentNumber cbatPassed donationPrompt.donatedAt hideSupporterBadge').sort({ displayNameLower: 1, agentNumber: 1 }).lean(),
     ]);
-    const unreadCount = await ChatMessage.countDocuments({
-      conversationId: convo._id,
-      deletedAt: null,
-      senderRole: { $ne: 'system' },
-      senderUserId: { $ne: req.user._id },
-      ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
-    });
+    const [unreadCount, othersOnline] = await Promise.all([
+      ChatMessage.countDocuments({
+        conversationId: convo._id,
+        deletedAt: null,
+        senderRole: { $ne: 'system' },
+        senderUserId: { $ne: req.user._id },
+        ...(read ? { createdAt: { $gt: read.lastReadAt } } : {}),
+      }),
+      cohortOthersOnline(convo, req.user._id),
+    ]);
     const refusal = postRefusal(convo, req.user);
     res.json({ status: 'success', data: {
       configured: true,
@@ -1155,6 +1173,7 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
       postBlockedMessage: refusal && !refusal.body?.code ? refusal.body.message : null,
       botName: null,
       memberCount: members.length,
+      othersOnline,
       welcome: cohortWelcomeFor(convo),
       members: members.map(member => ({
         _id: member._id,

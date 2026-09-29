@@ -35,6 +35,9 @@ const FALLBACK_POLL_MS = 10_000
 // The inactive My group tab has no EventSource of its own. This small status
 // response keeps its badge live without holding a second chat stream open.
 const GROUP_UNREAD_POLL_MS = 15_000
+// The online dot in an open group's strip. Presence is read at a 3-minute
+// range on the server, so checking more often than this would not sharpen it.
+const GROUP_ONLINE_POLL_MS = 30_000
 
 // How long a just-sent message is held over a load that has not caught up with
 // it. See applyJustSent below.
@@ -168,6 +171,21 @@ function Reactions({ message, onReact, picking, onPick }) {
         </button>
       ))}
     </span>
+  )
+}
+
+// Green while anyone else in the group is online, grey otherwise. The server
+// sends only a yes/no, so the dot never says who.
+function GroupOnlineDot({ online }) {
+  return (
+    <span
+      data-testid="group-online-dot"
+      data-online={online ? 'true' : 'false'}
+      title={online ? 'Someone in this group is online now' : 'Nobody else in this group is online'}
+      className={online
+        ? 'w-1.5 h-1.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.75)]'
+        : 'w-1.5 h-1.5 shrink-0 rounded-full bg-slate-400'}
+    />
   )
 }
 
@@ -365,6 +383,28 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
     }).catch(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [enabled, get, loungeReload, roomEndpoint])
+
+  // Keep the online dot of an open group current. The room load above runs
+  // once, and someone arriving or leaving would otherwise never show.
+  const groupOnlineEndpoint = lounge?.configured && (room === 'group' || (room === 'groups' && adminGroupId))
+    ? roomEndpoint
+    : null
+  useEffect(() => {
+    if (!enabled || !groupOnlineEndpoint) return
+    let cancelled = false
+    const id = setInterval(() => {
+      if (document.hidden) return
+      get(groupOnlineEndpoint)
+        .then(({ ok, data }) => {
+          if (cancelled || !ok || typeof data?.othersOnline !== 'boolean') return
+          setLounge(prev => (prev?.configured && prev.othersOnline !== data.othersOnline
+            ? { ...prev, othersOnline: data.othersOnline }
+            : prev))
+        })
+        .catch(() => {})
+    }, GROUP_ONLINE_POLL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [enabled, get, groupOnlineEndpoint])
 
   // Keep the inactive My group pill current. Once that room is selected its
   // own load + stream take over, so there is never a duplicate polling path.
@@ -968,7 +1008,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
 
       {room === 'group' && lounge?.configured && (
         <div className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.75)]" aria-hidden="true" />
+          <GroupOnlineDot online={lounge.othersOnline} />
           <p className="text-[10px] font-bold text-game-text">
             {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${lounge.date}T00:00:00Z`))}
           </p>
@@ -994,7 +1034,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
             title="All CBAT groups"
             className="text-brand-500 hover:text-brand-400 text-xs leading-none px-1 -ml-1 transition-colors"
           >←</button>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,.75)]" aria-hidden="true" />
+          <GroupOnlineDot online={lounge.othersOnline} />
           <p className="text-[10px] font-bold text-game-text">
             {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${lounge.date}T00:00:00Z`))}
           </p>

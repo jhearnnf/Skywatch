@@ -6,6 +6,7 @@ const db = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 const ChatConversation = require('../../models/ChatConversation');
 const ChatMessage = require('../../models/ChatMessage');
+const User = require('../../models/User');
 
 beforeAll(async () => { await db.connect(); await ChatConversation.syncIndexes(); });
 beforeEach(async () => { await createSettings(); });
@@ -155,6 +156,35 @@ describe('CBAT cohort groups', () => {
       const pub = await request(app).get(`/api/chat/conversations/${lounge._id}/messages`).set('Cookie', cookie);
       expect(pub.body.data.conversation).not.toHaveProperty('memberCount');
     }
+  });
+
+  it('says whether anyone else in the group is online, without saying who', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const elsewhere = await createUser({ displayName: 'Hawk', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await choose(b);
+    await choose(elsewhere, '2099-11-02');
+    const id = made.body.data.conversationId;
+    const mine = () => request(app).get('/api/chat/cbat-group').set('Cookie', authCookie(a._id));
+    const adminView = () => request(app).get(`/api/chat/cbat-groups/${id}`).set('Cookie', authCookie(admin._id));
+
+    // Only the viewer themselves and someone in another group are online.
+    await User.updateMany({ _id: { $in: [a._id, elsewhere._id] } }, { lastSeen: new Date() });
+    await User.updateOne({ _id: b._id }, { lastSeen: new Date(Date.now() - 10 * 60 * 1000) });
+    expect((await mine()).body.data.othersOnline).toBe(false);
+
+    await User.updateOne({ _id: b._id }, { lastSeen: new Date() });
+    const [member, detail, forB] = await Promise.all([
+      mine(),
+      adminView(),
+      request(app).get('/api/chat/cbat-group').set('Cookie', authCookie(b._id)),
+    ]);
+    expect(member.body.data.othersOnline).toBe(true);
+    expect(detail.body.data.othersOnline).toBe(true);
+    // B sees A, who is online too.
+    expect(forB.body.data.othersOnline).toBe(true);
   });
 
   it('includes participant totals in the admin all-groups list', async () => {

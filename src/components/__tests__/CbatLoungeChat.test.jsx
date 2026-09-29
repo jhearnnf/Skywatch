@@ -260,6 +260,20 @@ describe('private CBAT group', () => {
     expect(await screen.findByLabelText('3 members in your CBAT group')).toHaveTextContent('3 members')
   })
 
+  it('greys the group dot when nobody else is online and lights it when someone is', async () => {
+    const base = { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', testName: 'CBAT', unreadCount: 0, memberCount: 3 }
+    stubFetch({ group: { ...base, othersOnline: false } })
+    const { unmount } = renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    expect(await screen.findByTestId('group-online-dot')).toHaveAttribute('data-online', 'false')
+    unmount()
+
+    stubFetch({ group: { ...base, othersOnline: true } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    expect(await screen.findByTestId('group-online-dot')).toHaveAttribute('data-online', 'true')
+  })
+
   it('draws the welcome as background text above the history, not as a message', async () => {
     stubFetch({
       group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 1, welcome: 'Welcome to your SkyWatch group.' },
