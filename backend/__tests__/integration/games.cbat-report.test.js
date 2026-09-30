@@ -714,6 +714,18 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     expect(viss.played[0].gameKey).toBe('visualisation-2d');
   });
 
+  it('scores INSC on Instruments Orientation as well as Reading', async () => {
+    // INSC is fed by both Instruments boards. Orientation alone must score it.
+    await play('instruments-orientation', a => a.median);
+
+    const res = await request(app).get('/api/games/cbat/report/pilot').set('Cookie', cookie);
+    const insc = res.body.data.domains.find(d => d.key === 'SpaR').tests.find(t => t.code === 'INSC');
+
+    expect(insc.state).toBe('scored');
+    expect(insc.played).toHaveLength(1);
+    expect(insc.played[0].gameKey).toBe('instruments-orientation');
+  });
+
   it('never reports a score outside the scale', async () => {
     await playAll(() => 10_000_000);
     for (const b of BATTERIES) {

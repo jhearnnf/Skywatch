@@ -58,6 +58,7 @@ describe('where each test is played', () => {
     expect(mockGamePath('trace-1')).toBe('/cbat/trace?mode=trace1')
     expect(mockGamePath('visualisation-3d')).toBe('/cbat/visualisation?mode=3d')
     expect(mockGamePath('instruments')).toBe('/cbat/instruments?mode=reading')
+    expect(mockGamePath('instruments-orientation')).toBe('/cbat/instruments?mode=orientation')
   })
 
   it('adds the tutorial flag on the end of whatever is there', () => {

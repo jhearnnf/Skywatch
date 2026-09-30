@@ -124,6 +124,8 @@ describe('scoreToStanine', () => {
     for (const [gameKey, a] of Object.entries(STANINE_ANCHORS)) {
       expect([gameKey, scoreToStanine(gameKey, a.median)])
         .toEqual([gameKey, clampStanine(Math.round(applyCohortShift(MEDIAN_STANINE)))]);
+      // A board whose strong IS its ceiling reads that perfect run as a 9 instead (tested below).
+      if (a.strong >= a.max) continue;
       expect([gameKey, scoreToStanine(gameKey, a.strong)])
         .toEqual([gameKey, clampStanine(Math.round(applyCohortShift(STRONG_STANINE)))]);
     }
@@ -224,7 +226,9 @@ describe('the ceiling on a bounded game', () => {
     // overshoot back without failing anything else in this file.
     expect(bounded.length).toBeGreaterThan(0);
     for (const [gameKey, a] of bounded) {
-      expect([gameKey, a.max > a.strong]).toEqual([gameKey, true]);
+      // Equal is allowed: a board whose strong players already average a perfect run (see
+      // `ceilingHit` in utils/cbatStanine.js). Above is never meaningful.
+      expect([gameKey, a.max >= a.strong]).toEqual([gameKey, true]);
     }
   });
 
@@ -251,6 +255,25 @@ describe('the ceiling on a bounded game', () => {
         a.median + (removeCohortShift(MAX_STANINE) - MEDIAN_STANINE - 0.5) * stanineStep(gameKey),
       );
       expect([gameKey, scoreForStanine(gameKey, MAX_STANINE)]).toEqual([gameKey, plain]);
+    }
+  });
+
+  it('reads a perfect run as a 9 on a board whose strong anchor is its ceiling', () => {
+    // Instruments Orientation measured strong = max = 10 (2026-09-30): the top players already
+    // average a perfect run. On the plain line that perfect run read 8 and nothing read 9.
+    const a = STANINE_ANCHORS['instruments-orientation'];
+    expect(a.strong).toBe(a.max);
+    expect(topSegment('instruments-orientation')).toBeNull();
+    expect(scoreToStanine('instruments-orientation', a.max)).toBe(MAX_STANINE);
+    expect(scoreForStanine('instruments-orientation', MAX_STANINE)).toBeLessThanOrEqual(a.max);
+    // The median still reads 5 before the cohort shift.
+    expect(scoreToStanine('instruments-orientation', a.median)).toBe(Math.round(applyCohortShift(MEDIAN_STANINE)));
+
+    let prev = 0;
+    for (let s = 0; s <= a.max; s += 1 / 3) {
+      const v = scoreToStanine('instruments-orientation', s);
+      expect(v).toBeGreaterThanOrEqual(prev);
+      prev = v;
     }
   });
 

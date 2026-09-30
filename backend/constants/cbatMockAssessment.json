@@ -9,7 +9,8 @@
     "The test list comes from cbatBatteries.json: every test code in the chosen batteries, mapped",
     "to the Hard game(s) the Aptitude Report scores it on. Codes with no game (RCOG, GSPA) are left",
     "out; two codes that share a game (VIG1 and VGIL_SPEED are both Vigilance Hard) are sat once;",
-    "a code with two games (VISS: Visualisation 2D and 3D) is one step played back to back."
+    "a code with two games (VISS: Visualisation 2D and 3D; INSC: Instruments Reading and",
+    "Orientation) is one step played back to back."
   ],
 
   "_timingComment": [
@@ -43,6 +44,7 @@
     "trace-2":          3,
     "numerical-ops":    2,
     "instruments":      2,
+    "instruments-orientation": 2.5,
     "visualisation-2d": 2,
     "visualisation-3d": 2,
     "target":           3,

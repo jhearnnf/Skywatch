@@ -52,6 +52,13 @@ describe('mockSteps', () => {
     expect(steps.filter(s => s.gameKeys.some(g => g.startsWith('visualisation')))).toHaveLength(1);
   });
 
+  it('plays Instruments Reading and Orientation as one step, back to back', () => {
+    const steps = mockSteps([BATTERY_BY_KEY.pilot]);
+    const insc = steps.find(s => s.codes.includes('INSC'));
+    expect(insc.gameKeys).toEqual(['instruments', 'instruments-orientation']);
+    expect(steps.filter(s => s.gameKeys.some(g => g.startsWith('instruments')))).toHaveLength(1);
+  });
+
   it('never repeats a game across steps', () => {
     for (const region of ['GB', 'CA', 'AU']) {
       const games = mockSteps(mockBatteries({ region })).flatMap(s => s.gameKeys);

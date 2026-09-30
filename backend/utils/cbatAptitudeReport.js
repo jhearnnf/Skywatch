@@ -226,8 +226,9 @@ async function loadFormForUsers(userIds, gameKeys = SCORED_GAME_KEYS) {
 
 // ── Per-test scoring ─────────────────────────────────────────────────────────────────────────
 // A test's stanine is the mean of the stanines of whichever of its games the user has played at
-// all. VISS is the only test today backed by two games (Visualisation 2D and 3D); a user who has
-// played only one is scored on that one rather than blocked for missing the other.
+// all. Two tests are backed by two games: VISS (Visualisation 2D and 3D) and INSC (Instruments
+// Reading and Orientation). A user who has played only one is scored on that one rather than
+// blocked for missing the other.
 //
 // A game played fewer than FORM_MIN_RUNS times is scored TOO, shrunk toward the middle of the
 // scale and carrying a standard deviation — the header explains why, and `confidenceFor` is the

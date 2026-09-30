@@ -116,6 +116,7 @@ const MODE_LINKS = {
   'visualisation-2d': '/cbat/visualisation?mode=2d',
   'visualisation-3d': '/cbat/visualisation?mode=3d',
   instruments:        '/cbat/instruments?mode=reading',
+  'instruments-orientation': '/cbat/instruments?mode=orientation',
 }
 
 export function mockGamePath(gameKey, { tutorial = false } = {}) {

@@ -86,12 +86,24 @@ function removeCohortShift(t) {
   return (t - MAX_STANINE * k) / (1 - k);
 }
 
+// A game whose measured `strong` has reached its ceiling: the top ~7.5% of players already average
+// a perfect run, so `strong` IS `max`. The compressed band below has nothing to compress (it needs
+// room between the two), and the plain line reads a perfect run as an 8. Instruments Orientation
+// was the first (2026-09-30: median 8, strong 10, out of 10).
+const ceilingHit = (a) => Number.isFinite(a.max) && a.max <= a.strong;
+
 // One stanine's worth of raw score for a game. Anchors are authored strong > median for every
 // game (higher is always better among the games a battery draws on — asserted in the unit tests),
 // so this is always positive.
+//
+// On a game whose strong has hit its ceiling the line runs median → 5 to max → 9 instead, so a
+// perfect run reads 9 as on every other bounded game. `strong` is set aside there rather than
+// honoured: a perfect run is the only thing above the median a player can do, and it cannot be
+// both the 8 the anchor says and the 9 a real sheet would award for it.
 function stanineStep(gameKey) {
   const a = STANINE_ANCHORS[gameKey];
   if (!a) return null;
+  if (ceilingHit(a)) return (a.max - a.median) / (MAX_STANINE - MEDIAN_STANINE);
   return (a.strong - a.median) / (STRONG_STANINE - MEDIAN_STANINE);
 }
 
