@@ -6,6 +6,8 @@ import { initPostHog } from './lib/posthog'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { setUpdateSW } from './utils/appUpdate'
+import { recoverFromChunkError } from './utils/chunkLoadRecovery'
+import { getActiveMock } from './lib/cbatMockSession'
 import { preparePublicPagePreview } from './utils/publicPagePreview'
 
 initPostHog()
@@ -31,11 +33,15 @@ if (!Capacitor.isNativePlatform() && import.meta.env.PROD) {
     .catch(() => { /* SW unavailable — app still works online */ })
 }
 
+// A deploy renamed the code this tab still asks for. See utils/chunkLoadRecovery.js.
 window.addEventListener('vite:preloadError', () => {
-  if (!sessionStorage.getItem('skywatch-reload-on-preload-error')) {
-    sessionStorage.setItem('skywatch-reload-on-preload-error', '1')
-    window.location.reload()
-  }
+  recoverFromChunkError({
+    storage: sessionStorage,
+    mockActive: !!getActiveMock(),
+    reload: () => window.location.reload(),
+    // A full load, not a router push: the point is to fetch the new build.
+    goTo: path => window.location.replace(path),
+  })
 })
 
 // React 19 hoists Helmet's metadata natively. Remove the initial document's

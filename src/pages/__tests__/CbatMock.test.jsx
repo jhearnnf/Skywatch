@@ -108,6 +108,20 @@ describe('between tests', () => {
     fireEvent.click(screen.getByTestId('mock-tutorial-first'))
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/cbat/cut?difficulty=hard&tutorial=1'))
   })
+
+  it('explains the refresh when a new version sent the player back here', async () => {
+    renderPage([['/current', { data: { mock: active() } }]], '/cbat/mock?updated=1')
+    await waitFor(() => expect(screen.getByTestId('mock-updated')).toBeInTheDocument())
+    expect(screen.getByTestId('mock-updated')).toHaveTextContent('SkyWatch was updated')
+    expect(screen.getByTestId('mock-updated')).toHaveTextContent('Press Continue to carry on')
+    expect(screen.getByTestId('mock-continue')).toBeInTheDocument()
+  })
+
+  it('shows no update notice on an ordinary visit', async () => {
+    renderPage([['/current', { data: { mock: active() } }]])
+    await waitFor(() => expect(screen.getByTestId('mock-next')).toBeInTheDocument())
+    expect(screen.queryByTestId('mock-updated')).toBeNull()
+  })
 })
 
 describe('the start page', () => {

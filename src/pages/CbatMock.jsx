@@ -31,6 +31,7 @@ import {
   requestLeaveMock, grantGamePath, SIMULATED_MOCK_ID,
 } from '../lib/cbatMockSession'
 import { captureEvent } from '../lib/posthog'
+import { MOCK_UPDATED_PARAM } from '../utils/chunkLoadRecovery'
 
 // ── Small shared pieces ──────────────────────────────────────────────────────────────────────
 
@@ -389,6 +390,10 @@ function MockRunner({ mock, onRefresh }) {
   const navigate = useNavigate()
   // Set by the site lock when the player arrived somewhere else (a new tab, the back button).
   const returned = !!useLocation().state?.mockReturned
+  // Sent back here because a new version of SkyWatch went live mid-assessment
+  // (utils/chunkLoadRecovery.js).
+  const [searchParams] = useSearchParams()
+  const updated = searchParams.get(MOCK_UPDATED_PARAM) === '1'
   const now = useNow(1000)
   const [going, setGoing] = useState(false)
 
@@ -430,7 +435,13 @@ function MockRunner({ mock, onRefresh }) {
 
   return (
     <div className="max-w-xl mx-auto" data-testid="mock-runner">
-      {returned && (
+      {updated && (
+        <div className="mb-4 px-3 py-2.5 rounded-xl border border-brand-300 bg-brand-50 text-xs text-slate-800" data-testid="mock-updated">
+          <strong className="text-slate-900">SkyWatch was updated, so the page was refreshed.</strong> Your assessment is
+          still running and your scores so far are saved. Press Continue to carry on.
+        </div>
+      )}
+      {returned && !updated && (
         <div className="mb-4 px-3 py-2.5 rounded-xl border border-brand-300 bg-brand-50 text-xs text-slate-800" data-testid="mock-in-progress">
           <strong className="text-slate-900">Your Mock Assessment is still in progress.</strong> The rest of SkyWatch is
           closed until you finish it. Continue below, or use Leave assessment at the bottom if you want to stop.
