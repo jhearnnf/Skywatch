@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
+import { GAME_DEMO_POOL } from '../components/landingGames/gameDemoPool'
 
 // The Canadian and Australian guides are static documents outside the build,
 // exactly like the UK one, so nothing in the app imports them and nothing else
@@ -78,6 +79,15 @@ describe.each(GUIDES)('$slug', ({ slug, file }) => {
 
   it('spells SkyWatch with a capital W', () => {
     expect(html).not.toMatch(/Skywatch/)
+  })
+
+  it('only embeds games the embed route can serve', () => {
+    // An unknown id renders an empty frame rather than an error, so a typo or
+    // a game missing from the pool would ship silently.
+    const ids = [...html.matchAll(/data-src="\/embed\/cbat\/([a-z0-9-]+)"/g)].map((m) => m[1])
+    expect(ids.length).toBeGreaterThan(0)
+    const pooled = new Set(GAME_DEMO_POOL.map((g) => g.id))
+    for (const id of ids) expect(pooled.has(id), `embeds "${id}"`).toBe(true)
   })
 
   describe('staging', () => {
