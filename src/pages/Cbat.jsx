@@ -23,6 +23,7 @@ import PlayOnPcNote from '../components/cbat/PlayOnPcNote'
 import { isPublicCbatGame } from '../utils/cbat/publicGames'
 import { useClanOffered } from '../utils/cbat/clanOffer'
 import CountryFlag from '../components/ui/CountryFlag'
+import CbatGameIcon from '../components/cbat/CbatGameIcon'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -176,6 +177,8 @@ const TILE_HOVER =
   'cursor-pointer no-underline hover:border-brand-300 hover:bg-brand-50 hover:-translate-y-0.5'
 
 const TILE_EMOJI = 'text-[21px] leading-none shrink-0 sm:text-4xl'
+// The drawn game icon inside that slot: 21px on the phone tile, 36px on the card.
+const TILE_ICON = 'w-[21px] h-[21px] sm:w-9 sm:h-9'
 
 // An announcement badge has nowhere to live on an 83px phone tile, so there it
 // becomes a dot in the corner: the same "something changed here", at the only
@@ -363,7 +366,7 @@ function CombinedGameTile({ game: tileGame, i, split, flickeringKey, enabled, is
         <EstTime game={game} />
         {split.badge && enabled && <TileBadge text={split.badge} />}
         {!enabled && isAdmin && <TileBadge text="Disabled" tone="slate" />}
-        <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
+        <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}><CbatGameIcon gameKey={game.key} weight="tile" className={TILE_ICON} fallback={game.emoji} /></span>
         <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
           <TileTitle game={game} titleParts={split.titleParts} />
           <EstTimeCompact game={game} />
@@ -779,7 +782,7 @@ export default function Cbat() {
                       something. */}
                   {game.badge && enabled && <TileBadge text={game.badge} />}
                   {!enabled && user?.isAdmin && <TileBadge text="Disabled" tone="slate" />}
-                  <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
+                  <span className={`${TILE_EMOJI} group-hover:scale-110 transition-transform`} style={{ position: 'relative', zIndex: 3 }}><CbatGameIcon gameKey={game.key} weight="tile" className={TILE_ICON} fallback={game.emoji} /></span>
                   <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
                     <TileTitle game={game} />
                     <EstTimeCompact game={game} />
@@ -790,7 +793,7 @@ export default function Cbat() {
                 <div className={`${TILE_BASE} ${!user && !guestPlayable ? 'opacity-30 saturate-0 blur-[0.6px] pointer-events-none select-none' : 'opacity-60'}`} aria-disabled={!user && !guestPlayable ? 'true' : undefined}>
                   <CardBgImage game={game} delay={i * 2.1} isFlickering={flickeringKey === game.key} dimmed />
                   <EstTime game={game} />
-                  <span className={TILE_EMOJI} style={{ position: 'relative', zIndex: 3 }}>{game.emoji}</span>
+                  <span className={TILE_EMOJI} style={{ position: 'relative', zIndex: 3 }}><CbatGameIcon gameKey={game.key} weight="tile" className={TILE_ICON} fallback={game.emoji} /></span>
                   <div className="min-w-0 w-full sm:w-auto" style={{ position: 'relative', zIndex: 3 }}>
                     <TileTitle game={game} />
                     <EstTimeCompact game={game} />

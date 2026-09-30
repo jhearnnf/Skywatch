@@ -12,6 +12,7 @@ import { cbatLastRankKey } from '../utils/storageKeys'
 import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
 import { MAX_LEVEL } from '../utils/cbat/tracePractise'
 import UserCard from './chat/components/UserCard'
+import CbatGameIcon from '../components/cbat/CbatGameIcon'
 
 // 'you' is the odd one out: it's the user's own score history rather than a board of other
 // people, and it reads from /progress instead of /leaderboard. It lives here anyway because
@@ -439,7 +440,10 @@ export default function CbatLeaderboard() {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <Link to={cfg.backPath} className="text-slate-500 hover:text-brand-400 transition-colors text-sm">&larr; Instructions</Link>
-          <h1 className="text-sm font-extrabold text-slate-900">{cfg.emoji} {cfg.title} Leaderboard</h1>
+          <h1 className="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+            <CbatGameIcon gameKey={gameKey} weight="sm" className="w-5 h-5" fallback={<span aria-hidden="true">{cfg.emoji}</span>} />
+            {cfg.title} Leaderboard
+          </h1>
           {difficultyPills && (
             <div className="flex bg-game-arena border border-game-line rounded-full p-0.5" role="tablist" aria-label="Difficulty">
               {difficultyPills.map(d => {

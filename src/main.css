@@ -4948,3 +4948,53 @@ body.play-mode .card-shadow {
   body.cbat-mock-sheet .mock-sheet-bar { top: 3.5pt; bottom: 3.5pt; }
   body.cbat-mock-sheet .mock-sheet-battery-name { width: auto; }
 }
+
+/* ── CBAT game icons ───────────────────────────────────────────────────
+   The drawn icons from data/cbatGameIcons.js (<CbatGameIcon>). One set for
+   both themes: every line is currentColor or a variable below, so the Real
+   CBAT look is only a change of tokens. Size is left to the caller's
+   width/height utilities (unlayered rules here would beat them). */
+.cbat-gi {
+  --gi-line:   var(--color-brand-600);
+  --gi-accent: #eef6ff;
+  --gi-tint:   rgba(91, 170, 255, 0.18);
+  --gi-cap:    round;
+  --gi-join:   round;
+  --gi-w:      2;
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+  color: var(--gi-line);
+  filter: drop-shadow(0 0 3px rgba(91, 170, 255, 0.45));
+}
+/* Heavier line under ~24px so it stays solid; lighter at ~64px so it is not blunt */
+.cbat-gi--sm   { --gi-w: 2.35; }
+.cbat-gi--lg   { --gi-w: 1.7; }
+.cbat-gi--tile { --gi-w: 2.35; }
+@media (min-width: 640px) {
+  .cbat-gi--tile { --gi-w: 2; }
+}
+.cbat-gi * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--gi-w);
+  stroke-linecap: var(--gi-cap);
+  stroke-linejoin: var(--gi-join);
+}
+.cbat-gi .a    { stroke: var(--gi-accent); }
+.cbat-gi .t    { fill: var(--gi-tint); }
+.cbat-gi .f    { fill: currentColor; stroke: none; }
+.cbat-gi .af   { fill: var(--gi-accent); stroke: none; }
+.cbat-gi .fill { fill: var(--gi-tint); stroke: none; }
+.cbat-gi .d    { stroke-dasharray: 2.2 2.8; }
+.cbat-gi .dim  { opacity: 0.45; }
+
+/* Real CBAT: white line, the pale-yellow highlight, square ends, no glow or fill */
+:root[data-theme="cbat"] .cbat-gi {
+  --gi-line:   #ffffff;
+  --gi-accent: #ffff99;
+  --gi-tint:   transparent;
+  --gi-cap:    square;
+  --gi-join:   miter;
+  filter: none;
+}

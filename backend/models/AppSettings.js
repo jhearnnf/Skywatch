@@ -279,6 +279,11 @@ const appSettingsSchema = new mongoose.Schema({
   progressAwardEnabled:       { type: Boolean,  default: true },
   progressAwardDonateEnabled: { type: Boolean,  default: true },
 
+  // Drawn, theme-aware CBAT game icons (src/data/cbatGameIcons.js) in place of
+  // the OS emoji on the hub, boards, profile and award screen. Off by default:
+  // the emoji stay until an admin switches this on in Game Options.
+  cbatDrawnIconsEnabled:      { type: Boolean,  default: false },
+
   // There used to be a progressAwardDonateUrl here: free text for wherever the
   // ask should point, because donations went to somebody else's site (a Stripe
   // payment link, Ko-fi) and only an admin could know the address. Donations

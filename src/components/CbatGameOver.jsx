@@ -571,6 +571,7 @@ function CbatGameOverStandard({
             attempts={award.attempts}
             gameTitle={cbatTitleWithDifficulty(gameKey, cfg.title)}
             gameEmoji={cfg.emoji || '📈'}
+            gameKey={gameKey}
             onDismiss={() => setAwardDismissed(true)}
           />
         )}

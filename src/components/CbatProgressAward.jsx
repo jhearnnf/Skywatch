@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import Overlay from './ui/Overlay'
 import useCountUp from '../hooks/useCountUp'
 import { awardTitle, awardSummary } from '../utils/cbatProgressAward'
+import CbatGameIcon from './cbat/CbatGameIcon'
 
 // The CBAT progress-award milestone: a short celebration shown when a player's recent form has
 // improved measurably on their early runs at a game (see backend/utils/cbatProgressAward.js for
@@ -41,7 +42,7 @@ const RING_R = 60
 const RING_SW = 8
 const RING_C = 2 * Math.PI * RING_R
 
-export default function CbatProgressAward({ tier, pct, attempts, gameTitle, gameEmoji, onDismiss }) {
+export default function CbatProgressAward({ tier, pct, attempts, gameTitle, gameEmoji, gameKey, onDismiss }) {
   const shown = useCountUp(pct, { duration: COUNT_MS })
 
   // <Overlay> rather than a bare fixed div: it portals out (the results screen's root animates
@@ -64,7 +65,7 @@ export default function CbatProgressAward({ tier, pct, attempts, gameTitle, game
         {/* The emoji identifies the game up here rather than inside the ring, where it was
             competing with the number for the same 112px. */}
         <div className="flex items-center justify-center gap-2 mb-5">
-          <span className="text-sm" aria-hidden="true">{gameEmoji}</span>
+          <CbatGameIcon gameKey={gameKey} weight="sm" className="w-4 h-4" fallback={<span className="text-sm" aria-hidden="true">{gameEmoji}</span>} />
           <p className="text-[10px] text-slate-500 uppercase tracking-[0.2em]">Progress milestone</p>
         </div>
 

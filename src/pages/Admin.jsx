@@ -41,6 +41,7 @@ import { CATEGORIES as BRIEF_CATEGORIES, SUBCATEGORIES as BRIEF_SUBCATEGORIES } 
 import CbatPassersSection from '../components/admin/CbatPassersSection'
 import { CBAT_GAMES } from './Cbat'
 import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
+import CbatGameIcon from '../components/cbat/CbatGameIcon'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -3466,6 +3467,7 @@ function SettingsTab({ API }) {
           'cbatEnabled',
           'cbatTiers',
           'cbatGameEnabled',
+          'cbatDrawnIconsEnabled',
           'progressAwardEnabled',
           'progressAwardDonateEnabled',
           'caseFilesEnabled',
@@ -3771,6 +3773,14 @@ function SettingsTab({ API }) {
                     <p className="text-xs text-slate-400 mt-2">Enabling free also enables silver and gold; enabling silver also enables gold.</p>
                   </div>
 
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-1">Game icons</p>
+                  <Toggle
+                    label="Drawn game icons"
+                    hint="Replaces the emoji beside each CBAT game with a drawn icon that matches the site theme (blue for SkyWatch, white and yellow for Real CBAT) and looks the same on every device. Covers the CBAT page tiles, recent scores, leaderboards, agent profiles and the progress award. When off, the emoji are shown."
+                    checked={draft.cbatDrawnIconsEnabled ?? false}
+                    onChange={v => set('cbatDrawnIconsEnabled', v)}
+                  />
+
                   {/* ── Progress awards ─────────────────────────────────
                       Two switches on purpose: the milestone screen is a retention
                       feature that stands alone, and the donation note is a separate
@@ -3840,7 +3850,7 @@ function SettingsTab({ API }) {
                         className="w-full flex items-center justify-between text-sm font-bold text-slate-700 uppercase tracking-wide pt-3 pb-2 mb-1 border-b border-slate-200"
                       >
                         <span className="flex items-center gap-2">
-                          <span aria-hidden="true">{game.emoji}</span>
+                          <CbatGameIcon gameKey={game.key} weight="sm" className="w-5 h-5" fallback={<span aria-hidden="true">{game.emoji}</span>} />
                           <span>{game.title}</span>
                         </span>
                         <span className="flex items-center gap-2">

@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { CBAT_LEADERBOARD_CONFIG, CBAT_DIFFICULTY_BY_KEY } from '../data/cbatGames'
 import { useCbatAdminView, withCbatView } from '../utils/cbatAdminView'
+import CbatGameIcon from './cbat/CbatGameIcon'
 
 function timeAgo(iso) {
   if (!iso) return ''
@@ -201,7 +202,7 @@ export default function RecentCbatScores({ fill = false }) {
                   {rankBadge}
                 </span>
                 <span className="text-xs text-slate-400 min-w-0 flex items-center gap-1">
-                  <span className="shrink-0">{emoji}</span>
+                  <CbatGameIcon gameKey={r.gameKey} weight="sm" className="w-4 h-4" fallback={<span className="shrink-0">{emoji}</span>} />
                   <span className="truncate">{title}</span>
                   {difficulty && (
                     <span

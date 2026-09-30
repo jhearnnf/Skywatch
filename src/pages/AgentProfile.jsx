@@ -12,6 +12,7 @@ import ProfileBadge from '../components/ProfileBadge'
 import CbatPassedBadge from '../components/CbatPassedBadge'
 import SupporterBadge from '../components/SupporterBadge'
 import SEO from '../components/SEO'
+import CbatGameIcon from '../components/cbat/CbatGameIcon'
 
 // One agent, read-only, for anyone who has just met a name in Community or in
 // the recent-scores feed.
@@ -352,7 +353,7 @@ export function AgentProfileContent({ id, embedded = false }) {
                   const format = cfg.formatScore ?? ((s) => `${s}`)
                   return (
                     <li key={g.gameKey} className="flex items-center gap-3 py-2">
-                      <span className="text-base shrink-0" aria-hidden="true">{cfg.emoji ?? '🎯'}</span>
+                      <CbatGameIcon gameKey={g.gameKey} weight="sm" className="w-5 h-5" fallback={<span className="text-base shrink-0" aria-hidden="true">{cfg.emoji ?? '🎯'}</span>} />
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-bold text-slate-700 truncate">
                           {cbatGameName(g)}
