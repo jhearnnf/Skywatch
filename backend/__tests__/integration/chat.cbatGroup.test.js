@@ -8,7 +8,11 @@ const ChatConversation = require('../../models/ChatConversation');
 const ChatMessage = require('../../models/ChatMessage');
 const User = require('../../models/User');
 
-beforeAll(async () => { await db.connect(); await ChatConversation.syncIndexes(); });
+beforeAll(async () => {
+  await db.connect();
+  await ChatConversation.syncIndexes();
+  await ChatMessage.syncIndexes();
+});
 beforeEach(async () => { await createSettings(); });
 afterEach(async () => { await db.clearDatabase(); });
 afterAll(async () => { await db.closeDatabase(); });
@@ -66,7 +70,11 @@ describe('CBAT cohort groups', () => {
       .set('Cookie', authCookie(late._id));
 
     expect(thread.status).toBe(200);
-    expect(thread.body.data.messages.map(m => m.body)).toEqual(['anyone else on this date?']);
+    const bodies = thread.body.data.messages.map(m => m.body);
+    expect(bodies[0]).toBe('anyone else on this date?');
+    // ...followed by the line announcing their own arrival.
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toContain('Viper');
   });
 
   it('sends the welcome hint with the room, never as a stored message', async () => {
@@ -236,6 +244,69 @@ describe('CBAT cohort groups', () => {
     expect(list.body.data.groups).toHaveLength(1);
     expect(list.body.data.groups[0].participantCount).toBe(0);
     expect(list.body.data.groups[0].messageCount).toBe(1);
+  });
+
+  it('announces the second member onwards, never the first', async () => {
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const c = await createUser({ displayName: 'Hawk', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    const id = made.body.data.conversationId;
+    expect(await ChatMessage.countDocuments({ conversationId: id })).toBe(0);
+
+    await choose(b);
+    await choose(c);
+
+    const lines = await ChatMessage.find({ conversationId: id }).sort({ createdAt: 1 }).lean();
+    expect(lines).toHaveLength(2);
+    expect(lines.every(m => m.senderRole === 'system' && m.senderUserId === null)).toBe(true);
+    expect(lines[0].body).toContain('Viper');
+    expect(lines[1].body).toContain('Hawk');
+    expect(lines.map(m => String(m.joinedUserId))).toEqual([String(b._id), String(c._id)]);
+  });
+
+  it('never counts a join line as unread or as someone speaking', async () => {
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await choose(b);
+
+    const mine = await request(app).get('/api/chat/cbat-group').set('Cookie', authCookie(a._id));
+    expect(mine.body.data.unreadCount).toBe(0);
+    const convo = await ChatConversation.findById(made.body.data.conversationId).lean();
+    expect(convo.messageCount ?? 0).toBe(0);
+  });
+
+  it('announces a person once per room, even if their date is cleared and set again', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await choose(b);
+    await request(app).delete(`/api/admin/users/${b._id}/upcoming-cbat-date`)
+      .set('Cookie', authCookie(admin._id));
+    expect((await choose(b)).status).toBe(201);
+
+    expect(await ChatMessage.countDocuments({
+      conversationId: made.body.data.conversationId, joinedUserId: b._id,
+    })).toBe(1);
+  });
+
+  it('sweeps join lines with a group nobody spoke in', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await choose(b);
+    for (const u of [a, b]) {
+      await request(app).delete(`/api/admin/users/${u._id}/upcoming-cbat-date`)
+        .set('Cookie', authCookie(admin._id));
+    }
+
+    const list = await request(app).get('/api/chat/cbat-groups').set('Cookie', authCookie(admin._id));
+
+    expect(list.body.data.groups).toEqual([]);
+    expect(await ChatMessage.countDocuments({ conversationId: made.body.data.conversationId })).toBe(0);
   });
 
   // The room is rebuilt from the date, so sweeping it is never a one-way door.

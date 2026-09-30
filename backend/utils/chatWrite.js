@@ -29,7 +29,7 @@ function markRead(userId, conversationId, at = new Date()) {
 // marking it read for the sender (sending implies reading everything up to now).
 async function appendMessage({
   conversation, senderUserId, senderRole, body, senderDisplayName = null, replyTo = null,
-  mentions = [],
+  mentions = [], joinedUserId = null, countsAsMessage = true,
 }) {
   const message = await ChatMessage.create({
     conversationId: conversation._id,
@@ -39,6 +39,7 @@ async function appendMessage({
     senderDisplayName,
     ...(replyTo ? { replyTo } : {}),
     ...(mentions.length ? { mentions } : {}),
+    ...(joinedUserId ? { joinedUserId } : {}),
   });
 
   const update = {
@@ -51,7 +52,10 @@ async function appendMessage({
   }
   await ChatConversation.findByIdAndUpdate(conversation._id, {
     $set: update,
-    $inc: { messageCount: 1 },
+    // `messageCount` means "somebody said something here" (an empty cohort
+    // room is only reaped while it is zero), so a line the site writes on its
+    // own, such as a join announcement, leaves it alone.
+    ...(countsAsMessage ? { $inc: { messageCount: 1 } } : {}),
   });
 
   if (senderUserId) await markRead(senderUserId, conversation._id, message.createdAt);

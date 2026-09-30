@@ -136,6 +136,45 @@ const cohortOthersOnline = async (convo, viewerId) => Boolean(await User.exists(
   isBanned: { $ne: true },
 }));
 
+// The line posted when someone arrives in a group that already has people in
+// it, Discord-style. One is picked at random so a busy room does not read as
+// the same sentence over and over. Plain wording on purpose: a new member
+// should understand every one of these without knowing the site.
+const COHORT_JOIN_LINES = [
+  (name) => `Welcome ${name} to the SkyWatch Academy group!`,
+  (name) => `${name} has joined the group. Say hello!`,
+  (name) => `${name} is sitting the same test as you. Welcome them in!`,
+  (name) => `Welcome aboard, ${name}!`,
+  (name, date) => `${name} just joined. Everyone here is sitting on ${date}.`,
+];
+
+const cohortJoinLine = (name, readableDate, pick = Math.random) =>
+  COHORT_JOIN_LINES[Math.floor(pick() * COHORT_JOIN_LINES.length)](name, readableDate);
+
+// Announce `user` in their cohort room. Skipped for the first member, who has
+// nobody to announce them to. Written as a system line, so it is never counted
+// as unread (the rule every system line follows) and never stops an emptied
+// room being reaped. The unique index on `joinedUserId` makes it once per
+// person per room, whichever request gets there first. Best effort: a failed
+// announcement must never fail the join itself.
+async function announceCohortJoin(convo, user) {
+  try {
+    if (!convo || !user || user.isBot) return;
+    if (await cohortMemberCount(convo) < 2) return;
+    const name = user.displayName || (user.agentNumber ? `Agent ${user.agentNumber}` : 'A new member');
+    await appendMessage({
+      conversation: convo,
+      senderUserId: null,
+      senderRole: 'system',
+      body: cohortJoinLine(name, cohortReadableDate(convo.channel.cohortDate)),
+      joinedUserId: user._id,
+      countsAsMessage: false,
+    });
+  } catch (err) {
+    if (err?.code !== 11000) console.error('[chat] cohort join announcement failed:', err.message);
+  }
+}
+
 // A cohort room nobody is in and nobody ever posted in.
 //
 // The room is created the moment someone locks a date, and membership is
@@ -162,13 +201,14 @@ const reapEmptyCohort = async (group) => {
   if ((group.messageCount ?? 0) > 0) return false;
   const { deletedCount } = await ChatConversation.deleteOne({ _id: group._id, messageCount: 0 });
   if (!deletedCount) return false;
-  // With no messages in it, the only read marker a room can carry is from an
-  // admin who opened it.
+  // Nobody ever spoke, but join announcements may be here; they go with the
+  // room. The only read marker it can carry is from an admin who opened it.
+  await ChatMessage.deleteMany({ conversationId: group._id });
   await ChatRead.deleteMany({ conversationId: group._id });
   return true;
 };
 
-async function serializeCbatGroup(user) {
+async function serializeCbatGroup(user, { justJoined = false } = {}) {
   let date = userCbatDateKey(user);
   let region = user?.upcomingCbatRegion ?? null;
 
@@ -190,6 +230,7 @@ async function serializeCbatGroup(user) {
       { returnDocument: 'after' },
     );
     if (imported) {
+      justJoined = true;
       user = imported;
       date = userCbatDateKey(imported);
       region = imported.upcomingCbatRegion;
@@ -207,6 +248,7 @@ async function serializeCbatGroup(user) {
     };
   }
   const convo = await ensureCbatCohort(date, region);
+  if (justJoined) await announceCohortJoin(convo, user);
   const readRow = await ChatRead.findOne({ userId: user._id, conversationId: convo._id }).lean();
   const [unreadCount, memberCount, othersOnline] = await Promise.all([
     ChatMessage.countDocuments({
@@ -1085,7 +1127,7 @@ router.post('/cbat-group', async (req, res) => {
         message: 'Your test date has already been confirmed and cannot be changed.',
       });
     }
-    res.status(201).json({ status: 'success', data: await serializeCbatGroup(locked) });
+    res.status(201).json({ status: 'success', data: await serializeCbatGroup(locked, { justJoined: true }) });
   } catch (err) {
     if (err?.code === 11000) {
       const fresh = await User.findById(req.user._id);

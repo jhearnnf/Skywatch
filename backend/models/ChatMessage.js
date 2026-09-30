@@ -94,6 +94,12 @@ const chatMessageSchema = new mongoose.Schema({
   // equal to `senderUserId` means the author withdrew it themselves.
   deletedAt:        { type: Date, default: null },
   deletedByUserId:  { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+
+  // Set only on the system line announcing someone arriving in a test-date
+  // group. The unique index below makes "one announcement per person per
+  // room" hold even when two requests race, and it survives the member's date
+  // being cleared and set again by an admin.
+  joinedUserId:     { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
 });
 
 chatMessageSchema.index({ conversationId: 1, createdAt: 1 });
@@ -105,5 +111,9 @@ chatMessageSchema.index({ mentions: 1, conversationId: 1, createdAt: 1 });
 // Backs the other half of the personal unread count: "how many unread messages
 // reply to something I said".
 chatMessageSchema.index({ 'replyTo.userId': 1, conversationId: 1, createdAt: 1 });
+chatMessageSchema.index(
+  { conversationId: 1, joinedUserId: 1 },
+  { unique: true, partialFilterExpression: { joinedUserId: { $type: 'objectId' } } },
+);
 
 module.exports = mongoose.model('ChatMessage', chatMessageSchema);
