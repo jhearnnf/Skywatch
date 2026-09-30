@@ -516,3 +516,36 @@ describe('CbatPassersSection — editing the wording in place', () => {
     expect(screen.getByTestId('cbat-passers-survey-enabled')).not.toBeChecked()
   })
 })
+
+describe('CbatPassersSection — typing thresholds while the list is loading', () => {
+  it('keeps what was typed when the slow first load lands', async () => {
+    // Hold the first list response until the admin has typed.
+    let release
+    const gate = new Promise(r => { release = r })
+    const listUrls = []
+    global.fetch = vi.fn(async (url) => {
+      listUrls.push(String(url))
+      await gate
+      return { ok: true, json: async () => ({ data: cohort() }) }
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <Routes><Route path="/admin" element={<CbatPassersSection API="" />} /></Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByText('Potential CBAT Passers Survey'))
+
+    const [minInput, daysInput] = screen.getAllByRole('spinbutton')
+    fireEvent.change(minInput,  { target: { value: '5' } })
+    fireEvent.change(daysInput, { target: { value: '40' } })
+
+    release()
+    await screen.findByText('Agent 1234567')
+
+    // One load, not one per keystroke, and the typed values survive it.
+    expect(listUrls).toHaveLength(1)
+    expect(minInput).toHaveValue(5)
+    expect(daysInput).toHaveValue(40)
+  })
+})

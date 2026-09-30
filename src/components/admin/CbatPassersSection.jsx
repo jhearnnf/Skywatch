@@ -105,6 +105,14 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   const [surveyEnabled, setSurveyEnabled] = useState(true)
   const [savingDefaults, setSavingDefaults] = useState(false)
   const [notice, setNotice] = useState('')
+  // The saved-settings load fires once per mount. Keying it on `load` (which
+  // changes with every threshold keystroke) re-fired it on each key while the
+  // first, slow fetch was in flight, and each reply reset the inputs to the
+  // saved values under the admin's fingers.
+  const initialLoadStarted = useRef(false)
+  // Set as soon as the admin types a threshold, so a saved-settings reply that
+  // lands afterwards does not overwrite what they typed.
+  const thresholdsEdited = useRef(false)
 
   // The FIRST load deliberately sends no thresholds, so the server answers from
   // the saved settings and the inputs below can adopt them. Sending the
@@ -125,7 +133,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Could not load the list')
       setData(json.data)
-      if (opts.useSaved && json.data.thresholds) {
+      if (opts.useSaved && json.data.thresholds && !thresholdsEdited.current) {
         setMinCompletions(json.data.thresholds.minCompletions)
         setDormantDays(json.data.thresholds.dormantDays)
       }
@@ -143,7 +151,11 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
     }
   }, [API, apiFetch, minCompletions, dormantDays])
 
-  useEffect(() => { if (open && !data) load({ useSaved: true }) }, [open, data, load])
+  useEffect(() => {
+    if (!open || initialLoadStarted.current) return
+    initialLoadStarted.current = true
+    load({ useSaved: true })
+  }, [open, load])
 
   // Scroll the panel into view once, on the arrival that opened it. The flag is
   // consumed straight away so a later collapse is not undone by a re-render.
@@ -341,7 +353,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
               <input
                 type="number" min={0}
                 value={minCompletions}
-                onChange={e => setMinCompletions(Number(e.target.value))}
+                onChange={e => { thresholdsEdited.current = true; setMinCompletions(Number(e.target.value)) }}
                 className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm bg-surface-raised text-text outline-none focus:ring-2 focus:ring-brand-600/40"
               />
               <p className="text-[10px] text-slate-400 mt-1">Completed runs, not games opened.</p>
@@ -353,7 +365,7 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
               <input
                 type="number" min={0}
                 value={dormantDays}
-                onChange={e => setDormantDays(Number(e.target.value))}
+                onChange={e => { thresholdsEdited.current = true; setDormantDays(Number(e.target.value)) }}
                 className="w-full border border-slate-400 rounded-xl px-3 py-2 text-sm bg-surface-raised text-text outline-none focus:ring-2 focus:ring-brand-600/40"
               />
               <p className="text-[10px] text-slate-400 mt-1">
