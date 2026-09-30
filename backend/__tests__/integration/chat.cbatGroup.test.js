@@ -83,7 +83,7 @@ describe('CBAT cohort groups', () => {
       request(app).get('/api/chat/overview').set('Cookie', cookie),
     ]);
 
-    const expected = expect.stringMatching(/^Welcome to your SkyWatch group\. Everyone in here is sitting the CBAT on 14 Oct 2099,/);
+    const expected = expect.stringMatching(/^Welcome to your SkyWatch Academy group\. Everyone in here is sitting the CBAT on 14 Oct 2099,/);
     expect(mine.body.data.welcome).toEqual(expected);
     expect(thread.body.data.conversation.welcome).toEqual(expected);
     expect(detail.body.data.welcome).toEqual(expected);

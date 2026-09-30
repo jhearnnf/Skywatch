@@ -72,7 +72,7 @@ const cohortTestName = (region) => (cohortTestLabel(region) ? `the ${cohortTestL
 // room is offered as a way to take the edge off the day for anyone who wants
 // it.
 const cohortWelcome = (readableDate, region) =>
-  `Welcome to your SkyWatch group. Everyone in here is sitting ${cohortTestName(region)} on ${readableDate}, `
+  `Welcome to your SkyWatch Academy group. Everyone in here is sitting ${cohortTestName(region)} on ${readableDate}, `
   + "same date and region as you. Test day is easier when you're not walking in alone. Swap a few messages "
   + "beforehand and you'll already know someone in the waiting room.";
 

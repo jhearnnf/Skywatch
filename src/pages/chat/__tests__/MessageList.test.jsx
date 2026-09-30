@@ -56,12 +56,12 @@ const renderList = (messages, props = {}) =>
 
 describe('MessageList — room hint', () => {
   it('draws the hint above the first message and drops the empty prompt', () => {
-    const { rerender } = renderList([], { hint: 'Welcome to your SkyWatch group.', emptyLabel: 'Nothing here yet' })
-    expect(screen.getByTestId('room-hint')).toHaveTextContent('Welcome to your SkyWatch group.')
+    const { rerender } = renderList([], { hint: 'Welcome to your SkyWatch Academy group.', emptyLabel: 'Nothing here yet' })
+    expect(screen.getByTestId('room-hint')).toHaveTextContent('Welcome to your SkyWatch Academy group.')
     expect(screen.queryByText('Nothing here yet')).toBeNull()
 
     rerender(
-      <MessageList messages={[msg('u1', 'hello')]} currentUserId="me" conversationType="channel" senders={SENDERS} hint="Welcome to your SkyWatch group." />,
+      <MessageList messages={[msg('u1', 'hello')]} currentUserId="me" conversationType="channel" senders={SENDERS} hint="Welcome to your SkyWatch Academy group." />,
     )
     const hint = screen.getByTestId('room-hint')
     expect(hint.compareDocumentPosition(screen.getByText('hello')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()

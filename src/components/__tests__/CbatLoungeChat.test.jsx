@@ -227,7 +227,7 @@ describe('closed', () => {
     await waitFor(() => expect(FakeEventSource.last).not.toBeNull())
 
     FakeEventSource.last.emit('message', {
-      _id: 's1', senderUserId: null, senderRole: 'system', body: 'Welcome to your SkyWatch group.', mentions: [],
+      _id: 's1', senderUserId: null, senderRole: 'system', body: 'Welcome to your SkyWatch Academy group.', mentions: [],
     })
     await waitFor(() => expect(screen.queryByLabelText('New messages')).toBeNull())
   })
@@ -276,13 +276,13 @@ describe('private CBAT group', () => {
 
   it('draws the welcome as background text above the history, not as a message', async () => {
     stubFetch({
-      group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 1, welcome: 'Welcome to your SkyWatch group.' },
+      group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 1, welcome: 'Welcome to your SkyWatch Academy group.' },
       messages: [],
     })
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
     const hint = await screen.findByTestId('room-hint')
-    expect(hint).toHaveTextContent('Welcome to your SkyWatch group.')
+    expect(hint).toHaveTextContent('Welcome to your SkyWatch Academy group.')
     // Not a row: nothing to tap, no sender, and no second "say hello" prompt.
     expect(document.querySelector('[data-msg-row]')).toBeNull()
     expect(screen.queryByText('Unknown agent')).toBeNull()
@@ -291,7 +291,7 @@ describe('private CBAT group', () => {
 
   it('keeps the welcome above the conversation once people start talking', async () => {
     stubFetch({
-      group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 2, welcome: 'Welcome to your SkyWatch group.' },
+      group: { configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', unreadCount: 0, memberCount: 2, welcome: 'Welcome to your SkyWatch Academy group.' },
     })
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
