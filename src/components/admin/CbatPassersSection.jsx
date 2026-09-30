@@ -719,9 +719,16 @@ function hitReason(user, minCompletions) {
   }
 }
 
+const SOFT_REASONS = new Set(['still-active', 'below-min-games', 'never-finished-a-game', 'named'])
+
 function SearchHitRow({ user, minCompletions, checked, onToggle }) {
-  const reason  = hitReason(user, minCompletions)
   const emailed = !!user.invite?.sentAt
+  // Once they have been emailed, the cohort rules (still active, too few
+  // games, do-not-contact) no longer explain anything, so say they were
+  // emailed instead. Hard blocks like a ban or an unsubscribe still win.
+  const reason  = emailed && SOFT_REASONS.has(user.excludedReason)
+    ? null
+    : hitReason(user, minCompletions)
 
   return (
     <div className="border-b border-slate-100 last:border-0">
@@ -737,7 +744,7 @@ function SearchHitRow({ user, minCompletions, checked, onToggle }) {
         </p>
       )}
       {!reason && emailed && (
-        <p className="px-4 pb-2 text-[10px] text-slate-500">Already emailed for this questionnaire.</p>
+        <p className="px-4 pb-2 text-[10px] text-slate-500">We've already emailed this user for this questionnaire.</p>
       )}
     </div>
   )
