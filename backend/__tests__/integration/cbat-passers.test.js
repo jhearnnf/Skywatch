@@ -68,7 +68,7 @@ async function abandonRuns(userId, count, days) {
   );
 }
 
-async function candidate({ completions = 12, days = 30, ...overrides } = {}) {
+async function candidate({ completions = 20, days = 30, ...overrides } = {}) {
   const u = await createUser(overrides);
   await finishRuns(u._id, completions, days);
   await User.updateOne({ _id: u._id }, { lastSeen: daysAgo(days) });
@@ -107,7 +107,13 @@ describe('GET /api/admin/cbat-passers — auth', () => {
 });
 
 describe('cohort membership', () => {
-  it('includes someone who finished 12 games and went quiet 30 days ago', async () => {
+  it('defaults to 15 finished games and 7 days quiet', async () => {
+    const res = await getList();
+    expect(res.body.data.thresholds.minCompletions).toBe(15);
+    expect(res.body.data.thresholds.dormantDays).toBe(7);
+  });
+
+  it('includes someone who finished 20 games and went quiet 30 days ago', async () => {
     const u = await candidate();
     const res = await getList();
     expect(res.status).toBe(200);
@@ -152,7 +158,7 @@ describe('cohort membership', () => {
 
   it('bands a 16-day gap as warm rather than ready', async () => {
     const u = await candidate({ days: 16 });
-    const res = await getList();
+    const res = await getList('?dormantDays=21');
     const row = res.body.data.groups.flatMap(g => g.users).find(x => x.email === u.email);
     expect(row.band).toBe('warm');
     expect(res.body.data.nextBatchIds.map(String)).not.toContain(row._id.toString());
@@ -350,7 +356,7 @@ describe('GET /api/admin/cbat-passers/search', () => {
     expect(hit).toBeDefined();
     expect(hit.excludedReason).toBeNull();
     expect(hit.mailable).toBe(true);
-    expect(hit.completions).toBe(12);
+    expect(hit.completions).toBe(20);
   });
 
   it('finds someone on the do-not-contact list, and still lets them be mailed', async () => {
@@ -973,7 +979,7 @@ describe('someone who was mailed a link that did not work', () => {
   });
 
   it('is listed even when the thresholds have moved past them', async () => {
-    const u = await owed({ completions: 12, days: 30 });
+    const u = await owed({ completions: 20, days: 30 });
 
     // A cut nobody could satisfy. The debt is not conditional on an admin
     // leaving the sliders where they were when the bad send happened.

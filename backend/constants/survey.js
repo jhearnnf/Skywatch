@@ -33,17 +33,15 @@ const SURVEY_TEST_CAMPAIGN = 'cbat_outcome_test';
 // A *completed* run is a row in one of the CBAT result collections. Opening a
 // game and quitting writes a GameSessionCbatStart and no result, so abandoned
 // sessions are excluded by construction rather than by a heuristic.
-const DEFAULT_MIN_COMPLETIONS = 10;
+const DEFAULT_MIN_COMPLETIONS = 15;
 
 // Days of CBAT silence before we treat someone as finished with the site.
 //
-// 21 rather than 14 because the two errors are not symmetrical. Mailing someone
-// who has not sat the test yet burns a one-shot contact for nothing; mailing
-// someone a week later than ideal costs almost nothing. 14 days is also exactly
-// the length of the things that are NOT a CBAT — a holiday, a half-term, an
-// exam block — and 21 clears most of them. Getting it wrong early is recoverable
-// anyway: a "not yet" answer defers them rather than spending the contact.
-const DEFAULT_DORMANT_DAYS = 21;
+// 7 sits below WARM_BAND_DAYS, so by default the list starts at 7 days and
+// there is no warm band: everyone listed is eligible for a bulk send. A
+// "not yet" answer defers someone rather than spending the contact, so mailing
+// a little early is recoverable.
+const DEFAULT_DORMANT_DAYS = 7;
 
 // Candidates between this and the dormancy threshold are shown in the admin list
 // but never included in a bulk send: recently quiet, plausibly just on a break.
