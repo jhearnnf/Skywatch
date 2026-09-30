@@ -33,6 +33,7 @@ import {
   readStoredClanDifficulty, storeClanDifficulty,
 } from '../utils/cbat/clanDifficulty'
 import { createClanSim } from '../utils/cbat/clanSim'
+import { createClanDemoPilot } from '../utils/cbat/clanDemoPilot'
 import ClanTutorial from './CbatClan/ClanTutorial'
 import ClanBoard from './CbatClan/ClanBoard'
 import {
@@ -280,6 +281,9 @@ export default function CbatClan() {
   const simRef = useRef(null)
   const startedAtRef = useRef(0)
   const rafRef = useRef(null)
+  // Only set on a demo mount (the country guides' embed), where nobody is at
+  // the keys. See clanDemoPilot.js.
+  const pilotRef = useRef(null)
   const [snapshot, setSnapshot] = useState(null)
   // Guard against the end-of-run submit firing twice (StrictMode, or a tick
   // that lands after the phase has already moved on).
@@ -343,6 +347,14 @@ export default function CbatClan() {
       if (cancelled) return
       const sim = simRef.current
       sim.tick(now - startedAtRef.current)
+      if (pilotRef.current) {
+        for (const a of pilotRef.current.step(sim.snapshot())) {
+          if (a.kind === 'colour')      sim.pressColour(a.value)
+          else if (a.kind === 'option') sim.pickLetterOption(a.value)
+          else if (a.kind === 'digit')  sim.pressDigit(a.value)
+          else if (a.kind === 'enter')  sim.submitMath()
+        }
+      }
       const snap = sim.snapshot()
       setSnapshot(snap)
       if (snap.finished) { finishRef.current(); return }
@@ -390,6 +402,7 @@ export default function CbatClan() {
   const startGame = useCallback(() => {
     const sim = createClanSim({ tuning: runTuningRef.current })
     simRef.current = sim
+    pilotRef.current = demo ? createClanDemoPilot() : null
     startedAtRef.current = performance.now()
     resultSubmittedRef.current = false
     setFinalStats(null)
@@ -398,7 +411,7 @@ export default function CbatClan() {
     setSnapshot(sim.snapshot())
     startTracking(runTuningRef.current.gameKey)
     setPhase('playing')
-  }, [startTracking])
+  }, [startTracking, demo])
 
   // Pressing Start doesn't drop straight into the game: the chosen difficulty
   // button flashes on a greyed-out card for CLAN_LAUNCH_MS first, so the run

@@ -15,6 +15,9 @@ import { isCbatGameEnabled } from '../../utils/cbat/isCbatGameEnabled'
 //                      the game looks 3D or not; the picker rations these
 //   answerIntervalMs — games that sit waiting on input need the driver to keep
 //                      pressing; 0 means the game runs itself on a clock
+//   embedOnly        — served at /embed/cbat/:id for the country guides but
+//                      never dealt onto the landing wall (CLAN is Canada's and
+//                      Australia's multitasking test, not the UK's)
 //   focus            — the slice of the stage worth showing, in stage pixels
 //                      (see demoFraming.js). Only needed by games that lay
 //                      themselves out far narrower than the stage. Give it
@@ -52,6 +55,7 @@ export const GAME_DEMO_POOL = [
   { id: 'flag',             label: 'FLAG',               gameKey: 'flag',             path: '/cbat/flag',          poster: '/images/FLAG.png',                                              heavy: true,  answerIntervalMs: 900  },
   { id: 'target',           label: 'Target',             gameKey: 'target',           path: '/cbat/target',        poster: '/images/Target.png',                                            heavy: true,  answerIntervalMs: 1500 },
   { id: 'act',              label: 'ACT',                gameKey: 'act',              path: '/cbat/act',           poster: '/images/ACT.png',                                               heavy: true,  answerIntervalMs: 2600, focus: ACT_FOCUS },
+  { id: 'clan',             label: 'CLAN',               gameKey: 'clan',             path: '/cbat/clan',          poster: '/images/CLAN.png',                                              heavy: false, answerIntervalMs: 0, embedOnly: true },
   { id: 'instruments',      label: 'Instruments',        gameKey: 'instruments',      path: '/cbat/instruments',   poster: '/images/Instruments.png',      props: { forcedMode: 'reading' }, heavy: false, answerIntervalMs: 2400 },
 ]
 
@@ -99,6 +103,6 @@ export function takeWithHeavyCap(list, count, maxHeavy) {
  */
 export function pickGameDemos(settings, { count = 9, maxHeavy = 4, rng = Math.random } = {}) {
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
-  const available = GAME_DEMO_POOL.filter((g) => isCbatGameEnabled(cbatGameEnabled, g.gameKey))
+  const available = GAME_DEMO_POOL.filter((g) => !g.embedOnly && isCbatGameEnabled(cbatGameEnabled, g.gameKey))
   return takeWithHeavyCap(shuffle(available, rng), count, maxHeavy)
 }

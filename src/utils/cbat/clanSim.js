@@ -319,6 +319,9 @@ export function createClanSim({ tuning, rng = Math.random, durationMs = CLAN_DUR
       maths: {
         phase: maths.phase,
         question: maths.phase === 'asking' ? maths.question.question : null,
+        // For the demo pilot (clanDemoPilot.js), like correctIndex above for
+        // the tutorial. Never drawn.
+        answer: maths.phase === 'asking' ? maths.question.answer : null,
         entered: maths.entered,
         remainingFrac: maths.phase === 'asking' ? Math.max(0, (maths.until - t) / mathCfg.timeoutMs) : 0,
         feedback: maths.feedback ? { correct: maths.feedback.correct } : null,

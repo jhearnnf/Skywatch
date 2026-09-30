@@ -5,6 +5,7 @@ import CbatCut           from '../../pages/CbatCut'
 import CbatSymbols       from '../../pages/CbatSymbols'
 import CbatDpt           from '../../pages/CbatDpt'
 import CbatFlag          from '../../pages/CbatFlag'
+import CbatClan          from '../../pages/CbatClan'
 import CbatTarget        from '../../pages/CbatTarget'
 import CbatAct           from '../../pages/CbatAct'
 import CbatInstruments   from '../../pages/CbatInstruments'
@@ -25,6 +26,7 @@ export const COMPONENT_BY_ID = {
   symbols:            CbatSymbols,
   dpt:                CbatDpt,
   flag:               CbatFlag,
+  clan:               CbatClan,
   target:             CbatTarget,
   act:                CbatAct,
   instruments:        CbatInstruments,

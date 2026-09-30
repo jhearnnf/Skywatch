@@ -103,8 +103,17 @@ describe('takeWithHeavyCap', () => {
 
 describe('GAME_DEMO_POOL', () => {
   it('covers the twelve games the wall advertises', () => {
-    expect(GAME_DEMO_POOL).toHaveLength(12)
-    expect(new Set(GAME_DEMO_POOL.map((g) => g.id)).size).toBe(12)
+    const wall = GAME_DEMO_POOL.filter((g) => !g.embedOnly)
+    expect(wall).toHaveLength(12)
+    expect(new Set(GAME_DEMO_POOL.map((g) => g.id)).size).toBe(GAME_DEMO_POOL.length)
+  })
+
+  it('keeps embed-only games (CLAN, for the country guides) off the landing wall', () => {
+    expect(GAME_DEMO_POOL.find((g) => g.id === 'clan')?.embedOnly).toBe(true)
+    for (let seed = 1; seed <= 25; seed++) {
+      const ids = pickGameDemos({}, { count: 13, rng: seededRng(seed) }).map((p) => p.id)
+      expect(ids).not.toContain('clan')
+    }
   })
 
   it('links every tile at a route the app actually serves', () => {
