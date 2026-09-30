@@ -122,6 +122,16 @@ describe('GET /api/admin/users/:id/profile — identity and standing', () => {
     expect(res.body.data.user.email).toBeTruthy();
   });
 
+  // The page draws the Supporter badge from this, same as the public endpoint,
+  // so an admin opening a donor's profile must see it too.
+  it('marks a signed-in donor as a supporter, and honours their opt-out', async () => {
+    expect((await get()).body.data.user.supporter).toBe(false);
+    await User_update({ 'donationPrompt.donatedAt': new Date() });
+    expect((await get()).body.data.user.supporter).toBe(true);
+    await User_update({ hideSupporterBadge: true });
+    expect((await get()).body.data.user.supporter).toBe(false);
+  });
+
   it('reports the Score Sharing objection, and still sends the record an admin needs', async () => {
     await User_update({ hideFromShowcase: true });
     await seedRun('flag', 300);

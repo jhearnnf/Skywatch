@@ -2936,6 +2936,9 @@ router.get('/users/:id/profile', protect, adminOnly, async (req, res) => {
         isBanned:          Boolean(target.isBanned),
         isTester:          Boolean(target.isTester),
         cbatPassed:        Boolean(target.cbatPassed),
+        // Same derivation as the public profile, so the Supporter badge beside
+        // the name reads the same whether an admin or a player opens the page.
+        supporter:         User.isSupporter(target),
         chatBannedAt:      target.chatBannedAt ?? null,
         hideFromShowcase:  Boolean(target.hideFromShowcase),
         createdAt:         target.createdAt,
