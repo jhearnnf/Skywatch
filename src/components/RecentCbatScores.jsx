@@ -198,7 +198,27 @@ export default function RecentCbatScores({ fill = false }) {
                     {agentLabel}{isMe ? ' (you)' : ''}
                   </span>
                 )}
-                <span className="font-mono text-[11px] text-brand-600 shrink-0">
+                {/* A run sat inside a Mock Assessment: a small see-through tab hanging from
+                    the row's top edge, over the rank, that slides down into place. It sits
+                    in the row's top padding so it never touches the rank or the name. Named
+                    in full so anyone scanning the feed learns the feature exists; links to
+                    it, above the stretched row link. The clip box is what makes it look as
+                    if it comes out from under the divider above. */}
+                {r.mock && (
+                  <span className="absolute top-0 right-1 z-10 overflow-hidden px-2 pb-2 pointer-events-none">
+                    <Link
+                      to="/cbat/mock"
+                      data-mock-chip
+                      title="This score was set during a Mock Assessment. Tap to sit one yourself."
+                      className="recent-mock-tab pointer-events-auto block px-1.5 pt-px pb-0.5 rounded-b-md bg-amber-600/[0.04] shadow-[0_1px_6px_color-mix(in_srgb,var(--color-amber-600)_13%,transparent)] text-[8px] font-normal leading-none tracking-wide text-amber-700/30 hover:bg-amber-600/20 hover:text-amber-700 transition-colors"
+                    >
+                      Mock Assessment
+                    </Link>
+                  </span>
+                )}
+                {/* Nudged down on a mock row to clear the tab above it. A shift rather than
+                    a margin, so the row stays the same height as its neighbours. */}
+                <span className={`font-mono text-[11px] text-brand-600 shrink-0 justify-self-end${r.mock ? ' relative top-1' : ''}`}>
                   {rankBadge}
                 </span>
                 <span className="text-xs text-slate-400 min-w-0 flex items-center gap-1">

@@ -206,3 +206,26 @@ describe('GET /api/games/cbat/recent — rank counts demo rows', () => {
     expect(row.rank).toBe(14);
   });
 });
+
+describe('GET /api/games/cbat/recent — Mock Assessment runs', () => {
+  it('marks a run that was sat inside a Mock Assessment, and only that run', async () => {
+    const CbatMockAssessment = require('../../models/CbatMockAssessment');
+    const mocker = await createUser({ agentNumber: '3300001' });
+    const other  = await createUser({ agentNumber: '3300002' });
+    await request(app).post(PLANE_TURN_RESULT).set('Cookie', authCookie(mocker._id))
+      .send({ totalRotations: 20, totalTime: 20 });
+    await request(app).post(PLANE_TURN_RESULT).set('Cookie', authCookie(other._id))
+      .send({ totalRotations: 20, totalTime: 20 });
+
+    const run = await GameSessionCbatPlaneTurnResult.findOne({ userId: mocker._id }).lean();
+    await CbatMockAssessment.create({
+      userId: mocker._id, region: 'UK', scope: 'role', batteryKey: 'pilot',
+      steps: [{ gameKeys: ['plane-turn-2d'], results: [{ gameKey: 'plane-turn-2d', resultId: run._id, score: 20 }] }],
+    });
+
+    const res = await request(app).get(ROUTE).set('Cookie', authCookie(other._id));
+    const rows = res.body.data.recent;
+    expect(rows.find(r => r.userId === String(mocker._id)).mock).toBe(true);
+    expect(rows.find(r => r.userId === String(other._id)).mock).toBe(false);
+  });
+});

@@ -37,6 +37,7 @@ const { scoreSharingMatch } = require('../utils/cbatScoreSharing');
 const { buildCbatActivityStats } = require('../utils/cbatActivityStats');
 const GameSessionCbatStart = require('../models/GameSessionCbatStart');
 const CbatMatfPrint = require('../models/CbatMatfPrint');
+const CbatMockAssessment = require('../models/CbatMockAssessment');
 const GameSessionCbatTutorial = require('../models/GameSessionCbatTutorial');
 const GameSessionCbatPlaneTurnResult      = CBAT_GAMES['plane-turn-2d'].Model;
 const GameSessionCbatAnglesResult         = CBAT_GAMES['angles'].Model;
@@ -3591,6 +3592,22 @@ router.get('/cbat/recent', protect, async (req, res) => {
       )
     );
 
+    // Which of these runs were sat inside a Mock Assessment. A mock's runs are ordinary Hard runs
+    // in their own collections, so the only record of it is the sitting's link back to the run.
+    // Any sitting counts, finished or not: the run itself was real either way.
+    const mockRunIds = new Set();
+    if (merged.length) {
+      const mocks = await CbatMockAssessment.find(
+        { 'steps.results.resultId': { $in: merged.map(r => r.session._id) } },
+        { 'steps.results.resultId': 1 },
+      ).lean();
+      for (const m of mocks) {
+        for (const step of m.steps || []) {
+          for (const res of step.results || []) if (res.resultId) mockRunIds.add(String(res.resultId));
+        }
+      }
+    }
+
     const recent = await Promise.all(merged.map(async ({ session, gameKey, cfg }) => {
       const scoreVal = session[cfg.primaryField];
       const timeVal  = session.totalTime;
@@ -3639,6 +3656,7 @@ router.get('/cbat/recent', protect, async (req, res) => {
         time:        timeVal,
         rank:        countBetter + fakesBetter + 1,
         achievedAt:  session.createdAt,
+        mock:        mockRunIds.has(String(session._id)),
       };
     }));
 

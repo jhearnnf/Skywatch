@@ -234,6 +234,16 @@ header.fixed {
 .aptitude-dot-2 { animation-delay: 0.18s; }
 .aptitude-dot-3 { animation-delay: 0.36s; }
 
+/* Recent Scores: the Mock Assessment tab drops out from under the row's top
+   edge. Rows are keyed by run, so the 30s refresh does not replay it. */
+@keyframes recent-mock-tab-in {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.recent-mock-tab {
+  animation: recent-mock-tab-in 420ms cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
+}
+
 /* Date lock warning: a composed one-time entrance instead of a perpetual
    pulse. It draws the eye, then settles so the irreversible choice is easy to
    read without making the whole form feel like an error state. */

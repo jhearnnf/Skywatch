@@ -255,3 +255,23 @@ describe('RecentCbatScores — All / Top filter', () => {
     await waitFor(() => expect(screen.getByText('No scores yet.')).toBeDefined())
   })
 })
+
+describe('RecentCbatScores — Mock Assessment chip', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('chips a run sat inside a Mock Assessment and links the chip to the mock page', async () => {
+    setupAuth({
+      userId: 'me',
+      apiFetch: mockFetch([
+        { _id: 'r1', userId: 'a', gameKey: 'angles', gameLabel: 'Angles', rank: 5, displayName: 'Mocker', mock: true,  achievedAt: new Date().toISOString() },
+        { _id: 'r2', userId: 'b', gameKey: 'symbols', gameLabel: 'Symbols', rank: 6, displayName: 'Plain', mock: false, achievedAt: new Date().toISOString() },
+      ]),
+    })
+    const { container } = render(<RecentCbatScores />)
+    await waitFor(() => expect(screen.getByText('Mocker')).toBeDefined())
+    const chips = container.querySelectorAll('[data-mock-chip]')
+    expect(chips).toHaveLength(1)
+    expect(chips[0].textContent).toBe('Mock Assessment')
+    expect(chips[0].getAttribute('href')).toBe('/cbat/mock')
+  })
+})
