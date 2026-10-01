@@ -390,9 +390,15 @@ export function buildRound(roundNumber, rng = defaultRng) {
     lines.push('Each aircraft has its own load chart. Check you are reading the right one.')
 
     if (type === 'pairGap') {
-      lines.push(`How many minutes longer does ${partner.name} take to reach ${dest} than ${flight.name}?`)
-      round.correctAnswer = Math.abs(partner.totalMinutes - flight.totalMinutes)
-      round.gapAhead = partner.totalMinutes >= flight.totalMinutes ? flight.name : partner.name
+      // Ask about whichever is actually slower. This always named the Voyager, so whenever the
+      // Voyager was the quicker one the question asked how much longer it took (reported
+      // 2026-10-01).
+      const partnerSlower = partner.totalMinutes >= flight.totalMinutes
+      const slower = partnerSlower ? partner : flight
+      const faster = partnerSlower ? flight : partner
+      lines.push(`How many minutes longer does ${slower.name} take to reach ${dest} than ${faster.name}?`)
+      round.correctAnswer = slower.totalMinutes - faster.totalMinutes
+      round.gapAhead = faster.name
     } else {
       partner.departMin = flight.arriveMin - partner.totalMinutes
       lines.push(`${flight.name} departs ${origin} at ${formatHHMM(departMin)}.`)

@@ -248,6 +248,13 @@ describe('ANT Hard — per-type answers are derivable from the board', () => {
     })
   })
 
+  it('asks the time gap both ways round across the seeds, so the wording is tested both ways', () => {
+    const gaps = ALL.filter(({ round }) => round.type === 'pairGap')
+    const voyagerFirst = gaps.filter(({ round }) => round.gapAhead === round.partner.name)
+    expect(voyagerFirst.length).toBeGreaterThan(0)
+    expect(voyagerFirst.length).toBeLessThan(gaps.length)
+  })
+
   it('a two-aircraft round converges on one destination from two starts', () => {
     const pairs = ALL.filter(({ round }) => round.partner)
     expect(pairs.length).toBeGreaterThan(0)
@@ -260,6 +267,13 @@ describe('ANT Hard — per-type answers are derivable from the board', () => {
       expect(f.aircraftId).not.toBe(p.aircraftId)
       if (round.type === 'pairGap') {
         expect(round.correctAnswer).toBe(Math.abs(p.totalMinutes - f.totalMinutes))
+        // The aircraft asked "how much longer" about is the slower one, whichever that is. It was
+        // always the Voyager, even when the Voyager got there first (reported 2026-10-01).
+        const [slower, faster] = p.totalMinutes >= f.totalMinutes ? [p, f] : [f, p]
+        const ask = round.objective.at(-1)
+        expect(ask.startsWith(`How many minutes longer does ${slower.name} take`)).toBe(true)
+        expect(ask.endsWith(`than ${faster.name}?`)).toBe(true)
+        expect(round.gapAhead).toBe(faster.name)
       } else {
         expect(p.departMin + p.totalMinutes).toBe(f.arriveMin)
         expect(round.correctAnswer).toBe(p.departMin)
