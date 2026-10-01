@@ -7,30 +7,46 @@
 <meta name="description" content="The three testing stages an Australian aircrew applicant sits, what happens at East Sale, and where the CBAT advice does and does not apply.">
 
 <!--
-  ADMIN PREVIEW. Not linked publicly and deliberately kept out of the index:
-  robots noindex below, a Disallow in public/robots.txt, and no sitemap entry.
-  The Community rail shows it to admins only, via the ChatGuide `adminOnly`
-  flag. Going live means changing all four together. See the same note in
-  cbat-guide-canada.html for the checklist.
+  Served at two URLs: /cbat-guide-australia (vercel.json rewrite, and
+  staticDocRoutes() in vite.config.js for dev) and /cbat-guide-australia.html
+  directly. The canonical names the clean URL so the pair are never treated as
+  duplicates. Do not point it at the .html form.
 
-  Served at /cbat-guide-australia (vercel.json rewrite, and staticDocRoutes()
-  in vite.config.js for dev) and at /cbat-guide-australia.html directly.
+  Live since 2026-10-01. Indexable state lives in four places that must agree:
+  this robots tag, public/robots.txt, public/sitemap.xml, and the ChatGuide
+  row's adminOnly flag (admin console). src/__tests__/internationalGuides.test.js
+  checks the first three against each other.
 
   This guide is thinner than the Canadian one on purpose. The evidence base is
   about a quarter the size, and the grades reflect that rather than papering
   over it. Do not pad it out with general web knowledge: the whole value of
   these guides is that every claim traces to somebody who was there.
 -->
-<meta name="robots" content="noindex, nofollow">
+<link rel="canonical" href="https://skywatch.academy/cbat-guide-australia">
+<meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
 <meta name="theme-color" content="#1d3f76">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/guide-assets/guide.css">
+
+<meta property="og:site_name" content="SkyWatch Academy">
+<meta property="og:locale" content="en_GB">
+<meta property="og:title" content="ADF Aviation Screening (MACTS): the candidate guide">
+<meta property="og:description" content="The three testing stages an Australian aircrew applicant sits, what happens at East Sale, and where the CBAT advice does and does not apply.">
+<meta property="og:url" content="https://skywatch.academy/cbat-guide-australia">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://skywatch.academy/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ADF Aviation Screening (MACTS): the candidate guide">
+<meta name="twitter:description" content="The three testing stages an Australian aircrew applicant sits, what happens at East Sale, and where the CBAT advice does and does not apply.">
+<meta name="twitter:image" content="https://skywatch.academy/og-image.png">
 </head>
 <body>
 
 <header class="masthead">
   <div class="wrap">
-    <div class="kicker"><a href="/">A SkyWatch Academy guide</a> · draft, admin preview</div>
+    <div class="kicker"><a href="/">A SkyWatch Academy guide</a></div>
     <h1>MACTS: <span>ADF Aviation Screening</span></h1>
     <p class="sub">Australia tests aircrew applicants three separate times, in three different places,
     and only the last one decides anything. Most preparation advice online is aimed at the wrong stage.
@@ -431,8 +447,8 @@
 </div>
 
 <footer><div class="wrap">
-  <p><strong>Draft, admin preview.</strong> Not linked publicly and not indexed. Built from candidate
-  write-ups and archived discussion, not from any official or internal source, and graded accordingly.</p>
+  <p>Built from candidate write-ups and archived discussion, not from any official or internal
+  source, and graded accordingly.</p>
   <p>SkyWatch Academy is independent and is not affiliated with, endorsed by or connected to the Australian
   Defence Force, the Royal Australian Air Force or any other armed force. Our games are simulations
   built from publicly available descriptions. They are not the real tests and we have no access to them.
