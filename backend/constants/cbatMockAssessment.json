@@ -56,5 +56,43 @@
     "vlt":              15,
     "vigilance-hard":   3.5,
     "sma":              1
+  },
+
+  "_pathsComment": [
+    "Where the player is sent to sit each Hard board. The server sends these with every step",
+    "(utils/cbatMock.js serialiseMock), and the runner uses the server's copy before its own, so a",
+    "mock step changed in a deploy still opens on the right board in a tab running the build before",
+    "it. On 2026-10-01 a tab one deploy behind had no path for Instruments Orientation, fell back to",
+    "the plain Instruments page, which opened on Reading, and the player sat Reading over and over.",
+    "A board with modes needs ?mode=, since the mode row is hidden during a mock; a split game needs",
+    "?difficulty=hard. Every game in `minutes` must have an entry, and each must equal what the",
+    "frontend would build on its own (asserted on both sides)."
+  ],
+  "paths": {
+    "cut":              "/cbat/cut?difficulty=hard",
+    "sat":              "/cbat/sat?difficulty=hard",
+    "act":              "/cbat/act",
+    "dad":              "/cbat/dad",
+    "ant-hard":         "/cbat/ant?difficulty=hard",
+    "flag":             "/cbat/flag?difficulty=hard",
+    "clan":             "/cbat/clan?difficulty=hard",
+    "dpt-hard":         "/cbat/dpt?difficulty=hard",
+    "rtt":              "/cbat/rtt?difficulty=hard",
+    "trace-1":          "/cbat/trace?mode=trace1",
+    "trace-2":          "/cbat/trace?mode=trace2",
+    "numerical-ops":    "/cbat/numerical-ops?difficulty=hard",
+    "instruments":      "/cbat/instruments?mode=reading",
+    "instruments-orientation": "/cbat/instruments?mode=orientation",
+    "visualisation-2d": "/cbat/visualisation?mode=2d",
+    "visualisation-3d": "/cbat/visualisation?mode=3d",
+    "target":           "/cbat/target",
+    "angles":           "/cbat/angles",
+    "code-duplicates":  "/cbat/code-duplicates",
+    "matf":             "/cbat/matf?difficulty=hard",
+    "sit":              "/cbat/sit?difficulty=hard",
+    "slt":              "/cbat/slt?difficulty=hard",
+    "vlt":              "/cbat/vlt?difficulty=hard",
+    "vigilance-hard":   "/cbat/vigilance?difficulty=hard",
+    "sma":              "/cbat/sma?difficulty=hard"
   }
 }

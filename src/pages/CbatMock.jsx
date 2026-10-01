@@ -421,7 +421,7 @@ function MockRunner({ mock, onRefresh }) {
       const body = await res.json().catch(() => null)
       if (body?.data?.mock) setActiveMock(body.data.mock)
       if (!res.ok) { onRefresh(); return }
-      const to = mockGamePath(next, { tutorial })
+      const to = mockGamePath(next, { tutorial, step: currentStep(body?.data?.mock ?? mock) })
       grantGamePath(to.split('?')[0])
       navigate(to, { state: { mockGranted: true } })
     } catch {

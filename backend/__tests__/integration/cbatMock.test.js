@@ -83,6 +83,16 @@ describe('POST /api/cbat-mock/start', () => {
     const games = res.body.data.mock.steps.flatMap(s => s.gameKeys);
     expect(games).not.toContain('flag');
   });
+
+  it('sends where each board is played with every step, so an older client opens the right one', async () => {
+    const res = await request(app).post('/api/cbat-mock/start').set('Cookie', cookie).send({ battery: 'pilot' });
+    for (const step of res.body.data.mock.steps) {
+      expect(Object.keys(step.paths)).toEqual(step.gameKeys);
+      for (const g of step.gameKeys) expect(step.paths[g]).toMatch(/^\/cbat\//);
+    }
+    const insc = res.body.data.mock.steps.find(s => s.gameKeys.includes('instruments-orientation'));
+    expect(insc.paths['instruments-orientation']).toBe('/cbat/instruments?mode=orientation');
+  });
 });
 
 describe('claiming runs', () => {

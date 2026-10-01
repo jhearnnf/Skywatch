@@ -162,6 +162,9 @@ function serialiseMock(mock, { withSheet = false } = {}) {
       codes: s.codes,
       labels: s.codes.map(c => TESTS[c]?.label ?? c),
       gameKeys: s.gameKeys,
+      // Where each board is played, from the server's config rather than the client's, so a tab
+      // running an older build still opens the right board (see `paths` in the mock config).
+      paths: Object.fromEntries(s.gameKeys.map(g => [g, MOCK.paths[g] ?? null])),
       minutes: s.minutes,
       done: s.done,
       played: s.results.map(r => r.gameKey),

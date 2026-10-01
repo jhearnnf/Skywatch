@@ -79,7 +79,7 @@ export default function CbatMockLock() {
   const allowed = useMemo(() => {
     if (!mock) return null
     const step = currentStep(mock)
-    return new Set(step ? step.gameKeys.map(mockGamePathname) : [])
+    return new Set(step ? step.gameKeys.map(g => mockGamePathname(g, { step })) : [])
   }, [mock])
 
   // The assessment's own pages are always open. The test it is waiting on is open only to the tab

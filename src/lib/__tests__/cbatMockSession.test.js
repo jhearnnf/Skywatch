@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import {
-  setActiveMock, getActiveMock, mockIdFor, nextGameKey, mockGamePath, mockGamePathname, hasTutorial,
+  setActiveMock, getActiveMock, mockIdFor, nextGameKey, mockGamePath, mockGamePathname, localMockGamePath, hasTutorial,
   breakEndsAt, estimatedFinish, formatDuration, mockSummary, MOCK_CONFIG, MOCK_HTML_ATTR,
 } from '../cbatMockSession'
 
@@ -65,6 +65,23 @@ describe('where each test is played', () => {
     expect(mockGamePath('flag', { tutorial: true })).toBe('/cbat/flag?difficulty=hard&tutorial=1')
     expect(mockGamePath('target', { tutorial: true })).toBe('/cbat/target?tutorial=1')
     expect(mockGamePathname('trace-2')).toBe('/cbat/trace')
+  })
+
+  // A tab one deploy behind had no entry for Instruments Orientation and sent it to Reading
+  // (2026-10-01). The step's own paths come from the server, so they win.
+  it("uses the server's path for a board over this build's own", () => {
+    const step = { gameKeys: ['instruments', 'new-board'], paths: { 'new-board': '/cbat/new?mode=x' } }
+    expect(mockGamePath('new-board', { step })).toBe('/cbat/new?mode=x')
+    expect(mockGamePath('new-board', { step, tutorial: true })).toBe('/cbat/new?mode=x&tutorial=1')
+    expect(mockGamePathname('new-board', { step })).toBe('/cbat/new')
+    // No server path for a board: this build's table still answers.
+    expect(mockGamePath('instruments', { step })).toBe('/cbat/instruments?mode=reading')
+  })
+
+  it("matches the server's table for every board a mock can sit", () => {
+    for (const g of Object.keys(MOCK_CONFIG.minutes)) {
+      expect([g, MOCK_CONFIG.paths[g]]).toEqual([g, localMockGamePath(g)])
+    }
   })
 
   it('offers "Tutorial first" only where a tutorial exists', () => {

@@ -19,6 +19,17 @@ describe('mock minutes', () => {
   });
 });
 
+describe('mock paths', () => {
+  it('has a launch path for every game a mock can sit', () => {
+    for (const g of Object.keys(MOCK.minutes)) expect([g, MOCK.paths[g]]).toEqual([g, expect.stringMatching(/^\/cbat\//)]);
+  });
+
+  it('opens each Instruments board on its own mode', () => {
+    expect(MOCK.paths.instruments).toBe('/cbat/instruments?mode=reading');
+    expect(MOCK.paths['instruments-orientation']).toBe('/cbat/instruments?mode=orientation');
+  });
+});
+
 describe('mockSteps', () => {
   it('sits every test a role lists that SkyWatch has a game for, and nothing else', () => {
     for (const b of BATTERIES) {

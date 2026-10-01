@@ -119,15 +119,25 @@ const MODE_LINKS = {
   'instruments-orientation': '/cbat/instruments?mode=orientation',
 }
 
-export function mockGamePath(gameKey, { tutorial = false } = {}) {
-  const base = MODE_LINKS[gameKey] ?? gamePath(gameKey)
+// This build's own idea of where a board is played. Only a fallback: see mockGamePath.
+export function localMockGamePath(gameKey) {
+  return MODE_LINKS[gameKey] ?? gamePath(gameKey)
+}
+
+// Where to send the player for a board. `step` is the mock step it belongs to: the server sends
+// each step's paths (cbatMockAssessment.json `paths`), and those win over this build's table, so a
+// step changed in a deploy still opens on the right board in a tab that predates it. Without
+// them, a tab one deploy behind sent Instruments Orientation to the plain Instruments page, which
+// opened on Reading, and the player sat Reading over and over (2026-10-01).
+export function mockGamePath(gameKey, { tutorial = false, step = null } = {}) {
+  const base = step?.paths?.[gameKey] ?? localMockGamePath(gameKey)
   if (!tutorial) return base
   return `${base}${base.includes('?') ? '&' : '?'}tutorial=1`
 }
 
 // The pathname a board is played on, for the site lock's allowlist.
-export function mockGamePathname(gameKey) {
-  return mockGamePath(gameKey).split('?')[0]
+export function mockGamePathname(gameKey, { step = null } = {}) {
+  return mockGamePath(gameKey, { step }).split('?')[0]
 }
 
 // Games whose page has a Tutorial the between-tests screen can offer (CBAT_TUTORIAL_GAME_KEYS on
