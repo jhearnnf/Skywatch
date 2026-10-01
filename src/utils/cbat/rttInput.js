@@ -14,7 +14,14 @@
 // a finger drag, which is what the native CBAT-only app needs.
 //
 // The stick itself lives in gamepad.js, shared with ACT. This file owns the
-// pointer and keyboard fallbacks and the rule for which source is in charge.
+// pointer, the touch pad and keyboard fallbacks, and the rule for which source
+// is in charge.
+//
+// The touch pad (phones and tablets) is a thumb stick under the picture, so a
+// finger never has to cover what it is tracking: hold it and move away from
+// where you first touched, and the distance is the deflection. Same maths as
+// SMA's pad (touchPad.js). The page owns the pad element and calls padDown /
+// padMove / padUp from its pointer handlers.
 //
 //   const input = createRttInput({ el })
 //   input.poll()                    // once per frame
@@ -26,6 +33,7 @@ import {
   createStickReader, applyCurve, clamp1, loadProfile, defaultProfile, listPads,
   STICK_DEAD_ZONE, STICK_EXPO,
 } from './gamepad'
+import { clampPadOrigin, padRadius, padAxes } from './touchPad'
 import {
   createInputTally, addInput, dominantInput,
   INPUT_JOYSTICK, INPUT_KEYBOARD_MOUSE, INPUT_TOUCH,
@@ -76,6 +84,12 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
     // inside the arena; otherwise tapping the shutter button below the arena
     // would peg the aim downward on its way past.
     touchTracking: false,
+    // The touch pad's live gesture: where the thumb landed (the pad's centre
+    // for this gesture), how far is full deflection, and the deflection now.
+    padId: null,
+    padOrigin: null,
+    padRadius: 0,
+    padAxes: { x: 0, y: 0 },
     // Frames flown on each kind of control, so the run can be labelled with the
     // one that did most of the flying (see inputMethod.js). A frame with no
     // pointer and no stick is nobody's and is not counted.
@@ -176,10 +190,26 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
         // over the moment it's actually moved or its trigger is squeezed.
         if (stick.awake() || shots > 0) state.source = 'gamepad'
         if (state.source === 'gamepad') {
-          state.axes = stick.axes()
+          // Pitch is flipped for the stick, on every theme. The real RTT flies
+          // the camera like an aircraft: pull BACK and it looks UP, push forward
+          // and it looks down (survey report, 2026-10-01). gamepad.js calls
+          // BACK the positive end, the same as the pointer below centre, so
+          // without the flip the stick lowered the camera on a pull. The
+          // pointer keeps "point where you want to look", which is what a
+          // mouse or finger expects.
+          const a = stick.axes()
+          state.axes = { x: a.x, y: -a.y }
           addInput(state.inputTally, INPUT_JOYSTICK)
           return
         }
+      }
+
+      // A thumb on the pad flies the camera for as long as it is held, ahead
+      // of the pointer: a finger on the pad is the only pointer on a phone.
+      if (state.padOrigin) {
+        state.axes = state.padAxes
+        addInput(state.inputTally, INPUT_TOUCH)
+        return
       }
 
       const rect = readRect(now)
@@ -208,6 +238,36 @@ export function createRttInput({ el, deadZone = RTT_DEAD_ZONE, expo = RTT_EXPO }
     // The on-screen shutter button (and touch play generally) goes through here
     // rather than faking a pointer event.
     fireTrigger() { state.triggerEdges += 1 },
+
+    // ── Touch pad ────────────────────────────────────────────────────────────
+    // A second finger never steals the stick (the other thumb is on the
+    // shutter). Pad down/up with no pointer id are for tests and demos.
+    padDown(clientX, clientY, rect, pointerId = null) {
+      if (state.padId != null) return
+      state.padId = pointerId
+      state.padRadius = padRadius(rect)
+      state.padOrigin = clampPadOrigin(clientX, clientY, rect, state.padRadius)
+      state.padAxes = padAxes(clientX, clientY, state.padOrigin, state.padRadius, { deadZone, expo })
+      state.source = 'pad'
+    },
+    padMove(clientX, clientY, pointerId = null) {
+      if (!state.padOrigin) return
+      if (state.padId != null && pointerId != null && pointerId !== state.padId) return
+      state.padAxes = padAxes(clientX, clientY, state.padOrigin, state.padRadius, { deadZone, expo })
+    },
+    padUp(pointerId = null) {
+      if (state.padId != null && pointerId != null && pointerId !== state.padId) return
+      state.padOrigin = null
+      state.padId = null
+      state.padAxes = { x: 0, y: 0 }
+      if (state.source === 'pad') state.source = 'pointer'
+    },
+    // Where to draw the pad's knob, in client coordinates, or null when no
+    // thumb is on it.
+    padGesture() {
+      if (!state.padOrigin) return null
+      return { origin: state.padOrigin, radius: state.padRadius, axes: state.padAxes }
+    },
 
     source() { return state.source },
     // Which physical device is flying, for the HUD's source readout.

@@ -186,6 +186,75 @@ describe('createRttInput — pointer', () => {
   })
 })
 
+// The thumb pad under the picture on phones: where the thumb lands is the
+// centre, and how far it moves from there is the deflection — a rate stick,
+// like SMA's pad.
+describe('createRttInput — touch pad', () => {
+  const PAD = { left: 0, top: 500, right: 300, bottom: 644, width: 300, height: 144 }
+  // padRadius is a third of the pad's shorter side.
+  const R = 144 / 3
+
+  it('centres on where the thumb lands, so landing alone does not turn the camera', () => {
+    const i = input(makeArena())
+    i.padDown(150, 572, PAD, 1)
+    i.poll()
+    expect(i.axes()).toEqual({ x: 0, y: 0 })
+    expect(i.source()).toBe('pad')
+  })
+
+  it('turns faster the further the thumb moves from where it landed', () => {
+    const i = input(makeArena())
+    i.padDown(150, 572, PAD, 1)
+    i.padMove(150 + R / 2, 572, 1)
+    i.poll()
+    const half = i.axes().x
+    i.padMove(150 + R, 572 + R, 1)
+    i.poll()
+    expect(half).toBeGreaterThan(0)
+    expect(i.axes().x).toBeCloseTo(1)
+    expect(i.axes().x).toBeGreaterThan(half)
+    // Thumb down the pad looks down, the same way the pointer does.
+    expect(i.axes().y).toBeCloseTo(1)
+  })
+
+  it('stops the camera when the thumb lifts', () => {
+    const i = input(makeArena())
+    i.padDown(150, 572, PAD, 1)
+    i.padMove(150 + R, 572, 1)
+    i.padUp(1)
+    i.poll()
+    expect(i.axes()).toEqual({ x: 0, y: 0 })
+    expect(i.padGesture()).toBeNull()
+  })
+
+  it('ignores a second finger, which is on the shutter', () => {
+    const i = input(makeArena())
+    i.padDown(150, 572, PAD, 1)
+    i.padDown(20, 520, PAD, 2)
+    i.padMove(300, 644, 2)
+    i.padUp(2)
+    i.poll()
+    expect(i.axes()).toEqual({ x: 0, y: 0 })
+    expect(i.padGesture()).not.toBeNull()
+  })
+
+  it('labels a run flown on the pad as touch', () => {
+    const i = input(makeArena())
+    i.padDown(150, 572, PAD, 1)
+    i.padMove(150 + R, 572, 1)
+    for (let n = 0; n < 5; n++) i.poll()
+    expect(i.inputMethod()).toBe('touch')
+  })
+
+  it('reports where to draw the knob', () => {
+    const i = input(makeArena())
+    i.padDown(150, 572, PAD, 1)
+    const g = i.padGesture()
+    expect(g.origin).toEqual({ x: 150, y: 572 })
+    expect(g.radius).toBeCloseTo(R)
+  })
+})
+
 describe('createRttInput — touch', () => {
   it('only slews while a finger that started in the arena is down', () => {
     const el = makeArena()
@@ -247,7 +316,8 @@ describe('createRttInput — gamepad', () => {
     i.poll()
     expect(i.source()).toBe('gamepad')
     expect(i.axes().x).toBeGreaterThan(0)
-    expect(i.axes().y).toBeLessThan(0)
+    // Raw -0.5 is pushed forward; RTT flips stick pitch, so it reads as +y.
+    expect(i.axes().y).toBeGreaterThan(0)
   })
 
   it('curves and dead-zones gamepad axes exactly like the pointer', () => {
@@ -255,7 +325,23 @@ describe('createRttInput — gamepad', () => {
     const i = input(makeArena())
     i.poll()
     expect(i.axes().x).toBeCloseTo(applyCurve(1))
-    expect(i.axes().y).toBeCloseTo(applyCurve(0.5))
+    expect(i.axes().y).toBeCloseTo(-applyCurve(0.5))
+  })
+
+  // The real RTT pitches like an aircraft: pull back and the camera looks UP.
+  // The scene raises the aim for NEGATIVE y (screen-up), so a pull, which
+  // gamepad.js reports as positive, must come out of here negative, and a push
+  // positive. The pointer is not flipped: above centre still means look up.
+  it('pitches like an aircraft: pull back looks up, push forward looks down', () => {
+    navigator.getGamepads = vi.fn(() => [pad([0, 1])])
+    const pulled = input(makeArena())
+    pulled.poll()
+    expect(pulled.axes().y).toBeLessThan(0)
+
+    navigator.getGamepads = vi.fn(() => [pad([0, -1])])
+    const pushed = input(makeArena())
+    pushed.poll()
+    expect(pushed.axes().y).toBeGreaterThan(0)
   })
 
   it('fires one shot per trigger squeeze, not one per frame held', () => {
