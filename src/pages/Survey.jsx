@@ -800,7 +800,7 @@ function GapsCard({ initial, realismRating, onSubmit, saving }) {
         rows={5}
         value={text}
         onChange={e => setText(e.target.value)}
-        maxLength={2000}
+        maxLength={10000}
         placeholder={variant.placeholder}
         data-testid="survey-gaps-input"
         className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface text-sm text-slate-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 resize-y transition-all"
@@ -1442,7 +1442,7 @@ function CommentBox({ onSubmit }) {
         rows={4}
         autoFocus
         value={text}
-        maxLength={2000}
+        maxLength={10000}
         onChange={e => setText(e.target.value)}
         placeholder="Whatever you like. We read all of these."
         data-testid="survey-comment-input"

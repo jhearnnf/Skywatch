@@ -59,7 +59,7 @@ const surveyResponseSchema = new mongoose.Schema({
   // Q5. Free text: anything in the real CBAT we did not prepare them for.
   // Optional and skippable — it is the highest-value answer and the one most
   // likely to stall a form, so it never blocks the finish.
-  gaps: { type: String, trim: true, maxlength: 2000, default: null },
+  gaps: { type: String, trim: true, maxlength: 10000, default: null },
 
   // Q6.
   helpedRating: { type: Number, min: RATING_MIN, max: RATING_MAX, default: null },
@@ -73,7 +73,7 @@ const surveyResponseSchema = new mongoose.Schema({
   // is the thing no fixed question asks for — the detail that does not fit
   // "what did we miss", and the occasional note about what the training did for
   // them, which is worth having and worth reading.
-  comment: { type: String, trim: true, maxlength: 2000, default: null },
+  comment: { type: String, trim: true, maxlength: 10000, default: null },
 
   // The score sheet step, which sits AFTER the six questions and outside the
   // progress bar. Deliberately not a seventh question: it is the only ask in

@@ -198,9 +198,9 @@ describe('PATCH /api/survey/:token — progressive saving', () => {
   });
 
   it('truncates over-long free text rather than failing', async () => {
-    await patch({ gaps: 'x'.repeat(5000) });
+    await patch({ gaps: 'x'.repeat(12000) });
     const row = await SurveyResponse.findOne({ inviteId: invite._id });
-    expect(row.gaps).toHaveLength(2000);
+    expect(row.gaps).toHaveLength(10000);
   });
 });
 
@@ -434,8 +434,8 @@ describe('the closing comment', () => {
   });
 
   it('is truncated rather than rejected when over-long', async () => {
-    await patch({ comment: 'x'.repeat(5000) });
-    expect((await SurveyResponse.findOne({ inviteId: invite._id })).comment).toHaveLength(2000);
+    await patch({ comment: 'x'.repeat(12000) });
+    expect((await SurveyResponse.findOne({ inviteId: invite._id })).comment).toHaveLength(10000);
   });
 });
 
