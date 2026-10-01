@@ -13,6 +13,8 @@ const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
 const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT, PRESENCE_HERE_WINDOW_MS } = require('../../constants/presence');
+const CbatMockAssessment = require('../../models/CbatMockAssessment');
+const { IDLE_LIMIT_MS } = require('../../utils/cbatMock');
 
 beforeAll(async () => { await db.connect(); });
 beforeEach(async () => { await createSettings(); });
@@ -170,6 +172,26 @@ describe('where everyone is', () => {
     const res = await presence(authCookie(admin._id));
     expect(find(res, 'Viper').location).toBe('CBAT · ACT');
     expect(find(res, 'Falcon').location).toBe('Reading a brief');
+  });
+
+  it('says when someone is partway through a Mock Assessment', async () => {
+    const admin = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    const sitting = await createUser({ displayName: 'Viper',  lastSeen: new Date(), lastLocation: 'CBAT · ACT' });
+    const idle    = await createUser({ displayName: 'Falcon', lastSeen: new Date(), lastLocation: 'CBAT · FLAG' });
+    const done    = await createUser({ displayName: 'Hawk',   lastSeen: new Date(), lastLocation: 'CBAT · ANT' });
+    const steps = [{ gameKeys: ['flag'] }, { gameKeys: ['act'] }, { gameKeys: ['ant'] }];
+    await CbatMockAssessment.create({ userId: sitting._id, region: 'GB', scope: 'all', steps, currentStep: 1 });
+    // Idle past the limit: the mock routes will close it, so it is not "in a mock" now.
+    await CbatMockAssessment.create({
+      userId: idle._id, region: 'GB', scope: 'all', steps,
+      lastActivityAt: agoMs(IDLE_LIMIT_MS + 60_000),
+    });
+    await CbatMockAssessment.create({ userId: done._id, region: 'GB', scope: 'all', steps, status: 'completed' });
+
+    const res = await presence(authCookie(admin._id));
+    expect(find(res, 'Viper').location).toBe('Mock Assessment · ACT · Test 2 of 3');
+    expect(find(res, 'Falcon').location).toBe('CBAT · FLAG');
+    expect(find(res, 'Hawk').location).toBe('CBAT · ANT');
   });
 
   it('withholds the location of the admin reading the strip', async () => {

@@ -43,6 +43,11 @@ const LOCATIONS = [
   [/^\/cbat\/matf\/?$/,             'CBAT · Table Reading'],
   [/^\/cbat\/vigilance\/?$/,        'CBAT · Vigilance'],
   [/^\/cbat\/sma\/?$/,              'CBAT · Sensory Motor'],
+  // The Mock Assessment's own screens (start, between tests, breaks). Whether
+  // someone is mid-mock is not read from here: a mock spends most of its time on
+  // the game pages, so /presence asks the mock itself (see mockLocationLabel).
+  [/^\/cbat\/mock\/?$/,             'Mock Assessment'],
+  [/^\/cbat\/mock\/[^/]+\/?$/,       'Mock score sheet'],
   [/^\/cbat\/[^/]+\/leaderboard\/?$/, 'CBAT · Leaderboard'],
   [/^\/cbat\/?$/,                   'CBAT menu'],
 
@@ -219,7 +224,24 @@ function cbatCardFromLabel(label) {
   return CARD_BY_LABEL.get(label) ?? null;
 }
 
+// ── Sitting a Mock Assessment ────────────────────────────────────────────────
+//
+// A mock's tests are the ordinary game pages, so the stored label alone says
+// "CBAT · ACT" whether someone is practising ACT or is eight tests into a full
+// sitting. The admin strip wants the second case said out loud, so /presence
+// looks up who has an active mock and rewrites their label with this.
+//
+// `mock` is { step, total } (1-based step). The game name is kept when the
+// label names one, so the admin still sees which test they are on.
+function mockLocationLabel(label, { step, total } = {}) {
+  const progress = step && total ? `Test ${Math.min(step, total)} of ${total}` : null;
+  const game = typeof label === 'string' && label.startsWith('CBAT · ') && label !== 'CBAT · Leaderboard'
+    ? label.slice('CBAT · '.length)
+    : null;
+  return ['Mock Assessment', game, progress].filter(Boolean).join(' · ');
+}
+
 module.exports = {
-  LOCATIONS, LOCATION_MAX, locationLabel,
+  LOCATIONS, LOCATION_MAX, locationLabel, mockLocationLabel,
   CBAT_CARDS, cbatCardKey, cbatCardFromLabel,
 };

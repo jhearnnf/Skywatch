@@ -5,7 +5,7 @@
  * never survive into the label, because the label is what gets stored.
  */
 const {
-  locationLabel, LOCATIONS, CBAT_CARDS, cbatCardKey, cbatCardFromLabel,
+  locationLabel, LOCATIONS, CBAT_CARDS, cbatCardKey, cbatCardFromLabel, mockLocationLabel,
 } = require('../../constants/presenceLocations');
 
 describe('locationLabel', () => {
@@ -198,5 +198,27 @@ describe('cbatCardFromLabel', () => {
                      undefined, null, 42, {}, []]) {
       expect(cbatCardFromLabel(l)).toBeNull();
     }
+  });
+});
+
+describe('mockLocationLabel', () => {
+  it('names the mock, the game and how far through the sitting they are', () => {
+    expect(mockLocationLabel('CBAT · ACT', { step: 3, total: 12 })).toBe('Mock Assessment · ACT · Test 3 of 12');
+  });
+
+  it('drops the game when the label is not a game page', () => {
+    expect(mockLocationLabel('Mock Assessment', { step: 1, total: 8 })).toBe('Mock Assessment · Test 1 of 8');
+    expect(mockLocationLabel('CBAT · Leaderboard', { step: 2, total: 8 })).toBe('Mock Assessment · Test 2 of 8');
+    expect(mockLocationLabel(null, { step: 2, total: 8 })).toBe('Mock Assessment · Test 2 of 8');
+  });
+
+  it('never claims a test past the last one', () => {
+    expect(mockLocationLabel('Mock Assessment', { step: 9, total: 8 })).toBe('Mock Assessment · Test 8 of 8');
+  });
+
+  it('labels the mock screens themselves', () => {
+    expect(locationLabel('/cbat/mock')).toBe('Mock Assessment');
+    expect(locationLabel('/cbat/mock/abc123')).toBe('Mock score sheet');
+    expect(cbatCardKey('/cbat/mock')).toBeNull();
   });
 });

@@ -12,7 +12,9 @@ const User             = require('../models/User');
 const { generateAnnouncementDrafts } = require('../utils/announcementDrafts');
 const { resolveSelectedBadges } = require('../utils/selectedBadge');
 const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT, PRESENCE_HERE_WINDOW_MS } = require('../constants/presence');
-const { cbatCardFromLabel } = require('../constants/presenceLocations');
+const { cbatCardFromLabel, mockLocationLabel } = require('../constants/presenceLocations');
+const CbatMockAssessment = require('../models/CbatMockAssessment');
+const { IDLE_LIMIT_MS: MOCK_IDLE_LIMIT_MS } = require('../utils/cbatMock');
 const { medalsForUsers } = require('../utils/cbatMedalHolders');
 const BotKnowledge = require('../models/BotKnowledge');
 const { parseGuideUpload, renderGuideCorpus } = require('../utils/cbatGuideParser');
@@ -3032,6 +3034,20 @@ router.get('/presence', adminOnly, async (req, res) => {
       User.countDocuments({ ...filter, lastSeen: { $gte: new Date(hereSince) } }),
     ]);
 
+    // Who on the list is partway through a Mock Assessment. Read-only: a mock
+    // idle past its limit is skipped here rather than expired, because closing
+    // someone's sitting is the mock routes' job, not a side effect of an admin
+    // opening Community.
+    const mocks = users.length ? await CbatMockAssessment.find({
+      userId: { $in: users.map(u => u._id) },
+      status: 'active',
+      lastActivityAt: { $gte: new Date(Date.now() - MOCK_IDLE_LIMIT_MS) },
+    }).select('userId currentStep steps.done').lean() : [];
+    const mockByUser = new Map(mocks.map(m => [String(m.userId), {
+      step:  (m.currentStep ?? 0) + 1,
+      total: m.steps?.length ?? 0,
+    }]));
+
     res.json({ status: 'success', data: {
       online: users.map(u => {
         // The viewer is reading this strip from Community, so telling them they
@@ -3043,6 +3059,7 @@ router.get('/presence', adminOnly, async (req, res) => {
         // from the row: the strip still wants to list someone whose dot has
         // gone out.
         const here = Boolean(u.lastSeen && new Date(u.lastSeen).getTime() >= hereSince);
+        const mock = mockByUser.get(String(u._id)) ?? null;
         return {
           _id:         u._id,
           displayName: u.displayName ?? null,
@@ -3055,7 +3072,9 @@ router.get('/presence', adminOnly, async (req, res) => {
           // plausible later (an explicit "do not disturb", say), and by then
           // `isOnline: false` would have to mean two different things.
           status:      here ? 'online' : 'away',
-          location:    isSelf ? null : (u.lastLocation ?? null),
+          location:    isSelf ? null
+            : mock ? mockLocationLabel(u.lastLocation, mock)
+            : (u.lastLocation ?? null),
           // Unlike `location`, kept for the viewer's own row. An admin reading
           // the hub is by definition on /cbat, which is no card at all, so
           // their own dot only ever appears in the case that makes it useful:
