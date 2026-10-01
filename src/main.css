@@ -2557,9 +2557,158 @@ body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
 }
 .rtt-reticle[data-state='lock']     { color: #22c55e; }
 .rtt-reticle[data-state='obscured'] { color: #f59e0b; }
+/* Real CBAT: in the box, but not held there long enough for a frame to count
+   yet. Turns green ('lock') once it has been. */
+.rtt-reticle[data-state='hold']     { color: #facc15; }
 /* Three frames already in the bag — there is nothing left to earn on this
    target, so the reticle goes neutral rather than staying invitingly green. */
 .rtt-reticle[data-state='done']     { color: #94a3b8; }
+
+/* ── RTT SkyWatch dressing ──────────────────────────────────────────────────
+   SkyWatch theme only; Real CBAT renders none of this. Nothing here changes
+   what scores: it dresses the picture as a targeting pod's feed and puts a
+   little reward on each frame. */
+
+/* Scan lines and a vignette over the scene, with corner marks on the frame.
+   Faint on purpose: the picture has to stay as legible as before. */
+.rtt-pod {
+  background:
+    radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, 0.42) 100%),
+    repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px);
+}
+.rtt-pod-corner {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: rgba(91, 170, 255, 0.6);
+  border-style: solid;
+  border-width: 0;
+}
+.rtt-pod-corner-tl { top: 8px; left: 8px; border-top-width: 2px; border-left-width: 2px; }
+.rtt-pod-corner-tr { top: 8px; right: 8px; border-top-width: 2px; border-right-width: 2px; }
+.rtt-pod-corner-bl { bottom: 8px; left: 8px; border-bottom-width: 2px; border-left-width: 2px; }
+.rtt-pod-corner-br { bottom: 8px; right: 8px; border-bottom-width: 2px; border-right-width: 2px; }
+
+/* The lock bracket: four corner marks hugging the live target, placed by the
+   scene's frame loop in percent of the picture. Pale while tracking, green when
+   the target is in the reticle. */
+.rtt-bracket {
+  position: absolute;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  color: #cbd5e1;
+  opacity: 0.85;
+  transition: color 90ms linear;
+  --len: 30%;
+  background:
+    linear-gradient(currentColor, currentColor) top left / var(--len) 2px no-repeat,
+    linear-gradient(currentColor, currentColor) top left / 2px var(--len) no-repeat,
+    linear-gradient(currentColor, currentColor) top right / var(--len) 2px no-repeat,
+    linear-gradient(currentColor, currentColor) top right / 2px var(--len) no-repeat,
+    linear-gradient(currentColor, currentColor) bottom left / var(--len) 2px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom left / 2px var(--len) no-repeat,
+    linear-gradient(currentColor, currentColor) bottom right / var(--len) 2px no-repeat,
+    linear-gradient(currentColor, currentColor) bottom right / 2px var(--len) no-repeat;
+}
+.rtt-bracket[data-state='off']  { opacity: 0; }
+.rtt-bracket[data-state='lock'] { color: #22c55e; }
+
+/* How good a frame was, rising off the reticle. */
+@keyframes rttPopup {
+  0%   { opacity: 0; transform: translate(-50%, 6px) scale(0.9); }
+  15%  { opacity: 1; transform: translate(-50%, 0) scale(1.05); }
+  70%  { opacity: 1; transform: translate(-50%, -14px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -24px) scale(1); }
+}
+.rtt-popup {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  animation: rttPopup 900ms ease-out forwards;
+}
+
+/* The conditions banner every SkyWatch run opens with: Dusk, Dawn, Cloudy,
+   Rainy or Thermal. Mission-style, gone before the first target is far into
+   its pass, and above the middle so it never covers the reticle. Brand blue,
+   amber for thermal. */
+@keyframes rttBanner {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(1.25); letter-spacing: 0.5em; }
+  12%  { opacity: 1; transform: translate(-50%, -50%) scale(1); letter-spacing: 0.22em; }
+  80%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -60%) scale(0.98); }
+}
+.rtt-banner {
+  --banner: 91, 170, 255;
+  position: absolute;
+  left: 50%;
+  top: 28%;
+  max-width: calc(100% - 32px);
+  padding: 12px 20px;
+  text-align: center;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--banner), 0.7);
+  background: rgba(6, 16, 30, 0.82);
+  box-shadow: 0 0 28px rgba(var(--banner), 0.35);
+  pointer-events: none;
+  animation: rttBanner 3000ms ease-out forwards;
+}
+.rtt-banner[data-look='thermal'] {
+  --banner: 251, 191, 36;
+  background: rgba(10, 10, 10, 0.82);
+}
+.rtt-banner-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: #94a3b8;
+}
+.rtt-banner-title {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: rgb(var(--banner));
+  text-shadow: 0 0 12px rgba(var(--banner), 0.6);
+}
+.rtt-banner-line {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #e5e7eb;
+}
+
+/* The pass card: "Target 4 of 12: Convoy truck", shown as each pass goes live. */
+@keyframes rttCallout {
+  0%   { opacity: 0; transform: translate(-50%, -6px); }
+  10%  { opacity: 1; transform: translate(-50%, 0); }
+  80%  { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, 0); }
+}
+.rtt-callout {
+  position: absolute;
+  left: 50%;
+  top: 64px;
+  max-width: calc(100% - 32px);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(91, 170, 255, 0.5);
+  background: rgba(6, 16, 30, 0.78);
+  color: #ddeaf8;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  animation: rttCallout 2400ms ease-out forwards;
+}
 
 /* ── RTT target cue ────────────────────────────────────────────────────────
    An arrow riding a circle around the reticle, pointing the way to slew. Sized

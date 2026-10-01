@@ -14,7 +14,7 @@ import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
-import { playRttShutter } from '../utils/sound'
+import { playRttShutter, playRttPerfect } from '../utils/sound'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { createRttInput } from '../utils/cbat/rttInput'
 import { useMockStick } from '../utils/cbat/useMockStick'
@@ -22,6 +22,9 @@ import StickSetup from '../components/cbat/StickSetup'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
 import CbatStickRecommendation from '../components/cbat/CbatStickRecommendation'
 import { useStickPresence } from '../utils/cbat/useStickPresence'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useIsTouch } from '../hooks/useIsTouch'
+import TouchSteerPad from '../components/cbat/TouchSteerPad'
 import {
   RTT_DIFFICULTIES, RTT_LAUNCH_MS, rttTuning,
   readStoredRttDifficulty, storeRttDifficulty, computeGrade,
@@ -29,20 +32,13 @@ import {
 } from '../utils/cbat/rttDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import {
-  makeRttSim, rttStats, maxRttScore, captureRadius,
-  CAMERA_FOV_DEG, RTT_FRAMES_PER_TARGET, SHUTTER_COOLDOWN_MS, RTT_KINDS,
+  makeRttSim, rttStats, maxRttScore, captureRadius, reticleHeightPercent, LOOK_TITLES,
+  CAMERA_FOV_DEG, WIDE_FOV_DEG, RTT_FRAMES_PER_TARGET, SHUTTER_COOLDOWN_MS, RTT_KINDS,
   START_ELEV_DEG,
 } from '../utils/cbat/rttSim'
 
 const DEG = Math.PI / 180
 
-// How tall the reticle box is as a percentage of the arena height.
-//
-// The capture cone is an angle and the camera's vertical field of view is an
-// angle, so their tangent ratio is the fraction of the frame the cone covers —
-// which means the reticle can be sized in percent and never needs measuring or
-// a resize listener. The SVG inside draws its circle at half the box width, so
-// the box is twice the cone.
 // The camera's state at the start of a run. Pitched down rather than level:
 // every ground target sits below the horizon, so starting level meant the first
 // thing every run asked for was "look down".
@@ -50,10 +46,11 @@ function freshCamera() {
   return { az: 0, elev: START_ELEV_DEG * DEG, deflection: 0, stickX: 0, stickY: 0 }
 }
 
+// How tall the reticle box starts, as a percentage of the arena height (see
+// reticleHeightPercent). Real CBAT opens zoomed out, and from then on the
+// scene resizes the box as the zoom moves.
 function reticleBoxPercent(tuning) {
-  const cone = Math.tan(captureRadius(tuning))
-  const halfFov = Math.tan((CAMERA_FOV_DEG / 2) * DEG)
-  return 2 * 100 * (cone / halfFov)
+  return reticleHeightPercent(captureRadius(tuning), tuning.zoom ? WIDE_FOV_DEG : CAMERA_FOV_DEG)
 }
 
 // ── HUD pieces ───────────────────────────────────────────────────────────────
@@ -118,7 +115,66 @@ function StickIndicator({ innerRef }) {
   )
 }
 
-function ResultsScreen({ stats, tuning }) {
+// SkyWatch only: what a frame earns its popup. Centring is 1 at dead centre and
+// 0 at the edge of the capture cone.
+function frameGrade(centring) {
+  if (centring >= 0.8) return 'Perfect'
+  if (centring >= 0.45) return 'Good'
+  return 'Edge'
+}
+
+// SkyWatch only: dress the picture as a targeting pod's feed. Scan lines and a
+// vignette over the scene, and corner marks on the frame. All of it sits under
+// the readouts and none of it covers the middle of the picture.
+function PodOverlay() {
+  return (
+    <div className="rtt-pod absolute inset-0 pointer-events-none" aria-hidden="true">
+      {['tl', 'tr', 'bl', 'br'].map(c => <span key={c} className={`rtt-pod-corner rtt-pod-corner-${c}`} />)}
+    </div>
+  )
+}
+
+// SkyWatch only: the frames captured on the run, grouped by target, with the
+// best-centred one of each marked.
+function ContactSheet({ photos, targets }) {
+  if (!photos.length) return null
+  const byTarget = new Map()
+  for (const ph of photos) {
+    if (!byTarget.has(ph.target)) byTarget.set(ph.target, [])
+    byTarget.get(ph.target).push(ph)
+  }
+  return (
+    <div className="mt-5" data-testid="rtt-contact-sheet">
+      <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2 text-left">Your frames</p>
+      <div className="space-y-2">
+        {[...byTarget.entries()].map(([index, shots]) => {
+          const best = shots.reduce((a, b) => (b.centring > a.centring ? b : a))
+          const target = targets[index]
+          return (
+            <div key={index} className="bg-game-arena rounded-lg border border-game-line p-2 text-left">
+              <p className="text-[11px] text-game-text mb-1.5">
+                <span className="font-mono text-slate-500 mr-1.5">{index + 1}</span>
+                {target?.name ?? target?.label}
+              </p>
+              <div className="flex gap-1.5">
+                {shots.map((ph, i) => (
+                  <figure key={i} className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-md overflow-hidden border-2 ${ph === best ? 'border-brand-600' : 'border-game-line'}`}>
+                    <img src={ph.src} alt={`Frame ${i + 1} of target ${index + 1}`} className="w-full h-full object-cover" />
+                    <figcaption className="absolute bottom-0 inset-x-0 bg-black/60 text-[9px] font-mono text-center text-game-text leading-tight py-0.5">
+                      {ph === best ? 'Best' : frameGrade(ph.centring)}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ResultsScreen({ stats, tuning, photos = [], targets = [] }) {
   const pct = Math.round((stats.totalScore / maxRttScore(tuning)) * 100)
   const grade = computeGrade(stats.totalScore, tuning)
   const gradeColor = grade === 'Outstanding' ? 'text-green-400'
@@ -127,6 +183,13 @@ function ResultsScreen({ stats, tuning }) {
   const accuracy = stats.framesTaken
     ? Math.round((stats.framesOnTarget / stats.framesTaken) * 100)
     : 0
+  const rows = [
+    ['Targets completed', `${stats.targetsCompleted} / ${stats.totalTargets}`],
+    ['Frames on target', `${stats.framesOnTarget} / ${stats.totalTargets * RTT_FRAMES_PER_TARGET}`],
+    ['Shutter accuracy', `${accuracy}%`],
+    ['Average centring', `${stats.avgCentringErrorDeg}°`],
+  ]
+  if (stats.timeInBoxPct != null) rows.push(['Time in the box', `${stats.timeInBoxPct}%`])
 
   return (
     <div className="w-full max-w-md mx-auto">
@@ -135,18 +198,14 @@ function ResultsScreen({ stats, tuning }) {
         {stats.totalScore} of a possible {maxRttScore(tuning)} ({pct}%) · {tuning.label}
       </p>
       <div className="grid grid-cols-2 gap-2 text-left">
-        {[
-          ['Targets completed', `${stats.targetsCompleted} / ${stats.totalTargets}`],
-          ['Frames on target', `${stats.framesOnTarget} / ${stats.totalTargets * RTT_FRAMES_PER_TARGET}`],
-          ['Shutter accuracy', `${accuracy}%`],
-          ['Average centring', `${stats.avgCentringErrorDeg}°`],
-        ].map(([label, value]) => (
+        {rows.map(([label, value]) => (
           <div key={label} className="bg-game-arena rounded-lg border border-game-line p-3">
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{label}</p>
             <p className="font-mono font-bold text-brand-600">{value}</p>
           </div>
         ))}
       </div>
+      <ContactSheet photos={photos} targets={targets} />
     </div>
   )
 }
@@ -161,14 +220,25 @@ export default function CbatRtt() {
 
   const [phase, setPhase] = useState('intro') // intro | launching | playing | results
   const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredRttDifficulty))
-  const tuning = rttTuning(difficulty)
-  // The difficulty the run on screen is being played at. Pinned at launch so a
-  // mid-results switch can't relabel or misfile a finished run. Held twice on
-  // purpose: the ref is what the frame loop reads, the state is what the render
-  // tree reads (reading a ref during render trips react-hooks/refs).
+  // Real CBAT adds the zoom, the hold-in-the-box scoring, manoeuvres and
+  // decoys on top of the difficulty (see REAL_CBAT_RTT).
+  const cbat = useCbatTheme()
+  // Phones and tablets get a thumb pad under the picture, as ACT does, so a
+  // finger never has to cover the target it is tracking.
+  const isTouch = useIsTouch()
+  const padRef = useRef(null)
+  const padRectRef = useRef(null)
+  const [padHeld, setPadHeld] = useState(false)
+  const tuning = rttTuning(difficulty, cbat)
+  // The difficulty (and theme) the run on screen is being played at. Pinned at
+  // launch so a mid-results switch can't relabel or misfile a finished run.
+  // Held twice on purpose: the ref is what the frame loop reads, the state is
+  // what the render tree reads (reading a ref during render trips
+  // react-hooks/refs).
   const runTuningRef = useRef(tuning)
   const [runDifficulty, setRunDifficulty] = useState(difficulty)
-  const runTuning = rttTuning(runDifficulty)
+  const [runCbat, setRunCbat] = useState(cbat)
+  const runTuning = rttTuning(runDifficulty, runCbat)
 
   const [sensitivity, setSensitivity] = useState(readStoredSensitivity)
   const sensitivityRef = useRef(sensitivity)
@@ -195,6 +265,13 @@ export default function CbatRtt() {
 
   const [events, setEvents] = useState([])
   const [flash, setFlash] = useState(null)
+  // SkyWatch only: the points popup by the reticle, the pass card, and the
+  // frames captured for the contact sheet.
+  const [popup, setPopup] = useState(null)
+  // Every SkyWatch run opens with a banner naming its conditions.
+  const [banner, setBanner] = useState(null)
+  const [callout, setCallout] = useState(null)
+  const [photos, setPhotos] = useState([])
 
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
@@ -252,6 +329,7 @@ export default function CbatRtt() {
     // 'playing', and the tally goes with it.
     const inputMethod = inputRef.current?.inputMethod() ?? null
     setFinalStats(stats)
+    setPhotos(s.photos.slice())
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: stats.totalScore })
@@ -277,10 +355,26 @@ export default function CbatRtt() {
   // Written straight into the DOM rather than through state: at 60 Hz a
   // re-render per frame would cost more than the game does, and the reticle's
   // lock colour has to be exactly as current as the camera it describes.
+  const calloutKeyRef = useRef(-1)
   const writeHud = useCallback((hud) => {
     const el = hudRef.current
     if (!el.reticle) return
     if (el.reticle.dataset.state !== hud.reticle) el.reticle.dataset.state = hud.reticle
+    if (hud.reticleSize && el.reticle.style.height !== hud.reticleSize) el.reticle.style.height = hud.reticleSize
+    // SkyWatch: the lock bracket, and the pass card (a React update, but only
+    // once a pass).
+    if (el.bracket) {
+      if (el.bracket.dataset.state !== hud.bracket) el.bracket.dataset.state = hud.bracket
+      if (hud.bracket !== 'off') {
+        el.bracket.style.left = hud.bracketX
+        el.bracket.style.top = hud.bracketY
+        el.bracket.style.height = hud.bracketSize
+      }
+    }
+    if (hud.callout && hud.calloutKey !== calloutKeyRef.current) {
+      calloutKeyRef.current = hud.calloutKey
+      setCallout({ key: hud.calloutKey, text: hud.callout })
+    }
     if (el.stick) el.stick.style.transform = `translate(${(hud.stickX * 18).toFixed(1)}px, ${(hud.stickY * 18).toFixed(1)}px)`
     if (el.window && el.window.style.width !== hud.window) el.window.style.width = hud.window
     if (el.cue) {
@@ -294,15 +388,72 @@ export default function CbatRtt() {
       const text = hud.cueOn ? hud.cueDeg : '—'
       if (el.cueDeg.textContent !== text) el.cueDeg.textContent = text
     }
-    for (const key of ['clock', 'score', 'az', 'elev', 'frames', 'label', 'count']) {
+    // The pad's knob, from the live gesture: a ring where the thumb landed and
+    // a knob at the deflection. Written here, once a frame, for the same
+    // reason as the rest of the HUD.
+    if (el.padRing && el.padKnob) {
+      const g = inputRef.current?.padGesture?.()
+      const rect = padRectRef.current
+      if (g && rect) {
+        const ox = g.origin.x - rect.left
+        const oy = g.origin.y - rect.top
+        el.padRing.style.opacity = '1'
+        el.padRing.style.width = el.padRing.style.height = `${(g.radius * 2).toFixed(0)}px`
+        el.padRing.style.transform = `translate(${(ox - g.radius).toFixed(1)}px, ${(oy - g.radius).toFixed(1)}px)`
+        el.padKnob.style.opacity = '1'
+        el.padKnob.style.transform = `translate(${(ox + g.axes.x * g.radius - 14).toFixed(1)}px, ${(oy + g.axes.y * g.radius - 14).toFixed(1)}px)`
+      } else if (el.padKnob.style.opacity !== '0') {
+        el.padRing.style.opacity = '0'
+        el.padKnob.style.opacity = '0'
+      }
+    }
+    for (const key of ['clock', 'score', 'az', 'elev', 'frames', 'label', 'count', 'range']) {
       const node = el[key]
       if (node && node.textContent !== hud[key]) node.textContent = hud[key]
     }
   }, [])
 
+  // ── Touch pad ──────────────────────────────────────────────────────────────
+  // The rect is read fresh on every touch-down: the pad moves when a phone's
+  // address bar collapses, and a stale one would put the centre in the wrong
+  // place.
+  const onPadDown = useCallback((e) => {
+    const el = padRef.current
+    if (!el || !inputRef.current) return
+    const rect = el.getBoundingClientRect()
+    padRectRef.current = rect
+    try { el.setPointerCapture?.(e.pointerId) } catch { /* not capturable */ }
+    inputRef.current.padDown(e.clientX, e.clientY, rect, e.pointerId)
+    setPadHeld(true)
+  }, [])
+  const onPadMove = useCallback((e) => {
+    inputRef.current?.padMove(e.clientX, e.clientY, e.pointerId)
+  }, [])
+  const onPadUp = useCallback((e) => {
+    try { padRef.current?.releasePointerCapture?.(e.pointerId) } catch { /* already released */ }
+    inputRef.current?.padUp(e.pointerId)
+    if (!inputRef.current?.padGesture()) setPadHeld(false)
+  }, [])
+
   const onShot = useCallback((result) => {
-    playRttShutter(result.kind === 'hit' ? 'hit' : 'miss')
-    setFlash({ id: `${Date.now()}-${Math.random()}`, kind: result.kind })
+    const playing = runTuningRef.current
+    const id = `${Date.now()}-${Math.random()}`
+    setFlash({ id, kind: result.kind })
+    if (playing.realCbat) {
+      playRttShutter(result.kind === 'hit' ? 'hit' : 'miss')
+      return
+    }
+    // SkyWatch: a popup by the reticle saying how good the frame was, and a
+    // chime on a dead-centre one.
+    if (result.kind === 'hit') {
+      const grade = frameGrade(1 - result.errorRad / captureRadius(playing))
+      if (grade === 'Perfect') playRttPerfect()
+      else playRttShutter('hit')
+      setPopup({ id, text: grade, points: result.points, good: true })
+    } else {
+      playRttShutter('miss')
+      setPopup({ id, text: result.kind === 'occluded' ? 'Blocked' : 'Missed', points: result.points, good: false })
+    }
   }, [])
 
   const startGame = useCallback(() => {
@@ -312,6 +463,11 @@ export default function CbatRtt() {
     camRef.current = freshCamera()
     setEvents([])
     setFlash(null)
+    setPopup(null)
+    setCallout(null)
+    setBanner(next.tuning.realCbat ? null : { id: `${Date.now()}`, look: next.look })
+    setPhotos([])
+    calloutKeyRef.current = -1
     setFinalStats(null)
     setScoreSaved(false)
     startTracking(runTuningRef.current.gameKey)
@@ -325,6 +481,7 @@ export default function CbatRtt() {
   const beginLaunch = useCallback(() => {
     runTuningRef.current = tuning
     setRunDifficulty(tuning.key)
+    setRunCbat(!!tuning.realCbat)
     if (isDemo) startGame()
     else setPhase('launching')
   }, [tuning, isDemo, startGame])
@@ -443,11 +600,20 @@ export default function CbatRtt() {
                 </p>
 
                 <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Slew</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>
+                  {isTouch
+                    ? <div className="flex items-start gap-3"><CbatIntroLabel>Slew</CbatIntroLabel><span className="pt-0.5">hold the pad under the picture and move your thumb. Where you first touch is the middle. The further you move from it, the faster the camera turns. Let go to stop</span></div>
+                    : <div className="flex items-start gap-3"><CbatIntroLabel>Slew</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>}
                   <div className="flex items-start gap-3"><CbatIntroLabel>Shoot</CbatIntroLabel><span className="pt-0.5">click, or press Space, with the target inside the reticle — dead centre is worth double</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Targets</CbatIntroLabel><span className="pt-0.5">{tuning.targets} passes: {tuning.kinds.map(k => RTT_KINDS[k].label.toLowerCase()).join(', ')}</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Cover</CbatIntroLabel><span className="pt-0.5">targets pass behind cloud and terrain — predict where they come out and pick the track back up</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Drift</CbatIntroLabel><span className="pt-0.5">the aircraft never sits still — the picture wanders on its own and you have to keep trimming it back</span></div>
+                  <div className="flex items-start gap-3"><CbatIntroLabel>Flight</CbatIntroLabel><span className="pt-0.5">the aircraft flies forward through the area, so even targets that are standing still slide across the picture</span></div>
+                  {tuning.realCbat && (<>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Hold</CbatIntroLabel><span className="pt-0.5">keep the target inside the box for the whole pass. A frame only counts once the box has turned green</span></div>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Zoom</CbatIntroLabel><span className="pt-0.5">the camera is zoomed out and fast while you search, then zooms in and steadies a little once you are on the target</span></div>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Turns</CbatIntroLabel><span className="pt-0.5">targets can turn hard or speed up without warning</span></div>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Traffic</CbatIntroLabel><span className="pt-0.5">other aircraft fly through the area. Only the one the arrow points to is your target</span></div>
+                  </>)}
                   <div className="flex items-start gap-3"><CbatIntroLabel>Cue</CbatIntroLabel><span className="pt-0.5">an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
                 </div>
@@ -487,7 +653,9 @@ export default function CbatRtt() {
                 ref={arenaRef}
                 data-testid="rtt-arena"
                 className="relative w-full rounded-xl overflow-hidden border border-game-line bg-game-arena select-none touch-none cursor-crosshair"
-                style={{ height: 'min(72vh, 620px)' }}
+                // Shorter on touch, to leave room for the pad and the shutter
+                // under it without the page scrolling mid-run.
+                style={{ height: isTouch ? 'min(56vh, 620px)' : 'min(72vh, 620px)' }}
               >
                 <RttScene
                   sim={sim}
@@ -505,6 +673,10 @@ export default function CbatRtt() {
                     straight into these nodes — see the refs collected on
                     hudRef. Nothing here re-renders during a run. */}
                 <div className="rtt-hud absolute inset-0 pointer-events-none">
+                  {!runTuning.realCbat && <PodOverlay />}
+                  {!runTuning.realCbat && (
+                    <div ref={el => (hudRef.current.bracket = el)} data-state="off" data-testid="rtt-bracket" className="rtt-bracket" aria-hidden="true" />
+                  )}
                   <Reticle boxPercent={boxPercent} innerRef={el => (hudRef.current.reticle = el)} />
                   <TargetCue
                     innerRef={el => (hudRef.current.cue = el)}
@@ -513,7 +685,9 @@ export default function CbatRtt() {
 
                   <div className="absolute top-0 left-0 right-0 flex items-start justify-between gap-3 p-3">
                     <div>
-                      <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500 leading-none mb-0.5">Sensor</p>
+                      <p className="text-[9px] uppercase tracking-[0.18em] text-slate-500 leading-none mb-0.5">
+                        Sensor{sim.look === 'thermal' && <span className="ml-1.5 text-amber-400" data-testid="rtt-thermal">· White hot</span>}
+                      </p>
                       <p ref={el => (hudRef.current.label = el)} className="font-mono text-sm font-extrabold text-brand-600 leading-none">STAND BY</p>
                       <p ref={el => (hudRef.current.count = el)} className="font-mono text-[10px] text-slate-500 leading-none mt-1">– of {sim.run.targets.length}</p>
                       {/* How much of the current pass is left. Without it, a
@@ -547,29 +721,84 @@ export default function CbatRtt() {
                         <Readout label="Bearing"><span ref={el => (hudRef.current.az = el)}>000</span>°</Readout>
                         <Readout label="Elev"><span ref={el => (hudRef.current.elev = el)}>+00</span>°</Readout>
                         <Readout label="To target"><span ref={el => (hudRef.current.cueDeg = el)}>—</span></Readout>
+                        {!runTuning.realCbat && (
+                          <Readout label="Range"><span ref={el => (hudRef.current.range = el)}>–</span></Readout>
+                        )}
                       </div>
                     </div>
                     <StickIndicator innerRef={el => (hudRef.current.stick = el)} />
                   </div>
 
-                  {flash && (
-                    <div
-                      key={flash.id}
-                      className={`absolute inset-0 rtt-shutter-flash ${flash.kind === 'hit' ? 'bg-white' : 'bg-red-500'}`}
-                    />
-                  )}
+                  {/* The one-shot animations: thermal banner, pass card, points
+                      popup, shutter flash. Each sits in its OWN fixed wrapper.
+                      They used to be keyed siblings in one list, and a new one
+                      appearing made React rebuild the others — so the last
+                      frame's "+45" replayed as the next pass's card came up,
+                      looking like points for nothing (player report,
+                      2026-10-01). Each is also cleared when its animation ends,
+                      so there is nothing left to replay. */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    {banner && LOOK_TITLES[banner.look] && (
+                      <div key={banner.id} className="rtt-banner" data-look={banner.look} data-testid="rtt-banner" onAnimationEnd={() => setBanner(null)}>
+                        <p className="rtt-banner-label">Conditions</p>
+                        <p className="rtt-banner-title">{LOOK_TITLES[banner.look].title}</p>
+                        <p className="rtt-banner-line">{LOOK_TITLES[banner.look].line}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute inset-0 pointer-events-none">
+                    {callout && (
+                      <div key={callout.key} className="rtt-callout" data-testid="rtt-callout" onAnimationEnd={() => setCallout(null)}>{callout.text}</div>
+                    )}
+                  </div>
+                  <div className="absolute inset-0 pointer-events-none">
+                    {popup && (
+                      <div key={popup.id} className={`rtt-popup ${popup.good ? 'text-green-300' : 'text-red-300'}`} onAnimationEnd={() => setPopup(null)}>
+                        {popup.text} {popup.points >= 0 ? '+' : ''}{popup.points}
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute inset-0 pointer-events-none">
+                    {flash && (
+                      <div
+                        key={flash.id}
+                        className={`absolute inset-0 rtt-shutter-flash ${flash.kind === 'hit' ? 'bg-white' : 'bg-red-500'}`}
+                        onAnimationEnd={() => setFlash(null)}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Touch-only shutter — see .rtt-shutter in main.css for why it is
-                  hidden on pointer devices. */}
-              <button
-                type="button"
-                onPointerDown={(e) => { e.preventDefault(); inputRef.current?.fireTrigger() }}
-                className="rtt-shutter items-center justify-center w-full max-w-xs py-4 rounded-xl bg-brand-600 text-white font-extrabold uppercase tracking-wider text-sm cursor-pointer select-none touch-none"
-              >
-                Capture Frame
-              </button>
+              {/* Touch controls: the thumb pad, with the shutter beside it for the
+                  other thumb. The shutter is touch-only — see .rtt-shutter in
+                  main.css for why it is hidden on pointer devices. */}
+              <div className="flex items-stretch gap-2 w-full">
+                {isTouch && (
+                  <TouchSteerPad
+                    padRef={padRef}
+                    onPointerDown={onPadDown}
+                    onPointerMove={onPadMove}
+                    onPointerUp={onPadUp}
+                    isDragging={padHeld}
+                    cue="both"
+                    label="Hold and move to aim"
+                    ariaLabel="Camera pad: hold and move to turn the camera"
+                    className="h-36 flex-1"
+                    data-testid="rtt-pad"
+                  >
+                    <div ref={el => (hudRef.current.padRing = el)} className="absolute left-0 top-0 rounded-full border border-brand-300/50 pointer-events-none" style={{ opacity: 0 }} />
+                    <div ref={el => (hudRef.current.padKnob = el)} className="absolute left-0 top-0 w-7 h-7 rounded-full bg-brand-400/40 border-2 border-brand-300 shadow-[0_0_14px_rgba(91,170,255,0.5)] pointer-events-none" style={{ opacity: 0 }} />
+                  </TouchSteerPad>
+                )}
+                <button
+                  type="button"
+                  onPointerDown={(e) => { e.preventDefault(); inputRef.current?.fireTrigger() }}
+                  className={`rtt-shutter items-center justify-center py-4 rounded-xl bg-brand-600 text-white font-extrabold uppercase tracking-wider text-sm cursor-pointer select-none touch-none ${isTouch ? 'w-28 shrink-0 text-center leading-tight' : 'w-full max-w-xs mx-auto'}`}
+                >
+                  Capture Frame
+                </button>
+              </div>
             </div>
           )}
 
@@ -584,7 +813,7 @@ export default function CbatRtt() {
                 personalBest={personalBest}
                 onPlayAgain={() => { setScoreSaved(false); startGame() }}
               >
-                <ResultsScreen stats={finalStats} tuning={runTuning} />
+                <ResultsScreen stats={finalStats} tuning={runTuning} photos={photos} targets={sim?.run?.targets ?? []} />
               </CbatGameOver>
             </div>
           )}

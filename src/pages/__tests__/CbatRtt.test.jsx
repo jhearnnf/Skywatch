@@ -4,6 +4,19 @@ import CbatRtt from '../CbatRtt'
 import { RTT_LAUNCH_MS, RTT_TUNING } from '../../utils/cbat/rttDifficulty'
 
 const mockUseAuth = vi.hoisted(() => vi.fn())
+// Lets a test fly a run in a chosen look (the look is otherwise random).
+const forceLook = vi.hoisted(() => ({ value: null }))
+vi.mock('../../utils/cbat/rttSim', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    makeRttSim: (...args) => {
+      const sim = actual.makeRttSim(...args)
+      if (forceLook.value) sim.look = forceLook.value
+      return sim
+    },
+  }
+})
 
 vi.mock('react-router-dom', () => ({
   Link: ({ children, to, className }) => <a href={to} className={className}>{children}</a>,
@@ -15,7 +28,7 @@ vi.mock('../../lib/cbatOutbox', () => ({ submitCbatResult: vi.fn(() => Promise.r
 vi.mock('../../utils/cbat/useCbatTracking', () => ({
   useCbatTracking: () => ({ start: vi.fn(), setRound: vi.fn(), markCompleted: vi.fn() }),
 }))
-vi.mock('../../utils/sound', () => ({ playRttShutter: vi.fn() }))
+vi.mock('../../utils/sound', () => ({ playRttShutter: vi.fn(), playRttPerfect: vi.fn() }))
 vi.mock('framer-motion', () => ({
   motion: { div: ({ children, className }) => <div className={className}>{children}</div> },
   AnimatePresence: ({ children }) => <>{children}</>,
@@ -37,9 +50,19 @@ const HUD_STANDBY = {
 const HUD_ON_TARGET = { ...HUD_LIVE, cueOn: false, cueDeg: '3°' }
 
 vi.mock('../../components/RttScene', () => ({
-  default: ({ onShot, onEnd, onHud }) => (
+  default: ({ sim, onShot, onEnd, onHud }) => (
     <div data-testid="rtt-scene">
       <button type="button" onClick={() => onShot({ kind: 'hit', points: 40 })}>mock-hit</button>
+      <button type="button" onClick={() => onShot({ kind: 'hit', points: 45, errorRad: 0 })}>mock-perfect</button>
+      <button type="button" onClick={() => onHud({ ...HUD_LIVE, callout: 'Target 3 of 12: Convoy truck', calloutKey: 2 })}>mock-hud-callout</button>
+      <button
+        type="button"
+        onClick={() => {
+          sim.photos.push({ target: 0, centring: 0.9, points: 45, src: 'data:image/jpeg;base64,AAAA' })
+          sim.photos.push({ target: 0, centring: 0.3, points: 28, src: 'data:image/jpeg;base64,BBBB' })
+          onEnd()
+        }}
+      >mock-finish-with-photos</button>
       <button type="button" onClick={() => onShot({ kind: 'miss', points: -8 })}>mock-miss</button>
       <button type="button" onClick={onEnd}>mock-end</button>
       <button type="button" onClick={() => onHud(HUD_LIVE)}>mock-hud-live</button>
@@ -49,9 +72,9 @@ vi.mock('../../components/RttScene', () => ({
   ),
 }))
 
-function setup() {
+function setup({ uiTheme } = {}) {
   const apiFetch = vi.fn(async () => ({ ok: true, json: async () => ({ data: null }) }))
-  mockUseAuth.mockReturnValue({ user: { _id: 'u1' }, API: '', apiFetch })
+  mockUseAuth.mockReturnValue({ user: { _id: 'u1', uiTheme }, API: '', apiFetch })
   return apiFetch
 }
 
@@ -279,5 +302,130 @@ describe('CbatRtt', () => {
     unmount()
     render(<CbatRtt />)
     expect(screen.getByText('1.50×')).toBeInTheDocument()
+  })
+
+  // Phones get a thumb pad under the picture, like ACT's, so a finger never
+  // covers the target. useIsTouch counts a narrow window as touch.
+  describe('touch pad', () => {
+    const realWidth = window.innerWidth
+    afterEach(() => { window.innerWidth = realWidth })
+
+    it('puts the pad under the picture on a phone, and says how to use it', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      window.innerWidth = 390
+      setup()
+      render(<CbatRtt />)
+      expect(screen.getByText(/hold the pad under the picture/i)).toBeInTheDocument()
+      await playTo()
+      expect(screen.getByTestId('rtt-pad')).toBeInTheDocument()
+      expect(screen.getByText(/hold and move to aim/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /capture frame/i })).toBeInTheDocument()
+    })
+
+    it('leaves it out on a desktop, where the pointer is the stick', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      window.innerWidth = 1440
+      setup()
+      render(<CbatRtt />)
+      await playTo()
+      expect(screen.queryByTestId('rtt-pad')).toBeNull()
+    })
+  })
+
+  // The SkyWatch theme dresses the run as a targeting pod and rewards each
+  // frame. None of it changes scoring, and Real CBAT gets none of it.
+  describe('SkyWatch dressing', () => {
+    it('frames the picture as a sensor feed with a lock bracket and a range readout', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      setup()
+      const { container } = render(<CbatRtt />)
+      await playTo()
+      expect(container.querySelector('.rtt-pod')).not.toBeNull()
+      expect(screen.getByTestId('rtt-bracket')).toBeInTheDocument()
+      expect(screen.getByText('Range')).toBeInTheDocument()
+    })
+
+    it('pops up how good a frame was, with a chime for a dead-centre one', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const { playRttPerfect } = await import('../../utils/sound')
+      setup()
+      render(<CbatRtt />)
+      await playTo()
+      fireEvent.click(screen.getByRole('button', { name: /mock-perfect/i }))
+      expect(screen.getByText('Perfect +45')).toBeInTheDocument()
+      expect(playRttPerfect).toHaveBeenCalled()
+    })
+
+    // Player report: points appeared "for nothing" while turning to the next
+    // target. It was the last frame's popup being rebuilt — and its animation
+    // replayed — when the next pass's card came up.
+    it('never replays an old points popup when the next pass card appears', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      setup()
+      render(<CbatRtt />)
+      await playTo()
+      fireEvent.click(screen.getByRole('button', { name: /mock-perfect/i }))
+      const before = screen.getByText('Perfect +45')
+      fireEvent.click(screen.getByRole('button', { name: /mock-hud-callout/i }))
+      const after = screen.getByText('Perfect +45')
+      expect(after).toBe(before)
+    })
+
+    it('names each target as its pass goes live', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      setup()
+      render(<CbatRtt />)
+      await playTo()
+      fireEvent.click(screen.getByRole('button', { name: /mock-hud-callout/i }))
+      expect(screen.getByTestId('rtt-callout').textContent).toBe('Target 3 of 12: Convoy truck')
+    })
+
+    it('shows the frames you captured on the results screen, best one marked', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      setup()
+      render(<CbatRtt />)
+      await playTo()
+      fireEvent.click(screen.getByRole('button', { name: /mock-finish-with-photos/i }))
+      await act(async () => {})
+      const sheet = screen.getByTestId('rtt-contact-sheet')
+      expect(sheet.querySelectorAll('img')).toHaveLength(2)
+      expect(screen.getByText('Best')).toBeInTheDocument()
+      expect(screen.getByText('Edge')).toBeInTheDocument()
+    })
+
+    it.each([
+      ['thermal', 'Thermal'],
+      ['rain', 'Rainy'],
+      ['overcast', 'Cloudy'],
+      ['dawn', 'Dawn'],
+      ['dusk', 'Dusk'],
+    ])('opens a %s run with a banner naming its conditions', async (look, title) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      forceLook.value = look
+      try {
+        setup()
+        render(<CbatRtt />)
+        await playTo()
+        const banner = screen.getByTestId('rtt-banner')
+        expect(banner.querySelector('.rtt-banner-title').textContent).toBe(title)
+      } finally {
+        forceLook.value = null
+      }
+    })
+
+    it('leaves Real CBAT exactly as plain as it was', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      const { playRttPerfect } = await import('../../utils/sound')
+      setup({ uiTheme: 'cbat' })
+      const { container } = render(<CbatRtt />)
+      await playTo()
+      expect(container.querySelector('.rtt-pod')).toBeNull()
+      expect(screen.queryByTestId('rtt-bracket')).toBeNull()
+      expect(screen.queryByTestId('rtt-banner')).toBeNull()
+      expect(screen.queryByText('Range')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: /mock-perfect/i }))
+      expect(screen.queryByText(/Perfect/)).toBeNull()
+      expect(playRttPerfect).not.toHaveBeenCalled()
+    })
   })
 })

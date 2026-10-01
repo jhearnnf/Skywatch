@@ -17,8 +17,10 @@
 //   • the airframe wanders less under you, so there is less drift to trim out.
 //
 // The grade bands dropped ~8% on both when the airframe motion went in: the
-// drift mostly costs centring bonus rather than hits. That figure is an
-// estimate and wants one real playtest — retune it and the demo boards in
+// drift mostly costs centring bonus rather than hits. They rose 5% again on
+// 2026-10-01, when a perfect target went from 150 to 165 points (see
+// RTT_SCORE) and the platform started moving. All of these are estimates and
+// want a real playtest — retune them and the demo boards in
 // cbatFakeLeaderboard.js together, as CUT's notes say.
 //
 // Everything else is deliberately shared — the scene, the scoring, the HUD, the
@@ -58,7 +60,7 @@ export const RTT_TUNING = {
     // therefore move DOWN, the same way FLAG's and CUT's do — the opposite of
     // Numerical Operations and SAT, which score a percentage of a fixed
     // question count and so must demand more accuracy on Easier.
-    grades: { outstanding: 730, good: 505, needsWork: 280 },
+    grades: { outstanding: 767, good: 530, needsWork: 294 },
   },
   hard: {
     key: 'hard',
@@ -75,15 +77,47 @@ export const RTT_TUNING = {
     captureScale: 1,
     airframeScale: 1,
 
-    grades: { outstanding: 1060, good: 735, needsWork: 415 },
+    grades: { outstanding: 1113, good: 772, needsWork: 436 },
   },
 }
 
 // Ordered for the intro screen: easier sits left of the title, hard sits right.
 export const RTT_DIFFICULTIES = [RTT_TUNING.easier, RTT_TUNING.hard]
 
-export function rttTuning(difficulty) {
-  return RTT_TUNING[difficulty] || RTT_TUNING[DEFAULT_RTT_DIFFICULTY]
+// What the Real CBAT theme adds on top of each difficulty, from a player's
+// account of the real test (survey, 2026-10-01). Same boards as SkyWatch, so
+// the same perfect score (see maxRttScore); the grade bands sit lower because
+// holding a turning target in the box for a whole pass is harder than
+// snapping three frames of it.
+//
+//   • zoom: wide and fast while searching, zoomed in and lightly stabilised on
+//     the target;
+//   • trackScoring: a frame only counts once the target has been held in the
+//     box, and time in the box is scored for the whole pass;
+//   • manoeuvres: tight turns and bursts of speed, [min, max] per pass;
+//   • decoyGapMs: other aircraft flying through, this far apart.
+export const REAL_CBAT_RTT = {
+  easier: {
+    zoom: true,
+    trackScoring: true,
+    manoeuvres: [0, 1],
+    decoyGapMs: [6000, 12000],
+    grades: { outstanding: 730, good: 505, needsWork: 280 },
+  },
+  hard: {
+    zoom: true,
+    trackScoring: true,
+    manoeuvres: [1, 2],
+    decoyGapMs: [2000, 6000],
+    grades: { outstanding: 1060, good: 735, needsWork: 415 },
+  },
+}
+
+// `cbat` is the Real CBAT theme. The game key is the same either way: both
+// themes post to one board, and each row records which theme it was flown on.
+export function rttTuning(difficulty, cbat = false) {
+  const base = RTT_TUNING[difficulty] || RTT_TUNING[DEFAULT_RTT_DIFFICULTY]
+  return cbat ? { ...base, ...REAL_CBAT_RTT[base.key], realCbat: true } : base
 }
 
 export function rttGameKey(difficulty) {

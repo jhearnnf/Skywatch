@@ -98,8 +98,8 @@ describe('CBAT RTT', () => {
       expect(leaderboard).toHaveLength(20);
       expect(leaderboard.every(e => e.isFake)).toBe(true);
       leaderboard.forEach(e => {
-        expect(e.bestScore).toBeGreaterThanOrEqual(230);
-        expect(e.bestScore).toBeLessThanOrEqual(960);
+        expect(e.bestScore).toBeGreaterThanOrEqual(242);
+        expect(e.bestScore).toBeLessThanOrEqual(1008);
       });
       // RTT totals are arbitrary integers — a frame pays 20 plus a centring
       // bonus of round(20 × howCentred) — so unlike FLAG's and ANT's boards
@@ -179,7 +179,7 @@ describe('CBAT RTT (Easier)', () => {
 
     expect(leaderboard).toHaveLength(20);
     expect(leaderboard.find(e => e.agentNumber === '1000002')).toBeUndefined();
-    // 900 beats every demo row (ceiling 675), so the real easier run leads.
+    // 900 beats every demo row (ceiling 709), so the real easier run leads.
     expect(leaderboard[0].agentNumber).toBe('1000001');
   });
 
@@ -190,8 +190,8 @@ describe('CBAT RTT (Easier)', () => {
     expect(leaderboard).toHaveLength(20);
     expect(leaderboard.every(e => e.isFake)).toBe(true);
     leaderboard.forEach(e => {
-      expect(e.bestScore).toBeGreaterThanOrEqual(175);
-      expect(e.bestScore).toBeLessThanOrEqual(675);
+      expect(e.bestScore).toBeGreaterThanOrEqual(184);
+      expect(e.bestScore).toBeLessThanOrEqual(709);
     });
     expect(leaderboard.every(e => e.bestScore % 5 === 0)).toBe(false);
   });

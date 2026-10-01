@@ -1,26 +1,31 @@
-import { useRef, useMemo, useState, useEffect, useCallback, Suspense, Component } from 'react'
+import { useRef, useMemo, useEffect, useCallback, Suspense, Component } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import {
   CAMERA_FOV_DEG, MAX_SLEW_DEG_PER_SEC, AZ_LIMIT_DEG, ELEV_MIN_DEG, ELEV_MAX_DEG,
-  STATION_ALT_M, RTT_FRAMES_PER_TARGET, TARGET_EXIT_MS,
-  advanceRtt, fireShutter, isRunOver,
-  isTargetVisible, isTargetOccluded, targetDirectionAt, targetAngularSize,
-  polarToWorld, angularError, occlusionSpan, mulberry32, airframeDisturbance,
+  STATION_ALT_M, RTT_FRAMES_PER_TARGET, TARGET_EXIT_MS, STABILISER_GAIN,
+  TARGET_PREVIEW_MS, TARGET_FADE_IN_MS,
+  advanceRtt, fireShutter, isRunOver, trackRtt, isLocked,
+  isTargetVisible, isTargetOccluded, targetDirectionAt, targetWorldAt,
+  stationAt, platformPathLength, zoomStep, fovForZoom, reticleHeightPercent,
+  angularError, mulberry32, airframeDisturbance,
 } from '../utils/cbat/rttSim'
 import { useCbatDemoCanvas } from '../utils/cbat/demoMode'
+import { playRttLock } from '../utils/sound'
 
 // The Rapid Tracking Test scene.
 //
-// The camera is a gimballed sensor: it sits at the origin and ONLY rotates —
-// yaw and pitch, never position. That is both what a targeting pod actually does
-// and why the whole game is cheap to render: nothing has to be culled, lit or
-// re-sorted as the player moves, because the player never moves.
+// The camera is a gimballed sensor under an aircraft. The player only ever
+// yaws and pitches it; the aircraft carries it forward along -Z at a steady
+// speed (see stationAt in rttSim), so the world slides past underneath.
 //
 // The world is metres. The station is STATION_ALT_M above a flat ground plane,
 // which is what makes a ground target's range fall out of its depression angle
-// (see rttSim) instead of having to be invented per target.
+// (see rttSim) instead of having to be invented per target. Everything that
+// could ever stand between the camera and a target is either placed by the sim
+// (cover) or kept provably clear of every sightline (trees, scatter), so what
+// the player sees hidden and what the sim scores as hidden never disagree.
 //
 // LEGIBILITY IS THE BRIEF. This is a spotting-and-tracking test, and a target is
 // between about 10 and 60 pixels across. Everything below — the graded sky, the
@@ -109,6 +114,55 @@ const FIELD_COLORS = [
   '#3c4728', // young growth
 ]
 
+// The light a run is flown in (see pickLook in rttSim). Dusk is the original
+// look, and the only one Real CBAT ever uses. Fog near stays at 1200 m in all
+// of them: past the furthest target, so nothing the player has to see is
+// washed out.
+//
+// Thermal is a white-hot sensor picture: the whole canvas is greyed and
+// contrasted by a CSS filter (cheap, and nothing in the scene has to know),
+// the sky and haze go near black, and the targets glow white (see heatUp).
+const LOOKS = {
+  dusk: {
+    skyTop: '#0b1f3a', skyHorizon: '#3a5f84', fogFar: 5200,
+    ambient: 0.3, hemi: 0.45,
+    key: { pos: [900, 1400, 600], intensity: 0.95, color: '#ffeeda' },
+    fill: { pos: [-800, 500, -700], intensity: 0.5, color: '#8fb6e8' },
+  },
+  // Low sun ahead and to the left, warm horizon, cooler sky.
+  dawn: {
+    skyTop: '#1c2b4d', skyHorizon: '#b98a72', fogFar: 5000,
+    ambient: 0.32, hemi: 0.42,
+    key: { pos: [-1300, 550, -1100], intensity: 0.9, color: '#ffc89a' },
+    fill: { pos: [900, 500, 700], intensity: 0.45, color: '#8fa8d8' },
+  },
+  // Flat grey light from everywhere and the haze closer in.
+  overcast: {
+    skyTop: '#46525e', skyHorizon: '#7b8794', fogFar: 4200,
+    ambient: 0.48, hemi: 0.62,
+    key: { pos: [300, 1600, 200], intensity: 0.42, color: '#e6ecf2' },
+    fill: { pos: [-800, 500, -700], intensity: 0.32, color: '#c4cdd6' },
+  },
+  // Heavier cloud than overcast and the haze closer in, with real falling rain
+  // (see Rain). Lit about as brightly as overcast: the first version was so
+  // dark the targets all but disappeared, which makes a run unfair, not moody.
+  rain: {
+    skyTop: '#3d4752', skyHorizon: '#6c7884', fogFar: 3800,
+    ambient: 0.52, hemi: 0.66,
+    key: { pos: [300, 1600, 200], intensity: 0.42, color: '#e3e9ef' },
+    fill: { pos: [-800, 500, -700], intensity: 0.34, color: '#c2ccd6' },
+    rain: true,
+  },
+  thermal: {
+    skyTop: '#060606', skyHorizon: '#262626', fogFar: 4800,
+    ambient: 0.3, hemi: 0.45,
+    key: { pos: [900, 1400, 600], intensity: 0.95, color: '#ffffff' },
+    fill: { pos: [-800, 500, -700], intensity: 0.5, color: '#ffffff' },
+    thermal: true,
+  },
+}
+const THERMAL_FILTER = 'grayscale(1) contrast(1.35) brightness(0.88)'
+
 // Lifts every target model out of the shadows without recolouring it, so a jet
 // crossing a dark ridge is still a jet rather than a silhouette that vanishes.
 const TARGET_EMISSIVE = '#33465e'
@@ -133,12 +187,20 @@ class ErrorCatcher extends Component {
 // flat fill gives the eye no horizon to judge the camera's pitch against.
 const SKY_RADIUS = 14000
 
-function SkyDome() {
+function SkyDome({ simRef, look }) {
+  const meshRef = useRef(null)
+  // Centred on the aircraft, so the horizon never drifts as it flies.
+  useFrame(() => {
+    const sim = simRef.current
+    if (!meshRef.current || !sim) return
+    const [x, y, z] = stationAt(sim.elapsedMs)
+    meshRef.current.position.set(x, y, z)
+  })
   const geometry = useMemo(() => {
     const geo = new THREE.SphereGeometry(SKY_RADIUS, 24, 16)
     const pos = geo.attributes.position
-    const top = new THREE.Color(COLORS.skyTop)
-    const horizon = new THREE.Color(COLORS.skyHorizon)
+    const top = new THREE.Color(look.skyTop)
+    const horizon = new THREE.Color(look.skyHorizon)
     const colors = new Float32Array(pos.count * 3)
     const c = new THREE.Color()
     for (let i = 0; i < pos.count; i++) {
@@ -152,12 +214,12 @@ function SkyDome() {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
     return geo
-  }, [])
+  }, [look])
 
   useEffect(() => () => geometry.dispose(), [geometry])
 
   return (
-    <mesh geometry={geometry} frustumCulled={false}>
+    <mesh ref={meshRef} geometry={geometry} frustumCulled={false}>
       <meshBasicMaterial vertexColors side={THREE.BackSide} fog={false} depthWrite={false} />
     </mesh>
   )
@@ -165,33 +227,41 @@ function SkyDome() {
 
 // ── Static world ─────────────────────────────────────────────────────────────
 
+// How far a point on the ground is from the aircraft's track, which runs from
+// the origin to (0, 0, -pathLength).
+function distanceToPath(x, z, pathLength) {
+  const dz = z > 0 ? z : z < -pathLength ? z + pathLength : 0
+  return Math.hypot(x, dz)
+}
+
 // Ground clutter, purely for depth cues — without it a flat plane gives the eye
 // nothing to judge the camera's motion against and slewing feels like nothing is
-// happening. Deliberately kept beyond MIN_SCATTER_RANGE, which is further out
-// than any target can ever be, so a block can never end up in front of one and
-// hide it in a way the sim knows nothing about.
+// happening. Every block is kept at least MIN_SCATTER_RANGE from every point
+// the aircraft flies through. No target is ever further than 1150 m from the
+// aircraft (MAX_TARGET_RANGE_M), so no sightline reaches a block and none can
+// hide a target in a way the sim knows nothing about. The extra 60 m is a
+// block's own half-width.
 const MIN_SCATTER_RANGE = 1300
 const MAX_SCATTER_RANGE = 6500
 
-function Scatter() {
+function Scatter({ pathLength }) {
   const blocks = useMemo(() => {
     const rng = mulberry32(20260806)
     const out = []
-    for (let i = 0; i < 54; i++) {
+    for (let i = 0; i < 400 && out.length < 54; i++) {
       const az = (rng() * 2 - 1) * Math.PI
       const range = MIN_SCATTER_RANGE + rng() * (MAX_SCATTER_RANGE - MIN_SCATTER_RANGE)
       const h = 6 + rng() * 30
       const w = 18 + rng() * 70
       const d = 18 + rng() * 70
-      out.push({
-        key: i,
-        pos: [Math.sin(az) * range, GROUND_Y + h / 2, -Math.cos(az) * range],
-        args: [w, h, d],
-        rotY: rng() * Math.PI,
-      })
+      const rotY = rng() * Math.PI
+      const x = Math.sin(az) * range
+      const z = -pathLength / 2 - Math.cos(az) * range
+      if (distanceToPath(x, z, pathLength) < MIN_SCATTER_RANGE + 60) continue
+      out.push({ key: out.length, pos: [x, GROUND_Y + h / 2, z], args: [w, h, d], rotY })
     }
     return out
-  }, [])
+  }, [pathLength])
 
   return (
     <group>
@@ -218,7 +288,7 @@ function Scatter() {
 // has to stay beyond 1300 m for exactly that reason and would otherwise leave
 // the near ground — everything you see looking steeply down at a vehicle or a
 // foot patrol — completely bare.
-const FARM_HALF = 4500      // metres from the station the patchwork extends
+const FARM_HALF = 4500      // metres the patchwork extends past the aircraft's track
 const FARM_CELL = 90        // rough field size
 const HEDGE_RADIUS = 2200   // hedgerows only where they can actually be seen
 const HEDGE_WIDTH = 5
@@ -264,13 +334,33 @@ const OFFSET_WATER = -6
 const WATER_MARGIN_M = 45
 const WATER_ACROSS = 0.34   // how narrow the channel is across its track
 
+// Built from the boat's real track in the world, from before its pass (it is
+// out on the water early, see ActiveTarget) to the end. A boat that turns
+// doesn't run straight, so the channel is a chain of overlapping ellipses,
+// one per WATER_CHUNK_MS of track, each lying along its own stretch. `az` is
+// set so that (cos az, sin az) runs along a stretch, which is the convention
+// inWaterZone and WaterPatches rotate by.
+const WATER_CHUNK_MS = 3000
+
 function waterZonesFor(targets) {
-  return targets.filter(t => t.kind === 'boat').map((t) => {
-    const mid = targetDirectionAt(t, t.tStartMs + t.windowMs / 2)
-    const [x, , z] = polarToWorld(mid.az, mid.elev, t.range)
-    const trackLength = Math.abs(t.endAz - t.startAz) * t.range
-    return { x, z, az: mid.az, r: trackLength / 2 + WATER_MARGIN_M }
-  })
+  const zones = []
+  for (const t of targets) {
+    if (t.kind !== 'boat') continue
+    const pts = t.track
+    const step = Math.max(1, Math.round(WATER_CHUNK_MS / (pts[1].t - pts[0].t)))
+    for (let i = 0; i < pts.length - 1; i += step) {
+      const a = pts[i].p
+      const b = pts[Math.min(pts.length - 1, i + step)].p
+      const length = Math.hypot(b[0] - a[0], b[2] - a[2])
+      zones.push({
+        x: (a[0] + b[0]) / 2,
+        z: (a[2] + b[2]) / 2,
+        az: Math.atan2(b[2] - a[2], b[0] - a[0]),
+        r: length / 2 + WATER_MARGIN_M,
+      })
+    }
+  }
+  return zones
 }
 
 function inWaterZone(x, z, zones) {
@@ -287,27 +377,32 @@ function inWaterZone(x, z, zones) {
   return false
 }
 
-function buildFarmland(seed) {
+// A rectangle around the aircraft's whole track, FARM_HALF clear of it on
+// every side: `n` cells across, `m` along.
+function buildFarmland(seed, pathLength) {
   const rng = mulberry32(seed)
+  const zMin = -FARM_HALF - pathLength
   const n = Math.ceil((FARM_HALF * 2) / FARM_CELL)
-  const step = (FARM_HALF * 2) / n
-  const jitter = step * 0.3
+  const m = Math.ceil((FARM_HALF * 2 + pathLength) / FARM_CELL)
+  const stepX = (FARM_HALF * 2) / n
+  const stepZ = (FARM_HALF * 2 + pathLength) / m
+  const jitter = Math.min(stepX, stepZ) * 0.3
   const stride = n + 1
 
   // Shared vertex grid. Edges stay unjittered so the patchwork ends on a
   // straight line rather than a ragged one.
-  const gx = new Float32Array(stride * stride)
-  const gz = new Float32Array(stride * stride)
-  for (let i = 0; i <= n; i++) {
+  const gx = new Float32Array(stride * (m + 1))
+  const gz = new Float32Array(stride * (m + 1))
+  for (let i = 0; i <= m; i++) {
     for (let j = 0; j <= n; j++) {
       const k = i * stride + j
-      const edge = i === 0 || j === 0 || i === n || j === n
-      gx[k] = -FARM_HALF + j * step + (edge ? 0 : (rng() - 0.5) * 2 * jitter)
-      gz[k] = -FARM_HALF + i * step + (edge ? 0 : (rng() - 0.5) * 2 * jitter)
+      const edge = i === 0 || j === 0 || i === m || j === n
+      gx[k] = -FARM_HALF + j * stepX + (edge ? 0 : (rng() - 0.5) * 2 * jitter)
+      gz[k] = zMin + i * stepZ + (edge ? 0 : (rng() - 0.5) * 2 * jitter)
     }
   }
 
-  const cells = n * n
+  const cells = n * m
   const pos = new Float32Array(cells * 6 * 3)
   const col = new Float32Array(cells * 6 * 3)
   const nrm = new Float32Array(cells * 6 * 3)
@@ -315,7 +410,7 @@ function buildFarmland(seed) {
   const c = new THREE.Color()
   let o = 0
 
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < m; i++) {
     for (let j = 0; j < n; j++) {
       // Inherit a neighbour's colour a third of the time, so fields run to
       // several cells instead of every one being its own colour — real
@@ -363,13 +458,13 @@ function buildFarmland(seed) {
     ]
     for (const [x, z] of q) { hp.push(x, 0, z); hn.push(0, 1, 0) }
   }
-  const near = (k) => Math.hypot(gx[k], gz[k]) < HEDGE_RADIUS
-  for (let i = 0; i <= n; i++) {
+  const near = (k) => distanceToPath(gx[k], gz[k], pathLength) < HEDGE_RADIUS
+  for (let i = 0; i <= m; i++) {
     for (let j = 0; j <= n; j++) {
       const k = i * stride + j
       if (!near(k)) continue
       if (j < n && rng() < HEDGE_CHANCE) ribbon(gx[k], gz[k], gx[k + 1], gz[k + 1], HEDGE_WIDTH)
-      if (i < n && rng() < HEDGE_CHANCE) ribbon(gx[k], gz[k], gx[k + stride], gz[k + stride], HEDGE_WIDTH)
+      if (i < m && rng() < HEDGE_CHANCE) ribbon(gx[k], gz[k], gx[k + stride], gz[k + stride], HEDGE_WIDTH)
     }
   }
   const hedges = new THREE.BufferGeometry()
@@ -379,8 +474,8 @@ function buildFarmland(seed) {
   return { fields, hedges }
 }
 
-function Farmland() {
-  const { fields, hedges } = useMemo(() => buildFarmland(31415), [])
+function Farmland({ pathLength }) {
+  const { fields, hedges } = useMemo(() => buildFarmland(31415, pathLength), [pathLength])
   useEffect(() => () => { fields.dispose(); hedges.dispose() }, [fields, hedges])
 
   // Fields and hedges are separate meshes at DIFFERENT heights on purpose —
@@ -405,10 +500,11 @@ function Farmland() {
 }
 
 // Lanes and farm tracks, cutting across the field pattern.
-function Roads() {
+function Roads({ pathLength }) {
   const roads = useMemo(() => {
     const rng = mulberry32(27182)
     const out = []
+    const z0 = -pathLength / 2
     for (let i = 0; i < 16; i++) {
       const az = (rng() * 2 - 1) * Math.PI
       const r = 150 + rng() * 4000
@@ -417,13 +513,13 @@ function Roads() {
         // Same ladder trick as the woods: roads cross each other, and they are
         // all one colour so a tie would be invisible — but a road crossing a
         // wood is not, so they sit above everything except the water.
-        pos: [Math.sin(az) * r, GROUND_Y + Y_ROAD + i * 0.002, -Math.cos(az) * r],
+        pos: [Math.sin(az) * r, GROUND_Y + Y_ROAD + i * 0.002, z0 - Math.cos(az) * r],
         args: [6 + rng() * 5, 400 + rng() * 1400],
         rotY: rng() * Math.PI,
       })
     }
     return out
-  }, [])
+  }, [pathLength])
 
   return (
     <group>
@@ -443,15 +539,16 @@ function Roads() {
 // Woodland, as flat patches. Same reasoning as the fields above — coplanar, so
 // it cannot occlude anything — and it does most of the work of making the
 // ground read as countryside rather than a painted plane.
-function Woodland({ waterZones }) {
+function Woodland({ waterZones, pathLength }) {
   const patches = useMemo(() => {
     const rng = mulberry32(2718)
     const out = []
+    const z0 = -pathLength / 2
     for (let i = 0; i < 34; i++) {
       const az = (rng() * 2 - 1) * Math.PI
       const r = 150 + rng() * 4200
       // Woods don't grow in the middle of a channel.
-      if (inWaterZone(Math.sin(az) * r, -Math.cos(az) * r, waterZones)) continue
+      if (inWaterZone(Math.sin(az) * r, z0 - Math.cos(az) * r, waterZones)) continue
       // Two or three overlapping ellipses per patch, so a wood has a ragged
       // edge instead of being an obvious oval.
       const lobes = []
@@ -470,13 +567,13 @@ function Woodland({ waterZones }) {
         // other, and two overlapping patches of DIFFERENT colours sharing a
         // height is a guaranteed flicker — the depth buffer has no way to pick a
         // winner, so it picks a different one per pixel and per frame.
-        pos: [Math.sin(az) * r, GROUND_Y + Y_WOODLAND + i * 0.002, -Math.cos(az) * r],
+        pos: [Math.sin(az) * r, GROUND_Y + Y_WOODLAND + i * 0.002, z0 - Math.cos(az) * r],
         color: rng() < 0.6 ? COLORS.woodland : COLORS.scrub,
         lobes,
       })
     }
     return out
-  }, [waterZones])
+  }, [waterZones, pathLength])
 
   return (
     <group>
@@ -501,26 +598,28 @@ function Woodland({ waterZones }) {
 //
 // Safe to put this close because of the geometry of looking DOWN from altitude:
 // the sightline to a target at range R passes STATION_ALT_M × (1 − d/R) above
-// the ground at distance d, so a 10 m tree can only break it when d is within
-// about 6% of R. Anything nearer sits far below the line of sight and cannot
-// hide anything. The filter below rejects a tree within 12% of any target's
-// range on a bearing anywhere near that target's track — twice the margin the
-// geometry needs — so the picture can never disagree with the sim.
+// the ground at distance d, so a 10 m tree can only break it when it stands
+// within about 7% of R of the target itself. Anything nearer the aircraft sits
+// far below the line of sight and cannot hide anything. The filter below
+// rejects a copse whose centre is within 12% of a target's range, plus the
+// copse's own spread, of ANY point that target passes through. That is more
+// than the geometry needs from wherever the aircraft is, so the picture can
+// never disagree with the sim.
 const TREE_RANGE_MARGIN = 0.12
-const TREE_AZ_PAD = 4 * DEG
+const COPSE_SPREAD_M = 40
 const TREE_MAX_H = 10
 
-function treeBlocksATarget(az, range, targets) {
+function treeBlocksATarget(x, z, targets) {
   for (const t of targets) {
-    if (Math.abs(range - t.range) > t.range * TREE_RANGE_MARGIN) continue
-    const lo = Math.min(t.startAz, t.endAz) - TREE_AZ_PAD
-    const hi = Math.max(t.startAz, t.endAz) + TREE_AZ_PAD
-    if (az >= lo && az <= hi) return true
+    const clear = t.range * TREE_RANGE_MARGIN + COPSE_SPREAD_M
+    const near = (p) => Math.hypot(p[0] - x, p[2] - z) < clear
+    for (let i = 0; i < t.track.length; i += 3) if (near(t.track[i].p)) return true
+    if (near(t.track[t.track.length - 1].p)) return true
   }
   return false
 }
 
-function Trees({ targets }) {
+function Trees({ targets, pathLength }) {
   const trees = useMemo(() => {
     const rng = mulberry32(1618)
     const out = []
@@ -529,9 +628,9 @@ function Trees({ targets }) {
       attempts += 1
       const az = (rng() * 2 - 1) * Math.PI
       const range = 260 + rng() * 4500
-      if (treeBlocksATarget(az, range, targets)) continue
       const cx = Math.sin(az) * range
-      const cz = -Math.cos(az) * range
+      const cz = -pathLength / 2 - Math.cos(az) * range
+      if (treeBlocksATarget(cx, cz, targets)) continue
       // A copse, not a lone tree — a single cone at this range is a speck.
       const n = 3 + Math.floor(rng() * 3)
       const members = []
@@ -547,7 +646,7 @@ function Trees({ targets }) {
       out.push({ key: out.length, cx, cz, members })
     }
     return out
-  }, [targets])
+  }, [targets, pathLength])
 
   return (
     <group>
@@ -565,31 +664,25 @@ function Trees({ targets }) {
   )
 }
 
-function World({ targets }) {
+function World({ targets, pathLength }) {
   const waterZones = useMemo(() => waterZonesFor(targets), [targets])
   return (
     <group>
-      <mesh position={[0, GROUND_Y, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[24000, 24000]} />
+      <mesh position={[0, GROUND_Y, -pathLength / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[24000, 24000 + pathLength]} />
         <meshStandardMaterial color={COLORS.ground} roughness={1} />
       </mesh>
-      <Farmland />
-      <Woodland waterZones={waterZones} />
+      <Farmland pathLength={pathLength} />
+      <Woodland waterZones={waterZones} pathLength={pathLength} />
       <WaterPatches zones={waterZones} />
-      <Roads />
-      <Trees targets={targets} />
-      <Scatter />
+      <Roads pathLength={pathLength} />
+      <Trees targets={targets} pathLength={pathLength} />
+      <Scatter pathLength={pathLength} />
     </group>
   )
 }
 
 // ── Occluders ────────────────────────────────────────────────────────────────
-
-// Air occluders sit well forward of their target so they read as weather;
-// ground ones sit close to it, because a structure that hides a walker 300 m
-// away has to be a building rather than a 100 m tower halfway to them.
-const AIR_OCCLUDER_DIST = 0.6
-const GROUND_OCCLUDER_DIST = 0.9
 
 // The cue arrow disappears once the target is this close to centre — by then it
 // is on screen and pointing at it would just clutter the picture.
@@ -623,10 +716,14 @@ function cloudLumps(seed, halfWidth) {
   return out
 }
 
-function CloudBank({ width, seed }) {
+// `halfHeight` is how far above and below its middle the bank has to reach to
+// cover every sightline it hides; it stands taller than the usual flattened
+// bank when it needs to.
+function CloudBank({ width, seed, halfHeight = 0 }) {
   const lumps = useMemo(() => cloudLumps(seed, width / 2), [seed, width])
+  const yScale = Math.min(1.5, Math.max(0.62, halfHeight / (0.2 * (width / 2))))
   return (
-    <group scale={[1, 0.62, 1]}>
+    <group scale={[1, yScale, 1]}>
       {lumps.map((l, i) => (
         <mesh key={i} position={[l.dx, l.dy, l.dz]}>
           <sphereGeometry args={[l.r, 16, 12]} />
@@ -643,11 +740,9 @@ function CloudBank({ width, seed }) {
   )
 }
 
-// Height the roof clears the line of sight by, in metres.
-const OCCLUDER_HEAD_ROOM = 4
-
-function GroundOccluder({ pos, az, width, waterside }) {
-  const height = (pos[1] - GROUND_Y) + OCCLUDER_HEAD_ROOM
+// `height` comes from the sim: tall enough to clear every sightline the cover
+// hides, by COVER_HEAD_ROOM_M, and no taller.
+function GroundOccluder({ pos, az, width, height, waterside }) {
   const depth = Math.max(3, width * (waterside ? 1.3 : 0.6))
 
   // What hides a boat has to be part of the shoreline. A concrete shed standing
@@ -688,27 +783,29 @@ function GroundOccluder({ pos, az, width, waterside }) {
   )
 }
 
+// The cover, exactly as the sim built it (see buildCover in rttSim). It stands
+// in a vertical plane across the sightline, `uMin` to `uMax` across it, and is
+// drawn `pad` wider each side so a target's leading edge clears it at the
+// instant the sim stops calling it obscured. NOT widened beyond that: wider
+// cover would keep a target hidden after it had become shootable.
 function Occluders({ targets }) {
   const items = useMemo(() => {
     const out = []
     targets.forEach((target) => {
-      target.occlusions.forEach((occ, j) => {
-        const span = occlusionSpan(target, occ)
-        const dist = target.range * (target.ground ? GROUND_OCCLUDER_DIST : AIR_OCCLUDER_DIST)
-        // Half the arc the target walks behind it, plus half the target's own
-        // width — so the target's leading edge clears cover at the instant the
-        // sim stops calling it obscured. NOT clamped to a minimum: a wider
-        // occluder would keep a target hidden after it had become shootable,
-        // and a walker's arc is genuinely only a few metres.
-        const half = span.halfArc + targetAngularSize(target) / 2
+      target.cover.forEach((c, j) => {
+        const mid = (c.uMin + c.uMax) / 2
         out.push({
           key: `${target.id}-${j}`,
           seed: target.id * 977 + j * 31 + 7,
-          ground: target.ground,
-          waterside: target.kind === 'boat',
-          pos: polarToWorld(span.az, span.elev, dist),
-          az: span.az,
-          width: Math.max(1.2, 2 * dist * Math.tan(half)),
+          air: c.air,
+          waterside: c.waterside,
+          pos: [c.p[0] + c.u[0] * mid, (c.yMin + c.yMax) / 2, c.p[2] + c.u[2] * mid],
+          // The angle that turns the scene's local X onto the cover's own
+          // across-axis, (cos az, 0, sin az).
+          az: Math.atan2(c.n[0], -c.n[2]),
+          width: Math.max(1.2, (c.uMax - c.uMin) + 2 * c.pad),
+          height: c.yMax - GROUND_Y,
+          halfHeight: (c.yMax - c.yMin) / 2,
         })
       })
     })
@@ -717,21 +814,17 @@ function Occluders({ targets }) {
 
   return (
     <group>
-      {items.map(o => (o.ground
+      {items.map(o => (!o.air
         ? (
-          // A structure rooted on the ground and rising past the line of sight
-          // (o.pos[1] is exactly where the sightline crosses this distance), so
-          // it reads as part of the landscape rather than a floating box.
-          // Tall enough to break the line of sight and no taller. o.pos[1] is
-          // exactly where the sightline crosses this distance, so the roof only
-          // needs to clear it by a margin — the first pass made these twice
-          // that height and every building came out a nine-storey tower next to
-          // a five-metre truck.
-          <GroundOccluder key={o.key} pos={o.pos} az={o.az} width={o.width} waterside={o.waterside} />
+          // A structure rooted on the ground and rising just past the highest
+          // sightline it hides. The first pass made these twice that height
+          // and every building came out a nine-storey tower next to a
+          // five-metre truck.
+          <GroundOccluder key={o.key} pos={o.pos} az={o.az} width={o.width} height={o.height} waterside={o.waterside} />
         )
         : (
           <group key={o.key} position={o.pos} rotation={[0, -o.az, 0]}>
-            <CloudBank width={o.width} seed={o.seed} />
+            <CloudBank width={o.width} seed={o.seed} halfHeight={o.halfHeight} />
           </group>
         )
       ))}
@@ -942,6 +1035,9 @@ function applyOpacity(root, value) {
     if (!o.isMesh || !o.material) return
     const list = Array.isArray(o.material) ? o.material : [o.material]
     for (const m of list) {
+      // Effects (rotor discs, dust, wakes, trails) set their own see-through
+      // opacity every frame from the same fade; see TargetEffects.
+      if (m.userData.fx) continue
       m.transparent = transparent
       m.opacity = value
       m.depthWrite = !transparent
@@ -949,17 +1045,245 @@ function applyOpacity(root, value) {
   })
 }
 
-// The pass currently on screen. Only one target is ever mounted: passes never
-// overlap, and mounting one at a time keeps the draw-call count flat.
+// ── Target effects (SkyWatch only) ───────────────────────────────────────────
 //
-// Once the window closes the target keeps travelling and fades out over
-// TARGET_EXIT_MS. It is unshootable the whole time — the sim's window has not
-// moved — but a target that vanishes mid-frame is indistinguishable from a
-// broken game, and the player needs to see the pass end rather than infer it.
-function ActiveTarget({ target, simRef }) {
+// Small touches that make a target read as a working machine: turning rotors,
+// a jet's trail, a truck's dust, a boat's wake. All of them are see-through,
+// all sit behind or above the target rather than in front of it, and all are
+// part of the target's own group, so they hide when it is behind cover and
+// fade when it fades. Dust and wake scale with how fast it is going, so a
+// truck that has braked to a stop stops throwing dust.
+//
+// Built along +Z, the way lookAt points the target down its track; behind is
+// -Z. Every material is flagged `fx` so applyOpacity and heatUp leave it alone.
+const FX = { side: THREE.DoubleSide, transparent: true, depthWrite: false, userData: { fx: true } }
+
+function TargetEffects({ kind, size, speedRef, fadeRef }) {
+  const spinRefs = useRef([])
+  const puffRefs = useRef([])
+  const matRefs = useRef([])
+  useFrame((state, delta) => {
+    const fade = fadeRef.current
+    const t = state.clock.elapsedTime
+    for (const r of spinRefs.current) if (r) r.rotation.y += delta * 38
+    if (kind === 'vehicle') {
+      const going = clamp(speedRef.current / 10, 0, 1)
+      puffRefs.current.forEach((m, i) => {
+        if (!m) return
+        const phase = (t * 0.8 + i / 5) % 1
+        m.position.set((i % 2 ? 0.6 : -0.6), 0.8 + phase * 2.4, -size * 0.6 - phase * size * 2.6)
+        m.scale.setScalar(1 + phase * 2.6)
+        m.material.opacity = (1 - phase) * 0.32 * going * fade
+      })
+      return
+    }
+    const going = kind === 'boat' ? clamp(speedRef.current / 6, 0, 1) : 1
+    const base = { helicopter: 0.14, jet: 0.22, boat: 0.5 }[kind] ?? 0
+    for (const m of matRefs.current) if (m) m.opacity = base * going * fade
+  })
+
+  const mat = (i) => (m) => { matRefs.current[i] = m }
+  if (kind === 'helicopter') {
+    // Tandem rotors, fore and aft: a faint disc and a pair of blades each.
+    return [-0.32, 0.32].map((dz, i) => (
+      <group key={i} position={[0, size * 0.24, dz * size]}>
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[size * 0.36, 28]} />
+          <meshBasicMaterial ref={mat(i * 2)} color="#d9e2ea" opacity={0.14} {...FX} />
+        </mesh>
+        <group ref={(r) => { spinRefs.current[i] = r }}>
+          <mesh>
+            <boxGeometry args={[size * 0.72, 0.12, 0.5]} />
+            <meshBasicMaterial ref={mat(i * 2 + 1)} color="#d9e2ea" opacity={0.14} {...FX} />
+          </mesh>
+        </group>
+      </group>
+    ))
+  }
+  if (kind === 'jet') {
+    // A thin trail tapering away behind: a cone whose point is aft.
+    const len = size * 5
+    return (
+      <mesh position={[0, 0, -size * 0.45 - len / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[0.55, len, 10, 1, true]} />
+        <meshBasicMaterial ref={mat(0)} color="#ffffff" opacity={0.22} {...FX} />
+      </mesh>
+    )
+  }
+  if (kind === 'vehicle') {
+    return [0, 1, 2, 3, 4].map(i => (
+      <mesh key={i} ref={(r) => { puffRefs.current[i] = r }}>
+        <sphereGeometry args={[1.1, 10, 8]} />
+        <meshBasicMaterial color="#9c8a66" opacity={0} {...FX} />
+      </mesh>
+    ))
+  }
+  if (kind === 'boat') {
+    // A V of white water from the stern, flat on the water.
+    const len = size * 3.2
+    return (
+      <group position={[0, 0.65, -size * 0.45]}>
+        {[-0.28, 0.28].map((yaw, i) => (
+          <group key={i} rotation={[0, yaw, 0]}>
+            <mesh position={[0, 0, -len / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[0.9, len]} />
+              <meshBasicMaterial ref={mat(i)} color="#eef5fb" opacity={0.5} {...FX} />
+            </mesh>
+          </group>
+        ))}
+        <mesh position={[0, 0, -size * 0.2]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[size * 0.28, 16]} />
+          <meshBasicMaterial ref={mat(2)} color="#eef5fb" opacity={0.5} {...FX} />
+        </mesh>
+      </group>
+    )
+  }
+  return null
+}
+
+// Thermal runs: everything a target is made of glows white-hot. Run on a
+// timer rather than once, because an aircraft's model arrives after the
+// target mounts (it suspends while it loads) and replaces its stand-in body.
+const HEAT = new THREE.Color('#ffffff')
+function heatUp(root) {
+  if (!root) return
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material) return
+    const list = Array.isArray(o.material) ? o.material : [o.material]
+    for (const m of list) {
+      if (m.userData.fx || m.userData.heated || !m.emissive) continue
+      m.emissive = HEAT
+      m.emissiveIntensity = 0.85
+      m.userData.heated = true
+      m.needsUpdate = true
+    }
+  })
+}
+
+// ── Rain (SkyWatch rainy runs) ───────────────────────────────────────────────
+//
+// Real drops falling through the air in front of the sensor, not marks on the
+// screen: the first version was a striped overlay and looked like scratches.
+//
+// The camera's view is narrow and swings about, so drops are kept where they
+// can be seen: each one lives inside the view, between RAIN_NEAR and RAIN_FAR
+// (just past the near plane, and far short of any target), and one that falls
+// or is slewed out of view is put back at a random point inside it. That keeps
+// the density in the picture steady at any aim.
+//
+// Each drop is a short line, bright at the head and fading to nothing at the
+// tail, drawn additively so it only ever lightens the picture a little and
+// never hides anything behind it.
+const RAIN_DROPS = 650
+const RAIN_NEAR = 58
+const RAIN_FAR = 260
+const RAIN_FALL = new THREE.Vector3(4, -40, 1.5)   // m/s, with a little wind
+const RAIN_HEAD = new THREE.Color('#9aa6b2')
+
+// Seeded, like the rest of the scenery, so building it is pure.
+function buildRain() {
+  const rng = mulberry32(7741)
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(RAIN_DROPS * 6), 3))
+  const col = new Float32Array(RAIN_DROPS * 6)
+  for (let i = 0; i < RAIN_DROPS; i++) {
+    // Head lit, tail black: with additive blending black adds nothing.
+    const k = 0.55 + rng() * 0.45
+    col[i * 6] = RAIN_HEAD.r * k
+    col[i * 6 + 1] = RAIN_HEAD.g * k
+    col[i * 6 + 2] = RAIN_HEAD.b * k
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  const drops = Array.from({ length: RAIN_DROPS }, () => ({
+    p: new THREE.Vector3(),
+    len: 3 + rng() * 4,
+    live: false,
+  }))
+  return { geometry: geo, drops }
+}
+
+function Rain() {
+  const { geometry, drops } = useMemo(() => buildRain(), [])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  // The frame loop writes the drops through the mounted object, not the memo.
+  const segRef = useRef(null)
+
+  const local = useRef(new THREE.Vector3())
+  const dir = useRef(RAIN_FALL.clone().normalize())
+
+  useFrame((state, delta) => {
+    const seg = segRef.current
+    if (!seg) return
+    const cam = state.camera
+    cam.updateMatrixWorld()
+    const dt = Math.min(0.05, delta)
+    const tanH = Math.tan((cam.fov * DEG) / 2) * 1.1
+    const tanW = tanH * cam.aspect
+    const attr = seg.geometry.attributes.position
+    const pos = attr.array
+    const v = local.current
+    drops.forEach((d, i) => {
+      if (d.live) {
+        d.p.addScaledVector(RAIN_FALL, dt)
+        v.copy(d.p).applyMatrix4(cam.matrixWorldInverse)
+        const depth = -v.z
+        d.live = depth > RAIN_NEAR && depth < RAIN_FAR
+          && Math.abs(v.x) < depth * tanW && Math.abs(v.y) < depth * tanH
+      }
+      if (!d.live) {
+        const depth = RAIN_NEAR + Math.random() * (RAIN_FAR - RAIN_NEAR)
+        v.set((Math.random() * 2 - 1) * depth * tanW, (Math.random() * 2 - 1) * depth * tanH, -depth)
+        d.p.copy(v).applyMatrix4(cam.matrixWorld)
+        d.live = true
+      }
+      const o = i * 6
+      pos[o] = d.p.x
+      pos[o + 1] = d.p.y
+      pos[o + 2] = d.p.z
+      pos[o + 3] = d.p.x - dir.current.x * d.len
+      pos[o + 4] = d.p.y - dir.current.y * d.len
+      pos[o + 5] = d.p.z - dir.current.z * d.len
+    })
+    attr.needsUpdate = true
+  })
+
+  return (
+    <lineSegments ref={segRef} geometry={geometry} frustumCulled={false}>
+      <lineBasicMaterial vertexColors transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} />
+    </lineSegments>
+  )
+}
+
+// How far an aircraft is banked at a moment, from its stored track.
+function bankAt(target, tMs) {
+  const pts = target.track
+  if (pts.length < 2) return 0
+  const local = tMs - target.tStartMs
+  const i = clamp(Math.round((local - pts[0].t) / (pts[1].t - pts[0].t)), 0, pts.length - 1)
+  return pts[i].bank ?? 0
+}
+
+// One target, for the whole of its time in the world. Every target is mounted
+// for the whole run and shows itself only while it is out there:
+//
+//   • a static installation from the start of the run, because buildings
+//     don't appear out of nowhere;
+//   • a moving target from TARGET_PREVIEW_MS before its pass, fading in, and
+//     already travelling — so the next target is in the world well before the
+//     current pass ends rather than appearing as the camera arrives at it;
+//   • and for TARGET_EXIT_MS after its pass, still travelling and fading out,
+//     because a target that vanishes mid-frame is indistinguishable from a
+//     broken game.
+//
+// It is only shootable inside its pass; the sim's window is unchanged.
+function ActiveTarget({ target, simRef, fancy, thermal }) {
   const groupRef = useRef(null)
   const aheadRef = useRef(new THREE.Vector3())
   const fadedRef = useRef(false)
+  // For the effects: how fast it is going (m/s) and how faded it is (0…1).
+  const speedRef = useRef(0)
+  const fadeRef = useRef(1)
+  const heatTickRef = useRef(0)
 
   // Walked on demand rather than collected once into a ref: the materials only
   // need touching during the half-second a target is fading out, and caching
@@ -980,34 +1304,112 @@ function ActiveTarget({ target, simRef }) {
     const live = isTargetVisible(target, t)
     const sinceEnd = t - target.tEndMs
     const exiting = !live && sinceEnd >= 0 && sinceEnd < TARGET_EXIT_MS
-    if (!live && !exiting) { g.visible = false; return }
+    const appearAt = target.kind === 'static' ? 0 : target.tStartMs - TARGET_PREVIEW_MS
+    const early = !live && t >= appearAt && t < target.tStartMs
+    if (!live && !exiting && !early) { g.visible = false; return }
 
     g.visible = live ? !isTargetOccluded(target, t) : true
-    setOpacity(exiting ? 1 - sinceEnd / TARGET_EXIT_MS : 1)
+    const fadeIn = target.kind === 'static' ? 1 : Math.min(1, (t - appearAt) / TARGET_FADE_IN_MS)
+    const fade = exiting ? 1 - sinceEnd / TARGET_EXIT_MS : fadeIn
+    setOpacity(fade)
+    fadeRef.current = fade
+    if (thermal && heatTickRef.current-- <= 0) {
+      heatTickRef.current = 30
+      heatUp(g)
+    }
 
-    // Unclamped during the exit, so the target carries on down its track
-    // instead of freezing at the last frame of the window.
-    const now = targetDirectionAt(target, t, !exiting)
-    const [x, y, z] = polarToWorld(now.az, now.elev, target.range)
+    // Unclamped outside the pass, so the target travels its track before the
+    // pass and carries on down it after, instead of sitting at either end.
+    const [x, y, z] = targetWorldAt(target, t, live)
     g.position.set(x, y, z)
+    if (fancy) {
+      const [nx, , nz] = targetWorldAt(target, t + 100, false)
+      speedRef.current = Math.hypot(nx - x, nz - z) * 10
+    }
 
-    if (target.startAz === target.endAz) {
+    if (target.kind === 'static') {
       // A static installation has no track to face down, so it faces the
       // station — level, not tipped up at it.
-      aheadRef.current.set(0, y, 0)
+      const [sx, , sz] = stationAt(t)
+      aheadRef.current.set(sx, y, sz)
     } else {
-      const soon = targetDirectionAt(target, t + 400, !exiting)
-      const [ax, ay, az] = polarToWorld(soon.az, soon.elev, target.range)
+      // Facing along its travel. The ahead point is the very next stretch of
+      // track, so the model follows the curve it is actually on.
+      const [ax, ay, az] = targetWorldAt(target, t + 150, false)
       aheadRef.current.set(ax, ay, az)
     }
+    // A target that has slowed to a stop keeps the heading it had.
     if (aheadRef.current.distanceToSquared(g.position) > 1e-4) g.lookAt(aheadRef.current)
+    // Aircraft bank into their turns. lookAt points the model's +Z along the
+    // track, so rolling about Z is rolling about the nose.
+    if (!target.ground) g.rotateZ(bankAt(target, t))
   })
 
   return (
     <group ref={groupRef} visible={false}>
       <TargetBody target={target} />
+      {fancy && <TargetEffects kind={target.kind} size={target.size} speedRef={speedRef} fadeRef={fadeRef} />}
     </group>
   )
+}
+
+// Aircraft that are not targets (Real CBAT only — see buildDecoys in rttSim).
+// Always further away than any target, so they pass behind one and never in
+// front of it, and they score nothing. All mounted for the whole run and
+// shown only while they are flying: there are a handful, and mounting them
+// as they appear would load a model mid-run.
+function Decoy({ decoy, simRef }) {
+  const groupRef = useRef(null)
+  const aheadRef = useRef(new THREE.Vector3())
+  useFrame(() => {
+    const g = groupRef.current
+    const sim = simRef.current
+    if (!g || !sim) return
+    const t = sim.elapsedMs
+    const live = t >= decoy.tStartMs && t < decoy.tEndMs
+    g.visible = live
+    if (!live) return
+    const [x, y, z] = targetWorldAt(decoy, t)
+    g.position.set(x, y, z)
+    const [ax, ay, az] = targetWorldAt(decoy, t + 400, false)
+    aheadRef.current.set(ax, ay, az)
+    if (aheadRef.current.distanceToSquared(g.position) > 1e-4) g.lookAt(aheadRef.current)
+  })
+  return (
+    <group ref={groupRef} visible={false}>
+      <TargetBody target={decoy} />
+    </group>
+  )
+}
+
+function Decoys({ decoys, simRef }) {
+  return decoys.map(d => <Decoy key={d.id} decoy={d} simRef={simRef} />)
+}
+
+// A small square picture of what is in the middle of the frame, for the
+// SkyWatch contact sheet: three times the reticle's width, at 128 px, as a
+// JPEG. The canvas keeps its last frame (preserveDrawingBuffer, SkyWatch only)
+// so it can be read straight after the shot. A thermal run's grey look is a
+// CSS filter on the canvas, so it is applied here too. Null if the browser
+// refuses, which only costs the picture.
+const PHOTO_PX = 128
+function capturePhoto(canvas, sim) {
+  try {
+    const w = canvas.width
+    const h = canvas.height
+    const box = reticleHeightPercent(sim.captureRad, CAMERA_FOV_DEG) / 100
+    const side = Math.min(w, h, h * box * 3)
+    const out = document.createElement('canvas')
+    out.width = PHOTO_PX
+    out.height = PHOTO_PX
+    const ctx = out.getContext('2d')
+    if (!ctx) return null
+    if (sim.look === 'thermal') ctx.filter = THERMAL_FILTER
+    ctx.drawImage(canvas, (w - side) / 2, (h - side) / 2, side, side, 0, 0, PHOTO_PX, PHOTO_PX)
+    return out.toDataURL('image/jpeg', 0.72)
+  } catch {
+    return null
+  }
 }
 
 // ── Driver ───────────────────────────────────────────────────────────────────
@@ -1025,16 +1427,27 @@ function fmtClock(ms) {
 // not decoration: React 19's react-hooks/immutability rule forbids writing
 // through a prop, and pushing 60 Hz of text through React state instead would
 // cost a render a frame.
-function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, readyRef, camRef, onHud, onShot, onEnd, setActiveIndex }) {
+function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, readyRef, camRef, onHud, onShot, onEnd }) {
   const endedRef = useRef(false)
-  const activeRef = useRef(-2)
   // Reused every frame so the loop allocates nothing.
   const hudOut = useRef({
     reticle: 'idle', stickX: 0, stickY: 0,
     clock: '0:00', score: '0', az: '000', elev: '+00',
     frames: '', label: 'STAND BY', count: '', window: '0%',
     cueOn: false, cueNext: false, cueAngle: '0deg', cueDeg: '',
+    // Only written on Real CBAT, where the zoom changes the box's size.
+    reticleSize: '',
+    // SkyWatch only: the lock bracket round the target (percent of the
+    // picture), the range readout, and the pass card.
+    bracket: 'off', bracketX: '50%', bracketY: '50%', bracketSize: '10%',
+    range: '',
+    callout: '', calloutKey: -1,
   })
+  // SkyWatch: was the target in the reticle last frame (for the lock tone).
+  const lockedRef = useRef(false)
+  const projRef = useRef(new THREE.Vector3())
+  // Real CBAT zoom: 0 wide … 1 zoomed in. Starts wide, for the search.
+  const zoomRef = useRef({ z: 0, zoomingIn: false })
   // Yaw then pitch, the FPS convention. Built as a quaternion rather than by
   // setting camera.rotation.order, which would mean assigning to a value the
   // useThree hook returned.
@@ -1061,7 +1474,13 @@ function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, readyRef, cam
 
     input.poll()
     const { x, y } = input.axes()
-    const rate = MAX_SLEW_DEG_PER_SEC * DEG * (sensitivityRef.current || 1)
+    const zoomOn = !!sim.tuning.zoom
+    const zoom = zoomRef.current
+    const fov = zoomOn ? fovForZoom(zoom.z) : CAMERA_FOV_DEG
+    // The slew rate scales with the field of view, so a wide view turns fast
+    // and coarse and a zoomed one turns finely. On SkyWatch the view never
+    // changes, so the factor is always 1.
+    const rate = MAX_SLEW_DEG_PER_SEC * DEG * (sensitivityRef.current || 1) * (fov / CAMERA_FOV_DEG)
     const cam = camRef.current
     cam.az = clamp(cam.az + x * rate * dt, -AZ_LIMIT, AZ_LIMIT)
     // Screen-Y grows downward, so pushing the stick down must lower the aim.
@@ -1070,7 +1489,24 @@ function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, readyRef, cam
     cam.stickX = x
     cam.stickY = y
 
+    // The stabiliser (Real CBAT): once zoomed in on the live target, the
+    // gimbal follows a share of its motion by itself. A share only, so it
+    // still takes the player's hands to keep it in the box.
+    if (zoomOn && zoom.z > 0) {
+      const live = sim.run.targets.find(tg => isTargetVisible(tg, sim.elapsedMs))
+      if (live) {
+        const a = targetDirectionAt(live, sim.elapsedMs)
+        const b = targetDirectionAt(live, sim.elapsedMs + dt * 1000)
+        const k = STABILISER_GAIN * zoom.z
+        cam.az = clamp(cam.az + (b.az - a.az) * k, -AZ_LIMIT, AZ_LIMIT)
+        cam.elev = clamp(cam.elev + (b.elev - a.elev) * k, ELEV_MIN, ELEV_MAX)
+      }
+    }
+
     advanceRtt(sim, dt * 1000)
+    // The aircraft carries the camera forward.
+    const [px, py, pz] = stationAt(sim.elapsedMs)
+    camera.position.set(px, py, pz)
 
     // The airframe's residual motion, added on top of what the player commanded.
     // The result is the ACTUAL line of sight, and it drives both the camera and
@@ -1093,40 +1529,109 @@ function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, readyRef, cam
         index: i,
         errorRad: angularError(aimAz, aimElev, d.az, d.elev),
         occluded: isTargetOccluded(target, sim.elapsedMs),
+        range: d.range,
       })
     }
 
+    // Real CBAT scores time in the box, so it has to be counted every frame.
+    trackRtt(sim, candidates, dt * 1000)
+
+    const fancy = !sim.tuning.realCbat
     const shots = input.consumeTriggerEdges()
     for (let s = 0; s < shots; s++) {
       const result = fireShutter(sim, candidates)
-      if (result.kind !== 'cooldown') onShot?.(result)
+      if (result.kind === 'cooldown') continue
+      // SkyWatch keeps the picture of every frame that landed, for the
+      // contact sheet on the results screen.
+      if (fancy && result.kind === 'hit') {
+        const src = capturePhoto(state.gl.domElement, sim)
+        if (src) {
+          sim.photos.push({
+            target: result.targetIndex,
+            centring: 1 - result.errorRad / sim.captureRad,
+            points: result.points,
+            src,
+          })
+        }
+      }
+      onShot?.(result)
     }
 
     // ── HUD ──────────────────────────────────────────────────────────────────
     const active = candidates.length ? candidates[0] : null
 
-    // What is MOUNTED runs a little past what is shootable, so the target can be
-    // seen to leave (see ActiveTarget). The two indices are deliberately
-    // separate: `active` decides scoring and the reticle, `stageIndex` decides
-    // what is on screen.
+    // The pass the HUD describes runs a little past what is shootable, so it
+    // can say PASS COMPLETE while the target is seen to leave (see
+    // ActiveTarget). The two indices are deliberately separate: `active`
+    // decides scoring and the reticle, `stageIndex` decides the HUD's labels.
     let stageIndex = -1
     for (let i = 0; i < sim.run.targets.length; i++) {
       const tg = sim.run.targets[i]
       if (sim.elapsedMs >= tg.tStartMs && sim.elapsedMs < tg.tEndMs + TARGET_EXIT_MS) { stageIndex = i; break }
     }
-    if (stageIndex !== activeRef.current) {
-      activeRef.current = stageIndex
-      setActiveIndex(stageIndex)
-    }
 
-    const done = !!active && sim.progress[active.index].frames >= RTT_FRAMES_PER_TARGET
+    // On Real CBAT the pass keeps scoring after the third frame, for time in
+    // the box, so the reticle never goes to 'done' there.
+    const done = !sim.tuning.trackScoring && !!active
+      && sim.progress[active.index].frames >= RTT_FRAMES_PER_TARGET
     const onTarget = !!active && active.errorRad <= sim.captureRad && !active.occluded
     const obscured = !!active && active.occluded
     const hud = hudOut.current
     // 'done' is its own state on purpose: with three frames in the bag there is
     // nothing left to earn on this target, and a reticle still glowing green
-    // would keep inviting shots that can only cost points.
-    hud.reticle = done ? 'done' : onTarget ? 'lock' : obscured ? 'obscured' : 'idle'
+    // would keep inviting shots that can only cost points. 'hold' is Real
+    // CBAT's "in the box but not held long enough for a frame to count yet".
+    hud.reticle = done ? 'done'
+      : onTarget ? (isLocked(sim, active.index) ? 'lock' : 'hold')
+        : obscured ? 'obscured' : 'idle'
+
+    // ── SkyWatch extras ──────────────────────────────────────────────────────
+    if (fancy) {
+      // A double pip the moment the target comes into the reticle.
+      const locked = onTarget && !done
+      if (locked && !lockedRef.current) playRttLock()
+      lockedRef.current = locked
+
+      // The bracket hugs the live target wherever it is in the picture.
+      const visible = !!active && !active.occluded
+      let shown = false
+      if (visible) {
+        const [wx, wy, wz] = targetWorldAt(sim.run.targets[active.index], sim.elapsedMs)
+        const v = projRef.current.set(wx, wy, wz).project(camera)
+        if (v.z < 1 && Math.abs(v.x) <= 1.05 && Math.abs(v.y) <= 1.05) {
+          shown = true
+          const target = sim.run.targets[active.index]
+          const angular = Math.atan(target.size / active.range)
+          const pct = Math.max(5, (angular / (camera.fov * DEG)) * 100 * 1.8)
+          hud.bracketX = `${Math.round((v.x + 1) * 500) / 10}%`
+          hud.bracketY = `${Math.round((1 - v.y) * 500) / 10}%`
+          hud.bracketSize = `${Math.round(pct * 10) / 10}%`
+        }
+      }
+      hud.bracket = !shown ? 'off' : onTarget ? 'lock' : 'track'
+      hud.range = active ? `${Math.round(active.range)} m` : '–'
+
+      // The pass card, once as each pass goes live.
+      if (active && hud.calloutKey !== active.index) {
+        const target = sim.run.targets[active.index]
+        hud.calloutKey = active.index
+        hud.callout = `Target ${active.index + 1} of ${sim.run.targets.length}: ${target.name ?? target.label}`
+      }
+    }
+
+    // ── Zoom ─────────────────────────────────────────────────────────────────
+    if (zoomOn) {
+      const next = zoomStep(zoom.z, active ? active.errorRad : null, dt * 1000, zoom.zoomingIn)
+      zoomRef.current = next
+      const nextFov = fovForZoom(next.z)
+      if (Math.abs(camera.fov - nextFov) > 1e-3) {
+        camera.fov = nextFov
+        camera.updateProjectionMatrix()
+      }
+      // The box is the capture cone, so it grows on screen as the view
+      // narrows. One decimal, which the browser keeps as written.
+      hud.reticleSize = `${Math.round(reticleHeightPercent(sim.captureRad, nextFov) * 10) / 10}%`
+    }
     hud.stickX = cam.stickX
     hud.stickY = cam.stickY
     hud.clock = fmtClock(sim.durationMs - sim.elapsedMs)
@@ -1179,7 +1684,11 @@ function RttDriver({ simRef, inputRef, sensitivityRef, runningRef, readyRef, cam
     }
     if (cueIndex >= 0) {
       const tg = sim.run.targets[cueIndex]
-      const dir = targetDirectionAt(tg, Math.max(sim.elapsedMs, tg.tStartMs))
+      // From where the aircraft is NOW to where the target is now — the next
+      // one is already out there and moving before its pass (see ActiveTarget).
+      // Before even that, to where it will turn up.
+      const at = Math.max(sim.elapsedMs, tg.tStartMs - TARGET_PREVIEW_MS)
+      const dir = targetDirectionAt(tg, at, isTargetVisible(tg, at), sim.elapsedMs)
       const offRad = angularError(aimAz, aimElev, dir.az, dir.elev)
       hud.cueOn = offRad > CUE_HIDE_RAD
       hud.cueNext = cueIsNext
@@ -1218,28 +1727,19 @@ function ReadyNow({ onReady }) {
   return null
 }
 
-// Only the active pass is mounted; the driver reports which one that is and this
-// swaps the body over. Kept in its own component so a target change remounts the
-// model without disturbing the driver.
+// Every target, mounted once for the whole run; each one decides for itself
+// when it is in the world (see ActiveTarget). That is a dozen small groups,
+// and it means nothing mounts or loads mid-run.
 //
-// `sim` is passed as a plain prop as well as a ref: the render tree needs the
-// run's target list, and React 19's react-hooks/refs rule (rightly) forbids
-// reading simRef.current during render. Same object either way — the prop is for
-// rendering, the ref is for the frame loop.
-function TargetStage({ sim, simRef, activeIndex }) {
-  if (!sim || activeIndex < 0) return null
-  const target = sim.run.targets[activeIndex]
-  if (!target) return null
-  return <ActiveTarget key={target.id} target={target} simRef={simRef} />
+// `targets` is a plain prop rather than read from simRef: React 19's
+// react-hooks/refs rule (rightly) forbids reading a ref during render.
+function TargetStage({ targets, simRef, fancy, thermal }) {
+  return targets.map(t => (
+    <ActiveTarget key={t.id} target={t} simRef={simRef} fancy={fancy} thermal={thermal} />
+  ))
 }
 
-// Which pass is on screen is scene-local state, deliberately held INSIDE the
-// canvas subtree: keeping it here means a target change re-renders the three
-// components below it and nothing else. Lifting it to the page would re-render
-// <Canvas> itself a dozen times a run, and the HUD along with it — for a value
-// the HUD already gets written directly by the frame loop.
 function SceneContents({ sim, simRef, inputRef, sensitivityRef, runningRef, camRef, onHud, onShot, onEnd }) {
-  const [activeIndex, setActiveIndex] = useState(-1)
   const readyRef = useRef(false)
   const markReady = useCallback(() => { readyRef.current = true }, [])
   // A slow or failed download must never hold the run on LOADING for good.
@@ -1248,19 +1748,23 @@ function SceneContents({ sim, simRef, inputRef, sensitivityRef, runningRef, camR
     return () => clearTimeout(id)
   }, [markReady])
   const targets = sim?.run?.targets ?? []
+  const decoys = sim?.run?.decoys ?? []
+  const pathLength = platformPathLength(sim?.durationMs ?? 0)
+  const look = LOOKS[sim?.look] ?? LOOKS.dusk
+  const fancy = !!sim && !sim.tuning.realCbat
 
   return (
     <>
-      <color attach="background" args={[COLORS.skyTop]} />
+      <color attach="background" args={[look.skyTop]} />
       {/* Fog is the horizon: the ground fades into the sky's haze band at
           distance instead of ending on a hard line. Near sits past the furthest
           target (about 1150 m) so nothing the player has to see is washed out,
           and far is close enough in that the farmland is fully hazed by the time
           it runs out at FARM_HALF — otherwise the edge of the patchwork shows
           as a ring on the ground. */}
-      <fog attach="fog" args={[COLORS.skyHorizon, 1200, 5200]} />
+      <fog attach="fog" args={[look.skyHorizon, 1200, look.fogFar]} />
 
-      <SkyDome />
+      <SkyDome simRef={simRef} look={look} />
 
       {/* Dusk key from high and to the right, a cool fill from the opposite side
           so nothing's underside goes black, and a hemisphere to seat everything
@@ -1270,18 +1774,20 @@ function SceneContents({ sim, simRef, inputRef, sensitivityRef, runningRef, camR
           rendered as something noticeably different from what was written —
           a considered woodland green came out as vivid grass. Keeping the total
           near unity makes the palette mean what it says. */}
-      <ambientLight intensity={0.3} />
-      <hemisphereLight args={[COLORS.skyHorizon, COLORS.ground, 0.45]} />
-      <directionalLight position={[900, 1400, 600]} intensity={0.95} color="#ffeeda" />
+      <ambientLight intensity={look.ambient} />
+      <hemisphereLight args={[look.skyHorizon, COLORS.ground, look.hemi]} />
+      <directionalLight position={look.key.pos} intensity={look.key.intensity} color={look.key.color} />
       {/* The fill matters more than it looks. Buildings and the earth banks that
           hide boats are boxes whose camera-facing side is often turned away from
           the key, and with a weaker fill they rendered as flat black slabs that
           read as holes in the landscape rather than as cover. */}
-      <directionalLight position={[-800, 500, -700]} intensity={0.5} color="#8fb6e8" />
+      <directionalLight position={look.fill.pos} intensity={look.fill.intensity} color={look.fill.color} />
 
-      <World targets={targets} />
+      <World targets={targets} pathLength={pathLength} />
       <Occluders targets={targets} />
-      <TargetStage sim={sim} simRef={simRef} activeIndex={activeIndex} />
+      <TargetStage targets={targets} simRef={simRef} fancy={fancy} thermal={!!look.thermal} />
+      <Decoys decoys={decoys} simRef={simRef} />
+      {look.rain && <Rain />}
       <ErrorCatcher fallback={<ReadyNow onReady={markReady} />}>
         <Suspense fallback={null}>
           <ModelsReady urls={AIRCRAFT_MODELS} onReady={markReady} />
@@ -1298,7 +1804,6 @@ function SceneContents({ sim, simRef, inputRef, sensitivityRef, runningRef, camR
         onHud={onHud}
         onShot={onShot}
         onEnd={onEnd}
-        setActiveIndex={setActiveIndex}
       />
     </>
   )
@@ -1326,11 +1831,15 @@ function SceneContents({ sim, simRef, inputRef, sensitivityRef, runningRef, camR
 const CAMERA_NEAR = 50
 const CAMERA_PROPS = { position: [0, 0, 0], fov: CAMERA_FOV_DEG, near: CAMERA_NEAR, far: 20000 }
 const GL_PROPS = { antialias: true, powerPreference: 'high-performance' }
+// SkyWatch keeps each frame readable after it is drawn, so a captured frame
+// can be copied for the contact sheet (see capturePhoto).
+const GL_PROPS_PHOTO = { ...GL_PROPS, preserveDrawingBuffer: true }
 // Capped rather than uncapped: the sensor picture is a low-contrast scene where
 // extra pixels buy almost nothing, and this game has to stay playable on the
 // phones the CBAT-only app runs on.
 const DPR = [1, 1.5]
 const CANVAS_STYLE = { width: '100%', height: '100%' }
+const CANVAS_STYLE_THERMAL = { ...CANVAS_STYLE, filter: THERMAL_FILTER }
 
 export default function RttScene(props) {
   const demoCanvas = useCbatDemoCanvas()
@@ -1340,8 +1849,8 @@ export default function RttScene(props) {
       {...demoCanvas}
       camera={CAMERA_PROPS}
       dpr={demoCanvas.dpr ?? DPR}
-      gl={GL_PROPS}
-      style={CANVAS_STYLE}
+      gl={props.sim && !props.sim.tuning.realCbat ? GL_PROPS_PHOTO : GL_PROPS}
+      style={props.sim?.look === 'thermal' ? CANVAS_STYLE_THERMAL : CANVAS_STYLE}
     >
       <SceneContents {...props} />
     </Canvas>

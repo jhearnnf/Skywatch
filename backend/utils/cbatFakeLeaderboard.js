@@ -341,7 +341,7 @@ const FAKE_TUNING = {
   },
   'rtt': {
     // Rapid Tracking Test — accumulating totalScore (higher better), no fixed
-    // ceiling in the leaderboard's eyes, though a flawless run tops out at 1800
+    // ceiling in the leaderboard's eyes, though a flawless run tops out at 1980
     // (12 passes × 3 dead-centre frames + completion bonuses). The demo ceiling
     // of 960 is a strong-but-human run: most frames captured, most of them off
     // centre, a couple of passes lost behind cover. Roster trails to 230.
@@ -350,27 +350,29 @@ const FAKE_TUNING = {
     // stored times from all matching.
     //
     // Dropped ~8% from the original tuning when airframe drift went into the
-    // game — the wander mostly costs centring bonus rather than hits. That is
-    // an estimate: retune this and the grade bands in rttDifficulty.js together
-    // once there are real runs to look at.
+    // game — the wander mostly costs centring bonus rather than hits — and
+    // raised 5% on 2026-10-01, when a perfect target went from 150 to 165
+    // points (a flawless run is now 1980). Both are estimates: retune this and
+    // the grade bands in rttDifficulty.js together once there are real runs to
+    // look at.
     //
     // DELIBERATELY NOT round numbers. The multiple-of-5 sequences elsewhere in
     // this file exist because those games can only PRODUCE multiples of 5 (ANT
     // awards 10/5/0, FLAG's awards are all multiples of 5) — there, a demo
     // score of 63 would be impossible and look fabricated. RTT is the opposite:
-    // a frame pays 20 plus a centring bonus of `round(20 × howCentred)`, so a
+    // a frame pays 22 plus a centring bonus of `round(23 × howCentred)`, so a
     // real total is an arbitrary integer, and a board where every score happens
     // to end in 0 or 5 is itself the tell.
-    floor: 230, ceiling: 960, seedTime: 114.8, timeStep: 0.3,
-    scoreSequence: [958, 921, 884, 852, 813, 779, 748, 711, 679, 641, 608, 572, 539, 504, 468, 431, 396, 357, 312, 264],
+    floor: 242, ceiling: 1008, seedTime: 114.8, timeStep: 0.3,
+    scoreSequence: [1006, 967, 928, 895, 854, 818, 785, 747, 713, 673, 638, 601, 566, 529, 491, 453, 416, 375, 328, 277],
   },
   'rtt-easier': {
     // Eight passes instead of twelve, so the achievable total is two thirds of
-    // Hard's (1200 for a perfect run) — the demo band scales with it rather
+    // Hard's (1320 for a perfect run) — the demo band scales with it rather
     // than sitting higher because the game is easier. Arbitrary integers for
     // the same reason as Hard's, above.
-    floor: 175, ceiling: 675, seedTime: 80.6, timeStep: 0.3,
-    scoreSequence: [673, 644, 621, 592, 571, 538, 517, 489, 466, 438, 412, 387, 361, 338, 309, 283, 261, 233, 209, 181],
+    floor: 184, ceiling: 709, seedTime: 80.6, timeStep: 0.3,
+    scoreSequence: [707, 676, 652, 622, 600, 565, 543, 513, 489, 460, 433, 406, 379, 355, 324, 297, 274, 245, 219, 190],
   },
 
   // ── The five tests added to complete the RAF roster ─────────────────────────

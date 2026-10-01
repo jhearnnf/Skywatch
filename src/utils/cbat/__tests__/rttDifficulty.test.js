@@ -123,3 +123,42 @@ describe('RTT persistence', () => {
     expect(readStoredSensitivity()).toBe(DEFAULT_SENSITIVITY)
   })
 })
+
+// Real CBAT adds realism on top of each difficulty, from a player's account of
+// the real test. It must never change which board a run is posted to.
+describe('Real CBAT tuning', () => {
+  it('keeps the difficulty and the board, and switches the realism on', () => {
+    for (const key of ['easier', 'hard']) {
+      const plain = rttTuning(key)
+      const real = rttTuning(key, true)
+      expect(real.gameKey).toBe(plain.gameKey)
+      expect(real.targets).toBe(plain.targets)
+      expect(real.kinds).toEqual(plain.kinds)
+      expect(real.realCbat).toBe(true)
+      expect(real.zoom).toBe(true)
+      expect(real.trackScoring).toBe(true)
+      expect(real.manoeuvres).toHaveLength(2)
+      expect(real.decoyGapMs).toHaveLength(2)
+      expect(plain.zoom).toBeUndefined()
+      expect(plain.trackScoring).toBeUndefined()
+    }
+  })
+
+  it('turns harder on Hard: more manoeuvres and more traffic', () => {
+    const e = rttTuning('easier', true)
+    const h = rttTuning('hard', true)
+    expect(h.manoeuvres[1]).toBeGreaterThan(e.manoeuvres[1])
+    expect(h.decoyGapMs[0]).toBeLessThan(e.decoyGapMs[0])
+  })
+
+  it('grades on sane bands, a little below SkyWatch s for the harder task', () => {
+    for (const key of ['easier', 'hard']) {
+      const t = rttTuning(key, true)
+      expect(t.grades.outstanding).toBeLessThan(maxRttScore(t))
+      expect(t.grades.outstanding).toBeGreaterThan(t.grades.good)
+      expect(t.grades.good).toBeGreaterThan(t.grades.needsWork)
+      expect(t.grades.needsWork).toBeGreaterThan(0)
+      expect(t.grades.outstanding).toBeLessThan(rttTuning(key).grades.outstanding)
+    }
+  })
+})

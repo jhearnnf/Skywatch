@@ -420,6 +420,59 @@ export function playRttShutter(kind = 'hit') {
   })
 }
 
+// RTT (SkyWatch theme): a dead-centre frame gets the ordinary snap plus a bright
+// rising chime on top, so a perfect shot sounds like one.
+export function playRttPerfect() {
+  playRttShutter('hit')
+  if (isDemoActive()) return
+  const vol = masterVol(0.12)
+  if (vol <= 0) return
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const now = ctx.currentTime + 0.04
+      ;[1320, 1980].forEach((freq, i) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        const at = now + i * 0.07
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(freq, at)
+        gain.gain.setValueAtTime(0.0001, at)
+        gain.gain.exponentialRampToValueAtTime(vol, at + 0.01)
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22)
+        osc.connect(gain).connect(ctx.destination)
+        osc.start(at)
+        osc.stop(at + 0.25)
+      })
+    } catch { /* audio context unavailable — feedback, not gameplay */ }
+  })
+}
+
+// RTT (SkyWatch theme): a short double pip when the target comes into the
+// reticle, like a targeting pod reporting lock.
+export function playRttLock() {
+  if (isDemoActive()) return
+  const vol = masterVol(0.08)
+  if (vol <= 0) return
+  getRunningAudioCtx().then(ctx => {
+    try {
+      const now = ctx.currentTime
+      ;[0, 0.06].forEach((delay) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        const at = now + delay
+        osc.type = 'square'
+        osc.frequency.setValueAtTime(2400, at)
+        gain.gain.setValueAtTime(0.0001, at)
+        gain.gain.exponentialRampToValueAtTime(vol, at + 0.004)
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.035)
+        osc.connect(gain).connect(ctx.destination)
+        osc.start(at)
+        osc.stop(at + 0.05)
+      })
+    } catch { /* audio context unavailable — feedback, not gameplay */ }
+  })
+}
+
 // Synchronous read of the CBAT menu-music admin setting from the settings cache.
 // Returns { volume: 0..1, enabled }. Falls back to full-volume/enabled until the
 // settings fetch has warmed the cache (matches how other sounds behave on a
