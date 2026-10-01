@@ -6,6 +6,7 @@ import { initPostHog } from './lib/posthog'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { setUpdateSW } from './utils/appUpdate'
+import { markUpdateReady, startUpdateChecks } from './utils/staleBuild'
 import { recoverFromChunkError } from './utils/chunkLoadRecovery'
 import { getActiveMock } from './lib/cbatMockSession'
 import { preparePublicPagePreview } from './utils/publicPagePreview'
@@ -27,10 +28,21 @@ if (Capacitor.isNativePlatform()) {
 // version" button can ask the worker to check for a new deploy before it
 // clears the caches. Without this it would be discarded and the button would
 // have only the blunt instrument.
+//
+// A new build does not reload the page the moment it activates (that could be mid-game): it is
+// marked ready and loaded at the next safe page change, and checked for every 15 minutes since a
+// tab left open never re-checks on its own. See utils/staleBuild.js.
 if (!Capacitor.isNativePlatform() && import.meta.env.PROD) {
   import('virtual:pwa-register')
-    .then(({ registerSW }) => setUpdateSW(registerSW({ immediate: true })))
-    .catch(() => { /* SW unavailable — app still works online */ })
+    .then(({ registerSW }) => setUpdateSW(registerSW({
+      immediate: true,
+      onNeedReload: markUpdateReady,
+      onRegisteredSW: (_url, registration) => startUpdateChecks({ registration: registration ?? null }),
+      onRegisterError: () => startUpdateChecks(),
+    })))
+    .catch(() => { if ('serviceWorker' in navigator) startUpdateChecks() /* compare against /version.json instead */ })
+  // No service worker support at all: registerSW does nothing and calls nothing back.
+  if (!('serviceWorker' in navigator)) startUpdateChecks()
 }
 
 // A deploy renamed the code this tab still asks for. See utils/chunkLoadRecovery.js.

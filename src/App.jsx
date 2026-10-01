@@ -87,6 +87,7 @@ import CbatLeaderboard from './pages/CbatLeaderboard'
 import CbatAptitudeReport from './pages/CbatAptitudeReport'
 import CbatMock, { CbatMockSheetPage } from './pages/CbatMock'
 import CbatMockLock from './components/cbat/CbatMockLock'
+import StaleBuildReload from './components/StaleBuildReload'
 import { useActiveMock } from './lib/cbatMockSession'
 import CbatGameGuard from './components/CbatGameGuard'
 import AirstarHistory from './pages/AirstarHistory'
@@ -463,6 +464,7 @@ export default function App() {
                   <GameChromeProvider>
                     <UiThemeSync />
                     <CbatMockLock />
+                    <StaleBuildReload />
                     <AppRoutes />
                     <CbatMenuMusic />
         <CommunityMusic />
