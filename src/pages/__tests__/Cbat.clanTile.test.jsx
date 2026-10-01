@@ -75,12 +75,12 @@ describe('the FLAG tile with CLAN switched off', () => {
   })
 })
 
-describe('the FLAG | CLAN tile announcing the CLAN tutorial', () => {
+describe('the FLAG | CLAN tile once the CLAN tutorial is old news', () => {
   beforeEach(() => { vi.clearAllMocks(); mockClanOffered.mockReturnValue(true) })
 
-  it('carries the badge, naming CLAN so it is not read as news about FLAG', () => {
+  it('carries no announcement badge', () => {
     renderHub()
-    expect(within(flagCard()).getByText('New CLAN Tutorial')).toBeInTheDocument()
+    expect(within(flagCard()).queryByText('New CLAN Tutorial')).toBeNull()
   })
 })
 

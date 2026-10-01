@@ -298,7 +298,8 @@ const FLAG_CLAN_SPLIT = {
   // same in the few characters an 83px phone tile has room for.
   // The split's own announcement badge. A combined tile has no single game to
   // hang one on, and FLAG's `badge` would read as news about FLAG.
-  badge: 'New CLAN Tutorial',
+  // Set it to a string to announce something; null shows nothing.
+  badge: null,
   halves: [
     { label: 'FLAG', mode: 'flag', path: '/cbat/flag', lbKey: 'flag', flags: ['GB'], hint: 'Sat in the UK: RAF and Royal Navy', shortHint: 'UK: RAF and RN' },
     { label: 'CLAN', mode: 'clan', path: '/cbat/clan', lbKey: 'clan', flags: ['CA', 'AU'], hint: 'Sat in Canada and Australia', shortHint: 'Canada, Australia' },
