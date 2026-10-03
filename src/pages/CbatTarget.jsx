@@ -21,6 +21,7 @@ import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import { useCbatTheme } from '../hooks/useCbatTheme'
 
 const AircraftTopDown = lazy(() => import('../components/AircraftTopDown'))
 
@@ -92,6 +93,14 @@ const SCORE = {
   systemMatch: 15, systemMiss: -5,
   alertHit: 10, alertBonus: 20,
 }
+// What one correct scene click is worth. The Real CBAT scene hides its targets
+// among three times the decoys (see SCENE_DENSITY), so each find is slower; it
+// pays more and plants more matches so a Real CBAT run can still top the
+// shared leaderboard. Misses cost the same in both themes.
+export const SCENE_HIT_POINTS = {
+  skywatch: SCORE.sceneHit + SCORE.sceneHitBonus,  // 13
+  cbat:     SCORE.sceneHit + 8,                    // 18
+}
 
 // Grade bands (out of roughly -50..+500)
 function computeGrade(score) {
@@ -142,8 +151,24 @@ export function pickScanPanelAircraft(aircraftList, target, rng = Math.random) {
   return others.length > 0 ? others[Math.floor(rng() * others.length)] : target
 }
 
+// How full the scene gets. The Real CBAT theme copies the real test's field:
+// small marks packed edge to edge, so it has roughly three times the shapes,
+// mostly decoys. It also plants more matches per target, and each find is
+// worth more (SCENE_HIT_POINTS), to make up for the harder search. `gap` is
+// the minimum spacing between shape centres and `pad` the margin from the
+// edge, both in the 1000x800 canvas.
+export const SCENE_DENSITY = {
+  skywatch: { match: [3, 8], diamonds: [8, 10],  fakes: [16, 20], noise: [10, 14], noiseNow: [3, 4],   gap: 55, pad: 80 },
+  cbat:     { match: [5, 11], diamonds: [10, 12], fakes: [55, 65], noise: [30, 36], noiseNow: [10, 12], gap: 26, pad: 45 },
+}
+// Real CBAT shapes are drawn at this fraction of the SkyWatch size, with a
+// floor so they stay tappable on a phone.
+const CBAT_SHAPE_SCALE = 0.6
+const CBAT_SHAPE_SCALE_MIN = 0.45
+
 // Plan target labels and pre-generate all scene shapes + their spawn times.
-function planGame() {
+export function planGame(density = SCENE_DENSITY.skywatch) {
+  resetPlacements(density)
   // 6 target activations at t=15,35,55,75,95,115s
   const activations = [15, 35, 55, 75, 95, 115]
   const dirIdx = new Set()
@@ -175,7 +200,7 @@ function planGame() {
   // window from game start to ~2s before the target activates. Nothing spawns
   // at t=0 — shapes trickle in gradually so the scene fills rather than dumps.
   for (const t of targets) {
-    const n = randRange(3, 8)
+    const n = randRange(...density.match)
     const times = evenlySpread(n, 1500, Math.max(3000, t.activateAt - 2000))
     for (let k = 0; k < n; k++) {
       shapes.push({
@@ -193,7 +218,7 @@ function planGame() {
   }
 
   // Diamonds (unknown) — always yellow, all present from game start.
-  const diamondCount = randRange(8, 10)
+  const diamondCount = randRange(...density.diamonds)
   for (let i = 0; i < diamondCount; i++) {
     shapes.push({
       id: uid(),
@@ -209,7 +234,7 @@ function planGame() {
   }
 
   // Fake shapes (octagons, lines) — ~half present at start, rest trickle in.
-  const fakeCount = randRange(16, 20)
+  const fakeCount = randRange(...density.fakes)
   const fakeImmediateCount = Math.round(fakeCount * 0.5)
   const fakeLaterTimes = evenlySpread(
     Math.max(1, fakeCount - fakeImmediateCount),
@@ -235,8 +260,8 @@ function planGame() {
 
   // Random noise shapes — a few visible at game start so the scene reads
   // as populated immediately; the rest trickle in across the game.
-  const noiseCount = randRange(10, 14)
-  const noiseImmediateCount = randRange(3, 4)
+  const noiseCount = randRange(...density.noise)
+  const noiseImmediateCount = randRange(...density.noiseNow)
   const noiseLaterTimes = evenlySpread(
     Math.max(1, noiseCount - noiseImmediateCount),
     20_000,
@@ -263,13 +288,15 @@ function planGame() {
 // Pad is generous enough that direction arrows and high-priority crosshair
 // arms stay inside the scene container across all viewport sizes.
 let _placed = []
+let _gap = SCENE_DENSITY.skywatch.gap
+let _pad = SCENE_DENSITY.skywatch.pad
 function placeRandom() {
-  const padX = 80
-  const padY = 80
-  for (let attempt = 0; attempt < 12; attempt++) {
+  const padX = _pad
+  const padY = _pad
+  for (let attempt = 0; attempt < 20; attempt++) {
     const x = padX + Math.random() * (1000 - 2 * padX)
     const y = padY + Math.random() * (800 - 2 * padY)
-    const ok = _placed.every(p => Math.hypot(p.x - x, p.y - y) > 55)
+    const ok = _placed.every(p => Math.hypot(p.x - x, p.y - y) > _gap)
     if (ok) { _placed.push({ x, y }); return { x, y } }
   }
   const x = padX + Math.random() * (1000 - 2 * padX)
@@ -277,7 +304,11 @@ function placeRandom() {
   _placed.push({ x, y })
   return { x, y }
 }
-function resetPlacements() { _placed = [] }
+function resetPlacements(density = SCENE_DENSITY.skywatch) {
+  _placed = []
+  _gap = density.gap
+  _pad = density.pad
+}
 
 // Random position for an alert circle within the virtual canvas. Kept clear of
 // the edges so the pulsing ring never clips the scene border. Independent of
@@ -1676,6 +1707,10 @@ export default function CbatTarget() {
   const demo = useCbatDemo()
   const { settings } = useAppSettings()
   const shapeScale = useShapeScale()
+  const cbat = useCbatTheme()
+  // The live scene's shape size. The tutorial keeps shapeScale so its teaching
+  // symbols stay big; hit-testing below must use this same value.
+  const sceneScale = cbat ? Math.max(CBAT_SHAPE_SCALE_MIN, shapeScale * CBAT_SHAPE_SCALE) : shapeScale
 
   const [phase, setPhase] = useState('intro')         // intro | playing | tutorial | results
   // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
@@ -1784,8 +1819,7 @@ export default function CbatTarget() {
   const startGame = useCallback(() => {
     if (aircraftList.length < 1) return
     startTracking('target')
-    resetPlacements()
-    const { targets, shapes } = planGame()
+    const { targets, shapes } = planGame(cbat ? SCENE_DENSITY.cbat : SCENE_DENSITY.skywatch)
     setShapes(shapes)
     setAllTargets(targets)
     setActiveTargetIds([])
@@ -1811,7 +1845,7 @@ export default function CbatTarget() {
     scanCooldownUntilRef.current = 0
     startedAtRef.current = performance.now()
     setPhase('playing')
-  }, [aircraftList])
+  }, [aircraftList, cbat])
 
   // ── Master tick ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -2033,7 +2067,7 @@ export default function CbatTarget() {
     const hits = visibleShapes.filter(s => {
       const sx = s.x * scaleX
       const sy = s.y * scaleY
-      const half = SHAPE_R_BASE * shapeScale * (KIND_SCALE[s.kind] || 1) + 8
+      const half = SHAPE_R_BASE * sceneScale * (KIND_SCALE[s.kind] || 1) + 8
       return Math.abs(sx - clickX) <= half && Math.abs(sy - clickY) <= half
     })
     if (hits.length === 0) return
@@ -2064,7 +2098,7 @@ export default function CbatTarget() {
     if (shape.kind === 'unknown') {
       setClickedShapeIds(prev => new Set(prev).add(shape.id))
       bumpCounter('sceneHits')
-      addScore(SCORE.sceneHit + SCORE.sceneHitBonus, 'scene')
+      addScore(cbat ? SCENE_HIT_POINTS.cbat : SCENE_HIT_POINTS.skywatch, 'scene')
       return
     }
     // Real shape — must match at least one active target to count as a hit
@@ -2076,7 +2110,7 @@ export default function CbatTarget() {
     }
     setClickedShapeIds(prev => new Set(prev).add(shape.id))
     bumpCounter('sceneHits')
-    addScore(SCORE.sceneHit + SCORE.sceneHitBonus, 'scene')
+    addScore(cbat ? SCENE_HIT_POINTS.cbat : SCENE_HIT_POINTS.skywatch, 'scene')
   }
 
   const onLightPress = () => {
@@ -2227,12 +2261,12 @@ export default function CbatTarget() {
             </div>
             <div className="grid-scene">
               <div
-                className="cbat-target-scene relative w-full h-full border border-game-line rounded-lg overflow-hidden cursor-pointer"
+                className="cbat-target-scene cbat-target-live relative w-full h-full border border-game-line rounded-lg overflow-hidden cursor-pointer"
                 onClick={onSceneClick}
               >
                 <Compass />
                 {visibleShapes.map(s => (
-                  <Shape key={s.id} shape={s} scale={shapeScale} />
+                  <Shape key={s.id} shape={s} scale={sceneScale} />
                 ))}
                 {alerts.map(a => (
                   <AlertCircle key={a.id} alert={a} scale={shapeScale} onClick={onAlertClick} />

@@ -506,16 +506,35 @@ body::before {
   box-shadow: none;
 }
 
-/* Target's scene: a flat field, shapes in their true flat colours rather
-   than muted for the arcade look. The cloud cover stays; it is part of the
-   hunt, not the decoration. */
+/* Target's scene: dark green aerial terrain under heavy, drifting cloud, as on
+   the real test, with shapes in their true flat colours rather than muted for
+   the arcade look. Both textures are SVG fractal noise: the terrain maps it to
+   a band of dark greens, the cloud maps it to white with alpha only where the
+   noise peaks, so it comes out as patchy wisps rather than an even haze. */
 :root[data-theme="cbat"] .cbat-target-scene {
-  background-color: var(--color-game-arena);
-  background-image: none;
+  background-color: #2c3a2a;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='480'%3E%3Cfilter id='t' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.011' numOctaves='5' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0.36 0 0 0 0.03  0.42 0 0 0 0.05  0.34 0 0 0 0.03  0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23t)'/%3E%3C/svg%3E");
+  background-size: 480px 480px;
 }
 :root[data-theme="cbat"] .cbat-target-scene .cbat-shape-wrap {
   filter: none;
-  opacity: 1;
+  opacity: 0.9;
+}
+:root[data-theme="cbat"] .cbat-target-scene::after {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='c' x='0' y='0' width='100%25' height='100%25' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0045' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.86  0 0 0 0 0.88  0 0 0 0 0.9  3.2 0 0 0 -1.5'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E");
+  background-size: 900px 900px;
+  mix-blend-mode: normal;
+  opacity: 0.75;
+  animation: cbatTargetCloudDrift 120s linear infinite;
+}
+@keyframes cbatTargetCloudDrift {
+  from { background-position: 0 0; }
+  to   { background-position: 900px 300px; }
+}
+/* The live run's shapes are drawn smaller (see CBAT_SHAPE_SCALE), so thin the
+   strokes to match. CSS beats the SVG stroke-width attributes. */
+:root[data-theme="cbat"] .cbat-target-live .cbat-shape-wrap svg * {
+  stroke-width: 1.5px;
 }
 :root[data-theme="cbat"] .cbat-led-on {
   background-color: var(--color-game-accent);
