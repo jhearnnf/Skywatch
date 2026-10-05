@@ -144,7 +144,7 @@ describe('SAT — observe layouts', () => {
     startAt(container, 'hard')
 
     const liveCount = () => {
-      const plotted = container.querySelectorAll('svg circle').length
+      const plotted = container.querySelectorAll('[data-sat-unit]').length
       const fields = [...container.querySelectorAll('dd')].filter(d => d.textContent !== '—').length
       const radio = container.querySelector('[data-radio-line]').textContent === '—' ? 0 : 1
       return plotted + fields + radio

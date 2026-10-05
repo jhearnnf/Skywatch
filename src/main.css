@@ -5176,3 +5176,210 @@ body.play-mode .card-shadow {
   --gi-join:   miter;
   filter: none;
 }
+
+/* ── SAT: SkyWatch-theme game feel ────────────────────────────────────────────
+   Every class here is applied only when the Real CBAT theme is OFF (CbatSat
+   gates them on `!cbat`), so the Real CBAT version stays as plain as the real
+   test software. */
+
+/* Radar sweep over the tactical grid. Oversized so the rotating wedge always
+   covers the square's corners; the grid wrapper clips it. */
+.sat-radar { position: relative; overflow: hidden; }
+.sat-radar-sweep {
+  position: absolute;
+  inset: -50%;
+  pointer-events: none;
+  background: conic-gradient(from 0deg, rgba(91, 170, 255, 0.20), rgba(91, 170, 255, 0) 55deg, transparent 360deg);
+  animation: radar-sweep 4s linear infinite;
+  mix-blend-mode: screen;
+}
+
+/* A contact landing on the grid: one expanding ring, then the marker settles. */
+.sat-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sat-ping 900ms ease-out forwards;
+}
+@keyframes sat-ping {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+.sat-unit-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sat-unit-in 320ms cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+@keyframes sat-unit-in {
+  0%   { transform: scale(0.2); opacity: 0; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+/* Each new fact card / live field arrives with a quick glow. */
+.sat-card-in { animation: sat-card-in 380ms ease-out; }
+@keyframes sat-card-in {
+  0%   { transform: translateY(6px) scale(0.97); box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+  40%  { box-shadow: 0 0 26px 2px rgba(91, 170, 255, 0.45); }
+  100% { transform: none; box-shadow: 0 0 0 0 rgba(91, 170, 255, 0); }
+}
+
+/* Radio equaliser while a call is live. */
+.sat-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.sat-eq span {
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+  background: #4ade80;
+  transform-origin: bottom;
+  animation: sat-eq 700ms ease-in-out infinite;
+}
+.sat-eq span:nth-child(2) { animation-delay: -200ms; }
+.sat-eq span:nth-child(3) { animation-delay: -450ms; }
+.sat-eq span:nth-child(4) { animation-delay: -100ms; }
+@keyframes sat-eq {
+  0%, 100% { transform: scaleY(0.25); }
+  50%      { transform: scaleY(1); }
+}
+
+/* Progress pips: facts in the observe phase, questions in the recall phase. */
+.sat-pip { height: 6px; flex: 1 1 0; min-width: 4px; border-radius: 9999px; background: var(--color-game-line); transition: background-color 200ms; }
+.sat-pip-done    { background: var(--color-game-accent); }
+.sat-pip-correct { background: #4ade80; }
+.sat-pip-wrong   { background: #f87171; }
+.sat-pip-current { background: var(--color-game-accent); animation: sat-pip-pulse 1s ease-in-out infinite; }
+@keyframes sat-pip-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(91, 170, 255, 0.8); }
+  50%      { opacity: 0.45; box-shadow: none; }
+}
+
+/* Streak chip: bumps every time the streak grows. */
+.sat-streak { animation: flame-pulse 900ms ease-out; }
+
+/* Answer feedback. */
+.sat-opt-correct { animation: sat-opt-pop 420ms cubic-bezier(0.2, 1.5, 0.4, 1); box-shadow: 0 0 22px rgba(74, 222, 128, 0.35); }
+@keyframes sat-opt-pop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.07); }
+  100% { transform: scale(1); }
+}
+.sat-opt-wrong { animation: vig-shake-a 360ms ease-in-out; }
+.sat-plus-one {
+  position: absolute;
+  right: 1rem;
+  top: 0.75rem;
+  font-weight: 900;
+  font-size: 1.5rem;
+  color: #4ade80;
+  text-shadow: 0 0 12px rgba(74, 222, 128, 0.7);
+  pointer-events: none;
+  animation: sat-plus-one 900ms ease-out forwards;
+}
+@keyframes sat-plus-one {
+  0%   { transform: translateY(8px) scale(0.6); opacity: 0; }
+  25%  { transform: translateY(0) scale(1.15); opacity: 1; }
+  100% { transform: translateY(-28px) scale(1); opacity: 0; }
+}
+
+/* Results: stars drop in one after another. */
+.sat-star { display: inline-block; animation: sat-star-in 520ms cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+.sat-star-off { filter: grayscale(1) brightness(0.45); }
+@keyframes sat-star-in {
+  0%   { transform: scale(0) rotate(-40deg); opacity: 0; }
+  100% { transform: scale(1) rotate(0);      opacity: 1; }
+}
+
+/* ── SAT: SkyWatch-theme game feel, second pass ─────────────────────────────── */
+
+/* HUD frame: four corner brackets drawn with gradients, plus faint scanlines. */
+.sat-hud {
+  position: relative;
+  --sat-hud-c: rgba(91, 170, 255, 0.85);
+  --sat-hud-l: 14px;
+}
+.sat-hud::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) top left    / var(--sat-hud-l) 2px no-repeat,
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) top left    / 2px var(--sat-hud-l) no-repeat,
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) top right   / var(--sat-hud-l) 2px no-repeat,
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) top right   / 2px var(--sat-hud-l) no-repeat,
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) bottom left / var(--sat-hud-l) 2px no-repeat,
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) bottom left / 2px var(--sat-hud-l) no-repeat,
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) bottom right/ var(--sat-hud-l) 2px no-repeat,
+    linear-gradient(var(--sat-hud-c), var(--sat-hud-c)) bottom right/ 2px var(--sat-hud-l) no-repeat;
+  filter: drop-shadow(0 0 4px rgba(91, 170, 255, 0.6));
+}
+.sat-hud::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+}
+.sat-hud-amber { --sat-hud-c: rgba(251, 191, 36, 0.95); }
+.sat-hud-hot   { --sat-hud-c: rgba(248, 113, 113, 1); }
+
+/* Streak heat on the status bar. */
+.sat-heat-warm { border-color: rgba(251, 191, 36, 0.6) !important; box-shadow: 0 0 18px rgba(251, 191, 36, 0.25); }
+.sat-heat-hot  { border-color: rgba(248, 113, 113, 0.75) !important; box-shadow: 0 0 24px rgba(248, 113, 113, 0.35); animation: sat-heat-flicker 1.4s ease-in-out infinite; }
+@keyframes sat-heat-flicker {
+  0%, 100% { box-shadow: 0 0 24px rgba(248, 113, 113, 0.35); }
+  50%      { box-shadow: 0 0 34px rgba(251, 146, 60, 0.5); }
+}
+
+/* Situation banner in the observe header. */
+.sat-banner { animation: sat-banner-slam 650ms cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes sat-banner-slam {
+  0%   { transform: scale(1.8); opacity: 0; letter-spacing: 0.6em; }
+  60%  { transform: scale(0.96); opacity: 1; }
+  100% { transform: scale(1); letter-spacing: 0.18em; }
+}
+
+/* The contact on screen keeps pulsing while its fact is up. */
+.sat-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sat-halo 1.3s ease-out infinite;
+}
+@keyframes sat-halo {
+  0%   { transform: scale(1);   opacity: 0.7; }
+  100% { transform: scale(2.1); opacity: 0; }
+}
+
+/* Answer bursts. */
+.sat-burst { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+.sat-burst i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px;
+  border-radius: 9999px;
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+  animation: sat-spark 620ms ease-out forwards;
+}
+@keyframes sat-spark {
+  0%   { transform: rotate(var(--a)) translateX(0) scale(1); opacity: 1; }
+  100% { transform: rotate(var(--a)) translateX(64px) scale(0.2); opacity: 0; }
+}
+.sat-flash-good { animation: sat-flash-good 600ms ease-out; }
+.sat-flash-bad  { animation: sat-flash-bad 600ms ease-out; }
+@keyframes sat-flash-good {
+  0%   { box-shadow: inset 0 0 0 2px #4ade80, inset 0 0 40px rgba(74, 222, 128, 0.35); }
+  100% { box-shadow: inset 0 0 0 0 transparent; }
+}
+@keyframes sat-flash-bad {
+  0%   { box-shadow: inset 0 0 0 2px #f87171, inset 0 0 40px rgba(248, 113, 113, 0.4); }
+  100% { box-shadow: inset 0 0 0 0 transparent; }
+}
+
+/* Results bars fill from empty. */
+.sat-bar-fill { animation: sat-bar-fill 1100ms cubic-bezier(0.2, 0.8, 0.2, 1) both; transform-origin: left; }
+@keyframes sat-bar-fill {
+  0%   { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}

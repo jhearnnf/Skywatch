@@ -59,6 +59,7 @@ function buildSituations(tuning) {
 const ALLEGIANCE_COLOR = { friendly: '#fbbf24', hostile: '#ef4444', unknown: '#e5e7eb' }
 const TYPE_LETTER = { tank: 'T', helicopter: 'H', jet: 'J' }
 const TYPE_LABEL = { tank: 'Tank', helicopter: 'Helicopter', jet: 'Jet' }
+const UNIT_TYPES_FOR_LEGEND = ['tank', 'helicopter', 'jet']
 // Unit vectors, SVG y pointing down. The diagonals only occur under the Real
 // CBAT theme, whose units can head any of the 8 compass points.
 const D = Math.SQRT1_2
@@ -77,8 +78,33 @@ function arrowPoints(cx, cy, dir, s) {
   return [tip, b1, b2].map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ')
 }
 
+// SkyWatch-theme unit icons, drawn around (0,0) inside the marker. The Real
+// CBAT theme keeps the plain T/H/J letters the real console uses.
+function UnitIcon({ type, color }) {
+  if (type === 'tank') return (
+    <g fill={color}>
+      <rect x="-8" y="-1" width="16" height="6" rx="2" />
+      <rect x="-4" y="-5" width="8" height="5" rx="1.5" />
+      <rect x="3" y="-4" width="7" height="2" rx="1" />
+    </g>
+  )
+  if (type === 'helicopter') return (
+    <g fill={color} stroke={color} strokeLinecap="round">
+      <ellipse cx="-1" cy="1" rx="5.5" ry="4" stroke="none" />
+      <line x1="4" y1="1" x2="10" y2="-1" strokeWidth="2" />
+      <line x1="-9" y1="-5" x2="8" y2="-5" strokeWidth="1.8" />
+      <line x1="-1" y1="-5" x2="-1" y2="-3" strokeWidth="1.8" />
+    </g>
+  )
+  return <polygon fill={color} points="0,-9 3,0 9,5 2,4 0,8 -2,4 -9,5 -3,0" />
+}
+
 // The 10×10 tactical grid: columns 0–9 along the top, rows A–J down the left.
-function SatGrid({ units }) {
+// `gamified` (the SkyWatch theme) adds the radar sweep, a ping as each contact
+// lands, and drawn unit icons in place of the letters.
+// `halo` keeps a pulse on every plotted unit, for the observe phase where the
+// only unit on the grid is the one whose fact is up right now.
+function SatGrid({ units, gamified = false, halo = false }) {
   const { COLS, ROWS } = SAT_GRID
   const N = 10
   const cell = 46
@@ -87,8 +113,8 @@ function SatGrid({ units }) {
   const H = gy + N * cell
   const r = 14
 
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label="Tactical grid of units">
+  const svg = (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block" role="img" aria-label="Tactical grid of units">
       <rect x="0" y="0" width={W} height={H} fill="var(--color-game-arena)" />
 
       {/* gridlines */}
@@ -116,9 +142,13 @@ function SatGrid({ units }) {
         const cy = gy + rowIdx * cell + cell / 2
         const color = ALLEGIANCE_COLOR[u.allegiance]
         return (
-          <g key={u.id}>
+          <g key={u.id} data-sat-unit className={gamified ? 'sat-unit-in' : undefined}>
+            {gamified && <rect className="sat-ping" x={cx - r} y={cy - r} width={r * 2} height={r * 2} rx={r} fill="none" stroke={color} strokeWidth="2" />}
+            {gamified && halo && <rect className="sat-halo" x={cx - r} y={cy - r} width={r * 2} height={r * 2} rx={r} fill="none" stroke={color} strokeWidth="1.5" />}
             <circle cx={cx} cy={cy} r={r} fill={color} fillOpacity="0.18" stroke={color} strokeWidth="2.2" />
-            <text x={cx} y={cy + 6} fill={color} fontSize="18" fontWeight="bold" textAnchor="middle">{TYPE_LETTER[u.type]}</text>
+            {gamified
+              ? <g transform={`translate(${cx} ${cy})`}><UnitIcon type={u.type} color={color} /></g>
+              : <text x={cx} y={cy + 6} fill={color} fontSize="18" fontWeight="bold" textAnchor="middle">{TYPE_LETTER[u.type]}</text>}
             {/* count badge, top-right of the marker */}
             <text x={cx + r + 2} y={cy - r + 4} fill="var(--color-game-text)" fontSize="15" fontWeight="bold" textAnchor="middle">{u.count}</text>
             {/* travel-direction arrow, offset from the marker on the heading side */}
@@ -131,18 +161,36 @@ function SatGrid({ units }) {
       })}
     </svg>
   )
+  if (!gamified) return svg
+  return (
+    <div className="sat-radar rounded">
+      {svg}
+      <div className="sat-radar-sweep" aria-hidden="true" />
+    </div>
+  )
 }
 
-function GridLegend() {
+function GridLegend({ gamified = false }) {
   return (
     <div className="mt-2 text-xs text-slate-400 leading-relaxed">
-      <p className="mb-0.5">Each cell = <span className="text-slate-300">2 km</span> · letters next to a marker show how many · arrow shows heading.</p>
+      <p className="mb-0.5">Each cell = <span className="text-slate-300">2 km</span> · {gamified ? 'the number' : 'letters'} next to a marker show{gamified ? 's' : ''} how many · arrow shows heading.</p>
       <div className="flex flex-wrap gap-x-3 gap-y-0.5">
         <span><span style={{ color: ALLEGIANCE_COLOR.friendly }}>■</span> Yellow = Friendly</span>
         <span><span style={{ color: ALLEGIANCE_COLOR.hostile }}>■</span> Red = Hostile</span>
         <span><span style={{ color: ALLEGIANCE_COLOR.unknown }}>■</span> White = Unknown</span>
       </div>
-      <p className="mt-1 text-slate-500">Marker letter: T = Tank · H = Helicopter · J = Jet</p>
+      {gamified ? (
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-slate-500">
+          {UNIT_TYPES_FOR_LEGEND.map(t => (
+            <span key={t} className="inline-flex items-center gap-1">
+              <svg viewBox="-10 -10 20 20" className="w-4 h-4" aria-hidden="true"><UnitIcon type={t} color="#9fb4d0" /></svg>
+              {TYPE_LABEL[t]}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-1 text-slate-500">Marker letter: T = Tank · H = Helicopter · J = Jet</p>
+      )}
     </div>
   )
 }
@@ -252,15 +300,27 @@ function FieldValue({ ac, field, arrowClass = 'text-6xl' }) {
   return <>{ac.channel}</>
 }
 
-function ObserveCard({ card }) {
+// What each kind of fact is called on its card header (SkyWatch theme).
+const CARD_KIND_LABEL = { unit: 'New contact', field: 'Aircraft update', radio: 'Incoming radio call' }
+
+function RadioEq() {
+  return <span className="sat-eq" aria-hidden="true"><span /><span /><span /><span /></span>
+}
+
+function ObserveCard({ card, gamified = false }) {
   if (!card) return null
+  const enter = gamified ? ' sat-card-in' : ''
+  const kindChip = gamified && (
+    <p className="text-[11px] font-bold uppercase tracking-widest text-brand-600 mb-2 text-center">{CARD_KIND_LABEL[card.kind]}</p>
+  )
 
   if (card.kind === 'unit') {
     return (
-      <div className="w-full max-w-sm">
-        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 text-center">Contact — grid {card.unit.ref}</p>
-        <SatGrid units={[card.unit]} />
-        <GridLegend />
+      <div className={`w-full max-w-sm rounded-lg${enter}`}>
+        {kindChip}
+        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 text-center">Contact at grid {card.unit.ref}</p>
+        <SatGrid units={[card.unit]} gamified={gamified} halo />
+        <GridLegend gamified={gamified} />
       </div>
     )
   }
@@ -269,9 +329,10 @@ function ObserveCard({ card }) {
     const theme = CALLSIGN_THEME[card.callsign] || DEFAULT_THEME
     return (
       <div
-        className="w-full max-w-sm border rounded-xl p-5 text-center"
+        className={`w-full max-w-sm border rounded-xl p-5 text-center${enter}`}
         style={{ backgroundColor: theme.panel, borderColor: theme.border }}
       >
+        {kindChip}
         <p className={`text-3xl font-extrabold tracking-wide mb-4 ${theme.text}`}>{card.callsign}</p>
         <div className="border rounded-lg px-4 py-5" style={{ backgroundColor: theme.field, borderColor: theme.border }}>
           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">{FIELD_LABEL[card.field]}</p>
@@ -284,8 +345,10 @@ function ObserveCard({ card }) {
   }
 
   return (
-    <div className="w-full max-w-sm bg-game-panel border border-game-line rounded-xl p-5 text-center">
+    <div className={`w-full max-w-sm bg-game-panel border border-game-line rounded-xl p-5 text-center${enter}`}>
+      {kindChip}
       <p className="text-4xl mb-3">🔊</p>
+      {gamified && <div className="flex justify-center mb-3"><RadioEq /></div>}
       <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Radio</p>
       <p className="text-base sm:text-lg leading-snug text-green-300 font-mono break-words">{card.comm.text}</p>
     </div>
@@ -307,7 +370,7 @@ function panelChrome(live) {
     : { className: 'border-game-line opacity-40', style: undefined }
 }
 
-function AircraftPanelSerial({ aircraft, fields, card }) {
+function AircraftPanelSerial({ aircraft, fields, card, gamified = false }) {
   const live = card?.kind === 'field' ? card : null
   const theme = (live && CALLSIGN_THEME[live.callsign]) || DEFAULT_THEME
   return (
@@ -336,8 +399,10 @@ function AircraftPanelSerial({ aircraft, fields, card }) {
           const on = live?.field === f
           return (
             <div
-              key={f}
-              className="border rounded-lg px-3 py-2.5"
+              // Keyed per aircraft while live, so the arrival glow replays when
+              // the same field moves on to the next callsign.
+              key={on ? `${f}-${live.callsign}` : f}
+              className={`border rounded-lg px-3 py-2.5${on && gamified ? ' sat-card-in' : ''}`}
               style={{ backgroundColor: theme.field, borderColor: on ? theme.dot : theme.border, opacity: on ? 1 : 0.35 }}
             >
               <dt className="text-xs text-slate-500 uppercase tracking-wide mb-0.5">{FIELD_LABEL[f]}</dt>
@@ -352,7 +417,7 @@ function AircraftPanelSerial({ aircraft, fields, card }) {
   )
 }
 
-function ObservePanels({ situation, card, fields }) {
+function ObservePanels({ situation, card, fields, gamified = false }) {
   const gridLive = card?.kind === 'unit'
   const acLive = card?.kind === 'field'
   const radioLive = card?.kind === 'radio'
@@ -362,20 +427,20 @@ function ObservePanels({ situation, card, fields }) {
   return (
     <>
       <div className="flex flex-col sm:flex-row gap-2 mb-2">
-        <div className={`sm:flex-[3] bg-game-panel border rounded-lg p-3 ${grid.className}`} style={grid.style}>
+        <div className={`sm:flex-[3] bg-game-panel border rounded-lg p-3 ${grid.className}${gamified ? ' sat-hud' : ''}`} style={grid.style}>
           {/* No grid ref in the header: reading "D4" off a label is much easier
               to hold than locating a dot, and locating it is what's being
               tested. Easier's card layout does print it — it's the intro. */}
           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 px-0.5">Contacts</p>
           {/* SatGrid drops falsy entries, so an empty list draws the bare grid —
               the console never loses its map, it just has nothing plotted on it. */}
-          <SatGrid units={gridLive ? [card.unit] : []} />
-          <GridLegend />
+          <SatGrid units={gridLive ? [card.unit] : []} gamified={gamified} halo />
+          <GridLegend gamified={gamified} />
         </div>
         <div className={`sm:flex-[2] flex flex-col ${acLive ? '' : 'opacity-40'}`}>
           <p className="text-xs text-slate-500 uppercase tracking-wide mb-1 px-1">Controller Aircraft</p>
           <div className={`flex-1 rounded-lg ${acLive ? 'ring-1 ring-brand-400' : ''}`}>
-            <AircraftPanelSerial aircraft={situation.aircraft} fields={fields} card={card} />
+            <AircraftPanelSerial aircraft={situation.aircraft} fields={fields} card={card} gamified={gamified} />
           </div>
         </div>
       </div>
@@ -387,6 +452,7 @@ function ObservePanels({ situation, card, fields }) {
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-base">{radioLive ? '🔊' : '📻'}</span>
           <span className="text-xs text-slate-500 uppercase tracking-wide">Radio</span>
+          {gamified && radioLive && <RadioEq />}
         </div>
         <p data-radio-line className="text-[11px] sm:text-sm leading-snug text-green-300 font-mono break-words flex-1 min-w-0">
           {radioLive ? card.comm.text : '—'}
@@ -467,6 +533,119 @@ function useSatTypedKeys({ enabled, onDigit, onBackspace, onEnter }) {
   }, [enabled])
 }
 
+// ── SkyWatch-theme game feel: streaks, timer ring, pips ─────────────────────
+
+// Correct answers in a row at the end of the list, and the longest run anywhere.
+function currentStreak(answers) {
+  let n = 0
+  for (let i = answers.length - 1; i >= 0 && answers[i].correct; i--) n++
+  return n
+}
+function bestStreak(answers) {
+  let best = 0, run = 0
+  for (const a of answers) { run = a.correct ? run + 1 : 0; best = Math.max(best, run) }
+  return best
+}
+
+// The per-question clock as a draining ring, amber then red as it runs out.
+function TimerRing({ frac, seconds }) {
+  const R = 16
+  const C = 2 * Math.PI * R
+  const color = frac < 0.27 ? '#f87171' : frac < 0.5 ? '#fbbf24' : 'var(--color-game-accent)'
+  return (
+    <div className="relative w-11 h-11 shrink-0" aria-label={`${seconds} seconds left`}>
+      <svg viewBox="0 0 40 40" className="w-full h-full -rotate-90" aria-hidden="true">
+        <circle cx="20" cy="20" r={R} fill="none" stroke="var(--color-game-line)" strokeWidth="4" />
+        <circle
+          cx="20" cy="20" r={R} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round"
+          strokeDasharray={C} strokeDashoffset={C * (1 - Math.max(0, Math.min(1, frac)))}
+          style={{ transition: 'stroke-dashoffset 100ms linear, stroke 200ms' }}
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center font-mono font-bold text-sm" style={{ color }}>{seconds}</span>
+    </div>
+  )
+}
+
+// One pip per question: green right, red wrong, the current one pulsing.
+function QuestionPips({ answers, total, current }) {
+  return (
+    <div className="flex gap-1" aria-hidden="true">
+      {Array.from({ length: total }).map((_, i) => {
+        const a = answers[i]
+        const cls = a ? (a.correct ? 'sat-pip-correct' : 'sat-pip-wrong') : i === current ? 'sat-pip-current' : ''
+        return <span key={i} className={`sat-pip ${cls}`} />
+      })}
+    </div>
+  )
+}
+
+// Counts a number up from 0 when it first renders.
+function useCountUp(target, ms = 900) {
+  const [value, setValue] = useState(0)
+  useEffect(() => {
+    let raf
+    const start = performance.now()
+    const step = (now) => {
+      const t = Math.min(1, (now - start) / ms)
+      setValue(Math.round(target * (1 - Math.pow(1 - t, 3))))
+      if (t < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [target, ms])
+  return value
+}
+
+// Eight sparks thrown out from the middle of a right answer.
+const SPARK_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315]
+function SparkBurst() {
+  return (
+    <span className="sat-burst" aria-hidden="true">
+      {SPARK_ANGLES.map(a => <i key={a} style={{ '--a': `${a}deg` }} />)}
+    </span>
+  )
+}
+
+// The results breakdown: how each kind of fact was recalled.
+const SKILL_GROUPS = [
+  { key: 'unit', label: 'Contacts', icon: '🎯' },
+  { key: 'aircraft', label: 'Aircraft', icon: '✈️' },
+  { key: 'audio', label: 'Radio', icon: '📻' },
+]
+
+function SkillBars({ answers }) {
+  return (
+    <div className="bg-game-arena rounded-lg border border-game-line p-4 mb-4 text-left space-y-3">
+      <p className="text-xs text-slate-500 uppercase tracking-wide">By skill</p>
+      {SKILL_GROUPS.map((g, i) => {
+        const asked = answers.filter(a => a.category?.startsWith(g.key))
+        if (!asked.length) return null
+        const right = asked.filter(a => a.correct).length
+        const pct = Math.round((right / asked.length) * 100)
+        const color = pct >= 80 ? '#4ade80' : pct >= 50 ? '#fbbf24' : '#f87171'
+        return (
+          <div key={g.key} data-sat-skill={g.key}>
+            <div className="flex items-center justify-between text-sm mb-1">
+              <span className="text-game-text font-bold">{g.icon} {g.label}</span>
+              <span className="font-mono text-slate-400">{right}/{asked.length}</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-game-line overflow-hidden">
+              <div
+                className="h-full rounded-full sat-bar-fill"
+                style={{ width: `${pct}%`, background: color, boxShadow: `0 0 10px ${color}`, animationDelay: `${300 + i * 200}ms` }}
+              />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Streak lengths worth calling out in the reveal.
+const STREAK_CALLOUTS = new Set([3, 5, 8, 10, 15, 18])
+
 // ── Results screen (embedded inside CbatGameOver) ────────────────────────────
 const GRADE_STYLE = {
   Outstanding: { emoji: '🎖️', color: 'text-green-400' },
@@ -475,17 +654,35 @@ const GRADE_STYLE = {
   Failed:      { emoji: '💥', color: 'text-red-400' },
 }
 
-function ResultsScreen({ answers, totalTime, tuning }) {
+// Stars per grade on the SkyWatch theme's results.
+const GRADE_STARS = { Outstanding: 3, Good: 2, 'Needs Work': 1, Failed: 0 }
+
+function ResultsScreen({ answers, totalTime, tuning, gamified = false }) {
   const total = satTotalQuestions(tuning)
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / total) * 100)
 
   const label = computeGrade(pct, tuning)
   const grade = { label, ...GRADE_STYLE[label] }
+  const shownCorrect = useCountUp(gamified ? correct : 0)
 
   return (
     <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
-      <p className="text-5xl mb-3">{grade.emoji}</p>
+      {gamified ? (
+        <div className="flex justify-center gap-2 mb-3 text-5xl" data-sat-stars={GRADE_STARS[label]}>
+          {[0, 1, 2].map(i => (
+            <span
+              key={i}
+              className={`sat-star${i < GRADE_STARS[label] ? '' : ' sat-star-off'}`}
+              style={{ animationDelay: `${200 + i * 220}ms` }}
+            >
+              ⭐
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="text-5xl mb-3">{grade.emoji}</p>
+      )}
       <p className={`text-2xl font-extrabold mb-1 ${grade.color}`}>{grade.label}</p>
       <p className="text-sm text-slate-400 mb-6">Situational Awareness Test Complete</p>
 
@@ -493,7 +690,7 @@ function ResultsScreen({ answers, totalTime, tuning }) {
         <p className="text-xs text-slate-500 uppercase tracking-wide mb-3">Overall Score</p>
         <div className="flex flex-wrap justify-center gap-4 sm:gap-8 items-end">
           <div>
-            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{correct}/{total}</p>
+            <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{gamified ? shownCorrect : correct}/{total}</p>
             <p className="text-sm text-slate-400">{pct}% correct</p>
           </div>
           <div className="w-px h-12 bg-game-line" />
@@ -501,8 +698,26 @@ function ResultsScreen({ answers, totalTime, tuning }) {
             <p className="text-3xl sm:text-4xl font-mono font-bold text-brand-600 mb-1">{totalTime.toFixed(1)}s</p>
             <p className="text-sm text-slate-400">total time</p>
           </div>
+          {gamified && (
+            <>
+              <div className="w-px h-12 bg-game-line" />
+              <div>
+                <p className="text-3xl sm:text-4xl font-mono font-bold text-amber-400 mb-1">🔥 {bestStreak(answers)}</p>
+                <p className="text-sm text-slate-400">best streak</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
+
+      {gamified && (
+        <>
+          <div className="h-3 rounded-full bg-game-line overflow-hidden mb-4" aria-hidden="true">
+            <div className="h-full rounded-full sat-bar-fill bg-brand-600" style={{ width: `${pct}%`, boxShadow: '0 0 12px rgba(91,170,255,0.7)' }} />
+          </div>
+          <SkillBars answers={answers} />
+        </>
+      )}
 
       {/* Answer review — scrollable */}
       <div className="bg-game-arena rounded-lg border border-game-line p-3 max-h-48 overflow-y-auto">
@@ -690,8 +905,8 @@ function SatTutorial({ onExit, onProgress, cbat = false }) {
       {step.focus !== 'recall' ? (
         <div>
           <div className={`bg-game-panel border border-game-line rounded-lg p-3 mb-2${pulse('grid')}`}>
-            <SatGrid units={sit.units} />
-            <GridLegend />
+            <SatGrid units={sit.units} gamified={!cbat} />
+            <GridLegend gamified={!cbat} />
           </div>
           {/* The tutorial teaches the whole game, so it always shows the full
               four-field panel regardless of the difficulty selected behind it —
@@ -723,7 +938,7 @@ function SatTutorial({ onExit, onProgress, cbat = false }) {
         /* Step 4: recall — picture hidden, answer one sample question */
         <div className="max-w-md mx-auto">
           <div className="bg-game-panel border border-game-line rounded-xl p-5 mb-3">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Recall — from memory</p>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Recall from memory</p>
             <p className="text-base sm:text-lg text-game-text leading-relaxed">{sampleQ.prompt}</p>
           </div>
           {sampleQ.kind === 'typed' ? (
@@ -954,6 +1169,7 @@ export default function CbatSat() {
     if (!currentQuestion) return
     const correct = picked !== null && (typedCorrect ?? String(picked) === String(currentQuestion.answer))
     const entry = {
+      category: currentQuestion.category,
       prompt: currentQuestion.prompt,
       answer: currentQuestion.answer,
       picked,
@@ -1095,6 +1311,7 @@ export default function CbatSat() {
   }, [])
 
   const correctSoFar = answers.filter(a => a.correct).length
+  const streak = currentStreak(answers)
   const globalQ = situationIdx * runTuning.questionsPerSituation + questionIdx + 1
   const observeSec = (observeRemainingMs / 1000).toFixed(0)
   // Real CBAT: the console's in-game clock, which the waypoint times are read against.
@@ -1253,7 +1470,14 @@ export default function CbatSat() {
               <div className="flex items-stretch gap-2 mb-2">
                 <div className="flex-1 bg-game-panel border border-game-line rounded-lg px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs lg:text-sm text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations} — Memorise the picture</p>
+                    <div>
+                      {!cbat && (
+                        <p key={situationIdx} className="sat-banner text-base lg:text-xl font-black uppercase text-brand-600 leading-tight">
+                          Situation {situationIdx + 1} of {runTuning.situations}
+                        </p>
+                      )}
+                      <p className="text-xs lg:text-sm text-slate-500 uppercase tracking-wide">Situation {situationIdx + 1}/{runTuning.situations}: Memorise the picture</p>
+                    </div>
                     <button
                       onClick={() => { setAudioOn(v => { if (v) stopSpeech(); return !v }) }}
                       className="shrink-0 text-base bg-transparent border-0 cursor-pointer p-0"
@@ -1285,9 +1509,10 @@ export default function CbatSat() {
                   situation={currentSituation}
                   card={currentSituation.cards[cardIdx]}
                   fields={runTuning.aircraftFields}
+                  gamified={!cbat}
                 />
               ) : (
-                <div className="bg-game-panel border border-game-line rounded-lg p-3 mb-2">
+                <div className={`bg-game-panel border border-game-line rounded-lg p-3 mb-2${cbat ? '' : ' sat-hud'}`}>
                   <div className="min-h-[26rem] flex items-center justify-center">
                     <AnimatePresence mode="wait" initial={false}>
                       <motion.div
@@ -1298,7 +1523,7 @@ export default function CbatSat() {
                         transition={{ duration: 0.15 }}
                         className="w-full flex justify-center"
                       >
-                        <ObserveCard card={currentSituation.cards[cardIdx]} />
+                        <ObserveCard card={currentSituation.cards[cardIdx]} gamified={!cbat} />
                       </motion.div>
                     </AnimatePresence>
                   </div>
@@ -1310,12 +1535,20 @@ export default function CbatSat() {
                 <p className="text-xs text-slate-500 uppercase tracking-wide shrink-0">
                   Fact {Math.min(cardIdx + 1, cardCount)} / {cardCount}
                 </p>
-                <div className="h-1 flex-1 rounded-full bg-game-line overflow-hidden">
-                  <div
-                    className="h-full bg-brand-400"
-                    style={{ width: `${Math.round(((cardIdx + 1) / Math.max(1, cardCount)) * 100)}%` }}
-                  />
-                </div>
+                {cbat ? (
+                  <div className="h-1 flex-1 rounded-full bg-game-line overflow-hidden">
+                    <div
+                      className="h-full bg-brand-400"
+                      style={{ width: `${Math.round(((cardIdx + 1) / Math.max(1, cardCount)) * 100)}%` }}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex-1 flex gap-1" aria-hidden="true">
+                    {Array.from({ length: cardCount }).map((_, i) => (
+                      <span key={i} className={`sat-pip ${i < cardIdx ? 'sat-pip-done' : i === cardIdx ? 'sat-pip-current' : ''}`} />
+                    ))}
+                  </div>
+                )}
               </div>
 
             </motion.div>
@@ -1325,30 +1558,34 @@ export default function CbatSat() {
           {(phase === 'playing' || phase === 'feedback') && currentQuestion && (
             <div className="w-full max-w-md lg:max-w-2xl">
               {/* HUD — under the Real CBAT theme the title bar carries this */}
-              {!cbat && <div className="flex items-center justify-between text-sm font-mono mb-2 px-1">
-                <span className="text-slate-400">Q <span className="text-brand-600">{globalQ}</span>/{runTotalQuestions}</span>
-                <span className="text-slate-400">✓ <span className="text-green-400">{correctSoFar}</span></span>
-                <span className="text-slate-400">⏱ <span className={qRemainingMs < 6000 ? 'text-red-400' : 'text-brand-600'}>{remainingSec}s</span></span>
-              </div>}
-
-              {/* Progress bar */}
-              {!cbat && <div className="w-full h-1 bg-game-line rounded-full mb-3 overflow-hidden">
-                <motion.div
-                  className="h-full bg-brand-600 rounded-full"
-                  initial={false}
-                  animate={{ width: `${(answers.length / runTotalQuestions) * 100}%` }}
-                  transition={{ duration: 0.3 }}
-                />
-              </div>}
+              {!cbat && (
+                <div className={`bg-game-panel border border-game-line rounded-xl px-3 py-2 mb-3 transition-shadow${streak >= 5 ? ' sat-heat-hot' : streak >= 3 ? ' sat-heat-warm' : ''}`}>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="text-sm font-mono text-slate-400">Q <span className="text-brand-600 font-bold">{globalQ}</span>/{runTotalQuestions}</span>
+                    <span className="text-sm font-mono text-slate-400">✓ <span className="text-green-400 font-bold">{correctSoFar}</span></span>
+                    {/* Keyed on the streak, so the bump replays each time it grows. */}
+                    <span
+                      key={streak}
+                      data-sat-streak={streak}
+                      className={`font-bold font-mono ${streak >= 5 ? 'text-xl text-red-400' : streak >= 3 ? 'text-lg text-amber-400' : 'text-sm'} ${streak >= 2 ? 'sat-streak' : 'text-game-faint'}${streak === 2 ? ' text-amber-400' : ''}`}
+                    >
+                      🔥 {streak}
+                    </span>
+                    <TimerRing frac={qRemainingMs / PER_QUESTION_MS} seconds={remainingSec} />
+                  </div>
+                  <QuestionPips answers={answers} total={runTotalQuestions} current={globalQ - 1} />
+                </div>
+              )}
 
               {/* Question */}
               <motion.div
                 key={`${situationIdx}-${questionIdx}`}
                 initial={{ opacity: 0, scale: 0.97 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="bg-game-panel border border-game-line rounded-xl p-5 lg:p-7 mb-3"
+                className={`relative bg-game-panel border border-game-line rounded-xl p-5 lg:p-7 mb-3${cbat ? '' : ` sat-hud${streak >= 5 ? ' sat-hud-hot' : streak >= 3 ? ' sat-hud-amber' : ''}`}${!cbat && phase === 'feedback' ? (feedback?.correct ? ' sat-flash-good' : ' sat-flash-bad') : ''}`}
               >
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Recall — Situation {situationIdx + 1}</p>
+                {!cbat && phase === 'feedback' && feedback?.correct && <span className="sat-plus-one" aria-hidden="true">+1</span>}
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Recall: Situation {situationIdx + 1}</p>
                 <p className="text-lg sm:text-xl lg:text-2xl text-game-text leading-relaxed">{currentQuestion.prompt}</p>
               </motion.div>
 
@@ -1369,8 +1606,8 @@ export default function CbatSat() {
                   let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                   if (pending === i) cls += ' cbat-option-pending'
                   if (phase === 'feedback') {
-                    if (String(opt) === String(feedback?.answer)) cls = 'bg-green-500/15 border-green-500/50 text-green-400'
-                    else if (String(opt) === String(feedback?.picked)) cls = 'bg-red-500/15 border-red-500/50 text-red-400'
+                    if (String(opt) === String(feedback?.answer)) cls = `bg-green-500/15 border-green-500/50 text-green-400${cbat ? '' : ' sat-opt-correct'}`
+                    else if (String(opt) === String(feedback?.picked)) cls = `bg-red-500/15 border-red-500/50 text-red-400${cbat ? '' : ' sat-opt-wrong'}`
                     else cls = 'bg-game-panel border-game-line text-game-faint'
                   }
                   return (
@@ -1379,8 +1616,9 @@ export default function CbatSat() {
                       type="button"
                       onClick={() => select(i)}
                       disabled={phase === 'feedback'}
-                      className={`py-4 lg:py-5 px-2 rounded-lg border-2 font-mono font-bold text-lg lg:text-2xl transition-all ${cls}`}
+                      className={`relative py-4 lg:py-5 px-2 rounded-lg border-2 font-mono font-bold text-lg lg:text-2xl transition-all ${cls}`}
                     >
+                      {!cbat && phase === 'feedback' && feedback?.correct && String(opt) === String(feedback.answer) && <SparkBurst />}
                       <CbatKeyCap label={i + 1} className="mr-2" />{opt}
                     </button>
                   )
@@ -1396,9 +1634,12 @@ export default function CbatSat() {
                       {feedback.correct
                         ? '✓ Correct'
                         : feedback.picked === null
-                          ? `⏱ Timeout — the answer was ${feedback.answer}`
+                          ? `⏱ Time's up. The answer was ${feedback.answer}`
                           : `✗ The answer was ${feedback.answer}`}
                     </div>
+                    {feedback.correct && STREAK_CALLOUTS.has(streak) && (
+                      <p className="sat-streak text-center text-sm font-extrabold text-amber-400 mb-2">🔥 {streak} correct in a row</p>
+                    )}
                     <button
                       onClick={goNext}
                       className="w-full px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm"
@@ -1441,7 +1682,7 @@ export default function CbatSat() {
               personalBest={personalBest}
               onPlayAgain={() => { setScoreSaved(false); startGame() }}
             >
-              <ResultsScreen answers={answers} totalTime={totalElapsedMs / 1000} tuning={runTuning} />
+              <ResultsScreen answers={answers} totalTime={totalElapsedMs / 1000} tuning={runTuning} gamified={!cbat} />
             </CbatGameOver>
           )}
         </div>
