@@ -8,6 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
 } from 'recharts'
 
 const DIM_OPACITY = 0.05
@@ -121,6 +122,11 @@ export function ChartSkeleton({ height = 220 }) {
  * compareKey: optional data field plotted as a dashed "previous period" overlay
  *             line on top of line/bar/stackedBar charts (prior-period comparison).
  * compareLabel: legend/tooltip name for the compare line (default 'Prev period').
+ * markerKeys: subset of `keys` drawn as events rather than a line (line charts
+ *             only) — a full-height dashed vertical marker on every x where the
+ *             value is above zero, labelled with the value. For a sparse, small
+ *             count (e.g. CBAT dates, 1–2 a day) that a line would flatten onto
+ *             the axis beneath a series in the hundreds.
  */
 export default function ReportChart({
   type = 'line',
@@ -139,6 +145,7 @@ export default function ReportChart({
   slantX = false,
   compareKey,
   compareLabel = 'Prev period',
+  markerKeys,
 }) {
   // When comparing, a period that's empty now but had prior activity should still
   // render (so the dashed baseline shows), so fold compareKey into the zero check.
@@ -295,15 +302,42 @@ export default function ReportChart({
   // they merge into a thick band and bury the line itself, so they're dropped and
   // the hover dot does the work instead.
   const showDots = data.length <= 60
+  const markerSet = new Set(markerKeys ?? [])
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+      {/* Markers' counts sit in a strip above the plot, where no line can cross them. */}
+      <LineChart data={data} margin={{ top: markerSet.size ? 16 : 4, right: 12, left: 0, bottom: 4 }}>
         <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey={xKey} stroke={COLORS.axis} fontSize={11} tickFormatter={xFmt} />
         <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
         <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
         {(showLegend || compareKey) && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
-        {keys.map((k, i) => (
+        {/* Markers first so the real lines draw over them. */}
+        {keys.map((k, i) => markerSet.has(k) && data.filter(row => row[k] > 0).map(row => (
+          <ReferenceLine
+            key={`${k}-${row[xKey]}`}
+            x={row[xKey]}
+            stroke={seriesColors[i]}
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+            label={{ value: row[k], position: 'top', fill: seriesColors[i], fontSize: 10, fontWeight: 600 }}
+          />
+        )))}
+        {keys.map((k, i) => markerSet.has(k) ? (
+          // Invisible line: keeps the value in the tooltip and a dashed key in
+          // the legend, while the ReferenceLines above do the drawing.
+          <Line
+            key={k}
+            dataKey={k}
+            stroke={seriesColors[i]}
+            strokeWidth={0}
+            strokeDasharray="4 3"
+            dot={false}
+            activeDot={false}
+            legendType="plainline"
+            name={labels?.[k] ?? k}
+          />
+        ) : (
           <Line
             key={k}
             type="monotone"

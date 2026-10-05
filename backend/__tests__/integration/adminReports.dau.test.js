@@ -176,6 +176,48 @@ describe('GET /api/admin/reports/dau', () => {
     });
   });
 
+  describe('CBAT dates series', () => {
+    const utcDay = (offsetDays) => {
+      const d = new Date(Date.now() + offsetDays * DAY);
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    };
+
+    it('counts users whose CBAT date falls on each day', async () => {
+      const day = utcDay(-2);
+      await createUser({ agentNumber: '1000011', upcomingCbatDate: day });
+      await createUser({ agentNumber: '1000012', upcomingCbatDate: day });
+
+      const res = await get('?days=7');
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.dailyDau.find(r => r.date === ymd(day)).cbatDates).toBe(2);
+      const others = res.body.data.dailyDau.filter(r => r.date !== ymd(day));
+      expect(others.every(r => r.cbatDates === 0)).toBe(true);
+    });
+
+    it('falls back to the research date and never counts a user twice', async () => {
+      const day = utcDay(-1);
+      const other = utcDay(-3);
+      await createUser({ agentNumber: '1000011', cbatDate: day });                          // research only
+      await createUser({ agentNumber: '1000012', upcomingCbatDate: day, cbatDate: other }); // member date wins
+
+      const res = await get('?days=7');
+
+      expect(res.body.data.dailyDau.find(r => r.date === ymd(day)).cbatDates).toBe(2);
+      expect(res.body.data.dailyDau.find(r => r.date === ymd(other)).cbatDates).toBe(0);
+    });
+
+    it('ignores dates outside the requested range', async () => {
+      await createUser({ agentNumber: '1000011', upcomingCbatDate: utcDay(-40) });
+      await createUser({ agentNumber: '1000012', upcomingCbatDate: utcDay(10) });
+
+      const res = await get('?days=7');
+
+      expect(res.body.data.dailyDau.every(r => r.cbatDates === 0)).toBe(true);
+    });
+  });
+
   it('requires an admin', async () => {
     const res = await request(app)
       .get('/api/admin/reports/dau')

@@ -515,7 +515,28 @@ async function dailyCommunityMessages(since, until = null) {
   return dailyCount(ChatMessage, 'createdAt', since, match, until);
 }
 
-// ── GET /api/admin/reports/dau?days=7|30|90|365 ───────────────────────────────────
+// How many users have their CBAT on each day — the third series on the Daily
+// Active Users chart, so a spike in activity can be read against the test dates
+// clustered around it.
+//
+// A user's date is the member-facing `upcomingCbatDate` they confirmed, falling
+// back to the admin-typed research `cbatDate` when they never set one (or
+// removed it — the research date is still the day they sat). One date per user,
+// so someone with both fields set is never counted twice. Both are stored as
+// UTC midnight, matching the UTC day keys of the other two series.
+async function dailyCbatDates(since, until) {
+  const rows = await User.aggregate([
+    { $project: { d: { $ifNull: ['$upcomingCbatDate', '$cbatDate'] } } },
+    { $match: { d: { $gte: startOfUtcDay(since), $lte: until } } },
+    { $group: {
+      _id: { $dateToString: { format: '%Y-%m-%d', date: '$d', timezone: 'UTC' } },
+      count: { $sum: 1 },
+    }},
+  ]);
+  return new Map(rows.map(r => [r._id, r.count]));
+}
+
+// ── GET /api/admin/reports/dau?days=7|30|90|365───────────────────────────────────
 // The Daily Active Users series on its own timeframe. Split out of /snapshot so
 // changing the DAU range doesn't re-run the (much heavier) whole-snapshot query
 // — and so it stays independent of the Time window picker, which drives the
@@ -535,17 +556,19 @@ router.get('/dau', async (req, res) => {
     const now = new Date();
     const start = new Date(now.getTime() - (days - 1) * DAY_MS); // inclusive of today
 
-    const [streams, messagesByDay] = await Promise.all([
+    const [streams, messagesByDay, cbatDatesByDay] = await Promise.all([
       activityStreams(start),
       dailyCommunityMessages(start),
+      dailyCbatDates(start, now),
     ]);
     const dailyMap = mergeDailyDistinctUsers(streams);
-    // One row per day carrying both series, so the chart plots them on a shared
-    // x-axis without the frontend having to zip two arrays together.
+    // One row per day carrying every series, so the chart plots them on a shared
+    // x-axis without the frontend having to zip arrays together.
     const dailyDau = emptyDailyBuckets(start, now).map(b => ({
       date: b.date,
       count: dailyMap.get(b.date)?.size ?? 0,
       messages: messagesByDay.get(b.date) ?? 0,
+      cbatDates: cbatDatesByDay.get(b.date) ?? 0,
     }));
 
     res.json({ status: 'success', data: { days, dailyDau } });

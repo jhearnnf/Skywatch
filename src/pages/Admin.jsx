@@ -1589,9 +1589,12 @@ function ReportsTab({ API }) {
             type="line"
             data={dau.dailyDau}
             xKey="date"
-            keys={['count', 'messages']}
-            labels={{ count: 'Active users', messages: 'Community messages' }}
-            colors={['#5baaff', '#f59e0b']}
+            keys={['count', 'messages', 'cbatDates']}
+            labels={{ count: 'Active users', messages: 'Community messages', cbatDates: 'CBAT dates' }}
+            colors={['#5baaff', '#f59e0b', '#34d399']}
+            // 1–2 test dates a day would lie flat on the axis under the user
+            // count, so they're drawn as day markers instead of a line.
+            markerKeys={['cbatDates']}
             showLegend
             height={200}
           />
