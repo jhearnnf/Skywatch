@@ -1,4 +1,4 @@
-import { REGIONS } from '../../data/cbatBatteries'
+import { REGIONS, familyNote } from '../../data/cbatBatteries'
 
 // The Mock Assessment's score sheet, laid out like the real "Aptitude Scores" sheet so the first
 // time a player sees that shape of page is not on the day: Battery, Domain, Dom Wgt, Tests, a 1-9
@@ -74,6 +74,9 @@ function BatteryBlock({ battery }) {
               {battery.label}
               {battery.status === 'provisional' && (
                 <span className="mock-sheet-battery-note">Not enough tests sat to judge</span>
+              )}
+              {battery.ownStatus && battery.ownStatus !== battery.status && familyNote(battery.family, battery.status) && (
+                <span className="mock-sheet-battery-note">{familyNote(battery.family, battery.status)}</span>
               )}
             </td>
           )}

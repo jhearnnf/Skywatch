@@ -8,7 +8,7 @@ const data = require('./cbatBatteries.json');
 
 const { maxScore: MAX_SCORE, maxStanine: MAX_STANINE, minCoverageForVerdict: MIN_COVERAGE_FOR_VERDICT,
         domains: DOMAINS, tests: TESTS, stanineAnchors: STANINE_ANCHORS, cohortShift: COHORT_SHIFT,
-        regions: REGIONS, derivedBatteries: DERIVED_SPECS } = data;
+        regions: REGIONS, derivedBatteries: DERIVED_SPECS, families: FAMILIES } = data;
 
 // The UK roles are transcribed from real sheets; every one of them is region GB.
 const UK_BATTERIES = data.batteries.map(b => ({ ...b, region: 'GB' }));
@@ -35,6 +35,16 @@ function deriveBattery(spec) {
 
 const BATTERIES = [...UK_BATTERIES, ...DERIVED_SPECS.map(deriveBattery)];
 const BATTERY_BY_KEY = Object.fromEntries(BATTERIES.map(b => [b.key, b]));
+
+// Roles the real sheet judges as one family (see _familiesComment). A member naming no battery is a
+// data error, so it throws at load like a bad derived role.
+const FAMILY_BY_MEMBER = {};
+for (const f of FAMILIES) {
+  for (const k of f.members) {
+    if (!BATTERY_BY_KEY[k]) throw new Error(`cbatBatteries: family ${f.key} names unknown role ${k}`);
+    FAMILY_BY_MEMBER[k] = f;
+  }
+}
 
 // GB, CA or AU. Anything else (a country we have no roles for, or no country at all) reads as
 // the UK, whose roles are the ones every SkyWatch game was built against.
@@ -69,6 +79,8 @@ module.exports = {
   COHORT_SHIFT,
   BATTERIES,
   BATTERY_BY_KEY,
+  FAMILIES,
+  FAMILY_BY_MEMBER,
   REGIONS,
   normaliseRegion,
   detectRegion,

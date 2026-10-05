@@ -79,7 +79,7 @@
 const mongoose = require('mongoose');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { MAX_SCORE, MAX_STANINE, MIN_COVERAGE_FOR_VERDICT, DOMAINS, TESTS, BATTERIES, BATTERY_BY_KEY, SCORED_GAME_KEYS,
-        reportRegionFor } = require('../constants/cbatBatteries');
+        FAMILY_BY_MEMBER, reportRegionFor } = require('../constants/cbatBatteries');
 const { scoreToStanine, scoreForStanine, MEDIAN_STANINE } = require('./cbatStanine');
 
 // Matches the recent-form window used by the leaderboard percentile, for the reasons given there:
@@ -524,6 +524,61 @@ function buildBatteryReport(battery, form) {
   };
 }
 
+// ── Family verdicts ──────────────────────────────────────────────────────────────────────────
+// The real sheet prints one PASS/FAIL per family of roles (see _familiesComment). Controller pairs
+// pass together if either member passes; the WSOP ISR/RW/AM trio fails together if any member
+// fails. buildBatteryReport judges a role on its own, so this runs after it, over a set of
+// reports scored from the same form.
+//
+// Only a sibling's definite verdict moves a role. A sibling that is unscored or provisional is an
+// unknown, and an unknown neither carries nor sinks anything. An unscored role is left alone too:
+// there is no score to put a verdict on.
+//
+// `ownStatus` keeps the role's verdict on its own, and `family.decidedBy` names the siblings that
+// changed it, so the UI can say why a role passes under its pass mark or fails above it.
+function applyFamilyVerdicts(reports) {
+  const byKey = new Map(reports.map(r => [r.key, r]));
+  return reports.map((r) => {
+    const fam = FAMILY_BY_MEMBER[r.key];
+    if (!fam) return r;
+    const siblings = fam.members.filter(k => k !== r.key).map(k => byKey.get(k)).filter(Boolean);
+    let status = r.status;
+    let decidedBy = [];
+    if (r.status !== 'unscored') {
+      if (fam.rule === 'any' && r.status !== 'pass') {
+        decidedBy = siblings.filter(s => s.status === 'pass');
+        if (decidedBy.length) status = 'pass';
+      } else if (fam.rule === 'all' && r.status !== 'fail') {
+        decidedBy = siblings.filter(s => s.status === 'fail');
+        if (decidedBy.length) status = 'fail';
+      }
+    }
+    return {
+      ...r,
+      ownStatus: r.status,
+      status,
+      family: {
+        key: fam.key,
+        label: fam.label,
+        rule: fam.rule,
+        provisional: Boolean(fam.provisional),
+        members: fam.members.map(k => ({ key: k, label: BATTERY_BY_KEY[k].label })),
+        decidedBy: decidedBy.map(s => ({ key: s.key, label: s.label })),
+      },
+    };
+  });
+}
+
+// One role's report with its family applied: the siblings are scored from the same form so the
+// verdict matches what the role would read on a full sheet.
+function buildFamilyReport(battery, form) {
+  const fam = FAMILY_BY_MEMBER[battery.key];
+  const own = buildBatteryReport(battery, form);
+  if (!fam) return own;
+  const siblings = fam.members.filter(k => k !== battery.key).map(k => buildBatteryReport(BATTERY_BY_KEY[k], form));
+  return applyFamilyVerdicts([own, ...siblings])[0];
+}
+
 // ── "What should I work on?" ─────────────────────────────────────────────────────────────────
 // The ranked answer to the only question a report has to earn: what do I play tonight. Two kinds
 // of row come back, and each is priced in the currency that is true for it.
@@ -727,13 +782,14 @@ function buildGaps(battery) {
 async function buildAllBatteryScores(userId, targetKey = null) {
   const form = await loadForm(userId);
   let targetFocus = null;
-  const batteries = Object.values(BATTERY_BY_KEY).map((b) => {
-    const report = buildBatteryReport(b, form);
+  const reports = applyFamilyVerdicts(Object.values(BATTERY_BY_KEY).map(b => buildBatteryReport(b, form)));
+  const batteries = reports.map((report) => {
     const { key, label, group, region, cutoff, score, scoreLow, scoreHigh, firm, margin, status, coverage,
-            runsBanked, runsForFirmScore, firmTests, failedMinimums } = report;
+            runsBanked, runsForFirmScore, firmTests, failedMinimums, ownStatus, family } = report;
     if (targetKey && key === targetKey) targetFocus = topFocus(report);
     return { key, label, group, region, cutoff, maxScore: MAX_SCORE, score, scoreLow, scoreHigh, firm,
-             margin, status, coverage, runsBanked, runsForFirmScore, firmTests, failedMinimums };
+             margin, status, coverage, runsBanked, runsForFirmScore, firmTests, failedMinimums,
+             ownStatus: ownStatus ?? status, family: family ?? null };
   });
   const target = targetKey ? BATTERY_BY_KEY[targetKey] : null;
   // runsToCount travels with the data rather than being mirrored in the frontend. The card counts
@@ -912,7 +968,7 @@ async function buildCbatUserList(User, { q = '', limit = USER_LIST_LIMIT } = {})
       ...u,
       // A player with no runs clears nothing — no need to score them to find that out.
       rolesPassed: form[u._id]
-        ? batteries.filter(b => buildBatteryReport(b, form[u._id]).status === 'pass').length
+        ? applyFamilyVerdicts(batteries.map(b => buildBatteryReport(b, form[u._id]))).filter(r => r.status === 'pass').length
         : 0,
       totalRoles: batteries.length,
     };
@@ -993,7 +1049,7 @@ async function summariseCbatForUsers(userIds, batteryKeyFor = () => null) {
     const battery = BATTERY_BY_KEY[batteryKeyFor(key)] ?? null;
     let aptitude = null;
     if (battery) {
-      const report = played.runs ? buildBatteryReport(battery, form[key] ?? {}) : null;
+      const report = played.runs ? buildFamilyReport(battery, form[key] ?? {}) : null;
       aptitude = {
         battery:  battery.key,
         label:    battery.label,
@@ -1012,7 +1068,7 @@ async function buildAptitudeReport(userId, batteryKey) {
   const battery = BATTERY_BY_KEY[batteryKey];
   if (!battery) return null;
   const form = await loadForm(userId);
-  return { ...buildBatteryReport(battery, form), gaps: buildGaps(battery) };
+  return { ...buildFamilyReport(battery, form), gaps: buildGaps(battery) };
 }
 
 module.exports = {
@@ -1023,6 +1079,8 @@ module.exports = {
   summariseCbatForUsers,
   USER_LIST_LIMIT,
   buildBatteryReport,
+  buildFamilyReport,
+  applyFamilyVerdicts,
   buildGaps,
   loadForm,
   scoreTest,

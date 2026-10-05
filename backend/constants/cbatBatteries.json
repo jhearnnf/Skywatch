@@ -473,6 +473,34 @@
     }
   ],
 
+  "_familiesComment": [
+    "The real sheet's PASS/FAIL side bar is ONE verdict per family of roles, not one per battery.",
+    "Most families on the sheet hold a single role; these are the ones that hold more, and how the",
+    "verdict of a mixed family is decided. Read off the 22 sheets in APPLICATION_INFO/cbat scores plus",
+    "the questionnaire uploads, 2026-10-05.",
+    "",
+    "rule 'any': the family passes if any member passes. Controller pairs, seen on three mixed",
+    "families and never contradicted: CO-ATC failing a minimum beside CO-WC on 132 printed PASS, the",
+    "NCO pair the same on the same candidate, and NCO WC under its STM/C minimum beside NCO ATC on",
+    "101 printed PASS.",
+    "",
+    "rule 'all': the family fails if any member fails. WSOP ISR/RW/AM, seen on ONE mixed family:",
+    "ISR on 85 and under its SymR minimum, RW and AM both on 96 and clear of every minimum, printed",
+    "FAIL. One sheet cannot tell 'all must pass' from 'ISR must pass', hence `provisional`: recheck",
+    "on the next WSOP sheet with a mixed trio.",
+    "",
+    "Only a sibling's DEFINITE verdict moves a role: an unscored or part-played sibling changes",
+    "nothing. UK roles only; the Canadian and Australian roles are separate trades."
+  ],
+  "families": [
+    { "key": "control-officer", "label": "Control Officer", "rule": "any",
+      "members": ["control-officer-atc", "control-officer-wc"] },
+    { "key": "nco-control", "label": "Non-Commissioned Control", "rule": "any",
+      "members": ["nco-control-atc", "nco-control-wc"] },
+    { "key": "wsop-specialist", "label": "WSOP (ISR, RW and AM)", "rule": "all", "provisional": true,
+      "members": ["wsop-isr", "wsop-rw", "wsop-am"] }
+  ],
+
   "_regionsComment": [
     "Which country's test a player is sitting. Every battery above is a UK one (region GB), taken",
     "from real OASC sheets. Canada (CFAST) and Australia (MACTS) publish no weights or pass marks",

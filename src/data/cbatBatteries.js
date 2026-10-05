@@ -165,7 +165,42 @@ function minimumsPhrase(keys) {
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
 }
 
-export function reportVerdict({ status, margin, coverage, scoreLow, scoreHigh, cutoff, failedMinimums } = {}) {
+// "WSOP (ISR)" or "WSOP (ISR) and WSOP (RW)".
+function rolesPhrase(roles) {
+  const names = roles.map(r => r.label)
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
+}
+
+// The words for a verdict a role's family decided rather than its own score (see _familiesComment
+// in cbatBatteries.json). Exported for the mock sheet, which has no room for the full blurb.
+export function familyNote(family, status) {
+  if (!family?.decidedBy?.length) return null
+  return status === 'pass'
+    ? `Passes because you pass ${rolesPhrase(family.decidedBy)}`
+    : `Fails because you do not pass ${rolesPhrase(family.decidedBy)}`
+}
+
+export function reportVerdict({ status, ownStatus, family, margin, coverage, scoreLow, scoreHigh, cutoff, failedMinimums } = {}) {
+  // The real sheet judges some roles as one group: a controller pair passes if either role passes,
+  // and the WSOP ISR, RW and AM roles fail if any one of them fails. When the group, not this
+  // role's own score, decided the verdict, the score would read the other way, so say why.
+  if (family?.decidedBy?.length && ownStatus && ownStatus !== status) {
+    const members = rolesPhrase(family.members)
+    if (status === 'pass') {
+      return {
+        label: 'Passing with its pair',
+        tone: 'good',
+        blurb: `This role does not pass on its own, but the real score sheet gives ${members} one result between them, and you pass ${rolesPhrase(family.decidedBy)}.`,
+      }
+    }
+    return {
+      label: 'Failing with its group',
+      tone: 'bad',
+      blurb: `This role passes on its own, but the real score sheet gives ${members} one result between them, and you do not pass ${rolesPhrase(family.decidedBy)}.${family.provisional ? ' We have only seen this rule on one real score sheet so far.' : ''}`,
+    }
+  }
+
+
   // Every domain has a minimum as well as the battery having a pass mark, and falling under one
   // fails the role however high the score (see _minStanineComment in cbatBatteries.json). That has
   // to be said in words, because the score alone would read as a pass.

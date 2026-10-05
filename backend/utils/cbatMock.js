@@ -11,7 +11,7 @@ const mongoose = require('mongoose');
 const CbatMockAssessment = require('../models/CbatMockAssessment');
 const { CBAT_GAMES } = require('../constants/cbatGames');
 const { MAX_SCORE, MAX_STANINE, TESTS, BATTERY_BY_KEY } = require('../constants/cbatBatteries');
-const { buildBatteryReport, minRunsFor } = require('./cbatAptitudeReport');
+const { buildBatteryReport, buildFamilyReport, applyFamilyVerdicts, minRunsFor } = require('./cbatAptitudeReport');
 const { MOCK, mockBatteries } = require('./cbatMockPlan');
 
 const IDLE_LIMIT_MS = MOCK.idleLimitMinutes * 60 * 1000;
@@ -108,8 +108,7 @@ function mockForm(mock) {
   return form;
 }
 
-function sheetBattery(battery, form) {
-  const report = buildBatteryReport(battery, form);
+function sheetBattery(report) {
   return {
     key: report.key,
     label: report.label,
@@ -119,6 +118,10 @@ function sheetBattery(battery, form) {
     cutoff: report.cutoff,
     score: report.score,
     status: report.status,
+    // The role's verdict on its own, and the family that changed it if one did: the real sheet
+    // passes the controller pairs together and fails the WSOP trio together (see _familiesComment).
+    ownStatus: report.ownStatus ?? report.status,
+    family: report.family ?? null,
     coverage: report.coverage,
     failedMinimums: report.failedMinimums,
     domains: report.domains.map(d => ({
@@ -138,10 +141,15 @@ function buildMockSheet(mock) {
     ? [BATTERY_BY_KEY[mock.batteryKey]].filter(Boolean)
     : mockBatteries({ region: mock.region });
   const form = mockForm(mock);
+  // A role mock still judges the role against its family, scored off the same sitting; an
+  // all-roles sheet already holds every member.
+  const reports = mock.scope === 'role'
+    ? batteries.map(b => buildFamilyReport(b, form))
+    : applyFamilyVerdicts(batteries.map(b => buildBatteryReport(b, form)));
   return {
     maxScore: MAX_SCORE,
     maxStanine: MAX_STANINE,
-    batteries: batteries.map(b => sheetBattery(b, form)),
+    batteries: reports.map(sheetBattery),
   };
 }
 
