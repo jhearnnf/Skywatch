@@ -66,3 +66,39 @@
   border-radius: 2px;
   font-family: Arial, sans-serif;
 }
+
+/* Colour / number orders: the ball's current state, top left, in the same
+   grey box as the Seconds readout. */
+.act-ball-state {
+  position: absolute;
+  top: 3%;
+  left: 2%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgb(103 105 104 / 65%);
+  font-size: clamp(14px, 2vw, 20px);
+}
+.act-ball-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  border: 1px solid #eee;
+  color: #111;
+  font-weight: bold;
+}
+
+.act-order-key {
+  border: 1px solid #8d9699;
+  border-radius: 2px;
+  background: #d4d6d8;
+  color: #111;
+  font-family: Arial, sans-serif;
+}
+.act-order-key[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: -3px; }
+.act-order-key:disabled { opacity: 0.5; }

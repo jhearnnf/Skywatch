@@ -5,6 +5,7 @@
 // instead of a curve object.
 
 import { generateDistractorCallsign, CODE_DIGITS } from './actAudio'
+import { IMMEDIATE_WINDOW_S, DELAYED_WINDOW_S } from './actOrders'
 //
 // Core invariants enforced here (the source of truth for ACT scheduling):
 //   1. Triangles are NEVER the target of an "avoid" command. They're pure
@@ -25,6 +26,9 @@ import { generateDistractorCallsign, CODE_DIGITS } from './actAudio'
 //      has to hold for the rest of the round; the audio engine would silently
 //      drop whichever exclusive sequence started second, and a bleep landing
 //      mid-readout masks a digit.
+//   7. Colour/number orders (Real CBAT theme) are exclusive audio too: no
+//      avoid or distractor talks over one, and two real orders on the same
+//      attribute never overlap from first word to window close.
 
 // ── Tunable constants ───────────────────────────────────────────────────────
 
@@ -125,6 +129,90 @@ export function scoreCodeRecall(expected, entered) {
   const allCorrect = exp.length > 0 && digitsCorrect === exp.length && got.length === exp.length
   const score = digitsCorrect * CODE_SCORE.PER_DIGIT + (allCorrect ? CODE_SCORE.ALL_CORRECT : 0)
   return { digitsCorrect, allCorrect, score }
+}
+
+// ── Colour / number orders (Real CBAT theme only) ──────────────────────────
+// See actOrders.js for what an order says and how it is scored. Here they are
+// only blocks of exclusive audio to fit into the round. They go in AFTER the
+// avoids: an avoid needs a long clear run from its cue to its target, and
+// reserving orders first chopped the round too fine for that. An order only
+// has to stay clear of the avoid's spoken words, so it may land in the think
+// time before the target — holding two things at once is the test.
+
+// Worst-case length of the spoken order. Immediate: callsign (up to three
+// words) + "change colour to" + value. Delayed adds "at" + up to two number
+// words + "seconds".
+export const ORDER_NOW_AUDIO_EST_S = 3.8
+export const ORDER_AT_AUDIO_EST_S  = 5.6
+
+// Seconds between the end of a delayed order and its due second. Long enough
+// that the player has to carry it through other cues, which is the point.
+export const ORDER_LEAD_S = [10, 20]
+
+// How hard the planner tries to fit one order before giving up on it.
+const ORDER_PLACE_ATTEMPTS = 200
+
+// Fit the round's orders around `busy` (spoken intervals { audioT, targetT }).
+// Returns the order cues and their own blocks, which also go into `busy` as
+// they are placed. Real orders on the same attribute never overlap from the
+// moment one is spoken to the moment its window shuts, so one change can only
+// ever answer one order.
+function placeOrders(orderPlan, roundCfg, userCallsign, safeCurveLen, postTargetGapT, busy) {
+  const sToT = (s) => (s * roundCfg.speed) / safeCurveLen
+  const latestEnd = 1 - END_MARGIN_T
+  const spans = []   // { attr, start, end } for real orders
+  const cues = []
+
+  const blocks = []
+  const blockFree = (start, end) => busy.every(p => end + postTargetGapT <= p.audioT || start >= p.targetT + postTargetGapT)
+  const spanFree = (attr, start, end) => spans.every(sp => sp.attr !== attr || end <= sp.start || start >= sp.end)
+
+  const wanted = [
+    ...Array(orderPlan.at || 0).fill({ real: true, mode: 'at' }),
+    ...Array(orderPlan.now || 0).fill({ real: true, mode: 'now' }),
+    ...Array(orderPlan.fake || 0).fill({ real: false }),
+  ]
+  for (const want of wanted) {
+    // A fake says whichever kind the round already uses.
+    const mode = want.real ? want.mode : (orderPlan.at && Math.random() < 0.5 ? 'at' : 'now')
+    const audioS = mode === 'at' ? ORDER_AT_AUDIO_EST_S : ORDER_NOW_AUDIO_EST_S
+    const leadS = mode === 'at' ? ORDER_LEAD_S[0] + Math.random() * (ORDER_LEAD_S[1] - ORDER_LEAD_S[0]) : 0
+    // From the first word to the window shutting. +1 covers rounding the due
+    // time up to a whole second.
+    const spanS = mode === 'at' ? audioS + leadS + 1 + DELAYED_WINDOW_S : audioS + IMMEDIATE_WINDOW_S
+    const audioLenT = sToT(audioS)
+    // A fake's window means nothing, but the round has to outlast the voice.
+    const latest = latestEnd - (want.real ? sToT(spanS) : audioLenT)
+    if (latest <= AUDIO_WARMUP_T) continue
+    const firstAttr = Math.random() < 0.5 ? 'colour' : 'number'
+    const attrs = want.real ? [firstAttr, firstAttr === 'colour' ? 'number' : 'colour'] : [firstAttr]
+
+    let done = false
+    for (let attempt = 0; attempt < ORDER_PLACE_ATTEMPTS && !done; attempt++) {
+      const audioT = AUDIO_WARMUP_T + Math.random() * (latest - AUDIO_WARMUP_T)
+      if (!blockFree(audioT, audioT + audioLenT)) continue
+      for (const attr of attrs) {
+        const spanEnd = audioT + sToT(spanS)
+        if (want.real && !spanFree(attr, audioT, spanEnd)) continue
+        const block = { audioT, targetT: audioT + audioLenT, shape: null, reserved: true }
+        busy.push(block)
+        blocks.push(block)
+        if (want.real) spans.push({ attr, start: audioT, end: spanEnd })
+        cues.push({
+          t: audioT,
+          kind: 'order',
+          real: want.real,
+          mode,
+          attr,
+          leadS,
+          callsigns: want.real ? userCallsign : generateDistractorCallsign(userCallsign),
+        })
+        done = true
+        break
+      }
+    }
+  }
+  return { cues: cues.filter(c => c.callsigns), blocks }
 }
 
 // Floor on per-round avoid cue count — the player must hear their callsign
@@ -267,7 +355,9 @@ function findAudioTAroundExisting(window, candidateTargetT, existingCues, postTa
 
 // Build the per-round audio plan. Returns cues sorted by t.
 // `memoryCode` is the 7-digit string for the final round; pass null elsewhere.
-export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen, memoryCode = null) {
+// `orderPlan` ({ now, at, fake } counts) adds colour/number orders — Real CBAT
+// theme only; null leaves the plan exactly as it always was.
+export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curveLen, memoryCode = null, orderPlan = null) {
   const cues = []
 
   // Derived spacing in t-units.
@@ -293,10 +383,14 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
     // of the tunnel.
     const latest = Math.max(AUDIO_WARMUP_T, 1 - codeSpanT - postTargetGapT - 0.02)
     const startT = Math.min(Math.max(AUDIO_WARMUP_T, CODE_CUE_T + jitter), latest)
-    codeBlock = { audioT: startT, targetT: startT + codeSpanT, shape: null, isCode: true }
+    codeBlock = { audioT: startT, targetT: startT + codeSpanT, shape: null, isCode: true, reserved: true }
     placed.push(codeBlock)
     cues.push({ t: startT, kind: 'code', code: String(memoryCode) })
   }
+
+  // Everything reserved so far (the code block). The avoid passes route
+  // around these and never count them.
+  const reserved = placed.slice()
 
   // Span the code readout occupies, including its trailing gap. Null when the
   // round has no code.
@@ -332,10 +426,11 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
     rolled.sort((a, b) => a - b)
   }
 
-  // How many AVOID cues are placed. `placed` also carries the memory-code
-  // block, which must not count toward the per-round avoid floor or ceiling —
-  // otherwise round 5 reads as "already has one" and skips its top-up passes.
-  const avoidCount = () => placed.length - (codeBlock ? 1 : 0)
+  // How many AVOID cues are placed. `placed` also carries the reserved
+  // memory-code block, which must not count toward the per-round avoid floor
+  // or ceiling — otherwise round 5 reads as "already has one" and skips its
+  // top-up passes.
+  const avoidCount = () => placed.length - reserved.length
 
   // Step 2: place each rolled candidate. Slot-finder picks an audioT that
   // doesn't overlap any previously-placed cue's active span — so the order
@@ -388,7 +483,7 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
         // talking over the readout. Nothing is committed until BOTH fit —
         // clearing `placed` first would throw away a working single cue (and
         // the code block) on a pair that turns out not to work.
-        const trial = codeBlock ? [codeBlock] : []
+        const trial = reserved.slice()
         const audioA = findAudioTAroundExisting(A.win, A.win.targetT, trial, postTargetGapT)
         if (audioA == null) continue
         const blockA = { audioT: audioA, targetT: A.win.targetT, shape: A.shape }
@@ -396,7 +491,7 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
         if (audioB == null) continue
         placed.length = 0
         placedIdxs.clear()
-        if (codeBlock) placed.push(codeBlock)
+        placed.push(...reserved)
         placed.push(blockA)
         placedIdxs.add(A.i)
         placed.push({ audioT: audioB, targetT: B.win.targetT, shape: B.shape })
@@ -410,8 +505,19 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
   // Commit placed avoids into the cue list. The code block shares `placed` for
   // collision purposes only — it was already emitted in step 0.
   for (const p of placed) {
-    if (p.isCode) continue
+    if (p.reserved) continue
     cues.push({ t: p.audioT, kind: 'avoid', callsigns: userCallsign, shape: p.shape })
+  }
+
+  // Step 2d: colour/number orders (Real CBAT theme), fitted around the code
+  // readout and the avoids' spoken words. Their blocks join `placed` so the
+  // distractors below keep off them too.
+  const audioDurT = (AUDIO_DURATION_S_EST * roundCfg.speed) / safeCurveLen
+  if (orderPlan) {
+    const busy = placed.map(p => (p.reserved ? p : { audioT: p.audioT, targetT: p.audioT + audioDurT }))
+    const { cues: orderCues, blocks } = placeOrders(orderPlan, roundCfg, userCallsign, safeCurveLen, postTargetGapT, busy)
+    cues.push(...orderCues)
+    placed.push(...blocks)
   }
 
   // Step 3: distractors — fire near non-target events with a non-matching
@@ -431,10 +537,13 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
     const ev = events[i]
     const audioT = Math.max(AUDIO_WARMUP_T, ev.t - 0.06)
     if (audioT >= ev.t) continue
+    // The voice runs its full length even when the warm-up clamp has pulled
+    // the cue close to its shape.
+    const distractorEnd = Math.max(ev.t, audioT + audioDurT)
     let conflicts = false
     for (const p of placed) {
       const pEnd = p.targetT + postTargetGapT
-      if (audioT < pEnd && ev.t > p.audioT) { conflicts = true; break }
+      if (audioT < pEnd && distractorEnd > p.audioT) { conflicts = true; break }
     }
     if (conflicts) continue
     const distractorShape = Math.random() < 0.5 ? 'circle' : 'square'

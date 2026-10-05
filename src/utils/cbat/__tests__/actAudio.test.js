@@ -649,3 +649,100 @@ describe('ActAudioEngine clip loading', () => {
     expect(engine.loadOk).toBe(true)
   })
 })
+
+describe('ActAudioEngine colour/number orders', () => {
+  // A decoded "at seconds" take: loud, a 60ms gap, loud. Everything else
+  // decodes to a plain 0.4s buffer.
+  const SR = 1000
+  function atSecondsSamples() {
+    const out = new Float32Array(560)
+    for (let i = 50; i < 150; i++) out[i] = i % 2 ? 0.5 : -0.5
+    for (let i = 210; i < 510; i++) out[i] = i % 2 ? 0.4 : -0.4
+    return out
+  }
+  function fakeBuffer(samples) {
+    return {
+      duration: samples.length / SR, length: samples.length, sampleRate: SR, numberOfChannels: 1,
+      getChannelData: () => samples,
+    }
+  }
+
+  function stubOrderEnvironment({ missingVoice = null } = {}) {
+    const fetchMock = vi.fn((url) => {
+      if (missingVoice && url.includes(`_${missingVoice}.mp3`) && !url.includes(`${missingVoice}_`)) {
+        return Promise.resolve({ ok: false, status: 404 })
+      }
+      return Promise.resolve({ ok: true, arrayBuffer: () => Promise.resolve(url) })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    class FakeCtx {
+      constructor() { this.state = 'running'; this.currentTime = 0; this.destination = {} }
+      resume() { return Promise.resolve() }
+      decodeAudioData(url) {
+        return Promise.resolve(String(url).includes(encodeURIComponent('at seconds'))
+          ? fakeBuffer(atSecondsSamples())
+          : fakeBuffer(new Float32Array(400)))
+      }
+      createBuffer(channels, length, sampleRate) {
+        const data = Array.from({ length: channels }, () => new Float32Array(length))
+        return { duration: length / sampleRate, length, sampleRate, numberOfChannels: channels, getChannelData: (c) => data[c] }
+      }
+      createBufferSource() { return { buffer: null, connect() {}, start() {}, stop() {}, onended: null } }
+      createGain() { return { gain: { value: 0 }, connect() {} } }
+    }
+    vi.stubGlobal('AudioContext', FakeCtx)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    return fetchMock
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('init() does not fetch the order clips (SkyWatch theme never needs them)', async () => {
+    const fetchMock = stubOrderEnvironment()
+    const engine = new ActAudioEngine()
+    await engine.init()
+    expect(fetchMock.mock.calls.some(([u]) => u.includes('change%20color%20to'))).toBe(false)
+  })
+
+  it('loads the suffix-named order clips and splits "at seconds" into two words', async () => {
+    const fetchMock = stubOrderEnvironment()
+    const engine = new ActAudioEngine()
+    await engine.init()
+    await engine.loadOrderClips()
+    expect(fetchMock).toHaveBeenCalledWith('/sounds/act/red_male.mp3')
+    expect(fetchMock).toHaveBeenCalledWith('/sounds/act/40_female.mp3')
+    expect(fetchMock).toHaveBeenCalledWith(`/sounds/act/${encodeURIComponent('change color to_male')}.mp3`)
+    const at = engine.buffers.get('male:order_at')
+    const seconds = engine.buffers.get('male:order_seconds')
+    expect(at.length).toBeGreaterThanOrEqual(150)
+    expect(at.length).toBeLessThan(210)
+    expect(at.length + seconds.length).toBe(560)
+  })
+
+  it('a voice short of order clips is skipped, and never fails the load', async () => {
+    stubOrderEnvironment({ missingVoice: 'female' })
+    const engine = new ActAudioEngine()
+    await engine.init()
+    await engine.loadOrderClips()
+    expect(engine.loadOk).toBe(true)
+    const names = ['bravo', 'echo', 'order_change_colour_to', 'order_red']
+    expect(engine.voicesFor(names)).toEqual(['male'])
+    const spy = vi.spyOn(engine.buffers, 'get')
+    const result = engine.playOrder(names)
+    expect(result.played).toBe(true)
+    expect(result.durationS).toBeGreaterThan(0)
+    for (const [key] of spy.mock.calls) expect(key.startsWith('male:')).toBe(true)
+  })
+
+  it('does not play an order no voice can say in full', async () => {
+    stubOrderEnvironment()
+    const engine = new ActAudioEngine()
+    await engine.init()
+    // Order clips never loaded.
+    const result = engine.playOrder(['bravo', 'echo', 'order_change_colour_to', 'order_red'])
+    expect(result.played).toBe(false)
+  })
+})

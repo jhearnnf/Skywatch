@@ -23,6 +23,11 @@ const schema = new mongoose.Schema({
   codeAttempted:        { type: Boolean, default: false },
   codeDigitsCorrect:    { type: Number, default: 0 },     // digits correct in position (0–7)
   codeRecalled:         { type: Boolean, default: false },// whole code correct
+  // Colour / number orders — Real CBAT theme only, rounds 3-5. All zero for a
+  // SkyWatch-theme run and for every session recorded before the feature.
+  ordersObeyed:         { type: Number, default: 0 },     // changes made inside an order's window
+  ordersMissed:         { type: Number, default: 0 },     // orders not obeyed in time, or a delayed one done early
+  orderFalseChanges:    { type: Number, default: 0 },     // changes no live order asked for (fakes, wrong value)
   createdAt:            { type: Date, default: Date.now },
 });
 

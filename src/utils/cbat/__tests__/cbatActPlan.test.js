@@ -17,7 +17,11 @@ import {
   generateAudioPlan,
   generateMemoryCode,
   scoreCodeRecall,
+  ORDER_NOW_AUDIO_EST_S,
+  ORDER_AT_AUDIO_EST_S,
+  ORDER_LEAD_S,
 } from '../cbatActPlan'
+import { IMMEDIATE_WINDOW_S, DELAYED_WINDOW_S } from '../actOrders'
 import { CODE_DIGITS } from '../actAudio'
 
 // Mirror the production ROUND_CONFIG so tests cover real round tuning.
@@ -409,6 +413,122 @@ describe('generateAudioPlan — memory code cue', () => {
       const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
       const cues = generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, CODE)
       expect(cues.filter(c => c.kind === 'avoid').length).toBeGreaterThanOrEqual(2)
+    }
+  })
+})
+
+// ── Colour / number orders (Real CBAT theme) ────────────────────────────────
+
+// Mirrors ROUND_ORDERS in CbatAct.jsx.
+const ROUND_ORDERS = [null, null, { now: 2, at: 0, fake: 1 }, { now: 2, at: 1, fake: 1 }, { now: 2, at: 1, fake: 1 }]
+
+// Median length of the real tunnel per round (buildTunnelCurve sampled), not
+// approxCurveLen: orders are fitted in seconds, and the approximation runs
+// rounds 4-5 about a fifth short.
+const REAL_CURVE_LEN = [219, 262, 311, 368, 430]
+
+describe('generateAudioPlan — colour/number orders', () => {
+  const CODE = '1234567'
+  const sToT = (r, len, s) => (s * ROUND_CONFIG[r].speed) / len
+  // Seconds of exclusive voice each spoken cue occupies.
+  const audioS = (cue) => cue.kind === 'order'
+    ? (cue.mode === 'at' ? ORDER_AT_AUDIO_EST_S : ORDER_NOW_AUDIO_EST_S)
+    : cue.kind === 'code' ? CODE_AUDIO_DURATION_S_EST : AUDIO_DURATION_S_EST
+
+  function plan(r) {
+    const len = REAL_CURVE_LEN[r]
+    const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+    const code = r === CODE_ROUND_IDX ? CODE : null
+    return { len, cues: generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, code, ROUND_ORDERS[r]) }
+  }
+
+  it('adds no order cues when no order plan is given (SkyWatch theme)', () => {
+    for (let r = 0; r < 5; r++) {
+      const len = approxCurveLen(r)
+      const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+      const cues = generateAudioPlan(events, ROUND_CONFIG[r], USER_CALLSIGN, r, len, null)
+      expect(cues.some(c => c.kind === 'order')).toBe(false)
+    }
+  })
+
+  it('places the planned orders in almost every round', () => {
+    for (const r of [2, 3, 4]) {
+      const want = ROUND_ORDERS[r].now + ROUND_ORDERS[r].at + ROUND_ORDERS[r].fake
+      let placed = 0
+      for (let i = 0; i < 100; i++) placed += plan(r).cues.filter(c => c.kind === 'order').length
+      expect(placed / (100 * want)).toBeGreaterThan(0.9)
+    }
+  })
+
+  it('real orders carry your callsign, fakes a valid distractor', () => {
+    for (let i = 0; i < 60; i++) {
+      for (const cue of plan(4).cues.filter(c => c.kind === 'order')) {
+        if (cue.real) expect(cue.callsigns).toEqual(USER_CALLSIGN)
+        else expect(cue.callsigns.some(c => USER_CALLSIGN.includes(c))).toBe(false)
+        expect(['colour', 'number']).toContain(cue.attr)
+        if (cue.mode === 'at') {
+          expect(cue.leadS).toBeGreaterThanOrEqual(ORDER_LEAD_S[0])
+          expect(cue.leadS).toBeLessThanOrEqual(ORDER_LEAD_S[1])
+        }
+      }
+    }
+  })
+
+  it('no spoken cue talks over an order', () => {
+    for (const r of [2, 3, 4]) {
+      for (let i = 0; i < 80; i++) {
+        const { len, cues } = plan(r)
+        const spoken = cues.filter(c => c.kind !== 'bleep')
+        for (const o of spoken.filter(c => c.kind === 'order')) {
+          const oEnd = o.t + sToT(r, len, audioS(o))
+          for (const c of spoken) {
+            if (c === o) continue
+            const cEnd = c.t + sToT(r, len, audioS(c))
+            const overlaps = c.t < oEnd && cEnd > o.t
+            expect(overlaps, `round ${r + 1}: ${c.kind} at ${c.t} overlaps order at ${o.t}`).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  it('two real orders on the same attribute never overlap, voice to window close', () => {
+    const spanS = (o) => o.mode === 'at'
+      ? ORDER_AT_AUDIO_EST_S + o.leadS + 1 + DELAYED_WINDOW_S
+      : ORDER_NOW_AUDIO_EST_S + IMMEDIATE_WINDOW_S
+    for (const r of [2, 3, 4]) {
+      for (let i = 0; i < 80; i++) {
+        const { len, cues } = plan(r)
+        const real = cues.filter(c => c.kind === 'order' && c.real)
+        for (const a of real) {
+          for (const b of real) {
+            if (a === b || a.attr !== b.attr) continue
+            const aEnd = a.t + sToT(r, len, spanS(a))
+            const bEnd = b.t + sToT(r, len, spanS(b))
+            expect(a.t < bEnd && b.t < aEnd).toBe(false)
+          }
+        }
+      }
+    }
+  })
+
+  it('a real order finishes inside the round', () => {
+    for (let i = 0; i < 80; i++) {
+      const r = 4
+      const { len, cues } = plan(r)
+      for (const o of cues.filter(c => c.kind === 'order' && c.real && c.mode === 'at')) {
+        expect(o.t + sToT(r, len, ORDER_AT_AUDIO_EST_S + o.leadS + 1 + DELAYED_WINDOW_S)).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+
+  it('still meets the avoid-cue floor with the orders reserved', () => {
+    for (const r of [2, 3, 4]) {
+      let short = 0
+      for (let i = 0; i < 100; i++) {
+        if (plan(r).cues.filter(c => c.kind === 'avoid').length < 2) short++
+      }
+      expect(short, `round ${r + 1}`).toBeLessThanOrEqual(2)
     }
   })
 })

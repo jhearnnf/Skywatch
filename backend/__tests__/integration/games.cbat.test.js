@@ -949,6 +949,30 @@ describe('CBAT ACT', () => {
       expect(res.body.data.codeRecalled).toBe(false);
     });
 
+    it('records the colour/number order counts', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({
+          totalScore: 600, totalTime: 230, finalRound: 5,
+          ordersObeyed: 6, ordersMissed: 2, orderFalseChanges: 1,
+        });
+      expect(res.status).toBe(201);
+      expect(res.body.data.ordersObeyed).toBe(6);
+      expect(res.body.data.ordersMissed).toBe(2);
+      expect(res.body.data.orderFalseChanges).toBe(1);
+    });
+
+    it('defaults the order counts to zero (SkyWatch theme, older clients)', async () => {
+      const res = await request(app)
+        .post(RESULT_URL)
+        .set('Cookie', cookie)
+        .send({ totalScore: 120, totalTime: 60, finalRound: 2 });
+      expect(res.body.data.ordersObeyed).toBe(0);
+      expect(res.body.data.ordersMissed).toBe(0);
+      expect(res.body.data.orderFalseChanges).toBe(0);
+    });
+
     it('returns 401 without auth', async () => {
       const res = await request(app).post(RESULT_URL).send({ totalScore: 100, totalTime: 30 });
       expect(res.status).toBe(401);

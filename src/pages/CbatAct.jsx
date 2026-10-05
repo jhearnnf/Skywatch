@@ -33,7 +33,24 @@ import {
   generateAudioPlan,
   generateMemoryCode,
   scoreCodeRecall,
+  ORDER_AT_AUDIO_EST_S,
 } from '../utils/cbat/cbatActPlan'
+import {
+  ORDER_COLOURS,
+  ORDER_NUMBERS,
+  ORDER_COLOUR_HEX,
+  COLOUR_KEYS,
+  ORDER_SCORE,
+  randomBallState,
+  pickOrderValue,
+  resolveDueSecond,
+  buildOrderSequence,
+  armImmediateOrder,
+  armDelayedOrder,
+  applyBallChange,
+  expireOrders,
+  settleOrdersAtRoundEnd,
+} from '../utils/cbat/actOrders'
 import CodeRecall from './CbatAct/CodeRecall'
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
@@ -97,6 +114,21 @@ const ROUND_CONFIG = [
   { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.65, bleepOdds: 0.07, turns: 16, callsigns: 2 },
   { speed: 5.5, shapes: 28, distractorOdds: 0.28, avoidOdds: 0.70, bleepOdds: 0.08, turns: 18, callsigns: 3 },
   { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.75, bleepOdds: 0.09, turns: 20, callsigns: 3 },
+]
+
+// Colour / number orders per round — Real CBAT theme only (see actOrders.js).
+// Candidates describe the test starting easy and finishing very hard, so the
+// orders arrive in round 3 as immediate ones, and the delayed "at N seconds"
+// kind joins in rounds 4 and 5. `fake` orders use someone else's callsign.
+// Round 5 keeps round 4's mix: two delayed windows plus the code readout
+// did not fit a 66 s round, and its speed and three-word callsigns already
+// make it the hardest.
+const ROUND_ORDERS = [
+  null,
+  null,
+  { now: 2, at: 0, fake: 1 },
+  { now: 2, at: 1, fake: 1 },
+  { now: 2, at: 1, fake: 1 },
 ]
 
 // Score deltas
@@ -542,12 +574,16 @@ function ChaseCamera({ ballPosRef, ballForwardRef, ballTRef, curve, realCbat = f
 
 // Tracks the live game state for one round. Exposes everything the React tree
 // needs to render the canvas + HUD without re-rendering every frame.
-function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
+function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode, realCbat = false) {
   const cfg     = ROUND_CONFIG[roundIdx]
   const userCallsign = useMemo(() => pickCallsigns(cfg.callsigns), [roundIdx])
   const curve   = useMemo(() => buildTunnelCurve(roundIdx), [roundIdx])
   const events  = useMemo(() => generateShapeEvents(curve.getLength(), cfg.shapes, roundIdx), [curve, cfg.shapes, roundIdx])
-  const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx, curve.getLength(), memoryCode), [events, cfg, userCallsign, roundIdx, curve, memoryCode])
+  // Fixed for the life of the round: the theme is an account setting, and a
+  // plan that changed shape mid-round would re-fire cues already played.
+  const orderPlan = useMemo(() => (realCbat ? ROUND_ORDERS[roundIdx] : null), [roundIdx])
+  const ordersOn = !!orderPlan
+  const audioCues = useMemo(() => generateAudioPlan(events, cfg, userCallsign, roundIdx, curve.getLength(), memoryCode, orderPlan), [events, cfg, userCallsign, roundIdx, curve, memoryCode, orderPlan])
 
   const ballTRef       = useRef(0)
   const ballPosRef     = useRef(new THREE.Vector3())
@@ -596,6 +632,10 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     bleepMisses: 0,
     bleepFalseAlarms: 0,
     reactionMsList: [],
+    // Colour / number orders. Stay zero outside the Real CBAT order rounds.
+    ordersObeyed: 0,
+    ordersMissed: 0,
+    orderFalseChanges: 0,
     score: 0,
     // Pixel-equivalents of steering banked from each kind of control. Every
     // source writes into the same accumulator in the same unit (see
@@ -630,6 +670,38 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
   const codeQuietUntilRef = useRef(0)
 
   const completedRef = useRef(false)
+
+  // ── Colour / number orders ────────────────────────────────────────────────
+  // The ball's current colour and number, the orders the player is being held
+  // to, and the hex the 3D ball reads each frame. Only used when ordersOn.
+  const ballStateRef = useRef(null)
+  if (ballStateRef.current == null) ballStateRef.current = randomBallState()
+  const ballHexRef = useRef(ORDER_COLOUR_HEX[ballStateRef.current.colour])
+  const armedOrdersRef = useRef([])
+
+  // The player changed the ball. Scored against the live orders straight away;
+  // a change nothing asked for costs points, which is what makes the fakes
+  // worth listening to.
+  const changeBall = useCallback((attr, value) => {
+    if (!ordersOn || pausedRef.current || completedRef.current || tutorialActiveRef.current) return
+    const current = ballStateRef.current
+    if (current[attr] === value) return
+    ballStateRef.current = { ...current, [attr]: value }
+    if (attr === 'colour') ballHexRef.current = ORDER_COLOUR_HEX[value]
+    const s = statsRef.current
+    const outcome = applyBallChange(armedOrdersRef.current, attr, value, elapsedRef.current)
+    if (outcome === 'obeyed') {
+      s.ordersObeyed += 1
+      s.score += ORDER_SCORE.OBEYED
+    } else if (outcome === 'early') {
+      s.ordersMissed += 1
+      s.score += ORDER_SCORE.MISSED
+    } else {
+      s.orderFalseChanges += 1
+      s.score += ORDER_SCORE.FALSE_CHANGE
+    }
+    forceTick(t => t + 1)
+  }, [ordersOn])
 
   // ── Pause when the player isn't there ──────────────────────────────────────
   // Locking the phone, switching app/tab, or clicking into another window all
@@ -1123,6 +1195,22 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
         } else if (cue.kind === 'bleep') {
           audio.playBleep()
           pendingBleepRef.current = { startedAt: performance.now() }
+        } else if (cue.kind === 'order') {
+          // Colour / number order. The value is picked now, against the ball
+          // as the player actually has it, so a real order always asks for a
+          // change. A fake is spoken the same way and never armed.
+          const value = pickOrderValue(cue.attr, ballStateRef.current[cue.attr])
+          let dueS = null
+          if (cue.mode === 'at') {
+            dueS = resolveDueSecond(elapsedRef.current, ORDER_AT_AUDIO_EST_S, cue.leadS)
+            if (dueS == null) continue
+          }
+          const result = audio.playOrder(buildOrderSequence(cue.callsigns, { attr: cue.attr, value, dueS }))
+          if (result.played && cue.real) {
+            armedOrdersRef.current.push(cue.mode === 'at'
+              ? armDelayedOrder(cue.attr, value, dueS)
+              : armImmediateOrder(cue.attr, value, elapsedRef.current, result.durationS))
+          }
         } else if (cue.kind === 'code') {
           // Round-5 memory code. The planner reserves a cue-free block around
           // this, so nothing should be in flight to drop it; the chatter
@@ -1140,6 +1228,15 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
           statsRef.current.bleepMisses += 1
           statsRef.current.score += SCORE.BLEEP_MISS
           pendingBleepRef.current = null
+        }
+      }
+
+      // ── 6b. Orders whose window has shut without the change. ─────────────
+      if (armedOrdersRef.current.length) {
+        const missed = expireOrders(armedOrdersRef.current, elapsedRef.current)
+        if (missed) {
+          statsRef.current.ordersMissed += missed
+          statsRef.current.score += ORDER_SCORE.MISSED * missed
         }
       }
 
@@ -1208,6 +1305,11 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
           statsRef.current.score += SCORE.BLEEP_MISS
           pendingBleepRef.current = null
         }
+        const lateOrders = settleOrdersAtRoundEnd(armedOrdersRef.current, elapsedRef.current)
+        if (lateOrders) {
+          statsRef.current.ordersMissed += lateOrders
+          statsRef.current.score += ORDER_SCORE.MISSED * lateOrders
+        }
         audio.stopAll()
         audio.stopStatic()
         const reactionList = statsRef.current.reactionMsList
@@ -1251,6 +1353,10 @@ function useActRoundState(roundIdx, audio, onRoundComplete, memoryCode) {
     startBleepTutorial,
     paused,
     resumeFromPause,
+    ordersOn,
+    ballStateRef,
+    ballHexRef,
+    changeBall,
   }
 }
 
@@ -1309,6 +1415,7 @@ function ActScene({ state, craftUrl, realCbat }) {
         ballForwardRef={state.ballForwardRef}
         modelUrl={realCbat ? null : craftUrl}
         radius={realCbat ? BALL_RADIUS * 0.6 : BALL_RADIUS}
+        colourRef={state.ordersOn ? state.ballHexRef : undefined}
       />
       <ChaseCamera
         ballPosRef={state.ballPosRef}
@@ -1346,6 +1453,10 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
         <Stat label="Wall scrape"     value={`${stats.wallScrapeSeconds.toFixed(1)}s`} bad={stats.wallScrapeSeconds > 0} />
         <Stat label="Bleep hits"      value={`${stats.bleepHits}/${stats.bleepHits + stats.bleepMisses}`} good={stats.bleepHits > 0} />
         <Stat label="False taps"      value={stats.bleepFalseAlarms} bad={stats.bleepFalseAlarms > 0} />
+        {hadOrders(stats) && <>
+          <Stat label="Orders obeyed" value={`${stats.ordersObeyed}/${stats.ordersObeyed + stats.ordersMissed}`} good={stats.ordersObeyed > 0} />
+          <Stat label="Wrong changes" value={stats.orderFalseChanges} bad={stats.orderFalseChanges > 0} />
+        </>}
       </div>
 
       {codeResult && (
@@ -1379,6 +1490,12 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
   )
 }
 
+// Did this round (or run) carry colour/number orders? Only the Real CBAT order
+// rounds do, and only those show the two order stats.
+function hadOrders(stats) {
+  return (stats.ordersObeyed || 0) + (stats.ordersMissed || 0) + (stats.orderFalseChanges || 0) > 0
+}
+
 function Stat({ label, value, good, bad }) {
   const tone = good ? 'text-green-400' : bad ? 'text-red-400' : 'text-brand-600'
   return (
@@ -1392,6 +1509,8 @@ function Stat({ label, value, good, bad }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 export default function CbatAct() {
   const { user, apiFetch, API } = useAuth()
+  // Real CBAT theme: the colour/number orders, and the clips they need.
+  const realCbat = useCbatTheme()
   const { start: startTracking, setRound: trackRound, markCompleted: markGameCompleted } = useCbatTracking()
   const appSettings = useAppSettings()
   const settings = appSettings?.settings
@@ -1548,17 +1667,21 @@ export default function CbatAct() {
     }
     // A demo mount never builds a context: nothing to load, nothing to wake.
     if (!eng.ctx) { setAudioStatus(null); return true }
+    // Order clips only matter under the Real CBAT theme. Started here and
+    // awaited below, so the context wake still happens inside the tap.
+    const orderClips = realCbat ? eng.loadOrderClips() : null
     if (!eng.loadOk) {
       // Second time round only the missing clips are refetched.
       await eng.loadClips()
     }
     const running = await eng.ensureRunning()
+    if (orderClips) await orderClips
     if (allowSilent) { setAudioStatus(null); return true }
     if (!eng.loadOk) { setAudioStatus('load'); return false }
     if (!running) { setAudioStatus('blocked'); return false }
     setAudioStatus(null)
     return true
-  }, [initAudio])
+  }, [initAudio, realCbat])
 
   const startGame = useCallback(async ({ allowSilent = false } = {}) => {
     const ready = await prepareAudio({ allowSilent })
@@ -1693,7 +1816,10 @@ export default function CbatAct() {
       bleepHits: acc.bleepHits + s.bleepHits,
       bleepMisses: acc.bleepMisses + s.bleepMisses,
       reactionList: [...acc.reactionList, ...s.reactionMsList],
-    }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0, reactionList: [] })
+      ordersObeyed: acc.ordersObeyed + (s.ordersObeyed || 0),
+      ordersMissed: acc.ordersMissed + (s.ordersMissed || 0),
+      orderFalseChanges: acc.orderFalseChanges + (s.orderFalseChanges || 0),
+    }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0, reactionList: [], ordersObeyed: 0, ordersMissed: 0, orderFalseChanges: 0 })
     const avgReaction = totals.reactionList.length ? totals.reactionList.reduce((a, b) => a + b, 0) / totals.reactionList.length : 0
     // Time = sum of round durations is hard to track precisely; use the total
     // configured speed-distance approximation.
@@ -1720,6 +1846,9 @@ export default function CbatAct() {
         codeDigitsCorrect:  codeResult?.digitsCorrect ?? 0,
         codeRecalled:       !!codeResult?.allCorrect,
         codeAttempted:      !!codeResult,
+        ordersObeyed:       totals.ordersObeyed,
+        ordersMissed:       totals.ordersMissed,
+        orderFalseChanges:  totals.orderFalseChanges,
       }, { apiFetch, API })
       .then((r) => {
         setScoreSaved(!!r?.synced)
@@ -1923,6 +2052,16 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
         hold on to it. You'll be asked for it when the round ends.
       </p>
 
+      {realCbat && (
+        <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
+          From round 3 your ball has a <span className="text-brand-600 font-bold">colour and a number</span>.
+          When your callsign tells you to change one, do it straight away, or at the second it gives
+          if it says "at" a time. Watch the Seconds clock for those. On a keyboard press R, G or Y
+          for red, green or yellow, and 1 to 9 for the number. On a touch screen use the buttons
+          under BLEEP. Ignore orders for other callsigns.
+        </p>
+      )}
+
       {/* Only below lg. Above it this same notice is the right-hand column. */}
       <div className="w-full mb-5 lg:hidden">{headphonesNotice}</div>
 
@@ -1939,6 +2078,12 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⚡'}</span>
           <span className="pt-0.5">Tap BLEEP fast when you hear it (+25/+20/+10), miss or false tap = −10</span>
         </div>
+        {realCbat && (
+          <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
+            <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🎨'}</span>
+            <span className="pt-0.5">Colour and number orders: obeyed = +{ORDER_SCORE.OBEYED}, missed = −{-ORDER_SCORE.MISSED}, a change nobody asked for = −{-ORDER_SCORE.FALSE_CHANGE}</span>
+          </div>
+        )}
         <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Scraping the tunnel wall costs −5 / second</span>
@@ -2011,8 +2156,28 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
 // ── Round wrapper (mounts game-state hook + canvas + HUD) ────────────────────
 function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutorialDone, onTutorialFired, memoryCode, debug, craftUrl }) {
   const realCbat = useCbatTheme()
-  const state = useActRoundState(roundIdx, audio, onRoundComplete, memoryCode)
+  const state = useActRoundState(roundIdx, audio, onRoundComplete, memoryCode, realCbat)
   const stats = state.statsRef.current
+
+  // Colour / number orders: R, G, Y set the colour and 1-9 the number. Off
+  // during the callsign card and the pause screen, like BLEEP. Modifier keys
+  // are left alone so Ctrl+R still reloads.
+  const { ordersOn, changeBall } = state
+  useEffect(() => {
+    if (!ordersOn || showCallsignOverlay || state.paused) return
+    const onKeyDown = (e) => {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+      const key = e.key.toLowerCase()
+      if (COLOUR_KEYS[key]) {
+        changeBall('colour', COLOUR_KEYS[key])
+      } else if (key.length === 1 && key >= '1' && key <= '9') {
+        changeBall('number', Number(key))
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [ordersOn, changeBall, showCallsignOverlay, state.paused])
+  const ballState = state.ballStateRef.current
 
   // Round-1 bleep tutorial: ~1.5 s after the callsign overlay disappears,
   // play one bleep and pause everything until the player taps the button.
@@ -2160,6 +2325,18 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
           <div className="act-crosshair-vertical" />
           <div className="act-seconds">Seconds<br />{Math.floor(state.elapsedRef.current)}</div>
           <div className="act-progress"><div style={{ width: `${Math.min(100, state.ballTRef.current * 100)}%` }} /></div>
+          {ordersOn && (
+            <div className="act-ball-state" data-testid="act-ball-state">
+              Ball
+              <span
+                className="act-ball-swatch"
+                style={{ background: ORDER_COLOUR_HEX[ballState.colour] }}
+                aria-label={`${ballState.colour} ${ballState.number}`}
+              >
+                {ballState.number}
+              </span>
+            </div>
+          )}
         </div>}
 
         {showCallsignOverlay && (
@@ -2258,6 +2435,43 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
         BLEEP
       </button>
 
+      {/* Colour / number keys for touch. A desktop player uses R/G/Y and 1-9,
+          which leaves the mouse on the tunnel. Pointer-down for the same
+          reason as BLEEP: a second finger while the first steers. */}
+      {ordersOn && isTouch && (
+        <div className="act-order-pad mt-2 space-y-1.5" style={{ touchAction: 'none' }}>
+          <div className="grid grid-cols-3 gap-1.5">
+            {ORDER_COLOURS.map(c => (
+              <button
+                key={c}
+                type="button"
+                onPointerDown={(e) => { e.preventDefault(); changeBall('colour', c) }}
+                disabled={showCallsignOverlay || state.paused}
+                aria-pressed={ballState.colour === c}
+                className="act-order-key py-2 text-sm font-bold uppercase"
+                style={{ background: ORDER_COLOUR_HEX[c] }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-9 gap-1">
+            {ORDER_NUMBERS.map(n => (
+              <button
+                key={n}
+                type="button"
+                onPointerDown={(e) => { e.preventDefault(); changeBall('number', n) }}
+                disabled={showCallsignOverlay || state.paused}
+                aria-pressed={ballState.number === n}
+                className="act-order-key py-2 text-sm font-bold"
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isTouch && (
         <TouchSteerPad
           onPointerDown={state.onPointerDown}
@@ -2271,6 +2485,7 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
         {isTouch
           ? 'Tap on bleep • Drag the pad to steer • You can also drag on the tunnel'
           : 'BLEEP: Spacebar, right-click anywhere or click the button • Drag canvas to steer • Arrow keys also work'}
+        {ordersOn && !isTouch && ' • Colour: R, G or Y • Number: 1 to 9'}
       </p>
     </div>
   )
@@ -2288,7 +2503,10 @@ function FinalResults({ allRoundStats, codeResult, debug }) {
     bleepHits: acc.bleepHits + s.bleepHits,
     bleepMisses: acc.bleepMisses + s.bleepMisses,
     bleepFalseAlarms: acc.bleepFalseAlarms + (s.bleepFalseAlarms || 0),
-  }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0, bleepFalseAlarms: 0 })
+    ordersObeyed: acc.ordersObeyed + (s.ordersObeyed || 0),
+    ordersMissed: acc.ordersMissed + (s.ordersMissed || 0),
+    orderFalseChanges: acc.orderFalseChanges + (s.orderFalseChanges || 0),
+  }), { score: 0, ringsThreaded: 0, ringsMissed: 0, avoidObeyed: 0, avoidViolated: 0, wallScrapeSeconds: 0, bleepHits: 0, bleepMisses: 0, bleepFalseAlarms: 0, ordersObeyed: 0, ordersMissed: 0, orderFalseChanges: 0 })
 
   return (
     <div className="w-full bg-game-panel border border-game-line rounded-xl p-6 text-center">
@@ -2304,6 +2522,10 @@ function FinalResults({ allRoundStats, codeResult, debug }) {
         <Stat label="Wall scrape"     value={`${totals.wallScrapeSeconds.toFixed(1)}s`} bad={totals.wallScrapeSeconds > 0} />
         <Stat label="Bleep accuracy"  value={`${totals.bleepHits}/${totals.bleepHits + totals.bleepMisses}`} good={totals.bleepHits > 0} />
         <Stat label="False taps"      value={totals.bleepFalseAlarms} bad={totals.bleepFalseAlarms > 0} />
+        {hadOrders(totals) && <>
+          <Stat label="Orders obeyed" value={`${totals.ordersObeyed}/${totals.ordersObeyed + totals.ordersMissed}`} good={totals.ordersObeyed > 0} />
+          <Stat label="Wrong changes" value={totals.orderFalseChanges} bad={totals.orderFalseChanges > 0} />
+        </>}
         {codeResult && (
           <Stat
             label="Memory code"

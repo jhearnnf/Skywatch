@@ -7,6 +7,10 @@
 // All MP3s live in /public/sounds/act/ and are decoded once on init.
 
 import { isDemoActive } from './demoMode';
+import {
+  ORDER_CHUNK, ORDER_COLOURS, ORDER_NUMBERS, DUE_TENS,
+  colourChunk, numberChunk, findWordSplit,
+} from './actOrders';
 
 export const CALLSIGNS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'hotel'];
 export const SHAPES    = ['circle', 'square'];
@@ -52,6 +56,21 @@ export const CODE_DIGIT_GAP_S = 0.4;
 // than sits under it.
 const CODE_DUCK_FACTOR = 0.25;
 const CODE_DUCK_FADE_S = 0.3;
+
+// ── Colour / number orders (Real CBAT theme only) ───────────────────────────
+// Recorded later than the rest and named the other way round: the voice is a
+// SUFFIX ("red_male.mp3", "change color to_female.mp3"), and numbers are
+// numerals ("7_male.mp3", "40_male.mp3"). Only fetched for a Real CBAT player
+// (loadOrderClips), and never part of missingClips(): a voice that is short a
+// clip just doesn't speak orders — playOrder picks a voice that has them all.
+const ORDER_FILES = new Map([
+  [ORDER_CHUNK.changeColour, 'change color to'],
+  [ORDER_CHUNK.changeNumber, 'change number to'],
+  ...ORDER_COLOURS.map(c => [colourChunk(c), c]),
+  ...[...ORDER_NUMBERS, ...DUE_TENS].map(n => [numberChunk(n), String(n)]),
+]);
+// "at" and "seconds" are one take, cut apart on load — see findWordSplit.
+const ORDER_AT_SECONDS_FILE = 'at seconds';
 
 // Map internal key → actual filename body (no voice prefix, no extension).
 // Most are 1:1; the avoid keys translate underscores to spaces.
@@ -193,6 +212,76 @@ export class ActAudioEngine {
     }
     for (const name of CODE_FILES) jobs.push(this._loadCodeBuffer(name));
     await Promise.all(jobs);
+  }
+
+  // Fetch the colour/number order clips for every voice. Real CBAT theme only;
+  // safe to call repeatedly (loaded clips are skipped).
+  async loadOrderClips() {
+    if (!this.ctx) return;
+    const jobs = [];
+    for (const voice of VOICES) {
+      for (const [name, file] of ORDER_FILES) jobs.push(this._loadOrderBuffer(voice, name, file));
+      jobs.push(this._loadAtSeconds(voice));
+    }
+    await Promise.all(jobs);
+  }
+
+  async _loadOrderBuffer(voice, name, file) {
+    const key = bufferKey(voice, name);
+    if (this.buffers.has(key)) return;
+    const url = `/sounds/act/${encodeURIComponent(`${file}_${voice}`)}.mp3`;
+    const audioBuffer = await this._fetchAndDecode(url);
+    if (audioBuffer) this.buffers.set(key, audioBuffer);
+  }
+
+  // One recording, two buffers.
+  async _loadAtSeconds(voice) {
+    if (this.buffers.has(bufferKey(voice, ORDER_CHUNK.at))) return;
+    const url = `/sounds/act/${encodeURIComponent(`${ORDER_AT_SECONDS_FILE}_${voice}`)}.mp3`;
+    const whole = await this._fetchAndDecode(url);
+    if (!whole) return;
+    const cut = findWordSplit(whole.getChannelData(0), whole.sampleRate);
+    if (cut == null) {
+      console.warn(`[ACT] Could not split "${ORDER_AT_SECONDS_FILE}" for ${voice}; delayed orders stay off in that voice.`);
+      return;
+    }
+    this.buffers.set(bufferKey(voice, ORDER_CHUNK.at), this._sliceBuffer(whole, 0, cut));
+    this.buffers.set(bufferKey(voice, ORDER_CHUNK.seconds), this._sliceBuffer(whole, cut, whole.length));
+  }
+
+  _sliceBuffer(buf, from, to) {
+    const out = this.ctx.createBuffer(buf.numberOfChannels, Math.max(1, to - from), buf.sampleRate);
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      out.getChannelData(ch).set(buf.getChannelData(ch).subarray(from, to));
+    }
+    return out;
+  }
+
+  // Voices that hold every clip in `names`, so a sentence never loses a word.
+  voicesFor(names) {
+    return VOICES.filter(v => names.every(n => this.buffers.has(bufferKey(v, n))));
+  }
+
+  // How long `names` takes to say in `voice`, gaps included.
+  sequenceDurationS(names, voice, { gap = 0.04 } = {}) {
+    let total = 0;
+    for (const n of names) {
+      const buf = this.buffers.get(bufferKey(voice, n));
+      if (buf) total += buf.duration + gap;
+    }
+    return total;
+  }
+
+  // Speak a colour/number order, real or fake. Exclusive like any instruction.
+  // Picks a voice that has every clip; `played: false` when none does (the
+  // female set not recorded yet, a failed fetch) so the caller never holds the
+  // player to an order nobody heard. `durationS` is the real spoken length.
+  playOrder(names) {
+    const voices = this.voicesFor(names);
+    if (!this.ctx || !voices.length) return { promise: Promise.resolve(), cancel: () => {}, played: false, durationS: 0 };
+    const voice = voices[Math.floor(Math.random() * voices.length)];
+    const result = this.playSequence(names, { voice, exclusive: true });
+    return { ...result, durationS: result.played ? this.sequenceDurationS(names, voice) : 0 };
   }
 
   // Keys of the instruction and code clips that failed to load. Chatter is

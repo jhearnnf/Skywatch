@@ -25,17 +25,27 @@ const MODEL_NOSE = new THREE.Vector3(-1, 0, 0)
 const CRAFT_EMISSIVE = '#25415f'
 const CRAFT_EMISSIVE_INTENSITY = 0.55
 
-// The white player ball — reads ballPosRef directly (world coords).
-export function PlayerBall({ ballPosRef, radius }) {
+// The player ball — reads ballPosRef directly (world coords). White, unless
+// `colourRef` is given: under the Real CBAT theme the ball carries a colour the
+// voice can order changed, and the game loop writes the hex into that ref.
+export function PlayerBall({ ballPosRef, radius, colourRef }) {
   const ref = useRef()
+  const matRef = useRef()
+  const shownRef = useRef(null)
   useFrame(() => {
     if (!ref.current) return
     ref.current.position.copy(ballPosRef.current)
+    const hex = colourRef?.current
+    if (hex && matRef.current && shownRef.current !== hex) {
+      matRef.current.color.set(hex)
+      matRef.current.emissive.set(hex)
+      shownRef.current = hex
+    }
   })
   return (
     <mesh ref={ref}>
       <sphereGeometry args={[radius, 16, 16]} />
-      <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.6} />
+      <meshStandardMaterial ref={matRef} color="#ffffff" emissive="#ffffff" emissiveIntensity={0.6} />
     </mesh>
   )
 }
@@ -153,8 +163,8 @@ function CraftModel({ ballPosRef, ballForwardRef, url }) {
   )
 }
 
-export default function ActPlayerCraft({ ballPosRef, ballForwardRef, modelUrl, radius }) {
-  const ball = <PlayerBall ballPosRef={ballPosRef} radius={radius} />
+export default function ActPlayerCraft({ ballPosRef, ballForwardRef, modelUrl, radius, colourRef }) {
+  const ball = <PlayerBall ballPosRef={ballPosRef} radius={radius} colourRef={colourRef} />
   if (!modelUrl) return ball
   return (
     <CraftErrorBoundary key={modelUrl} fallback={ball}>

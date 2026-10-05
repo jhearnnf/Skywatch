@@ -2917,6 +2917,7 @@ router.post('/cbat/act/result', protect, async (req, res) => {
       ringsThreaded, ringsMissed, avoidObeyed, avoidViolated,
       wallScrapeSeconds, bleepHits, bleepMisses, avgBleepReactionMs,
       codeAttempted, codeDigitsCorrect, codeRecalled, inputMethod,
+      ordersObeyed, ordersMissed, orderFalseChanges,
     } = req.body;
     const result = await saveCbatResult(GameSessionCbatActResult, req, {
       totalScore:         Math.max(0, Math.round(totalScore ?? 0)),
@@ -2933,6 +2934,9 @@ router.post('/cbat/act/result', protect, async (req, res) => {
       codeAttempted:      !!codeAttempted,
       codeDigitsCorrect:  Math.max(0, Math.round(codeDigitsCorrect ?? 0)),
       codeRecalled:       !!codeRecalled,
+      ordersObeyed:       Math.max(0, Math.round(ordersObeyed ?? 0)),
+      ordersMissed:       Math.max(0, Math.round(ordersMissed ?? 0)),
+      orderFalseChanges:  Math.max(0, Math.round(orderFalseChanges ?? 0)),
       inputMethod:        normalizeInputMethod(inputMethod),
     });
     res.status(201).json({ status: 'success', data: result });
