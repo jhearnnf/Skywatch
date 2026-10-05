@@ -515,14 +515,17 @@ describe('Cbat page — tile badges', () => {
     expect(screen.queryByText('New Difficulty Modes')).toBeNull()
   })
 
-  it('points at ACT alone, which gained colour and number orders', () => {
+  it('points at ACT and SAT, which have each had an update', () => {
+    // ACT gained colour and number orders; SAT gained the Real CBAT question
+    // format and the SkyWatch theme's game feel.
+    //
     // Keep the slot rare, or it stops meaning "look here" — DPT's "New
     // Tutorial", ANT's and then Vigilance's "New Hard Mode", the Instruments
     // and Vigilance "New Practise Mode", FLAG | CLAN's "New CLAN Tutorial" and
     // RTT's "New Updates" each gave the slot up in turn.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['act'])
-    expect(screen.getAllByText('New Update')).toHaveLength(1)
+    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['act', 'sat'])
+    expect(screen.getAllByText('New Update')).toHaveLength(2)
     expect(screen.queryByText('New Updates')).toBeNull()
     expect(screen.queryByText('New Practise Mode')).toBeNull()
     expect(screen.queryByText('New CLAN Tutorial')).toBeNull()
