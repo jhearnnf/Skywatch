@@ -6,7 +6,10 @@ import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
-import { generateSatSituation, SAT_GRID, ALL_AIRCRAFT_FIELDS } from '../utils/cbat/satGenerator'
+import {
+  generateSatSituation, SAT_GRID, ALL_AIRCRAFT_FIELDS,
+  formatSatAltitude, formatSatWaypointAt, formatSatClock, formatSatEntry, satEntryLength, satTypedCorrect,
+} from '../utils/cbat/satGenerator'
 import { buildSatCards, satObserveMs } from '../utils/cbat/satCards'
 import { speak, stopSpeech, primeSpeech } from '../utils/cbat/satSpeech'
 import SEO from '../components/SEO'
@@ -45,6 +48,7 @@ function buildSituations(tuning) {
       aircraftRange: tuning.aircraftRange,
       aircraftFields: tuning.aircraftFields,
       supportChance: tuning.supportChance,
+      format: tuning.format,
     })
     out.push({ ...sit, cards: buildSatCards(sit, tuning.aircraftFields) })
   }
@@ -55,7 +59,13 @@ function buildSituations(tuning) {
 const ALLEGIANCE_COLOR = { friendly: '#fbbf24', hostile: '#ef4444', unknown: '#e5e7eb' }
 const TYPE_LETTER = { tank: 'T', helicopter: 'H', jet: 'J' }
 const TYPE_LABEL = { tank: 'Tank', helicopter: 'Helicopter', jet: 'Jet' }
-const HEADING_VEC = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] } // SVG y points down
+// Unit vectors, SVG y pointing down. The diagonals only occur under the Real
+// CBAT theme, whose units can head any of the 8 compass points.
+const D = Math.SQRT1_2
+const HEADING_VEC = {
+  N: [0, -1], NE: [D, -D], E: [1, 0], SE: [D, D],
+  S: [0, 1], SW: [-D, D], W: [-1, 0], NW: [-D, -D],
+}
 
 // Travel-direction arrow as a small triangle pointing `dir`, centred at (cx,cy).
 function arrowPoints(cx, cy, dir, s) {
@@ -137,7 +147,7 @@ function GridLegend() {
   )
 }
 
-const WAYPOINT_ARROW = { N: '↑', S: '↓', E: '→', W: '←' }
+const WAYPOINT_ARROW = { N: '↑', NE: '↗', E: '→', SE: '↘', S: '↓', SW: '↙', W: '←', NW: '↖' }
 
 // Each callsign owns a colour so the panel reads at a glance when it switches:
 // York blue, Leeds red, Hull yellow.
@@ -195,8 +205,8 @@ function AircraftPanel({ aircraft, activeIdx, fields = ALL_AIRCRAFT_FIELDS }) {
             <span className="align-middle">{ac.waypointRef}</span>
           </AircraftField>
         )}
-        {fields.includes('waypointAt') && <AircraftField label="Next Waypoint At" theme={theme}>{ac.waypointAt}s</AircraftField>}
-        {fields.includes('altitude') && <AircraftField label="Altitude" theme={theme}>FL{ac.altitude}</AircraftField>}
+        {fields.includes('waypointAt') && <AircraftField label="Next Waypoint At" theme={theme}>{formatSatWaypointAt(ac)}</AircraftField>}
+        {fields.includes('altitude') && <AircraftField label="Altitude" theme={theme}>{formatSatAltitude(ac)}</AircraftField>}
         {fields.includes('channel') && <AircraftField label="Comms Channel" theme={theme}>{ac.channel}</AircraftField>}
       </dl>
     </div>
@@ -237,8 +247,8 @@ function FieldValue({ ac, field, arrowClass = 'text-6xl' }) {
       <span className="align-middle">{ac.waypointRef}</span>
     </>
   )
-  if (field === 'waypointAt') return <>{ac.waypointAt}s</>
-  if (field === 'altitude') return <>FL{ac.altitude}</>
+  if (field === 'waypointAt') return <>{formatSatWaypointAt(ac)}</>
+  if (field === 'altitude') return <>{formatSatAltitude(ac)}</>
   return <>{ac.channel}</>
 }
 
@@ -386,6 +396,77 @@ function ObservePanels({ situation, card, fields }) {
   )
 }
 
+// ── Typed answers (Real CBAT theme) ──────────────────────────────────────────
+// About half the Real CBAT questions are filled in rather than picked: the
+// entry line shows the fixed parts ("11:", ",000ft") with a blank per digit,
+// and digits fill the blanks left to right. Number keys and Backspace work from
+// the keyboard; the keypad is there for touch.
+
+const KEYPAD_DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+
+function SatTypedEntry({ entry, digits, onDigit, onBackspace, disabled }) {
+  const full = digits.length >= satEntryLength(entry)
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <p data-sat-entry className="font-mono font-bold text-3xl lg:text-4xl tracking-widest text-game-text bg-game-arena border border-game-line rounded-lg px-5 py-3">
+        {formatSatEntry(entry, digits)}
+      </p>
+      <div className="grid grid-cols-3 gap-2 w-full max-w-[16rem]">
+        {KEYPAD_DIGITS.map(d => (
+          <button
+            key={d}
+            type="button"
+            onClick={() => onDigit(d)}
+            disabled={disabled || full}
+            className="py-3 rounded-lg border-2 border-game-line bg-game-panel text-game-text font-mono font-bold text-xl hover:border-brand-400 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+          >
+            {d}
+          </button>
+        ))}
+        <span />
+        <button
+          type="button"
+          onClick={() => onDigit('0')}
+          disabled={disabled || full}
+          className="py-3 rounded-lg border-2 border-game-line bg-game-panel text-game-text font-mono font-bold text-xl hover:border-brand-400 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+        >
+          0
+        </button>
+        <button
+          type="button"
+          onClick={onBackspace}
+          disabled={disabled || !digits}
+          aria-label="Delete last digit"
+          className="py-3 rounded-lg border-2 border-game-line bg-game-panel text-game-text font-bold text-xl hover:border-brand-400 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+        >
+          ⌫
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Digits and Backspace edit the entry; Enter commits it. Skipped while a dialog
+// (the quit prompt) is open or a modifier is held, like the option keys.
+function useSatTypedKeys({ enabled, onDigit, onBackspace, onEnter }) {
+  const handlers = useRef({ onDigit, onBackspace, onEnter })
+  useEffect(() => { handlers.current = { onDigit, onBackspace, onEnter } })
+  useEffect(() => {
+    if (!enabled) return
+    function onKey(e) {
+      if (e.altKey || e.ctrlKey || e.metaKey) return
+      if (document.querySelector('[role="dialog"]')) return
+      const tag = e.target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); handlers.current.onDigit(e.key) }
+      else if (e.key === 'Backspace') { e.preventDefault(); handlers.current.onBackspace() }
+      else if (e.key === 'Enter') { e.preventDefault(); handlers.current.onEnter() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [enabled])
+}
+
 // ── Results screen (embedded inside CbatGameOver) ────────────────────────────
 const GRADE_STYLE = {
   Outstanding: { emoji: '🎖️', color: 'text-green-400' },
@@ -469,6 +550,7 @@ const SAT_TUTORIAL_STEPS = [
         All three are shown together here so you can learn them. In the game you get <b className="text-brand-600">one contact at a time</b>.
       </>
     ),
+    cbatNote: 'Units can head in any of the 8 compass directions, diagonals included.',
   },
   {
     focus: 'aircraft',
@@ -480,6 +562,7 @@ const SAT_TUTORIAL_STEPS = [
         The whole panel is filled in together here. In the game you only ever get <b className="text-brand-600">one field of one aircraft</b> at a time, so York's altitude and York's channel arrive separately. On Hard the panel stays on screen with its other boxes dashed out; on Easier the field gets the screen to itself.
       </>
     ),
+    cbatNote: 'Next Waypoint At is a time on the clock in the top corner, and Altitude is in thousands of feet. All three aircraft are up on both difficulties.',
   },
   {
     focus: 'radio',
@@ -501,6 +584,7 @@ const SAT_TUTORIAL_STEPS = [
         Nothing comes back. Once the last card has gone you answer multiple-choice questions <b className="text-brand-600">from memory</b>. Try one below.
       </>
     ),
+    cbatNote: 'About half the questions are typed: fill in the blanks with the number keys or the keypad, then press Enter. The rest give you up to 8 choices.',
   },
 ]
 
@@ -531,15 +615,31 @@ function TutorialComplete({ onExit }) {
   )
 }
 
-function SatTutorial({ onExit, onProgress }) {
+function SatTutorial({ onExit, onProgress, cbat = false }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [done, setDone] = useState(false)
   const [picked, setPicked] = useState(null)
+  const [typedDigits, setTypedDigits] = useState('')
   const [runId] = useState(makeTutorialRunId)
   // Fixed, seeded practice situation so the coach copy always matches the picture.
-  const [sit] = useState(() => generateSatSituation({ unitCount: 3, aircraftCount: 2, questionCount: 1 }, mulberry32(20260620)))
+  // Under the Real CBAT theme it is built in that format, so the panel reads in
+  // feet and clock times and the sample question is a typed one.
+  const [sit] = useState(() => generateSatSituation(
+    { unitCount: 3, aircraftCount: cbat ? 3 : 2, questionCount: 1, format: cbat ? 'cbat' : 'classic' },
+    mulberry32(20260620),
+  ))
   const step = SAT_TUTORIAL_STEPS[stepIdx]
   const sampleQ = sit.questions[0]
+  const sampleCorrect = picked !== null && (sampleQ.kind === 'typed'
+    ? satTypedCorrect(sampleQ, typedDigits)
+    : String(picked) === String(sampleQ.answer))
+  const sampleLen = sampleQ.kind === 'typed' ? satEntryLength(sampleQ.entry) : 0
+  useSatTypedKeys({
+    enabled: step.focus === 'recall' && sampleQ.kind === 'typed' && picked === null && !done,
+    onDigit: d => setTypedDigits(v => (v.length < sampleLen ? v + d : v)),
+    onBackspace: () => setTypedDigits(v => v.slice(0, -1)),
+    onEnter: () => { if (typedDigits) setPicked(formatSatEntry(sampleQ.entry, typedDigits)) },
+  })
 
   // Report progress for the admin Reports per-step drop-off funnel.
   useEffect(() => {
@@ -578,6 +678,7 @@ function SatTutorial({ onExit, onProgress }) {
           <motion.div key={stepIdx} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
             <h2 className="text-base font-extrabold text-white mb-1">{step.title}</h2>
             <p className="text-sm text-game-text leading-relaxed">{step.body}</p>
+            {cbat && step.cbatNote && <p className="text-sm text-brand-600 leading-relaxed mt-2">{step.cbatNote}</p>}
           </motion.div>
         </AnimatePresence>
         <div className="mt-4">
@@ -625,6 +726,15 @@ function SatTutorial({ onExit, onProgress }) {
             <p className="text-[10px] text-slate-500 uppercase tracking-wide mb-2">Recall — from memory</p>
             <p className="text-base sm:text-lg text-game-text leading-relaxed">{sampleQ.prompt}</p>
           </div>
+          {sampleQ.kind === 'typed' ? (
+            <SatTypedEntry
+              entry={sampleQ.entry}
+              digits={typedDigits}
+              disabled={picked !== null}
+              onDigit={d => setTypedDigits(v => (v.length < satEntryLength(sampleQ.entry) ? v + d : v))}
+              onBackspace={() => setTypedDigits(v => v.slice(0, -1))}
+            />
+          ) : (
           <div className="grid grid-cols-2 gap-2">
             {sampleQ.options.map(opt => {
               let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
@@ -641,11 +751,21 @@ function SatTutorial({ onExit, onProgress }) {
               )
             })}
           </div>
+          )}
+          {sampleQ.kind === 'typed' && picked === null && (
+            <button
+              onClick={() => setPicked(formatSatEntry(sampleQ.entry, typedDigits))}
+              disabled={!typedDigits}
+              className="w-full mt-3 px-6 py-3 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm cursor-pointer disabled:cursor-not-allowed"
+            >
+              Check Answer
+            </button>
+          )}
           <AnimatePresence>
             {picked !== null && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3">
-                <div className={`text-center text-sm font-bold mb-2 ${String(picked) === String(sampleQ.answer) ? 'text-green-400' : 'text-red-400'}`}>
-                  {String(picked) === String(sampleQ.answer) ? '✓ Correct' : `✗ The answer was ${sampleQ.answer}`}
+                <div className={`text-center text-sm font-bold mb-2 ${sampleCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                  {sampleCorrect ? '✓ Correct' : `✗ The answer was ${sampleQ.answer}`}
                 </div>
                 <button onClick={() => setDone(true)}
                   className="w-full px-6 py-3 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm">
@@ -676,14 +796,18 @@ export default function CbatSat() {
   // The difficulty the instructions card is set to. Persisted, so the card opens
   // on whatever was played last.
   const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredSatDifficulty))
-  const tuning = satTuning(difficulty)
+  // The Real CBAT theme changes both the load and how questions are asked
+  // (see SAT_CBAT_OVERRIDES), so it is part of the tuning, not just the look.
+  const cbat = useCbatTheme()
+  const tuning = satTuning(difficulty, cbat)
   // The difficulty the run on screen is being played at. Pinned at launch so
   // flipping the card's selection mid-run could never redirect a finished score.
   // The ref is what the game logic reads; the state is what the render tree
   // reads (reading a ref during render trips react-hooks/refs).
   const runTuningRef = useRef(tuning)
   const [runDifficulty, setRunDifficulty] = useState(difficulty)
-  const runTuning = satTuning(runDifficulty)
+  const [runCbat, setRunCbat] = useState(cbat)
+  const runTuning = satTuning(runDifficulty, runCbat)
   const runTotalQuestions = satTotalQuestions(runTuning)
 
   const { enterImmersive, exitImmersive } = useGameChrome()
@@ -716,7 +840,8 @@ export default function CbatSat() {
   const [audioOn, setAudioOn] = useState(true)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
-  const cbat = useCbatTheme()
+  // Digits typed so far on a typed question.
+  const [typedDigits, setTypedDigits] = useState('')
 
   const qStartRef = useRef(null)
   const tickRef = useRef(null)
@@ -823,9 +948,11 @@ export default function CbatSat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, situationIdx, questionIdx])
 
-  function recordAnswer(picked, elapsedMs) {
+  // `typedCorrect` is passed for a typed question, whose `picked` is the
+  // formatted entry line and is marked by satTypedCorrect, not by string match.
+  function recordAnswer(picked, elapsedMs, typedCorrect) {
     if (!currentQuestion) return
-    const correct = picked !== null && String(picked) === String(currentQuestion.answer)
+    const correct = picked !== null && (typedCorrect ?? String(picked) === String(currentQuestion.answer))
     const entry = {
       prompt: currentQuestion.prompt,
       answer: currentQuestion.answer,
@@ -857,14 +984,36 @@ export default function CbatSat() {
   // Keyboard answering: 1-4 pick an option (marked under the Real CBAT theme
   // and committed with Enter; committed at once otherwise). Enter moves past
   // the reveal.
+  const isTyped = currentQuestion?.kind === 'typed'
   const { pending, select, commit } = useCbatMcq({
-    enabled: phase === 'playing' && !!currentQuestion,
+    enabled: phase === 'playing' && !!currentQuestion && !isTyped,
     count: currentQuestion?.options?.length ?? 0,
     kind: 'number',
     onCommit: (i) => handlePick(currentQuestion.options[i]),
     resetKey: `${situationIdx}-${questionIdx}`,
   })
   useCbatAnswerKeys({ enabled: phase === 'feedback', count: 0, onEnter: goNext })
+
+  // Typed questions: the entry clears on every new question.
+  useEffect(() => { setTypedDigits('') }, [situationIdx, questionIdx])
+  const typedLen = isTyped ? satEntryLength(currentQuestion.entry) : 0
+  const addTypedDigit = (d) => setTypedDigits(v => (v.length < typedLen ? v + d : v))
+  const removeTypedDigit = () => setTypedDigits(v => v.slice(0, -1))
+  function commitTyped() {
+    if (phase !== 'playing' || !isTyped || !typedDigits) return
+    clearInterval(tickRef.current)
+    recordAnswer(
+      formatSatEntry(currentQuestion.entry, typedDigits),
+      Date.now() - qStartRef.current,
+      satTypedCorrect(currentQuestion, typedDigits),
+    )
+  }
+  useSatTypedKeys({
+    enabled: phase === 'playing' && isTyped,
+    onDigit: addTypedDigit,
+    onBackspace: removeTypedDigit,
+    onEnter: commitTyped,
+  })
 
   function goNext() {
     setFeedback(null)
@@ -909,9 +1058,10 @@ export default function CbatSat() {
     primeSpeech()
     runTuningRef.current = tuning
     setRunDifficulty(tuning.key)
+    setRunCbat(cbat)
     if (isDemo) { startGame(); return }
     setPhase('launching')
-  }, [tuning, isDemo, startGame])
+  }, [tuning, cbat, isDemo, startGame])
 
   // Keyed to `phase` alone. Depending on startGame meant any re-render
   // that changed its identity cleared the pending timeout and started a
@@ -947,6 +1097,11 @@ export default function CbatSat() {
   const correctSoFar = answers.filter(a => a.correct).length
   const globalQ = situationIdx * runTuning.questionsPerSituation + questionIdx + 1
   const observeSec = (observeRemainingMs / 1000).toFixed(0)
+  // Real CBAT: the console's in-game clock, which the waypoint times are read against.
+  const observeTotalMs = currentSituation ? satObserveMs(currentSituation.cards, runTuning.cardMs) : 0
+  const clockText = currentSituation?.clockStart != null
+    ? formatSatClock(currentSituation.clockStart + Math.floor((observeTotalMs - observeRemainingMs) / 1000))
+    : null
   const cardCount = currentSituation?.cards?.length || 0
   const remainingSec = (qRemainingMs / 1000).toFixed(0)
   const launching = phase === 'launching'
@@ -1027,7 +1182,12 @@ export default function CbatSat() {
                 </div>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>2.</CbatIntroLabel>
-                  <span className="pt-0.5">Each one holds for {tuning.cardMs / 1000}s, then it's gone for good. Answer multiple-choice recall questions.</span>
+                  <span className="pt-0.5">
+                    Each one holds for {tuning.cardMs / 1000}s, then it's gone for good.{' '}
+                    {tuning.format === 'cbat'
+                      ? 'Answer recall questions: about half are typed in, the rest give you up to 8 choices.'
+                      : 'Answer multiple-choice recall questions.'}
+                  </span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>3.</CbatIntroLabel>
@@ -1078,7 +1238,7 @@ export default function CbatSat() {
 
           {/* Guided practice tutorial */}
           {phase === 'tutorial' && (
-            <SatTutorial onExit={() => setPhase('intro')} onProgress={reportTutorialProgress} />
+            <SatTutorial onExit={() => setPhase('intro')} onProgress={reportTutorialProgress} cbat={cbat} />
           )}
 
           {/* Observe phase — one fact at a time, then it's gone */}
@@ -1105,10 +1265,17 @@ export default function CbatSat() {
                   </div>
                   <p className="text-sm lg:text-base text-game-text">Each fact shows once, then vanishes. Nothing comes back.</p>
                 </div>
-                <div className="w-20 lg:w-28 bg-game-panel border border-game-line rounded-lg flex flex-col items-center justify-center">
-                  <p className="text-[11px] lg:text-xs text-slate-500 uppercase">Time</p>
-                  <p className={`text-2xl lg:text-4xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-600'}`}>{observeSec}s</p>
-                </div>
+                {clockText ? (
+                  <div className="w-28 lg:w-40 bg-game-panel border border-game-line rounded-lg flex flex-col items-center justify-center">
+                    <p className="text-[11px] lg:text-xs text-slate-500 uppercase">Time</p>
+                    <p data-sat-clock className="text-lg lg:text-2xl font-mono font-bold text-brand-600 tabular-nums">{clockText}</p>
+                  </div>
+                ) : (
+                  <div className="w-20 lg:w-28 bg-game-panel border border-game-line rounded-lg flex flex-col items-center justify-center">
+                    <p className="text-[11px] lg:text-xs text-slate-500 uppercase">Time</p>
+                    <p className={`text-2xl lg:text-4xl font-mono font-bold ${observeRemainingMs < 5000 ? 'text-red-400' : 'text-brand-600'}`}>{observeSec}s</p>
+                  </div>
+                )}
               </div>
 
               {/* The picture. Easier gives the fact a screen to itself; Hard puts
@@ -1185,8 +1352,19 @@ export default function CbatSat() {
                 <p className="text-lg sm:text-xl lg:text-2xl text-game-text leading-relaxed">{currentQuestion.prompt}</p>
               </motion.div>
 
-              {/* Options */}
-              <div className="grid grid-cols-2 gap-2 lg:gap-3">
+              {/* Typed entry (Real CBAT) or options */}
+              {isTyped ? (
+                <SatTypedEntry
+                  entry={currentQuestion.entry}
+                  digits={typedDigits}
+                  disabled={phase !== 'playing'}
+                  onDigit={addTypedDigit}
+                  onBackspace={removeTypedDigit}
+                />
+              ) : (
+              <div className={currentQuestion.options.length > 4
+                ? 'grid grid-cols-2 sm:grid-cols-4 gap-2 lg:gap-3'
+                : 'grid grid-cols-2 gap-2 lg:gap-3'}>
                 {currentQuestion.options.map((opt, i) => {
                   let cls = 'bg-game-panel border-game-line text-game-text hover:border-brand-400 hover:bg-game-raised cursor-pointer'
                   if (pending === i) cls += ' cbat-option-pending'
@@ -1208,6 +1386,7 @@ export default function CbatSat() {
                   )
                 })}
               </div>
+              )}
 
               {/* Reveal */}
               <AnimatePresence>
@@ -1235,11 +1414,19 @@ export default function CbatSat() {
               </AnimatePresence>
 
               {/* Real CBAT theme: the instruction strip */}
-              <CbatFooterStrip
-                answer={phase === 'playing' ? (pending != null ? pending + 1 : null) : (feedback?.picked == null ? null : currentQuestion.options.findIndex(o => String(o) === String(feedback.picked)) + 1)}
-                onSubmit={phase === 'playing' ? commit : goNext}
-                canSubmit={phase === 'feedback' || pending != null}
-              />
+              {isTyped ? (
+                <CbatFooterStrip
+                  answer={typedDigits ? formatSatEntry(currentQuestion.entry, typedDigits) : null}
+                  onSubmit={commitTyped}
+                  canSubmit={phase === 'playing' && !!typedDigits}
+                />
+              ) : (
+                <CbatFooterStrip
+                  answer={phase === 'playing' ? (pending != null ? pending + 1 : null) : (feedback?.picked == null ? null : currentQuestion.options.findIndex(o => String(o) === String(feedback.picked)) + 1)}
+                  onSubmit={phase === 'playing' ? commit : goNext}
+                  canSubmit={phase === 'feedback' || pending != null}
+                />
+              )}
             </div>
           )}
 

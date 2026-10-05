@@ -88,8 +88,41 @@ export const SAT_TUNING = {
 // Ordered for the intro screen: easier sits left of the title, hard sits right.
 export const SAT_DIFFICULTIES = [SAT_TUNING.easier, SAT_TUNING.hard]
 
-export function satTuning(difficulty) {
-  return SAT_TUNING[difficulty] || SAT_TUNING[DEFAULT_SAT_DIFFICULTY]
+// ── Real CBAT theme ──────────────────────────────────────────────────────────
+// Under the Real CBAT theme both difficulties carry more and ask it the real
+// test's way (see `format: 'cbat'` in satGenerator.js). A candidate who passed
+// the real SAT (survey, Oct 2026) said even its first stage carried as much as
+// our Hard, with all three stations up, so Real CBAT Easier starts at classic
+// Hard's load and Real CBAT Hard goes past it.
+//
+// Situations and questions per situation are deliberately NOT overridden: the
+// two themes share each difficulty's leaderboard, and the Aptitude Report reads
+// `sat` scores out of 18, so a run's total has to be the same on both themes.
+export const SAT_CBAT_OVERRIDES = {
+  easier: {
+    unitRange: [3, 4],
+    aircraftRange: [3, 3],
+    aircraftFields: ['waypoint', 'waypointAt', 'altitude', 'channel'],
+    supportChance: 0.5,
+    cardMs: 4000,
+    layout: 'panels',
+  },
+  hard: {
+    unitRange: [4, 5],
+    aircraftRange: [3, 3],
+    aircraftFields: ['waypoint', 'waypointAt', 'altitude', 'channel'],
+    supportChance: 0.6,
+    cardMs: 3500,
+    layout: 'panels',
+  },
+}
+
+// `cbat` is whether the Real CBAT theme is on. Classic tuning carries
+// `format: 'classic'` so every caller can hand `format` straight to the generator.
+export function satTuning(difficulty, cbat = false) {
+  const base = SAT_TUNING[difficulty] || SAT_TUNING[DEFAULT_SAT_DIFFICULTY]
+  if (!cbat) return { ...base, format: 'classic' }
+  return { ...base, ...SAT_CBAT_OVERRIDES[base.key], format: 'cbat' }
 }
 
 export function satGameKey(difficulty) {

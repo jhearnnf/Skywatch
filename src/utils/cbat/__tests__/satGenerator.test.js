@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { generateSatSituation } from '../satGenerator'
+import {
+  generateSatSituation, formatSatEntry, formatSatClock, satTypedCorrect, satEntryLength,
+  SAT_HEADINGS_8, SAT_HEADING_WORD,
+} from '../satGenerator'
 
 // Deterministic PRNG so each case is reproducible.
 function mulberry32(seed) {
@@ -110,5 +113,136 @@ describe('generateSatSituation', () => {
         expect(q.options.map(String)).toContain(String(q.answer))
       })
     }
+  })
+})
+
+// The Real CBAT theme's format, from a candidate who passed the real SAT: all 8
+// compass points, altitude in thousands of feet, waypoint times on the clock,
+// 8-option multiple choice and 40-60% typed answers.
+describe('generateSatSituation, cbat format', () => {
+  const FIELDS = ['waypoint', 'waypointAt', 'altitude', 'channel']
+  const cbat = (seed, extra = {}) => generateSatSituation(
+    { format: 'cbat', aircraftCount: 3, unitRange: [3, 5], questionCount: 6, aircraftFields: FIELDS, ...extra },
+    mulberry32(seed),
+  )
+
+  it('leaves the classic format untouched by default', () => {
+    const s = generateSatSituation({}, mulberry32(3))
+    expect(s.format).toBe('classic')
+    expect(s.clockStart).toBeNull()
+    s.questions.forEach(q => expect(q.kind).toBeUndefined())
+  })
+
+  it('uses 8 compass headings, feet and clock times', () => {
+    const headings = new Set()
+    for (let seed = 1; seed <= 300; seed++) {
+      const s = cbat(seed)
+      expect(s.clockStart).toBeGreaterThanOrEqual(8 * 3600)
+      s.units.forEach(u => headings.add(u.heading))
+      s.aircraft.forEach(a => {
+        expect(a.altitudeUnit).toBe('kft')
+        expect(a.altitude).toBeGreaterThanOrEqual(5)
+        expect(a.altitude).toBeLessThanOrEqual(40)
+        expect(a.waypointAt).toMatch(/^\d\d:\d\d:\d\d$/)
+        // Ahead of the clock by 2-15 minutes.
+        const [h, m, sec] = a.waypointAt.split(':').map(Number)
+        const ahead = h * 3600 + m * 60 + sec - s.clockStart
+        expect(ahead).toBeGreaterThanOrEqual(120)
+        expect(ahead).toBeLessThanOrEqual(900)
+      })
+    }
+    expect([...headings].sort()).toEqual(['E', 'N', 'NE', 'NW', 'S', 'SE', 'SW', 'W'])
+  })
+
+  it('reads altitude out in feet over the radio', () => {
+    for (let seed = 1; seed <= 100; seed++) {
+      cbat(seed).comms.filter(c => c.kind === 'altitude').forEach(c => {
+        expect(c.text).toMatch(/\d+,000ft\.$/)
+        expect(c.speech).toMatch(/thousand feet\.$/)
+        expect(c.text).not.toContain('flight level')
+      })
+    }
+  })
+
+  it('types 40-60% of every situation\'s questions', () => {
+    for (const questionCount of [5, 6]) {
+      for (let seed = 1; seed <= 300; seed++) {
+        const s = cbat(seed, { questionCount })
+        expect(s.questions).toHaveLength(questionCount)
+        const typed = s.questions.filter(q => q.kind === 'typed').length
+        expect(typed / questionCount, `seed ${seed}`).toBeGreaterThanOrEqual(0.4)
+        expect(typed / questionCount, `seed ${seed}`).toBeLessThanOrEqual(0.6)
+      }
+    }
+  })
+
+  it('asks altitude as __,000ft and waypoint time as HH:__:__', () => {
+    for (let seed = 1; seed <= 200; seed++) {
+      const s = cbat(seed)
+      s.questions.filter(q => q.kind === 'typed').forEach(q => {
+        const ac = s.aircraft.find(a => q.prompt.includes(a.callsign))
+        if (q.category === 'aircraft-altitude') {
+          expect(formatSatEntry(q.entry)).toBe('__,000ft')
+          expect(satTypedCorrect(q, String(ac.altitude))).toBe(true)
+          expect(q.answer).toBe(`${ac.altitude},000ft`)
+        } else {
+          expect(q.category).toBe('aircraft-seconds')
+          expect(formatSatEntry(q.entry)).toBe(`${ac.waypointAt.slice(0, 2)}:__:__`)
+          expect(formatSatEntry(q.entry, q.answerDigits)).toBe(ac.waypointAt)
+        }
+      })
+    }
+  })
+
+  it('offers 8 options in a fixed order wherever the pool allows', () => {
+    const NUMERIC_OR_ORDERED = ['unit-count', 'unit-heading', 'aircraft-channel', 'aircraft-waypoint', 'unit-cell', 'audio-support-ref']
+    for (let seed = 1; seed <= 200; seed++) {
+      const s = cbat(seed, { supportCall: true })
+      s.questions.filter(q => q.kind !== 'typed').forEach(q => {
+        expect(q.options.map(String)).toContain(String(q.answer))
+        expect(new Set(q.options.map(String)).size).toBe(q.options.length)
+        if (NUMERIC_OR_ORDERED.includes(q.category)) expect(q.options).toHaveLength(8)
+        else expect(q.options).toHaveLength(3) // callsigns and unit types: only 3 exist
+        // Listed in the pool's own order, never shuffled.
+        if (q.category === 'unit-count') expect(q.options).toEqual([...q.options].sort((a, b) => a - b))
+        if (q.category === 'unit-cell') expect(q.options).toEqual([...q.options].sort())
+        if (q.category === 'unit-heading') {
+          const order = SAT_HEADINGS_8.map(h => SAT_HEADING_WORD[h])
+          expect(q.options).toEqual(order.filter(w => q.options.includes(w)))
+        }
+      })
+    }
+  })
+
+  it('is deterministic for a given seed', () => {
+    expect(cbat(42)).toEqual(cbat(42))
+  })
+})
+
+describe('typed answer marking', () => {
+  const alt = { entry: [{ digits: 2 }, { text: ',000ft' }], answerDigits: '5' }
+  const time = { entry: [{ text: '11:' }, { digits: 2 }, { text: ':' }, { digits: 2 }], answerDigits: '0605' }
+
+  it('takes an altitude with or without a leading zero', () => {
+    expect(satTypedCorrect(alt, '5')).toBe(true)
+    expect(satTypedCorrect(alt, '05')).toBe(true)
+    expect(satTypedCorrect(alt, '50')).toBe(false)
+    expect(satTypedCorrect(alt, '')).toBe(false)
+  })
+
+  it('needs a clock time digit for digit', () => {
+    expect(satTypedCorrect(time, '0605')).toBe(true)
+    expect(satTypedCorrect(time, '605')).toBe(false)
+    expect(satTypedCorrect(time, '0650')).toBe(false)
+  })
+
+  it('shows blanks for the digits not typed yet', () => {
+    expect(formatSatEntry(time.entry, '06')).toBe('11:06:__')
+    expect(formatSatEntry(alt.entry, '2')).toBe('2_,000ft')
+    expect(satEntryLength(time.entry)).toBe(4)
+  })
+
+  it('formats the clock', () => {
+    expect(formatSatClock(11 * 3600 + 6 * 60 + 5)).toBe('11:06:05')
   })
 })

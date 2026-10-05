@@ -192,3 +192,32 @@ describe('SAT generator honours a difficulty', () => {
     expect(build(SAT_TUNING.easier, 42)).toEqual(build(SAT_TUNING.easier, 42))
   })
 })
+
+describe('SAT difficulty tuning, Real CBAT theme', () => {
+  it('starts Easier at classic Hard\'s load and takes Hard past it', () => {
+    const easier = satTuning('easier', true)
+    const hard = satTuning('hard', true)
+    for (const t of [easier, hard]) {
+      expect(t.format).toBe('cbat')
+      expect(t.aircraftRange).toEqual([3, 3])
+      expect(t.aircraftFields).toEqual(ALL_AIRCRAFT_FIELDS)
+      expect(t.layout).toBe('panels')
+    }
+    expect(easier.unitRange[0]).toBeGreaterThanOrEqual(SAT_TUNING.hard.unitRange[0])
+    expect(hard.unitRange[1]).toBeGreaterThan(SAT_TUNING.hard.unitRange[1])
+  })
+
+  // Both themes post to the same board per difficulty, and the Aptitude Report
+  // scores `sat` out of 18, so the run length must not move with the theme.
+  it('keeps each difficulty\'s question total and board on both themes', () => {
+    for (const key of ['easier', 'hard']) {
+      expect(satTotalQuestions(satTuning(key, true))).toBe(satTotalQuestions(satTuning(key)))
+      expect(satTuning(key, true).gameKey).toBe(satTuning(key).gameKey)
+    }
+  })
+
+  it('stays classic when the theme is off', () => {
+    expect(satTuning('hard').format).toBe('classic')
+    expect(satTuning('hard').aircraftRange).toEqual(SAT_TUNING.hard.aircraftRange)
+  })
+})
