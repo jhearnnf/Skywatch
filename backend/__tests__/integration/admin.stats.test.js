@@ -203,6 +203,33 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.androidAppUsers).toBe(0);
   });
 
+  // "On Latest Version" tile: one entry per recently active account, for the
+  // client it used most recently, plus the native yardstick to judge it by.
+  it('tallies each recently active account by its most recently used build', async () => {
+    const admin = await createAdminUser();
+    const now = Date.now();
+    const daysAgo = d => new Date(now - d * 24 * 60 * 60 * 1000);
+    await createUser({ lastClients: { android: { version: '1.4.2', build: '9', buildNumber: 9, lastSeenAt: daysAgo(1) } } });
+    await createUser({ lastClients: { android: { version: '1.0.0', build: '3', buildNumber: 3, lastSeenAt: daysAgo(2) } } });
+    // Uses both: the web visit is newer, so the account counts as web only.
+    await createUser({ lastClients: {
+      android: { version: '1.0.0', build: '3', buildNumber: 3, lastSeenAt: daysAgo(5) },
+      web:     { version: '1.2.0', build: 'abc1234', buildNumber: null, lastSeenAt: daysAgo(1) },
+    } });
+    // Not seen for months — left out entirely.
+    await createUser({ lastClients: { web: { version: '1.0.0', build: 'old0001', buildNumber: null, lastSeenAt: daysAgo(90) } } });
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    const { clientBuilds } = res.body.data.users;
+    expect(clientBuilds.activeDays).toBe(30);
+    expect(clientBuilds.latestClients.android).toEqual({ version: '1.4.2', build: '9' });
+    const byKey = Object.fromEntries(clientBuilds.builds.map(b => [`${b.platform}|${b.build}`, b.count]));
+    expect(byKey).toEqual({ 'android|9': 1, 'android|3': 1, 'web|abc1234': 1 });
+  });
+
   // The Stats tile shows the share on the Real CBAT theme. Only the one
   // non-default value is counted: the default is SkyWatch, and an account from
   // before the selector existed has no `uiTheme` at all, which means the same.

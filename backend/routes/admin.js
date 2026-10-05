@@ -56,7 +56,7 @@ const { autoLinkKeywords, buildTitleRejectCheck } = require('../utils/keywordLin
 const { validateBriefTitleForCategory } = require('../utils/airframeValidation');
 const { reprioritizeCategory } = require('../utils/priorityRanking');
 const { lookupRankOrderByTitle } = require('../constants/rankOrder');
-const { NATIVE_PLATFORMS, OS_KEYS } = require('../constants/clientPlatforms');
+const { CLIENT_PLATFORMS, NATIVE_PLATFORMS, OS_KEYS } = require('../constants/clientPlatforms');
 const { latestNativeReleases } = require('../utils/latestNativeReleases');
 const {
   compactRankOrder,
@@ -489,6 +489,43 @@ async function cbatHardwareStats() {
   };
 }
 
+// Which build each recently active account is on, for the "On Latest Version"
+// tile. One entry per account — the client it used MOST RECENTLY, the same pick
+// Admin › Users makes for its collapsed row — tallied by platform + build.
+//
+// Only accounts seen in the last VERSION_ACTIVE_DAYS days: an account that last
+// opened the site in spring is "outdated" by definition and would drag the share
+// down forever, which says nothing about whether the current release is landing.
+//
+// The verdict itself is made on the client, because the web yardstick is the
+// bundle the admin is viewing from (the server cannot know the deployed sha —
+// the frontend deploys separately). Native's yardstick is `latestClients`.
+const VERSION_ACTIVE_DAYS = 30;
+async function clientBuildStats() {
+  const since = new Date(Date.now() - VERSION_ACTIVE_DAYS * 24 * 60 * 60 * 1000);
+  const [rows, latestClients] = await Promise.all([
+    User.find({ $or: CLIENT_PLATFORMS.map(p => ({ [`lastClients.${p}.lastSeenAt`]: { $gte: since } })) })
+      .select('lastClients')
+      .lean(),
+    latestNativeReleases(),
+  ]);
+  const tally = new Map();
+  for (const { lastClients } of rows) {
+    let pick = null;
+    for (const platform of CLIENT_PLATFORMS) {
+      const info = lastClients?.[platform];
+      if (!info?.version || !info.lastSeenAt) continue;
+      if (!pick || new Date(info.lastSeenAt) > new Date(pick.lastSeenAt)) pick = { platform, ...info };
+    }
+    if (!pick || new Date(pick.lastSeenAt) < since) continue;
+    const key = `${pick.platform}|${pick.build ?? ''}`;
+    const entry = tally.get(key) ?? { platform: pick.platform, build: pick.build ?? null, count: 0 };
+    entry.count += 1;
+    tally.set(key, entry);
+  }
+  return { activeDays: VERSION_ACTIVE_DAYS, builds: [...tally.values()], latestClients };
+}
+
 // GET /api/admin/stats
 router.get('/stats', async (_req, res) => {
   try {
@@ -523,6 +560,7 @@ router.get('/stats', async (_req, res) => {
       donationReceivedAgg, donationAnonReceivedAgg,
       affiliateCounts,
       cbatHardware,
+      clientBuilds,
     ] = await Promise.all([
       User.countDocuments(),
       // A non-null upcoming date is the source of truth for membership of a
@@ -707,6 +745,7 @@ router.get('/stats', async (_req, res) => {
       ]),
       AffiliateClickCount.find().lean(),
       cbatHardwareStats(),
+      clientBuildStats(),
     ]);
 
     // The union is over people, not rows: someone who saw the post-game note and later
@@ -727,6 +766,7 @@ router.get('/stats', async (_req, res) => {
           androidAppUsers,
           cbatThemeUsers,
           privateScoreUsers,
+          clientBuilds,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,
           amazonAffiliateClicks: affiliateCounts.reduce((total, row) => total + row.count, 0),

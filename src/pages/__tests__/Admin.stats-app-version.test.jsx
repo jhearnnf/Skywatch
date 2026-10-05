@@ -53,9 +53,9 @@ vi.mock('../../utils/appVersion', () => ({
   getClientInfo:  () => Promise.resolve(adminClientRef.async ?? adminClientRef.value),
 }))
 
-function setupFetch() {
+function setupFetch(users = {}) {
   global.fetch = vi.fn().mockImplementation((url) => {
-    if (url.includes('/api/admin/stats'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: {}, games: { boo: {} }, briefs: {}, tutorials: {}, server: { serverUptimeSeconds: 60, totalLoadingMs: 0 } } }) })
+    if (url.includes('/api/admin/stats'))          return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users, games: { boo: {} }, briefs: {}, tutorials: {}, server: { serverUptimeSeconds: 60, totalLoadingMs: 0 } } }) })
     if (url.includes('/api/admin/problems/count')) return Promise.resolve({ ok: true, json: async () => ({ data: { unsolvedCount: 0 } }) })
     if (url.includes('/api/admin/settings'))       return Promise.resolve({ ok: true, json: async () => ({ data: { settings: {} } }) })
     return Promise.resolve({ ok: true, json: async () => ({}) })
@@ -94,5 +94,40 @@ describe('Admin — Stats: current app version card', () => {
     render(<Admin />)
     await waitFor(() => expect(screen.getByText('App Version')).toBeInTheDocument())
     expect(screen.getByText('Android · build 8')).toBeInTheDocument()
+  })
+})
+
+describe('Admin — Stats: On Latest Version card', () => {
+  const clientBuilds = {
+    activeDays: 30,
+    latestClients: { android: { version: '1.4.2', build: '9' } },
+    builds: [
+      { platform: 'android', build: '9',       count: 3 },
+      { platform: 'android', build: '3',       count: 1 },
+      { platform: 'web',     build: 'bb11cc2', count: 4 },
+      { platform: 'web',     build: 'old0001', count: 2 },
+    ],
+  }
+
+  beforeEach(() => {
+    adminClientRef.value = { platform: 'web', version: '1.2.4', build: 'bb11cc2' }
+    adminClientRef.async  = null
+    global.Audio = class { play = vi.fn().mockResolvedValue(undefined) }
+    setupFetch({ totalUsers: 10, clientBuilds })
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('judges web against the bundle being viewed and native against the newest release', async () => {
+    render(<Admin />)
+    expect(await screen.findByText('On Latest Version')).toBeInTheDocument()
+    // 3 android on 9 + 4 web on bb11cc2, of 10 judged.
+    expect(screen.getByText('7 of 10 active in the last 30 days')).toBeInTheDocument()
+  })
+
+  it('leaves web accounts out when the admin is viewing from the app', async () => {
+    adminClientRef.value = { platform: 'android', version: '1.4.2', build: '9' }
+    render(<Admin />)
+    expect(await screen.findByText('On Latest Version')).toBeInTheDocument()
+    expect(screen.getByText('3 of 4 active in the last 30 days')).toBeInTheDocument()
   })
 })

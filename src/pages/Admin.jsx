@@ -724,6 +724,23 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   //
   // Read from the live AppSettings rather than the stats payload: it's a display concern, and it
   // flips the moment an admin toggles slim mode instead of waiting for the 30s stats refetch.
+  // Share of recently active accounts on the newest build. The web yardstick is the
+  // bundle this page is running (the deployed one), so it only exists when the admin
+  // is on the site; from the native app, web accounts are left out of the share
+  // rather than all counted as outdated.
+  const latestVersion = (() => {
+    const cb = users.clientBuilds ?? {}
+    const webReference = clientInfo?.platform === 'web' ? clientInfo : null
+    let latest = 0, judged = 0
+    for (const { platform, build, count } of cb.builds ?? []) {
+      const status = versionStatus({ platform, build }, cb.latestClients, webReference)
+      if (!status) continue
+      judged += count
+      if (status === 'latest') latest += count
+    }
+    return { latest, judged, activeDays: cb.activeDays ?? 30 }
+  })()
+
   const slimStat = appSettings?.slimModeEnabled === true
     ? { disabled: true, sub: 'not used in CBAT-only mode' }
     : {}
@@ -804,6 +821,17 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             sub={users.totalUsers
               ? `${pct(users.cbatDateUsers ?? 0, users.totalUsers)} of all accounts`
               : 'no accounts yet'}
+          />
+          {/* Of the accounts seen recently, how many are on the newest build of whatever
+              they last used. Same latest/outdated rule as Admin › Users (versionStatus),
+              so the two never disagree. */}
+          <StatCard
+            label="On Latest Version"
+            value={latestVersion.judged ? pct(latestVersion.latest, latestVersion.judged) : '—'}
+            color="emerald"
+            sub={latestVersion.judged
+              ? `${fmtNum(latestVersion.latest)} of ${fmtNum(latestVersion.judged)} active in the last ${latestVersion.activeDays} days`
+              : 'no recent builds to compare'}
           />
         </div>
         {/* The tier trio opens this row in reading order: Free, Trial, Paying Subscribers. */}
