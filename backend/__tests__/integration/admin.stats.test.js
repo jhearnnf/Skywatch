@@ -893,6 +893,40 @@ describe('GET /api/admin/stats/donation-funnel', () => {
   });
 });
 
+describe('GET /api/admin/stats/donations-received', () => {
+  const DonationPageVisit = require('../../models/DonationPageVisit');
+
+  it('returns 401 for a guest and 403 for a non-admin', async () => {
+    const user = await createUser();
+    expect((await request(app).get('/api/admin/stats/donations-received')).status).toBe(401);
+    expect((await request(app)
+      .get('/api/admin/stats/donations-received')
+      .set('Cookie', authCookie(user._id))).status).toBe(403);
+  });
+
+  // The list has to add up to the tile, so it reads the same two places the tile sums.
+  it('lists named and anonymous donors, most recent first, and nobody who never paid', async () => {
+    const admin = await createAdminUser();
+    await createUser({ displayName: 'Maverick', donationPrompt: { donatedAt: new Date('2026-07-30'), donatedTotalPence: 500 } });
+    await createUser({ displayName: 'Goose',    donationPrompt: { impressionCount: 3 } });
+    await DonationPageVisit.recordPayment('visit-1', 1200, new Date('2026-08-03'));
+    await DonationPageVisit.recordSessionPayment('cs_test_1', 300, new Date('2026-08-01'));
+    await DonationPageVisit.create({ visitKey: 'visit-unpaid' });
+
+    const res = await request(app)
+      .get('/api/admin/stats/donations-received')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.status).toBe(200);
+    // Dated so that newest-first and largest-first disagree.
+    expect(res.body.data.donors.map(d => [d.anonymous, d.totalPence, d.displayName ?? d.via])).toEqual([
+      [true,  1200, 'donate page'],
+      [true,  300,  'questionnaire or a payment link'],
+      [false, 500,  'Maverick'],
+    ]);
+  });
+});
+
 // ── games.cbatHardware ───────────────────────────────────────────────────────
 // The two Stats tiles beside the affiliate clicks: runs flown on a joystick
 // across every steered game, and SMA runs flown on pedals. Runs and players

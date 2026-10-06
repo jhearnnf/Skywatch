@@ -111,11 +111,19 @@ const MOCK_FUNNEL = [
   { _id: 'u2', agentNumber: 102, displayName: 'Goose',    email: 'goose@example.com', impressionCount: 3, clickCount: 0, dismissCount: 2, lastShownAt: '2026-07-30T10:00:00.000Z', surveyAsked: true, surveyClicked: false, surveyAskedAt: '2026-07-31T10:00:00.000Z', pageVisited: false, pageCheckout: false, pageVisitedAt: null },
 ]
 
+const MOCK_DONORS = [
+  { _id: 'u1', anonymous: false, agentNumber: 101, displayName: 'Maverick', email: 'mav@example.com', totalPence: 2500, lastAt: '2026-08-02T10:00:00.000Z' },
+  { _id: 'v1', anonymous: true, via: 'questionnaire or a payment link', totalPence: 1750, lastAt: '2026-08-01T10:00:00.000Z' },
+]
+
 function setupFetch() {
   return vi.fn().mockImplementation((url) => {
-    // Ahead of the /api/admin/stats branch below — the drill-down URL is a prefix match on it.
+    // Ahead of the /api/admin/stats branch below — the drill-down URLs are a prefix match on it.
     if (url.includes('/api/admin/stats/donation-funnel')) {
       return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: MOCK_FUNNEL } }) })
+    }
+    if (url.includes('/api/admin/stats/donations-received')) {
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { donors: MOCK_DONORS } }) })
     }
     if (url.includes('/api/admin/stats')) {
       return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: MOCK_STATS }) })
@@ -237,6 +245,40 @@ describe('Admin — Stats tab: donation funnel', () => {
 
     fireEvent.click(screen.getByText('Donation Asks'))
     await waitFor(() => expect(screen.queryByText('Maverick')).not.toBeInTheDocument())
+  })
+
+  it('opens the list of who donated how much when Donations Received is clicked', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Donations Received')).toBeInTheDocument())
+    expect(screen.queryByText('Who donated')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Donations Received'))
+
+    await waitFor(() => expect(screen.getByText('Who donated')).toBeInTheDocument())
+    expect(screen.getByText('Maverick')).toBeInTheDocument()
+    expect(screen.getByText('£25.00')).toBeInTheDocument()
+    // Donors without an account have no name to show, only where the money came in.
+    expect(screen.getByText('Anonymous')).toBeInTheDocument()
+    expect(screen.getByText(/via the questionnaire or a payment link/)).toBeInTheDocument()
+    expect(screen.getByText('£17.50')).toBeInTheDocument()
+    expect(screen.getByText(/£42.50 · 2 donors/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Donations Received'))
+    await waitFor(() => expect(screen.queryByText('Who donated')).not.toBeInTheDocument())
+  })
+
+  // One drill-down under the row at a time.
+  it('closes the donors list when the asks list is opened', async () => {
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Donations Received')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Donations Received'))
+    await waitFor(() => expect(screen.getByText('Who donated')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Donation Asks'))
+    await waitFor(() => expect(screen.getByText('Where the asks landed')).toBeInTheDocument())
+    expect(screen.queryByText('Who donated')).not.toBeInTheDocument()
   })
 })
 

@@ -958,6 +958,54 @@ router.get('/stats/donation-funnel', async (_req, res) => {
   }
 });
 
+// GET /api/admin/stats/donations-received
+//
+// The names behind the Donations Received tile: who gave, and how much. Read
+// from the same two places the tile sums, so the list always adds up to it —
+// signed-in donors from their account, everyone else from the /donate visit or
+// Payment Link row the webhook wrote. The anonymous rows stay anonymous: nothing
+// about the donor is copied out of Stripe, so there is no name to show.
+//
+// Signed-in gifts are summed per person (that is how the account stores them),
+// so `donatedAt` is their most recent gift. Most recent first.
+router.get('/stats/donations-received', async (_req, res) => {
+  try {
+    const [users, visits] = await Promise.all([
+      User.find({ 'donationPrompt.donatedAt': { $ne: null } })
+        .select('agentNumber displayName email donationPrompt.donatedAt donationPrompt.donatedTotalPence')
+        .lean(),
+      DonationPageVisit.find({ paidAt: { $ne: null } })
+        .select('visitKey paidAt paidPence')
+        .lean(),
+    ]);
+
+    const donors = [
+      ...users.map(u => ({
+        _id:         u._id,
+        anonymous:   false,
+        agentNumber: u.agentNumber,
+        displayName: u.displayName,
+        email:       u.email,
+        totalPence:  u.donationPrompt?.donatedTotalPence ?? 0,
+        lastAt:      u.donationPrompt?.donatedAt ?? null,
+      })),
+      ...visits.map(v => ({
+        _id:        v._id,
+        anonymous:  true,
+        // `stripe:` keys carried no metadata at all: a Payment Link shared by
+        // hand, or a questionnaire gift from before the survey sent its token.
+        via:        String(v.visitKey ?? '').startsWith('stripe:') ? 'questionnaire or a payment link' : 'donate page',
+        totalPence: v.paidPence ?? 0,
+        lastAt:     v.paidAt,
+      })),
+    ].sort((a, b) => new Date(b.lastAt ?? 0) - new Date(a.lastAt ?? 0));
+
+    res.json({ status: 'success', data: { donors } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── OpenRouter usage ────────────────────────────────────────────────────────
 
 const OpenRouterUsageLog = require('../models/OpenRouterUsageLog');

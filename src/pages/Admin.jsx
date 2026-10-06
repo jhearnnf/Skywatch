@@ -580,6 +580,75 @@ function DonationFunnelList({ API, donation }) {
   )
 }
 
+// The names behind Donations Received. Signed-in donors are named; everyone else
+// gave without an account, so the row says where the money came in instead.
+function DonorsList({ API }) {
+  const { apiFetch } = useAuth()
+  const [rows, setRows] = useState(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`${API}/api/admin/stats/donations-received`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        if (d.status === 'success') setRows(d.data.donors ?? [])
+        else setError('Failed to load the donors')
+      })
+      .catch(() => { if (!cancelled) setError('Failed to load the donors') })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API])
+
+  if (error) return <p className="mt-3 text-xs text-red-500">{error}</p>
+  if (!rows) return <p className="mt-3 text-xs text-slate-400 animate-pulse">Loading the donors…</p>
+  if (!rows.length) return <p className="mt-3 text-xs text-slate-400">Nobody has donated yet.</p>
+
+  return (
+    <div className="mt-3 rounded-2xl border border-slate-200 bg-surface overflow-hidden">
+      <div className="px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          Who donated
+        </p>
+        <p className="text-[10px] text-slate-400">
+          {fmtGBPExact(rows.reduce((t, r) => t + (r.totalPence ?? 0), 0))} · {rows.length} {rows.length === 1 ? 'donor' : 'donors'}
+        </p>
+      </div>
+      <ul className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+        {rows.map(r => (
+          <li key={r._id} className="px-4 py-2.5 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              {r.anonymous ? (
+                <>
+                  <p className="text-xs font-bold text-slate-800">Anonymous</p>
+                  <p className="text-[10px] text-slate-400">no account, via the {r.via}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-bold text-slate-800 truncate">
+                    {r.displayName || r.email || '—'}
+                    {r.agentNumber != null && (
+                      <span className="ml-1.5 font-mono font-normal text-slate-400">#{r.agentNumber}</span>
+                    )}
+                  </p>
+                  <p className="text-[10px] text-slate-400 truncate">{r.email}</p>
+                </>
+              )}
+            </div>
+            <div className="shrink-0 text-right">
+              <p className="text-xs font-bold text-emerald-700">{fmtGBPExact(r.totalPence)}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {r.anonymous ? '' : 'last gave '}{fmtDateTime(r.lastAt)}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 function PeopleAskedList({ rows }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-surface overflow-hidden">
@@ -640,6 +709,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   // needs the bridge round-trip.
   const [clientInfo, setClientInfo] = useState(() => peekClientInfo())
   const [showDonationFunnel, setShowDonationFunnel] = useState(false)
+  const [showDonors, setShowDonors] = useState(false)
 
   // Refetched on an interval, not just on mount: Users Online is a live 5-minute
   // window, and the first read races the heartbeat that marks *this* admin as
@@ -905,17 +975,24 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
               times is one conversion, not five — and the denominator is people who actually saw
               an ask (each reports its own impression), so the rate is a real click-through rate
               rather than clicks over everyone who merely earned a milestone. */}
-          <StatCard
-            label="Donations Received"
-            value={fmtGBP(donation.received.totalPence)}
-            color="emerald"
-            sub={donation.received.donors
-              ? `from ${fmtNum(donation.received.donors)} ${donation.received.donors === 1 ? 'donor' : 'donors'}`
-              : 'nobody has donated yet'}
-          />
           <button
             type="button"
-            onClick={() => setShowDonationFunnel(o => !o)}
+            onClick={() => { setShowDonors(o => !o); setShowDonationFunnel(false) }}
+            aria-expanded={showDonors}
+            className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-emerald-300 rounded-2xl [&>div]:flex-1"
+          >
+            <StatCard
+              label="Donations Received"
+              value={fmtGBP(donation.received.totalPence)}
+              color="emerald"
+              sub={donation.received.donors
+                ? `from ${fmtNum(donation.received.donors)} ${donation.received.donors === 1 ? 'donor' : 'donors'}`
+                : 'nobody has donated yet'}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowDonationFunnel(o => !o); setShowDonors(false) }}
             aria-expanded={showDonationFunnel}
             className="flex w-full text-left cursor-pointer hover:brightness-95 transition focus:outline-none focus:ring-2 focus:ring-amber-300 rounded-2xl [&>div]:flex-1"
           >
@@ -929,6 +1006,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
             />
           </button>
         </div>
+        {showDonors && <DonorsList API={API} />}
         {showDonationFunnel && <DonationFunnelList API={API} donation={donation} />}
         {/* The hardware row. The two run counts sit beside the affiliate clicks because
             they are the other end of the same cabinet: the joystick and pedal panels on
