@@ -67,7 +67,7 @@ const fmtDay  = (ymd) => {
   })
 }
 
-export default function CbatPassersSection({ API, openOnMount = false, onOpenConsumed }) {
+export default function CbatPassersSection({ API, openOnMount = false, presetGroup = null, onOpenConsumed }) {
   const { apiFetch } = useAuth()
   const navigate = useNavigate()
 
@@ -113,6 +113,10 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   // Set as soon as the admin types a threshold, so a saved-settings reply that
   // lands afterwards does not overwrite what they typed.
   const thresholdsEdited = useRef(false)
+  // A lounge group handed over from its member list ({ title, ids }). Read once
+  // at mount: Admin drops it straight after, and the panel keeps its own copy.
+  const [group] = useState(presetGroup)
+  const [groupRows, setGroupRows] = useState(null)
 
   // The FIRST load deliberately sends no thresholds, so the server answers from
   // the saved settings and the inputs below can adopt them. Sending the
@@ -154,8 +158,30 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
   useEffect(() => {
     if (!open || initialLoadStarted.current) return
     initialLoadStarted.current = true
-    load({ useSaved: true })
+    ;(async () => {
+      await load({ useSaved: true })
+      if (group?.ids?.length) await applyGroup(group.ids)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, load])
+
+  // Replaces the server's pre-ticked batch with exactly the group's members.
+  // They are looked up by id, so anyone the list would leave out still shows,
+  // with the reason, and is ticked unless they cannot be mailed at all.
+  const applyGroup = async (ids) => {
+    try {
+      const qs = new URLSearchParams({ ids: ids.join(',') })
+      const res = await apiFetch(`${API}/api/admin/cbat-passers/search?${qs}`, { credentials: 'include' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.message || 'Could not load the group')
+      const users = json.data.users ?? []
+      setGroupRows(users)
+      setPicked(new Map(users.map(u => [u._id.toString(), u])))
+      setSelected(new Set(users.filter(u => u.mailable).map(u => u._id.toString())))
+    } catch (err) {
+      setError(err.message)
+    }
+  }
 
   // Scroll the panel into view once, on the arrival that opened it. The flag is
   // consumed straight away so a later collapse is not undone by a re-render.
@@ -478,6 +504,42 @@ export default function CbatPassersSection({ API, openOnMount = false, onOpenCon
             <div className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-3 py-2 mb-3">
               Sent {result.sentCount} email{result.sentCount === 1 ? '' : 's'}.
               {result.failedCount > 0 && ` ${result.failedCount} failed — those accounts stay in the list to retry.`}
+            </div>
+          )}
+
+          {groupRows && (
+            <div className="mb-4" data-testid="cbat-passers-group">
+              <div className="flex items-baseline justify-between gap-2 mb-1">
+                <p className="text-xs font-semibold text-slate-500">
+                  From the group {group.title}: {groupRows.filter(u => selected.has(u._id.toString())).length} of {groupRows.length} ticked
+                </p>
+                <button
+                  onClick={() => setGroupRows(null)}
+                  className="text-[10px] text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Hide
+                </button>
+              </div>
+              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
+                {groupRows.length === 0 && (
+                  <p className="px-4 py-4 text-center text-xs text-slate-500">Nobody in this group could be found.</p>
+                )}
+                {groupRows.map(u => (
+                  <SearchHitRow
+                    key={u._id}
+                    user={u}
+                    minCompletions={minCompletions}
+                    checked={selected.has(u._id.toString())}
+                    onToggle={() => {
+                      // "Refresh list" empties `picked`; put the row back so a
+                      // re-tick still reaches the confirmation and the send.
+                      const id = u._id.toString()
+                      toggle(id)
+                      setPicked(prev => (prev.has(id) ? prev : new Map(prev).set(id, u)))
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           )}
 

@@ -6991,7 +6991,7 @@ const CR_DEFAULTS = {
   combatReadinessMediumLabel:  'Operative', combatReadinessMediumTag:  'MEDIUM', combatReadinessMediumStars:  '★★★★☆', combatReadinessMediumFlavor:  'Contextual, deeper questions.',
 }
 
-function ContentTab({ API, openPassers = false, onBootstrapConsumed }) {
+function ContentTab({ API, openPassers = false, passersGroup = null, onBootstrapConsumed }) {
   const [draft,       setDraft]       = useState({})
   const [modal,       setModal]       = useState(null)
   const [toast,       setToast]       = useState('')
@@ -7110,7 +7110,7 @@ function ContentTab({ API, openPassers = false, onBootstrapConsumed }) {
       {/* ── Potential CBAT Passers Survey ──────────────────
           The recipient list, both email templates, the questionnaire's settings
           and the only send button in the app. */}
-      <CbatPassersSection API={API} openOnMount={openPassers} onOpenConsumed={onBootstrapConsumed} />
+      <CbatPassersSection API={API} openOnMount={openPassers} presetGroup={passersGroup} onOpenConsumed={onBootstrapConsumed} />
 
       {/* ── Static Content ────────────────────────────────────────── */}
       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-2">Static Content</p>
@@ -12343,6 +12343,9 @@ export default function Admin() {
   // Set when we arrive back from the questionnaire results page: open Content
   // with the Potential CBAT Passers panel already expanded.
   const [openPassersOnMount, setOpenPassersOnMount] = useState(() => !!location.state?.openPassers)
+  // Sent by "Email CBAT passers survey" on a lounge group's member list: the
+  // panel opens with exactly that group ticked.
+  const [passersGroupOnMount, setPassersGroupOnMount] = useState(() => location.state?.passersGroup ?? null)
   // Sent by "Manage in Admin" on an agent's profile: open Users on that agent.
   const [focusUserOnMount, setFocusUserOnMount] = useState(() => location.state?.focusUser ?? null)
   // UsersTab reads it only in its first render, so it is dropped right after:
@@ -12445,7 +12448,7 @@ export default function Admin() {
               {tab === 'reports'  && <ReportsTab  API={API} />}
               {tab === 'settings' && <SettingsTab API={API} />}
               {tab === 'users'    && <UsersTab    API={API} onViewEmailHistory={openUserEmailLog} focusUser={focusUserOnMount} />}
-              {tab === 'content'  && <ContentTab  API={API} openPassers={openPassersOnMount} onBootstrapConsumed={() => setOpenPassersOnMount(false)} />}
+              {tab === 'content'  && <ContentTab  API={API} openPassers={openPassersOnMount} passersGroup={passersGroupOnMount} onBootstrapConsumed={() => { setOpenPassersOnMount(false); setPassersGroupOnMount(null) }} />}
               {tab === 'briefs'   && <BriefsTab   API={API} initialSearch={leadsInitialSearch} openLeads={openLeadsOnMount} editBriefIdOnMount={editBriefIdOnMount} onBootstrapConsumed={() => { setLeadsInitialSearch(''); setOpenLeadsOnMount(false); setEditBriefIdOnMount(null) }} />}
               {tab === 'intel'    && <IntelTab    API={API} unsolvedCount={unsolvedCount} unresolvedSystemLogs={unresolvedSystemLogs} initialSub={intelInitial.sub} initialEmailStatus={intelInitial.emailStatus} initialEmailUser={intelInitial.emailUser} onOpenBrief={openBriefFromReport} onBootstrapConsumed={() => setIntelInitial({ sub: null, emailStatus: null, emailUser: null })} />}
             </motion.div>

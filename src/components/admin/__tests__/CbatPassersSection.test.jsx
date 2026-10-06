@@ -549,3 +549,37 @@ describe('CbatPassersSection — typing thresholds while the list is loading', (
     expect(daysInput).toHaveValue(40)
   })
 })
+
+// Opened from a lounge group's member list: the ticks are that group and no
+// one else, and members the list would leave out still show up with a reason.
+describe('CbatPassersSection — opened for a lounge group', () => {
+  it('ticks exactly the group members that can be mailed', async () => {
+    mockApi(cohort({ nextBatchIds: ['u1'] }))
+    searchHits = [
+      person({ _id: 'g1', agentNumber: '1111111', email: 'g1@example.com', excludedReason: 'still-active' }),
+      person({ _id: 'g2', agentNumber: '2222222', email: 'g2@example.com', excludedReason: 'opted-out', mailable: false }),
+    ]
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <Routes>
+          <Route path="/admin" element={
+            <CbatPassersSection API="" openOnMount presetGroup={{ title: 'CBAT · 6 Oct 2026', ids: ['g1', 'g2'] }} />
+          } />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const group = await screen.findByTestId('cbat-passers-group')
+    expect(searchUrls.some(u => u.includes('ids=g1%2Cg2'))).toBe(true)
+    expect(within(group).getByText(/From the group CBAT · 6 Oct 2026: 1 of 2 ticked/)).toBeInTheDocument()
+    expect(within(group).getByRole('checkbox', { name: 'Select Agent 1111111' })).toBeChecked()
+    expect(within(group).getByRole('checkbox', { name: 'Select Agent 2222222' })).toBeDisabled()
+    // The server's own batch pick is replaced, not added to.
+    expect(screen.getByRole('button', { name: /Send bulk email \(1\)/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('checkbox', { name: 'Select Agent 1234567' })[0]).not.toBeChecked()
+
+    fireEvent.click(screen.getByRole('button', { name: /Send bulk email/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Send now' }))
+    await waitFor(() => expect(sendBody?.userIds).toEqual(['g1']))
+  })
+})

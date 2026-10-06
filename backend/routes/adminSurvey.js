@@ -106,8 +106,18 @@ router.get('/', async (req, res) => {
 //
 // It does NOT reach past an unsubscribe, a ban or a bot account. Those come
 // back flagged and untickable.
+//
+// `?ids=a,b,c` looks up accounts already picked elsewhere (a lounge group's
+// member list) instead of searching, under the same rules.
 router.get('/search', async (req, res) => {
   try {
+    if (req.query.ids) {
+      const ids = req.query.ids.toString().split(',').map(s => s.trim()).filter(Boolean).slice(0, 200);
+      const { minCompletions, dormantDays } = await resolveThresholds(req.query);
+      const users = await describeSurveyUsersByIds(ids, { minCompletions, dormantDays });
+      return res.json({ status: 'success', data: { users, query: '' } });
+    }
+
     const q = (req.query.q ?? '').toString().trim();
     if (q.length < 2) return res.json({ status: 'success', data: { users: [], query: q } });
 

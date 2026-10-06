@@ -417,6 +417,21 @@ describe('GET /api/admin/cbat-passers/search', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.users).toEqual([]);
   });
+
+  // A lounge group's member list hands its ids straight over, listed or not.
+  it('looks up a list of ids, under the same rules, ignoring malformed ones', async () => {
+    const listed = await candidate();
+    const active = await candidate({ completions: 20, days: 1 });
+    const bot    = await candidate({ isBot: true });
+    const res = await request(app)
+      .get(`/api/admin/cbat-passers/search?ids=${listed._id},${active._id},${bot._id},not-an-id`)
+      .set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.users).toHaveLength(3);
+    expect(hitFor(res.body, listed.email).excludedReason).toBeNull();
+    expect(hitFor(res.body, active.email).excludedReason).toBe('still-active');
+    expect(hitFor(res.body, bot.email).mailable).toBe(false);
+  });
 });
 
 describe('POST /api/admin/cbat-passers/send — hand-picked from the search', () => {

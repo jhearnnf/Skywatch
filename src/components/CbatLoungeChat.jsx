@@ -1495,6 +1495,15 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
           members={lounge.members}
           onClose={() => setMembersOpen(false)}
           onOpenUser={(id) => { setMembersOpen(false); setCardUserId(id) }}
+          onEmailSurvey={lounge.date && lounge.date <= localDateKey() ? () => navigate('/admin', {
+            state: {
+              openPassers: true,
+              passersGroup: {
+                title: lounge.title || `CBAT · ${lounge.date}`,
+                ids: lounge.members.map(m => String(m._id)),
+              },
+            },
+          }) : undefined}
         />
       )}
       {cardUserId && (

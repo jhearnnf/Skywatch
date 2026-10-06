@@ -8,7 +8,11 @@ import { agentLabel } from '../format'
 // Opened from the "N members" count in the room strip rather than listed in
 // the strip itself, so the admin's drill-down looks like the room the members
 // see and the names are one tap away when they are wanted.
-export default function GroupMembersDialog({ title, members = [], onClose, onOpenUser }) {
+//
+// `onEmailSurvey` is passed only once the group's test date has arrived; it
+// adds the button that sends the admin to the passers survey with this group
+// ticked.
+export default function GroupMembersDialog({ title, members = [], onClose, onOpenUser, onEmailSurvey }) {
   return (
     <Overlay onDismiss={onClose} className="flex items-center justify-center px-4" data-testid="group-members-dialog">
       <div className="w-full max-w-xs bg-surface rounded-2xl border border-slate-200 card-shadow overflow-hidden">
@@ -50,7 +54,17 @@ export default function GroupMembersDialog({ title, members = [], onClose, onOpe
           )}
         </div>
 
-        <div className="px-4 py-3 border-t border-slate-200">
+        <div className="px-4 py-3 border-t border-slate-200 space-y-2">
+          {onEmailSurvey && members.length > 0 && (
+            <button
+              type="button"
+              onClick={onEmailSurvey}
+              data-testid="group-members-email-survey"
+              className="w-full px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-sm transition-colors"
+            >
+              Email CBAT passers survey
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
