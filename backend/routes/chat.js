@@ -252,6 +252,7 @@ async function serializeCbatGroup(user, { justJoined = false } = {}) {
   const convo = await ensureCbatCohort(date, region);
   if (justJoined) await announceCohortJoin(convo, user);
   const readRow = await ChatRead.findOne({ userId: user._id, conversationId: convo._id }).lean();
+  const cutoff = readCutoff(user, convo, readRow);
   const [unreadCount, memberCount, othersOnline] = await Promise.all([
     ChatMessage.countDocuments({
       conversationId: convo._id,
@@ -260,7 +261,7 @@ async function serializeCbatGroup(user, { justJoined = false } = {}) {
       // number on the My group tab. Same rule as personalUnreadCounts.
       senderRole: { $ne: 'system' },
       senderUserId: { $ne: user._id },
-      ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+      ...(cutoff ? { createdAt: { $gt: cutoff } } : {}),
     }),
     cohortMemberCount(convo),
     cohortOthersOnline(convo, user._id),
@@ -504,26 +505,41 @@ function postRefusal(convo, user) {
 // appendMessage() and markRead() live in utils/chatWrite.js so the report
 // route and the admin Reports tab can write into a ticket too.
 
+// Where "new" starts for this user in this conversation, or null for "from
+// the beginning".
+//
+// Normally that is where they last read up to. A channel they have never
+// opened starts from when they signed up instead: a fresh account has not
+// missed anything, so the backlog that was already there when they arrived is
+// not news to them (the way joining a Slack or Discord server works). Anything
+// posted after they joined still counts, so an announcement made next week
+// dots them as it should.
+//
+// DMs and support threads keep "never opened = all unread". They are always
+// created after the account, so the backlog case cannot arise there.
+function readCutoff(user, convo, readRow) {
+  if (readRow) return readRow.lastReadAt;
+  if (convo.type === 'channel' && user?.createdAt) return user.createdAt;
+  return null;
+}
+
 // The unread rule, in one place.
 //
-// A conversation you have never opened counts as unread — including a channel.
-// The Community dot is meant to say "there is something new in here" to every
-// user, not only to people who have already been in. The cost is that a user
-// who has never opened Community sees a dot for the existing backlog once;
-// opening it clears that for good, and the per-user opt-out
-// (communityNotificationsEnabled) is the escape hatch for anyone who does not
-// want the badge at all.
+// Something posted after readCutoff() is unread. That includes a channel the
+// user has never opened, so the Community dot says "there is something new in
+// here" to everyone, not only to people who have already been in.
 //
 // A user's own message never dots them: appendMessage marks the conversation
 // read for the sender as it writes.
-function isUnread(convo, readRow) {
+function isUnread(user, convo, readRow) {
   if (!convo.messageCount) return false;
   // Admin-disabled notifications for this channel. A feed that badges the
   // navbar on every message trains people to ignore the dot, which would cost
   // it its meaning everywhere else too.
   if (convo.type === 'channel' && convo.channel?.notifyMembers === false) return false;
-  if (!readRow) return true;
-  return new Date(readRow.lastReadAt) < new Date(convo.lastMessageAt);
+  const cutoff = readCutoff(user, convo, readRow);
+  if (!cutoff) return true;
+  return new Date(cutoff) < new Date(convo.lastMessageAt);
 }
 
 // Every conversation a user can see, projected to just what unread needs.
@@ -588,10 +604,10 @@ async function personalUnreadCounts(user, convos, reads) {
     if (!c.messageCount) continue;
     // A channel the admin has silenced does not badge, dot or number.
     if (c.type === 'channel' && c.channel?.notifyMembers === false) continue;
-    const readRow = reads.get(String(c._id));
+    const cutoff = readCutoff(user, c, reads.get(String(c._id)));
     clauses.push({
       conversationId: c._id,
-      ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+      ...(cutoff ? { createdAt: { $gt: cutoff } } : {}),
       // In a channel, only what names you. In a DM or support thread the whole
       // conversation is addressed to you, so every message counts.
       ...(c.type === 'channel'
@@ -862,7 +878,7 @@ router.get('/overview', async (req, res) => {
         type:          c.type,
         lastMessageAt: c.lastMessageAt,
         messageCount:  c.messageCount ?? 0,
-        unread:        isUnread(c, reads.get(String(c._id))),
+        unread:        isUnread(req.user, c, reads.get(String(c._id))),
         // Unread messages in here that name this user. Zero in a channel you
         // are simply behind on.
         personalUnread: personal.get(String(c._id)) ?? 0,
@@ -976,7 +992,7 @@ router.get('/overview', async (req, res) => {
           title:          b.displayName || 'Bot',
           description:    b.botDescription || null,
           conversationId: thread?._id ?? null,
-          unread:         thread ? isUnread(thread, reads.get(String(thread._id))) : false,
+          unread:         thread ? isUnread(req.user, thread, reads.get(String(thread._id))) : false,
           personalUnread: thread ? (personal.get(String(thread._id)) ?? 0) : 0,
           lastMessageAt:  thread?.lastMessageAt ?? null,
         };
@@ -1039,9 +1055,12 @@ router.get('/lounge', async (req, res) => {
     // The widget's own dot, computed here rather than read off isUnread():
     // this channel is muted for the Community badge on purpose (see
     // seeds/seedCbatLounge.js), and isUnread() honours that. The panel's own
-    // dot is a different signal and must ignore it.
+    // dot is a different signal and must ignore it. It does share the
+    // readCutoff() baseline, so a fresh account is not dotted for chat that
+    // happened before it signed up.
+    const cutoff = readCutoff(req.user, convo, readRow);
     const unread = Boolean(convo.messageCount)
-      && (!readRow || new Date(readRow.lastReadAt) < new Date(convo.lastMessageAt));
+      && (!cutoff || new Date(cutoff) < new Date(convo.lastMessageAt));
     // The number on the Lounge pill while another room is selected. Only
     // counted when there is something unread, so the common case costs nothing.
     const unreadCount = unread
@@ -1050,7 +1069,7 @@ router.get('/lounge', async (req, res) => {
         deletedAt: null,
         senderRole: { $ne: 'system' },
         senderUserId: { $ne: req.user._id },
-        ...(readRow ? { createdAt: { $gt: readRow.lastReadAt } } : {}),
+        ...(cutoff ? { createdAt: { $gt: cutoff } } : {}),
       })
       : 0;
 
@@ -1458,7 +1477,7 @@ router.get('/unread/me', async (req, res) => {
     const convos = await visibleConversations(req.user);
     const reads  = await readMap(req.user._id, convos.map(c => c._id));
 
-    const unread = convos.filter(c => isUnread(c, reads.get(String(c._id))));
+    const unread = convos.filter(c => isUnread(req.user, c, reads.get(String(c._id))));
     const hasAnyOpenChat = convos.some(c => c.type === 'support' && c.status === 'open');
     const personal = await personalUnreadCounts(req.user, convos, reads);
     const personalUnread = [...personal.values()].reduce((a, b) => a + b, 0);

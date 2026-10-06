@@ -14,6 +14,7 @@
 process.env.JWT_SECRET = 'test_secret';
 
 const request = require('supertest');
+const mongoose = require('mongoose');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, createSettings, authCookie } = require('../helpers/factories');
@@ -216,5 +217,52 @@ describe('migrations/backfillReplyToUserId', () => {
     await send(viper._id, channelId, 'second', parent.body.data.message._id);
 
     expect(await backfill({ ChatMessage, logger: silent })).toEqual({ scanned: 0, filled: 0 });
+  });
+});
+
+describe('a fresh account and the channel backlog', () => {
+  // Push everything already in the channel a minute into the past, so "posted
+  // before this account existed" does not hinge on millisecond ordering.
+  async function backdate(channelId) {
+    const past = new Date(Date.now() - 60_000);
+    await ChatMessage.collection.updateMany({}, { $set: { createdAt: past } });
+    await ChatConversation.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(String(channelId)) },
+      { $set: { lastMessageAt: past } },
+    );
+  }
+
+  it('does not dot a new user for channel chat from before they signed up', async () => {
+    const { viper, channelId } = await seedChannel();
+    await send(viper._id, channelId, 'welcome to the channel');
+    await backdate(channelId);
+
+    const rookie = await createUser({ displayName: 'Rookie' });
+
+    const res = await unread(rookie._id);
+    expect(res.body.data.hasUnread).toBe(false);
+    expect(res.body.data.personalUnread).toBe(0);
+
+    const rail = await overview(rookie._id);
+    const row = rail.body.data.channels.find(c => String(c._id) === String(channelId));
+    expect(row.unread).toBe(false);
+  });
+
+  it('dots them for the first message posted after they joined', async () => {
+    const { viper, channelId } = await seedChannel();
+    await send(viper._id, channelId, 'old news');
+    await backdate(channelId);
+
+    const rookie = await createUser({ displayName: 'Rookie' });
+    await send(viper._id, channelId, 'new announcement');
+
+    expect((await unread(rookie._id)).body.data.hasUnread).toBe(true);
+  });
+
+  it('still dots an older account that has never opened the channel', async () => {
+    const { falcon, viper, channelId } = await seedChannel();
+    await send(viper._id, channelId, 'posted after falcon signed up');
+
+    expect((await unread(falcon._id)).body.data.hasUnread).toBe(true);
   });
 });
