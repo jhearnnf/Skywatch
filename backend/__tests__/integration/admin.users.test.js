@@ -126,6 +126,24 @@ describe('GET /api/admin/users — sort order', () => {
     expect(second.body.data.users.map(u => u._id)).toEqual([admin.id]);
   });
 
+  it('reads the member-set upcoming date first, falling back to the research date', async () => {
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const day = (n) => new Date(today.getTime() + n * 86400000);
+    const admin = await createAdminUser();
+    const memberOnly = await createUser({ upcomingCbatDate: day(1) });
+    const researchOnly = await createUser({ cbatDate: day(2) });
+    // The member's own date wins: a future one keeps them in despite a past
+    // research date, a past one drops them despite a future research date.
+    const memberWins = await createUser({ upcomingCbatDate: day(3), cbatDate: day(-5) });
+    await createUser({ upcomingCbatDate: day(-1), cbatDate: day(5) });
+    const res = await listFor(admin, '?sort=upcoming-cbat');
+    expect(res.body.data.users.map(u => u._id)).toEqual([memberOnly.id, researchOnly.id, memberWins.id]);
+    const search = await request(app).get('/api/admin/users/search?q=%40&sort=upcoming-cbat')
+      .set('Cookie', authCookie(admin._id));
+    expect(search.body.data.users.map(u => u._id)).toEqual([memberOnly.id, researchOnly.id, memberWins.id]);
+  });
+
   it('applies upcoming CBAT filtering and ordering to search', async () => {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);

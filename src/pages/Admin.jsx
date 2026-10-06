@@ -5830,8 +5830,8 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
                 </p>
                 <p className="flex items-center gap-2 text-xs text-slate-400">
                   <span className="truncate">{u.email}</span>
-                  {userSort === 'upcoming-cbat' && u.cbatDate && (
-                    <span className="shrink-0 text-brand-600">CBAT: {fmtCbatDate(u.cbatDate)}</span>
+                  {userSort === 'upcoming-cbat' && (u.upcomingCbatDate ?? u.cbatDate) && (
+                    <span className="shrink-0 text-brand-600">CBAT: {fmtCbatDate(u.upcomingCbatDate ?? u.cbatDate)}</span>
                   )}
                   {userSort === 'supporter' && u.donationPrompt?.donatedAt && (
                     <span className="shrink-0 text-brand-600">Donated: {fmtGBPExact(u.donationPrompt.donatedTotalPence)}</span>

@@ -1862,10 +1862,26 @@ function orderUsersForList({ users, owesTest, testerHighlights }) {
 // GET /api/admin/users — one ordered page: admins first, then whoever is online,
 // then oldest registration first. ?page, ?limit, and ?testerFx=0 to drop the
 // tester terms from the order (the list's own highlight switch).
+//
+// ?sort=upcoming-cbat reads each user's effective CBAT date: the member-facing
+// `upcomingCbatDate` they confirmed, falling back to the admin-typed research
+// `cbatDate` when they never set one — the same rule as the Daily Active Users
+// chart's CBAT series (adminReports dailyCbatDates). Reading `cbatDate` alone
+// left the filter empty once members started setting their own dates.
 function upcomingCbatFilter() {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  return { cbatDate: { $gte: today } };
+  return { $or: [
+    { upcomingCbatDate: { $gte: today } },
+    { upcomingCbatDate: null, cbatDate: { $gte: today } },
+  ] };
+}
+
+const effectiveCbatDate = (u) => u.upcomingCbatDate ?? u.cbatDate;
+
+function upcomingCbatComparator(a, b) {
+  return new Date(effectiveCbatDate(a)) - new Date(effectiveCbatDate(b))
+    || a._id.toString().localeCompare(b._id.toString());
 }
 
 // ?sort=supporter — only the accounts that have donated while signed in (the
@@ -1928,7 +1944,7 @@ router.get('/users', async (req, res) => {
         : supporters   ? supporterFilter()
         : scoresHidden ? scoresHiddenFilter()
         : {},
-      '_id isAdmin isTester lastSeen createdAt lastClients cbatDate donationPrompt.donatedAt donationPrompt.donatedTotalPence',
+      '_id isAdmin isTester lastSeen createdAt lastClients cbatDate upcomingCbatDate donationPrompt.donatedAt donationPrompt.donatedTotalPence',
     ).lean();
     const total     = ordering.length;
     const pageCount = Math.max(1, Math.ceil(total / limit));
@@ -1961,8 +1977,7 @@ router.get('/users', async (req, res) => {
 
     const createdSpec = createdSortSpec(req.query.sort);
     const ordered = upcomingCbat
-      ? ordering.sort((a, b) => new Date(a.cbatDate) - new Date(b.cbatDate)
-        || a._id.toString().localeCompare(b._id.toString()))
+      ? ordering.sort(upcomingCbatComparator)
       : supporters
         ? ordering.sort(supporterComparator)
         : createdSpec
@@ -2036,15 +2051,20 @@ router.get('/users/search', async (req, res) => {
     // query is a literal, not a regex operator (or a 500).
     const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
-    const users = await User.find({
-      ...(req.query.sort === 'upcoming-cbat' ? upcomingCbatFilter()
-        : req.query.sort === 'supporter'    ? supporterFilter()
-        : req.query.sort === 'scores-hidden' ? scoresHiddenFilter()
-        : {}),
-      $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }],
-    }).populate('rank').sort(req.query.sort === 'upcoming-cbat' ? { cbatDate: 1, _id: 1 }
-      : req.query.sort === 'supporter'    ? SUPPORTER_SORT_SPEC
-      : createdSortSpec(req.query.sort) ?? { isAdmin: -1, createdAt: 1 }).limit(20);
+    const identity = { $or: [{ email: rx }, { agentNumber: rx }, { displayName: rx }] };
+    // The effective CBAT date is one of two fields, which a Mongo sort can't
+    // express, so those hits are ordered here. The date filter keeps the set
+    // small before anything is read.
+    const users = req.query.sort === 'upcoming-cbat'
+      ? (await User.find({ $and: [upcomingCbatFilter(), identity] }).populate('rank'))
+        .sort(upcomingCbatComparator).slice(0, 20)
+      : await User.find({
+        ...(req.query.sort === 'supporter'    ? supporterFilter()
+          : req.query.sort === 'scores-hidden' ? scoresHiddenFilter()
+          : {}),
+        ...identity,
+      }).populate('rank').sort(req.query.sort === 'supporter' ? SUPPORTER_SORT_SPEC
+        : createdSortSpec(req.query.sort) ?? { isAdmin: -1, createdAt: 1 }).limit(20);
 
     // Latest-release yardstick comes from the whole population, not just the
     // search hits — otherwise searching for one outdated user would make their
