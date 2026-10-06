@@ -54,7 +54,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['target'],
     simulates: 'TRT',
     aliases: ['target', 'trt', 'target recognition'],
-    what: 'eight panels running at once for two minutes - hunt shapes, match warning lights, find codes and identify aircraft and vehicles from a silhouette revealed through a strip that sweeps across it.',
+    what: 'eight panels running at once for two minutes - hunt shapes, match warning lights, find codes and identify aircraft and vehicles from a silhouette revealed through a strip that sweeps across it. Under the Real CBAT theme the scene is dark green terrain under drifting cloud with about three times as many shapes, drawn smaller, and each find there pays more.',
     tutorial: 'a practice mode that unlocks the panels one at a time - spot the targets, read a full target, match the lights, identify the aircraft, catch the code - so each is learnt on its own before the full board runs.',
   },
   {
@@ -86,7 +86,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['code-duplicates'],
     simulates: 'DRT',
     aliases: ['code duplicates', 'code dupes', 'duplicates', 'drt', 'digit recognition'],
-    what: 'memorise a run of digits, then count how many times one of them appeared.',
+    what: 'memorise a run of digits, then count how many times one of them appeared. Under the Real CBAT theme it plays as the real screen: the number alone for five seconds, then pick the count from five numbered options with no right or wrong shown, and the number grows from 5 to 15 digits across the run.',
   },
   {
     name: 'Angles',
@@ -133,7 +133,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['trace-1'],
     simulates: 'TRAC1',
     aliases: ['trace 1', 'trace one', 'trac1'],
-    what: 'watch the Hawk T2 fly and name each turn as it happens - the control-copying half of the Trace tests.',
+    what: 'watch the Hawk T2 fly and name each turn as it happens - the control-copying half of the Trace tests. Under the Real CBAT theme the tracked aircraft is the red one and the keys are Left, Right, Push and Pull.',
   },
   {
     name: 'Trace 2',
@@ -184,7 +184,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['act'],
     simulates: 'ACT',
     aliases: ['act', 'auditory capacity', 'auditory capacity test', 'the audio one'],
-    what: 'fly a tunnel on spoken callsigns, threading every shape except the ones the briefing tells you to avoid, while reacting to bleeps.',
+    what: 'fly a tunnel on spoken callsigns, threading every shape except the ones the briefing tells you to avoid, while reacting to bleeps with the Spacebar, a right-click or the BLEEP button. Under the Real CBAT theme, from round 3 the voice also orders the ball to change colour or number, either straight away or "at" a time on the round clock: R, G or Y for the colour and 1 to 9 for the number, scored on orders obeyed, missed and changes nobody asked for. Orders for other callsigns are fakes to ignore.',
   },
   {
     name: 'Numerical Operations',
@@ -206,7 +206,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['cut', 'cut-easier'],
     simulates: 'CUT',
     aliases: ['cut', 'cognitive updating', 'cognitive updating test'],
-    what: 'six aircraft displays at once for three minutes - hold fuel, speed, sensors, pressure and load drops in tolerance while the warnings stack up.',
+    what: 'six aircraft displays at once for three minutes - hold fuel, speed, sensors, pressure and load drops in tolerance while the warnings stack up. A load drop is ordered on the Message display as a latitude, a longitude and then a clock time: type the three values in, and press RELEASE as the Clock reaches that exact second. Early is a fault, on time scores best and points fall away over the next ten seconds.',
     difficulties: ['Easier', 'Hard'],
     tutorial: 'eight steps on a moving board - the two windows and the warning strip first, then Message, Engine, Navigation, Sensor, Mission and System one display at a time, with an arrow on the exact control to press.',
   },
@@ -215,7 +215,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['sat', 'sat-easier'],
     simulates: 'SAT',
     aliases: ['sat', 'situational awareness', 'situational awareness test'],
-    what: 'watch a tactical picture of units, aircraft and radio calls build up, then answer on it from memory.',
+    what: 'watch a tactical picture of units, aircraft and radio calls build up, then answer on it from memory. Under the Real CBAT theme it is asked the harder way candidates describe: all eight compass headings, altitude in thousands of feet, the next waypoint as a time on an in-game clock, and roughly half the answers typed in rather than picked from up to eight options.',
     difficulties: ['Easier', 'Hard'],
     tutorial: 'four steps - read the grid and its markers (colour for allegiance, letter for type, number for strength, arrow for heading), the controller aircraft, the radio calls, then a recall round.',
   },
@@ -224,7 +224,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['rtt', 'rtt-easier'],
     simulates: 'RTT',
     aliases: ['rtt', 'rapid tracking', 'rapid tracking test', 'the camera one'],
-    what: 'slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends. Plays on a joystick if one is plugged in.',
+    what: 'slew a sensor camera onto moving targets and capture three centred frames of each before the pass ends. The camera sits on an aircraft flying forward, so even buildings slide past, and a perfect target is worth 165. Plays on a joystick if one is plugged in (pull back to look up), or a thumb pad on a touch screen. Under the Real CBAT theme a frame only counts once the target has been held in the box for just over half a second, and the wide search view zooms in once you are on target.',
     difficulties: ['Easier', 'Hard'],
   },
   {
@@ -232,7 +232,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['sit', 'sit-easier'],
     simulates: 'SIT',
     aliases: ['sit', 'spatial integration', 'spatial integration test'],
-    what: 'study the ground one isolated layer at a time, then judge a rotated clip of the whole scene, three seconds on Hard and four on Easier, on a single detail. Every question gets its own viewing of the clip, and the question is asked after it, so the whole frame has to be taken in each time.',
+    what: 'study the ground one isolated layer at a time, then judge a rotated clip of the whole scene, three seconds on Hard and four on Easier, on a single detail. Every question gets its own viewing of the clip, and the question is asked after it, so the whole frame has to be taken in each time. The board is eight by eight. Switching study tabs fades the map out and the next one in on the running clock, so flicking between layers costs time, and some layers are drawn turned with a compass rose beside each one: Hard turns one or two layers by any quarter turn, Easier turns exactly one upside down, and at least one layer always stays north up.',
     difficulties: ['Easier', 'Hard'],
   },
   {
@@ -256,7 +256,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['matf', 'matf-easier'],
     simulates: 'MATF',
     aliases: ['matf', 'table reading', 'table reading test'],
-    what: 'read a coordinate grid, then a wind sheet in three steps, both against the clock. MATF stands for Table Reading Test, not a multi-attribute task battery.',
+    what: 'read a coordinate grid, then a wind sheet in three steps, both against the clock. A wrong answer takes a point off (the score never goes below zero), so guessing does not pay. You can print the reference sheets to practise from paper. MATF stands for Table Reading Test, not a multi-attribute task battery.',
     difficulties: ['Easier', 'Hard'],
   },
   {
@@ -273,7 +273,7 @@ const CBAT_GAME_CATALOGUE = [
     registryKeys: ['vigilance-practise'],
     simulates: null,
     aliases: ['vigilance practise', 'vigilance practice', 'vigilance drill'],
-    what: 'one minute on the Vigilance grid with it already mostly full of stars and refilling as fast as you clear it, so there is nothing to search for. A drill for keying coordinates on the number pad quickly, with no priority tasks. A wrong coordinate costs more than in the test so guessing never pays.',
+    what: 'one minute on the Vigilance grid with it already mostly full of stars and refilling as fast as you clear it, so there is nothing to search for. A drill for keying coordinates on the number pad quickly, with no priority tasks. A wrong coordinate costs 50 points, far more than in the test, so guessing never pays.',
   },
   {
     name: 'Sensory Motor Apparatus Test',
@@ -288,11 +288,28 @@ const CBAT_GAME_CATALOGUE = [
 // Things that are not games but come up in the same breath. Short on purpose:
 // this block rides in every system prompt, and anything longer belongs in the
 // guide rather than here.
+//
+// A plain string is always on. An object names the AppSettings switch that can
+// turn it off (`setting`), so the renderer can mark it the same way it marks a
+// switched-off game, for the same reason: a feature that vanished from the
+// prompt would be denied outright.
 const CBAT_APP_FEATURES = [
+  'Two looks, picked from the theme selector at the top of the page on a computer and saved on the account: SkyWatch (the default) and Real CBAT, a plain navy screen drawn after what candidates describe. On most games only the look changes. Where a game plays differently under Real CBAT, its line above says how. Guests always get SkyWatch.',
+  'Guests without an account can play Target, Symbols, Code Duplicates and ANT. Everything else needs a free account.',
+  {
+    setting: 'cbatMockAssessmentEnabled',
+    name: 'Mock Assessment',
+    text: 'Mock Assessment - sit every test a role is scored on (or every role in your country) in one go, the way the real day runs: shuffled order, always the Hard board in the Real CBAT look, no scores shown between tests, a ten minute break after about every thirty minutes, and a score sheet at the end laid out like the real one but titled as a SkyWatch estimate. The rest of the app is locked while it runs, and it closes itself if the next test is not started within two hours, keeping the scores already posted. The runs count on the leaderboards like any other. Opened from the Aptitude Report card on the CBAT page.',
+  },
   'Aptitude Report - estimates your battery score against the cutoff for a role from the games you have played, and shows which parts of the battery you have not covered yet. A test only counts as firm once you have three runs on it (six for CUT, whose scores keep climbing for longer than any other game), and it averages your last three.',
   'Leaderboards on every game, weekly and all-time, plus a chart of your own scores over time.',
   'Every game plays offline in the app, and scores sync when you are back on.',
   'A written CBAT guide, plus Canadian and Australian equivalents, in the Community section.',
+  {
+    setting: 'caseFilesEnabled',
+    name: 'Case Files',
+    text: 'Case Files - a separate investigation game, not CBAT practice and not part of any test. You work through a real recent conflict as an intelligence analyst; the published case is Russia / Ukraine, chapter one "Road to Invasion" (September 2021 to 24 February 2022, about 35 minutes), and an Israel / Iran case is marked coming soon. The stages run: read the briefing; link evidence cards that share a theme on a pinboard (wrong links cost very little); draw the routes you expect on a map and star the main attack; ask up to three short questions each of the people involved, scored on how many different people you ask; pick what you think will actually happen; see which links held up as new evidence arrives; then step through what really happened on a live map, answering a question at each step. It ends with a scored debrief of what you got right and why. A run can be left and resumed, and refreshing never costs one. How many runs you get a day depends on your plan, and a case can need a paid plan. It does not affect airstars or your level. A Case Files tab appears in the navigation once you have finished enough CBAT games.',
+  },
 ];
 
 // How a switched-off part of a game is flagged on its line. One phrase, used
@@ -348,14 +365,14 @@ const CATALOGUE_FOOTER = '=== END OF GAME LIST ===';
  *   bot is told when only that board is off. Omitted means everything is on.
  * @returns {string}
  */
-function renderGameCatalogue({ isEnabled = null } = {}) {
+function renderGameCatalogue({ isEnabled = null, isFeatureEnabled = null } = {}) {
   const lines = [
     CATALOGUE_HEADER,
     'This is the full, current list of practice games SkyWatch has built. It is fact about this app, not a candidate report, so it carries no confidence codes and needs no hedging.',
     'They are CBAT-style simulations written from what candidates described. They are not the real tests, and nobody outside the test provider has those.',
     `Each line reads: NAME | also called | what you do | drills, meaning the real test it is built from | modes, where the game has two difficulties | tutorial, where the game has a Tutorial button of its own and what it teaches | ${OFF_MARKER}, only where something is unavailable today.`,
-    `"${OFF_MARKER}" means an admin has switched that game, or that one mode of it, off in Game Options. It is not on the hub today and nobody can open it. Never recommend it, never count it among what someone can play, and never send someone to it. Asked about it by name, say plainly that it is switched off at the moment and name what is still playable in its place. You are not told why, so give no reason and do not guess at one.`,
-    'Six games have a tutorial: Target, ANT, FLAG, SAT, CUT and DPT. It is opened from a Tutorial button on the game page itself, it is not scored, and it is the answer to "how do the controls work" or "I do not understand what to do" for those games. For a game without one, the answer is to play its Easier mode where it has one.',
+    `"${OFF_MARKER}" means an admin has switched that game, or that one mode of it, or one of the app features listed after the games, off. It is not on the hub today and nobody can open it. Never recommend it, never count it among what someone can play, and never send someone to it. Asked about it by name, say plainly that it is switched off at the moment and name what is still playable in its place. You are not told why, so give no reason and do not guess at one.`,
+    'Seven games have a tutorial: Target, ANT, FLAG, CLAN, SAT, CUT and DPT. It is opened from a Tutorial button on the game page itself, it is not scored, and it is the answer to "how do the controls work" or "I do not understand what to do" for those games. For a game without one, the answer is to play its Easier mode where it has one.',
     '',
   ];
 
@@ -375,7 +392,11 @@ function renderGameCatalogue({ isEnabled = null } = {}) {
 
   lines.push('');
   lines.push('Also in the app:');
-  for (const f of CBAT_APP_FEATURES) lines.push(`- ${f}`);
+  for (const f of CBAT_APP_FEATURES) {
+    if (typeof f === 'string') { lines.push(`- ${f}`); continue; }
+    const on = !isFeatureEnabled || isFeatureEnabled(f.setting);
+    lines.push(on ? `- ${f.text}` : `- ${f.text} | ${OFF_MARKER}`);
+  }
   lines.push(CATALOGUE_FOOTER);
 
   return lines.join('\n');

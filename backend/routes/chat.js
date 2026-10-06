@@ -1927,15 +1927,19 @@ async function loadBotCorpus(question) {
 async function loadGameCatalogue() {
   try {
     const settings = await AppSettings.getSettings();
+    // App features (Case Files, Mock Assessment) are plain booleans on the
+    // settings doc. Read them by their own default, so a feature that ships off
+    // (Case Files) is off until an admin turns it on.
+    const isFeatureEnabled = (name) => settings?.[name] === true;
     const enabled = settings?.cbatGameEnabled;
-    if (!enabled) return renderGameCatalogue();
+    if (!enabled) return renderGameCatalogue({ isFeatureEnabled });
     // A Map on a hydrated doc, a plain object on a lean one. Explicitly false is
     // the only "off": a key that has never been written is on, the same rule the
     // client's isCbatGameEnabled uses.
     const read = typeof enabled.get === 'function'
       ? (k) => enabled.get(k)
       : (k) => enabled[k];
-    return renderGameCatalogue({ isEnabled: (k) => read(k) !== false });
+    return renderGameCatalogue({ isEnabled: (k) => read(k) !== false, isFeatureEnabled });
   } catch {
     return renderGameCatalogue();
   }

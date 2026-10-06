@@ -122,13 +122,13 @@ describe('rendering', () => {
   // Where a game has a tutorial the rendered line must say so, and the
   // preamble must name the set, or a user asking "is there a DPT tutorial"
   // gets the real-battery answer instead of ours.
-  it('prints each tutorial on its game and names the six games that have one', () => {
+  it('prints each tutorial on its game and names the seven games that have one', () => {
     const block = renderGameCatalogue();
     for (const game of CBAT_GAME_CATALOGUE) {
       const line = block.split('\n').find(l => l.startsWith(`- ${game.name} |`));
       expect([game.name, line.includes('tutorial:')]).toEqual([game.name, Boolean(game.tutorial)]);
     }
-    expect(block).toMatch(/Six games have a tutorial: Target, ANT, FLAG, SAT, CUT and DPT/);
+    expect(block).toMatch(/Seven games have a tutorial: Target, ANT, FLAG, CLAN, SAT, CUT and DPT/);
   });
 
   const lineFor = (block, name) => block.split('\n').find(l => l.startsWith(`- ${name} |`));
@@ -186,5 +186,34 @@ describe('rendering', () => {
     expect(block).toContain(`"${OFF_MARKER}" means an admin has switched that game`);
     expect(block).toMatch(/Never recommend it/);
     expect(block).toMatch(/switched off at the moment/);
+  });
+});
+
+describe('app features', () => {
+  const featureLine = (block, name) => block.split('\n').find(l => l.startsWith(`- ${name} -`));
+
+  // Case Files is not a CBAT game, so it is not in CBAT_GAMES and the registry
+  // tests above cannot see it. Without its line the bot denied it existed.
+  it('describes Case Files, and says it is not CBAT practice', () => {
+    const line = featureLine(renderGameCatalogue(), 'Case Files');
+    expect(line).toBeDefined();
+    expect(line).toMatch(/not CBAT practice/);
+    expect(line).toMatch(/Russia \/ Ukraine/);
+  });
+
+  it('describes the Mock Assessment', () => {
+    expect(featureLine(renderGameCatalogue(), 'Mock Assessment')).toBeDefined();
+  });
+
+  it('marks a switched-off feature rather than dropping it', () => {
+    const block = renderGameCatalogue({ isFeatureEnabled: (name) => name !== 'caseFilesEnabled' });
+    expect(featureLine(block, 'Case Files')).toMatch(new RegExp(`\\| ${OFF_MARKER}$`));
+    expect(featureLine(block, 'Mock Assessment')).not.toContain(OFF_MARKER);
+  });
+
+  it('marks no feature when every switch is on, or none is passed', () => {
+    for (const block of [renderGameCatalogue(), renderGameCatalogue({ isFeatureEnabled: () => true })]) {
+      expect(featureLine(block, 'Case Files')).not.toContain(OFF_MARKER);
+    }
   });
 });
