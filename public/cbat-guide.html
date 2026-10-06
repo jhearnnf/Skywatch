@@ -760,7 +760,7 @@ const TESTS = [
   {c:'red',tag:'Probably not your test',t:'If you’re sitting the current RAF CBAT, you almost certainly get FLAG instead of CLAN. Nobody sitting the RAF version reports getting CLAN.',
    n:'Graded red because practising CLAN for an RAF CBAT looks like wasted effort. It also explains a common source of confusion: one popular practice app carries CLAN, the other carries FLAG, and people compare scores across them without realising they’re preparing for different tests.'},
   {c:'amber',tag:'Still live overseas',t:'At least one overseas candidate sat CLAN and got no FLAG at all, and a New Zealand candidate reported CLAN still being in their battery.',
-   n:'So if you’re applying outside the RAF, don’t assume the FLAG advice higher up this page applies to you. Ask what your battery contains before you plan around it. The Royal Navy has gone the other way and moved to FLAG, so a Navy guidance document still showing CLAN is worth checking rather than trusting.'},
+   n:'An Australian candidate was told by the psychologist running their testing that the same software is used by the UK, Canada, New Zealand and Australia, and that each military picks its own tests from it, so CLAN versus FLAG is a choice each service makes. So if you’re applying outside the RAF, don’t assume the FLAG advice higher up this page applies to you. Ask what your battery contains before you plan around it. The Royal Navy has gone the other way and moved to FLAG, so a Navy guidance document still showing CLAN is worth checking rather than trusting.'},
   {c:'amber',tag:'Format',t:'It’s coloured diamonds, maths and remembering codes, structurally very close to FLAG.',
    n:'Which is good news if you’ve been drilling FLAG and then find out you’re sitting this. The three concurrent tasks map across almost one for one, and the same advice applies: bank the maths, don’t defend the memory task to the death.'}
  ]},
@@ -979,8 +979,10 @@ const OTHER = [
    n:'It covers weapons and sonar, mission command such as directing ships and aircraft, and navigation. The Observer is often the most senior aircrew on board.'}
 ]},
 { id:'adf', flag:'Australia, ADF', facts:[
-  {c:'amber',tag:'Key difference',t:'The Australian test didn’t include FLAG. It swapped in a different exercise built around coloured diamonds, arithmetic and code recall.',
-   n:'From one candidate writing it up the day he sat it. If you’re preparing for the Australian version, that’s the big structural difference to plan around.'},
+  {c:'amber',tag:'Same software',t:'The Australian test, MACTS, reportedly runs on the same software as the RAF CBAT. Each country’s military picks which tests from it to use.',
+   n:'A 2026 Australian candidate was told this by the psychologist running the testing at their Aviation Screening Program, and named the UK, Canada, New Zealand and Australia as the countries using it. It explains why candidates have long described the two as near-identical, and why the one clear difference is a swapped test rather than a different battery. One account, passed on second-hand, so check it if it matters to you.'},
+  {c:'amber',tag:'Key difference',t:'The Australian test uses CLAN instead of FLAG.',
+   n:'Several Australian candidates name CLAN, and none describes sitting FLAG. CLAN is the older sibling of FLAG covered further up this page. If you’re preparing for the Australian version, that’s the big structural difference to plan around. There is a separate SkyWatch guide to MACTS for Australian applicants.'},
   {c:'green',tag:'Overlap',t:'Everything else lines up closely. Instruments, visual search, situational awareness, directions and distances and the trace tests all turn up in both.',
    n:'So most UK-focused prep carries over directly. Don’t throw this guide out over one test.'},
   {c:'amber',tag:'Rules',t:'Australia reportedly allows only two attempts, on the reasoning that people don’t improve enough after two.',
@@ -1241,8 +1243,8 @@ OTHER.forEach(o=>{ oh += `<div class="grp"><h3>${o.flag}</h3>${factsHTML(o.facts
 sec('other','Other services','The Navy, Australian and Canadian equivalents', oh + `
 <div class="note"><strong>The short version.</strong> The Royal Navy is said to run the same test under a
 different name, with the result recognised by the RAF. That could be a useful second route, but it rests
-on one account, so check it with a recruiter. The Australian version is clearly the same family of tests
-with one swap. Canada splits it over two days, which puts a lot of weight on the first night’s sleep.</div>`);
+on one account, so check it with a recruiter. The Australian version reportedly runs on the same software,
+with each country picking its own tests, which is why it has CLAN where the RAF has FLAG. Canada splits it over two days, which puts a lot of weight on the first night’s sleep.</div>`);
 nav.push(['other','Other services',0]);
 
 main.innerHTML = out.join('');
