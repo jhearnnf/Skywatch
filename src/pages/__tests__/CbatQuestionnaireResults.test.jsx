@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatQuestionnaireResults from '../CbatQuestionnaireResults'
@@ -21,6 +21,9 @@ const payload = (over = {}) => ({
   },
 })
 
+// Answer cards start closed; this opens every one of them.
+const expandAll = async () => fireEvent.click(await screen.findByTestId('results-toggle-all'))
+
 const mount = (data) => {
   global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ data }) }))
   return render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)
@@ -41,11 +44,6 @@ describe('CbatQuestionnaireResults — the funnel', () => {
     expect(screen.getByText('30%')).toBeInTheDocument()  // finished
   })
 
-  it('surfaces the free text above the tables', async () => {
-    mount(payload({ summary: { gaps: [{ gaps: 'The SLT was a new format.', role: 'pilot', agentNumber: '999' }] } }))
-    expect(await screen.findByText('The SLT was a new format.')).toBeInTheDocument()
-    expect(screen.getByText(/Royal Air Force/)).toBeInTheDocument()
-  })
 })
 
 describe('CbatQuestionnaireResults — unsubscribes', () => {
@@ -117,13 +115,17 @@ describe('CbatQuestionnaireResults — answers', () => {
 
     expect(await screen.findByText('Kestrel')).toBeInTheDocument()
     const table = within(screen.getByTestId('results-answers'))
+    // Closed: who, pass, and that there is something written inside.
     expect(table.getByText('Passed')).toBeInTheDocument()
+    expect(table.getByText(/Wrote about the gaps/)).toBeInTheDocument()
+    expect(table.queryByText('Realism 4/5')).toBeNull()
+    expect(table.queryByText('Timing was tighter.')).toBeNull()
+
+    await expandAll()
     expect(table.getByText('Realism 4/5')).toBeInTheDocument()
     expect(table.getByText('Helped 5/5')).toBeInTheDocument()
     expect(table.getByText('Clicked donate')).toBeInTheDocument()
-    // The paragraph itself belongs to the block above, not to the row.
-    expect(table.queryByText('Timing was tighter.')).toBeNull()
-    expect(table.getByText(/Wrote about the gaps/)).toBeInTheDocument()
+    expect(table.getByText('Timing was tighter.')).toBeInTheDocument()
   })
 
   it('marks a run that stopped partway rather than hiding it', async () => {
@@ -147,6 +149,7 @@ describe('CbatQuestionnaireResults — answers', () => {
       },
     }] }))
 
+    await expandAll()
     const row = within(await screen.findByTestId('results-cbat-summary'))
     expect(row.getByText('12 / 23')).toBeInTheDocument()
     expect(row.getByText('128 / 180')).toBeInTheDocument()
@@ -161,6 +164,7 @@ describe('CbatQuestionnaireResults — answers', () => {
       cbat: { runs: 3, gamesPlayed: 1, gamesTotal: 23, aptitude: null },
     }] }))
 
+    await expandAll()
     const row = within(await screen.findByTestId('results-cbat-summary'))
     expect(row.getByText('1 / 23')).toBeInTheDocument()
     expect(row.queryByText(/Est\. score/)).toBeNull()
@@ -176,6 +180,7 @@ describe('CbatQuestionnaireResults — answers', () => {
       },
     }] }))
 
+    await expandAll()
     const row = within(await screen.findByTestId('results-cbat-summary'))
     expect(row.getByText('— / 180')).toBeInTheDocument()
     expect(row.queryByText('No score')).toBeNull()
@@ -281,62 +286,87 @@ describe('CbatQuestionnaireResults — viewing a score sheet', () => {
   })
 })
 
-describe('CbatQuestionnaireResults — locating a respondent from their gap statement', () => {
-  it('switches to the Answers tab and flashes that row', async () => {
-    mount(payload({
-      responses: [{
-        _id: 'r5', userId: { _id: 'u5', agentNumber: '888' },
-        satTest: true, passedForRole: 'yes', gaps: 'A test we had not seen.',
-      }],
-      summary: {
-        gaps: [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '888', userId: 'u5' }],
-      },
-    }))
+describe('CbatQuestionnaireResults — expandable answer cards', () => {
+  const two = () => payload({ responses: [
+    { _id: 'a1', userId: { _id: 'u1', agentNumber: '111' }, satTest: true, passedForRole: 'yes',
+      gaps: 'First gap.', comment: 'First comment.' },
+    { _id: 'a2', userId: { _id: 'u2', agentNumber: '222' }, satTest: true, passedForRole: 'no',
+      gaps: 'Second gap.' },
+  ] })
+  const headerOf = async (name) =>
+    within((await screen.findByText(name)).closest('[data-testid="results-answer-card"]'))
+      .getByRole('button', { expanded: false })
 
-    fireEvent.click(await screen.findByText('A test we had not seen.'))
-
-    const table = within(await screen.findByTestId('results-answers'))
-    expect(table.getByText('Agent 888')).toBeInTheDocument()
-    await waitFor(() => {
-      expect(document.getElementById('answer-user-u5')).toHaveClass('admin-row-locate-flash')
-    })
-    expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled()
+  it('starts every card closed', async () => {
+    mount(two())
+    await screen.findByText('Agent 111')
+    expect(screen.queryByTestId('results-answer-body')).toBeNull()
+    expect(screen.queryByText('First gap.')).toBeNull()
   })
 
-  it('is not clickable when the account behind the gap statement is gone', async () => {
-    mount(payload({
-      summary: { gaps: [{ gaps: 'Orphaned answer.', role: 'pilot', agentNumber: '999', userId: null }] },
-    }))
+  it('opens and closes one card on click, leaving the others shut', async () => {
+    mount(two())
+    const header = await headerOf('Agent 111')
 
-    const block = (await screen.findByText('Orphaned answer.')).closest('div')
-    expect(block).not.toHaveAttribute('title')
-    expect(() => fireEvent.click(block)).not.toThrow()
-    expect(document.querySelector('.admin-row-locate-flash')).toBeNull()
+    fireEvent.click(header)
+    expect(screen.getByText('First gap.')).toBeInTheDocument()
+    expect(screen.getByText('First comment.')).toBeInTheDocument()
+    expect(screen.queryByText('Second gap.')).toBeNull()
+    expect(header).toHaveAttribute('aria-expanded', 'true')
+
+    fireEvent.click(header)
+    expect(screen.queryByText('First gap.')).toBeNull()
+  })
+
+  it('opens from the keyboard', async () => {
+    mount(two())
+    fireEvent.keyDown(await headerOf('Agent 222'), { key: 'Enter' })
+    expect(screen.getByText('Second gap.')).toBeInTheDocument()
+  })
+
+  it('expands and collapses them all at once', async () => {
+    mount(two())
+    await expandAll()
+    expect(screen.getAllByTestId('results-answer-body')).toHaveLength(2)
+    expect(screen.getByTestId('results-toggle-all')).toHaveTextContent('Collapse all')
+
+    fireEvent.click(screen.getByTestId('results-toggle-all'))
+    expect(screen.queryByTestId('results-answer-body')).toBeNull()
+  })
+
+  it('opens the score sheet from a closed card without opening the card', async () => {
+    global.fetch = vi.fn(async (url) => url.includes('/cbat-results')
+      ? { ok: true, json: async () => ({ data: { images: [] } }) }
+      : { ok: true, json: async () => ({ data: payload({ responses: [{
+          _id: 'r12', userId: { _id: 'u12', agentNumber: '557' },
+          satTest: true, passedForRole: 'yes', resultImagesUploaded: 1,
+        }] }) }) })
+    render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByTestId('results-sheet-badge'))
+    expect(await screen.findByTestId('sheets-modal')).toBeInTheDocument()
+    expect(screen.queryByTestId('results-answer-body')).toBeNull()
   })
 })
 
-describe('CbatQuestionnaireResults — comments', () => {
-  it('shows what people said, apart from the gaps answers', async () => {
-    mount(payload({ summary: {
-      gaps:     [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '1' }],
-      comments: [{ comment: 'Genuinely helped, thank you.', role: 'pilot', passedForRole: 'yes', agentNumber: '2' }],
-    } }))
+describe('CbatQuestionnaireResults — what they wrote', () => {
+  it('keeps the gaps and the comment apart inside the card', async () => {
+    mount(payload({ responses: [{
+      _id: 'r9', userId: { agentNumber: '777' }, satTest: true, passedForRole: 'yes',
+      gaps: 'A test we had not seen.', comment: 'Genuinely helped, thank you.',
+    }] }))
 
-    expect(await screen.findByText('What we did not prepare them for')).toBeInTheDocument()
-    expect(screen.getByText('What they said')).toBeInTheDocument()
-    expect(screen.getByText('Genuinely helped, thank you.')).toBeInTheDocument()
+    await expandAll()
+    const body = within(screen.getByTestId('results-answer-body'))
+    expect(body.getByText('What we did not prepare them for')).toBeInTheDocument()
+    expect(body.getByText('A test we had not seen.')).toBeInTheDocument()
+    expect(body.getByText('What they said')).toBeInTheDocument()
+    expect(body.getByText('Genuinely helped, thank you.')).toBeInTheDocument()
   })
 
-  it('hides the block when nobody wrote anything', async () => {
-    mount(payload())
-    await screen.findByText('Emailed')
-    expect(screen.queryByText('What they said')).not.toBeInTheDocument()
-  })
-
-  // The page used to print each paragraph twice — once in the block above and
-  // again on the person's row — which with a single respondent filled the
-  // screen with the same wall of text.
-  it('prints each answer once, with the row pointing up at it', async () => {
+  // The page used to print each paragraph twice, once in a block above the
+  // tabs and again on the person's row.
+  it('prints each answer once, even when the summary carries it too', async () => {
     mount(payload({
       responses: [{
         _id: 'r9', userId: { agentNumber: '777' },
@@ -345,22 +375,15 @@ describe('CbatQuestionnaireResults — comments', () => {
       summary: { comments: [{ comment: 'One more thing.', role: 'pilot', passedForRole: 'yes', agentNumber: '777' }] },
     }))
 
-    expect(await screen.findByText('What they said')).toBeInTheDocument()
+    await expandAll()
     expect(screen.getAllByText('One more thing.')).toHaveLength(1)
-    const table = within(screen.getByTestId('results-answers'))
-    expect(table.getByText(/Left a comment/)).toBeInTheDocument()
   })
 
-  it('names the writer so a block can be matched to a row', async () => {
-    mount(payload({ summary: {
-      gaps: [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '777', displayName: 'Kestrel' }],
-    } }))
-
-    expect(await screen.findByText('A test we had not seen.')).toBeInTheDocument()
-    // Split across elements now that the name and the agent number are their own
-    // click targets, so the line is read off the paragraph that holds them.
-    expect(screen.getByText('Kestrel').closest('p'))
-      .toHaveTextContent('Kestrel · Royal Air Force — Pilot · Agent 777')
+  it('leaves the headings out when nobody wrote anything', async () => {
+    mount(payload({ responses: [{ _id: 'r8', userId: { agentNumber: '1' }, satTest: true, passedForRole: 'yes' }] }))
+    await expandAll()
+    expect(screen.queryByText('What they said')).toBeNull()
+    expect(screen.queryByText('What we did not prepare them for')).toBeNull()
   })
 })
 
@@ -407,10 +430,10 @@ describe('CbatQuestionnaireResults — opening a profile', () => {
       .toBe('/agent/u1 · Back to results')
   })
 
-  it('opens it from the name under a piece of free text', async () => {
-    mountRouted(payload({ summary: {
-      gaps: [{ gaps: 'A test we had not seen.', role: 'pilot', agentNumber: '777', userId: 'u7' }],
-    } }))
+  it('opens the profile from a closed card without opening it first', async () => {
+    mountRouted(payload({ responses: [{
+      _id: 'r1', userId: { _id: 'u7', agentNumber: '777' }, satTest: true, passedForRole: 'yes',
+    }] }))
 
     fireEvent.click(await screen.findByText('Agent 777'))
     expect((await screen.findByTestId('profile-probe')).textContent)

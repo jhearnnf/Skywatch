@@ -55,9 +55,14 @@ function AgentLink({ userId, name, className = '', children }) {
   return (
     <button
       type="button"
-      onClick={() => navigate(`/agent/${userId}`, {
-        state: { backTo: '/admin/cbat-questionnaire', backLabel: 'Back to results' },
-      })}
+      onClick={(e) => {
+        // Names sit inside the clickable header of an answer card; opening the
+        // profile should not also open or close the card.
+        e.stopPropagation()
+        navigate(`/agent/${userId}`, {
+          state: { backTo: '/admin/cbat-questionnaire', backLabel: 'Back to results' },
+        })
+      }}
       title={name ? `View ${name}'s profile` : 'View their profile'}
       className={`${className} text-left hover:underline hover:text-brand-600 transition-colors`}
     >
@@ -66,11 +71,9 @@ function AgentLink({ userId, name, className = '', children }) {
   )
 }
 
-// Who wrote a piece of free text. The blocks above the tables are the only
-// place the text itself appears, so they have to carry enough to find the
-// person in the rows below: their name if they gave one, their agent number
-// either way. Both of those are the person, so both open their profile; the
-// role between them is not, so it stays plain.
+// One line naming a person in the summary blocks above the tabs: their name if
+// they gave one, their agent number either way. Both of those are the person,
+// so both open their profile; the role between them is not, so it stays plain.
 function Writer({ x, suffix = '' }) {
   const name     = x.displayName?.trim() || (x.agentNumber ? `Agent ${x.agentNumber}` : null)
   const agentTag = x.displayName?.trim() && x.agentNumber ? `Agent ${x.agentNumber}` : null
@@ -101,27 +104,19 @@ export default function CbatQuestionnaireResults() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [tab, setTab]         = useState('answers')
-  const [highlightUserId, setHighlightUserId] = useState(null)
   const [sheetsModal, setSheetsModal] = useState(null) // { userId, name } of the agent whose sheets are open
+  // Answer cards the admin has opened, by response id. Everything starts
+  // closed so the list reads as a list of people, not a wall of paragraphs.
+  const [expanded, setExpanded] = useState(() => new Set())
 
-  // Jump to the row a free-text "gap" statement came from. Switching tabs and
-  // scrolling both need the Answers rows to already be in the DOM, so this
-  // runs after render rather than in the click handler itself.
-  useEffect(() => {
-    if (!highlightUserId || tab !== 'answers') return
-    const el = document.getElementById(`answer-user-${highlightUserId}`)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    const t = setTimeout(() => setHighlightUserId(null), 3600)
-    return () => clearTimeout(t)
-  }, [highlightUserId, tab])
-
-  const locateInAnswers = (userId) => {
-    if (!userId) return
-    setTab('answers')
-    // Re-trigger the flash even if the same row was just located.
-    setHighlightUserId(null)
-    requestAnimationFrame(() => setHighlightUserId(userId))
-  }
+  const toggleExpanded = (id) => setExpanded(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const allExpanded = !!data?.responses?.length && data.responses.every(r => expanded.has(r._id))
+  const toggleAll = () => setExpanded(allExpanded ? new Set() : new Set(data.responses.map(r => r._id)))
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -242,60 +237,11 @@ export default function CbatQuestionnaireResults() {
             </div>
           )}
 
-          {/* The free text is the point of the exercise, so it sits above the
-              tables rather than inside a tab someone has to think to open.
-
-              It is printed HERE AND NOWHERE ELSE. The answer rows used to
-              repeat the same paragraphs underneath, which on a page with one
-              respondent showed the identical wall of text twice; the rows keep
-              the facts you scan for (role, ratings, pass, donate) and these
-              blocks keep the prose, each named so you can still tell who wrote
-              what. */}
-          {s.gaps?.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
-                What we did not prepare them for
-              </h2>
-              <div className="space-y-2">
-                {s.gaps.map((g, i) => (
-                  <div
-                    key={i}
-                    onClick={g.userId ? () => locateInAnswers(g.userId) : undefined}
-                    title={g.userId ? "Jump to this agent's row below" : undefined}
-                    className={`rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2 ${
-                      g.userId ? 'cursor-pointer hover:border-amber-400 hover:bg-amber-50 transition-colors' : ''
-                    }`}
-                  >
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{g.gaps}</p>
-                    <p className="text-[10px] text-slate-500 mt-1"><Writer x={g} /></p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Kept apart from the gaps above because they answer different
-              questions: one is a defect report about the training, the other is
-              whatever the person wanted to say. */}
-          {s.comments?.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">
-                What they said
-              </h2>
-              <div className="space-y-2">
-                {s.comments.map((c, i) => (
-                  <div key={i} className="rounded-xl border border-slate-200 bg-surface px-3 py-2">
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{c.comment}</p>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      <Writer x={c} suffix={c.passedForRole === 'yes' ? ' · Passed' : ''} />
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-2 mb-3">
+          {/* What people wrote lives inside their own card in the Answers tab,
+              collapsed until opened. It used to be printed in full up here,
+              which on a few long answers pushed the list of people several
+              screens down the page. */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             {TABS.map(t => (
               <button
                 key={t.id}
@@ -310,12 +256,23 @@ export default function CbatQuestionnaireResults() {
                 {t.label} · {counts[t.id]}
               </button>
             ))}
+            {tab === 'answers' && counts.answers > 0 && (
+              <button
+                type="button"
+                onClick={toggleAll}
+                data-testid="results-toggle-all"
+                className="ml-auto text-xs text-slate-500 hover:text-brand-600 transition-colors"
+              >
+                {allExpanded ? 'Collapse all' : 'Expand all'}
+              </button>
+            )}
           </div>
 
           {tab === 'answers'  && (
             <AnswersTable
               rows={data.responses}
-              highlightUserId={highlightUserId}
+              expanded={expanded}
+              onToggle={toggleExpanded}
               onOpenSheets={setSheetsModal}
             />
           )}
@@ -378,56 +335,96 @@ function Empty({ children }) {
   )
 }
 
-// One row per respondent, including the ones who stopped halfway — a partial
+// One card per respondent, including the ones who stopped halfway — a partial
 // answer is the normal case, not an error, and usually carries the pass answer.
-function AnswersTable({ rows, highlightUserId, onOpenSheets }) {
+//
+// Closed, a card is one line you can scan: who, their role, pass, and whether
+// there is anything written inside. Open, it holds everything they told us,
+// including the free text, which is printed nowhere else on the page.
+function AnswersTable({ rows, expanded, onToggle, onOpenSheets }) {
   if (!rows?.length) return <Empty>Nobody has answered yet.</Empty>
   return (
     <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100" data-testid="results-answers">
-      {rows.map(r => {
-        const rowUserId = r.userId?._id ? String(r.userId._id) : null
-        const rowName = r.userId?.displayName?.trim() || (r.userId?.agentNumber ? `Agent ${r.userId.agentNumber}` : 'Unknown')
-        return (
-        <div
+      {rows.map(r => (
+        <AnswerCard
           key={r._id}
-          id={rowUserId ? `answer-user-${rowUserId}` : undefined}
-          className={`px-4 py-3 ${highlightUserId && rowUserId === highlightUserId ? 'admin-row-locate-flash' : ''}`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email }} />
-              {r.resultImagesUploaded > 0 && rowUserId && (
-                <button
-                  type="button"
-                  onClick={() => onOpenSheets({ userId: rowUserId, name: rowName })}
-                  className="inline-block mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-200/60 text-emerald-800 hover:bg-emerald-200 transition-colors"
-                  title="View the score sheet they sent in"
-                  data-testid="results-sheet-badge"
-                >
-                  Sheet{r.resultImagesUploaded > 1 ? ` ×${r.resultImagesUploaded}` : ''}
-                </button>
-              )}
-            </div>
-            <div className="shrink-0 text-right">
-              {r.satTest === false
-                ? <span className="text-[10px] font-semibold text-sky-700">Not sat yet</span>
-                : r.passedForRole
-                  ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      r.passedForRole === 'yes' ? 'bg-emerald-200/60 text-emerald-800'
-                      : r.passedForRole === 'no' ? 'bg-rose-200/60 text-rose-800'
-                      : 'bg-slate-200/60 text-slate-700'}`}>
-                      {PASS_LABELS[r.passedForRole]}
-                    </span>
-                  : <span className="text-[10px] text-slate-400">No answer yet</span>}
-              <p className="text-[10px] text-slate-400 mt-0.5">
-                {r.completedAt ? `Finished ${fmt(r.completedAt)}` : 'Stopped partway'}
-              </p>
-            </div>
-          </div>
+          r={r}
+          open={expanded.has(r._id)}
+          onToggle={() => onToggle(r._id)}
+          onOpenSheets={onOpenSheets}
+        />
+      ))}
+    </div>
+  )
+}
 
-          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5 text-[11px] text-slate-600">
-            {r.testType && <span>{r.testType === 'other' ? r.testOther || 'Other test' : surveyTests.find(test => test.key === r.testType)?.label || r.testType}</span>}
+function AnswerCard({ r, open, onToggle, onOpenSheets }) {
+  const rowUserId = r.userId?._id ? String(r.userId._id) : null
+  const rowName = r.userId?.displayName?.trim() || (r.userId?.agentNumber ? `Agent ${r.userId.agentNumber}` : 'Unknown')
+  const hasGaps = !!r.gaps?.trim()
+  const hasComment = !!r.comment?.trim()
+  const wrote = [hasGaps && 'Wrote about the gaps', hasComment && 'Left a comment'].filter(Boolean).join(' · ')
+
+  const onKeyDown = (e) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() }
+  }
+
+  return (
+    <div id={rowUserId ? `answer-user-${rowUserId}` : undefined} data-testid="results-answer-card">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={onKeyDown}
+        className="px-4 py-3 flex items-start gap-3 cursor-pointer hover:bg-slate-50/60 transition-colors"
+      >
+        <span
+          aria-hidden="true"
+          className={`mt-0.5 text-slate-400 text-xs transition-transform ${open ? 'rotate-90' : ''}`}
+        >
+          ▶
+        </span>
+        <div className="min-w-0 flex-1">
+          <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email }} />
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[10px] text-slate-500">
             {r.role && <span>{roleLabel(r.role, r.roleOther)}</span>}
+            {wrote && <span className="text-amber-700 font-semibold">{wrote}</span>}
+            {r.resultImagesUploaded > 0 && rowUserId && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onOpenSheets({ userId: rowUserId, name: rowName }) }}
+                className="font-bold px-1.5 py-0.5 rounded bg-emerald-200/60 text-emerald-800 hover:bg-emerald-200 transition-colors"
+                title="View the score sheet they sent in"
+                data-testid="results-sheet-badge"
+              >
+                Sheet{r.resultImagesUploaded > 1 ? ` ×${r.resultImagesUploaded}` : ''}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0 text-right">
+          {r.satTest === false
+            ? <span className="text-[10px] font-semibold text-sky-700">Not sat yet</span>
+            : r.passedForRole
+              ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  r.passedForRole === 'yes' ? 'bg-emerald-200/60 text-emerald-800'
+                  : r.passedForRole === 'no' ? 'bg-rose-200/60 text-rose-800'
+                  : 'bg-slate-200/60 text-slate-700'}`}>
+                  {PASS_LABELS[r.passedForRole]}
+                </span>
+              : <span className="text-[10px] text-slate-400">No answer yet</span>}
+          <p className="text-[10px] text-slate-400 mt-0.5">
+            {r.completedAt ? `Finished ${fmt(r.completedAt)}` : 'Stopped partway'}
+          </p>
+        </div>
+      </div>
+
+      {open && (
+        <div className="px-4 pb-4 pl-10 space-y-3" data-testid="results-answer-body">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-600">
+            {r.testType && <span>{r.testType === 'other' ? r.testOther || 'Other test' : surveyTests.find(test => test.key === r.testType)?.label || r.testType}</span>}
             {r.passedAnyRole === 'yes' && <span className="text-emerald-700">Passed for another role</span>}
             {r.realismRating != null && <span>Realism {r.realismRating}/5</span>}
             {r.helpedRating  != null && <span>Helped {r.helpedRating}/5</span>}
@@ -440,19 +437,27 @@ function AnswersTable({ rows, highlightUserId, onOpenSheets }) {
               estimate is Hard runs only, for the role they answered with. */}
           {r.cbat && <CbatSummary cbat={r.cbat} />}
 
-          {/* What they wrote is printed in full above, under "What we did not
-              prepare them for" and "What they said". The row only says that
-              there is something up there with this person's name on it. */}
-          {(r.gaps || r.comment) && (
-            <p className="mt-1.5 text-[10px] text-slate-500">
-              {r.gaps && r.comment ? 'Wrote about the gaps, and left a comment'
-                : r.gaps ? 'Wrote about the gaps'
-                : 'Left a comment'} — above
-            </p>
+          {/* Kept apart because they answer different questions: one is a
+              defect report about the training, the other is whatever the
+              person wanted to say. */}
+          {hasGaps && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2">
+              <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-1">
+                What we did not prepare them for
+              </p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{r.gaps}</p>
+            </div>
+          )}
+          {hasComment && (
+            <div className="rounded-xl border border-slate-200 bg-surface px-3 py-2">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">
+                What they said
+              </p>
+              <p className="text-sm text-slate-700 whitespace-pre-wrap">{r.comment}</p>
+            </div>
           )}
         </div>
-        )
-      })}
+      )}
     </div>
   )
 }
