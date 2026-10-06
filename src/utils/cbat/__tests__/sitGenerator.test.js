@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   generateSitRound, generateSitRounds, rotateCell, rotateHeading,
-  sitRoundPlan, GRID, OBJECT_CLASSES,
+  sitRoundPlan, GRID, OBJECT_CLASSES, MIN_CORRUPTION_DISTANCE,
 } from '../sitGenerator'
 import {
   SIT_TUNING, SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP,
@@ -21,8 +21,15 @@ function mulberry32(seed) {
 }
 
 const QPC = SIT_QUESTIONS_PER_CLIP
-const HARD = { classes: SIT_TUNING.hard.classPool, rotations: SIT_TUNING.hard.rotations, questionsPerClip: QPC }
-const EASIER = { classes: SIT_TUNING.easier.classPool, rotations: SIT_TUNING.easier.rotations, questionsPerClip: QPC }
+const optsFor = (t) => ({
+  classes: t.classPool,
+  rotations: t.rotations,
+  layerRotations: t.layerRotations,
+  maxRotatedLayers: t.maxRotatedLayers,
+  questionsPerClip: QPC,
+})
+const HARD = optsFor(SIT_TUNING.hard)
+const EASIER = optsFor(SIT_TUNING.easier)
 
 // The scene the layers add up to — which nothing but the clip ever shows.
 const sceneOf = (round) => {
@@ -102,6 +109,45 @@ describe('the study layers', () => {
     }
   })
 
+  it('turns some layers but never all of them, within what the difficulty allows', () => {
+    // A sitter (2026-10): "in certain tabs (i.e. the trucks tab) the map would
+    // be rotated, with the compass rose rotated in that same direction". Some
+    // tabs, not every tab, so at least one always stays north-up.
+    for (const [tuning, opts] of [[SIT_TUNING.hard, HARD], [SIT_TUNING.easier, EASIER]]) {
+      for (let seed = 0; seed < 300; seed++) {
+        const round = generateSitRound(opts, mulberry32(seed))
+        const turned = round.layers.filter(l => l.rotation !== 0)
+        expect([tuning.key, seed, turned.length >= 1]).toEqual([tuning.key, seed, true])
+        expect([tuning.key, seed, turned.length <= tuning.maxRotatedLayers]).toEqual([tuning.key, seed, true])
+        expect([tuning.key, seed, turned.length < round.layers.length]).toEqual([tuning.key, seed, true])
+        for (const l of turned) expect(tuning.layerRotations).toContain(l.rotation)
+      }
+    }
+  })
+
+  it('turns Easier layers by a half-turn only', () => {
+    for (let seed = 0; seed < 200; seed++) {
+      const round = generateSitRound(EASIER, mulberry32(seed))
+      for (const l of round.layers) expect([0, 180]).toContain(l.rotation)
+    }
+  })
+
+  it("keeps every layer's objects in true north-up cells, whatever it is turned by", () => {
+    // The turn is applied when the layer is drawn, so the hills sit in the same
+    // cells on every layer's data. If the generator pre-turned them instead,
+    // every other rule in the file would have to be restated per layer.
+    for (let seed = 0; seed < 100; seed++) {
+      const round = generateSitRound(HARD, mulberry32(seed))
+      const hillsOf = (l) => l.objects.filter(o => o.cls === 'hill').map(o => `${o.id}@${o.col},${o.row}`).sort()
+      for (const l of round.layers) expect([seed, hillsOf(l)]).toEqual([seed, hillsOf(round.layers[0])])
+    }
+  })
+
+  it('leaves every layer north-up when no layer turns are asked for', () => {
+    const round = generateSitRound({ classes: HARD.classes, rotations: [90], questionsPerClip: QPC }, mulberry32(1))
+    for (const l of round.layers) expect(l.rotation).toBe(0)
+  })
+
   it('shows in the clip everything the layers between them held', () => {
     for (let seed = 0; seed < 100; seed++) {
       const round = generateSitRound(HARD, mulberry32(seed))
@@ -166,6 +212,33 @@ describe('generateSitRound', () => {
           return o.col !== expected.col || o.row !== expected.row
         })
         expect([seed, q.askedClass, misplaced]).toEqual([seed, q.askedClass, !q.answer])
+      }
+    }
+  })
+
+  it('moves a corrupted object far enough to read as plainly wrong', () => {
+    // A one-cell nudge in an oblique 3D pass is a question about perspective,
+    // not position. The real test's misplacements read as obvious.
+    for (const opts of [HARD, EASIER]) {
+      for (let seed = 0; seed < 300; seed++) {
+        const round = generateSitRound(opts, mulberry32(seed))
+        for (const o of round.clip) {
+          const t = round.truth.find(x => x.id === o.id)
+          if (t.col === o.col && t.row === o.row) continue
+          const d = Math.max(Math.abs(t.col - o.col), Math.abs(t.row - o.row))
+          expect([seed, o.id, d >= MIN_CORRUPTION_DISTANCE]).toEqual([seed, o.id, true])
+        }
+      }
+    }
+  })
+
+  it('plays on an 8 by 8 board, so the ground has room between objects', () => {
+    expect(GRID).toBe(8)
+    for (let seed = 0; seed < 50; seed++) {
+      const round = generateSitRound(HARD, mulberry32(seed))
+      for (const o of round.clip) {
+        expect(o.col).toBeLessThan(GRID)
+        expect(o.row).toBeLessThan(GRID)
       }
     }
   })
@@ -349,7 +422,8 @@ describe('sitDifficulty', () => {
     // stated scope — the same guard FLAG's and CUT's tuning tables carry.
     const allowed = new Set([
       'key', 'label', 'gameKey', 'bars', 'blurb',
-      'classPool', 'rotations', 'studyMsPerLayer', 'clipMs', 'answerMs', 'grades',
+      'classPool', 'rotations', 'layerRotations', 'maxRotatedLayers',
+      'studyMsPerLayer', 'clipMs', 'answerMs', 'grades',
     ])
     for (const tuning of Object.values(SIT_TUNING)) {
       for (const k of Object.keys(tuning)) expect([k, allowed.has(k)]).toEqual([k, true])
@@ -371,11 +445,7 @@ describe('sitDifficulty', () => {
     // layers into one map, which would make it a different test rather than an
     // easier one.
     for (const tuning of Object.values(SIT_TUNING)) {
-      const round = generateSitRound({
-        classes: tuning.classPool,
-        rotations: tuning.rotations,
-        questionsPerClip: QPC,
-      }, mulberry32(2))
+      const round = generateSitRound(optsFor(tuning), mulberry32(2))
       expect([tuning.key, round.layers.length]).toEqual([tuning.key, tuning.classPool.length])
     }
   })

@@ -43,15 +43,35 @@
 // Pure and deterministic: pass a seeded `rng` (() => [0,1)) to reproduce a round
 // in tests. Defaults to Math.random for live play.
 //
-// generateSitRound({ classes, rotations, hillCount, questionsPerClip }, rng)
+// THE LAYERS ARE NOT ALL NORTH-UP EITHER. A candidate who sat the real test
+// (2026-10) reported that some tabs — the trucks tab was the example — showed
+// the map turned, with the compass rose turned the same way. So a layer can
+// carry its own `rotation`, and lining it up against the others means turning
+// it back in your head first. The objects on a layer stay in TRUE (north-up)
+// coordinates; the rotation is applied when it is drawn, exactly as a turned
+// paper map still shows the same ground. Keeping the data north-up is what
+// lets every other rule in this file stay stated against one frame.
+//
+// generateSitRound({ classes, rotations, layerRotations, maxRotatedLayers,
+//                    hillCount, questionsPerClip }, rng)
 //   → { grid, rotation, layers, clip, questions, corruptedClasses }
-//     layers    = [{ cls, objects: [{ id, cls, col, row }] }] — hills on each
+//     layers    = [{ cls, rotation, objects: [{ id, cls, col, row }] }] — hills on each
 //     clip      = [{ id, cls, col, row }]  (col/row are 0-indexed)
 //     questions = [{ askedClass, answer, prompt }]
 //     answer    = true when that class is placed correctly in the clip
 
-export const GRID = 6
-export const COL_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
+// 8 × 8, not 6 × 6. The real test's ground is roomier than ours was — a sitter
+// (2026-10) found it "easier to distinguish whether objects were in the right
+// place" — and on a 6 × 6 board the same dozen objects sat shoulder to shoulder.
+// The object counts did not grow with it, so the extra room is all spacing.
+export const GRID = 8
+export const COL_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+
+// How far a corrupted object must move, in cells (Chebyshev: a diagonal step
+// counts as one). A one-cell nudge in an oblique 3D pass is a judgement about
+// perspective, not about where the thing is, and the real test's misplacements
+// read as plainly wrong. Two cells is unmistakable without being a giveaway.
+export const MIN_CORRUPTION_DISTANCE = 2
 
 // Every class that can appear, in the order rounds unlock them. Named after the
 // things the corpus lists — "farm position, truck, troops, trees, aircraft
@@ -126,17 +146,24 @@ export function cellRef(col, row) {
 // The floor is questionsPerClip + 1, never lower: every clip has to corrupt one
 // class that nobody asks about, and that is impossible if every class present is
 // asked about. The distractor rule is the whole test, so the floor protects it.
-export function sitRoundPlan(index, { classPool, rotations, questionsPerClip }) {
+export function sitRoundPlan(index, { classPool, rotations, layerRotations, maxRotatedLayers, questionsPerClip }) {
   const floor = questionsPerClip + 1
   const unlocked = Math.min(classPool.length, floor + index)
   return {
     classes: classPool.slice(0, unlocked),
     rotations,
+    layerRotations,
+    maxRotatedLayers,
     questionsPerClip,
   }
 }
 
-export function generateSitRound({ classes, rotations, hillCount = 2, questionsPerClip = 2 }, rng = Math.random) {
+const chebyshev = (a, b) => Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row))
+
+export function generateSitRound({
+  classes, rotations, layerRotations = [], maxRotatedLayers = 0,
+  hillCount = 2, questionsPerClip = 2,
+}, rng = Math.random) {
   const cells = []
   for (let r = 0; r < GRID; r++) for (let c = 0; c < GRID; c++) cells.push({ col: c, row: r })
   const free = shuffle(cells, rng)
@@ -162,8 +189,19 @@ export function generateSitRound({ classes, rotations, hillCount = 2, questionsP
       if (MOVING_CLASSES.has(cls)) obj.heading = pick(HEADINGS, rng)
       objects.push(obj)
     }
-    return { cls, objects }
+    return { cls, rotation: 0, objects }
   })
+
+  // Turn some of the layers. Between one and `maxRotatedLayers` of them, and
+  // never all: at least one layer stays north-up, so there is always a map that
+  // reads the way the compass rose normally sits.
+  const rotatable = Math.min(maxRotatedLayers, layers.length - 1)
+  if (layerRotations.length && rotatable > 0) {
+    const count = 1 + Math.floor(rng() * rotatable)
+    for (const layer of shuffle(layers, rng).slice(0, count)) {
+      layer.rotation = pick(layerRotations, rng)
+    }
+  }
 
   // The full scene, which no layer shows and which only the clip ever displays.
   const scene = [...hills, ...layers.flatMap(l => l.objects.filter(o => o.cls !== 'hill'))]
@@ -189,16 +227,17 @@ export function generateSitRound({ classes, rotations, hillCount = 2, questionsP
     cells.filter(c => !occupied.has(`${c.col},${c.row}`)),
     rng,
   )
-  let vacantNext = 0
-  const takeVacant = () => vacant[vacantNext++]
 
-  // Move one object of `cls` to a free cell, so that class reads as wrong.
+  // Move one object of `cls` to a free cell at least MIN_CORRUPTION_DISTANCE
+  // from where it belongs, so that class reads as plainly wrong.
   const corrupt = (cls) => {
     const candidates = clip.filter(o => o.cls === cls)
     if (!candidates.length) return false
-    const cell = takeVacant()
-    if (!cell) return false
     const victim = candidates[Math.floor(rng() * candidates.length)]
+    const i = vacant.findIndex(c =>
+      !occupied.has(`${c.col},${c.row}`) && chebyshev(c, victim) >= MIN_CORRUPTION_DISTANCE)
+    if (i < 0) return false
+    const [cell] = vacant.splice(i, 1)
     victim.col = cell.col
     victim.row = cell.row
     occupied.add(`${cell.col},${cell.row}`)
@@ -242,10 +281,12 @@ export function generateSitRound({ classes, rotations, hillCount = 2, questionsP
   }
 }
 
-export function generateSitRounds({ roundCount, classPool, rotations, hillCount, questionsPerClip }, rng = Math.random) {
+export function generateSitRounds({
+  roundCount, classPool, rotations, layerRotations, maxRotatedLayers, hillCount, questionsPerClip,
+}, rng = Math.random) {
   const out = []
   for (let i = 0; i < roundCount; i++) {
-    const plan = sitRoundPlan(i, { classPool, rotations, questionsPerClip })
+    const plan = sitRoundPlan(i, { classPool, rotations, layerRotations, maxRotatedLayers, questionsPerClip })
     out.push(generateSitRound({ ...plan, hillCount }, rng))
   }
   return out

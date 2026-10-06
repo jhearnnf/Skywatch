@@ -46,7 +46,7 @@ import { generateSitRounds, GRID, COL_LABELS, CLASS_LABEL, MOVING_CLASSES } from
 import { CLASS_STYLE, HEADING_DEG } from '../components/cbat/sitClassStyle'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import {
-  SIT_DIFFICULTIES, SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP, SIT_LAUNCH_MS,
+  SIT_DIFFICULTIES, SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP, SIT_LAUNCH_MS, SIT_TAB_FADE_MS,
   sitTuning, computeSitGrade, sitPhaseMs, sitRunEstimateMs,
   readStoredSitDifficulty, storeSitDifficulty,
 } from '../utils/cbat/sitDifficulty'
@@ -125,8 +125,15 @@ const SIZE = GRID * CELL
 // `sizeClass` is the caller's, because the same component draws the big study
 // map and the pair of thumbnails on the review screen. Left as a cap rather
 // than a fixed width so it still shrinks on a phone.
-function SitMap({ objects, labelled, dim, sizeClass = 'max-w-[min(360px,52vh)]' }) {
+//
+// `rotation` turns the whole plan clockwise, grid references and all, the way a
+// study layer is turned in the real test. The objects are still given in north-
+// up cells; only the drawing turns. Each label is spun back upright about its
+// own centre so it stays attached to its edge but remains readable.
+function SitMap({ objects, labelled, dim, rotation = 0, sizeClass = 'max-w-[min(360px,52vh)]' }) {
   const pad = labelled ? 18 : 4
+  const mid = SIZE / 2
+  const upright = (x, y) => (rotation ? `rotate(${-rotation} ${x} ${y})` : undefined)
   return (
     <svg
       viewBox={`${-pad} ${-pad} ${SIZE + pad * 2} ${SIZE + pad * 2}`}
@@ -136,19 +143,49 @@ function SitMap({ objects, labelled, dim, sizeClass = 'max-w-[min(360px,52vh)]' 
       style={dim ? { opacity: 0.25 } : undefined}
     >
       <rect x={-pad} y={-pad} width={SIZE + pad * 2} height={SIZE + pad * 2} fill="var(--color-game-arena)" />
-      {Array.from({ length: GRID + 1 }, (_, i) => (
-        <g key={i}>
-          <line x1={i * CELL} y1={0} x2={i * CELL} y2={SIZE} stroke="#13294a" strokeWidth={1} />
-          <line x1={0} y1={i * CELL} x2={SIZE} y2={i * CELL} stroke="#13294a" strokeWidth={1} />
-        </g>
-      ))}
-      {labelled && COL_LABELS.map((l, i) => (
-        <text key={`c${l}`} x={(i + 0.5) * CELL} y={-5} fill="var(--color-game-faint)" fontSize={13} textAnchor="middle" fontWeight="bold">{l}</text>
-      ))}
-      {labelled && Array.from({ length: GRID }, (_, i) => (
-        <text key={`r${i}`} x={-6} y={(i + 0.5) * CELL + 4} fill="var(--color-game-faint)" fontSize={13} textAnchor="end" fontWeight="bold">{i + 1}</text>
-      ))}
-      {objects.map(o => <MapObject key={o.id} o={o} cell={CELL} />)}
+      <g transform={rotation ? `rotate(${rotation} ${mid} ${mid})` : undefined}>
+        {Array.from({ length: GRID + 1 }, (_, i) => (
+          <g key={i}>
+            <line x1={i * CELL} y1={0} x2={i * CELL} y2={SIZE} stroke="#13294a" strokeWidth={1} />
+            <line x1={0} y1={i * CELL} x2={SIZE} y2={i * CELL} stroke="#13294a" strokeWidth={1} />
+          </g>
+        ))}
+        {labelled && COL_LABELS.map((l, i) => {
+          const x = (i + 0.5) * CELL, y = -9
+          return <text key={`c${l}`} x={x} y={y} transform={upright(x, y)} fill="var(--color-game-faint)" fontSize={13} textAnchor="middle" dominantBaseline="central" fontWeight="bold">{l}</text>
+        })}
+        {labelled && Array.from({ length: GRID }, (_, i) => {
+          const x = -9, y = (i + 0.5) * CELL
+          return <text key={`r${i}`} x={x} y={y} transform={upright(x, y)} fill="var(--color-game-faint)" fontSize={13} textAnchor="middle" dominantBaseline="central" fontWeight="bold">{i + 1}</text>
+        })}
+        {objects.map(o => <MapObject key={o.id} o={o} cell={CELL} />)}
+      </g>
+    </svg>
+  )
+}
+
+// The compass rose beside each study layer, turned by the same amount as the
+// layer. The red needle is north. Every layer carries one, turned or not, so a
+// turned layer is told apart by where the needle points rather than by a rose
+// suddenly appearing.
+function CompassRose({ rotation = 0 }) {
+  return (
+    <svg
+      viewBox="-20 -20 40 40"
+      className="block w-full h-auto"
+      role="img"
+      aria-label={rotation ? `Compass: this map is turned ${rotation} degrees` : 'Compass: north is up'}
+      data-testid="sit-compass"
+      data-rotation={rotation}
+    >
+      <circle r={18} fill="var(--color-game-arena)" stroke="#13294a" strokeWidth={1.5} />
+      <g transform={rotation ? `rotate(${rotation})` : undefined}>
+        <polygon points="0,-13 3.5,0 -3.5,0" fill="#ef4444" />
+        <polygon points="0,13 3.5,0 -3.5,0" fill="#64748b" />
+        <polygon points="-13,0 0,-2.5 0,2.5" fill="#334155" />
+        <polygon points="13,0 0,-2.5 0,2.5" fill="#334155" />
+        <text x={0} y={-14.5} fill="#ef4444" fontSize={6} fontWeight="bold" textAnchor="middle">N</text>
+      </g>
     </svg>
   )
 }
@@ -262,6 +299,13 @@ export default function CbatSit() {
   // between the layers themselves rather than a metronome we impose.
   const [questionIdx, setQuestionIdx] = useState(0)
   const [layerIdx, setLayerIdx] = useState(0)
+  // Switching tabs fades the map out and the next one in, as the real test does.
+  // `tabIdx` is the tab the player picked (highlighted at once); `layerIdx` is
+  // the layer actually drawn, which only changes once the map has faded out.
+  const [tabIdx, setTabIdx] = useState(0)
+  const [layerVisible, setLayerVisible] = useState(true)
+  const fadeTimerRef = useRef(null)
+  const fadingRef = useRef(false)
   // The clip's countdown does not start until the renderer is actually up — see
   // the clip effect below.
   const [clipReady, setClipReady] = useState(false)
@@ -321,7 +365,32 @@ export default function CbatSit() {
     clearInterval(tickRef.current)
     clearTimeout(timerRef.current)
     clearTimeout(launchTimerRef.current)
+    clearTimeout(fadeTimerRef.current)
   }, [])
+
+  // Back to the first layer, with any fade in progress abandoned.
+  function resetLayer() {
+    clearTimeout(fadeTimerRef.current)
+    fadingRef.current = false
+    setLayerIdx(0)
+    setTabIdx(0)
+    setLayerVisible(true)
+  }
+
+  // Fade out, swap the layer, fade in. The study clock keeps running through
+  // all of it, and clicks during a fade are ignored, so comparing two layers by
+  // flicking between them costs time, the way it does in the real test.
+  function switchLayer(i) {
+    if (phase !== 'study' || fadingRef.current || i === layerIdx) return
+    fadingRef.current = true
+    setTabIdx(i)
+    setLayerVisible(false)
+    fadeTimerRef.current = setTimeout(() => {
+      setLayerIdx(i)
+      setLayerVisible(true)
+      fadeTimerRef.current = setTimeout(() => { fadingRef.current = false }, SIT_TAB_FADE_MS)
+    }, SIT_TAB_FADE_MS)
+  }
 
   const submitScore = useCallback((finalAnswers, finalTotalMs, key) => {
     const correctCount = finalAnswers.filter(a => a.correct).length
@@ -453,6 +522,7 @@ export default function CbatSit() {
   function endStudyEarly() {
     if (phase !== 'study') return
     clearInterval(tickRef.current)
+    clearTimeout(fadeTimerRef.current)
     setPhase('clip')
   }
 
@@ -481,7 +551,7 @@ export default function CbatSit() {
     }
     setCurrentIdx(nextIdx)
     setQuestionIdx(0)
-    setLayerIdx(0)
+    resetLayer()
     setClipReady(false)
     setPhase('study')
   }
@@ -496,11 +566,13 @@ export default function CbatSit() {
       roundCount: SIT_CLIPS,
       classPool: tuning.classPool,
       rotations: tuning.rotations,
+      layerRotations: tuning.layerRotations,
+      maxRotatedLayers: tuning.maxRotatedLayers,
       questionsPerClip: SIT_QUESTIONS_PER_CLIP,
     }))
     setCurrentIdx(0)
     setQuestionIdx(0)
-    setLayerIdx(0)
+    resetLayer()
     setClipReady(false)
     setAnswers([])
     answersRef.current = []
@@ -522,7 +594,7 @@ export default function CbatSit() {
     setRounds([])
     setCurrentIdx(0)
     setQuestionIdx(0)
-    setLayerIdx(0)
+    resetLayer()
     setClipReady(false)
     setAnswers([])
     answersRef.current = []
@@ -623,7 +695,7 @@ export default function CbatSit() {
               <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
-                  <span className="pt-0.5">Study the layers. Each one holds a single kind of thing, and you move between them as you like. Only the hills appear on every layer.</span>
+                  <span className="pt-0.5">Study the layers. Each one holds a single kind of thing, and you move between them as you like, though each switch takes a moment and the clock keeps running. Only the hills appear on every layer. Some layers are turned, so check the compass beside each one.</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>2.</CbatIntroLabel>
@@ -744,19 +816,19 @@ export default function CbatSit() {
                         style={{ width: `${(remainingMs / Math.max(1, studyMs)) * 100}%` }}
                       />
                     </div>
-                    {/* One layer at a time, and never the whole scene. Moving
-                        between them is free and unmetered — the corpus says "the
-                        time per tab is not equal", so how the budget is divided
-                        is the player's call, not ours. */}
+                    {/* One layer at a time, and never the whole scene. How the
+                        budget is divided between layers is the player's call
+                        ("the time per tab is not equal"), but each switch fades
+                        the map out and back in on the running clock. */}
                     <div className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 justify-center">
                       {current.layers.map((layer, i) => (
                         <button
                           key={layer.cls}
                           type="button"
-                          onClick={() => setLayerIdx(i)}
-                          aria-pressed={i === layerIdx}
+                          onClick={() => switchLayer(i)}
+                          aria-pressed={i === tabIdx}
                           className={`shrink-0 px-2.5 py-1 rounded-lg border text-[10px] font-bold capitalize transition-colors cursor-pointer ${
-                            i === layerIdx
+                            i === tabIdx
                               ? 'bg-game-raised border-brand-600 text-game-text'
                               : 'bg-game-arena border-game-line text-slate-600 hover:text-game-text'
                           }`}
@@ -765,10 +837,31 @@ export default function CbatSit() {
                         </button>
                       ))}
                     </div>
-                    <SitMap objects={current.layers[layerIdx].objects} labelled sizeClass="max-w-none" />
-                    <Legend classes={[current.layers[layerIdx].cls]} />
+                    {/* The map, its compass and its legend fade together. The
+                        compass sits beside the map rather than on it, so it
+                        never hides a cell. */}
+                    <div
+                      data-testid="sit-study-layer"
+                      data-visible={layerVisible}
+                      style={{ opacity: layerVisible ? 1 : 0, transition: `opacity ${SIT_TAB_FADE_MS}ms ease` }}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <SitMap
+                            objects={current.layers[layerIdx].objects}
+                            rotation={current.layers[layerIdx].rotation}
+                            labelled
+                            sizeClass="max-w-none"
+                          />
+                        </div>
+                        <div className="w-10 sm:w-12 shrink-0">
+                          <CompassRose rotation={current.layers[layerIdx].rotation} />
+                        </div>
+                      </div>
+                      <Legend classes={[current.layers[layerIdx].cls]} />
+                    </div>
                     <p className="text-[10px] text-slate-600 mt-2 text-center px-2">
-                      No layer shows everything. Only the hills appear on all of them, so use those to line one layer up against the next.
+                      No layer shows everything. Only the hills appear on all of them, so use those to line one layer up against the next. Some layers are turned: the red needle on the compass always points north.
                     </p>
                     {/* Ending study early only ever costs the player time they
                         were free to spend — it cannot buy them a longer look at
@@ -860,7 +953,7 @@ export default function CbatSit() {
                             {feedback.correct ? '✓ Correct' : feedback.picked === null ? '⏱ Timeout' : '✗ Wrong'}
                           </p>
                           <p className="text-center text-xs text-slate-500 mb-2">
-                            The camera passed {current.rotation}° round from the way you studied it.
+                            The camera passed {current.rotation}° round from north-up.
                             {feedback.otherWrong.length > 0 && (
                               <> The {CLASS_LABEL[feedback.otherWrong[0]]} were out of place too, and nobody asked about those.</>
                             )}

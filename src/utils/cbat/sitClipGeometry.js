@@ -8,7 +8,7 @@
 //
 // See components/cbat/SitClipScene.jsx for the renderer that uses them.
 
-// One grid cell is 2 world units, so a 6×6 board spans −6..+6 either way and the
+// One grid cell is 2 world units, so an 8×8 board spans −8..+8 either way and the
 // scene is centred on the origin whatever the grid size.
 export const CELL = 2
 
@@ -50,7 +50,9 @@ export function headingVector(heading) {
 // screenshot.
 export const CAMERA = {
   fovDeg: 40,          // vertical, which is what three.js means by fov
-  radius: 24,
+  // Pulled back from 24 when the board grew from 6×6 to 8×8 — the corners of
+  // the bigger field need the room, and `fitsInFrame` is what says so.
+  radius: 28,
   elevationDeg: 27,
   // How far round the camera pans across the clip. Narrow on purpose: this is a
   // pass over the ground, not an orbit, and a wide sweep would hand the player
@@ -91,8 +93,8 @@ export const SCENE_MAX_HEIGHT = 3.2
 // field could stand between the camera and the ground being judged, and hiding
 // the thing the question is about is not difficulty, it is a broken question.
 
-export const FIELD_HALF = 6      // the playing field is 12 × 12 world units
-const FLAT_TO = 7.5              // dead flat out to here, so the field is safe
+export const FIELD_HALF = 8      // the playing field is 16 × 16 world units (8 cells of 2)
+const FLAT_TO = 9.5              // dead flat out to here, so the field is safe
 const ROLL_TO = 45               // full relief only this far out
 
 // A lake, out where the ground has room to fall away. Placed to the north (−Z),

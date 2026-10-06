@@ -29,7 +29,7 @@
 // failing is "use fixed terrain like hills as reference points", and that is not
 // a technique at all while there is a grid to read off instead.
 //
-// What replaces it is the FIELD: a hedged boundary around the same 12 × 12, so
+// What replaces it is the FIELD: a hedged boundary around the same 16 × 16, so
 // "near the top-left corner of the field" is still a thing you can see. That is
 // a real frame of reference rather than a survey overlay, and it is the sort of
 // thing you would actually navigate by.

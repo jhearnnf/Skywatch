@@ -7,7 +7,7 @@ import CbatMatf from '../CbatMatf'
 import CbatVigilance, { CLEAR_EFFECT_MS } from '../CbatVigilance'
 import { press } from '../../components/landingGames/demoDriver'
 import { submitCbatResult } from '../../lib/cbatOutbox'
-import { SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP } from '../../utils/cbat/sitDifficulty'
+import { SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP, SIT_TAB_FADE_MS } from '../../utils/cbat/sitDifficulty'
 import { VIGILANCE_GRID } from '../../utils/cbat/vigilanceSim'
 import { VIGILANCE_LAUNCH_MS } from '../../utils/cbat/vigilanceDifficulty'
 import { SLT_QUESTIONS } from '../../utils/cbat/sltDifficulty'
@@ -541,6 +541,39 @@ describe('SIT — run structure', () => {
 
     act(() => { vi.advanceTimersByTime(5000) })
     expect(secondsLeft()).toBeLessThan(first)
+  })
+
+  it('fades the map out and in when switching tabs, on the running clock', () => {
+    // A sitter (2026-10): "switching between tabs would have a delay (like a
+    // fade out and a fade into the next screen)". An instant switch let players
+    // flick between layers to compare them, which the real test does not.
+    renderPage(CbatSit)
+    act(() => { press(screen.getByText('Start')) })
+    act(() => { vi.advanceTimersByTime(1100) })
+
+    const layer = () => screen.getByTestId('sit-study-layer')
+    const tabs = [...document.querySelectorAll('button[aria-pressed]')]
+      .filter(b => !b.hasAttribute('data-difficulty'))
+    const second = tabs[1]
+    const label = second.textContent
+
+    act(() => { press(second) })
+    // The tab lights at once, but the map is fading out and still the old layer.
+    expect(second.getAttribute('aria-pressed')).toBe('true')
+    expect(layer().getAttribute('data-visible')).toBe('false')
+    expect(layer().textContent).not.toContain(label)
+
+    act(() => { vi.advanceTimersByTime(SIT_TAB_FADE_MS + 20) })
+    expect(layer().getAttribute('data-visible')).toBe('true')
+    expect(layer().textContent).toContain(label)
+  })
+
+  it('draws a compass rose beside every study layer', () => {
+    renderPage(CbatSit)
+    act(() => { press(screen.getByText('Start')) })
+    act(() => { vi.advanceTimersByTime(1100) })
+    const compass = screen.getByTestId('sit-compass')
+    expect(['0', '90', '180', '270']).toContain(compass.getAttribute('data-rotation'))
   })
 
   it('lets the player hand back the rest of the study window', () => {

@@ -33,6 +33,8 @@ import { sitRoundPlan } from './sitGenerator'
 //     rotation you can read off without re-deriving which way is which — every
 //     cell simply moves to the opposite corner
 //   • longer on each study layer, and longer on each look at the clip
+//   • only one study layer is ever turned, and only by a half-turn. Hard turns
+//     one or two, by any quarter. See sitGenerator.js for why layers turn at all
 //
 // Deliberately NOT changed: the question count, the grid, the scoring, the fact
 // that the study phase shows one isolated LAYER at a time, and the distractor
@@ -50,6 +52,13 @@ export const DEFAULT_SIT_DIFFICULTY = 'easier'
 // Matches FLAG's, CUT's and Numerical Operations' launch flash.
 export const SIT_LAUNCH_MS = 1000
 
+// Switching study tabs fades the map out and the next one in, as the real test
+// does (sitter report, 2026-10). Each half of the fade, in ms. The study clock
+// keeps running through it, so flicking between layers to compare them costs
+// time — which is the point: the real test does not let you flip back and forth
+// for free. Same on both difficulties; it is how the screen behaves, not load.
+export const SIT_TAB_FADE_MS = 300
+
 // Four clips of two questions, each question preceded by its own viewing of that
 // clip. Same on both difficulties — see the note above.
 export const SIT_CLIPS = 4
@@ -66,6 +75,8 @@ export const SIT_TUNING = {
 
     classPool: ['farm', 'truck', 'troops', 'trees'],
     rotations: [180],
+    layerRotations: [180],
+    maxRotatedLayers: 1,
     // Per LAYER, not per clip: the study window is the number of layers times
     // this, so it grows as the clips unlock more of them. The corpus has the
     // whole sequence running about a minute at full spread, and leaves the split
@@ -85,6 +96,8 @@ export const SIT_TUNING = {
 
     classPool: ['farm', 'truck', 'troops', 'trees', 'aircraft', 'helicopter'],
     rotations: [90, 180, 270],
+    layerRotations: [90, 180, 270],
+    maxRotatedLayers: 2,
     studyMsPerLayer: 10000,
     // The top of the only sourced range — "a brief 2-3 second clip". Hard sits
     // at the long end rather than the short one because our clip is an oblique
