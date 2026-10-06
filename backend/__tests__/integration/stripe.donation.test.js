@@ -139,6 +139,34 @@ describe('POST /api/stripe/create-donation-session', () => {
     await donate({ amount: 3 });
     expect(lastSessionArgs().metadata.visitKey).toBe('');
   });
+
+  // The questionnaire is answered from an emailed link, signed out. Its token
+  // names the account, so the gift still earns the Supporter badge.
+  describe('from the questionnaire', () => {
+    const SurveyInvite = require('../../models/SurveyInvite');
+    const invite = (userId) => SurveyInvite.create({ userId, campaign: 'test', token: 'b'.repeat(64) });
+
+    it('credits a signed-out respondent through their survey token', async () => {
+      const user = await createUser();
+      await invite(user._id);
+      await donate({ amount: 5, surveyToken: 'b'.repeat(64) });
+      expect(lastSessionArgs().metadata.userId).toBe(user._id.toString());
+    });
+
+    it('prefers the signed-in account over the token', async () => {
+      const owner  = await createUser();
+      const signed = await createUser();
+      await invite(owner._id);
+      await donate({ amount: 5, surveyToken: 'b'.repeat(64) }, authCookie(signed._id));
+      expect(lastSessionArgs().metadata.userId).toBe(signed._id.toString());
+    });
+
+    it('stays anonymous on a token that matches no invite', async () => {
+      const res = await donate({ amount: 5, surveyToken: 'nope' });
+      expect(res.status).toBe(200);
+      expect(lastSessionArgs().metadata.userId).toBe('');
+    });
+  });
 });
 
 // ── The payment coming back ──────────────────────────────────────────────────

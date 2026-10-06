@@ -126,7 +126,9 @@ export default function Donate() {
         // The visit key rides along so the server can mark this visit as having
         // pressed through. Only this page sends one, which is how the funnel
         // tells a donation started here from one started on the questionnaire.
-        body:        JSON.stringify({ amount, visitKey: getVisitKey() }),
+        // `survey` is the questionnaire's token, set when its "another amount"
+        // link sent them here, so a signed-out respondent is still credited.
+        body:        JSON.stringify({ amount, visitKey: getVisitKey(), surveyToken: searchParams.get('survey') || undefined }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.url) throw new Error(data.error || 'Could not start the payment. Please try again.')

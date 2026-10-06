@@ -4,6 +4,7 @@ const { protect, optionalAuth } = require('../middleware/auth');
 const User         = require('../models/User');
 const AppSettings  = require('../models/AppSettings');
 const DonationPageVisit = require('../models/DonationPageVisit');
+const SurveyInvite = require('../models/SurveyInvite');
 
 const router = express.Router();
 
@@ -117,7 +118,19 @@ router.post('/create-donation-session', optionalAuth, async (req, res) => {
     }
 
     const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    const userId    = req.user?._id ? req.user._id.toString() : '';
+
+    // Who to credit. A signed-in account always wins. Failing that, a
+    // questionnaire token: the survey is answered from an emailed link with no
+    // sign-in, but every invite belongs to one account, so the token names the
+    // donor as surely as a session would. Without this their gift arrived
+    // unattributed and they never got the Supporter badge it earns.
+    let userId = req.user?._id ? req.user._id.toString() : '';
+    const surveyToken = typeof req.body?.surveyToken === 'string' ? req.body.surveyToken : null;
+    if (!userId && surveyToken) {
+      const invite = await SurveyInvite.findOne({ token: surveyToken }).select('userId').lean()
+        .catch(() => null);
+      if (invite?.userId) userId = invite.userId.toString();
+    }
 
     // Which ask sent them. Only /donate carries a `visitKey`, and stamping the
     // press-through here rather than in the click handler means the funnel can

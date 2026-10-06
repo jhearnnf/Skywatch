@@ -655,6 +655,7 @@ export default function Survey() {
               badge={badge}
               name={meta?.name}
               API={API}
+              token={token}
               preview={isPreview}
               usedAndroid={!!meta?.usedAndroid}
               awaitingResult={answers.passedForRole === 'waiting'}
@@ -1142,7 +1143,7 @@ function SheetUploadCard({ API, token, preview = false, returning = false, sheet
   )
 }
 
-function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awaitingResult = false, canAddSheet = false, onAddSheet, onDonationClick, onPlayReviewClick, onComment }) {
+function DoneCard({ badge, name, API, token, preview = false, usedAndroid = false, awaitingResult = false, canAddSheet = false, onAddSheet, onDonationClick, onPlayReviewClick, onComment }) {
   const [amount, setAmount] = useState(null)
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
@@ -1164,7 +1165,7 @@ function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awai
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount, surveyToken: token }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.url) throw new Error(data.error || 'Could not start the payment.')
@@ -1272,7 +1273,7 @@ function DoneCard({ badge, name, API, preview = false, usedAndroid = false, awai
               text field on a card whose whole value is being one tap. */}
           <div className="text-center mb-3">
             <Link
-              to="/donate"
+              to={token && !preview ? `/donate?survey=${encodeURIComponent(token)}` : '/donate'}
               onClick={onDonationClick}
               data-testid="survey-donate-other"
               className="text-[11px] font-semibold text-slate-500 hover:text-slate-700 no-underline"

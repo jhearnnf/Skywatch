@@ -637,7 +637,18 @@ describe('Survey — the donation ladder', () => {
   it('sends a bigger giver to the full donate page rather than capping them', async () => {
     await reachDone()
     const other = screen.getByTestId('survey-donate-other')
-    expect(other).toHaveAttribute('href', '/donate')
+    // The token rides along so a signed-out respondent is still credited there.
+    expect(other).toHaveAttribute('href', `/donate?survey=${TOKEN}`)
+  })
+
+  it('sends the survey token with the donation so the gift is credited to them', async () => {
+    await reachDone()
+    fireEvent.click(screen.getByTestId('survey-donate-5'))
+    fireEvent.click(screen.getByTestId('survey-donate-submit'))
+    await waitFor(() => {
+      const call = global.fetch.mock.calls.find(([url]) => String(url).includes('create-donation-session'))
+      expect(JSON.parse(call[1].body)).toEqual({ amount: 5, surveyToken: TOKEN })
+    })
   })
 })
 
