@@ -409,6 +409,49 @@ describe('GET /api/admin/stats — users.questionnaire', () => {
   });
 });
 
+// ── users section — questionnaire pass outcomes ──────────────────────────────
+
+describe('GET /api/admin/stats — users.passOutcomes', () => {
+  async function respond(response, campaign = SURVEY_CAMPAIGN) {
+    const user = await createUser();
+    const inv  = await SurveyInvite.create({
+      userId: user._id, campaign, token: SurveyInvite.newToken(), sentAt: new Date(),
+    });
+    await SurveyResponse.create({ inviteId: inv._id, userId: user._id, campaign, satTest: true, ...response });
+  }
+
+  const fetchOutcomes = async () => {
+    const admin = await createAdminUser();
+    const res   = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+    return res.body.data.users.passOutcomes;
+  };
+
+  it('returns zeroes when nobody has reported a result', async () => {
+    expect(await fetchOutcomes()).toEqual({ answered: 0, passedRole: 0, passedOther: 0 });
+  });
+
+  it('splits passes for the chosen role from passes for a different one', async () => {
+    await respond({ passedForRole: 'yes' });
+    await respond({ passedForRole: 'yes' });
+    await respond({ passedForRole: 'no', passedAnyRole: 'yes', passedAnyRoleWhich: 'ATC' });
+    await respond({ passedForRole: 'no', passedAnyRole: 'no' });
+
+    expect(await fetchOutcomes()).toEqual({ answered: 4, passedRole: 2, passedOther: 1 });
+  });
+
+  // "Still waiting" is not a fail, and a dry run is not a respondent.
+  it('leaves out waiting answers, unanswered runs and test sends', async () => {
+    await respond({ passedForRole: 'yes' });
+    await respond({ passedForRole: 'waiting' });
+    await respond({});
+    await respond({ passedForRole: 'yes' }, SURVEY_TEST_CAMPAIGN);
+
+    expect(await fetchOutcomes()).toEqual({ answered: 1, passedRole: 1, passedOther: 0 });
+  });
+});
+
 // ── games section — quiz ──────────────────────────────────────────────────────
 
 describe('GET /api/admin/stats — games.totalGamesWon (pass rate)', () => {

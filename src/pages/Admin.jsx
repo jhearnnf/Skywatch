@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, useId, Fragment } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Overlay from '../components/ui/Overlay'
 import CountBadge from '../components/ui/CountBadge'
@@ -285,6 +285,34 @@ function EnvelopeGlyph({ color }) {
       {/* Cut out in the page background rather than white: a white flap on a pale envelope
           has almost no contrast once the whole layer drops to a wash. */}
       <path d="M2.4 4.8 12 11.6 21.6 4.8" fill="none" stroke="#06101e" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// A chequered flag for the Passed For Role card: the finish line, crossed. Same solid
+// watermark style and bottom-flush contract as AndroidGlyph (the stand's base is the
+// viewBox bottom). The checks are cut out in the page background, like the envelope's
+// flap, and clipped to the waving cloth so the squares follow its edges.
+function FinishFlagGlyph({ color }) {
+  const clipId = useId()
+  return (
+    <svg viewBox="0 0 24 20" preserveAspectRatio="xMidYMax meet" className="h-full w-full" aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <path d="M4.6 2.2C9 .6 13 3.8 17.5 2.2c1.7-.6 3.3-.8 4.5-.4v9.8c-1.2-.4-2.8-.2-4.5.4C13 13.6 9 10.4 4.6 12z" />
+        </clipPath>
+      </defs>
+      <rect x="3" y="1" width="1.6" height="19" rx=".8" fill={color} />
+      <rect x="1" y="18.6" width="5.6" height="1.4" rx=".7" fill={color} />
+      <g clipPath={`url(#${clipId})`}>
+        <rect x="4.6" y="0" width="17.4" height="14" fill={color} />
+        <g fill="#06101e">
+          <rect x="4.6"  y="0" width="4.35" height="6.9" />
+          <rect x="13.3" y="0" width="4.35" height="6.9" />
+          <rect x="8.95" y="6.9" width="4.35" height="7.1" />
+          <rect x="17.65" y="6.9" width="4.35" height="7.1" />
+        </g>
+      </g>
     </svg>
   )
 }
@@ -779,6 +807,7 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
   // Stats tab on a missing `page.visits`.
   const d0 = { seen: 0, clicked: 0 }
   const questionnaire = { sent: 0, started: 0, completed: 0, ...(users.questionnaire ?? {}) }
+  const passOutcomes = { answered: 0, passedRole: 0, passedOther: 0, ...(users.passOutcomes ?? {}) }
   const donation = {
     ...d0,
     ...(users.donation ?? {}),
@@ -975,6 +1004,19 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
                 : 'nobody emailed yet'}
             />
           </button>
+          {/* Pass rate from the questionnaire. Out of respondents who gave a definite yes or
+              no for the role they applied for ("still waiting" is left out, it is not a fail).
+              The headline is the role they chose; the sub adds those who were told no for that
+              role but passed for a different one. */}
+          <StatCard
+            label="Passed For Role"
+            value={pct(passOutcomes.passedRole, passOutcomes.answered)}
+            color="emerald"
+            icon={<FinishFlagGlyph color="#6ee7b7" />}
+            sub={passOutcomes.answered
+              ? `${pct(passOutcomes.passedRole + passOutcomes.passedOther, passOutcomes.answered)} any role, of ${fmtNum(passOutcomes.answered)}`
+              : 'no results reported yet'}
+          />
           {/* Donations. Two tiles, because at a glance there are only two questions: how much
               came in, and how many of the people we asked pressed the button. Everything else
               — which of the three asks each click came from, and who — is a drill-down, and

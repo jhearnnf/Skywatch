@@ -70,6 +70,7 @@ const MOCK_STATS = {
     emailsSent: 42, emailsFailed: 7,
     amazonAffiliateClicks: 1234,
     questionnaire: { sent: 20, started: 8, completed: 5 },
+    passOutcomes: { answered: 8, passedRole: 5, passedOther: 1 },
     donation: {
       seen: 40, clicked: 6,
       card:   { seen: 34, clicked: 4 },
@@ -693,6 +694,50 @@ describe('Admin — Stats tab: outreach questionnaire', () => {
 
     await waitFor(() => expect(screen.getByText('Questionnaires')).toBeInTheDocument())
     expect(screen.getByText('0 / 0')).toBeInTheDocument()
+  })
+})
+
+describe('Admin — Stats tab: questionnaire pass rate', () => {
+  beforeEach(() => { mockAppSettings.value = {} })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const withOutcomes = (passOutcomes) => vi.fn().mockImplementation((url) => {
+    if (url.includes('/api/admin/stats/donation-funnel')) {
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { users: [] } }) })
+    }
+    if (url.includes('/api/admin/stats')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ status: 'success', data: { ...MOCK_STATS, users: { ...MOCK_STATS.users, passOutcomes } } }),
+      })
+    }
+    return Promise.resolve({ ok: true, json: async () => ({}) })
+  })
+
+  it('shows the share who passed for their chosen role, and for any role underneath', async () => {
+    global.fetch = setupFetch()
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Passed For Role')).toBeInTheDocument())
+    expect(screen.getByText('63%')).toBeInTheDocument()
+    expect(screen.getByText('75% any role, of 8')).toBeInTheDocument()
+  })
+
+  it('watermarks the card with a chequered flag', async () => {
+    global.fetch = setupFetch()
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Passed For Role')).toBeInTheDocument())
+    const card = screen.getByText('Passed For Role').closest('[class*="rounded-2xl"]')
+    expect(card.querySelector('clipPath')).not.toBeNull()
+  })
+
+  it('says so plainly before anyone has reported, and survives an older backend', async () => {
+    global.fetch = withOutcomes(undefined)
+    render(<Admin />)
+
+    await waitFor(() => expect(screen.getByText('Passed For Role')).toBeInTheDocument())
+    expect(screen.getByText('no results reported yet')).toBeInTheDocument()
   })
 })
 

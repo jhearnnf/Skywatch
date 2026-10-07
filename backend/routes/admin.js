@@ -561,6 +561,7 @@ router.get('/stats', async (_req, res) => {
       affiliateCounts,
       cbatHardware,
       clientBuilds,
+      passOutcomeAgg,
     ] = await Promise.all([
       User.countDocuments(),
       // A non-null upcoming date is the source of truth for membership of a
@@ -746,6 +747,21 @@ router.get('/stats', async (_req, res) => {
       AffiliateClickCount.find().lean(),
       cbatHardwareStats(),
       clientBuildStats(),
+      // What the questionnaire's respondents told us about their result. Only definite
+      // answers count: "still waiting" has no outcome yet, and folding it into the
+      // denominator would read as a fail. A "no" for the chosen role is followed by Q3b,
+      // which is where a pass for a different role comes from.
+      SurveyResponse.aggregate([
+        { $match: { campaign: SURVEY_CAMPAIGN, passedForRole: { $in: ['yes', 'no'] } } },
+        { $group: {
+            _id: null,
+            answered:    { $sum: 1 },
+            passedRole:  { $sum: { $cond: [{ $eq: ['$passedForRole', 'yes'] }, 1, 0] } },
+            passedOther: { $sum: { $cond: [{ $and: [
+              { $eq: ['$passedForRole', 'no'] }, { $eq: ['$passedAnyRole', 'yes'] },
+            ] }, 1, 0] } },
+        }},
+      ]),
     ]);
 
     // The union is over people, not rows: someone who saw the post-game note and later
@@ -777,6 +793,11 @@ router.get('/stats', async (_req, res) => {
             sent:      questionnaireSent,
             started:   questionnaireStarted,
             completed: questionnaireCompleted,
+          },
+          passOutcomes: {
+            answered:    passOutcomeAgg[0]?.answered    ?? 0,
+            passedRole:  passOutcomeAgg[0]?.passedRole  ?? 0,
+            passedOther: passOutcomeAgg[0]?.passedOther ?? 0,
           },
           donation: {
             seen:    donationAskSeen,
