@@ -34,9 +34,9 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => <>{children}</>,
 }))
 
-function renderPage() {
+function renderPage(user = { _id: 'u1' }) {
   mockUseAuth.mockReturnValue({
-    user: { _id: 'u1' },
+    user,
     API: '',
     apiFetch: vi.fn(async () => ({ ok: true, json: async () => ({}) })),
   })
@@ -64,6 +64,22 @@ afterEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
   delete navigator.getGamepads
+})
+
+// Real CBAT splits the axes like the apparatus; the card has to say so.
+describe('SMA — control card per theme', () => {
+  it('explains the stick/mouse vertical, keys/pedals lateral split under Real CBAT', () => {
+    renderPage({ _id: 'u1', uiTheme: 'cbat' })
+    expect(screen.getByText('Up/down')).toBeTruthy()
+    expect(screen.getByText('Left/right')).toBeTruthy()
+    expect(screen.queryByText('Keys')).toBeNull()
+  })
+
+  it('keeps the one-control card under SkyWatch', () => {
+    renderPage()
+    expect(screen.getByText('Keys')).toBeTruthy()
+    expect(screen.queryByText('Left/right')).toBeNull()
+  })
 })
 
 describe('SMA — difficulty wiring', () => {

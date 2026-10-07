@@ -9,6 +9,12 @@
 // being shown) and from then on the pedals own the lateral axis and whatever
 // else is flying keeps the vertical one, which is the real split.
 //
+// Under the Real CBAT theme (`split: true`) the split is enforced for everyone:
+// the stick and the mouse fly the vertical axis only, and the lateral axis
+// belongs to the left/right keys, or to the pedals when a set is calibrated.
+// Up/down keys do nothing there. The touch pad keeps both axes, because a
+// phone has neither keys nor pedals to put the lateral axis on.
+//
 // Four sources feed one pair of numbers, and nothing downstream can tell them
 // apart:
 //
@@ -87,7 +93,7 @@ const KEY_AXIS = {
 
 // ── Reader ───────────────────────────────────────────────────────────────────
 
-export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EXPO } = {}) {
+export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EXPO, split = false } = {}) {
   // The dead zone and expo the caller asked for have to reach the stick too, or
   // a tuned pointer and an untuned stick would fly differently on the same run.
   const stick = createStickReader({
@@ -241,7 +247,9 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     // Keys beat the mouse while anything is held or still winding down, so a
     // player using the keyboard is not fighting a stationary pointer parked
     // halfway to the bezel.
-    if (state.keysHeld.size || state.keyAxes.x !== 0 || state.keyAxes.y !== 0) {
+    // Under the split the keys are the lateral control only, so they never
+    // take the vertical job from the mouse.
+    if (!split && (state.keysHeld.size || state.keyAxes.x !== 0 || state.keyAxes.y !== 0)) {
       return { source: 'keyboard', axes: state.keyAxes, method: INPUT_KEYBOARD_MOUSE }
     }
 
@@ -326,9 +334,18 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
       if (state.pedalsEngaged) {
         state.axes = { x: pedals.x(), y: state.axes.y }
         state.pedalFrames += 1
+      } else if (split && base.source !== 'pad') {
+        // Real CBAT split without pedals: the keys stand in for them. The
+        // stick's roll and the mouse's sideways offset go unread. The run's
+        // label is still whatever flew the vertical axis.
+        state.axes = { x: state.keyAxes.x, y: state.axes.y }
       }
-      if (base.method) addInput(state.inputTally, base.method)
-      if (base.method || state.pedalsEngaged) state.steeredFrames += 1
+      // Keys steering the lateral axis with nothing on the vertical one (no
+      // mouse on the page yet) is still a desk run, not nobody's.
+      const method = base.method
+        || (split && !state.pedalsEngaged && (state.keysHeld.size || state.keyAxes.x !== 0) ? INPUT_KEYBOARD_MOUSE : null)
+      if (method) addInput(state.inputTally, method)
+      if (method || state.pedalsEngaged) state.steeredFrames += 1
     },
 
     axes() { return state.axes },
@@ -337,6 +354,8 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     stickId() { return stick.padId() },
     pedalsId() { return pedals.padId() },
     pedalsEngaged() { return state.pedalsEngaged },
+    // Keys own the lateral axis (Real CBAT split, no pedals, not on the pad).
+    keysLateral() { return split && !state.pedalsEngaged && state.source !== 'pad' },
     // What the run was flown on, by frames — 'joystick', 'keyboard-mouse',
     // 'touch', or null before anything has steered. Read once at the end of a
     // run and sent with the score.

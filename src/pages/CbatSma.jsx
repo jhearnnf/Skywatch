@@ -39,6 +39,7 @@ import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { useMockStick } from '../utils/cbat/useMockStick'
 import { createSmaInput, SMA_SOURCE_LABEL } from '../utils/cbat/smaInput'
+import { useCbatTheme } from '../hooks/useCbatTheme'
 import { createSmaSim, smaStats, maxSmaScore, CONTROL_RATE, LEAD_IN_MS } from '../utils/cbat/smaSim'
 import {
   SMA_DIFFICULTIES, SMA_LAUNCH_MS, smaTuning, computeGrade, scorePercent,
@@ -226,6 +227,9 @@ export default function CbatSma() {
   // touch pad and keys, so it stays on the card.
   const stickConnected = useStickPresence() || mockStick
   const pedalsConnected = usePedalPresence()
+  // Real CBAT theme splits the axes as the apparatus does: stick or mouse on
+  // vertical, keys or pedals on lateral. SkyWatch keeps one control on both.
+  const realCbat = useCbatTheme()
 
   const simRef = useRef(null)
   const inputRef = useRef(null)
@@ -288,13 +292,13 @@ export default function CbatSma() {
   // against — the pointer path reads deflection from that element's rect.
   useEffect(() => {
     if (phase !== 'playing') return undefined
-    const input = createSmaInput({ el: faceRef.current })
+    const input = createSmaInput({ el: faceRef.current, split: realCbat })
     inputRef.current = input
     return () => {
       input.dispose()
       inputRef.current = null
     }
-  }, [phase])
+  }, [phase, realCbat])
 
   // The frame loop. Scoped to the effect rather than to a self-rescheduling
   // callback, so a run that ends cannot submit through a stale closure — the
@@ -366,7 +370,7 @@ export default function CbatSma() {
         score: `${snap.score}`,
         onTarget: snap.onTarget ? 'ON' : 'OFF',
         err: `${Math.round(snap.error * 100)}%`,
-        source: (SMA_SOURCE_LABEL[input.source()] || '—') + (input.pedalsEngaged() ? ' + pedals' : ''),
+        source: (SMA_SOURCE_LABEL[input.source()] || '—') + (input.pedalsEngaged() ? ' + pedals' : input.keysLateral() ? ' + keys' : ''),
         gesture: input.padGesture(),
       })
 
@@ -540,10 +544,20 @@ export default function CbatSma() {
 
                 <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Control</CbatIntroLabel><span className="pt-0.5">your input sets how fast the dot moves, not where it goes. Centre the control and the dot keeps drifting, so you are always holding something.</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Mouse</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the display, the harder the dot is pushed that way</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Touch</CbatIntroLabel><span className="pt-0.5">hold anywhere on the pad below and move from there. Where you first touch becomes the centre.</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Joystick</CbatIntroLabel><span className="pt-0.5">push away to send the dot down, pull back to bring it up, exactly as the real test does</span></div>
-                  <div className="flex items-start gap-3"><CbatIntroLabel>Keys</CbatIntroLabel><span className="pt-0.5">arrow keys or WASD, if you have neither a mouse nor a touchscreen</span></div>
+                  {realCbat ? (
+                    <>
+                      <div className="flex items-start gap-3"><CbatIntroLabel>Up/down</CbatIntroLabel><span className="pt-0.5">joystick or mouse. Push the stick away to send the dot down, pull back to bring it up. With a mouse, the further the pointer sits above or below the middle of the display, the harder the dot is pushed that way. Moving either one left or right does nothing.</span></div>
+                      <div className="flex items-start gap-3"><CbatIntroLabel>Left/right</CbatIntroLabel><span className="pt-0.5">the left and right arrow keys (or A and D), or your foot pedals if you have calibrated a set in the Pedals panel. Hold a key to push the dot that way.</span></div>
+                      <div className="flex items-start gap-3"><CbatIntroLabel>Touch</CbatIntroLabel><span className="pt-0.5">hold anywhere on the pad below and move from there. On a touchscreen the pad moves the dot both ways.</span></div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-3"><CbatIntroLabel>Mouse</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the display, the harder the dot is pushed that way</span></div>
+                      <div className="flex items-start gap-3"><CbatIntroLabel>Touch</CbatIntroLabel><span className="pt-0.5">hold anywhere on the pad below and move from there. Where you first touch becomes the centre.</span></div>
+                      <div className="flex items-start gap-3"><CbatIntroLabel>Joystick</CbatIntroLabel><span className="pt-0.5">push away to send the dot down, pull back to bring it up, exactly as the real test does</span></div>
+                      <div className="flex items-start gap-3"><CbatIntroLabel>Keys</CbatIntroLabel><span className="pt-0.5">arrow keys or WASD, if you have neither a mouse nor a touchscreen</span></div>
+                    </>
+                  )}
                   <div className="flex items-start gap-3"><CbatIntroLabel>Scoring</CbatIntroLabel><span className="pt-0.5">you earn points for every second the dot is inside the ring, and the most for holding it dead centre</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">{Math.round(tuning.durationMs / 1000)} seconds, after {LEAD_IN_MS / 1000} seconds to get hold of it. A perfect run is {maxSmaScore(tuning)}.</span></div>
                   {/* Say plainly which of the two this is doing. The real test
@@ -551,7 +565,9 @@ export default function CbatSma() {
                       pedals this is one control doing both jobs, and a player
                       comparing notes with someone who has sat it should know
                       that going in. */}
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center" aria-hidden>{'ℹ️'}</span><span className="pt-0.5">On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. Here both axes are on one control unless you have pedals: calibrate them in the Pedals panel and they take the left and right axis, exactly as on the test.</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center" aria-hidden>{'ℹ️'}</span><span className="pt-0.5">On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. {realCbat
+                    ? 'Here the keys stand in for the pedals unless you have a set: calibrate them in the Pedals panel and they take the left and right axis instead.'
+                    : 'Here both axes are on one control unless you have pedals: calibrate them in the Pedals panel and they take the left and right axis, exactly as on the test.'}</span></div>
                 </div>
 
                 {/* On the card only while there is no stick. With one plugged

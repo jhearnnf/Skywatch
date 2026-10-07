@@ -248,6 +248,69 @@ describe('createSmaInput source priority', () => {
     expect(input.axes().x).toBeGreaterThan(0.9)
   })
 
+  // Real CBAT theme: stick or mouse on the vertical axis only, left/right keys
+  // (or pedals) on the lateral one, as on the apparatus.
+  describe('split (Real CBAT)', () => {
+    it('reads only pitch from the stick and takes the lateral axis from the keys', () => {
+      const pad = { id: 'Fake Stick', connected: true, axes: [0.9, 0.9], buttons: [] }
+      navigator.getGamepads = () => [pad]
+      input = createSmaInput({ el: arena(), split: true })
+      input.poll(16)
+      expect(input.source()).toBe('gamepad')
+      expect(input.keysLateral()).toBe(true)
+      expect(input.axes().x).toBe(0)               // roll unread
+      expect(input.axes().y).toBeLessThan(-0.5)    // pitch still flies
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight' }))
+      input.poll(KEY_RAMP_MS)
+      expect(input.axes().x).toBe(1)
+      expect(input.inputMethod()).toBe('joystick')
+    })
+
+    it('reads only the vertical offset from the mouse', () => {
+      input = createSmaInput({ el: arena(), split: true })
+      window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400, clientY: 350 }))
+      input.poll(16)
+      expect(input.source()).toBe('pointer')
+      expect(input.axes().x).toBe(0)
+      expect(input.axes().y).toBeGreaterThan(0.5)
+    })
+
+    it('ignores up/down keys and never lets the keys take the vertical axis', () => {
+      input = createSmaInput({ el: arena(), split: true })
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }))
+      input.poll(KEY_RAMP_MS)
+      expect(input.source()).toBe('pointer')
+      expect(input.axes()).toEqual({ x: -1, y: 0 })
+      // Keys alone still label the run, rather than leaving it nobody's.
+      expect(input.inputMethod()).toBe('keyboard-mouse')
+    })
+
+    it('leaves both axes on the touch pad', () => {
+      input = createSmaInput({ el: arena(), split: true })
+      const padRect = rect(0, 500, 300, 160)
+      const r = padRadius(padRect)
+      input.padDown(150, 580, padRect, 1)
+      input.padMove(150 + r * 0.8, 580 + r * 0.8, 1)
+      input.poll(16)
+      expect(input.source()).toBe('pad')
+      expect(input.keysLateral()).toBe(false)
+      expect(input.axes().x).toBeGreaterThan(0.5)
+      expect(input.axes().y).toBeGreaterThan(0.5)
+    })
+  })
+
+  it('keeps stick roll and both key axes live under the SkyWatch theme', () => {
+    const pad = { id: 'Fake Stick', connected: true, axes: [0.9, 0], buttons: [] }
+    navigator.getGamepads = () => [pad]
+    input = createSmaInput({ el: arena() })
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA' }))
+    input.poll(16)
+    expect(input.keysLateral()).toBe(false)
+    expect(input.axes().x).toBeGreaterThan(0.5)
+  })
+
   it('lets held keys beat a parked mouse, and ramps rather than switches', () => {
     input = createSmaInput({ el: arena() })
     window.dispatchEvent(new MouseEvent('pointermove', { clientX: 400, clientY: 200 }))
