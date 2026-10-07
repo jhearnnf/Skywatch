@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createLoopingMusic } from '../loopingMusic'
+import { setMusicMuted } from '../musicMute'
 
 // Every Audio the module constructs, so a leaked one is visible to the test.
 const built = []
@@ -169,5 +170,22 @@ describe('createLoopingMusic', () => {
     music.update('on')
     flushFrames()
     expect(playing()[0].volume).toBe(1)
+  })
+})
+
+// The top bar's music button zeroes every soundtrack, including one that is
+// already playing, and brings it back on unmute.
+describe('createLoopingMusic with the music mute', () => {
+  afterEach(() => setMusicMuted(false))
+
+  it('silences a playing track at once and restores it on unmute', () => {
+    const music = makeMusic()
+    music.update('on')
+    flushFrames()
+    expect(built[0].volume).toBe(1)
+    setMusicMuted(true)
+    expect(built[0].volume).toBe(0)
+    setMusicMuted(false)
+    expect(built[0].volume).toBe(1)
   })
 })

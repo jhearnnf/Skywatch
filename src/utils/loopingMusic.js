@@ -14,12 +14,15 @@
 //
 // Volume is scaled by BOTH the admin per-sound level (AppSettings, via the
 // sound-settings cache) AND the user's master-volume preference (Profile →
-// Sound), both read live through the injected getters.
+// Sound), both read live through the injected getters. The top bar's music
+// button (utils/musicMute.js) zeroes every soundtrack on top of that.
 //
 // Presence gating: the track is only audible while the user is actually present
 // on the app — minimising, switching tab/app, or backgrounding pauses it, and
 // returning resumes the SAME clip (no restart). Leaving the "on" zones fully
 // stops the sequence; returning restarts from the beginning.
+
+import { isMusicMuted, subscribeMusicMute } from './musicMute'
 
 const FADE_MS = 700
 
@@ -46,6 +49,7 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
   }
 
   function masterFactor() {
+    if (isMusicMuted()) return 0
     try { return Math.min(1, Math.max(0, getMasterVolume() / 100)) }
     catch { return 1 }
   }
@@ -331,6 +335,9 @@ export function createLoopingMusic({ startSrc = null, repeatSrc, zoneVolumes, ge
     zoneVol = 0
     appliedGain = 0
   }
+
+  // The music button applies to a track that is already playing, at once.
+  subscribeMusicMute(() => refreshVolume())
 
   return { update, refreshVolume, audition, isPlaying, reset }
 }

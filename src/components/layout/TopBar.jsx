@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext'
 import ProfileBadge from '../ProfileBadge'
 import OfflineBadge from './OfflineBadge'
 import ThemeSelector from './ThemeSelector'
+import MuteButton from './MuteButton'
 import { useSlimMode, useLandingPageEnabled } from '../../hooks/useSlimMode'
 import { GUEST_UI_THEME_EVENT, hasGuestUiThemeChoice } from '../../lib/uiTheme'
 
@@ -127,6 +128,8 @@ export default function TopBar() {
             <GuestThemeHint />
             <ThemeSelector />
           </div>
+          {/* Music mute: every width, signed in or not. */}
+          <MuteButton />
           {user ? (
             <>
               {/* Theme — the full selector, desktop only (the phone has the

@@ -7,6 +7,7 @@ import { captureEvent } from '../lib/posthog'
 import { hardNavigate } from '../utils/hardNavigate'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
+import MuteButton from '../components/layout/MuteButton'
 import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
 import SEO from '../components/SEO'
 import PreviewWindow from '../components/homePreview/PreviewWindow'
@@ -166,6 +167,7 @@ export default function Landing({ legacy = false }) {
             <span className="font-bold tracking-widest text-brand-600 text-sm">SKYWATCH</span>
           </div>
           <div className="flex items-center gap-3">
+            <MuteButton />
             {user && slim ? (
               <Link to="/cbat" onClick={guardNav('/cbat')} data-testid="landing-header-cbat-cta" className="bg-brand-600 hover:bg-brand-700 text-slate-50 text-sm font-bold px-4 py-1.5 rounded-full transition-colors touch-manipulation">
                 Play CBAT
