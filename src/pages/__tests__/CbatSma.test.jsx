@@ -82,6 +82,44 @@ describe('SMA — control card per theme', () => {
   })
 })
 
+// Real CBAT: each axis has its own control, so the page has to shout about
+// whichever one the player is not using.
+describe('SMA — control prompts', () => {
+  // Plays `ms` of a run with nothing touched, recording every prompt state seen.
+  function playUntouched(user, ms) {
+    let frame = null
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { frame = cb; return 1 })
+    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+    try {
+      const { container } = renderPage(user)
+      beginRun(container)
+      const hint = screen.getByTestId('sma-control-hint')
+      const seen = []
+      for (let t = 0; t <= ms && frame; t += 50) {
+        const cb = frame
+        frame = null
+        act(() => cb(t))
+        seen.push({ t, lateral: hint.dataset.lateral, vertical: hint.dataset.vertical })
+      }
+      return seen
+    } finally {
+      raf.mockRestore()
+    }
+  }
+
+  it('says nothing at the start, then prompts once an untouched control lets the dot drift off', () => {
+    const seen = playUntouched({ _id: 'u1', uiTheme: 'cbat' }, 12000)
+    const early = seen.filter(s => s.t < 1500)
+    expect(early.every(s => s.lateral === 'none' && s.vertical === 'none')).toBe(true)
+    expect(seen.some(s => s.lateral !== 'none' || s.vertical !== 'none')).toBe(true)
+  })
+
+  it('never prompts under SkyWatch', () => {
+    const seen = playUntouched(undefined, 12000)
+    expect(seen.every(s => s.lateral === 'none' && s.vertical === 'none')).toBe(true)
+  })
+})
+
 describe('SMA — difficulty wiring', () => {
   it('opens on Easier with both difficulties offered', () => {
     const { container } = renderPage()

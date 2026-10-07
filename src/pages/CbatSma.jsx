@@ -38,7 +38,7 @@ import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { useMockStick } from '../utils/cbat/useMockStick'
-import { createSmaInput, SMA_SOURCE_LABEL } from '../utils/cbat/smaInput'
+import { createSmaInput, SMA_SOURCE_LABEL, smaControlHints } from '../utils/cbat/smaInput'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import { createSmaSim, smaStats, maxSmaScore, CONTROL_RATE, LEAD_IN_MS } from '../utils/cbat/smaSim'
 import {
@@ -99,6 +99,44 @@ function Face({ ringPercent, dotLayerRef, ringRef, faceRef }) {
       {/* The dot. Centred in a full-face layer that the frame loop translates. */}
       <div ref={dotLayerRef} className="absolute inset-0 flex items-center justify-center pointer-events-none will-change-transform">
         <div data-testid="sma-dot" className="sma-dot" />
+      </div>
+    </div>
+  )
+}
+
+// ── Control prompts ──────────────────────────────────────────────────────────
+
+// Real CBAT only. Each axis has its own control there, so a player who has
+// not found one of them needs telling, loudly: the arrow keys for left/right,
+// the mouse or joystick for up/down. Always mounted and driven by the frame
+// loop through data attributes (`data-lateral` left/right/none,
+// `data-vertical` up/down/none, `data-vsource` mouse/joystick), the same
+// imperative path as the rest of the HUD, so it costs no re-renders.
+function ControlHint({ hintRef }) {
+  return (
+    <div
+      ref={hintRef}
+      data-lateral="none"
+      data-vertical="none"
+      data-vsource="mouse"
+      data-testid="sma-control-hint"
+      className="sma-hint"
+      aria-live="polite"
+    >
+      <div className="sma-hint-cap sma-hint-left" aria-hidden="true">{'◀'}</div>
+      <div className="sma-hint-cap sma-hint-right" aria-hidden="true">{'▶'}</div>
+      <div className="sma-hint-cap sma-hint-up" aria-hidden="true">{'▲'}</div>
+      <div className="sma-hint-cap sma-hint-down" aria-hidden="true">{'▼'}</div>
+      <div className="sma-hint-banner sma-hint-banner-vertical" data-testid="sma-hint-vertical">
+        <span className="sma-hint-title">
+          <span className="sma-hint-mouse">Move the mouse up and down</span>
+          <span className="sma-hint-stick">Move the joystick forward and back</span>
+        </span>
+        <span className="sma-hint-sub">to move the dot up and down. The arrow keys only move it left and right.</span>
+      </div>
+      <div className="sma-hint-banner sma-hint-banner-lateral" data-testid="sma-hint-lateral">
+        <span className="sma-hint-title">Use the ← → arrow keys</span>
+        <span className="sma-hint-sub">(or A and D) to move the dot left and right. The mouse and joystick only move it up and down.</span>
       </div>
     </div>
   )
@@ -307,12 +345,41 @@ export default function CbatSma() {
     if (phase !== 'playing') return undefined
     let raf
     let last = null
+    // A phone flies on the touch pad, which keeps both axes, so neither prompt
+    // applies. Same test that shows the pad (.sma-pad).
+    const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+    const ringRadius = runTuningRef.current.ringRadius
+
+    const controlHint = (input, snap, ts) => {
+      const h = coarse
+        ? { lateral: null, vertical: null }
+        : smaControlHints({
+          lateral: input.keysLateral(),
+          vertical: input.verticalSplit(),
+          lateralIdleMs: input.lateralKeyIdleMs(ts),
+          verticalIdleMs: input.verticalIdleMs(ts),
+          x: snap.x,
+          y: snap.y,
+          ringRadius,
+        })
+      return {
+        lateral: h.lateral || 'none',
+        vertical: h.vertical || 'none',
+        vsource: input.source() === 'gamepad' ? 'joystick' : 'mouse',
+      }
+    }
 
     const write = (hud) => {
       const el = hudRef.current
       if (el.dotLayer) el.dotLayer.style.transform = `translate(${(hud.x * 50).toFixed(2)}%, ${(hud.y * 50).toFixed(2)}%)`
       if (el.ring && el.ring.dataset.state !== hud.ringState) el.ring.dataset.state = hud.ringState
       if (el.errBar) el.errBar.style.width = `${Math.round(hud.error * 100)}%`
+      if (el.hint) {
+        const d = el.hint.dataset
+        if (d.lateral !== hud.hint.lateral) d.lateral = hud.hint.lateral
+        if (d.vertical !== hud.hint.vertical) d.vertical = hud.hint.vertical
+        if (d.vsource !== hud.hint.vsource) d.vsource = hud.hint.vsource
+      }
       for (const key of ['clock', 'score', 'onTarget', 'err', 'source']) {
         const node = el[key]
         if (node && node.textContent !== hud[key]) node.textContent = hud[key]
@@ -372,6 +439,7 @@ export default function CbatSma() {
         err: `${Math.round(snap.error * 100)}%`,
         source: (SMA_SOURCE_LABEL[input.source()] || '—') + (input.pedalsEngaged() ? ' + pedals' : input.keysLateral() ? ' + keys' : ''),
         gesture: input.padGesture(),
+        hint: controlHint(input, snap, ts),
       })
 
       if (snap.finished) { doFinish(); return }
@@ -614,12 +682,15 @@ export default function CbatSma() {
                 <div ref={el => (hudRef.current.errBar = el)} className="h-full bg-brand-600 rounded-full" style={{ width: '0%' }} />
               </div>
 
-              <Face
-                faceRef={faceRef}
-                ringPercent={ringPercent}
-                ringRef={el => (hudRef.current.ring = el)}
-                dotLayerRef={el => (hudRef.current.dotLayer = el)}
-              />
+              <div className="relative w-full">
+                <Face
+                  faceRef={faceRef}
+                  ringPercent={ringPercent}
+                  ringRef={el => (hudRef.current.ring = el)}
+                  dotLayerRef={el => (hudRef.current.dotLayer = el)}
+                />
+                <ControlHint hintRef={el => (hudRef.current.hint = el)} />
+              </div>
 
               <TouchPad
                 padRef={padRef}

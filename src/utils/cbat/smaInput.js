@@ -133,6 +133,14 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
 
     keysHeld: new Set(),
     keyAxes: { x: 0, y: 0 },
+    // When each half of the split was last worked, for its "use this control"
+    // prompt: a left/right key held, and the mouse moved or the stick off
+    // centre on pitch. null until it ever has been; the idle clock then runs
+    // from the first poll, so never touching a control counts as idle.
+    lateralKeyAt: null,
+    verticalAt: null,
+    pointerMoved: false,
+    firstPollAt: null,
 
     // Frames flown on each kind of control, so the run can be labelled with the
     // one that did most of the flying (see inputMethod.js). The pad and the
@@ -169,6 +177,7 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
   const onPointerMove = (e) => {
     if (e.pointerType === 'touch') return
     state.pointer = { x: e.clientX, y: e.clientY }
+    state.pointerMoved = true
   }
   // Leaving the document entirely centres the control — the alternative is a dot
   // running for the bezel because the pointer is off in another window.
@@ -305,7 +314,11 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     // Polling is explicit rather than hidden inside axes() because a gamepad is
     // only observable by reading it, and the keyboard ramp needs the dt.
     poll(dtMs = 16, now = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
+      if (state.firstPollAt == null) state.firstPollAt = now
       const target = keyTarget()
+      for (const code of state.keysHeld) {
+        if (KEY_AXIS[code][0] === 'x') { state.lateralKeyAt = now; break }
+      }
       state.keyAxes = {
         x: rampAxis(state.keyAxes.x, target.x, dtMs),
         y: rampAxis(state.keyAxes.y, target.y, dtMs),
@@ -325,6 +338,10 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
       const base = pickBase(now)
       state.source = base.source
       state.axes = base.axes
+      if ((base.source === 'pointer' && state.pointerMoved) || (base.source === 'gamepad' && base.axes.y !== 0)) {
+        state.verticalAt = now
+      }
+      state.pointerMoved = false
 
       // Engaged pedals own the lateral axis, whatever is flying the vertical
       // one. The stick's own roll goes unread, as on the apparatus. The run's
@@ -356,6 +373,19 @@ export function createSmaInput({ el, deadZone = STICK_DEAD_ZONE, expo = STICK_EX
     pedalsEngaged() { return state.pedalsEngaged },
     // Keys own the lateral axis (Real CBAT split, no pedals, not on the pad).
     keysLateral() { return split && !state.pedalsEngaged && state.source !== 'pad' },
+    // How long each half of the split has sat unused, timed from the first
+    // poll if it never has been used. Drive the split's control prompts.
+    lateralKeyIdleMs(now) {
+      const from = state.lateralKeyAt ?? state.firstPollAt
+      return from == null ? 0 : Math.max(0, now - from)
+    },
+    verticalIdleMs(now) {
+      const from = state.verticalAt ?? state.firstPollAt
+      return from == null ? 0 : Math.max(0, now - from)
+    },
+    // Whether the vertical half of the split is the mouse/stick's alone (Real
+    // CBAT, not on the touch pad), i.e. whether its prompt can apply.
+    verticalSplit() { return split && state.source !== 'pad' },
     // What the run was flown on, by frames — 'joystick', 'keyboard-mouse',
     // 'touch', or null before anything has steered. Read once at the end of a
     // run and sent with the score.
@@ -398,4 +428,27 @@ export const SMA_SOURCE_LABEL = {
   pointer: 'Mouse',
   gamepad: 'Joystick',
   keyboard: 'Keyboard',
+}
+
+// ── Control prompts (Real CBAT split) ──────────────────────────────────────
+// Under the split each axis has its own control: the mouse or stick for up and
+// down, the arrow keys (or pedals) for left and right. A player who has not
+// found one of them watches the dot slide off on that axis with no idea why.
+// Each prompt shows when its control has sat unused for CONTROL_HINT_IDLE_MS,
+// counted from the start of the run if it has never been touched, AND the dot
+// is outside the ring on that axis. Using the control clears it at once.
+export const CONTROL_HINT_IDLE_MS = 1500
+
+// The direction the dot needs to go, per axis ('left' | 'right' | 'up' |
+// 'down'), or null for no prompt on that axis. +x right, +y down.
+export function smaControlHints({
+  lateral, vertical, lateralIdleMs, verticalIdleMs, x, y, ringRadius,
+}) {
+  const lat = lateral && lateralIdleMs >= CONTROL_HINT_IDLE_MS
+    ? (x > ringRadius ? 'left' : x < -ringRadius ? 'right' : null)
+    : null
+  const ver = vertical && verticalIdleMs >= CONTROL_HINT_IDLE_MS
+    ? (y > ringRadius ? 'up' : y < -ringRadius ? 'down' : null)
+    : null
+  return { lateral: lat, vertical: ver }
 }

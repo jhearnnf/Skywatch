@@ -2876,6 +2876,92 @@ body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
   }
 }
 
+/* Real CBAT control prompts, laid over the face. Under that theme each axis
+   has its own control (mouse/stick up and down, arrow keys left and right), so
+   a player who has not found one watches the dot slide off on that axis with
+   no idea why: this has to be impossible to miss. The key caps do the hard
+   stepped arcade blink and point the way the dot needs to go; the banners hold
+   still so they can be read. Driven by the frame loop via data-lateral
+   (left | right | none), data-vertical (up | down | none) and data-vsource
+   (mouse | joystick). */
+.sma-hint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sma-hint-cap,
+.sma-hint-banner {
+  display: none;
+}
+.sma-hint-cap {
+  position: absolute;
+  width: 4.25rem;
+  height: 4.25rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  border: 3px solid #f5a524;
+  background: rgba(20, 12, 0, 0.82);
+  color: #f5a524;
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 0 18px rgba(245, 165, 36, 0.85), 0 0 42px rgba(245, 165, 36, 0.4);
+  animation: sma-hint-blink 0.7s steps(1, end) infinite;
+}
+.sma-hint-left  { left: 0.5rem;  top: 50%; margin-top: -2.125rem; }
+.sma-hint-right { right: 0.5rem; top: 50%; margin-top: -2.125rem; }
+.sma-hint-up    { top: 0.5rem;    left: 50%; margin-left: -2.125rem; }
+.sma-hint-down  { bottom: 0.5rem; left: 50%; margin-left: -2.125rem; }
+.sma-hint[data-lateral='left'] .sma-hint-left,
+.sma-hint[data-lateral='right'] .sma-hint-right,
+.sma-hint[data-vertical='up'] .sma-hint-up,
+.sma-hint[data-vertical='down'] .sma-hint-down {
+  display: flex;
+}
+@keyframes sma-hint-blink {
+  0%, 49.9% { opacity: 1; transform: scale(1.08); }
+  50%, 100% { opacity: 0.2; transform: scale(1); }
+}
+.sma-hint-banner {
+  position: absolute;
+  left: 50%;
+  width: min(74%, 22rem);
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 0.6rem;
+  border: 2px solid #f5a524;
+  background: rgba(20, 12, 0, 0.9);
+  box-shadow: 0 0 22px rgba(245, 165, 36, 0.7);
+  text-align: center;
+}
+.sma-hint-banner-vertical { top: 20%; }
+.sma-hint-banner-lateral  { bottom: 20%; }
+.sma-hint:not([data-vertical='none']) .sma-hint-banner-vertical,
+.sma-hint:not([data-lateral='none']) .sma-hint-banner-lateral {
+  display: flex;
+}
+.sma-hint-title {
+  color: #f5a524;
+  font-size: 1.15rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 10px rgba(245, 165, 36, 0.8);
+}
+.sma-hint[data-vsource='mouse'] .sma-hint-stick,
+.sma-hint[data-vsource='joystick'] .sma-hint-mouse {
+  display: none;
+}
+.sma-hint-sub {
+  color: #fde7bf;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
 /* Ring and knob for the virtual stick. Both are anchored at the pad's top-left
    and translated to the gesture's origin in pixels, because the origin is
    wherever the finger landed rather than a fixed point the CSS could know. The

@@ -3,6 +3,7 @@ import { savePedalProfile, PEDAL_PROFILE_VERSION } from '../gamepad'
 import {
   createSmaInput, padAxes, padRadius, clampPadOrigin, rampAxis,
   KEY_RAMP_MS, KEY_RELEASE_MS, PAD_RADIUS_FRACTION, SMA_SOURCE_LABEL,
+  smaControlHints, CONTROL_HINT_IDLE_MS,
 } from '../smaInput'
 
 // SMA is the only CBAT game that has to work identically on four control
@@ -301,6 +302,41 @@ describe('createSmaInput source priority', () => {
     })
   })
 
+  it('times each control as idle from the first poll until it is used', () => {
+    input = createSmaInput({ el: arena(), split: true })
+    input.poll(16, 1000)
+    expect(input.lateralKeyIdleMs(1600)).toBe(600)    // never used: idle since the start
+    expect(input.verticalIdleMs(1600)).toBe(600)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowDown' }))
+    input.poll(16, 1100)
+    expect(input.lateralKeyIdleMs(1100)).toBe(100)   // up/down is not lateral
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyD' }))
+    input.poll(16, 1200)
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyD' }))
+    input.poll(16, 1300)
+    expect(input.lateralKeyIdleMs(2000)).toBe(800)
+
+    // The mouse counts as used on the frame it moved, not while parked.
+    window.dispatchEvent(new MouseEvent('pointermove', { clientX: 200, clientY: 300 }))
+    input.poll(16, 1400)
+    input.poll(16, 1500)
+    expect(input.verticalIdleMs(2000)).toBe(600)
+  })
+
+  it('counts a stick off centre on pitch as the vertical control in use', () => {
+    const pad = { id: 'Fake Stick', connected: true, axes: [0, 0.9], buttons: [] }
+    navigator.getGamepads = () => [pad]
+    input = createSmaInput({ el: arena(), split: true })
+    input.poll(16, 1000)
+    pad.axes = [0, 0.9]
+    input.poll(16, 1500)
+    expect(input.verticalIdleMs(1500)).toBe(0)
+    pad.axes = [0.9, 0]                                // roll only: not vertical use
+    input.poll(16, 1600)
+    expect(input.verticalIdleMs(3000)).toBe(1500)
+  })
+
   it('keeps stick roll and both key axes live under the SkyWatch theme', () => {
     const pad = { id: 'Fake Stick', connected: true, axes: [0.9, 0], buttons: [] }
     navigator.getGamepads = () => [pad]
@@ -547,5 +583,37 @@ describe('createSmaInput source priority', () => {
       expect(input.inputTally()).toMatchObject({ joystick: 2, 'keyboard-mouse': 1 })
       expect(input.inputMethod()).toBe('joystick')
     })
+  })
+})
+
+describe('smaControlHints', () => {
+  const base = { lateral: true, vertical: true, ringRadius: 0.2, x: 0, y: 0 }
+  const idle = CONTROL_HINT_IDLE_MS
+
+  it('stays quiet while each control is in use, however far off the dot is', () => {
+    expect(smaControlHints({ ...base, lateralIdleMs: idle - 1, verticalIdleMs: idle - 1, x: 0.9, y: 0.9 }))
+      .toEqual({ lateral: null, vertical: null })
+  })
+
+  it('stays quiet for an idle control while the dot is inside the ring on that axis', () => {
+    expect(smaControlHints({ ...base, lateralIdleMs: idle, verticalIdleMs: idle, x: 0.1, y: -0.1 }))
+      .toEqual({ lateral: null, vertical: null })
+  })
+
+  it('points each idle control the way the dot needs to go', () => {
+    expect(smaControlHints({ ...base, lateralIdleMs: idle, verticalIdleMs: idle, x: 0.5, y: 0.5 }))
+      .toEqual({ lateral: 'left', vertical: 'up' })
+    expect(smaControlHints({ ...base, lateralIdleMs: idle, verticalIdleMs: idle, x: -0.5, y: -0.5 }))
+      .toEqual({ lateral: 'right', vertical: 'down' })
+  })
+
+  it('prompts only for the control that is idle', () => {
+    expect(smaControlHints({ ...base, lateralIdleMs: 0, verticalIdleMs: idle, x: 0.5, y: 0.5 }))
+      .toEqual({ lateral: null, vertical: 'up' })
+  })
+
+  it('never prompts for an axis the split does not own', () => {
+    expect(smaControlHints({ ...base, lateral: false, vertical: false, lateralIdleMs: idle, verticalIdleMs: idle, x: 0.9, y: 0.9 }))
+      .toEqual({ lateral: null, vertical: null })
   })
 })
