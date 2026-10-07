@@ -339,6 +339,24 @@ describe('private CBAT group', () => {
     expect(warning.compareDocumentPosition(screen.getByRole('button', { name: 'Continue' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('asks for a display name, not "cannot post", right after picking a date', async () => {
+    const base = stubFetch()
+    global.fetch = vi.fn((url, opts) => (String(url).includes('/api/chat/cbat-group') && opts?.method === 'POST'
+      ? Promise.resolve({ ok: true, status: 201, json: async () => ({ status: 'success', data: {
+        configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', memberCount: 1,
+        canPost: false, displayNameRequired: true, chatBanned: false, postBlockedMessage: null,
+      } }) })
+      : base(url, opts)))
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: 'My group' }))
+    fireEvent.change(await screen.findByLabelText('Upcoming CBAT date'), { target: { value: '2099-10-14' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByRole('button', { name: /confirm/i }))
+
+    expect(await screen.findByText('Choose a display name')).toBeTruthy()
+    expect(screen.queryByText(/cannot post here right now/i)).toBeNull()
+  })
+
   it('gives admins an all-groups list with participant, message and unread counts', async () => {
     mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
     stubFetch({ group: { groups: [{ conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 7, messageCount: 12, unread: 3 }] } })

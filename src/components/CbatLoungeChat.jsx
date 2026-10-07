@@ -474,6 +474,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
       const json = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(json.message || cohortCopy(lounge?.testName).saveError)
       setLounge(json.data)
+      // Same as the room load: without this, someone with no display name lands
+      // in their new group on the bare "cannot post" line instead of the gate.
+      setNeedsName(Boolean(json.data?.displayNameRequired))
       setConfirmingDate(false)
       setLoading(false)
     } catch (error) {
