@@ -139,7 +139,7 @@ export default function RecentCbatScores({ fill = false }) {
           )}
         </div>
       ) : (
-        <div className={`divide-y divide-game-line/50 overflow-y-auto ${
+        <div className={`divide-y divide-game-line/50 overflow-y-auto scrollbar-inset ${
           fill ? 'flex-1 min-h-0' : 'max-h-[640px]'
         }`}>
           {visible.map((r) => {

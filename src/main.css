@@ -334,6 +334,26 @@ body::before {
   &::-webkit-scrollbar { display: none; }
 }
 
+/* A scrollbar for lists that run flush to a card's border (the CBAT lounge's
+   messages, Recent Scores). The plain 6px bar there sits hard against the
+   border and gets cut by the card's edge, which reads as a rendering glitch.
+   This floats a thinner pill clear of the border (the transparent border plus
+   padding-box clip is what insets it) and keeps it off the rounded corners.
+   The Real CBAT theme's square grey thumb still wins on colour and corners.
+   No scrollbar-width / scrollbar-color here: Chrome drops every
+   ::-webkit-scrollbar rule on an element that sets either. */
+@utility scrollbar-inset {
+  &::-webkit-scrollbar { width: 10px; }
+  &::-webkit-scrollbar-track { background: transparent; margin-block: 8px; }
+  &::-webkit-scrollbar-thumb {
+    background: #1a3060;
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+  }
+  &::-webkit-scrollbar-thumb:hover { background: #2a4a8a; background-clip: padding-box; }
+}
+
 /* The "there is more this way" cue on a sideways scroller: the clipped edge
    of the content dissolves rather than stopping dead. A mask, not a gradient
    overlay, so it works over any row background. Used by the leaderboard's

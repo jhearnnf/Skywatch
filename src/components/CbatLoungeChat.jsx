@@ -14,6 +14,7 @@ import MentionPicker from '../pages/chat/components/MentionPicker'
 import UserCard from '../pages/chat/components/UserCard'
 import GroupMembersDialog from '../pages/chat/components/GroupMembersDialog'
 import { cohortCopy, formatCohortDate } from '../utils/cbat/cohortCopy'
+import { DEFAULT_LOUNGE_GROW } from './cbat/LoungeResizeHandle'
 
 // The mini chat docked under Recent Scores on the CBAT hub.
 //
@@ -58,6 +59,12 @@ const READ_BAND_MARGIN = '-20% 0px -20% 0px'
 // gone are folded away behind "Load previous", which reveals them a page at a time.
 const GROUP_RECENT_DAYS = 3
 const GROUP_PREVIOUS_PAGE = 10
+// Side-column sizing (see the group-setup fit below). The panel's own 1px
+// border top and bottom, and the least height Recent Scores is ever squeezed to
+// by the fit.
+const PANEL_BORDER_PX = 2
+const SCORES_MIN_PX = 160
+const PANEL_SIZE_TRANSITION = 'flex-grow 450ms cubic-bezier(.22,1,.36,1), flex-basis 450ms cubic-bezier(.22,1,.36,1)'
 
 // Cohort dates are plain YYYY-MM-DD calendar days, so compare against the
 // admin's own local calendar day in the same shape.
@@ -189,7 +196,10 @@ function GroupOnlineDot({ online }) {
   )
 }
 
-export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
+// `grow` is the panel's flex weight against Recent Scores' 1 in the desktop
+// side column (the player's dragged split); `resizing` is true mid-drag, which
+// switches the size animation off so the panel tracks the pointer.
+export default function CbatLoungeChat({ open, onToggle, collapsible = true, grow = DEFAULT_LOUNGE_GROW, resizing = false }) {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
   const navigate = useNavigate()
@@ -621,6 +631,52 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
     return () => io.disconnect()
   }, [panelEl])
 
+  // Group setup fits without a scrollbar. In the desktop side column the panel
+  // normally takes 2/5 of the height, which is too short for the date form, so
+  // while the form is up the panel is sized to it exactly and Recent Scores
+  // gives up the difference. It re-fits as the form grows (the date warning)
+  // or shrinks (the confirm step), and goes back to the normal split when the
+  // form goes away. Sizes animate through the flex transition on the panel.
+  // Not on the stacked layout (`collapsible` false), whose height is fixed.
+  //
+  // The split the player dragged to (`grow`) still counts: the fit only ever
+  // makes the panel taller than that, never shorter.
+  const [setupEl, setSetupEl] = useState(null)
+  const headerRef = useRef(null)
+  const [fitHeight, setFitHeight] = useState(null)
+  useLayoutEffect(() => {
+    if (!collapsible || !setupEl || !panelEl) { setFitHeight(null); return }
+    const measure = () => {
+      const wrap   = setupEl.parentElement
+      const style  = wrap ? getComputedStyle(wrap) : null
+      const pad    = style ? parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) : 0
+      const needed = Math.ceil((headerRef.current?.offsetHeight ?? 0) + setupEl.offsetHeight + pad + PANEL_BORDER_PX)
+
+      // The height the panel has at the plain split: its share of whatever the
+      // column has left after its fixed rows (the admin toggle, the gap).
+      const column = panelEl.parentElement
+      if (!column) { setFitHeight(null); return }
+      // Fixed = anything that does not flex: everything but this panel and
+      // Recent Scores. (The resize handle between them is zero height.)
+      const fixed = [...column.children]
+        .filter(el => el !== panelEl && !(parseFloat(getComputedStyle(el).flexGrow) > 0))
+        .reduce((sum, el) => sum + el.offsetHeight, 0)
+      const free    = column.clientHeight - fixed - (parseFloat(getComputedStyle(panelEl).marginTop) || 0)
+      const natural = free * (grow / (1 + grow))
+      if (needed <= natural) { setFitHeight(null); return }
+
+      // Never squeeze Recent Scores below a usable sliver; past that, the form
+      // scrolls as before.
+      setFitHeight(Math.max(natural, Math.min(needed, free - SCORES_MIN_PX)))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(setupEl)
+    if (panelEl.parentElement) ro.observe(panelEl.parentElement)
+    return () => ro.disconnect()
+  }, [collapsible, setupEl, panelEl, grow])
+
   // A backgrounded tab is not being read either, and the panel stays
   // "intersecting" the whole time it is in one.
   useEffect(() => {
@@ -950,9 +1006,12 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
   return (
     <div
       ref={setPanelEl}
-      className="flex-[2] min-h-0 mt-3 flex flex-col bg-game-panel border border-game-line rounded-xl overflow-hidden shadow-[0_18px_50px_rgba(2,8,23,0.14)]"
+      className="min-h-0 mt-3 flex flex-col bg-game-panel border border-game-line rounded-xl overflow-hidden shadow-[0_18px_50px_rgba(2,8,23,0.14)]"
+      style={fitHeight
+        ? { flexGrow: 0, flexShrink: 0, flexBasis: `${fitHeight}px`, transition: resizing ? 'none' : PANEL_SIZE_TRANSITION }
+        : { flexGrow: grow, flexShrink: 1, flexBasis: '0px', transition: resizing ? 'none' : PANEL_SIZE_TRANSITION }}
     >
-      <div className="shrink-0 px-4 py-3 border-b border-game-line flex items-center gap-2">
+      <div ref={headerRef} className="shrink-0 px-4 py-3 border-b border-game-line flex items-center gap-2">
         <div className={`grid ${user?.isAdmin ? 'grid-cols-3' : 'grid-cols-2'} rounded-lg bg-game-arena/70 p-1 border border-game-line shadow-inner`} role="tablist" aria-label="CBAT chats">
           {['lounge', 'group', ...(user?.isAdmin ? ['groups'] : [])].map(key => (
             <button
@@ -1098,9 +1157,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
           <p className="text-xs text-slate-500 mt-2 max-w-xs">{cohortCopy(lounge.testName).passedBody}</p>
         </div>
       ) : room === 'group' && !loading && lounge && !lounge.configured ? (
-        <div key="group-setup" className="cbat-room-enter flex-1 min-h-0 overflow-y-auto relative px-5 py-6 flex flex-col justify-center">
+        <div key="group-setup" className="cbat-room-enter flex-1 min-h-0 overflow-y-auto scrollbar-inset relative px-5 py-6 flex flex-col justify-center">
           <div aria-hidden="true" className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_80%_10%,rgba(59,130,246,.18),transparent_42%),radial-gradient(circle_at_10%_90%,rgba(99,102,241,.12),transparent_38%)]" />
-          <div className="relative mx-auto w-full max-w-sm">
+          <div ref={setSetupEl} className="relative mx-auto w-full max-w-sm">
             <div className="w-12 h-12 mb-4 rounded-2xl grid place-items-center text-xl bg-brand-600 text-white shadow-[0_12px_30px_rgba(37,99,235,.32)]">✈</div>
             <p className="text-[10px] uppercase tracking-[0.2em] font-extrabold text-brand-500 mb-2">{cohortCopy(lounge.testName).eyebrow}</p>
             <h3 className="text-lg font-black text-game-text leading-tight mb-2">{cohortCopy(lounge.testName).heading}</h3>
@@ -1148,7 +1207,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true }) {
           const el = e.currentTarget
           atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX
         }}
-        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-1.5"
+        className="flex-1 min-h-0 overflow-y-auto scrollbar-inset px-3 py-2 space-y-1.5"
       >
         {/* The group's welcome, as background text above the history rather
             than a message in it: nothing to reply to, react on or count. The

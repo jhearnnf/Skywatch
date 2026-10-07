@@ -13,7 +13,9 @@ import CbatLoungeChat from '../components/CbatLoungeChat'
 import CbatPresenceDots from '../components/cbat/CbatPresenceDots'
 import useChatPresence from '../hooks/useChatPresence'
 import { useLoungeOpen } from '../hooks/useLoungeOpen'
+import LoungeResizeHandle, { DEFAULT_LOUNGE_GROW } from '../components/cbat/LoungeResizeHandle'
 import { useFixedColumn } from '../hooks/useFixedColumn'
+import { useContainWheel } from '../hooks/useContainWheel'
 import { usePhoneTight } from '../hooks/usePhoneTight'
 import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
@@ -478,10 +480,17 @@ export default function Cbat() {
   // Owned here rather than inside the widget: the split between Recent Scores
   // and the chat depends on it, so both halves of the column need to see it.
   const [loungeOpen, setLoungeOpen] = useLoungeOpen()
+  // How that split is shared, dragged by the player; animation is off mid-drag.
+  // Starts even on every visit, deliberately not remembered.
+  const [loungeGrow, setLoungeGrow] = useState(DEFAULT_LOUNGE_GROW)
+  const [loungeResizing, setLoungeResizing] = useState(false)
   // The side column does not move with the page: only the game grid scrolls.
   // Fixed rather than sticky, and measured off the spacer aside — see the hook.
   const sideColumnRef = useRef(null)
   const sideColumn    = useFixedColumn(sideColumnRef)
+  // The wheel over that column scrolls the chat or Recent Scores, never the
+  // game grid behind it. `user` because the column only mounts once signed in.
+  useContainWheel(sideColumnRef, Boolean(user))
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
   const visibleGames = CBAT_GAMES.filter(g => !g.hidden)
 
@@ -910,8 +919,9 @@ export default function Cbat() {
 
         {/* Recent scores side column — desktop (lg+) only, requires sign-in.
             A flex column exactly as tall as the viewport below it, so the two
-            cards can split that height: Recent Scores takes 60% and the lounge
-            chat 40% while the chat is open, and Recent Scores takes all of it
+            cards can split that height: half each while the chat is open (until the player drags the handle
+            between them, or the group setup form needs more room — see
+            CbatLoungeChat), and Recent Scores takes all of it
             while the chat is collapsed to its tab. The height is measured
             rather than set in CSS — see useStickyFillHeight for why. */}
         {user && (
@@ -941,10 +951,26 @@ export default function Cbat() {
                   <CbatAdminViewToggle />
                 </div>
               )}
-              <div className={`${loungeOpen && loungeInColumn ? 'flex-[3]' : 'flex-1'} min-h-0`}>
+              {/* Weight 1 here against the chat's `loungeGrow`, which the
+                  handle between them changes (default 1: an even split). */}
+              <div className="flex-1 min-h-0">
                 <RecentCbatScores fill />
               </div>
-              {loungeInColumn && <CbatLoungeChat open={loungeOpen} onToggle={setLoungeOpen} collapsible />}
+              {loungeInColumn && loungeOpen && (
+                <LoungeResizeHandle
+                  onChange={setLoungeGrow}
+                  onDragChange={setLoungeResizing}
+                />
+              )}
+              {loungeInColumn && (
+                <CbatLoungeChat
+                  open={loungeOpen}
+                  onToggle={setLoungeOpen}
+                  collapsible
+                  grow={loungeGrow}
+                  resizing={loungeResizing}
+                />
+              )}
             </div>
           </aside>
         )}
