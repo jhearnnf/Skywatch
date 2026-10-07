@@ -946,6 +946,17 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
               ? `${fmtNum(latestVersion.latest)} of ${fmtNum(latestVersion.judged)} active in the last ${latestVersion.activeDays} days`
               : 'no recent builds to compare'}
           />
+          {/* Accounts that have ever turned our music off, with the top bar's music
+              button or by setting Profile › Sound to 0. A lifetime count (the first
+              time is stamped and never cleared), shown as a share like the theme tile. */}
+          <StatCard
+            label="Music Off"
+            value={users.totalUsers ? pct(users.musicOffUsers ?? 0, users.totalUsers) : '—'}
+            color="slate"
+            sub={users.totalUsers
+              ? `${fmtNum(users.musicOffUsers ?? 0)} of ${fmtNum(users.totalUsers)} accounts, muted or volume at 0`
+              : 'no accounts yet'}
+          />
         </div>
         {/* The tier trio opens this row in reading order: Free, Trial, Paying Subscribers. */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 mt-5">

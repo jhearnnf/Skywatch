@@ -218,6 +218,25 @@ router.patch('/me/theme', protect, async (req, res) => {
   }
 });
 
+// POST /api/users/me/music-off — the player has turned our music off, with the
+// top bar's music button or by setting Profile › Sound to 0. Body { via }.
+// Only the first report is kept; later ones are no-ops.
+router.post('/me/music-off', protect, async (req, res) => {
+  try {
+    const { via } = req.body ?? {};
+    if (via !== 'mute' && via !== 'volume') {
+      return res.status(400).json({ status: 'error', message: "via must be 'mute' or 'volume'" });
+    }
+    await User.updateOne(
+      { _id: req.user._id, musicOffAt: null },
+      { musicOffAt: new Date(), musicOffVia: via }
+    );
+    res.json({ status: 'success' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // PATCH /api/users/me/clan-keys — which keys CLAN answers to.
 // Body { layout: 'grouped' | 'mirrored' | 'letters' }.
 //

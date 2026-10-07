@@ -11,6 +11,7 @@ import { warmOfflineAssets } from '../lib/warmOfflineAssets'
 import { setOutboxOwner } from '../lib/outboxOwner'
 import { noteApiReachable, noteApiUnauthorized, noteApiUnreachable, onApiHealthChange, getApiHealth } from '../lib/apiHealth'
 import { reportApiUnreachable, stashUnreachable } from '../lib/apiDiagnostics'
+import { reportMusicOff, onMusicOff } from '../lib/musicOffReport'
 
 // Exported so a caller can deliberately substitute the auth value for a
 // subtree — the landing page's live game wall wraps each demo-mounted game in
@@ -219,13 +220,17 @@ export function AuthProvider({ children }) {
     getAircraftRoster('aircraft-cutouts', { apiFetch, API })
       .then(() => warmOfflineAssets())
       .catch(() => {})
+    // Admin › Stats counts players who turned the music off (music button or
+    // Profile volume at 0); report it now and whenever it happens later.
+    reportMusicOff({ apiFetch, API, user })
+    const offMusic = onMusicOff(() => reportMusicOff({ apiFetch, API, user }))
     const off = onNetworkChange((online) => {
       if (online) {
         flushOutbox({ apiFetch, API, userId: user._id })
         flushStartOutbox({ apiFetch, API, userId: user._id })
       }
     })
-    return off
+    return () => { off?.(); offMusic() }
   }, [user, apiFetch])
 
   const logout = async () => {

@@ -268,6 +268,21 @@ describe('GET /api/admin/stats — users section', () => {
     expect(res.body.data.users.privateScoreUsers).toBe(3);
   });
 
+  // The Stats tile shows the share of accounts that have ever turned the music
+  // off (music button or Profile volume at 0). Only a stamped musicOffAt counts.
+  it('counts accounts that have turned the music off', async () => {
+    const admin = await createAdminUser();
+    await createUser({ musicOffAt: new Date(), musicOffVia: 'mute' });
+    await createUser({ musicOffAt: new Date(), musicOffVia: 'volume' });
+    await createUser();
+
+    const res = await request(app)
+      .get('/api/admin/stats')
+      .set('Cookie', authCookie(admin._id));
+
+    expect(res.body.data.users.musicOffUsers).toBe(2);
+  });
+
   it('counts users by subscription tier — only paying Stripe subscribers', async () => {
     const admin = await createAdminUser();
     await createUser({ subscriptionTier: 'free' });

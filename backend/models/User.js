@@ -228,6 +228,13 @@ const userSchema = new mongoose.Schema(
     // clears the showcase cache).
     hideFromShowcase: { type: Boolean, default: false },
 
+    // When this player first turned our music off, and how: 'mute' (the top
+    // bar's music button) or 'volume' (Profile › Sound dragged to 0). Stamped
+    // once and never cleared, so the Admin › Stats "Music Off" tile counts
+    // everyone who has ever done it, not just who has it off right now.
+    musicOffAt:  { type: Date, default: null },
+    musicOffVia: { type: String, enum: ['mute', 'volume', null], default: null },
+
     // Whether a donor wears the "Supporter" mark beside their name. Stored as
     // the objection, like hideFromShowcase, so an existing donor needs no
     // backfill and reads as wearing it. Deliberately NOT folded into Score

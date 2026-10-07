@@ -539,6 +539,7 @@ router.get('/stats', async (_req, res) => {
       androidAppUsers,
       cbatThemeUsers,
       privateScoreUsers,
+      musicOffUsers,
       totalBrifsRead, totalBrifsOpened, readTimeAgg,
       totalGamesPlayed, totalGamesCompleted, totalPerfectScores, totalGamesWon,
       easyLost, mediumLost,
@@ -604,6 +605,9 @@ router.get('/stats', async (_req, res) => {
       // the option existed is in the showcase and is not counted here — the one
       // `true` value is the whole answer, like the theme count above.
       User.countDocuments({ hideFromShowcase: true }),
+      // Accounts that have ever turned our music off (top bar music button or
+      // Profile volume at 0). Stamped once, never cleared.
+      User.countDocuments({ musicOffAt: { $ne: null } }),
       IntelligenceBriefRead.countDocuments({ completed: true }),
       IntelligenceBriefRead.countDocuments({ completed: false }),
       IntelligenceBriefRead.aggregate([{ $group: { _id: null, total: { $sum: '$timeSpentSeconds' } } }]),
@@ -782,6 +786,7 @@ router.get('/stats', async (_req, res) => {
           androidAppUsers,
           cbatThemeUsers,
           privateScoreUsers,
+          musicOffUsers,
           clientBuilds,
           combinedStreaks:  streakAgg[0]?.total ?? 0,
           emailsSent, emailsFailed,

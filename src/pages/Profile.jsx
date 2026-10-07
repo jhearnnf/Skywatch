@@ -8,6 +8,7 @@ import { MOCK_LEADERBOARD } from '../data/mockData'
 import { getMasterVolume, setMasterVolume } from '../utils/sound'
 import { refreshCbatMusicVolume } from '../utils/cbat/menuMusic'
 import { refreshCommunityMusicVolume } from '../utils/communityMusic'
+import { noteMusicOff } from '../lib/musicOffReport'
 import { displayTier, isFreeUser } from '../utils/subscription'
 import { getLevelInfo } from '../utils/levelUtils'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -778,6 +779,7 @@ export default function Profile() {
                 const v = Number(e.target.value)
                 setMasterVol(v)
                 setMasterVolume(v)
+                if (v === 0) noteMusicOff('volume')
                 // Menu music is playing on this page — apply the new level live
                 // instead of only on the next navigation.
                 refreshCbatMusicVolume()
