@@ -20,6 +20,7 @@ const ACTION_TYPES = [
   'award_test_coins',
   'change_subscription',
   'rename_user',
+  'reset_rename_cooldown',
   'reset_leads',
   'change_beta_settings',
   'update_economy_levels',

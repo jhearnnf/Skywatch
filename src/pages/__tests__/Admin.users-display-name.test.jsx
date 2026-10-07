@@ -59,6 +59,10 @@ const AGENT = {
 
 function setupFetch(users, { spy, ok = true, message = 'nope' } = {}) {
   return vi.fn().mockImplementation((url, opts) => {
+    if (url.includes('/display-name-cooldown') && opts?.method === 'PATCH') {
+      spy?.(url, opts)
+      return Promise.resolve({ ok: true, json: async () => ({ status: 'success', data: { displayNameChangedAt: null } }) })
+    }
     if (url.includes('/display-name') && opts?.method === 'PATCH') {
       spy?.(url, opts)
       if (!ok) return Promise.resolve({ ok: false, json: async () => ({ message }) })
@@ -146,9 +150,43 @@ describe('Admin — Users tab: display name', () => {
     confirmModal()
 
     await waitFor(() => expect(spy).toHaveBeenCalled())
-    expect(JSON.parse(spy.mock.calls[0][1].body)).toEqual({ displayName: '', reason: 'testing' })
+    // Cooldown is off unless the admin ticks it.
+    expect(JSON.parse(spy.mock.calls[0][1].body)).toEqual({ displayName: '', reason: 'testing', applyCooldown: false })
     await waitFor(() => expect(screen.getByLabelText('Display name').value).toBe(''))
     expect(screen.queryByRole('button', { name: 'Clear display name' })).toBeNull()
+  })
+
+  it('clears with the cooldown when the box is ticked', async () => {
+    const spy = vi.fn()
+    await expandRow([{ ...AGENT, displayName: 'CumBum' }], { spy })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear display name' }))
+    await screen.findByText('Clear display name — Agent 001')
+    fireEvent.click(screen.getByRole('checkbox', { name: /30 day rename cooldown/i }))
+    confirmModal()
+
+    await waitFor(() => expect(spy).toHaveBeenCalled())
+    expect(JSON.parse(spy.mock.calls[0][1].body)).toEqual({ displayName: '', reason: 'testing', applyCooldown: true })
+  })
+
+  it('offers a cooldown reset only while a cooldown is running', async () => {
+    const spy = vi.fn()
+    await expandRow([{ ...AGENT, displayNameChangedAt: new Date(Date.now() - 2 * 86400000).toISOString() }], { spy })
+
+    expect(screen.getByText('Rename cooldown: 28 days left')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reset rename cooldown' }))
+    await screen.findByText('Reset rename cooldown — Agent 001')
+    confirmModal()
+
+    await waitFor(() => expect(spy).toHaveBeenCalled())
+    const [url, opts] = spy.mock.calls[0]
+    expect(url).toMatch(/\/api\/admin\/users\/u1\/display-name-cooldown$/)
+    expect(JSON.parse(opts.body)).toEqual({ reason: 'testing' })
+  })
+
+  it('shows no cooldown reset when there is no cooldown', async () => {
+    await expandRow([{ ...AGENT, displayNameChangedAt: new Date(Date.now() - 31 * 86400000).toISOString() }])
+    expect(screen.queryByRole('button', { name: 'Reset rename cooldown' })).toBeNull()
   })
 
   it('surfaces a rejected name as a toast', async () => {

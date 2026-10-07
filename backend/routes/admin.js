@@ -2351,6 +2351,11 @@ router.delete('/users/:id/upcoming-cbat-date', async (req, res) => {
 // renamed account can never end up carrying a reserved prefix. The 30-day
 // cooldown stamp is written too: without it the user could put the old name
 // straight back the moment they noticed.
+//
+// `applyCooldown: false` skips that and also wipes any cooldown already
+// running, so the user can choose a new name straight away. The admin picks
+// this when clearing a name: chat refuses posts from an account with no name,
+// so a cooldown on a cleared name is also a 30 day chat lockout.
 router.patch('/users/:id/display-name', requireReason, async (req, res) => {
   try {
     const result = validateDisplayName(req.body?.displayName);
@@ -2367,9 +2372,10 @@ router.patch('/users/:id/display-name', requireReason, async (req, res) => {
 
     // Clearing $unsets the lowercase mirror rather than writing null — see the
     // matching route in routes/users.js for the index reason.
+    const changedAt = req.body?.applyCooldown === false ? null : new Date();
     const update = nextValue
-      ? { $set: { displayName: nextValue, displayNameLower: nextLower, displayNameChangedAt: new Date() } }
-      : { $set: { displayName: null, displayNameChangedAt: new Date() }, $unset: { displayNameLower: 1 } };
+      ? { $set: { displayName: nextValue, displayNameLower: nextLower, displayNameChangedAt: changedAt } }
+      : { $set: { displayName: null, displayNameChangedAt: changedAt }, $unset: { displayNameLower: 1 } };
     const updated = await User.findByIdAndUpdate(req.params.id, update, { returnDocument: 'after' })
       .select('displayName');
     if (!updated) return res.status(404).json({ message: 'User not found.' });
@@ -2386,6 +2392,33 @@ router.patch('/users/:id/display-name', requireReason, async (req, res) => {
     if (err && err.code === 11000) {
       return res.status(409).json({ message: 'That display name is already taken.' });
     }
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/admin/users/:id/display-name-cooldown — end a user's 30-day
+// rename cooldown now, so they can choose a name straight away. For an account
+// left without a name and still in its cooldown (chat refuses posts from an
+// account with no name, so that is a chat lockout too), or any time an admin
+// decides a wait is not warranted. Takes a reason and is audited like a rename.
+router.patch('/users/:id/display-name-cooldown', requireReason, async (req, res) => {
+  try {
+    const updated = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { displayNameChangedAt: null } },
+      { returnDocument: 'after' },
+    ).select('_id');
+    if (!updated) return res.status(404).json({ message: 'User not found.' });
+
+    await AdminAction.create({
+      userId:       req.user._id,
+      actionType:   'reset_rename_cooldown',
+      reason:       req.body.reason,
+      targetUserId: req.params.id,
+    });
+
+    res.json({ status: 'success', data: { displayNameChangedAt: null } });
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });

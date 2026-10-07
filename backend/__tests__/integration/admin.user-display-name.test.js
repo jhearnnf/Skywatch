@@ -137,9 +137,93 @@ describe('PATCH /api/admin/users/:id/display-name', () => {
     expect(dbUser).not.toHaveProperty('displayNameLower');
   });
 
+  it('clears without a cooldown, wiping one already running', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({
+      displayName: 'CumBum', displayNameLower: 'cumbum', displayNameChangedAt: new Date(),
+    });
+
+    const res = await rename(authCookie(admin._id), target._id, { displayName: '', applyCooldown: false });
+
+    expect(res.status).toBe(200);
+    const dbUser = await User.findById(target._id).lean();
+    expect(dbUser.displayName).toBeNull();
+    expect(dbUser.displayNameChangedAt).toBeNull();
+
+    // The user can pick a new name straight away.
+    const pick = await request(app)
+      .patch('/api/users/me/display-name')
+      .set('Cookie', authCookie(target._id))
+      .send({ displayName: 'Well Behaved' });
+    expect(pick.status).toBe(200);
+  });
+
+  it('clears with the cooldown when asked', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({ displayName: 'CumBum', displayNameLower: 'cumbum' });
+
+    await rename(authCookie(admin._id), target._id, { displayName: '', applyCooldown: true });
+
+    const pick = await request(app)
+      .patch('/api/users/me/display-name')
+      .set('Cookie', authCookie(target._id))
+      .send({ displayName: 'Well Behaved' });
+    expect(pick.status).toBe(429);
+  });
+
   it('returns 404 for an unknown user', async () => {
     const admin = await createAdminUser();
     const res   = await rename(authCookie(admin._id), '64b000000000000000000000', { displayName: 'Falcon' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('PATCH /api/admin/users/:id/display-name-cooldown', () => {
+  beforeEach(async () => { await createRank(); });
+
+  const reset = (cookie, id, body = { reason: 'locked out of chat' }) => {
+    const req = request(app).patch(`/api/admin/users/${id}/display-name-cooldown`);
+    if (cookie) req.set('Cookie', cookie);
+    return req.send(body);
+  };
+
+  it('returns 403 for a non-admin user', async () => {
+    const caller = await createUser();
+    const target = await createUser({ displayNameChangedAt: new Date() });
+    const res    = await reset(authCookie(caller._id), target._id);
+    expect(res.status).toBe(403);
+  });
+
+  it('requires a reason', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({ displayNameChangedAt: new Date() });
+    const res    = await reset(authCookie(admin._id), target._id, { reason: '' });
+    expect(res.status).toBe(400);
+    expect((await User.findById(target._id)).displayNameChangedAt).toBeTruthy();
+  });
+
+  it('ends the cooldown so the user can pick a name at once, and audits it', async () => {
+    const admin  = await createAdminUser();
+    const target = await createUser({ displayName: null, displayNameChangedAt: new Date() });
+
+    const res = await reset(authCookie(admin._id), target._id);
+    expect(res.status).toBe(200);
+    expect((await User.findById(target._id).lean()).displayNameChangedAt).toBeNull();
+
+    const audit = await AdminAction.findOne({ actionType: 'reset_rename_cooldown' });
+    expect(audit.targetUserId.toString()).toBe(target._id.toString());
+    expect(audit.reason).toBe('locked out of chat');
+
+    const pick = await request(app)
+      .patch('/api/users/me/display-name')
+      .set('Cookie', authCookie(target._id))
+      .send({ displayName: 'Well Behaved' });
+    expect(pick.status).toBe(200);
+  });
+
+  it('returns 404 for an unknown user', async () => {
+    const admin = await createAdminUser();
+    const res   = await reset(authCookie(admin._id), '64b000000000000000000000');
     expect(res.status).toBe(404);
   });
 });

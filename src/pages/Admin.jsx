@@ -145,9 +145,12 @@ function Toast({ msg, onClear }) {
   )
 }
 
-function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, onConfirm, onCancel }) {
+// `option` adds one checkbox above the buttons ({ label, defaultChecked }); its
+// value is passed to onConfirm as the second argument.
+function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, option = null, onConfirm, onCancel }) {
   const [reason, setReason] = useState('testing')
   const [busy,   setBusy]   = useState(false)
+  const [checked, setChecked] = useState(Boolean(option?.defaultChecked))
 
   useEffect(() => {
     const fn = (e) => { if (e.key === 'Escape') onCancel() }
@@ -158,7 +161,7 @@ function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, o
   const confirm = async () => {
     if (!reason.trim()) return
     setBusy(true)
-    await onConfirm(reason.trim())
+    await onConfirm(reason.trim(), checked)
     setBusy(false)
   }
 
@@ -180,6 +183,17 @@ function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger = false, o
           placeholder="Briefly describe why…"
           className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 resize-none mb-4"
         />
+        {option && (
+          <label className="flex items-start gap-2 text-sm text-slate-600 mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={e => setChecked(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>{option.label}</span>
+          </label>
+        )}
         <div className="flex gap-2">
           <button onClick={onCancel} disabled={busy} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 transition-colors">
             Cancel
@@ -4829,6 +4843,10 @@ function EmailUserModal({ user, API, apiFetch, onClose, onSent, onError }) {
 // Defined at module level, never inside UsersTab: an inline component would
 // remount on every parent render and the field would lose focus on each
 // keystroke.
+// Mirrors COOLDOWN_DAYS in backend/utils/displayName.js.
+const DAY_MS = 24 * 60 * 60 * 1000
+const RENAME_COOLDOWN_MS = 30 * DAY_MS
+
 function UserDisplayNameRow({ u, action }) {
   const saved = u.displayName ?? ''
   const [value, setValue] = useState(saved)
@@ -4837,12 +4855,32 @@ function UserDisplayNameRow({ u, action }) {
   const next  = value.trim()
   const dirty = next !== saved
 
+  // Whole days left on their 30-day rename cooldown, rounded up; 0 when none.
+  const changedAt = u.displayNameChangedAt ? new Date(u.displayNameChangedAt).getTime() : 0
+  const cooldownDaysLeft = changedAt
+    ? Math.max(0, Math.ceil((changedAt + RENAME_COOLDOWN_MS - Date.now()) / DAY_MS))
+    : 0
+
+  // Clearing asks whether to start the rename cooldown. Off by default: chat
+  // refuses posts from an account with no name, so a cooldown here would also
+  // shut them out of chat for 30 days.
+  const clear = () => action(
+    `Clear display name — Agent ${u.agentNumber}`,
+    `/api/admin/users/${u._id}/display-name`,
+    'PATCH',
+    { displayName: '' },
+    {
+      key: 'applyCooldown',
+      label: 'Start their 30 day rename cooldown. While it runs they have no name, so they cannot post in chat. Leave this off to let them pick a new name straight away.',
+      defaultChecked: false,
+    },
+  )
+
   const submit = () => {
     if (!dirty) return
+    if (!next) return clear()
     action(
-      next
-        ? `Rename Agent ${u.agentNumber} → ${next}`
-        : `Clear display name — Agent ${u.agentNumber}`,
+      `Rename Agent ${u.agentNumber} → ${next}`,
       `/api/admin/users/${u._id}/display-name`,
       'PATCH',
       { displayName: next },
@@ -4877,19 +4915,33 @@ function UserDisplayNameRow({ u, action }) {
           <button
             type="button"
             aria-label="Clear display name"
-            onClick={() => action(
-              `Clear display name — Agent ${u.agentNumber}`,
-              `/api/admin/users/${u._id}/display-name`,
-              'PATCH',
-              { displayName: '' },
-            )}
+            onClick={clear}
             className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors"
           >
             Clear
           </button>
         )}
-        <span className="text-xs text-slate-400">3 to 20 characters. Starts their 30 day rename cooldown.</span>
+        <span className="text-xs text-slate-400">3 to 20 characters. Renaming starts their 30 day rename cooldown.</span>
       </form>
+      {cooldownDaysLeft > 0 && (
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <span className="text-xs text-slate-500">
+            Rename cooldown: {cooldownDaysLeft} {cooldownDaysLeft === 1 ? 'day' : 'days'} left
+          </span>
+          <button
+            type="button"
+            aria-label="Reset rename cooldown"
+            onClick={() => action(
+              `Reset rename cooldown — Agent ${u.agentNumber}`,
+              `/api/admin/users/${u._id}/display-name-cooldown`,
+              'PATCH',
+            )}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold transition-colors"
+          >
+            Reset rename cooldown
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -5631,13 +5683,19 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
     }
   }
 
-  const action = (label, endpoint, method = 'POST', extra = {}) => setModal({ label, endpoint, method, extra })
+  // `option` ({ key, label, defaultChecked }) puts a checkbox in the reason
+  // modal; its value is sent in the body under `key`.
+  const action = (label, endpoint, method = 'POST', extra = {}, option = null) =>
+    setModal({ label, endpoint, method, extra, option })
 
-  const confirmAction = async (reason) => {
+  const confirmAction = async (reason, checked) => {
     const res  = await apiFetch(`${API}${modal.endpoint}`, {
       method: modal.method, credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason, ...modal.extra }),
+      body: JSON.stringify({
+        reason, ...modal.extra,
+        ...(modal.option ? { [modal.option.key]: checked } : {}),
+      }),
     })
     const data = await res.json().catch(() => ({}))
     setModal(null)
@@ -5659,7 +5717,7 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
       <AnimatePresence>{toast && <Toast msg={toast} onClear={() => setToast('')} />}</AnimatePresence>
       {modal && (
         <ConfirmModal title={modal.label} danger={modal.label.toLowerCase().includes('ban') || modal.label.toLowerCase().includes('delete')}
-          onConfirm={confirmAction} onCancel={() => setModal(null)} />
+          option={modal.option} onConfirm={confirmAction} onCancel={() => setModal(null)} />
       )}
       {emailModal && (
         <EmailUserModal
@@ -11331,6 +11389,8 @@ const ACTION_TYPE_LABELS = {
   regenerate_brief_cascade:  { label: 'Regenerate Brief',      color: 'bg-violet-900/40 text-violet-300' },
   award_test_coins:          { label: 'Award Airstars',        color: 'bg-amber-900/40 text-amber-300'   },
   change_subscription:       { label: 'Change Subscription',   color: 'bg-indigo-900/40 text-indigo-300' },
+  rename_user:               { label: 'Rename User',           color: 'bg-sky-900/40 text-sky-300'       },
+  reset_rename_cooldown:     { label: 'Reset Rename Cooldown', color: 'bg-sky-900/40 text-sky-300'       },
 }
 
 const ALL_ACTION_TYPES = Object.keys(ACTION_TYPE_LABELS)
