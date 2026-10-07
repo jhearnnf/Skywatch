@@ -6,7 +6,11 @@
 // the channel to call them by the new name, on old messages as much as new
 // ones, exactly as it already does for their avatar and badge.
 //
-// The snapshot stays as the fallback rather than being replaced: it is what
+// Live means live even when the account has NO name: a cleared name (by the
+// user, or by an admin removing one we do not want on screen) shows as
+// "Agent N", never the old name off the snapshot.
+//
+// The snapshot is the fallback only when there is no live profile: it is what
 // names an author whose account has since been deleted (the cascade nulls
 // senderUserId and keeps the name), and it is the only name a bot posting
 // under a label has. It also remains the moderation record on the server,
@@ -19,5 +23,9 @@
  * @returns {string|null} the name to render, or null if there is none
  */
 export function senderName(userId, senders, snapshot) {
-  return (userId && senders?.[String(userId)]?.displayName) || snapshot || null
+  const live = userId ? senders?.[String(userId)] : null
+  if (live) {
+    return live.displayName || (live.agentNumber ? `Agent ${live.agentNumber}` : null) || snapshot || null
+  }
+  return snapshot || null
 }

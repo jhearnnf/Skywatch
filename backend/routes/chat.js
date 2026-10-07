@@ -852,14 +852,18 @@ router.get('/overview', async (req, res) => {
     // Current names for whoever wrote each preview. The rail line is "Name:
     // message", and reading it off the send-time snapshot left the list calling
     // someone by a name they had already changed. One small query for the
-    // handful of distinct senders across the whole rail.
+    // handful of distinct senders across the whole rail. A sender with no name
+    // (cleared by them or an admin) reads as "Agent N", never the old snapshot.
     const previewNames = await (async () => {
       const senderIds = [...new Set(
         [...previews.values()].map(p => p.senderUserId).filter(Boolean).map(String),
       )];
       if (!senderIds.length) return new Map();
-      const users = await User.find({ _id: { $in: senderIds } }).select('displayName').lean();
-      return new Map(users.map(u => [String(u._id), u.displayName ?? null]));
+      const users = await User.find({ _id: { $in: senderIds } }).select('displayName agentNumber').lean();
+      return new Map(users.map(u => [
+        String(u._id),
+        u.displayName || (u.agentNumber ? `Agent ${u.agentNumber}` : null),
+      ]));
     })();
 
     // A channel's most recent line can be from someone this viewer has blocked.
