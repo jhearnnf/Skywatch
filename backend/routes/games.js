@@ -24,6 +24,7 @@ const AptitudeSyncUsage = require('../models/AptitudeSyncUsage');
 const { CBAT_GAMES, cbatLabelWithDifficulty } = require('../constants/cbatGames');
 const { normalizeInputMethod, normalizePedals } = require('../constants/cbatInputMethods');
 const { saveCbatResult } = require('../utils/cbatResult');
+const { getCbatPublicStats } = require('../utils/cbatPublicStats');
 const { matfScore } = require('../utils/matfScore');
 const { padLeaderboard, padWeeklyLeaderboard } = require('../utils/cbatFakeLeaderboard');
 const { cbatPaddedFakes } = require('../utils/cbatBoardRank');
@@ -2198,6 +2199,18 @@ router.get('/history/flashcard/:sessionId', protect, async (req, res) => {
 
 // ── CBAT — Plane Turn: aircraft cutouts for character selection ────────────
 // Returns published Aircraft briefs that have a cutout image.
+// GET /api/games/cbat/public-stats — anonymous practice totals for the public
+// CBAT test pages, read once per frontend build. Public on purpose: it returns
+// only pooled counts and a share, with small numbers suppressed. See
+// utils/cbatPublicStats.js for what is and is not published.
+router.get('/cbat/public-stats', async (_req, res) => {
+  try {
+    res.json({ status: 'success', data: await getCbatPublicStats() });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Public because Target is one of the no-account CBAT games. The response is
 // only the same published-aircraft metadata/assets already exposed elsewhere;
 // no user or score data is included.
