@@ -52,6 +52,7 @@ import {
   vigilanceModes, VIGILANCE_LAUNCH_MS, vigilanceTuning, computeGrade,
   readStoredVigilanceDifficulty, storeVigilanceDifficulty, DEFAULT_VIGILANCE_DIFFICULTY,
 } from '../utils/cbat/vigilanceDifficulty'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // Cell indices, 0-based. The LABEL drawn for index i is i + 1, so the axes read
 // 1–9 and every coordinate is two keystrokes off a pad with no zero on it.
@@ -810,6 +811,7 @@ export default function CbatVigilance() {
               >
                 Start
               </button>
+              <CbatTestPageLink test="vigil" />
             </motion.div>
           )}
 

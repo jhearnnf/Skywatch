@@ -14,6 +14,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 15
@@ -489,6 +490,7 @@ export default function CbatCodeDuplicates() {
               >
                 Start
               </button>
+              <CbatTestPageLink test="drt" />
             </motion.div>
           )}
 

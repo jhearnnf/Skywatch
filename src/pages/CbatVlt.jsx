@@ -65,6 +65,7 @@ export default function CbatVlt() {
     <CbatTabbedReasoning
       gameName="Verbal Logic Test"
       emoji="📖"
+      testPage="vlt"
       seoTitle="Verbal Logic Test (CBAT)"
       seoDescription="Eight tabs of briefing prose. Every answer needs two of them joined, and the plainly-stated one is the trap."
       introLead="A briefing arrives as a set of tabs. The subject can look intimidating and is entirely beside the point. You are being tested on whether you can join two pieces of information from different pages."

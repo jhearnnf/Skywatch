@@ -12,6 +12,7 @@ import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import { getModelUrl } from '../data/aircraftModels'
 import { generateTrace2Game, TRACE2_ROUNDS, TRACE2_COLORS, replayStatKind } from '../utils/cbat/trace2Generator'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 const Trace2Scene = lazy(() => import('../components/Trace2Scene'))
 const MODEL_URL = getModelUrl(null, 'Hawk T2')
@@ -95,6 +96,7 @@ function StartScreen({ onStart, personalBest, traceModeSelector }) {
           Start Trace 2
         </button>
       </div>
+      <CbatTestPageLink test="trac" />
     </div>
   )
 }

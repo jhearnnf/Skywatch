@@ -48,6 +48,7 @@ import {
   MIN_SMA_SENSITIVITY, MAX_SMA_SENSITIVITY,
 } from '../utils/cbat/smaDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Display ──────────────────────────────────────────────────────────────────
 
@@ -662,6 +663,7 @@ export default function CbatSma() {
                 >
                   Start
                 </button>
+                <CbatTestPageLink test="sma" />
               </motion.div>
             </CbatStickLayout>
           )}

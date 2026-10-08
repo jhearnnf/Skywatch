@@ -28,6 +28,7 @@ import {
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // Situation count, question count, how many units and aircraft appear, how often
@@ -1450,6 +1451,7 @@ export default function CbatSat() {
                   Start
                 </button>
               </div>
+              <CbatTestPageLink test="sat" />
             </motion.div>
           )}
 

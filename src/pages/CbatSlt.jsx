@@ -67,6 +67,7 @@ export default function CbatSlt() {
     <CbatTabbedReasoning
       gameName="System Logic Test"
       emoji="⚙️"
+      testPage="slt"
       seoTitle="System Logic Test (CBAT)"
       seoDescription="Tabs of system figures and a clock. Find the right figure and use it, before the search eats the time."
       introLead="You are given an aircraft's systems across a numbered index of tabs: burn rates, outputs, capacities, limits. Then questions that make you go and find two figures and use them together."

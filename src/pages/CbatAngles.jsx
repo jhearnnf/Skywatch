@@ -12,6 +12,7 @@ import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const ROUND_1_COUNT = 10
@@ -488,6 +489,7 @@ export default function CbatAngles() {
               >
                 Start
               </button>
+              <CbatTestPageLink test="abd" />
             </motion.div>
           )}
 

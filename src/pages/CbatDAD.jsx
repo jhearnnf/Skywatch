@@ -12,6 +12,7 @@ import { useCbatTheme } from '../hooks/useCbatTheme'
 import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_QUESTIONS = 15
@@ -498,6 +499,7 @@ export default function CbatDAD() {
               >
                 Start
               </button>
+              <CbatTestPageLink test="dad" />
             </motion.div>
           )}
 

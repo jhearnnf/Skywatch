@@ -81,6 +81,7 @@ import {
   readStoredActCraft,
   storeActCraft,
 } from '../utils/cbat/actCraft'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5
@@ -2148,6 +2149,7 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
           {audioLoading ? 'Fetching the voice clips.' : 'Tap to enable audio.'}
         </p>
       )}
+      <CbatTestPageLink test="act" />
     </motion.div>
     </CbatStickLayout>
   )

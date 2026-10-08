@@ -34,6 +34,7 @@ import {
   headingSettled, gateCrossing, bearingSector, sweepExtent, onTrackForGate, pad3,
 } from '../utils/cbat/dptPractice'
 import GuideArrow from '../components/cbat/GuideArrow'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // The full ladder. A run no longer plays all eight: Easier serves rounds 1-4
@@ -2804,6 +2805,7 @@ export default function CbatDpt() {
                 onDifficulty={handleDifficulty}
                 onPractice={openPractice}
               />
+              <div className="text-center"><CbatTestPageLink test="dpt" /></div>
             </div>
           )}
 

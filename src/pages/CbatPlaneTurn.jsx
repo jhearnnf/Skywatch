@@ -43,6 +43,7 @@ import {
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 function forwardToMoveState(forwardVec, prevDir) {
   const x = Math.round(forwardVec.x), y = Math.round(forwardVec.y), z = Math.round(forwardVec.z)
@@ -308,6 +309,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
           ))}
         </div>
       )}
+      <CbatTestPageLink test="trac" />
     </div>
   )
 }

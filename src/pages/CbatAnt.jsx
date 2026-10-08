@@ -42,6 +42,7 @@ import {
   WEIGHT_TABLE,
   QUESTION_META,
 } from '../utils/antGenerator'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 const ROUND_COUNT = 8
 const ROUND_TIME = 60            // seconds per round
@@ -1313,6 +1314,7 @@ export default function CbatAnt() {
                 The tutorial walks the Easier board panel by panel. It is the quickest way in,
                 whichever mode you go on to play.
               </p>
+              <CbatTestPageLink test="ant" />
             </motion.div>
           )}
 

@@ -44,6 +44,7 @@ import CbatPersonalBest from '../CbatPersonalBest'
 import CbatIntroLabel from './CbatIntroLabel'
 import { useCbatPersonalBest } from '../../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
+import CbatTestPageLink from './CbatTestPageLink'
 
 // ── Tab strip ────────────────────────────────────────────────────────────────
 // Top-level so it is never re-created between renders — a component defined
@@ -218,6 +219,8 @@ function Walkthrough({ steps, showQuotes = false }) {
 export default function CbatTabbedReasoning({
   gameName,
   emoji,
+  // guideId of this test's public page (/cbat-tests/<slug>), for the link under Start.
+  testPage,
   seoTitle,
   seoDescription,
   introLead,
@@ -575,6 +578,7 @@ export default function CbatTabbedReasoning({
               >
                 Start
               </button>
+              <CbatTestPageLink test={testPage} />
             </motion.div>
           )}
 

@@ -36,6 +36,7 @@ import {
   CAMERA_FOV_DEG, WIDE_FOV_DEG, RTT_FRAMES_PER_TARGET, SHUTTER_COOLDOWN_MS, RTT_KINDS,
   START_ELEV_DEG,
 } from '../utils/cbat/rttSim'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 const DEG = Math.PI / 180
 
@@ -642,6 +643,7 @@ export default function CbatRtt() {
                 >
                   Start
                 </button>
+                <CbatTestPageLink test="rtt" />
               </motion.div>
             </CbatStickLayout>
           )}

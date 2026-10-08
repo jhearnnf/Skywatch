@@ -22,6 +22,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatTheme } from '../hooks/useCbatTheme'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 const AircraftTopDown = lazy(() => import('../components/AircraftTopDown'))
 
@@ -898,6 +899,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
           {aircraftReady ? 'Start' : 'Loading aircraft…'}
         </button>
       </div>
+      <CbatTestPageLink test="trt" />
     </motion.div>
   )
 }

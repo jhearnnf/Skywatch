@@ -51,6 +51,7 @@ import {
   readStoredSitDifficulty, storeSitDifficulty,
 } from '../utils/cbat/sitDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Map rendering ────────────────────────────────────────────────────────────
 // The flat plan view, used for the STUDY LAYERS and the review diagram. The clip
@@ -755,6 +756,7 @@ export default function CbatSit() {
               >
                 Start
               </button>
+              <CbatTestPageLink test="sit" />
             </motion.div>
           )}
 

@@ -19,6 +19,7 @@ import {
   readStoredNumericalOpsDifficulty, storeNumericalOpsDifficulty,
 } from '../utils/cbat/numericalOpsDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // Shared by both difficulties: the round structure, the question count and the
@@ -582,6 +583,7 @@ export default function CbatNumericalOps() {
               >
                 Start
               </button>
+              <CbatTestPageLink test="numops" />
             </motion.div>
           )}
 

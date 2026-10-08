@@ -29,6 +29,7 @@ import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { visualisationMode, visualisationModes } from '../utils/cbat/visualisationModes'
 import Visualisation3DShape, { VisualisationShapeCanvas } from '../components/cbat/Visualisation3DShape'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 const TOTAL_ROUNDS = 8
 const ROUND_TIMER_S = 30
@@ -849,6 +850,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
               >
                 Start
               </button>
+              <CbatTestPageLink test="vis" />
             </motion.div>
           )}
 

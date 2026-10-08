@@ -31,6 +31,7 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useClanOffered } from '../utils/cbat/clanOffer'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // Shared by both difficulties. The only things a difficulty changes are how
@@ -195,6 +196,7 @@ function IntroScreen({
           <Link to="/cbat/clan" data-testid="flag-to-clan" className="text-brand-600 hover:text-brand-700 transition-colors">Play CLAN →</Link>
         </p>
       )}
+      <CbatTestPageLink test="flag" />
     </motion.div>
   )
 }

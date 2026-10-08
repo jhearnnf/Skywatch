@@ -30,6 +30,7 @@ import {
 } from '../utils/cbat/instrumentsModes'
 import { orientationGrade, ORIENTATION_QUESTIONS, ORIENTATION_TIME_LIMIT } from '../utils/cbat/instrumentsOrientation'
 import { DRILL_SECONDS, MAX_POINTS, MIN_POINTS } from '../utils/cbat/instrumentsDrill'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // The practice drill pulls in three.js and the aircraft models, so it only
 // loads when someone opens it.
@@ -679,6 +680,7 @@ export default function CbatInstruments({ forcedMode = null }) {
               >
                 Start
               </button>
+              <CbatTestPageLink test="insc" />
             </motion.div>
             </CbatStickLayout>
           )}

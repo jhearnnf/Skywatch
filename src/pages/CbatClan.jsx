@@ -45,6 +45,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Grade badge helper ────────────────────────────────────────────────────────
 const GRADE_STYLE = {
@@ -217,6 +218,7 @@ function IntroScreen({
         Sitting the RAF or Royal Navy battery? That one uses FLAG.{' '}
         <Link to="/cbat/flag" data-testid="clan-to-flag" className="text-brand-600 hover:text-brand-700 transition-colors">Play FLAG →</Link>
       </p>
+      <CbatTestPageLink test="clan" />
     </motion.div>
   )
 }

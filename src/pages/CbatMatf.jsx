@@ -53,6 +53,7 @@ import {
   readStoredMatfDifficulty, storeMatfDifficulty,
 } from '../utils/cbat/matfDifficulty'
 import { initialDifficulty } from '../utils/cbat/difficultyParam'
+import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Reference panels ─────────────────────────────────────────────────────────
 // Top-level components, never defined inside the page's render — these hold the
@@ -690,6 +691,7 @@ export default function CbatMatf() {
               >
                 Start
               </button>
+              <CbatTestPageLink test="matf" />
             </motion.div>
 
             {/* Below `lg` CbatStickLayout drops both side tracks, so the rail
