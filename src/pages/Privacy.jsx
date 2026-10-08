@@ -86,6 +86,18 @@ export default function Privacy() {
             immediately.
           </p>
           <p>
+            <span className="text-slate-700 font-medium">Anonymous practice totals</span>: our public
+            test pages show combined figures, such as how many practice runs a game has had and what
+            share of regular players improved. These are pooled across many players, small numbers are
+            never shown, and nothing in them identifies you.
+          </p>
+          <p>
+            <span className="text-slate-700 font-medium">What you tell us about the real test</span>:
+            if you describe your aptitude test to us, in the questionnaire or in a message, we may use
+            what you describe in our public guides, reworded and never attributed. We never publish
+            your name, your scores or your score sheet.
+          </p>
+          <p>
             <span className="text-slate-700 font-medium">Research emails</span> — we may occasionally
             email you a short questionnaire about your experience of the aptitude tests, so we can
             check our practice material still matches what candidates actually face. These are sent

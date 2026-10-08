@@ -8,7 +8,7 @@ import { hardNavigate } from '../utils/hardNavigate'
 import WelcomeAgentFlow from '../components/onboarding/WelcomeAgentFlow'
 import SocialLinks from '../components/SocialLinks'
 import MuteButton from '../components/layout/MuteButton'
-import { CBAT_GUIDE_HREF, prepareGuideChrome } from '../utils/guideHref'
+import { CBAT_GUIDE_HREF, CBAT_TESTS_INDEX_HREF, prepareGuideChrome } from '../utils/guideHref'
 import SEO from '../components/SEO'
 import PreviewWindow from '../components/homePreview/PreviewWindow'
 import LiveGameGrid from '../components/landingGames/LiveGameGrid'
@@ -593,6 +593,10 @@ export default function Landing({ legacy = false }) {
               route. */}
           <a href={CBAT_GUIDE_HREF} onClick={prepareGuideChrome} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
             CBAT Guide
+          </a>
+          <span className="text-xs text-slate-300">·</span>
+          <a href={CBAT_TESTS_INDEX_HREF} onClick={prepareGuideChrome} className="text-xs text-slate-500 hover:text-slate-700 transition-colors">
+            CBAT Tests
           </a>
           <span className="text-xs text-slate-300">·</span>
           <Link to="/privacy" className="text-xs text-slate-500 hover:text-slate-700 transition-colors">

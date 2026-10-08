@@ -179,6 +179,26 @@ function staticDocRoutes() {
         if (target) req.url = target + (req.url.slice(pathname.length) || '')
         next()
       })
+      // The CBAT test pages only exist in dist/ (scripts/build-cbat-test-pages.mjs
+      // writes them after the build), so dev renders them on request through the
+      // same renderer. Loaded per request so an edit to the guide or the copy
+      // shows on refresh. No player stats in dev.
+      server.middlewares.use(async (req, res, next) => {
+        const [pathname] = (req.url || '').split('?')
+        const clean = pathname.replace(/\.html$/, '')
+        if (clean !== '/cbat-tests' && !/^\/cbat-tests\/[a-z0-9-]+$/.test(clean)) return next()
+        try {
+          const { renderAll } = await server.ssrLoadModule('/scripts/cbatTestPages/render.mjs')
+          const registry = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'backend/constants/cbatTestPages.json'), 'utf8'))
+          const guideHtml = fs.readFileSync(path.resolve(__dirname, 'public/cbat-guide.html'), 'utf8')
+          const html = renderAll({ guideHtml, registry }).get(clean)
+          if (!html) return next()
+          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          res.end(html)
+        } catch (err) {
+          next(err)
+        }
+      })
     },
   }
 }
@@ -199,7 +219,9 @@ export default defineConfig({
         // Precache the app shell. GLBs are added explicitly below so the heavy
         // World3D models (character/scene) are never precached.
         globPatterns: ['**/*.{js,css,html,svg,woff,woff2,png,ico}'],
-        globIgnores: ['**/models/**'],
+        // The CBAT test pages are crawler-facing documents, not app shell; 24
+        // of them would bloat every install's precache for nothing.
+        globIgnores: ['**/models/**', 'cbat-tests.html', 'cbat-tests/**'],
         additionalManifestEntries: offlineGlbPrecacheEntries(),
         // 3D/vendor chunks. The app ships as a single eagerly-imported bundle,
         // so this has to clear the whole thing — and it MUST, because offline
@@ -215,7 +237,7 @@ export default defineConfig({
         // The guide is a standalone document, not an app route, so it has to
         // opt out of the fallback or it breaks in production only: dev has no
         // service worker, so it works right up until it is deployed.
-        navigateFallbackDenylist: [/^\/api\//, /^\/cbat-guide(-canada|-australia)?(\.html)?$/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/cbat-guide(-canada|-australia)?(\.html)?$/, /^\/cbat-tests(\/|\.html|$)/],
         runtimeCaching: [
           {
             // Aircraft cutout images live on Cloudinary — cache on first use so

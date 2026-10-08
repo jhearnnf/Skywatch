@@ -69,3 +69,29 @@ describe('isCbatGuideUrl', () => {
     }
   })
 })
+
+describe('the per-test pages', () => {
+  beforeEach(() => { vi.resetModules(); vi.doUnmock('@capacitor/core') })
+
+  async function load(native) {
+    vi.resetModules()
+    vi.doMock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => native } }))
+    return import('../guideHref')
+  }
+
+  it('link by clean URL on the web and by filename in the native app', async () => {
+    const web = await load(false)
+    expect(web.cbatTestHref('dpt-dynamic-projection-test')).toBe('/cbat-tests/dpt-dynamic-projection-test')
+    expect(web.CBAT_TESTS_INDEX_HREF).toBe('/cbat-tests')
+    const native = await load(true)
+    expect(native.cbatTestHref('dpt-dynamic-projection-test')).toBe('/cbat-tests/dpt-dynamic-projection-test.html')
+    expect(native.CBAT_TESTS_INDEX_HREF).toBe('/cbat-tests.html')
+  })
+
+  it('get the same status-bar handover as the guide they share a stylesheet with', () => {
+    for (const url of ['/cbat-tests', '/cbat-tests.html', '/cbat-tests/vigilance-test', '/cbat-tests/vigilance-test.html']) {
+      expect(isCbatGuideUrl(url)).toBe(true)
+    }
+    expect(isCbatGuideUrl('/cbat-tests/../admin')).toBe(false)
+  })
+})

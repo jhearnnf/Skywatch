@@ -16,6 +16,8 @@
     { "source": "/cbat-guide", "destination": "/cbat-guide.html" },
     { "source": "/cbat-guide-canada", "destination": "/cbat-guide-canada.html" },
     { "source": "/cbat-guide-australia", "destination": "/cbat-guide-australia.html" },
+    { "source": "/cbat-tests", "destination": "/cbat-tests.html" },
+    { "source": "/cbat-tests/:slug", "destination": "/cbat-tests/:slug.html" },
     { "source": "/((?!api/|assets/|sounds/|images/|models/|.*\\..*).*)", "destination": "/index.html" }
   ]
 }

@@ -19,6 +19,12 @@ import { isNative } from './isNative'
 // inside the store binary, including during the build-time prerender.
 export const CBAT_GUIDE_HREF = isNative ? '/cbat-guide.html' : '/cbat-guide'
 
+// The per-test pages (/cbat-tests/<slug>) are generated documents in dist/ with
+// the same problem and the same fix: clean URL on the web, the real filename
+// inside the store binary.
+export const cbatTestHref = (slug) => (isNative ? `/cbat-tests/${slug}.html` : `/cbat-tests/${slug}`)
+export const CBAT_TESTS_INDEX_HREF = isNative ? '/cbat-tests.html' : '/cbat-tests'
+
 // The app paints light status-bar text for its dark theme (main.jsx), and the
 // guide is a cream document, so leaving for it left the clock and the signal
 // icons white on near-white. Hand the status bar over before we go.
@@ -35,11 +41,12 @@ export const CBAT_GUIDE_HREF = isNative ? '/cbat-guide.html' : '/cbat-guide'
 // lists guides from the database, so it can carry links to documents we do not
 // style and must not hand the status bar over for those.
 //
-// The international guides share the UK guide's stylesheet, so they are the
-// same cream document and need the same handover. Adding a guide means adding
-// its slug here as well.
+// The international guides and the per-test pages share the UK guide's
+// stylesheet, so they are the same cream document and need the same handover.
+// Adding a guide means adding its slug here as well.
 export function isCbatGuideUrl(url) {
   return /^\/cbat-guide(-canada|-australia)?(\.html)?$/.test(url || '')
+    || /^\/cbat-tests(\/[a-z0-9-]+)?(\.html)?$/.test(url || '')
 }
 
 export function prepareGuideChrome() {
