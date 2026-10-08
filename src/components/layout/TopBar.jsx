@@ -80,6 +80,18 @@ function CrosshairLogo() {
   )
 }
 
+// Hidden on phones (crosshair only), "SKYWATCH" on tablets, the full
+// "SKYWATCH ACADEMY" from lg up where the bar has room for it. Two-tone: the
+// brand word leads, ACADEMY sits quieter beside it as a sub-brand.
+function Wordmark() {
+  return (
+    <span className="hidden sm:flex items-baseline gap-2">
+      <span className="font-bold text-lg tracking-wider text-brand-600">SKYWATCH</span>
+      <span className="hidden lg:inline font-medium text-sm tracking-[0.2em] text-slate-600">ACADEMY</span>
+    </span>
+  )
+}
+
 export default function TopBar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -99,16 +111,12 @@ export default function TopBar() {
           {!landingEnabled ? (
             <div className="flex items-center gap-2 select-none">
               <CrosshairLogo />
-              <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
-                SKYWATCH
-              </span>
+              <Wordmark />
             </div>
           ) : (
             <Link to="/" className="flex items-center gap-2">
               <CrosshairLogo />
-              <span className="font-bold text-lg tracking-widest text-brand-600 hidden sm:block">
-                SKYWATCH
-              </span>
+              <Wordmark />
             </Link>
           )}
           <OfflineBadge />
