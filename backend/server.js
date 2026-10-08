@@ -55,6 +55,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // The room behind the mini chat on the CBAT hub. Runs once ever.
     await require('./seeds/seedCbatLounge')();
     await require('./migrations/backfillCbatCohorts')();
+    // Treat the app builds already in use as released, so the update link's
+    // one-hour settle window only applies to builds first seen from now on.
+    await require('./migrations/backfillNativeReleases')();
     // Every problem report is a support ticket: give the ones filed before
     // that a thread, and drop the one-open-thread-per-user index. Idempotent.
     await require('./migrations/supportTickets')();

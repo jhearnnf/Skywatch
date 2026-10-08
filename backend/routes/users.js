@@ -35,8 +35,9 @@ const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../co
 const { sanitiseReportEnvironment } = require('../utils/reportEnvironment');
 const { openTicket } = require('../utils/supportTickets');
 const { sanitiseGeoInfo, resolveCountry } = require('../constants/geo');
-const { latestNativeReleases } = require('../utils/latestNativeReleases');
+const { latestNativeReleases, settledNativeReleases } = require('../utils/latestNativeReleases');
 const AppOpen = require('../models/AppOpen');
+const NativeRelease = require('../models/NativeRelease');
 
 // True when the request should be treated as "slim" (CBAT-only) mode, in which
 // every Aircraft with a cutout is an unlockable badge regardless of whether the
@@ -587,9 +588,19 @@ router.get('/ranks', async (req, res) => {
 //
 // Web is absent by design — see utils/latestNativeReleases.js. The site answers
 // staleness by force-refreshing the service worker, not by comparing versions.
+//
+// Two answers per platform:
+//   latest — the newest build first seen at least an hour ago. The first device
+//            on a new build is usually ours, before Google Play has the build
+//            live for everyone, so a younger one is not offered yet.
+//   newest — the newest build reported at all, no wait. Profile uses this
+//            instead while the admin "update screen for all users" switch is on,
+//            which is the admin saying the release is live.
+// Older apps only read `latest`, so they get the cautious answer.
 router.get('/latest-release', async (req, res) => {
   try {
-    res.json({ status: 'success', data: { latest: await latestNativeReleases() } });
+    const [latest, newest] = await Promise.all([settledNativeReleases(), latestNativeReleases()]);
+    res.json({ status: 'success', data: { latest, newest } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -1066,6 +1077,13 @@ router.post('/heartbeat', protect, async (req, res) => {
       try {
         await AppOpen.record(req.user._id, client.platform, now);
       } catch { /* duplicate-key race or write failure — presence still stands */ }
+      // When this build was first seen, for the update link's settle window.
+      const buildNumber = update[`lastClients.${client.platform}`].buildNumber;
+      if (buildNumber !== null) {
+        try {
+          await NativeRelease.record(client.platform, buildNumber, client.version, now);
+        } catch { /* duplicate-key race or write failure — presence still stands */ }
+      }
     }
 
     res.json({ ok: true });

@@ -115,8 +115,10 @@ export default function Profile() {
   const [clientInfo,  setClientInfo]  = useState(null)
   // Newest native release the server has seen, used only to decide whether the
   // "Update app" link is worth showing. Stays null on web, which has no version
-  // to compare against — it force-refreshes instead.
-  const [latestRelease, setLatestRelease] = useState(null)
+  // to compare against — it force-refreshes instead. `latest` only names a build
+  // an hour after it was first seen (Google Play may not have it live yet);
+  // `newest` has no wait and is used while the admin update-screen switch is on.
+  const [releases, setReleases] = useState(null)
   const [updateBusy,  setUpdateBusy]  = useState(false)
 
   useEffect(() => {
@@ -146,7 +148,7 @@ export default function Profile() {
     let alive = true
     apiFetch(`${API}/api/users/latest-release`)
       .then(r => r.json())
-      .then(d => { if (alive) setLatestRelease(d?.data?.latest ?? null) })
+      .then(d => { if (alive) setReleases(d?.data ?? null) })
       .catch(() => { /* offline or endpoint down — just don't offer the link */ })
     return () => { alive = false }
   }, [clientInfo?.platform, API, apiFetch])
@@ -160,6 +162,13 @@ export default function Profile() {
     fetchLiveWebVersion().then(v => { if (alive) setLiveWeb(v) })
     return () => { alive = false }
   }, [clientInfo?.platform])
+
+  // Admin switch (AppSettings.updateCoverEnabled), off until the new release is
+  // live on both the web and Google Play. Off means only the footer control.
+  // On also lifts the one-hour wait on a new native build: the admin is saying
+  // it is live.
+  const updateCoverOn = appSettings?.updateCoverEnabled === true
+  const latestRelease = (updateCoverOn ? releases?.newest : null) ?? releases?.latest ?? null
 
   const isWeb = clientInfo?.platform === 'web'
   const updateAvailable = isWeb
@@ -184,9 +193,6 @@ export default function Profile() {
     try { return sessionStorage.getItem(UPDATE_COVER_DISMISSED_KEY) } catch { return null }
   })
   const coverDismissed = newestBuild !== null && String(newestBuild) === dismissedBuild
-  // Admin switch (AppSettings.updateCoverEnabled), off until the new release is
-  // live on both the web and Google Play. Off means only the footer control.
-  const updateCoverOn = appSettings?.updateCoverEnabled === true
   const previewUpdateCover = wantsUpdatePreview && updateCoverOn
   const [coverTogglePulse, setCoverTogglePulse] = useState(false)
   const pulseCoverToggle = () => {

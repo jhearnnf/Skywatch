@@ -19,9 +19,13 @@ const request = require('supertest');
 const app     = require('../../app');
 const db      = require('../helpers/setupDb');
 const { createUser, authCookie } = require('../helpers/factories');
+const NativeRelease = require('../../models/NativeRelease');
+const backfillNativeReleases = require('../../migrations/backfillNativeReleases');
+
+const HOUR = 60 * 60 * 1000;
 
 beforeAll(async () => { await db.connect(); });
-afterEach(async () => { await db.clearDatabase(); });
+afterEach(async () => { await db.clearDatabase(); NativeRelease.resetCache(); });
 afterAll(async () => { await db.closeDatabase(); });
 
 const beat = (cookie, client) =>
@@ -46,7 +50,7 @@ describe('GET /api/users/latest-release', () => {
 
     const res = await latest();
     expect(res.status).toBe(200);
-    expect(res.body.data.latest.android).toEqual({ version: '1.3.0', build: '31' });
+    expect(res.body.data.newest.android).toEqual({ version: '1.3.0', build: '31' });
   });
 
   it('tracks iOS separately from Android', async () => {
@@ -54,14 +58,15 @@ describe('GET /api/users/latest-release', () => {
     await reportBuild({ platform: 'ios',     version: '1.1.0', build: '9'  });
 
     const res = await latest();
-    expect(res.body.data.latest.android).toEqual({ version: '1.3.0', build: '31' });
-    expect(res.body.data.latest.ios).toEqual({ version: '1.1.0', build: '9' });
+    expect(res.body.data.newest.android).toEqual({ version: '1.3.0', build: '31' });
+    expect(res.body.data.newest.ios).toEqual({ version: '1.1.0', build: '9' });
   });
 
   it('answers null for a platform nobody has reported', async () => {
     await reportBuild({ platform: 'android', version: '1.3.0', build: '31' });
 
     const res = await latest();
+    expect(res.body.data.newest.ios).toBeNull();
     expect(res.body.data.latest.ios).toBeNull();
   });
 
@@ -83,5 +88,57 @@ describe('GET /api/users/latest-release', () => {
 
     const body = JSON.stringify(res.body);
     expect(body).not.toMatch(/agentNumber|email|lastSeen|_id/);
+  });
+});
+
+// `latest` is what the app offers as an update, so a build first seen under an
+// hour ago is held back: the first device on it is usually ours, before Google
+// Play has it live for everyone. `newest` has no wait (admin switch override).
+describe('GET /api/users/latest-release — settle window', () => {
+  // Backdates the first-seen stamp of a build the heartbeat has recorded.
+  const age = (platform, build, ms) =>
+    NativeRelease.updateOne({ platform, build }, { $set: { firstSeenAt: new Date(Date.now() - ms) } });
+
+  it('holds back a build first seen under an hour ago', async () => {
+    await reportBuild({ platform: 'android', version: '1.3.0', build: '30' });
+    await age('android', 30, 2 * HOUR);
+    await reportBuild({ platform: 'android', version: '1.3.1', build: '31' });
+    await age('android', 31, 59 * 60 * 1000);
+
+    const res = await latest();
+    expect(res.body.data.latest.android).toEqual({ version: '1.3.0', build: '30' });
+    expect(res.body.data.newest.android).toEqual({ version: '1.3.1', build: '31' });
+  });
+
+  it('offers it once the hour has passed', async () => {
+    await reportBuild({ platform: 'android', version: '1.3.1', build: '31' });
+    await age('android', 31, HOUR + 1000);
+
+    const res = await latest();
+    expect(res.body.data.latest.android).toEqual({ version: '1.3.1', build: '31' });
+  });
+
+  it('keeps the first-seen time when the build is reported again', async () => {
+    await reportBuild({ platform: 'android', version: '1.3.1', build: '31' });
+    await age('android', 31, 2 * HOUR);
+    NativeRelease.resetCache(); // as after a server restart
+    await reportBuild({ platform: 'android', version: '1.3.1', build: '31' });
+
+    const res = await latest();
+    expect(res.body.data.latest.android).toEqual({ version: '1.3.1', build: '31' });
+  });
+
+  it('backfill treats builds already in use as released, once only', async () => {
+    const user = await createUser();
+    await user.constructor.updateOne({ _id: user._id }, {
+      $set: { 'lastClients.android': { version: '1.2.0', build: '12', buildNumber: 12, lastSeenAt: new Date() } },
+    });
+
+    expect(await backfillNativeReleases()).toEqual({ seeded: 1 });
+    const res = await latest();
+    expect(res.body.data.latest.android).toEqual({ version: '1.2.0', build: '12' });
+
+    // A second start finds the collection populated and leaves it alone.
+    expect(await backfillNativeReleases()).toEqual({ seeded: 0 });
   });
 });

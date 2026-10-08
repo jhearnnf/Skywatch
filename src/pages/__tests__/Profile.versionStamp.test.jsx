@@ -75,13 +75,14 @@ const BASE_USER = {
   rank: { rankName: 'Airman', rankAbbreviation: 'AC' },
 }
 
-// `latest` is what GET /api/users/latest-release answers; every other call the
-// page makes gets an empty payload. Routing by URL rather than by call order
-// keeps these tests from breaking when Profile adds an unrelated fetch.
-function mountWith(user, { latest = null } = {}) {
+// `latest` (settled an hour) and `newest` (no wait) are what GET
+// /api/users/latest-release answers; every other call the page makes gets an
+// empty payload. Routing by URL rather than by call order keeps these tests
+// from breaking when Profile adds an unrelated fetch.
+function mountWith(user, { latest = null, newest = latest } = {}) {
   const apiFetch = vi.fn((url) => Promise.resolve({
     ok: true,
-    json: async () => (String(url).includes('/latest-release') ? { data: { latest } } : { data: {} }),
+    json: async () => (String(url).includes('/latest-release') ? { data: { latest, newest } } : { data: {} }),
   }))
   mockUseAuth.mockReturnValue({ user, setUser: vi.fn(), API: '', apiFetch, logout: vi.fn() })
   return apiFetch
@@ -353,6 +354,33 @@ describe('Profile — update control', () => {
     await screen.findByRole('link', { name: /update app/i })
     expect(screen.getByText('v1.2.20')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /update available/i })).not.toBeInTheDocument()
+  })
+
+  it('waits for the settled build while the switch is off, even with a newer one reported', async () => {
+    // Build 28 was first seen under an hour ago, so Google Play may not have it
+    // live yet: the server still names 25 as `latest`, which this device has.
+    mockSettings.current = { updateCoverEnabled: false }
+    mockGetClientInfo.mockResolvedValue(ANDROID)
+    mountWith(BASE_USER, {
+      latest: { android: { version: '1.2.20', build: '25' }, ios: null },
+      newest: { android: { version: '1.2.23', build: '28' }, ios: null },
+    })
+    render(<Profile />)
+
+    await screen.findByText('v1.2.20')
+    await waitFor(() => expect(screen.queryByRole('link', { name: /update app/i })).not.toBeInTheDocument())
+  })
+
+  it('offers the newest build straight away while the switch is on', async () => {
+    mockGetClientInfo.mockResolvedValue(ANDROID)
+    mountWith(BASE_USER, {
+      latest: { android: { version: '1.2.20', build: '25' }, ios: null },
+      newest: { android: { version: '1.2.23', build: '28' }, ios: null },
+    })
+    render(<Profile />)
+
+    expect(await screen.findByRole('heading', { name: /update available/i })).toBeInTheDocument()
+    expect(screen.getByText(/latest: v1\.2\.23/i)).toBeInTheDocument()
   })
 
   it('does not preview while the switch is off, and pulses the switch instead', async () => {

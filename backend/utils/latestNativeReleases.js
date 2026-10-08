@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const NativeRelease = require('../models/NativeRelease');
 const { NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
 
 // The newest native release seen in the wild, per platform.
@@ -40,4 +41,22 @@ async function latestNativeReleases() {
   return Object.fromEntries(entries);
 }
 
-module.exports = { latestNativeReleases };
+// How long a build must have been in the wild before the app offers it as an
+// update. Google Play can take a while to make an uploaded build installable,
+// and the first device to report it is usually a tester's, not the store's.
+const RELEASE_SETTLE_MS = 60 * 60 * 1000;
+
+// The newest build per platform first seen at least RELEASE_SETTLE_MS ago, from
+// the first-seen stamps in NativeRelease. Same shape as latestNativeReleases().
+async function settledNativeReleases(now = new Date()) {
+  const cutoff = new Date(now.getTime() - RELEASE_SETTLE_MS);
+  const entries = await Promise.all(NATIVE_PLATFORMS.map(async platform => {
+    const row = await NativeRelease.findOne({ platform, firstSeenAt: { $lte: cutoff } })
+      .sort({ build: -1 })
+      .lean();
+    return [platform, row ? { version: row.version, build: String(row.build) } : null];
+  }));
+  return Object.fromEntries(entries);
+}
+
+module.exports = { latestNativeReleases, settledNativeReleases, RELEASE_SETTLE_MS };
