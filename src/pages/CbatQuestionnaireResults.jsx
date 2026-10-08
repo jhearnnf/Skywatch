@@ -40,6 +40,29 @@ const OPT_OUT_REASON_LABELS = {
 
 const PASS_LABELS = { yes: 'Passed', no: 'Did not pass', waiting: 'Waiting' }
 
+// The questionnaire page sends a heartbeat every 30s while it is open and
+// visible. A run counts as live for a little over two of those, so one dropped
+// request does not flicker it back to "Stopped partway".
+const LIVE_WINDOW_MS = 75 * 1000
+const REFRESH_MS     = 20 * 1000
+const isLive = (r) => !!r.lastSeenAt && Date.now() - new Date(r.lastSeenAt).getTime() < LIVE_WINDOW_MS
+
+// The three bouncing dots of a messaging app's "typing" bubble.
+function TypingDots() {
+  return (
+    <span className="inline-flex items-end gap-[3px] h-2" aria-hidden="true">
+      {[0, 1, 2].map(i => (
+        <motion.span
+          key={i}
+          className="w-1 h-1 rounded-full bg-brand-600"
+          animate={{ y: [0, -3, 0], opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+        />
+      ))}
+    </span>
+  )
+}
+
 // A name or an email that opens that agent's read-only profile.
 //
 // Every person on this page is one an admin has just read an opinion from, and
@@ -118,21 +141,33 @@ export default function CbatQuestionnaireResults() {
   const allExpanded = !!data?.responses?.length && data.responses.every(r => expanded.has(r._id))
   const toggleAll = () => setExpanded(allExpanded ? new Set() : new Set(data.responses.map(r => r._id)))
 
-  const load = useCallback(async () => {
-    setLoading(true); setError('')
+  // `quiet` is the background refresh: no loading line, and a failed refresh
+  // keeps what is already on screen rather than replacing it with an error.
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) { setLoading(true); setError('') }
     try {
       const res  = await apiFetch(`${API}/api/admin/cbat-passers/responses`, { credentials: 'include' })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.message || 'Could not load the results')
       setData(json.data)
     } catch (err) {
-      setError(err.message)
+      if (!quiet) setError(err.message)
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [API, apiFetch])
 
   useEffect(() => { load() }, [load])
+
+  // Refreshed in the background while the page is in front of the admin, so a
+  // row someone is answering right now shows as live and drops back to
+  // "Stopped partway" once they leave, without a manual reload.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') load({ quiet: true })
+    }, REFRESH_MS)
+    return () => clearInterval(id)
+  }, [load])
 
   const s = data?.summary
   const counts = {
@@ -415,9 +450,17 @@ function AnswerCard({ r, open, onToggle, onOpenSheets }) {
                   {PASS_LABELS[r.passedForRole]}
                 </span>
               : <span className="text-[10px] text-slate-400">No answer yet</span>}
-          <p className="text-[10px] text-slate-400 mt-0.5">
-            {r.completedAt ? `Finished ${fmt(r.completedAt)}` : 'Stopped partway'}
-          </p>
+          {isLive(r)
+            ? (
+              <p className="text-[10px] text-brand-600 font-semibold mt-0.5 flex items-center justify-end gap-1.5" data-testid="results-answering-now">
+                Answering now <TypingDots />
+              </p>
+            )
+            : (
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {r.completedAt ? `Finished ${fmt(r.completedAt)}` : 'Stopped partway'}
+              </p>
+            )}
         </div>
       </div>
 

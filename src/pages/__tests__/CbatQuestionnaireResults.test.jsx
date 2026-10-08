@@ -138,6 +138,30 @@ describe('CbatQuestionnaireResults — answers', () => {
     expect(screen.getByText('Did not pass')).toBeInTheDocument()
   })
 
+  // The page heartbeats while open, so a long free-text answer in progress is
+  // not mistaken for someone who left.
+  it('shows a run whose page is open right now as being answered', async () => {
+    mount(payload({ responses: [{
+      _id: 'r4', userId: { agentNumber: '666' },
+      satTest: true, passedForRole: 'yes', completedAt: null,
+      lastSeenAt: new Date(Date.now() - 10 * 1000).toISOString(),
+    }] }))
+
+    expect(await screen.findByTestId('results-answering-now')).toHaveTextContent('Answering now')
+    expect(screen.queryByText('Stopped partway')).toBeNull()
+  })
+
+  it('goes back to stopped partway once the heartbeat goes quiet', async () => {
+    mount(payload({ responses: [{
+      _id: 'r5', userId: { agentNumber: '777' },
+      satTest: true, passedForRole: 'yes', completedAt: null,
+      lastSeenAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    }] }))
+
+    expect(await screen.findByText('Stopped partway')).toBeInTheDocument()
+    expect(screen.queryByTestId('results-answering-now')).toBeNull()
+  })
+
   // What they did here before they sat it, beside what they told us about it.
   it('shows how much of the roster they played and the estimate for their role', async () => {
     mount(payload({ responses: [{

@@ -202,6 +202,38 @@ describe('PATCH /api/survey/:token — progressive saving', () => {
     const row = await SurveyResponse.findOne({ inviteId: invite._id });
     expect(row.gaps).toHaveLength(10000);
   });
+
+  it('stamps when the page was last seen', async () => {
+    await patch({ satTest: true });
+    const row = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(row.lastSeenAt).toBeTruthy();
+  });
+});
+
+describe('POST /api/survey/:token/heartbeat — the page is still open', () => {
+  const beat = (t = token) => request(app).post(`/api/survey/${t}/heartbeat`);
+
+  it('moves lastSeenAt forward on a run already under way', async () => {
+    await patch({ satTest: true });
+    const old = new Date(Date.now() - 10 * 60 * 1000);
+    await SurveyResponse.updateOne({ inviteId: invite._id }, { lastSeenAt: old });
+
+    const res = await beat();
+    expect(res.status).toBe(204);
+    const row = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(row.lastSeenAt.getTime()).toBeGreaterThan(old.getTime());
+  });
+
+  it('does not turn a bare page open into a response', async () => {
+    const res = await beat();
+    expect(res.status).toBe(204);
+    expect(await SurveyResponse.countDocuments({ inviteId: invite._id })).toBe(0);
+  });
+
+  it('404s an unknown token', async () => {
+    const res = await beat(SurveyInvite.newToken());
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('the pass flag', () => {

@@ -140,6 +140,9 @@ const PREVIEW_TOKEN = 'preview'
 const DAY_MS = 24 * 60 * 60 * 1000
 const BOOKED_GRACE_DAYS = 7
 const DEFAULT_DEFER_DAYS = 60
+// How often the open page tells the server it is still there. The results
+// page treats a run as live for a little over two of these.
+const HEARTBEAT_MS = 30 * 1000
 
 // The score sheet step. Mirrors backend/constants/survey.js.
 const MAX_SHEETS = 6
@@ -304,6 +307,25 @@ export default function Survey() {
       setSaving(false)
     }
   }, [API, token, isPreview])
+
+  // Tells the server the page is still open, so the results page can show this
+  // run as in progress while they type a long answer that saves nothing until
+  // they press on. Only while the tab is visible: a backgrounded tab is someone
+  // who has gone elsewhere, and should read as stopped.
+  useEffect(() => {
+    if (!token || isPreview || loading || fatal) return
+    const beat = () => {
+      if (document.visibilityState !== 'visible') return
+      fetch(`${API}/api/survey/${token}/heartbeat`, { method: 'POST' }).catch(() => {})
+    }
+    beat()
+    const id = setInterval(beat, HEARTBEAT_MS)
+    document.addEventListener('visibilitychange', beat)
+    return () => {
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', beat)
+    }
+  }, [API, token, isPreview, loading, fatal])
 
   const goTo = useCallback((next) => {
     setHistory(h => [...h, step])

@@ -500,6 +500,7 @@ router.patch('/:token', throttle, async (req, res) => {
     const updates = sanitiseAnswers(req.body);
     const complete = req.body?.complete === true;
     if (complete) updates.completedAt = new Date();
+    updates.lastSeenAt = new Date();
 
     const response = await SurveyResponse.findOneAndUpdate(
       { inviteId: invite._id },
@@ -567,6 +568,25 @@ router.patch('/:token', throttle, async (req, res) => {
       status: 'success',
       data: { response, badgeAwarded: claimsPass, deferredUntil: deferredUntil ?? null },
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/survey/:token/heartbeat — "the page is still open in front of me".
+//
+// Sent every half minute while the questionnaire is visible, so the results
+// page can show someone mid-way through a long free-text answer as still going
+// rather than stopped. Only touches a row that already exists: opening the link
+// without answering anything is not a response, and must not become one here.
+router.post('/:token/heartbeat', throttle, async (req, res) => {
+  try {
+    const token = req.params.token;
+    if (!token || typeof token !== 'string' || token.length < 16) return res.status(404).end();
+    const invite = await SurveyInvite.findOne({ token }).select('_id optedOutAt').lean();
+    if (!invite || invite.optedOutAt) return res.status(404).end();
+    await SurveyResponse.updateOne({ inviteId: invite._id }, { $set: { lastSeenAt: new Date() } });
+    res.status(204).end();
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

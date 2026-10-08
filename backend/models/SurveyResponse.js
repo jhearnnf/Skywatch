@@ -109,6 +109,12 @@ const surveyResponseSchema = new mongoose.Schema({
 
   startedAt:   { type: Date, default: Date.now },
   completedAt: { type: Date, default: null },
+
+  // Last time the questionnaire page was open in front of them. Bumped by every
+  // save and by a heartbeat the page sends while it is visible, so the results
+  // page can tell "stopped partway" from "still typing a long answer", which
+  // writes nothing until they press on.
+  lastSeenAt: { type: Date, default: null },
 }, { timestamps: true });
 
 surveyResponseSchema.index({ campaign: 1, completedAt: -1 });
