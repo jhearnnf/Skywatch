@@ -28,7 +28,7 @@ vi.mock('../../utils/geoHint', () => ({
   peekGeoHint: () => geoRef.value,
 }))
 
-import useHeartbeat from '../useHeartbeat'
+import useHeartbeat, { HEARTBEAT_NAV_EVENT } from '../useHeartbeat'
 
 const setVisibility = (state) => {
   Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
@@ -173,6 +173,34 @@ describe('useHeartbeat', () => {
       goTo('/cbat/rtt')
       act(() => { vi.advanceTimersByTime(30_000) })
       expect(bodyOf(global.fetch.mock.calls.length - 1).path).toBe('/cbat/rtt')
+    })
+
+    // Waiting for the timer left the hub drawing someone's dot on the game they
+    // had just left for up to 30s.
+    it('beats at once when the route changes, not on the first render', () => {
+      goTo('/cbat/flag')
+      const { rerender } = renderHook(({ path }) => useHeartbeat(path), { initialProps: { path: '/cbat/flag' } })
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+
+      goTo('/cbat')
+      rerender({ path: '/cbat' })
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(bodyOf(1).path).toBe('/cbat')
+    })
+
+    it('announces a navigation beat once the server has it, and only that kind', async () => {
+      const heard = vi.fn()
+      window.addEventListener(HEARTBEAT_NAV_EVENT, heard)
+      try {
+        const { rerender } = renderHook(({ path }) => useHeartbeat(path), { initialProps: { path: '/cbat/flag' } })
+        await act(async () => { vi.advanceTimersByTime(30_000) })
+        expect(heard).not.toHaveBeenCalled()
+
+        await act(async () => { rerender({ path: '/cbat' }) })
+        expect(heard).toHaveBeenCalledTimes(1)
+      } finally {
+        window.removeEventListener(HEARTBEAT_NAV_EVENT, heard)
+      }
     })
   })
 

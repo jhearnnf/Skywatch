@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { HEARTBEAT_NAV_EVENT } from './useHeartbeat'
 
 // Matches ChatShell's overview poll. Presence moves on the same timescale the
 // heartbeat writes it (every 30s), so a faster poll would only re-fetch the same
@@ -56,13 +57,17 @@ export default function useChatPresence(enabled, pollMs = POLL_MS) {
     if (!enabled) return
 
     let cancelled = false
+    // Only the newest request may write. The extra tick below can overtake the
+    // mount tick, and the slower, older answer must not land on top of it.
+    let latest = 0
     const tick = () => {
       // A backgrounded tab is not watching the rail, and its own heartbeat has
       // already stopped — polling from one would be asking who is online on
       // behalf of someone who isn't.
       if (document.hidden) return
+      const seq = ++latest
       load()
-        .then(next => { if (!cancelled) setFetched(next) })
+        .then(next => { if (!cancelled && seq === latest) setFetched(next) })
         // A failed poll keeps the last answer on screen. Presence is ambient:
         // blanking the strip on one dropped request would read as "everyone just
         // left", which is a louder claim than the failure justifies.
@@ -71,7 +76,15 @@ export default function useChatPresence(enabled, pollMs = POLL_MS) {
 
     tick()
     const id = setInterval(tick, pollMs)
-    return () => { cancelled = true; clearInterval(id) }
+    // The viewer's own move, re-asked the moment the server has it. Arriving on
+    // the hub from a game, the mount tick above can race the beat that says so
+    // and come back with the viewer still on that game's tile.
+    window.addEventListener(HEARTBEAT_NAV_EVENT, tick)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+      window.removeEventListener(HEARTBEAT_NAV_EVENT, tick)
+    }
   }, [enabled, load, pollMs])
 
   // id → 'online' | 'away', for the callers that only ask about one person —

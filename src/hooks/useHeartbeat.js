@@ -12,9 +12,20 @@ const INTERVAL_MS = 30_000
 // Anything the server still counts as online must keep sending.
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000
 
-export default function useHeartbeat() {
+// Fired on window once a beat sent because of a navigation has landed, so
+// anything drawing presence (the CBAT hub's dots) can re-ask straight away
+// instead of showing where this user was a page ago until its next poll.
+export const HEARTBEAT_NAV_EVENT = 'skywatch:heartbeat-nav'
+
+// `pathname` is the router's current path, passed in by App rather than read
+// with useLocation() here so the hook still works outside a router. It is only
+// a trigger: a change sends a beat at once, because on the timer alone the
+// server kept reporting the previous page for up to 30s after someone left it,
+// and the hub drew their dot on the game they had just finished.
+export default function useHeartbeat(pathname) {
   const { user, API } = useAuth()
   const lastActivityRef = useRef(Date.now())
+  const sendRef = useRef(null)
 
   useEffect(() => {
     if (!user) return
@@ -32,7 +43,7 @@ export default function useHeartbeat() {
     // does not change from one beat to the next.
     let geoSent = false
 
-    const send = async () => {
+    const send = async ({ navigated = false } = {}) => {
       if (document.visibilityState !== 'visible') return
       if (Date.now() - lastActivityRef.current > IDLE_THRESHOLD_MS) return
 
@@ -74,6 +85,7 @@ export default function useHeartbeat() {
           }),
         })
         if (geo && !res?.ok) geoSent = false
+        if (navigated && res?.ok) window.dispatchEvent(new Event(HEARTBEAT_NAV_EVENT))
       } catch {
         if (geo) geoSent = false
         // ignore network errors silently
@@ -97,14 +109,26 @@ export default function useHeartbeat() {
     }
     document.addEventListener('visibilitychange', onVisibility)
 
+    sendRef.current = send
     send()
     const id = setInterval(send, INTERVAL_MS)
 
     return () => {
       stopped = true
+      sendRef.current = null
       events.forEach(e => window.removeEventListener(e, onActivity))
       document.removeEventListener('visibilitychange', onVisibility)
       clearInterval(id)
     }
   }, [user, API])
+
+  // Beat on navigation. Skips the first run: mounting the effect above has
+  // already sent one for the page we start on. Navigating is activity too, so
+  // it counts toward the idle check like a click would.
+  const firstPathRef = useRef(true)
+  useEffect(() => {
+    if (firstPathRef.current) { firstPathRef.current = false; return }
+    lastActivityRef.current = Date.now()
+    sendRef.current?.({ navigated: true })
+  }, [pathname])
 }

@@ -245,7 +245,7 @@ function AppRoutes() {
   // Native only: whether a launch at `/` should skip the landing page. Called
   // here with every other hook, ahead of the early returns below.
   const skipLaunchLanding = useNativeLaunchRoute(location.pathname, user, !loading)
-  useHeartbeat()
+  useHeartbeat(location.pathname)
 
   // When the user transitions TO /login from another route, remember where
   // they came from so we can send them back after successful sign-in. Covers
