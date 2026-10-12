@@ -790,7 +790,13 @@ export default function MessageList({
               {divider}
               <div className="flex justify-center py-1 mt-2">
                 <span className="text-[11px] text-slate-400 italic px-2 py-1 rounded-full bg-slate-100">
-                  {m.body}
+                  {/* A join line whose member has since left the group. */}
+                  {m.memberLeft ? (
+                    <>
+                      <s>{m.body}</s>
+                      <span className="not-italic"> (left the group)</span>
+                    </>
+                  ) : m.body}
                 </span>
               </div>
             </Fragment>

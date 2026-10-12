@@ -118,6 +118,16 @@ describe('MessageList — avatars', () => {
     expect(avatars()).toHaveLength(2)
   })
 
+  it('strikes through a join line whose member has left the group', () => {
+    renderList([
+      msg(null, 'Welcome aboard, Viper!', { senderRole: 'system', memberLeft: true }),
+      msg(null, 'Welcome aboard, Hawk!', { senderRole: 'system', memberLeft: false }),
+    ])
+    expect(screen.getByText('Welcome aboard, Viper!').tagName).toBe('S')
+    expect(screen.getByText('Welcome aboard, Hawk!').tagName).not.toBe('S')
+    expect(screen.getAllByText(/left the group/)).toHaveLength(1)
+  })
+
   it('falls back to the rank badge when no cutout is selected', () => {
     renderList([msg('u2', 'hi')])
     expect(avatars()).toHaveLength(0)

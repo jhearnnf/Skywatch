@@ -292,6 +292,49 @@ describe('CBAT cohort groups', () => {
     })).toBe(1);
   });
 
+  it('shows a join line with the member\'s current name after they rename', async () => {
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await choose(b);
+    const stored = await ChatMessage.findOne({ joinedUserId: b._id }).lean();
+    // A name full of regex syntax, so the template match cannot be fooled by it.
+    await User.updateOne({ _id: b._id }, { displayName: 'Ace (RAF) $1.*' });
+
+    const thread = await request(app).get(`/api/chat/conversations/${made.body.data.conversationId}/messages`)
+      .set('Cookie', authCookie(a._id));
+
+    const line = thread.body.data.messages.find(m => m.senderRole === 'system').body;
+    expect(line).toBe(stored.body.replace('Viper', 'Ace (RAF) $1.*'));
+    // Rendered at read time only: the stored row is untouched.
+    expect((await ChatMessage.findById(stored._id).lean()).body).toBe(stored.body);
+  });
+
+  it('marks a join line once its member leaves the group', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const b = await createUser({ displayName: 'Viper', firstSeenCountry: 'GB' });
+    const c = await createUser({ displayName: 'Hawk', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    await choose(b);
+    await choose(c);
+    const id = made.body.data.conversationId;
+    const joinLines = async () => (await request(app).get(`/api/chat/conversations/${id}/messages`)
+      .set('Cookie', authCookie(a._id))).body.data.messages.filter(m => m.senderRole === 'system');
+
+    expect((await joinLines()).map(m => m.memberLeft)).toEqual([false, false]);
+
+    await request(app).delete(`/api/admin/users/${b._id}/upcoming-cbat-date`)
+      .set('Cookie', authCookie(admin._id));
+    await User.deleteOne({ _id: c._id });
+
+    const lines = await joinLines();
+    expect(lines.map(m => m.memberLeft)).toEqual([true, true]);
+    // Still there, still named: only marked, never removed.
+    expect(lines[0].body).toContain('Viper');
+    expect(lines[1].body).toContain('Hawk');
+  });
+
   it('sweeps join lines with a group nobody spoke in', async () => {
     const admin = await createUser({ displayName: 'Control', isAdmin: true });
     const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });

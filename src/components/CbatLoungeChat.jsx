@@ -1233,7 +1233,13 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
               return (
                 <div key={m._id} className="flex justify-center py-1" data-msg-row={String(m._id)}>
                   <span className="text-[11px] leading-snug text-slate-500 italic text-center px-3 py-1.5 rounded-xl bg-slate-100/60 border border-game-line max-w-[26rem]">
-                    {m.body}
+                    {/* A join line whose member has since left the group. */}
+                    {m.memberLeft ? (
+                      <>
+                        <s>{m.body}</s>
+                        <span className="block not-italic">Left the group</span>
+                      </>
+                    ) : m.body}
                   </span>
                 </div>
               )

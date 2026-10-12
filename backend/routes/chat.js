@@ -153,6 +153,54 @@ const COHORT_JOIN_LINES = [
 const cohortJoinLine = (name, readableDate, pick = Math.random) =>
   COHORT_JOIN_LINES[Math.floor(pick() * COHORT_JOIN_LINES.length)](name, readableDate);
 
+const cohortJoinName = (user) =>
+  user.displayName || (user.agentNumber ? `Agent ${user.agentNumber}` : 'A new member');
+
+// Each join line as a pattern with the name and date left open, so a stored
+// line can be matched back to the template it was written from.
+const JOIN_NAME_SLOT = '\u0000name\u0000';
+const JOIN_DATE_SLOT = '\u0000date\u0000';
+const COHORT_JOIN_PATTERNS = COHORT_JOIN_LINES.map(line => new RegExp(
+  `^${escapeRegex(line(JOIN_NAME_SLOT, JOIN_DATE_SLOT))
+    .replace(JOIN_NAME_SLOT, '.+')
+    .replace(JOIN_DATE_SLOT, '.+')}$`,
+  's',
+));
+
+// A join line is stored with the name the member had when they arrived, but
+// should read with the name they go by now. Re-rendered at read time from the
+// template it matches, so a rename reaches every line already posted without
+// rewriting stored messages. A line whose member is gone, or whose wording no
+// longer matches any template, keeps the name it was written with.
+//
+// Also marks the line `memberLeft` once that person is no longer in the room,
+// worked out the same way membership is everywhere else (date and region
+// match), so the client can strike it through. A deleted account has left too.
+async function withJoinLineState(items, convo) {
+  if (convo.channel?.audience !== 'cbat-cohort') return items;
+  const joinIds = items.filter(m => m.joinedUserId).map(m => m.joinedUserId);
+  if (!joinIds.length) return items;
+  const users = await User.find({ _id: { $in: joinIds } })
+    .select('displayName agentNumber upcomingCbatDate upcomingCbatRegion').lean();
+  const byId = new Map(users.map(u => [String(u._id), u]));
+  const date = cohortReadableDate(convo.channel.cohortDate);
+  return items.map(m => {
+    if (!m.joinedUserId) return m;
+    const user = byId.get(String(m.joinedUserId));
+    const memberLeft = !user
+      || userCbatDateKey(user) !== convo.channel.cohortDate
+      || user.upcomingCbatRegion !== convo.channel.cohortRegion;
+    const i = user && typeof m.body === 'string'
+      ? COHORT_JOIN_PATTERNS.findIndex(p => p.test(m.body))
+      : -1;
+    return {
+      ...m,
+      memberLeft,
+      ...(i === -1 ? {} : { body: COHORT_JOIN_LINES[i](cohortJoinName(user), date) }),
+    };
+  });
+}
+
 // Announce `user` in their cohort room. Skipped for the first member, who has
 // nobody to announce them to. Written as a system line, so it is never counted
 // as unread (the rule every system line follows) and never stops an emptied
@@ -163,7 +211,7 @@ async function announceCohortJoin(convo, user) {
   try {
     if (!convo || !user || user.isBot) return;
     if (await cohortMemberCount(convo) < 2) return;
-    const name = user.displayName || (user.agentNumber ? `Agent ${user.agentNumber}` : 'A new member');
+    const name = cohortJoinName(user);
     await appendMessage({
       conversation: convo,
       senderUserId: null,
@@ -686,6 +734,9 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
     // The pre-edit text goes only to admins — it is the moderation record.
     edited:            Boolean(m.editedAt),
     editedAt:          m.editedAt ?? null,
+    // Join lines only, set by withJoinLineState: the person it announced is no
+    // longer in the group.
+    ...(m.memberLeft !== undefined ? { memberLeft: m.memberLeft } : {}),
     ...(viewerIsAdmin ? {
       originalBody: m.originalBody ?? null,
       // The full revision history, oldest first. Admin-only: see the note on
@@ -1622,7 +1673,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
       .lean();
 
     const hasMore = messages.length > limit;
-    const items   = (hasMore ? messages.slice(0, limit) : messages).reverse();
+    const items   = await withJoinLineState(
+      (hasMore ? messages.slice(0, limit) : messages).reverse(),
+      convo,
+    );
 
     // Read state as it was BEFORE this visit. The client marks the
     // conversation read in a separate call once it has rendered, so this still
