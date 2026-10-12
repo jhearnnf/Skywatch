@@ -1242,10 +1242,10 @@ function StatsTab({ API, onViewEmailLog, onViewUsers }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const REPORT_WINDOWS = [
-  { id: 'today', label: 'Today' },
-  { id: '7d',    label: '7d'    },
-  { id: '30d',   label: '30d'   },
-  { id: 'all',   label: 'All'   },
+  { id: 'today', label: 'Today', loadLabel: "Load today's report" },
+  { id: '7d',    label: '7d',    loadLabel: 'Load last 7 days'    },
+  { id: '30d',   label: '30d',   loadLabel: 'Load last 30 days'   },
+  { id: 'all',   label: 'All',   loadLabel: 'Load all-time'       },
 ]
 
 // Daily Active Users has its own timeframe. It sits above the Time window picker
@@ -1284,13 +1284,42 @@ function DauRangePicker({ value, onChange }) {
   )
 }
 
+// `value` is null while the window-driven sections are closed — nothing is
+// selected and nothing has been fetched. Clicking the selected button again
+// closes them.
+//
+// Closed, the time frames are drawn as "Load …" action buttons rather than a
+// segmented switch: picking one fires two of the heaviest report queries, and
+// a switch reads as though the data were already there.
 function WindowPicker({ value, onChange }) {
+  if (!value) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {REPORT_WINDOWS.map(w => (
+          <button
+            key={w.id}
+            type="button"
+            onClick={() => onChange(w.id)}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-brand-400/60 bg-brand-100 text-brand-600 font-bold hover:bg-brand-200 transition-colors"
+          >
+            <svg aria-hidden viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 13.5h11" />
+            </svg>
+            {w.loadLabel}
+          </button>
+        ))}
+      </div>
+    )
+  }
   return (
     <div className="inline-flex rounded-xl border border-slate-200 bg-surface p-1 mb-4">
       {REPORT_WINDOWS.map(w => (
         <button
           key={w.id}
-          onClick={() => onChange(w.id)}
+          type="button"
+          aria-pressed={value === w.id}
+          title={value === w.id ? 'Click again to close' : undefined}
+          onClick={() => onChange(value === w.id ? null : w.id)}
           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all
             ${value === w.id
               ? 'bg-brand-600 text-white shadow-sm'
@@ -1622,7 +1651,10 @@ function ReportsTab({ API }) {
   // website is still selling tiers.
   const slimMode = appSettings?.slimModeEnabled === true
   const subTiersSub = slimMode ? 'not used in CBAT-only mode' : 'current snapshot'
-  const [window, setWindow] = useState('7d')
+  // null = Activity & Growth / CBAT Engagement are closed and not fetched.
+  // They open (and load) only when a time frame is picked, so an ordinary visit
+  // to the Reports tab doesn't pay for the two heaviest report queries.
+  const [window, setWindow] = useState(null)
   const [compare, setCompare] = useState(false)
   const [snapshot, setSnapshot] = useState(null)
   // Daily Active Users has its own timeframe, independent of the Time window
@@ -1678,12 +1710,13 @@ function ReportsTab({ API }) {
   }, [API, dauDays])
 
   // All-time has no prior period — comparison is forced off there.
-  const compareActive = compare && window !== 'all'
+  const compareActive = compare && !!window && window !== 'all'
   const cmpQuery = compareActive ? '&compare=1' : ''
 
   // Window-driven data — stale-while-revalidate: previous data stays in place,
   // skeletons only appear on the very first load.
   useEffect(() => {
+    if (!window) return
     let cancelled = false
     setWindowedLoading(true)
     setCbatLoading(true)
@@ -1904,7 +1937,11 @@ function ReportsTab({ API }) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-1">
           <div>
             <h3 className="text-sm font-bold text-slate-700">Time window</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">Filters <strong>Activity &amp; Growth</strong> and <strong>CBAT Engagement</strong> below.</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {window
+                ? <>Filters <strong>Activity &amp; Growth</strong> and <strong>CBAT Engagement</strong> below. Click the selected time frame again to close them.</>
+                : <>Loads the full <strong>Activity &amp; Growth</strong> and <strong>CBAT Engagement</strong> report for the time frame you pick.</>}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <WindowPicker value={window} onChange={setWindow} />
@@ -1918,6 +1955,7 @@ function ReportsTab({ API }) {
         )}
       </div>
 
+      {window && (<>
       {/* ── ACTIVITY & GROWTH ─────────────────────────────────────────────── */}
       <StatsSection title={<>Activity &amp; Growth<WindowChip window={window} /></>} defaultOpen>
         {/* At xl the two headline cards sit in a narrow left column beside the
@@ -2254,6 +2292,7 @@ function ReportsTab({ API }) {
           </div>
         )}
       </StatsSection>
+      </>)}
     </div>
   )
 }

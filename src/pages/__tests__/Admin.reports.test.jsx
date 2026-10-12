@@ -238,11 +238,16 @@ function setupFetch(overrides = {}) {
   })
 }
 
-async function openReportsTab() {
+// Activity & Growth / CBAT Engagement stay closed (and unfetched) until a time
+// frame is picked, so most tests open them on 7d; pass `window: null` to leave
+// them closed.
+const LOAD_LABELS = { today: "Load today's report", '7d': 'Load last 7 days', '30d': 'Load last 30 days', all: 'Load all-time' }
+async function openReportsTab({ window = '7d' } = {}) {
   render(<Admin />)
   // Switch to Reports tab.
   const reportsTab = await screen.findByRole('button', { name: /Reports/i })
   fireEvent.click(reportsTab)
+  if (window) fireEvent.click(await screen.findByRole('button', { name: LOAD_LABELS[window] }))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -250,6 +255,33 @@ async function openReportsTab() {
 describe('Admin — Reports tab', () => {
   beforeEach(() => { global.fetch = setupFetch(); mockSettings.current = {} })
   afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
+
+  it('keeps the time-window sections closed and unfetched until a time frame is picked', async () => {
+    await openReportsTab({ window: null })
+    await waitFor(() => expect(screen.getByText('Daily Active Users')).toBeInTheDocument())
+    const windowCalls = () => global.fetch.mock.calls.filter(c => /reports\/(window|cbat)\?/.test(String(c[0])))
+    expect(windowCalls()).toHaveLength(0)
+    expect(screen.queryByText(/Activity & Growth/i, { selector: 'h3' })).toBeNull()
+    expect(screen.queryByText(/CBAT Engagement/i, { selector: 'h3' })).toBeNull()
+    // Compare can be switched on before a time frame is picked, without loading anything.
+    fireEvent.click(screen.getByRole('switch', { name: /Compare to previous/i }))
+    expect(screen.getByRole('switch', { name: /Compare to previous/i })).toHaveAttribute('aria-checked', 'true')
+    expect(windowCalls()).toHaveLength(0)
+
+    // Closed, the time frames are "Load …" actions, not a switch.
+    expect(screen.queryByRole('button', { name: '7d' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Load last 7 days' }))
+
+    await waitFor(() => expect(windowCalls().length).toBe(2))
+    expect(windowCalls().every(c => String(c[0]).includes('window=7d&compare=1'))).toBe(true)
+    expect(screen.getByText(/Activity & Growth/i, { selector: 'h3' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '7d' })).toHaveAttribute('aria-pressed', 'true')
+
+    // Clicking the selected time frame again closes the sections.
+    fireEvent.click(screen.getByRole('button', { name: '7d' }))
+    expect(screen.queryByText(/Activity & Growth/i, { selector: 'h3' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Load last 7 days' })).toBeInTheDocument()
+  })
 
   it('renders Snapshot headline cards (window-independent)', async () => {
     await openReportsTab()
