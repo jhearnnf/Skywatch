@@ -143,6 +143,8 @@
     "VIG1":       { "label": "Vigilance Test",                 "games": ["vigilance-hard"],                       "match": "direct" },
     "VGIL_SPEED": { "label": "Vigilance Test (Speed)",         "games": ["vigilance-hard"],                       "match": "proxy" },
     "RCOG":       { "label": "Recognition",                    "games": [], "match": "none" },
+    "MATHR":      { "label": "Mathematical Reasoning",         "games": [], "match": "none" },
+    "VSRCH":      { "label": "Visual Search",                  "games": ["symbols"],                              "match": "direct" },
     "SMA":        { "label": "Sensory Motor Apparatus Test",   "games": ["sma"],                                  "match": "direct" }
   },
 
@@ -277,6 +279,7 @@
     "target":           { "median": 576,  "strong": 916  },
     "angles":           { "median": 15,   "strong": 18,   "max": 20  },
     "code-duplicates":  { "median": 11,   "strong": 13,   "max": 15  },
+    "symbols":          { "median": 14,   "strong": 15,   "max": 15  },
 
     "sit":              { "median": 4,    "strong": 7,    "max": 8   },
     "slt":              { "median": 7,    "strong": 9,    "max": 10  },
@@ -513,6 +516,20 @@
     "lists CLAN and no FLAG, and the user's call (2026-09-24) is that Australia sits CLAN too.",
     "Canada also drops DAD, DPT and VLT, which are not on the CFASC guide's list of 20 tests.",
     "Australia keeps every test: the only published MACTS list is a prep site's and not reliable.",
+    "(Since 2026-10-04 we have one candidate's full list, used for Australia's `mockTests` below.",
+    "It is one source, so it adds tests to the sitting but drops nothing from scoring: Air Battle",
+    "Manager still scores Vigilance, which that candidate did not sit.)",
+    "",
+    "`mockTests` is the whole test list for a region, where we have one. A Mock",
+    "Assessment for any role in that region sits every one of them, not only the ones the borrowed",
+    "UK role scores: the borrowed role is a stand-in for the weights, but the sitting itself should",
+    "be the real battery. The extra tests are played and never scored (no weight is published to",
+    "score them with). A code with no game (MATHR) is listed as not included on the start page,",
+    "like RCOG and GSPA. Canada's list is the CFASC candidate guide's 20 tests.",
+    "Australia's is the 2026 candidate's list in our Australian guide (SLT and VLT, which they",
+    "sat as one test, are both listed). VSRCH (Visual",
+    "Search) is our Symbols game; its anchors are the measured P50/P92.5 (2026-10-12, 261 players)",
+    "but the game is near its ceiling, so they are too coarse to score on. Nothing scores VSRCH.",
     "",
     "Keys match the CBAT outcome questionnaire's role keys (surveyRoles.json) on purpose, so a",
     "survey answer and a report role are the same string and the questionnaire can be pre-filled.",
@@ -520,8 +537,12 @@
   ],
   "regions": {
     "GB": { "label": "United Kingdom", "testName": "CBAT",  "surveyTest": "raf-cbat" },
-    "CA": { "label": "Canada",         "testName": "CFAST", "surveyTest": "cfast" },
-    "AU": { "label": "Australia",      "testName": "MACTS", "surveyTest": "adf-asp" }
+    "CA": { "label": "Canada",         "testName": "CFAST", "surveyTest": "cfast",
+            "mockTests": ["ANT", "ABD5", "ACT", "CLAN", "MATHR", "INSC", "DRT", "CUT", "NOP", "SAT",
+                          "SMA", "RTT", "SIT", "SLT", "MATF", "TRT", "TRAC1", "TRAC2", "VIG1", "VSRCH"] },
+    "AU": { "label": "Australia",      "testName": "MACTS", "surveyTest": "adf-asp",
+            "mockTests": ["TRT", "ANT", "VSRCH", "DRT", "ABD5", "INSC", "TRAC1", "TRAC2", "CLAN", "DPT", "ACT",
+                          "NOP", "DAD", "CUT", "SAT", "RTT", "SIT", "SLT", "VLT", "MATF", "SMA"] }
   },
   "derivedBatteries": [
     {

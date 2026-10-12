@@ -1,6 +1,6 @@
 const { BATTERIES, BATTERY_BY_KEY, TESTS, SCORED_GAME_KEYS } = require('../../constants/cbatBatteries');
 const { isCbatEasierKey } = require('../../constants/cbatGames');
-const { MOCK, mockBatteries, mockSteps, breakPoints, buildMockPlan } = require('../../utils/cbatMockPlan');
+const { MOCK, REGIONS, mockBatteries, mockSteps, unsatCodes, breakPoints, buildMockPlan } = require('../../utils/cbatMockPlan');
 
 // A seeded rng, so a shuffle can be asserted on.
 function seeded(seed) {
@@ -74,6 +74,54 @@ describe('mockSteps', () => {
     for (const region of ['GB', 'CA', 'AU']) {
       const games = mockSteps(mockBatteries({ region })).flatMap(s => s.gameKeys);
       expect([region, new Set(games).size]).toEqual([region, games.length]);
+    }
+  });
+});
+
+// Canada (the CFAST guide's 20 tests) and Australia (one 2026 candidate's full list) each have a
+// test list. Their roles borrow a UK role's weights, which cover only some of it, but the mock
+// should still sit the whole battery.
+describe('Canadian and Australian mocks', () => {
+  for (const region of ['CA', 'AU']) {
+    const list = REGIONS[region].mockTests;
+    const roles = BATTERIES.filter(b => b.region === region);
+
+    it(`sits every ${region} test SkyWatch has a game for, whichever role`, () => {
+      for (const b of roles) {
+        const sat = new Set(mockSteps([b]).flatMap(s => s.codes));
+        for (const code of list) {
+          expect([b.key, code, sat.has(code)]).toEqual([b.key, code, TESTS[code].games.length > 0]);
+        }
+      }
+    });
+  }
+
+  it('adds the CFAST tests the borrowed UK role does not score', () => {
+    const games = new Set(mockSteps([BATTERY_BY_KEY['rcaf-pilot']]).flatMap(s => s.gameKeys));
+    for (const g of ['angles', 'code-duplicates', 'numerical-ops', 'vigilance-hard', 'symbols']) expect([g, games.has(g)]).toEqual([g, true]);
+  });
+
+  it('sits nothing that is not on the CFAST list', () => {
+    for (const b of BATTERIES.filter(x => x.region === 'CA')) {
+      for (const s of mockSteps([b])) for (const c of s.codes) expect([b.key, c, REGIONS.CA.mockTests.includes(c)]).toEqual([b.key, c, true]);
+    }
+  });
+
+  it('still sits a test an Australian role scores even when the list leaves it out', () => {
+    // Air Battle Manager scores Vigilance; the one MACTS list we have does not name it.
+    const games = mockSteps([BATTERY_BY_KEY['raaf-air-battle-manager']]).flatMap(s => s.gameKeys);
+    expect(games).toContain('vigilance-hard');
+  });
+
+  it('names Mathematical Reasoning, which has no game, as not included', () => {
+    expect(unsatCodes([BATTERY_BY_KEY['rcaf-aec']])).toEqual(['MATHR']);
+    expect(unsatCodes([BATTERY_BY_KEY['raaf-pilot']])).toEqual([]);
+  });
+
+  it('leaves UK mocks to the tests their role scores', () => {
+    for (const b of BATTERIES.filter(x => x.region === 'GB')) {
+      const sat = new Set(mockSteps([b]).flatMap(s => s.codes));
+      expect([b.key, [...sat].every(c => codesOf(b).includes(c))]).toEqual([b.key, true]);
     }
   });
 });

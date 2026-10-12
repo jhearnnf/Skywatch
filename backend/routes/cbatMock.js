@@ -59,6 +59,8 @@ router.get('/preview', protect, async (req, res) => {
     const steps = mockSteps(batteries);
     const breakAfter = breakPoints(steps);
     const form = await loadForm(req.user._id, [...new Set(steps.flatMap(s => s.gameKeys))]);
+    // A Canadian mock also sits CFAST tests its borrowed role has no weight for (mockTests).
+    const scoredCodes = new Set(batteries.flatMap(b => b.domains.flatMap(d => d.tests.map(t => t.code))));
     res.json({ status: 'success', data: {
       scope: scope.batteryKey ? 'role' : 'all',
       batteryKey: scope.batteryKey ?? null,
@@ -69,6 +71,7 @@ router.get('/preview', protect, async (req, res) => {
         gameKeys: s.gameKeys,
         minutes: s.minutes,
         played: s.gameKeys.every(g => (form[g]?.runs ?? 0) > 0),
+        scored: s.codes.some(c => scoredCodes.has(c)),
       })),
       breaks: breakAfter.length,
       totalMinutes: totalMinutes(steps, breakAfter),

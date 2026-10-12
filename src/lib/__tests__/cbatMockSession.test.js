@@ -125,9 +125,16 @@ describe('mockSummary (the /cbat card)', () => {
     expect(mockSummary('wsop-linguist').tests).toBe(8)
   })
 
-  it('builds a Canadian role from the UK role it borrows', () => {
-    // Pilot less DAD (not on the CFAST list), CLAN in place of FLAG.
-    expect(mockSummary('rcaf-pilot').tests).toBe(14)
+  it('sits the whole CFAST list for a Canadian role, whatever the borrowed UK role scores', () => {
+    // The 20 CFAST tests less Mathematical Reasoning, which has no game.
+    expect(mockSummary('rcaf-pilot').tests).toBe(19)
+    expect(mockSummary('rcaf-aec').tests).toBe(19)
+  })
+
+  it('sits the whole MACTS list for an Australian role, plus anything the role scores beyond it', () => {
+    expect(mockSummary('raaf-pilot').tests).toBe(21)
+    // Air Battle Manager also scores Vigilance, which the list does not name.
+    expect(mockSummary('raaf-air-battle-manager').tests).toBe(22)
   })
 
   it('includes the breaks in the time', () => {

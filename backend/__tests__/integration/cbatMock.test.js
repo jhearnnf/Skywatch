@@ -54,6 +54,14 @@ describe('GET /api/cbat-mock/preview', () => {
     expect(res.body.data.scope).toBe('all');
     expect(res.body.data.batteries.map(b => b.key)).toEqual(expect.arrayContaining(['rcaf-pilot', 'rcaf-acso', 'rcaf-aec']));
   });
+
+  it('marks the CFAST tests a Canadian role sits but does not score', async () => {
+    const res = await request(app).get('/api/cbat-mock/preview?battery=rcaf-pilot').set('Cookie', cookie);
+    const { steps, unsat } = res.body.data;
+    expect(steps.find(s => s.gameKeys.includes('angles')).scored).toBe(false);
+    expect(steps.find(s => s.gameKeys.includes('clan')).scored).toBe(true);
+    expect(unsat).toEqual(['MATHR']);
+  });
 });
 
 describe('POST /api/cbat-mock/start', () => {

@@ -17,6 +17,15 @@ function mockBatteries({ batteryKey = null, region = null } = {}) {
   return BATTERIES.filter(b => b.region === r);
 }
 
+// Every test code a battery's mock sits: the ones it scores, then any on its region's published
+// list that it does not (`mockTests`, Canada only; see _regionsComment). The extras are played so
+// the sitting matches the real battery, and the sheet ignores them, having no weight to score
+// them with.
+function mockCodes(b) {
+  const scored = b.domains.flatMap(d => d.tests.map(t => t.code));
+  return [...new Set([...scored, ...(REGIONS[b.region]?.mockTests ?? [])])];
+}
+
 // The steps, unshuffled, in first-seen order through the batteries (so the preview lists them in
 // the order the sheet does). One step per distinct set of games: a code with no game is dropped,
 // two codes on the same game share a step, and a code with two games is one step played back to
@@ -24,21 +33,19 @@ function mockBatteries({ batteryKey = null, region = null } = {}) {
 function mockSteps(batteries) {
   const byGames = new Map();
   for (const b of batteries) {
-    for (const d of b.domains) {
-      for (const t of d.tests) {
-        const games = TESTS[t.code]?.games ?? [];
-        if (!games.length) continue;
-        const id = games.join('+');
-        if (!byGames.has(id)) {
-          byGames.set(id, {
-            codes: [],
-            gameKeys: [...games],
-            minutes: games.reduce((a, g) => a + (MOCK.minutes[g] ?? 0), 0),
-          });
-        }
-        const step = byGames.get(id);
-        if (!step.codes.includes(t.code)) step.codes.push(t.code);
+    for (const code of mockCodes(b)) {
+      const games = TESTS[code]?.games ?? [];
+      if (!games.length) continue;
+      const id = games.join('+');
+      if (!byGames.has(id)) {
+        byGames.set(id, {
+          codes: [],
+          gameKeys: [...games],
+          minutes: games.reduce((a, g) => a + (MOCK.minutes[g] ?? 0), 0),
+        });
       }
+      const step = byGames.get(id);
+      if (!step.codes.includes(code)) step.codes.push(code);
     }
   }
   return [...byGames.values()];
@@ -48,8 +55,8 @@ function mockSteps(batteries) {
 // the sheet will leave them out.
 function unsatCodes(batteries) {
   const out = new Set();
-  for (const b of batteries) for (const d of b.domains) for (const t of d.tests) {
-    if (!(TESTS[t.code]?.games ?? []).length) out.add(t.code);
+  for (const b of batteries) for (const code of mockCodes(b)) {
+    if (!(TESTS[code]?.games ?? []).length) out.add(code);
   }
   return [...out];
 }
@@ -105,6 +112,7 @@ module.exports = {
   MOCK,
   REGIONS,
   mockBatteries,
+  mockCodes,
   mockSteps,
   unsatCodes,
   breakPoints,

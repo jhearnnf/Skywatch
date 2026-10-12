@@ -157,9 +157,16 @@ function Preview({ choice }) {
             <span className="truncate">{s.gameKeys.length > 1 ? s.gameKeys.map(gameTitle).join(' + ') : stepName(s.codes)}</span>
             <span className="shrink-0 text-[10px] text-slate-500 font-mono">{formatDuration(s.minutes)}</span>
             {!s.played && <span className="shrink-0 text-[10px] font-bold text-amber-700">Not tried yet</span>}
+            {s.scored === false && <span className="shrink-0 text-[10px] text-slate-500">Not scored</span>}
           </li>
         ))}
       </ul>
+      {p.steps.some(s => s.scored === false) && (
+        <p className="text-[11px] text-slate-600 mb-2">
+          Tests marked Not scored are on the real test, so you sit them here too. Nobody publishes how much
+          they count, so your score sheet leaves them off.
+        </p>
+      )}
       {unplayed.length > 0 && (
         <p className="text-[11px] text-slate-600 mb-2" data-testid="mock-readiness">
           You have not tried {unplayed.length} of these on Hard yet. You can still start: every test shows its
@@ -169,7 +176,7 @@ function Preview({ choice }) {
       )}
       {p.unsat.length > 0 && (
         <p className="text-[11px] text-slate-500">
-          Not included: {p.unsat.join(', ')}. SkyWatch does not have a game for {p.unsat.length === 1 ? 'this test' : 'these tests'} yet, so the score sheet leaves {p.unsat.length === 1 ? 'it' : 'them'} out.
+          Not included: {p.unsat.map(c => TESTS[c]?.label ?? c).join(', ')}. SkyWatch does not have a game for {p.unsat.length === 1 ? 'this test' : 'these tests'} yet, so the score sheet leaves {p.unsat.length === 1 ? 'it' : 'them'} out.
         </p>
       )}
     </div>

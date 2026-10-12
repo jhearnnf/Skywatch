@@ -10,7 +10,9 @@
     "to the Hard game(s) the Aptitude Report scores it on. Codes with no game (RCOG, GSPA) are left",
     "out; two codes that share a game (VIG1 and VGIL_SPEED are both Vigilance Hard) are sat once;",
     "a code with two games (VISS: Visualisation 2D and 3D; INSC: Instruments Reading and",
-    "Orientation) is one step played back to back."
+    "Orientation) is one step played back to back. A region with a published test list",
+    "(`mockTests` in cbatBatteries.json, Canada only) adds the tests on it that the role does not",
+    "score, so the sitting matches the real battery; those extra runs do not count on the sheet."
   ],
 
   "_timingComment": [
@@ -50,6 +52,7 @@
     "target":           3,
     "angles":           1.5,
     "code-duplicates":  2,
+    "symbols":          1.5,
     "matf":             4,
     "sit":              6,
     "slt":              6,
@@ -88,6 +91,7 @@
     "target":           "/cbat/target",
     "angles":           "/cbat/angles",
     "code-duplicates":  "/cbat/code-duplicates",
+    "symbols":          "/cbat/symbols",
     "matf":             "/cbat/matf?difficulty=hard",
     "sit":              "/cbat/sit?difficulty=hard",
     "slt":              "/cbat/slt?difficulty=hard",

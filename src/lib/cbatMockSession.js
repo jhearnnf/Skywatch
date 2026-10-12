@@ -218,6 +218,7 @@ export function onLeaveRequest(cb) {
 // request. The server (backend/utils/cbatMockPlan.js) stays the authority on the real plan; this
 // mirrors its rules: codes with no game drop out, codes sharing a game are sat once, and the
 // breaks are counted in order (the real plan is shuffled, so the break count can differ by one).
+// A Canadian role also sits the rest of its region's published list (mockTests), unscored.
 function batteryCodes(key) {
   const uk = batteryData.batteries.find(b => b.key === key)
   if (uk) return uk.domains.flatMap(d => d.tests.map(t => t.code))
@@ -225,7 +226,8 @@ function batteryCodes(key) {
   const base = spec && batteryData.batteries.find(b => b.key === spec.basedOn)
   if (!base) return []
   const drop = new Set(spec.drop ?? [])
-  return base.domains.flatMap(d => d.tests.map(t => spec.swap?.[t.code] ?? t.code)).filter(c => !drop.has(c))
+  const scored = base.domains.flatMap(d => d.tests.map(t => spec.swap?.[t.code] ?? t.code)).filter(c => !drop.has(c))
+  return [...scored, ...(batteryData.regions[spec.region]?.mockTests ?? [])]
 }
 
 export function mockSummary(batteryKey) {
