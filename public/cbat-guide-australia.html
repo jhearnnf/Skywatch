@@ -41,6 +41,40 @@
 <meta name="twitter:title" content="ADF Aviation Screening (MACTS): the candidate guide">
 <meta name="twitter:description" content="The three testing stages an Australian aircrew applicant sits, what happens at East Sale, and where the CBAT advice does and does not apply.">
 <meta name="twitter:image" content="https://skywatch.academy/og-image.png">
+<!--
+  PostHog. Same block as public/cbat-guide.html, copied verbatim so the three
+  country guides are measured identically (pageviews, time on page, scroll
+  depth, autocapture, replay). This page is served straight out of public/, so
+  the SPA bundle and its initPostHog() never run here. The project key is the
+  public ingest-only one; Vite never substitutes env vars in public/.
+-->
+<script src="https://eu-assets.i.posthog.com/static/array.js" defer></script>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  var http = location.protocol === 'https:' || location.protocol === 'http:';
+  if (!http || !window.posthog) return;   // pre-render, or the CDN was blocked
+
+  posthog.init('phc_zqRyDJ6T6z2QUjJ6KcF7NmJAfALfEMy8iJ6VFLHAddtX', {
+    api_host: 'https://eu.i.posthog.com',
+    // Deliberately NOT 'history_change' like the SPA's config. The section nav
+    // down the page replaceState()s the hash on every click, which under that
+    // setting would log each jump as a fresh pageview and wreck the counts.
+    capture_pageview: true,
+    // Gives both of the things this page is measured on: time on page, and
+    // $prev_pageview_max_scroll_percentage, how far down people actually got.
+    capture_pageleave: true,
+    autocapture: true,
+    session_recording: {
+      maskAllInputs: false,
+      maskInputOptions: { password: true },
+    },
+    // Same as src/lib/posthog.js. The distinct_id cookie is per-domain, so a
+    // reader who has signed in to the app arrives here already identified and
+    // logged-in vs anonymous readers separate on $is_identified.
+    person_profiles: 'always',
+  });
+});
+</script>
 </head>
 <body>
 
