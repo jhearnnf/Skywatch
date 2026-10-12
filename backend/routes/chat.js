@@ -12,7 +12,7 @@ const User             = require('../models/User');
 const { generateAnnouncementDrafts } = require('../utils/announcementDrafts');
 const { resolveSelectedBadges } = require('../utils/selectedBadge');
 const { PRESENCE_WINDOW_MS, PRESENCE_LIST_LIMIT, PRESENCE_HERE_WINDOW_MS } = require('../constants/presence');
-const { cbatCardFromLabel, mockLocationLabel } = require('../constants/presenceLocations');
+const { cbatCardFromLabel, mockLocationLabel, MOCK_CARD } = require('../constants/presenceLocations');
 const CbatMockAssessment = require('../models/CbatMockAssessment');
 const { IDLE_LIMIT_MS: MOCK_IDLE_LIMIT_MS } = require('../utils/cbatMock');
 const { medalsForUsers } = require('../utils/cbatMedalHolders');
@@ -3110,7 +3110,13 @@ router.get('/presence', adminOnly, async (req, res) => {
           // Read from the label when the row carries no tile — the label is the
           // same knowledge in a coarser form, and it is what every deployed
           // backend has been recording since August.
-          cbatCard:    here ? (u.lastCbatCard ?? cbatCardFromLabel(u.lastLocation)) : null,
+          //
+          // Someone partway through a Mock Assessment is on the Mock tile
+          // whichever test page they are on: the sitting is what they are
+          // doing, and their game's tile would read as ordinary practice.
+          cbatCard:    !here ? null
+            : mock ? MOCK_CARD
+            : (u.lastCbatCard ?? cbatCardFromLabel(u.lastLocation)),
         };
       }),
       count,

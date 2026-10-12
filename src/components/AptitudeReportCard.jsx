@@ -227,6 +227,9 @@ function MockHalf({ targetKey, testDate }) {
       to="/cbat/mock"
       className="group relative block shrink-0 w-[88px] sm:w-[30%] border-l border-slate-200 no-underline overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400"
       data-testid="aptitude-card-mock"
+      // The hub's admin presence dots treat this half as a tile: anyone on the
+      // mock start page or partway through a sitting is drawn here.
+      data-cbat-card="mock"
     >
       {/* The panel is lit from the corner the button sits in, so this half reads as the thing to
           press rather than a second readout. The light rises on hover. */}

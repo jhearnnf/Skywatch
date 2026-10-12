@@ -5,7 +5,7 @@
  * never survive into the label, because the label is what gets stored.
  */
 const {
-  locationLabel, LOCATIONS, CBAT_CARDS, cbatCardKey, cbatCardFromLabel, mockLocationLabel,
+  locationLabel, LOCATIONS, CBAT_CARDS, cbatCardKey, cbatCardFromLabel, mockLocationLabel, MOCK_CARD,
 } = require('../../constants/presenceLocations');
 
 describe('locationLabel', () => {
@@ -219,6 +219,16 @@ describe('mockLocationLabel', () => {
   it('labels the mock screens themselves', () => {
     expect(locationLabel('/cbat/mock')).toBe('Mock Assessment');
     expect(locationLabel('/cbat/mock/abc123')).toBe('Mock score sheet');
-    expect(cbatCardKey('/cbat/mock')).toBeNull();
+  });
+
+  // The hub's Mock button is a tile for the presence dots. Its start page is
+  // the mock's intro, so it counts; the score sheet looks back at a finished
+  // sitting, so it does not.
+  it('puts the mock start page on the Mock tile, but not a score sheet', () => {
+    expect(cbatCardKey('/cbat/mock')).toBe(MOCK_CARD);
+    expect(cbatCardKey('/cbat/mock/')).toBe(MOCK_CARD);
+    expect(cbatCardKey('/cbat/mock?battery=pilot')).toBe(MOCK_CARD);
+    expect(cbatCardKey('/cbat/mock/abc123')).toBeNull();
+    expect(CBAT_CARDS).not.toContain(MOCK_CARD);
   });
 });

@@ -681,6 +681,11 @@ export default function Cbat() {
 
       {/* Aptitude Report — the estimate of what this practice would score on a real role's
           battery. Above the grid because it's the reason to pick one game over another. */}
+      {/* The presence-dot layer's wrapper opens here rather than at the grid so
+          it spans this card too: the Mock half is a tile like any game's, and a
+          dot can only be drawn over what the layer covers. Block flow with no
+          padding, so the card's margin to the grid is unchanged. */}
+      <div className="relative" ref={gridWrapRef}>
       {user && <AptitudeReportCard />}
 
       {/* Game grid — blurred when not signed in */}
@@ -689,12 +694,11 @@ export default function Cbat() {
           2rem style, which beat every class and applied at all widths — it is a
           responsive class now, which is what lets the phone grid be dense.
 
-          The `relative` wrapper exists for the admin presence dots below: they
-          are one overlay layer positioned against it, not a mark inside each
-          tile, which is what lets a dot slide from one tile to another when its
-          player switches games. It is outside the grid so the layer is not
-          itself a grid cell. */}
-      <div className="relative" ref={gridWrapRef}>
+          The `relative` wrapper (opened above the Aptitude Report card) exists
+          for the admin presence dots below: they are one overlay layer
+          positioned against it, not a mark inside each tile, which is what lets
+          a dot slide from one tile to another when its player switches games.
+          It is outside the grid so the layer is not itself a grid cell. */}
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-2 sm:gap-x-4 sm:gap-y-8">
         {visibleGames.map((game, i) => {
           const isImplemented = !!game.path

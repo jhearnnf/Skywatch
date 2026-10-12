@@ -58,6 +58,38 @@ function Harness({ online }) {
 const dots = () => Array.from(document.querySelectorAll('[data-cbat-dot]'))
 const dotFor = (card) => dots().filter(d => d.dataset.cbatDot === card)
 
+// The Mock tile is not a grid cell: it is the right half of the Aptitude Report
+// card above the grid, so its offsets are measured from the card, not from the
+// layer's container. Card at (0, 0) inside the container; Mock half at 400 in.
+function NestedHarness({ online }) {
+  const ref = useRef(null)
+  const cardRef = useRef(null)
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div ref={(node) => {
+        cardRef.current = node
+        if (!node) return
+        Object.defineProperties(node, {
+          offsetLeft:   { configurable: true, get: () => 0 },
+          offsetTop:    { configurable: true, get: () => 30 },
+          offsetParent: { configurable: true, get: () => ref.current },
+        })
+      }}>
+        <div data-cbat-card="mock" ref={(node) => {
+          if (!node) return
+          Object.defineProperties(node, {
+            offsetLeft:   { configurable: true, get: () => 400 },
+            offsetTop:    { configurable: true, get: () => 0 },
+            offsetWidth:  { configurable: true, get: () => 200 },
+            offsetParent: { configurable: true, get: () => cardRef.current },
+          })
+        }} />
+      </div>
+      <CbatPresenceDots containerRef={ref} online={online} />
+    </div>
+  )
+}
+
 describe('presenceSlots', () => {
   it('gives one slot per person, on the tile they are on', () => {
     const slots = presenceSlots([agent('a', 'target'), agent('b', 'act')])
@@ -155,5 +187,14 @@ describe('CbatPresenceDots', () => {
     // on hover, so it has to be inert.
     expect(screen.getByTestId('cbat-presence-dots').className)
       .toContain('pointer-events-none')
+  })
+
+  it('places a dot on a tile nested inside another card, measured from the layer', async () => {
+    render(<NestedHarness online={[agent('a', 'mock')]} />)
+
+    await waitFor(() => expect(dots()).toHaveLength(1))
+    const dot = dotFor('mock')[0]
+    expect(Number(dot.dataset.x)).toBe(400 + 200 - INSET - DOT)
+    expect(Number(dot.dataset.y)).toBe(30 + INSET)
   })
 })

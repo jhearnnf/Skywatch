@@ -28,11 +28,7 @@ export default function CbatPresenceDots({ containerRef, online = [] }) {
     if (!el) return
     const next = {}
     for (const node of el.querySelectorAll('[data-cbat-card]')) {
-      next[node.dataset.cbatCard] = {
-        left:  node.offsetLeft,
-        top:   node.offsetTop,
-        width: node.offsetWidth,
-      }
+      next[node.dataset.cbatCard] = { ...offsetWithin(node, el), width: node.offsetWidth }
     }
     // A ResizeObserver fires on every pixel of a window drag, and most of those
     // ticks move nothing here (a taller grid does not move the tiles above the
@@ -131,6 +127,21 @@ export default function CbatPresenceDots({ containerRef, online = [] }) {
 // Same tiles in the same places? Compared field by field rather than by
 // JSON.stringify so key order can never make two identical measurements look
 // different.
+// A node's offset from the container, summed up its offsetParent chain. The
+// game tiles sit directly against the container, so for them this is just
+// offsetLeft/offsetTop; the Mock tile is nested inside the Aptitude Report
+// card, whose own positioned elements would otherwise be what it measured from.
+// Still offsets, not rects, for the reason above.
+function offsetWithin(node, container) {
+  let left = 0
+  let top  = 0
+  for (let n = node; n && n !== container; n = n.offsetParent) {
+    left += n.offsetLeft
+    top  += n.offsetTop
+  }
+  return { left, top }
+}
+
 function sameCards(a, b) {
   const keys = Object.keys(b)
   if (Object.keys(a).length !== keys.length) return false

@@ -194,6 +194,19 @@ describe('where everyone is', () => {
     expect(find(res, 'Hawk').location).toBe('CBAT · ANT');
   });
 
+  it('puts someone partway through a Mock Assessment on the Mock tile, not the tile of the test they are on', async () => {
+    const admin   = await createUser({ isAdmin: true, displayName: 'Control', lastSeen: new Date() });
+    const sitting = await createUser({ displayName: 'Viper',  lastSeen: new Date(), lastLocation: 'CBAT · ACT', lastCbatCard: 'act' });
+    const done    = await createUser({ displayName: 'Hawk',   lastSeen: new Date(), lastLocation: 'CBAT · ANT', lastCbatCard: 'ant' });
+    const steps = [{ gameKeys: ['flag'] }, { gameKeys: ['act'] }, { gameKeys: ['ant'] }];
+    await CbatMockAssessment.create({ userId: sitting._id, region: 'GB', scope: 'all', steps, currentStep: 1 });
+    await CbatMockAssessment.create({ userId: done._id, region: 'GB', scope: 'all', steps, status: 'completed' });
+
+    const res = await presence(authCookie(admin._id));
+    expect(find(res, 'Viper').cbatCard).toBe('mock');
+    expect(find(res, 'Hawk').cbatCard).toBe('ant');
+  });
+
   it('withholds the location of the admin reading the strip', async () => {
     // They are in Community, reading this — the one row that says nothing.
     const admin = await createUser({

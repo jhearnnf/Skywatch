@@ -136,6 +136,11 @@ function locationLabel(path) {
 // These keys are the frontend's, from src/data/cbatGames.js. They are the card
 // identity the hub renders by, so this list must stay in step with it: a game
 // added there and missed here simply never shows a dot.
+// Not a game, so not in CBAT_CARDS (which mirrors the hub's game list), but a
+// tile on the hub all the same: the Mock Assessment half of the Aptitude
+// Report card.
+const MOCK_CARD = 'mock';
+
 const CBAT_CARDS = [
   'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
   'plane-turn', 'flag', 'visualisation', 'dpt', 'act', 'numerical-ops', 'dad',
@@ -182,6 +187,14 @@ function cbatCardKey(path) {
 
   const clean = path.split('?')[0].split('#')[0].trim();
   if (!clean || !clean.startsWith('/') || clean.length > 300) return null;
+
+  // The Mock Assessment's start page, which is the hub's Mock button. It is the
+  // mock's "instructions screen", so it counts as standing on that tile the way
+  // a game's intro counts as its game. The score sheet (/cbat/mock/<id>) does
+  // not: that is looking back at a finished sitting, not doing one. Someone
+  // partway through a sitting is placed on this tile by /presence instead,
+  // because a mock's tests run on the ordinary game pages.
+  if (/^\/cbat\/mock\/?$/.test(clean)) return MOCK_CARD;
 
   // The game page itself, or one of its leaderboards. Nothing else under /cbat
   // belongs to a tile — /cbat is the hub, /cbat/report is the Aptitude Report.
@@ -243,5 +256,5 @@ function mockLocationLabel(label, { step, total } = {}) {
 
 module.exports = {
   LOCATIONS, LOCATION_MAX, locationLabel, mockLocationLabel,
-  CBAT_CARDS, cbatCardKey, cbatCardFromLabel,
+  CBAT_CARDS, MOCK_CARD, cbatCardKey, cbatCardFromLabel,
 };

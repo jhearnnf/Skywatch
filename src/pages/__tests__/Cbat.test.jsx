@@ -790,7 +790,9 @@ describe('Cbat page — who is in which game (admin only)', () => {
     const marked = Array.from(document.querySelectorAll('[data-cbat-card]'))
       .map(n => n.dataset.cbatCard)
 
-    expect(marked).toEqual(CBAT_GAMES.filter(g => !g.hidden).map(g => g.key))
+    // Plus the Mock half of the Aptitude Report card, when the card shows it:
+    // a tile for the dots too, but not a game, so it is kept out of the list.
+    expect(marked.filter(k => k !== 'mock')).toEqual(CBAT_GAMES.filter(g => !g.hidden).map(g => g.key))
   })
 })
 
