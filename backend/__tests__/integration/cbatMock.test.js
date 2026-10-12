@@ -231,6 +231,18 @@ describe('admin stats', () => {
     expect(p.last).toMatchObject({ label: 'Pilot', status: 'completed' });
   });
 
+  it('counts a mock idle past the limit as closed, not in progress, without closing it', async () => {
+    const admin = await createAdminUser({ agentNumber: '2000011', email: 'mockstatsadmin2@test.com' });
+    const id = await startPinned([FLAG_STEP, VISS_STEP]);
+    await CbatMockAssessment.updateOne({ _id: id }, { lastActivityAt: new Date(Date.now() - 3 * 60 * 60 * 1000) });
+
+    const res = await request(app).get('/api/cbat-mock/admin/stats').set('Cookie', authCookie(admin._id));
+    expect(res.body.data.byStatus).toMatchObject({ active: 0, expired: 1 });
+    expect(res.body.data.people[0].last.status).toBe('expired');
+    // The stats only read it that way; closing the sitting stays with the player's own routes.
+    expect((await CbatMockAssessment.findById(id).lean()).status).toBe('active');
+  });
+
   it('is admin only', async () => {
     const res = await request(app).get('/api/cbat-mock/admin/stats').set('Cookie', cookie);
     expect(res.status).toBe(403);

@@ -13,7 +13,7 @@ const AppSettings = require('../models/AppSettings');
 const CbatMockAssessment = require('../models/CbatMockAssessment');
 const { BATTERY_BY_KEY, detectRegion, normaliseRegion } = require('../constants/cbatBatteries');
 const { buildMockPlan, mockBatteries, mockSteps, breakPoints, totalMinutes, unsatCodes, MOCK } = require('../utils/cbatMockPlan');
-const { findActiveMock, expireIfIdle, serialiseMock, buildMockSheet } = require('../utils/cbatMock');
+const { findActiveMock, expireIfIdle, serialiseMock, buildMockSheet, IDLE_LIMIT_MS } = require('../utils/cbatMock');
 const User = require('../models/User');
 const { simulateMock } = require('../utils/cbatMockSimulate');
 const { adminOnly } = require('../middleware/auth');
@@ -245,7 +245,14 @@ router.get('/admin/stats', protect, adminOnly, async (req, res) => {
     const weekAgo = new Date(Date.now() - WEEK_MS);
     const adminIds = await User.find({ isAdmin: true }).distinct('_id');
     const mocks = await CbatMockAssessment.find({ userId: { $nin: adminIds } })
-      .select('userId scope batteryKey region steps status startedAt endedAt').sort({ startedAt: 1 }).lean();
+      .select('userId scope batteryKey region steps status startedAt endedAt lastActivityAt').sort({ startedAt: 1 }).lean();
+    // A mock only flips to 'expired' when its own player next loads it, so one whose player never
+    // came back stays 'active' forever. Read it as expired here (without writing: closing a
+    // sitting is the mock routes' job) so "in progress now" means in progress now.
+    const idleCutoff = Date.now() - IDLE_LIMIT_MS;
+    for (const m of mocks) {
+      if (m.status === 'active' && new Date(m.lastActivityAt).getTime() < idleCutoff) m.status = 'expired';
+    }
 
     const startersLast7d = new Set();
     const byStatus = { active: 0, completed: 0, abandoned: 0, expired: 0 };
