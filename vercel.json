@@ -5,7 +5,12 @@
       "has": [{ "type": "host", "value": "www.skywatch.academy" }],
       "destination": "https://skywatch.academy/$1",
       "permanent": true
-    }
+    },
+    { "source": "/cbat-guide.html", "destination": "/cbat-guide", "permanent": true },
+    { "source": "/cbat-guide-canada.html", "destination": "/cbat-guide-canada", "permanent": true },
+    { "source": "/cbat-guide-australia.html", "destination": "/cbat-guide-australia", "permanent": true },
+    { "source": "/cbat-tests.html", "destination": "/cbat-tests", "permanent": true },
+    { "source": "/cbat-tests/:slug.html", "destination": "/cbat-tests/:slug", "permanent": true }
   ],
   "rewrites": [
     { "source": "/cbat", "destination": "/public-pages/cbat.html" },
