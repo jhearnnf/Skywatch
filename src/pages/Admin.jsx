@@ -1762,12 +1762,22 @@ function ReportsTab({ API }) {
             type="line"
             data={dau.dailyDau}
             xKey="date"
-            keys={['count', 'messages', 'cbatDates']}
-            labels={{ count: 'Active users', messages: 'Community messages', cbatDates: 'CBAT dates' }}
-            colors={['#5baaff', '#f59e0b', '#34d399']}
+            keys={['count', 'messages', 'signups', 'cbatDatesEntered', 'cbatDates']}
+            labels={{
+              count: 'Active users',
+              messages: 'Community messages',
+              signups: 'Sign-ups',
+              cbatDatesEntered: 'CBAT dates entered',
+              cbatDates: 'CBAT dates',
+            }}
+            colors={['#5baaff', '#f59e0b', '#a78bfa', '#f87171', '#34d399']}
             // 1–2 test dates a day would lie flat on the axis under the user
             // count, so they're drawn as day markers instead of a line.
             markerKeys={['cbatDates']}
+            // Each series can be switched off from the legend; hiding Active
+            // users rescales the axis so the small counts are readable.
+            toggleable
+            shadeWeekends
             showLegend
             height={200}
           />

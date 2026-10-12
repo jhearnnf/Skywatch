@@ -536,6 +536,16 @@ async function dailyCbatDates(since, until) {
   return new Map(rows.map(r => [r._id, r.count]));
 }
 
+// How many users entered their CBAT date on each day — keyed by the day they
+// confirmed it (`upcomingCbatDateLockedAt`), not the day of the test, so a
+// burst of activity can be read against the moment people committed to a date.
+// Only member-confirmed dates have a timestamp: the admin-typed research
+// `cbatDate` was never stamped, and removing a date clears the lock, so a
+// removed date drops out of the day it was entered.
+function dailyCbatDatesEntered(since) {
+  return dailyCount(User, 'upcomingCbatDateLockedAt', since, { upcomingCbatDate: { $ne: null } });
+}
+
 // ── GET /api/admin/reports/dau?days=7|30|90|365───────────────────────────────────
 // The Daily Active Users series on its own timeframe. Split out of /snapshot so
 // changing the DAU range doesn't re-run the (much heavier) whole-snapshot query
@@ -556,10 +566,12 @@ router.get('/dau', async (req, res) => {
     const now = new Date();
     const start = new Date(now.getTime() - (days - 1) * DAY_MS); // inclusive of today
 
-    const [streams, messagesByDay, cbatDatesByDay] = await Promise.all([
+    const [streams, messagesByDay, cbatDatesByDay, datesEnteredByDay, signupsByDay] = await Promise.all([
       activityStreams(start),
       dailyCommunityMessages(start),
       dailyCbatDates(start, now),
+      dailyCbatDatesEntered(start),
+      dailyCount(User, 'createdAt', start, { isBot: { $ne: true } }),
     ]);
     const dailyMap = mergeDailyDistinctUsers(streams);
     // One row per day carrying every series, so the chart plots them on a shared
@@ -569,6 +581,8 @@ router.get('/dau', async (req, res) => {
       count: dailyMap.get(b.date)?.size ?? 0,
       messages: messagesByDay.get(b.date) ?? 0,
       cbatDates: cbatDatesByDay.get(b.date) ?? 0,
+      cbatDatesEntered: datesEnteredByDay.get(b.date) ?? 0,
+      signups: signupsByDay.get(b.date) ?? 0,
     }));
 
     res.json({ status: 'success', data: { days, dailyDau } });

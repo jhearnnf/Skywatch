@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import ReportChart from '../ReportChart'
 
 // The bar-chart legend is drawn outside the Recharts container so a long
@@ -54,5 +54,65 @@ describe('ReportChart bar legend', () => {
       <ReportChart type="bar" data={data} keys={['ant']} />,
     )
     expect(container.querySelector('ul')).toBeNull()
+  })
+})
+
+describe('ReportChart toggleable line legend', () => {
+  const lineData = [
+    { date: '2026-09-01', count: 20, signups: 3, cbatDates: 1 },
+    { date: '2026-09-02', count: 25, signups: 0, cbatDates: 0 },
+  ]
+  const renderLine = () => render(
+    <ReportChart
+      type="line"
+      data={lineData}
+      keys={['count', 'signups', 'cbatDates']}
+      labels={{ count: 'Active users', signups: 'Sign-ups', cbatDates: 'CBAT dates' }}
+      markerKeys={['cbatDates']}
+      toggleable
+      showLegend
+    />,
+  )
+
+  it('renders one pressed toggle button per series', () => {
+    renderLine()
+    for (const name of ['Active users', 'Sign-ups', 'CBAT dates']) {
+      expect(screen.getByRole('button', { name }).getAttribute('aria-pressed')).toBe('true')
+    }
+  })
+
+  it('switches a series off and back on when its legend entry is clicked', () => {
+    renderLine()
+    const btn = screen.getByRole('button', { name: 'Sign-ups' })
+    fireEvent.click(btn)
+    expect(btn.getAttribute('aria-pressed')).toBe('false')
+    expect(btn.style.opacity).toBe('0.3')
+    // Other series are untouched.
+    expect(screen.getByRole('button', { name: 'Active users' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(btn)
+    expect(btn.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('adds a Weekends switch when weekend shading is on', () => {
+    render(
+      <ReportChart
+        type="line"
+        data={lineData}
+        keys={['count']}
+        labels={{ count: 'Active users' }}
+        toggleable
+        shadeWeekends
+        showLegend
+      />,
+    )
+    const btn = screen.getByRole('button', { name: 'Weekends' })
+    expect(btn.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(btn)
+    expect(btn.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('has no Weekends switch without weekend shading', () => {
+    renderLine()
+    expect(screen.queryByRole('button', { name: 'Weekends' })).toBeNull()
   })
 })

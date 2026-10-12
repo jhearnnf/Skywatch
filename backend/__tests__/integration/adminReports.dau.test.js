@@ -7,6 +7,7 @@ const { createUser, createAdminUser, createSettings, authCookie } = require('../
 const GameSessionCbatSatResult = require('../../models/GameSessionCbatSatResult');
 const ChatConversation = require('../../models/ChatConversation');
 const ChatMessage = require('../../models/ChatMessage');
+const User = require('../../models/User');
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -215,6 +216,51 @@ describe('GET /api/admin/reports/dau', () => {
       const res = await get('?days=7');
 
       expect(res.body.data.dailyDau.every(r => r.cbatDates === 0)).toBe(true);
+    });
+  });
+
+  describe('CBAT dates entered series', () => {
+    it('counts dates by the day they were entered, not the day of the test', async () => {
+      const entered = new Date(Date.now() - 2 * DAY);
+      const testDay = new Date(Date.now() + 20 * DAY);
+      await createUser({ agentNumber: '1000011', upcomingCbatDate: testDay, upcomingCbatDateLockedAt: entered });
+      await createUser({ agentNumber: '1000012', upcomingCbatDate: testDay, upcomingCbatDateLockedAt: entered });
+
+      const res = await get('?days=7');
+
+      expect(res.body.data.dailyDau.find(r => r.date === ymd(entered)).cbatDatesEntered).toBe(2);
+      const others = res.body.data.dailyDau.filter(r => r.date !== ymd(entered));
+      expect(others.every(r => r.cbatDatesEntered === 0)).toBe(true);
+    });
+
+    it('ignores research-only dates and entries before the range', async () => {
+      await createUser({ agentNumber: '1000011', cbatDate: new Date() });
+      await createUser({
+        agentNumber: '1000012',
+        upcomingCbatDate: new Date(),
+        upcomingCbatDateLockedAt: new Date(Date.now() - 40 * DAY),
+      });
+
+      const res = await get('?days=7');
+
+      expect(res.body.data.dailyDau.every(r => r.cbatDatesEntered === 0)).toBe(true);
+    });
+  });
+
+  describe('sign-ups series', () => {
+    it('counts accounts created per day, excluding bots', async () => {
+      const day = new Date(Date.now() - 3 * DAY);
+      const a = await createUser({ agentNumber: '1000011' });
+      const b = await createUser({ agentNumber: '1000012' });
+      const bot = await createUser({ agentNumber: '1000013', isBot: true });
+      await User.collection.updateMany(
+        { _id: { $in: [a._id, b._id, bot._id] } },
+        { $set: { createdAt: day } },
+      );
+
+      const res = await get('?days=7');
+
+      expect(res.body.data.dailyDau.find(r => r.date === ymd(day)).signups).toBe(2);
     });
   });
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -41,6 +42,17 @@ const tooltipStyle = {
 }
 const tooltipItemStyle = { color: '#ddeaf8' }
 const tooltipLabelStyle = { color: '#aec0d8', fontWeight: 600 }
+
+// Weekend shading on daily line charts (see `shadeWeekends`).
+const WEEKEND_KEY = '__weekend'
+const WEEKEND_COLOR = COLORS.slate
+const WEEKEND_OPACITY = 0.1
+
+// 'YYYY-MM-DD' is a UTC day key, so read the weekday in UTC too.
+function isWeekend(d) {
+  const day = new Date(d).getUTCDay()
+  return day === 0 || day === 6
+}
 
 function shortDate(d) {
   // 'YYYY-MM-DD' → 'MMM D'
@@ -91,6 +103,34 @@ function SeriesLegend({ items }) {
   )
 }
 
+// Clickable legend for line charts with `toggleable` — each entry shows or
+// hides its series. Drawn as plain buttons beneath the chart (like
+// SeriesLegend) so it is keyboard-reachable and testable without a canvas.
+function ToggleLegend({ items, onToggle }) {
+  return (
+    <div className="flex flex-wrap justify-center gap-x-1 gap-y-1 mt-1 px-1" style={{ fontSize: 11 }}>
+      {items.map(it => (
+        <button
+          key={it.key}
+          type="button"
+          aria-pressed={!it.hidden}
+          onClick={() => onToggle(it.key)}
+          title={it.hidden ? `Show ${it.label}` : `Hide ${it.label}`}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 cursor-pointer hover:bg-slate-200/40"
+          style={{ color: it.color, opacity: it.hidden ? DIM_LABEL_OPACITY : 1, textDecoration: it.hidden ? 'line-through' : 'none' }}
+        >
+          {it.band
+            ? <span aria-hidden className="inline-block w-3 h-3 rounded-[2px]" style={{ background: it.color, opacity: 0.35 }} />
+            : it.marker
+              ? <span aria-hidden className="inline-block w-3.5 border-t border-dashed" style={{ borderColor: it.color }} />
+              : <span aria-hidden className="inline-block w-3.5 border-t-2" style={{ borderColor: it.color }} />}
+          <span>{it.label}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function ChartSkeleton({ height = 220 }) {
   return (
     <div
@@ -127,6 +167,12 @@ export function ChartSkeleton({ height = 220 }) {
  *             value is above zero, labelled with the value. For a sparse, small
  *             count (e.g. CBAT dates, 1–2 a day) that a line would flatten onto
  *             the axis beneath a series in the hundreds.
+ * shadeWeekends: line charts with a 'YYYY-MM-DD' xKey only — Saturdays and
+ *             Sundays get a faint full-height band behind the lines. With
+ *             `toggleable` the bands get their own legend switch.
+ * toggleable: line charts only — the legend becomes a row of buttons that show
+ *             or hide each series. A hidden series also leaves the y-axis
+ *             domain, so hiding a big series rescales the small ones.
  */
 export default function ReportChart({
   type = 'line',
@@ -146,7 +192,16 @@ export default function ReportChart({
   compareKey,
   compareLabel = 'Prev period',
   markerKeys,
+  toggleable = false,
+  shadeWeekends = false,
 }) {
+  const [hiddenKeys, setHiddenKeys] = useState(() => new Set())
+  const toggleKey = k => setHiddenKeys(prev => {
+    const next = new Set(prev)
+    if (next.has(k)) next.delete(k)
+    else next.add(k)
+    return next
+  })
   // When comparing, a period that's empty now but had prior activity should still
   // render (so the dashed baseline shows), so fold compareKey into the zero check.
   const zeroKeys = compareKey ? [...keys, compareKey] : keys
@@ -303,17 +358,42 @@ export default function ReportChart({
   // the hover dot does the work instead.
   const showDots = data.length <= 60
   const markerSet = new Set(markerKeys ?? [])
+  const isHidden = k => toggleable && hiddenKeys.has(k)
+  // Weekend bands are a Bar on a hidden 0–1 axis rather than ReferenceAreas: on
+  // a category axis a ReferenceArea runs centre-to-centre, so it would only
+  // shade half of each weekend day. A gap-free bar fills the whole day's band.
+  // Switched off, the bar stays mounted at zero height: removing it would turn
+  // the x-axis back into a point scale and every line would shift sideways.
+  const showWeekends = !isHidden(WEEKEND_KEY)
+  const chartData = shadeWeekends
+    ? data.map(row => ({ ...row, [WEEKEND_KEY]: showWeekends && isWeekend(row[xKey]) ? 1 : 0 }))
+    : data
+  const LineChartish = shadeWeekends ? ComposedChart : LineChart
   return (
+    <>
     <ResponsiveContainer width="100%" height={height}>
       {/* Markers' counts sit in a strip above the plot, where no line can cross them. */}
-      <LineChart data={data} margin={{ top: markerSet.size ? 16 : 4, right: 12, left: 0, bottom: 4 }}>
+      <LineChartish data={chartData} barCategoryGap={shadeWeekends ? 0 : undefined} margin={{ top: markerSet.size ? 16 : 4, right: 12, left: 0, bottom: 4 }}>
         <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
+        {shadeWeekends && <YAxis yAxisId={WEEKEND_KEY} domain={[0, 1]} hide />}
+        {shadeWeekends && (
+          <Bar
+            yAxisId={WEEKEND_KEY}
+            dataKey={WEEKEND_KEY}
+            fill={WEEKEND_COLOR}
+            fillOpacity={WEEKEND_OPACITY}
+            isAnimationActive={false}
+            activeBar={false}
+            tooltipType="none"
+            legendType="none"
+          />
+        )}
         <XAxis dataKey={xKey} stroke={COLORS.axis} fontSize={11} tickFormatter={xFmt} />
         <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
         <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
-        {(showLegend || compareKey) && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
+        {!toggleable && (showLegend || compareKey) && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
         {/* Markers first so the real lines draw over them. */}
-        {keys.map((k, i) => markerSet.has(k) && data.filter(row => row[k] > 0).map(row => (
+        {keys.map((k, i) => markerSet.has(k) && !isHidden(k) && data.filter(row => row[k] > 0).map(row => (
           <ReferenceLine
             key={`${k}-${row[xKey]}`}
             x={row[xKey]}
@@ -336,6 +416,7 @@ export default function ReportChart({
             activeDot={false}
             legendType="plainline"
             name={labels?.[k] ?? k}
+            hide={isHidden(k)}
           />
         ) : (
           <Line
@@ -347,10 +428,33 @@ export default function ReportChart({
             dot={showDots ? { r: 2.5, fill: seriesColors[i] } : false}
             activeDot={{ r: 4 }}
             name={labels?.[k] ?? k}
+            hide={isHidden(k)}
           />
         ))}
         {compareLine}
-      </LineChart>
+      </LineChartish>
     </ResponsiveContainer>
+    {toggleable && (
+      <ToggleLegend
+        items={[
+          ...keys.map((k, i) => ({
+            key: k,
+            label: labels?.[k] ?? k,
+            color: seriesColors[i],
+            marker: markerSet.has(k),
+            hidden: hiddenKeys.has(k),
+          })),
+          ...(shadeWeekends ? [{
+            key: WEEKEND_KEY,
+            label: 'Weekends',
+            color: WEEKEND_COLOR,
+            band: true,
+            hidden: hiddenKeys.has(WEEKEND_KEY),
+          }] : []),
+        ]}
+        onToggle={toggleKey}
+      />
+    )}
+    </>
   )
 }

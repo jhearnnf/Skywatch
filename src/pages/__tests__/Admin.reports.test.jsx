@@ -74,9 +74,10 @@ vi.mock('recharts', async () => {
 // hands the chart is the wiring these tests care about; how recharts draws them
 // is ReportChart's own business.
 vi.mock('../../components/admin/ReportChart', () => ({
-  default: ({ keys = [], labels, markerKeys = [] }) => (
+  default: ({ keys = [], labels, markerKeys = [], toggleable = false }) => (
     <div
       data-testid="report-chart"
+      data-toggleable={String(toggleable)}
       data-keys={keys.join(',')}
       data-markers={markerKeys.join(',')}
       data-labels={keys.map(k => labels?.[k] ?? k).join(',')}
@@ -268,15 +269,16 @@ describe('Admin — Reports tab', () => {
     )
   })
 
-  it('plots community messages and CBAT dates alongside active users on the DAU chart', async () => {
+  it('plots messages, sign-ups and CBAT dates alongside active users on the DAU chart', async () => {
     await openReportsTab()
     await waitFor(() => expect(screen.getByText('Daily Active Users')).toBeInTheDocument())
     // Two named series on one chart — a second unlabelled line would be
     // unreadable next to the one the card is titled after.
     const chart = screen.getAllByTestId('report-chart')
-      .find(c => c.dataset.keys === 'count,messages,cbatDates')
+      .find(c => c.dataset.keys === 'count,messages,signups,cbatDatesEntered,cbatDates')
     expect(chart).toBeDefined()
-    expect(chart.dataset.labels).toBe('Active users,Community messages,CBAT dates')
+    expect(chart.dataset.labels).toBe('Active users,Community messages,Sign-ups,CBAT dates entered,CBAT dates')
+    expect(chart.dataset.toggleable).toBe('true')
     // CBAT dates are 1-2 a day, so they're drawn as day markers, not a line
     // that would sit flat on the axis under the user count.
     expect(chart.dataset.markers).toBe('cbatDates')
