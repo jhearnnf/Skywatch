@@ -104,9 +104,9 @@ export default function CbatMockScoreSheet({ mock, agentNumber }) {
   return (
     <div className="mock-sheet" data-testid="mock-score-sheet">
       <header className="mock-sheet-head">
-        <p className="mock-sheet-brand">SkyWatch Mock Assessment</p>
+        <p className="mock-sheet-brand">SkyWatch Academy Mock Assessment</p>
         <h2 className="mock-sheet-title">Aptitude Scores (estimate)</h2>
-        <p className="mock-sheet-sub">A practice sitting of SkyWatch&apos;s CBAT-style tests. Not an official result.</p>
+        <p className="mock-sheet-sub">A practice sitting of SkyWatch Academy&apos;s CBAT-style tests. Not an official result.</p>
       </header>
 
       <div className="mock-sheet-candidate">

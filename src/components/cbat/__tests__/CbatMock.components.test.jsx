@@ -200,7 +200,7 @@ describe('the score sheet', () => {
 
   it('is titled as a SkyWatch estimate, never as an official result', () => {
     const { container } = render(<CbatMockScoreSheet mock={sheetMock} />)
-    expect(container.textContent).toContain('SkyWatch Mock Assessment')
+    expect(container.textContent).toContain('SkyWatch Academy Mock Assessment')
     expect(container.textContent).toContain('Not an official result')
     expect(container.textContent).not.toMatch(/OFFICIAL - SENSITIVE|OFFICIAL – SENSITIVE/)
   })
