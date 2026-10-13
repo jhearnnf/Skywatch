@@ -1,8 +1,8 @@
 // A made-up finished Mock Assessment for the admin tools' "Simulated pass / fail page" buttons, so an
 // admin can see exactly what a player lands on at the end without sitting one.
 //
-// Random region, random role in it, random scores — but every score is a real game score fed
-// through the real sheet (buildMockSheet), so the page shows what that scorer would say. Scores are
+// Random region, random scope (one role in it, or every role in it, as a player can choose), random
+// scores — but every score is a real game score fed through the real sheet (buildMockSheet), so the page shows what that scorer would say. Scores are
 // drawn stanine-first and turned back into game scores with scoreForStanine, then re-drawn until the
 // sheet gives the verdict asked for. Nothing is saved.
 
@@ -34,13 +34,20 @@ function drawStanines(gameKeys, want, rng) {
   return gameKeys.map((_, i) => (i === weak ? between(1, 2, rng) : between(5, 9, rng)));
 }
 
-function simulateMock({ want = 'pass', userId, rng = Math.random, now = new Date() } = {}) {
+// The verdict an all-roles sheet counts as: a pass when any role passes, a fail when none does.
+function sheetVerdict(sheet) {
+  return sheet.batteries.some(b => b.status === 'pass') ? 'pass' : 'fail';
+}
+
+// `scope` pins 'role' or 'all'; left out, each press picks one at random.
+function simulateMock({ want = 'pass', scope = null, userId, rng = Math.random, now = new Date() } = {}) {
   const regions = Object.keys(REGIONS).filter(r => BATTERIES.some(b => b.region === r));
 
   for (let i = 0; i < MAX_TRIES; i++) {
     const region = pickOne(regions, rng);
-    const battery = pickOne(BATTERIES.filter(b => b.region === region), rng);
-    const plan = buildMockPlan({ batteryKey: battery.key, rng });
+    const allRoles = (scope ?? (rng() < 0.5 ? 'role' : 'all')) === 'all';
+    const battery = allRoles ? null : pickOne(BATTERIES.filter(b => b.region === region), rng);
+    const plan = allRoles ? buildMockPlan({ region, rng }) : buildMockPlan({ batteryKey: battery.key, rng });
     if (!plan) continue;
 
     const gameKeys = plan.steps.flatMap(s => s.gameKeys);
@@ -53,8 +60,8 @@ function simulateMock({ want = 'pass', userId, rng = Math.random, now = new Date
       _id: 'simulated',
       userId,
       region: plan.region,
-      scope: 'role',
-      batteryKey: battery.key,
+      scope: plan.scope,
+      batteryKey: plan.batteryKey,
       steps: plan.steps.map(s => ({
         ...s,
         done: true,
@@ -69,7 +76,8 @@ function simulateMock({ want = 'pass', userId, rng = Math.random, now = new Date
       endedAt: now,
     };
 
-    const status = buildMockSheet(mock).batteries[0]?.status;
+    const sheet = buildMockSheet(mock);
+    const status = allRoles ? sheetVerdict(sheet) : sheet.batteries[0]?.status;
     if (status === want) return serialiseMock(mock, { withSheet: true });
   }
   return null;

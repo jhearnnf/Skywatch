@@ -8,6 +8,8 @@ const { createUser, createAdminUser, createSettings, authCookie } = require('../
 const CbatMockAssessment = require('../../models/CbatMockAssessment');
 const GameSessionCbatFlagResult = require('../../models/GameSessionCbatFlagResult');
 const { IDLE_LIMIT_MS } = require('../../utils/cbatMock');
+const { simulateMock } = require('../../utils/cbatMockSimulate');
+const { mockBatteries } = require('../../utils/cbatMockPlan');
 
 let user, cookie;
 
@@ -282,12 +284,41 @@ describe('simulated pass / fail sheets', () => {
       const res = await request(app).get(`/api/cbat-mock/admin/simulate?result=${result}`).set('Cookie', authCookie(admin._id));
       expect(res.status).toBe(200);
       const { mock } = res.body.data;
-      expect(mock).toMatchObject({ id: 'simulated', status: 'completed', scope: 'role' });
+      expect(mock).toMatchObject({ id: 'simulated', status: 'completed' });
       expect(mock.testsDone).toBe(mock.testsTotal);
-      expect(mock.sheet.batteries).toHaveLength(1);
-      expect(mock.sheet.batteries[0].status).toBe(result);
+      if (mock.scope === 'role') {
+        expect(mock.sheet.batteries).toHaveLength(1);
+        expect(mock.sheet.batteries[0].status).toBe(result);
+      } else {
+        expect(mock.sheet.batteries.some(b => b.status === 'pass')).toBe(result === 'pass');
+      }
     }
     expect(await CbatMockAssessment.countDocuments()).toBe(0);
+  });
+
+  it('draws a one-role sheet', () => {
+    for (const want of ['pass', 'fail']) {
+      const mock = simulateMock({ want, scope: 'role', userId: 'u1' });
+      expect(mock).toMatchObject({ scope: 'role', status: 'completed' });
+      expect(mock.sheet.batteries).toHaveLength(1);
+      expect(mock.sheet.batteries[0].status).toBe(want);
+    }
+  });
+
+  it('draws an all-roles sheet with every role in the region, as a player choosing all roles sees', () => {
+    for (const want of ['pass', 'fail']) {
+      const mock = simulateMock({ want, scope: 'all', userId: 'u1' });
+      expect(mock).toMatchObject({ scope: 'all', batteryKey: null, status: 'completed' });
+      expect(mock.sheet.batteries).toHaveLength(mockBatteries({ region: mock.region }).length);
+      // A pass is any role passing; a fail is none passing.
+      expect(mock.sheet.batteries.some(b => b.status === 'pass')).toBe(want === 'pass');
+    }
+  });
+
+  it('picks either scope when none is pinned', () => {
+    const scopes = new Set();
+    for (let i = 0; i < 40; i++) scopes.add(simulateMock({ want: 'pass', userId: 'u1' }).scope);
+    expect(scopes).toEqual(new Set(['role', 'all']));
   });
 
   it('is admin only', async () => {

@@ -286,6 +286,14 @@ describe('simulated pass / fail pages', () => {
     expect(screen.getByTestId('mock-simulated-note')).toHaveTextContent('Simulated fail: Pilot, Canada')
   })
 
+  it('names an all-roles simulation as all roles', async () => {
+    const allRoles = { data: { mock: {
+      ...simulated('pass').data.mock, scope: 'all', batteryKey: null, batteryLabel: null, region: 'GB',
+    } } }
+    renderPage([['/admin/simulate', allRoles]], '/cbat/mock/simulated?result=pass&draw=1', ADMIN)
+    await waitFor(() => expect(screen.getByTestId('mock-simulated-note')).toHaveTextContent('Simulated pass: All roles, United Kingdom'))
+  })
+
   it('draws a fresh one when pressed again on the simulated page', async () => {
     const apiFetch = renderPage([['/admin/simulate', simulated('pass')]], '/cbat/mock/simulated?result=pass&draw=1', ADMIN)
     await waitFor(() => expect(screen.getByTestId('sheet-stub')).toBeInTheDocument())

@@ -266,9 +266,10 @@ export function MockSimulateButtons() {
 // What the simulated page is showing, so it is never mistaken for a real player's sheet.
 export function MockSimulatedNote({ mock, result }) {
   const region = mock ? (REGIONS[mock.region]?.label ?? mock.region) : null
+  const title = mock?.scope === 'role' ? mock.batteryLabel : 'All roles'
   return (
     <p className="text-[11px] text-text-muted mb-2" data-testid="mock-simulated-note">
-      Simulated {result}{mock ? `: ${mock.batteryLabel}, ${region}` : ''}. Random scores, nothing saved.
+      Simulated {result}{mock ? `: ${title}, ${region}` : ''}. Random scores, nothing saved.
       Press again for another.
     </p>
   )
