@@ -22,6 +22,7 @@ const OWNED_BY_USER = [
   'AptitudeSyncUsage',
   'CbatMatfPrint',
   'CbatMockAssessment',
+  'CbatScoreSheet',
   'GameSessionCaseFileResult',
   'GameSessionCbatActResult',
   'GameSessionCbatAnglesResult',

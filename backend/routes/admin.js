@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { protect, adminOnly, sweepStaleStreaks, staleStreakCutoff } = require('../middleware/auth');
 const User = require('../models/User');
+const CbatScoreSheet = require('../models/CbatScoreSheet');
 const ProblemReport = require('../models/ProblemReport');
 const AdminAction = require('../models/AdminAction');
 const AccountDeletion = require('../models/AccountDeletion');
@@ -2516,6 +2517,7 @@ router.delete('/users/:id/cbat-results/:imageId', async (req, res) => {
     if (image.publicId) await destroyAsset(image.publicId).catch(() => {});
     image.deleteOne();
     await user.save();
+    await CbatScoreSheet.deleteOne({ imageId: req.params.imageId });
 
     res.json({ status: 'success', data: { images: user.cbatResultImages } });
   } catch (err) {

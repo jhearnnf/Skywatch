@@ -3,9 +3,11 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatQuestionnaireResults from '../CbatQuestionnaireResults'
 
-vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ API: '', apiFetch: (...a) => fetch(...a) }),
-}))
+// One apiFetch for every render, as the real AuthContext provides.
+vi.mock('../../context/AuthContext', () => {
+  const apiFetch = (...a) => fetch(...a)
+  return { useAuth: () => ({ API: '', apiFetch }) }
+})
 vi.mock('../../components/SEO', () => ({ default: () => null }))
 
 const payload = (over = {}) => ({
@@ -307,6 +309,50 @@ describe('CbatQuestionnaireResults — viewing a score sheet', () => {
 
     const modal = within(await screen.findByTestId('sheets-modal'))
     expect(await modal.findByText('Could not load the score sheet')).toBeInTheDocument()
+  })
+})
+
+describe('CbatQuestionnaireResults — reading a score sheet into numbers', () => {
+  const READ = {
+    _id: 's1', imageId: 'i1', status: 'extracted', testDate: '2026-09-30T00:00:00.000Z', board: 'RAF', extractedAt: '2026-10-13T00:00:00.000Z',
+    batteries: [{ label: 'RAF Pilot 2026', batteryKey: 'pilot', sideBar: 1, verdict: 'pass', cutoff: 112, score: 123,
+      domains: [{ key: 'StrgcTM', weight: 17, tests: [{ code: 'CUT', mult: 3 }, { code: 'SAT', mult: 1 }], stanine: 6, minStanine: 4, belowMinimum: false }] }],
+  }
+
+  it('reads the photo on request, then saves the admin’s confirmation', async () => {
+    const calls = []
+    global.fetch = vi.fn(async (url, init) => {
+      calls.push([url, init?.method ?? 'GET', init?.body ? JSON.parse(init.body) : null])
+      if (url.includes('/cbat-results')) {
+        return { ok: true, json: async () => ({ data: { images: [{ _id: 'i1', url: 'https://example.com/1.png', caption: 'sheet1' }] } }) }
+      }
+      if (url.includes('/score-sheets/user/')) return { ok: true, json: async () => ({ data: { sheets: [] } }) }
+      if (url.includes('/score-sheets/extract')) return { ok: true, json: async () => ({ data: { sheet: READ } }) }
+      if (url.includes('/score-sheets/s1')) return { ok: true, json: async () => ({ data: { sheet: { ...READ, status: 'confirmed' } } }) }
+      return {
+        ok: true,
+        json: async () => ({ data: payload({ responses: [{
+          _id: 'r12', userId: { _id: 'u12', agentNumber: '557' }, satTest: true, passedForRole: 'yes', resultImagesUploaded: 1,
+        }] }) }),
+      }
+    })
+
+    render(<MemoryRouter><CbatQuestionnaireResults /></MemoryRouter>)
+    fireEvent.click(await screen.findByTestId('results-sheet-badge'))
+    const modal = within(await screen.findByTestId('sheets-modal'))
+
+    fireEvent.click(await modal.findByText('Read this sheet'))
+    expect(await modal.findByDisplayValue('RAF Pilot 2026')).toBeInTheDocument()
+    expect(modal.getByDisplayValue('3(CUT), SAT')).toBeInTheDocument()
+    expect(calls.find(([u]) => u.includes('/extract'))[2]).toEqual({ userId: 'u12', imageId: 'i1', force: false })
+
+    fireEvent.change(modal.getByLabelText('Score'), { target: { value: '124' } })
+    fireEvent.click(modal.getByText('Confirm'))
+    expect(await modal.findByText('Checked and confirmed')).toBeInTheDocument()
+    const [, method, body] = calls.find(([u]) => u.includes('/score-sheets/s1'))
+    expect(method).toBe('PATCH')
+    expect(body).toMatchObject({ status: 'confirmed', testDate: '2026-09-30' })
+    expect(body.batteries[0].score).toBe(124)
   })
 })
 

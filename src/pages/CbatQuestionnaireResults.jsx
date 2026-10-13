@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import Overlay from '../components/ui/Overlay'
+import ScoreSheetReview from '../components/admin/ScoreSheetReview'
 import { roleLabel } from '../data/surveyRoles'
 import surveyTests from '../../backend/constants/surveyTests.json'
 
@@ -574,6 +575,21 @@ function SheetsModal({ userId, name, API, apiFetch, onClose }) {
   const [images, setImages] = useState(null)
   const [error, setError]   = useState('')
   const [index, setIndex]   = useState(0)
+  // What has been read off each image so far, keyed by imageId (see ScoreSheetReview).
+  const [sheets, setSheets] = useState({})
+
+  useEffect(() => {
+    let cancelled = false
+    apiFetch(`${API}/api/admin/score-sheets/user/${userId}`, { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(body => {
+        if (cancelled || !body) return
+        // A read that finished before this list arrived is newer than what the list holds.
+        setSheets(prev => ({ ...Object.fromEntries((body.data?.sheets ?? []).map(s => [String(s.imageId), s])), ...prev }))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [API, apiFetch, userId])
 
   useEffect(() => {
     let cancelled = false
@@ -594,6 +610,8 @@ function SheetsModal({ userId, name, API, apiFetch, onClose }) {
 
   useEffect(() => {
     const onKey = (e) => {
+      // Arrow keys inside the review's inputs move the caret, not the photo.
+      if (e.target instanceof HTMLElement && e.target.closest('input, textarea')) return
       if (e.key === 'Escape') onClose()
       else if (e.key === 'ArrowLeft'  && count > 1) goPrev()
       else if (e.key === 'ArrowRight' && count > 1) goNext()
@@ -606,7 +624,7 @@ function SheetsModal({ userId, name, API, apiFetch, onClose }) {
 
   return (
     <Overlay zIndex={60} backdrop="rgba(8,14,30,0.92)" onDismiss={onClose} className="flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full" data-testid="sheets-modal">
+      <div className="max-w-4xl w-full max-h-[95vh] overflow-y-auto" data-testid="sheets-modal">
         <div className="flex items-center justify-between gap-3 mb-2">
           <p className="text-sm font-semibold text-white truncate">{name}'s score sheet</p>
           <button
@@ -658,6 +676,18 @@ function SheetsModal({ userId, name, API, apiFetch, onClose }) {
             </p>
             {count > 1 && <p className="text-xs text-slate-400 shrink-0">{index + 1} / {count}</p>}
           </div>
+        )}
+
+        {current && (
+          <ScoreSheetReview
+            key={current._id}
+            userId={userId}
+            imageId={current._id}
+            sheet={sheets[String(current._id)] ?? null}
+            API={API}
+            apiFetch={apiFetch}
+            onSaved={sheet => setSheets(prev => ({ ...prev, [String(sheet.imageId)]: sheet }))}
+          />
         )}
       </div>
     </Overlay>

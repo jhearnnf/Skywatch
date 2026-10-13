@@ -56,6 +56,7 @@ app.use('/api/cbat-mock',  require('./routes/cbatMock'));
 app.use('/api/admin/reports', require('./routes/adminReports'));
 // Mounted ahead of the catch-all admin router so its paths win.
 app.use('/api/admin/cbat-passers', require('./routes/adminSurvey'));
+app.use('/api/admin/score-sheets', require('./routes/adminScoreSheets'));
 app.use('/api/admin',  require('./routes/admin'));
 // Public: the CBAT outcome questionnaire, authenticated by invite token only.
 app.use('/api/survey', require('./routes/survey'));

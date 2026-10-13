@@ -5,6 +5,7 @@ const User           = require('../models/User');
 const AppSettings    = require('../models/AppSettings');
 const SurveyInvite   = require('../models/SurveyInvite');
 const SurveyResponse = require('../models/SurveyResponse');
+const CbatScoreSheet = require('../models/CbatScoreSheet');
 const surveyRoles    = require('../constants/surveyRoles.json');
 const surveyTests    = require('../constants/surveyTests.json');
 const { BATTERY_BY_KEY, REGIONS } = require('../constants/cbatBatteries');
@@ -306,6 +307,8 @@ router.delete('/:token/cbat-result/:imageId', throttle, async (req, res) => {
     }
     image.deleteOne();
     await user.save();
+    // The numbers read from it go too: a withdrawn sheet leaves nothing behind.
+    await CbatScoreSheet.deleteOne({ imageId: req.params.imageId });
 
     await SurveyResponse.updateOne(
       { inviteId: invite._id, resultImagesUploaded: { $gt: 0 } },
