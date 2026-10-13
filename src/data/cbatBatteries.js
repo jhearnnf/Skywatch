@@ -14,7 +14,8 @@ export const { maxScore: MAX_SCORE, maxStanine: MAX_STANINE, domains: DOMAINS, t
 // Every role, UK first. The Canadian and Australian roles are derived from a UK one (see
 // `_regionsComment` in the JSON); the backend builds their domains, and all the page needs of
 // them is who they are and the pass mark they borrow, so that is all this side reads.
-const UK_BATTERIES = batteryData.batteries.map(b => ({ ...b, region: 'GB' }))
+// A retired role (one the current sheets no longer carry) is left out entirely.
+const UK_BATTERIES = batteryData.batteries.filter(b => !b.retired).map(b => ({ ...b, region: 'GB' }))
 const UK_BY_KEY = Object.fromEntries(UK_BATTERIES.map(b => [b.key, b]))
 export const BATTERIES = [
   ...UK_BATTERIES,

@@ -33,7 +33,12 @@ function deriveBattery(spec) {
   return { ...meta, cutoff: base.cutoff, note: spec.note ?? null, domains };
 }
 
-const BATTERIES = [...UK_BATTERIES, ...DERIVED_SPECS.map(deriveBattery)];
+// A retired role (one the current sheets no longer carry) is left out of BATTERIES and
+// BATTERY_BY_KEY, so nothing offers, accepts or scores it. ANY_BATTERY_BY_KEY still has it, for
+// reading back a past mock that named it.
+const ALL_BATTERIES = [...UK_BATTERIES, ...DERIVED_SPECS.map(deriveBattery)];
+const ANY_BATTERY_BY_KEY = Object.fromEntries(ALL_BATTERIES.map(b => [b.key, b]));
+const BATTERIES = ALL_BATTERIES.filter(b => !b.retired);
 const BATTERY_BY_KEY = Object.fromEntries(BATTERIES.map(b => [b.key, b]));
 
 // Roles the real sheet judges as one family (see _familiesComment). A member naming no battery is a
@@ -79,6 +84,7 @@ module.exports = {
   COHORT_SHIFT,
   BATTERIES,
   BATTERY_BY_KEY,
+  ANY_BATTERY_BY_KEY,
   FAMILIES,
   FAMILY_BY_MEMBER,
   REGIONS,

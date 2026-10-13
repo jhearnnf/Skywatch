@@ -192,10 +192,26 @@ describe('the score sheet', () => {
     const { container } = render(<CbatMockScoreSheet mock={sheetMock} agentNumber="1234567" />)
     expect(screen.getByTestId('mock-sheet-battery-pilot')).toHaveAttribute('data-status', 'fail')
     expect(screen.getByTestId('mock-sheet-battery-intelligence')).toHaveAttribute('data-status', 'pass')
+    expect(screen.getByTestId('mock-sheet-battery-pilot')).toHaveTextContent('RAF Pilot 2026')
     expect(container.querySelectorAll('.mock-sheet-min-fail')).toHaveLength(1)
     // The multiplier leads a test exactly as the real sheet writes it.
     expect(container.textContent).toContain('3(CUT), SAT')
     expect(container.textContent).toContain('1234567')
+  })
+
+  it('names and orders the UK roles the way the real 2026 sheet does', () => {
+    const role = (key, label) => ({ key, label, cutoff: 90, score: 100, status: 'pass', failedMinimums: [], domains: [domain()] })
+    const mock = { ...sheetMock, sheet: { maxScore: 180, batteries: [
+      role('pilot', 'Pilot'), role('wso', 'Weapon Systems Officer'), role('control-officer-atc', 'Control Officer (ATC)'),
+      role('intelligence', 'Intelligence Officer'), role('nco-control-atc', 'Non-Commissioned Control (ATC)'),
+      role('nco-control-wc', 'Non-Commissioned Control (WC)'),
+    ] } }
+    const { container } = render(<CbatMockScoreSheet mock={mock} agentNumber="1" />)
+    const order = [...container.querySelectorAll('[data-testid^="mock-sheet-battery-"]')].map(el => el.dataset.testid.replace('mock-sheet-battery-', ''))
+    // WSO moves after the officer page's roles, as on the printed sheet.
+    expect(order).toEqual(['pilot', 'control-officer-atc', 'intelligence', 'wso', 'nco-control-atc', 'nco-control-wc'])
+    expect(screen.getByTestId('mock-sheet-battery-nco-control-atc')).toHaveTextContent('Air Traffic & Weapons Controller (ATC)')
+    expect(screen.getByTestId('mock-sheet-battery-nco-control-wc')).toHaveTextContent('Air Traffic & Weapons Controller (WC)')
   })
 
   it('is titled as a SkyWatch estimate, never as an official result', () => {

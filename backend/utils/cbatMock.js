@@ -10,7 +10,7 @@
 const mongoose = require('mongoose');
 const CbatMockAssessment = require('../models/CbatMockAssessment');
 const { CBAT_GAMES } = require('../constants/cbatGames');
-const { MAX_SCORE, MAX_STANINE, TESTS, BATTERY_BY_KEY } = require('../constants/cbatBatteries');
+const { MAX_SCORE, MAX_STANINE, TESTS, ANY_BATTERY_BY_KEY } = require('../constants/cbatBatteries');
 const { buildBatteryReport, buildFamilyReport, applyFamilyVerdicts, minRunsFor } = require('./cbatAptitudeReport');
 const { MOCK, mockBatteries } = require('./cbatMockPlan');
 
@@ -138,7 +138,8 @@ function sheetBattery(report) {
 
 function buildMockSheet(mock) {
   const batteries = mock.scope === 'role'
-    ? [BATTERY_BY_KEY[mock.batteryKey]].filter(Boolean)
+    // ANY_: a past mock may name a role that has since been retired, and still reads back.
+    ? [ANY_BATTERY_BY_KEY[mock.batteryKey]].filter(Boolean)
     : mockBatteries({ region: mock.region });
   const form = mockForm(mock);
   // A role mock still judges the role against its family, scored off the same sitting; an
@@ -165,7 +166,7 @@ function serialiseMock(mock, { withSheet = false } = {}) {
     region: m.region,
     scope: m.scope,
     batteryKey: m.batteryKey,
-    batteryLabel: m.batteryKey ? (BATTERY_BY_KEY[m.batteryKey]?.label ?? m.batteryKey) : null,
+    batteryLabel: m.batteryKey ? (ANY_BATTERY_BY_KEY[m.batteryKey]?.label ?? m.batteryKey) : null,
     steps: m.steps.map(s => ({
       codes: s.codes,
       labels: s.codes.map(c => TESTS[c]?.label ?? c),

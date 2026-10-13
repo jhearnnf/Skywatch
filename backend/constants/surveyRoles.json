@@ -17,7 +17,8 @@
     "role names need correcting here rather than evidence that respondents are confused.",
     "",
     "Keys are permanent once shipped - a stored SurveyResponse.role refers to one - so",
-    "rename a `label` freely but never a `key`."
+    "rename a `label` freely but never a `key`. A role that is no longer real is marked",
+    "`retired`: the form stops offering it, but a stored answer still reads back by name."
   ],
 
   "otherKey": "other",
@@ -27,7 +28,7 @@
       "service": "Royal Air Force",
       "roles": [
         { "key": "pilot",              "label": "Pilot",                            "battery": "pilot" },
-        { "key": "pilot-isr-rpas",     "label": "Pilot ISR (RPAS)",                 "battery": "pilot-isr-rpas" },
+        { "key": "pilot-isr-rpas",     "label": "Pilot ISR (RPAS)",                 "retired": true },
         { "key": "wso",                "label": "Weapon Systems Officer (WSO)",     "battery": "wso" },
         { "key": "control-officer-atc","label": "Control Officer (ATC)",            "battery": "control-officer-atc" },
         { "key": "control-officer-wc", "label": "Control Officer (Weapons)",        "battery": "control-officer-wc" },

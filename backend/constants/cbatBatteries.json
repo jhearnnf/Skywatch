@@ -309,6 +309,8 @@
     {
       "key": "pilot-isr-rpas",
       "label": "Pilot ISR (RPAS)",
+      "retired": true,
+      "_retiredComment": "Only on the older sheet format (Screenshot_20260108-154753.png, beside a plain 'Pilot' on the old weights). Absent from every 2025/2026 sheet: 'RAF Pilot 2025/2026' stands alone. Retired 2026-10-13: never offered, never scored for a new report or mock; kept so a past mock or stored answer that names it still reads back.",
       "group": "Officer aircrew",
       "cutoff": 100,
       "domains": [

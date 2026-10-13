@@ -1,4 +1,4 @@
-const { BATTERIES, BATTERY_BY_KEY, DOMAINS, TESTS, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MAX_STANINE } = require('../../constants/cbatBatteries');
+const { BATTERIES, BATTERY_BY_KEY, ANY_BATTERY_BY_KEY, DOMAINS, TESTS, STANINE_ANCHORS, SCORED_GAME_KEYS, MAX_SCORE, MAX_STANINE } = require('../../constants/cbatBatteries');
 const { isCbatEasierKey } = require('../../constants/cbatGames');
 const { CBAT_GAMES } = require('../../constants/cbatGames');
 const { scoreToStanine, scoreForStanine, stanineStep, topSegment, removeCohortShift, applyCohortShift, clampStanine, COHORT_SHIFT, MEDIAN_STANINE, STRONG_STANINE } = require('../../utils/cbatStanine');
@@ -8,6 +8,13 @@ const { scoreToStanine, scoreForStanine, stanineStep, topSegment, removeCohortSh
 // code produces a report that looks perfectly plausible and is quietly wrong.
 
 describe('battery definitions', () => {
+  it('leaves a retired role out of every list, but can still look it up for a past mock', () => {
+    // Pilot ISR (RPAS) is only on the older sheet format; no 2025/2026 sheet carries it.
+    expect(BATTERIES.map(b => b.key)).not.toContain('pilot-isr-rpas');
+    expect(BATTERY_BY_KEY['pilot-isr-rpas']).toBeUndefined();
+    expect(ANY_BATTERY_BY_KEY['pilot-isr-rpas']).toMatchObject({ label: 'Pilot ISR (RPAS)', retired: true });
+  });
+
   it('has every battery weighted to exactly 100', () => {
     // The real sheets all sum to 100 — that is what makes `score / 100 * 20` land on 180 — so a
     // battery that doesn't is a transcription error, not a design choice.

@@ -393,16 +393,16 @@ describe('GET /api/games/cbat/report/:batteryKey', () => {
     expect(expected).toBeGreaterThan(batteryGames('control-officer-atc').size * FORM_MIN_RUNS);
   });
 
-  // Pilot ISR (RPAS) is the clean demonstration: its pass mark is 100 and median play across the
+  // Weapon Systems Officer is the clean demonstration: its pass mark is 100 and median play across the
   // whole roster scores exactly 100, so the same play is a pass or a coin toss purely on how many
   // times each game was played.
   describe('a range that still has the pass mark inside it', () => {
     // One stanine below the median, which the cohort shift reads back as a straight 5 — landing
     // this battery exactly on its cutoff of 100, which is the whole setup for a straddling band.
     const playAllOf = async (runsFor) => {
-      for (const game of batteryGames('pilot-isr-rpas')) await play(game, stanines(-1), runsFor(game));
+      for (const game of batteryGames('wso')) await play(game, stanines(-1), runsFor(game));
     };
-    const get = () => request(app).get('/api/games/cbat/report/pilot-isr-rpas').set('Cookie', cookie);
+    const get = () => request(app).get('/api/games/cbat/report/wso').set('Cookie', cookie);
 
     it('is a pass once every game is settled', async () => {
       await playAllOf(game => minRunsFor(game));

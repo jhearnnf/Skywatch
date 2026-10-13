@@ -10,6 +10,7 @@ const GameSessionCbatFlagResult = require('../../models/GameSessionCbatFlagResul
 const { IDLE_LIMIT_MS } = require('../../utils/cbatMock');
 const { simulateMock } = require('../../utils/cbatMockSimulate');
 const { mockBatteries } = require('../../utils/cbatMockPlan');
+const { buildMockSheet, serialiseMock } = require('../../utils/cbatMock');
 
 let user, cookie;
 
@@ -313,6 +314,17 @@ describe('simulated pass / fail sheets', () => {
       // A pass is any role passing; a fail is none passing.
       expect(mock.sheet.batteries.some(b => b.status === 'pass')).toBe(want === 'pass');
     }
+  });
+
+  it('no longer offers a retired role, but a past mock that named it still reads back', async () => {
+    const res = await request(app).post('/api/cbat-mock/start').set('Cookie', cookie).send({ battery: 'pilot-isr-rpas' });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(mockBatteries({ region: 'GB' }).map(b => b.key)).not.toContain('pilot-isr-rpas');
+
+    const past = { _id: 'old', userId: 'u1', region: 'GB', scope: 'role', batteryKey: 'pilot-isr-rpas', steps: [],
+      breakAfter: [], currentStep: 0, status: 'completed', startedAt: new Date(), endedAt: new Date() };
+    expect(buildMockSheet(past).batteries.map(b => b.key)).toEqual(['pilot-isr-rpas']);
+    expect(serialiseMock(past).batteryLabel).toBe('Pilot ISR (RPAS)');
   });
 
   it('picks either scope when none is pinned', () => {

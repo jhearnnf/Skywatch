@@ -5,12 +5,14 @@ import surveyTests from '../../backend/constants/surveyTests.json'
 // backend constants file the same way categories.json is — one definition, so
 // a role the API will accept is always a role the form can offer.
 
-export const ROLE_GROUPS = surveyRoles.groups
+// What the form offers: a retired role drops out here, but stays in ROLE_BY_KEY so a stored answer
+// naming it still reads back.
+export const ROLE_GROUPS = surveyRoles.groups.map(g => ({ ...g, roles: g.roles.filter(r => !r.retired) }))
 export const OTHER_ROLE_KEY = surveyRoles.otherKey
 
 // Flat lookup for turning a stored key back into something readable.
 export const ROLE_BY_KEY = Object.fromEntries(
-  ROLE_GROUPS.flatMap(g => g.roles.map(r => [r.key, { ...r, service: g.service }])),
+  surveyRoles.groups.flatMap(g => g.roles.map(r => [r.key, { ...r, service: g.service }])),
 )
 
 export function roleLabel(key, other) {

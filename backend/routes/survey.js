@@ -427,7 +427,7 @@ router.get('/:token', throttle, async (req, res) => {
         // kind things to the store is review gating, which Play's policy
         // prohibits and which is the one way this could put the listing at risk.
         usedAndroid: !!invite.userId?.osSeen?.android,
-        roleGroups: surveyRoles.groups,
+        roleGroups: surveyRoles.groups.map(g => ({ ...g, roles: g.roles.filter(r => !r.retired) })),
         // Score sheets this person has already sent, so a reopened link shows
         // them back rather than asking again for something we already have.
         resultImages: ownSheets(invite.userId),

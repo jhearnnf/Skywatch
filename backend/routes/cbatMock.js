@@ -11,7 +11,7 @@ const router = require('express').Router();
 const { protect } = require('../middleware/auth');
 const AppSettings = require('../models/AppSettings');
 const CbatMockAssessment = require('../models/CbatMockAssessment');
-const { BATTERY_BY_KEY, detectRegion, normaliseRegion } = require('../constants/cbatBatteries');
+const { BATTERY_BY_KEY, ANY_BATTERY_BY_KEY, detectRegion, normaliseRegion } = require('../constants/cbatBatteries');
 const { buildMockPlan, mockBatteries, mockSteps, breakPoints, totalMinutes, unsatCodes, MOCK } = require('../utils/cbatMockPlan');
 const { findActiveMock, expireIfIdle, serialiseMock, buildMockSheet, IDLE_LIMIT_MS } = require('../utils/cbatMock');
 const User = require('../models/User');
@@ -275,7 +275,7 @@ router.get('/admin/stats', protect, adminOnly, async (req, res) => {
       person.lastStartedAt = m.startedAt;
       people.set(uid, person);
 
-      const label = m.scope === 'role' ? (BATTERY_BY_KEY[m.batteryKey]?.label ?? m.batteryKey) : `All roles (${m.region})`;
+      const label = m.scope === 'role' ? (ANY_BATTERY_BY_KEY[m.batteryKey]?.label ?? m.batteryKey) : `All roles (${m.region})`;
       if (m.status !== 'completed') {
         person.last = { label, status: m.status, verdict: null, score: null, cutoff: null };
         continue;

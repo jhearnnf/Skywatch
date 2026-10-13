@@ -15,6 +15,24 @@ import { REGIONS, familyNote } from '../../data/cbatBatteries'
 const DOMAIN_ABBR = { STM_C: 'STM/C', PrcptSTM: 'Prcpt-STM', StrgCIP: 'Strg-CIP' }
 const domainAbbr = key => DOMAIN_ABBR[key] ?? key
 
+// Roles the real 2026 sheet names differently from our role pickers. Only the sheet uses these.
+const SHEET_LABEL = {
+  'pilot':           'RAF Pilot 2026',
+  'nco-control-atc': 'Air Traffic & Weapons Controller (ATC)',
+  'nco-control-wc':  'Air Traffic & Weapons Controller (WC)',
+}
+const sheetLabel = battery => SHEET_LABEL[battery.key] ?? battery.label
+
+// The order the real 2026 sheet prints the UK roles in: the officer page (Pilot, the controllers,
+// Ops, Intelligence), then WSO, the WSOP roles and the NCO controllers on the second page. Our role
+// pickers list WSO beside Pilot, so the sheet re-sorts; a role not listed keeps its place after.
+const SHEET_ORDER = [
+  'pilot', 'control-officer-atc', 'control-officer-wc', 'operations-officer', 'intelligence',
+  'wso', 'wsop-linguist', 'wsop-isr', 'wsop-rw', 'wsop-am', 'nco-control-atc', 'nco-control-wc',
+]
+const sheetRank = key => { const i = SHEET_ORDER.indexOf(key); return i === -1 ? SHEET_ORDER.length : i }
+const sheetOrder = batteries => [...batteries].sort((a, b) => sheetRank(a.key) - sheetRank(b.key))
+
 // "3(CUT), SAT": a test's multiplier leads it when it is more than one.
 function testsText(tests) {
   return tests.map(t => (t.mult > 1 ? `${t.mult}(${t.code})` : t.code)).join(', ')
@@ -71,7 +89,7 @@ function BatteryBlock({ battery }) {
           {i === 0 && <SideLabel status={battery.status} rows={rows} />}
           {i === 0 && (
             <td className="mock-sheet-battery-name" rowSpan={rows}>
-              {battery.label}
+              {sheetLabel(battery)}
               {battery.status === 'provisional' && (
                 <span className="mock-sheet-battery-note">Not enough tests sat to judge</span>
               )}
@@ -99,7 +117,7 @@ export default function CbatMockScoreSheet({ mock, agentNumber }) {
   const region = REGIONS[mock.region]
   const sat = mock.testsDone
   const date = new Date(mock.startedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-  const assessment = mock.scope === 'role' ? mock.batteryLabel : `All roles, ${region?.label ?? mock.region}`
+  const assessment = mock.scope === 'role' ? (SHEET_LABEL[mock.batteryKey] ?? mock.batteryLabel) : `All roles, ${region?.label ?? mock.region}`
 
   return (
     <div className="mock-sheet" data-testid="mock-score-sheet">
@@ -137,7 +155,7 @@ export default function CbatMockScoreSheet({ mock, agentNumber }) {
               {Array.from({ length: 9 }, (_, i) => <th key={i} className="mock-sheet-stanine-num">{i + 1}</th>)}
             </tr>
           </thead>
-          {sheet.batteries.map(b => <BatteryBlock key={b.key} battery={b} />)}
+          {sheetOrder(sheet.batteries).map(b => <BatteryBlock key={b.key} battery={b} />)}
         </table>
       </div>
 
