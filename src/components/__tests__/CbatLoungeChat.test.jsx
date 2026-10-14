@@ -1489,3 +1489,69 @@ describe('who said it', () => {
       String(url).includes('/messages') && opts?.method !== 'POST').length).toBe(before + 1))
   })
 })
+
+// Scrolling to the top of the room fetches the page before it, the way the
+// Community channels page back. Without it the lounge only ever showed its
+// newest 40 messages.
+describe('older messages', () => {
+  class Observer {
+    static all = []
+    constructor(cb) { this.cb = cb; Observer.all.push(this) }
+    observe(el) { this.el = el }
+    disconnect() { this.el = null }
+  }
+  const older = { _id: 'm0', senderUserId: 'u3', senderDisplayName: 'Hawk', body: 'from last week', createdAt: new Date(Date.now() - 864e5).toISOString(), mentions: [] }
+
+  beforeEach(() => {
+    Observer.all = []
+    global.IntersectionObserver = Observer
+  })
+  afterEach(() => { delete global.IntersectionObserver })
+
+  function stubPaged() {
+    const fetchMock = stubFetch()
+    const base = fetchMock.getMockImplementation()
+    fetchMock.mockImplementation((url, opts) => {
+      if (String(url).includes('/messages') && !opts?.method) {
+        const before = String(url).includes('before=')
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: 'success', data: before
+            ? { messages: [older], senders: {}, hasMore: false }
+            : { messages: MESSAGES, senders: {}, hasMore: true, botTyping: null } }),
+        })
+      }
+      return base(url, opts)
+    })
+    return fetchMock
+  }
+  const scrollToTop = () => {
+    const sentinel = screen.getByTestId('older-messages')
+    const io = Observer.all.find(o => o.el === sentinel)
+    act(() => { io.cb([{ isIntersecting: true, target: sentinel }]) })
+  }
+
+  it('loads the page before the oldest message when the top comes into view', async () => {
+    const fetchMock = stubPaged()
+    renderOpen()
+    await screen.findByText('anyone about?')
+
+    scrollToTop()
+
+    expect(await screen.findByText('from last week')).toBeInTheDocument()
+    const olderCall = fetchMock.mock.calls.find(([url]) => String(url).includes('before='))
+    expect(String(olderCall[0])).toContain(encodeURIComponent(MESSAGES[0].createdAt))
+    // Older first, newest last, and nothing further back to ask for.
+    const bodies = [...document.querySelectorAll('[data-msg-row]')].map(el => el.textContent)
+    expect(bodies.findIndex(t => t.includes('from last week'))).toBeLessThan(bodies.findIndex(t => t.includes('anyone about?')))
+    expect(screen.queryByTestId('older-messages')).toBeNull()
+  })
+
+  it('offers nothing when the room has no older history', async () => {
+    stubFetch()
+    renderOpen()
+    await screen.findByText('anyone about?')
+    expect(screen.queryByTestId('older-messages')).toBeNull()
+  })
+})

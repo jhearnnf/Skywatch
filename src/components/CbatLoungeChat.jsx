@@ -50,6 +50,19 @@ const ACTIVITY_REFRESH_MS = 5 * 60_000
 // pixels of slack, because sub-pixel row heights mean the scroll maths rarely
 // lands on exactly zero.
 const BOTTOM_SLACK_PX = 4
+
+// Older pages, loaded by scrolling up, must survive every refresh. A refresh
+// is a snapshot of only the newest page, so applied as it stands it would drop
+// everything the reader had scrolled back to and dump them at the bottom.
+// Anything in `prev` from before the snapshot's oldest message stays in front
+// of it. The same rule as mergeOlder in pages/chat/ChatThread.jsx.
+const keepOlder = (prev, snapshot) => {
+  if (!prev.length || !snapshot.length) return snapshot
+  const oldest = new Date(snapshot[0].createdAt).getTime()
+  const ids    = new Set(snapshot.map(m => String(m._id)))
+  const kept   = prev.filter(m => !ids.has(String(m._id)) && new Date(m.createdAt).getTime() < oldest)
+  return kept.length ? [...kept, ...snapshot] : snapshot
+}
 // How much of the viewport the panel has to reach into before it counts as
 // being read. A band down the middle rather than a fraction of the panel:
 // the panel is 60dvh on a phone but can be taller than the window in the
@@ -199,7 +212,11 @@ function GroupOnlineDot({ online }) {
 // `grow` is the panel's flex weight against Recent Scores' 1 in the desktop
 // side column (the player's dragged split); `resizing` is true mid-drag, which
 // switches the size animation off so the panel tracks the pointer.
-export default function CbatLoungeChat({ open, onToggle, collapsible = true, grow = DEFAULT_LOUNGE_GROW, resizing = false }) {
+// `split` false switches off the group-setup fit below, which sizes the panel
+// against its siblings in a shared column. The desktop dock (see
+// components/cbat/CbatLoungeDock.jsx) is a column of its own with nothing to
+// borrow height from, so there the form scrolls.
+export default function CbatLoungeChat({ open, onToggle, collapsible = true, grow = DEFAULT_LOUNGE_GROW, resizing = false, split = true }) {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
   const navigate = useNavigate()
@@ -208,6 +225,22 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   const [lounge,    setLounge]    = useState(null)
   const [gone,      setGone]      = useState(false)
   const [messages,  setMessages]  = useState([])
+  // Paging back through history, as the Community channels do: the newest
+  // page arrives first, and scrolling to the top fetches the one before it.
+  // `hasMore` is the server's word on whether there is anything further back.
+  const [hasMore,      setHasMore]      = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [olderErr,     setOlderErr]     = useState(false)
+  // Set once an older page is on screen; see loadMessages.
+  const olderLoadedRef = useRef(false)
+  const olderInFlight  = useRef(false)
+  // Forget the paging for a conversation being left (a room change, or an
+  // admin switching between groups).
+  const resetHistory = () => {
+    setHasMore(false)
+    setOlderErr(false)
+    olderLoadedRef.current = false
+  }
   const [loading,   setLoading]   = useState(true)
   const [busy,      setBusy]      = useState(false)
   const [err,       setErr]       = useState('')
@@ -338,6 +371,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     setRoom(next)
     setLounge(null)
     setMessages([])
+    resetHistory()
     setSenders({})
     setLoading(true)
     setMembersOpen(false)
@@ -515,11 +549,42 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     if (!conversationId) return
     const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}`)
     if (!ok || !data) return
-    setMessages(applyJustSent(data.messages ?? []))
-    setSenders(data.senders ?? {})
+    setMessages(prev => keepOlder(prev, applyJustSent(data.messages ?? [])))
+    // On top of the senders already known, so names on older pages still resolve.
+    setSenders(prev => ({ ...prev, ...(data.senders ?? {}) }))
+    // Once an older page is on screen, whether there is more is that page's
+    // answer, not the newest page's.
+    if (!olderLoadedRef.current) setHasMore(Boolean(data.hasMore))
     setTypingName(data.botTyping ?? null)
     setLoading(false)
   }, [applyJustSent, conversationId, get])
+
+  // The page before the oldest message on screen, prepended. The ref, not the
+  // state, guards against a second request: the observer and a click on the
+  // retry button can both fire in one frame.
+  const loadOlder = useCallback(async () => {
+    const oldest = messages[0]
+    if (!conversationId || !oldest || !hasMore || olderInFlight.current) return
+    olderInFlight.current = true
+    setLoadingOlder(true); setOlderErr(false)
+    try {
+      const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}&before=${encodeURIComponent(oldest.createdAt)}`)
+      if (!ok || !data) throw new Error('older page failed')
+      olderLoadedRef.current = true
+      setMessages(prev => {
+        const ids   = new Set(prev.map(m => String(m._id)))
+        const fresh = (data.messages ?? []).filter(m => !ids.has(String(m._id)))
+        return fresh.length ? [...fresh, ...prev] : prev
+      })
+      setSenders(prev => ({ ...(data.senders ?? {}), ...prev }))
+      setHasMore(Boolean(data.hasMore))
+    } catch {
+      setOlderErr(true)
+    } finally {
+      olderInFlight.current = false
+      setLoadingOlder(false)
+    }
+  }, [conversationId, get, hasMore, messages])
 
   useEffect(() => {
     if (!conversationId) return
@@ -645,7 +710,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   const headerRef = useRef(null)
   const [fitHeight, setFitHeight] = useState(null)
   useLayoutEffect(() => {
-    if (!collapsible || !setupEl || !panelEl) { setFitHeight(null); return }
+    if (!collapsible || !split || !setupEl || !panelEl) { setFitHeight(null); return }
     const measure = () => {
       const wrap   = setupEl.parentElement
       const style  = wrap ? getComputedStyle(wrap) : null
@@ -675,7 +740,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     ro.observe(setupEl)
     if (panelEl.parentElement) ro.observe(panelEl.parentElement)
     return () => ro.disconnect()
-  }, [collapsible, setupEl, panelEl, grow])
+  }, [collapsible, split, setupEl, panelEl, grow])
 
   // A backgrounded tab is not being read either, and the panel stays
   // "intersecting" the whole time it is in one.
@@ -707,11 +772,50 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
 
   // Stick to the bottom, which is where a chat lives. useLayoutEffect so the
   // jump happens before paint rather than as a visible scroll.
+  //
+  // But not over someone reading back. A page of history arriving above them
+  // must not move what they are looking at: the list grows at the top, so the
+  // offset is pushed down by exactly the height added. And a refresh while
+  // they are scrolled up leaves them there; it only follows the conversation
+  // down when they were already at the bottom, or the new message is theirs.
+  const prevFirstIdRef = useRef(null)
+  const prevLastIdRef  = useRef(null)
+  const prevHeightRef  = useRef(0)
   useLayoutEffect(() => {
-    if (!open) return
+    // Closed: the list is gone, and whatever mounts next starts at the bottom.
+    if (!open) { prevFirstIdRef.current = null; return }
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [open, messages, typingName])
+    if (!el) return
+    const first     = messages[0] ? String(messages[0]._id) : null
+    const last      = messages[messages.length - 1]
+    const lastId    = last ? String(last._id) : null
+    const prevFirst = prevFirstIdRef.current
+    const prepended = Boolean(prevFirst) && first !== prevFirst && messages.some(m => String(m._id) === prevFirst)
+    const mineNew   = Boolean(last) && lastId !== prevLastIdRef.current && String(last.senderUserId ?? '') === String(user?._id)
+    if (prepended) el.scrollTop += el.scrollHeight - prevHeightRef.current
+    else if (!prevFirst || atBottomRef.current || mineNew) el.scrollTop = el.scrollHeight
+    prevFirstIdRef.current = first
+    prevLastIdRef.current  = lastId
+    prevHeightRef.current  = el.scrollHeight
+  }, [open, messages, typingName, user?._id])
+
+  // Ask for the previous page when the top of the list comes into view. An
+  // observer rather than a scroll handler, so a page too short to scroll still
+  // fills up to the point where it can, and rebuilt when the request state
+  // changes so a page that has just landed does not re-fire on the same
+  // intersection. Mirrors pages/chat/components/MessageList.jsx.
+  const topRef = useRef(null)
+  const wantOlder = open && hasMore && !loading && !loadingOlder && !olderErr
+  useEffect(() => {
+    const root = scrollRef.current
+    const target = topRef.current
+    if (!wantOlder || !root || !target || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) loadOlder()
+    }, { root, rootMargin: '120px 0px 0px 0px' })
+    io.observe(target)
+    return () => io.disconnect()
+  }, [wantOlder, loadOlder])
 
   // The reaction picker opens INLINE (see Reactions), so on the last message it
   // makes that row taller. If you were parked at the bottom — which is exactly
@@ -1091,7 +1195,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
         <div className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2">
           <button
             type="button"
-            onClick={() => { setAdminGroupId(null); setLounge(null); setMessages([]); setLoading(true); setMembersOpen(false) }}
+            onClick={() => { setAdminGroupId(null); setLounge(null); setMessages([]); resetHistory(); setLoading(true); setMembersOpen(false) }}
             aria-label="Back to all groups"
             title="All CBAT groups"
             className="text-brand-500 hover:text-brand-400 text-xs leading-none px-1 -ml-1 transition-colors"
@@ -1126,7 +1230,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             const isToday = group.date === todayKey
             const isPast = group.date < todayKey
             return (
-            <button key={group.conversationId} type="button" onClick={() => { setAdminGroupId(group.conversationId); setLounge(null); setLoading(true) }} className={`w-full rounded-xl border border-game-line bg-surface/70 px-3 py-2.5 flex items-center gap-3 text-left hover:border-brand-400 hover:bg-brand-500/[0.06] hover:-translate-y-px transition-all ${isToday ? 'cbat-group-today' : ''} ${isPast ? 'opacity-50 grayscale hover:opacity-80' : ''}`}>
+            <button key={group.conversationId} type="button" onClick={() => { setAdminGroupId(group.conversationId); setLounge(null); setMessages([]); resetHistory(); setLoading(true) }} className={`w-full rounded-xl border border-game-line bg-surface/70 px-3 py-2.5 flex items-center gap-3 text-left hover:border-brand-400 hover:bg-brand-500/[0.06] hover:-translate-y-px transition-all ${isToday ? 'cbat-group-today' : ''} ${isPast ? 'opacity-50 grayscale hover:opacity-80' : ''}`}>
               <span className={`w-9 h-9 rounded-xl grid place-items-center ${isToday ? 'bg-amber-500/15 text-amber-500' : 'bg-brand-500/10 text-brand-500'}`}>✈</span>
               <span className="min-w-0">
                 <span className="block text-xs font-extrabold text-game-text">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}</span>
@@ -1209,6 +1313,23 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
         }}
         className="flex-1 min-h-0 overflow-y-auto scrollbar-inset px-3 py-2 space-y-1.5"
       >
+        {!loading && hasMore && (
+          <div ref={topRef} className="flex justify-center py-1" data-testid="older-messages">
+            {olderErr ? (
+              <button
+                type="button"
+                onClick={loadOlder}
+                className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 px-2 py-1 rounded-lg border border-game-line hover:bg-surface-raised transition-colors"
+              >
+                Could not load older messages. Try again
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-500">
+                {loadingOlder ? 'Loading older messages…' : 'Scroll up for older messages'}
+              </span>
+            )}
+          </div>
+        )}
         {/* The group's welcome, as background text above the history rather
             than a message in it: nothing to reply to, react on or count. The
             server only sends one for a cohort room. */}
@@ -1231,7 +1352,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             // site, not a person, so it gets no name, no colour and no actions.
             if (m.senderRole === 'system') {
               return (
-                <div key={m._id} className="flex justify-center py-1" data-msg-row={String(m._id)}>
+                <div key={m._id} className="content-fade-in flex justify-center py-1" data-msg-row={String(m._id)}>
                   <span className="text-[11px] leading-snug text-slate-500 italic text-center px-3 py-1.5 rounded-xl bg-slate-100/60 border border-game-line max-w-[26rem]">
                     {/* A join line whose member has since left the group. */}
                     {m.memberLeft ? (
@@ -1288,7 +1409,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
                   if (e.target?.closest?.('button')) return
                   setOpenActionsId(cur => (cur === String(m._id) ? null : String(m._id)))
                 }}
-                className={`group relative text-xs leading-snug break-words ${
+                className={`content-fade-in group relative text-xs leading-snug break-words ${
                   mineTag ? 'bg-brand-600/10 border-l-2 border-l-brand-400 -mx-1 px-1 rounded' : ''
                 }`}
               >
