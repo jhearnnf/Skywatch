@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
 import { useCbatDemo } from '../utils/cbat/demoMode'
 
 // Puts a class on <body> while a game wants it — unless the game is a demo
@@ -13,9 +13,14 @@ import { useCbatDemo } from '../utils/cbat/demoMode'
 //
 // The demo harness contains context (auth, chrome, portals) but nothing can
 // contain `document.body`, so the guard has to live at the point of use.
+//
+// A layout effect, so the class is on <body> before the first frame of the
+// state that wants it is painted. A plain effect left one frame drawn in the
+// old shell, and a game that sizes itself to the window (DPT) measured that
+// frame and then jumped.
 export function useGameBodyClass(className, active = true) {
   const isDemo = !!useCbatDemo()
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active || isDemo) return
     document.body.classList.add(className)
     return () => document.body.classList.remove(className)
