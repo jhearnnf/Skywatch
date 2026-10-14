@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { useTutorialFromSearch } from '../hooks/useTutorialFromSearch'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -36,6 +36,12 @@ import {
 import GuideArrow from '../components/cbat/GuideArrow'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
+import { useCbatTheme } from '../hooks/useCbatTheme'
+import { useViewportFit } from '../hooks/useViewportFit'
+import {
+  DptCbatRadar, DptCbatGate, DptCbatZone, DptCbatAircraft, DptCbatProjection,
+  DptCbatLegend, DptCbatStrip, DptCbatKeypad,
+} from '../components/cbat/DptRealCbat'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // The full ladder. A run no longer plays all eight: Easier serves rounds 1-4
@@ -62,6 +68,30 @@ const BEARING_LABELS = [360, 45, 90, 135, 180, 225, 270, 315]
 // Minor tick bearings — every 10°, skipping the bearings that have a label
 const MINOR_TICKS = Array.from({ length: 36 }, (_, i) => i * 10)
   .filter(b => b % 45 !== 0 && b !== 0)
+
+// ── Fitting a run to the window ─────────────────────────────────────────────
+// From md up the arena is sized from what useViewportFit says is left of the
+// window, so the whole run sits on one screen without scrolling. Below md the
+// layout stacks and the arena simply takes the width, as it always has.
+//
+// SkyWatch layout: the arena column carries a fixed row above the arena (the
+// RND / SCORE / time line, 16px + 8px margin) and the aircraft tabs under it
+// (40px, 8px of it tucked behind the arena), plus a little slack.
+const ARENA_COLUMN_CHROME = 24 + 32 + 4
+const CONTROLS_GAP        = 16
+const CONTROLS_MAX_W      = 440
+const ARENA_MIN_PX        = 260
+// The numpad column grows with its width: four rows of square keys, each
+// (W - 156) / 3 wide, on top of ~260px of display, tabs, help and zone key. On
+// a short window it is narrowed so it is never taller than the arena column.
+function controlsWidthFor(height) {
+  const key = (height - 260) / 4
+  return Math.round(Math.max(320, Math.min(CONTROLS_MAX_W, key * 3 + 156)))
+}
+// Real CBAT layout: the key column to the left of the radar, and the black
+// strip under both.
+const DPT_CBAT_KEY_W   = 256
+const DPT_CBAT_STRIP_H = 40
 
 // ── Aircraft motion ─────────────────────────────────────────────────────────
 const AIRCRAFT_ICON  = 40    // visual icon size in scope units (label offset)
@@ -890,6 +920,9 @@ const DptControls = memo(function DptControls({
 // CbatStickLayout from `lg` up, and inside the card below it, where that column
 // is not drawn. The pick itself lives on the page.
 const RANDOM_AIRCRAFT = 'random'
+// What a Real CBAT run "flies": no aircraft, so no model and no title (the
+// result's aircraftUsed is left empty).
+const REAL_CBAT_CRAFT = Object.freeze({ briefId: null, title: null })
 
 function DptAircraftPanel({ aircraft, loading, value, onChange, className = '' }) {
   const tile = (selected) => [
@@ -980,7 +1013,10 @@ function DptAircraftPanel({ aircraft, loading, value, onChange, className = '' }
 // DPT's instructions card, so the difficulty pair sits under the title here the
 // way it does on every other split game. The aircraft is picked in its own
 // panel (above); Start flies the run with whatever is picked.
-function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loading, personalBest, bestLoading, difficulty, onDifficulty, onPractice }) {
+//
+// Under the Real CBAT theme there is no aircraft to pick: the run draws radar
+// symbols, as the real test does, so the panel goes and Start needs no roster.
+function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loading, personalBest, bestLoading, difficulty, onDifficulty, onPractice, cbat = false }) {
   const tuning = dptTuning(difficulty)
   return (
     <div>
@@ -1095,13 +1131,15 @@ function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loadi
 
       {/* Below lg the left-hand column is not drawn, so the aircraft panel
           sits in the card, above the buttons that use it. */}
-      <DptAircraftPanel
-        aircraft={aircraft}
-        loading={loading}
-        value={aircraftPick}
-        onChange={onAircraftPick}
-        className="lg:hidden max-w-md mx-auto mb-4"
-      />
+      {!cbat && (
+        <DptAircraftPanel
+          aircraft={aircraft}
+          loading={loading}
+          value={aircraftPick}
+          onChange={onAircraftPick}
+          className="lg:hidden max-w-md mx-auto mb-4"
+        />
+      )}
 
       <div className="flex flex-wrap gap-3 lg:gap-4 justify-center">
         <button
@@ -1115,7 +1153,7 @@ function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loadi
         <button
           type="button"
           onClick={onStart}
-          disabled={loading || !aircraft.length}
+          disabled={!cbat && (loading || !aircraft.length)}
           data-demo-start
           className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
         >
@@ -1332,7 +1370,7 @@ function PracticeComplete({ onExit }) {
         That is every control: a side and a bearing for heading, ALT and a height for altitude.
       </p>
       <p className="text-sm text-slate-400 mb-6">
-        Pick an aircraft on the briefing to start a run.
+        Press Start on the briefing to begin a run.
       </p>
       <button
         onClick={onExit}
@@ -1347,6 +1385,12 @@ function PracticeComplete({ onExit }) {
 function DptPractice({ modelUrl, onExit, onProgress }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [done, setDone]       = useState(false)
+  // Sized to the window from md up, like a run (see the playing branch).
+  const stageRef = useRef(null)
+  const fit      = useViewportFit(stageRef, !done)
+  const fitPx    = fit?.wide
+    ? Math.max(ARENA_MIN_PX, Math.min(fit.width - CONTROLS_MAX_W - CONTROLS_GAP, fit.height - ARENA_COLUMN_CHROME))
+    : null
   const [runId]               = useState(makePracticeRunId)
   const drill    = DPT_PRACTICE_DRILLS[stepIdx]
   const drillRef = useRef(drill)
@@ -1803,11 +1847,14 @@ function DptPractice({ modelUrl, onExit, onProgress }) {
   const zoneList = drill.zones ?? []
 
   return (
-    <div className="w-full flex flex-col md:grid md:grid-cols-[auto_440px] md:gap-4 md:justify-center">
+    <div ref={stageRef} className="w-full flex flex-col md:grid md:grid-cols-[auto_440px] md:gap-4 md:justify-center">
       {/* Arena — the live game's sizing (see the playing branch) so the drills
           are flown on the arena a run will use. Second on a phone, under the
           card; the left column on desktop, spanning both rows on the right. */}
-      <div className="order-2 md:order-none md:row-span-2 md:col-start-1 w-full max-w-md md:max-w-none mx-auto md:mx-0 md:w-[min(calc(100vh_-_134px),calc(100vw_-_704px))]">
+      <div
+        className="order-2 md:order-none md:row-span-2 md:col-start-1 w-full max-w-md md:max-w-none mx-auto md:mx-0 md:w-[min(calc(100vh_-_160px),calc(100vw_-_704px))]"
+        style={fitPx ? { width: fitPx } : undefined}
+      >
         <div className="flex items-center justify-between text-xs font-mono mb-2 px-1">
           <span className="text-slate-400">DRILL <span className="text-brand-600">{stepIdx + 1}</span>/{total}</span>
           <span className="text-slate-400">TUTORIAL · NO SCORE</span>
@@ -1968,7 +2015,11 @@ export default function CbatDpt() {
   // returning to it: starting a scored run stays a deliberate pick.
   const [phase, setPhase] = useState('select')
   const { enterImmersive, exitImmersive } = useGameChrome()
-  useEffect(() => {
+  // A layout effect: going immersive is what slides the desktop chat panel
+  // away and hands its column back, and doing it before the first frame of the
+  // run is painted means the arena is sized for the final page, not for one
+  // that still has the chat's column reserved.
+  useLayoutEffect(() => {
     // Practice hides the nav chrome like a run does — it lays the arena and
     // numpad out exactly where a run will put them.
     if (phase === 'playing' || phase === 'over' || phase === 'practice') enterImmersive()
@@ -1983,6 +2034,18 @@ export default function CbatDpt() {
   // The instructions page lays out in three columns (the aircraft panel on the
   // left), which needs the shell's width cap lifted. See CbatStickLayout.
   useGameBodyClass('cbat-stick-wide', phase === 'select')
+
+  // Real CBAT theme. Read live on the instructions page (it hides the aircraft
+  // panel) and pinned when Start is pressed, so flipping the theme mid-run
+  // cannot swap a radar-symbol run onto 3D models it never picked.
+  const cbat = useCbatTheme()
+  const [runCbat, setRunCbat] = useState(false)
+  const runCbatRef = useRef(false)
+
+  // The run and the tutorial are sized to the window from md up, so neither
+  // needs the page to scroll. See useViewportFit.
+  const stageRef = useRef(null)
+  const fit      = useViewportFit(stageRef, phase === 'playing')
 
   // ── Practice ───────────────────────────────────────────────────────────────
   // Fire-and-forget usage tracking (admin Reports per-drill drop-off). Online-
@@ -2156,11 +2219,16 @@ export default function CbatDpt() {
   //  - Round 5:    CA-A + CA-N, 3 numbered gates, danger zones begin
   //  - Round 6:    + Fighter joins, + enemies appear, more danger zones
   //  - Rounds 7–8: more enemies, harder spawns
+  // A Real CBAT run draws radar symbols and loads no models, so it spawns
+  // every aircraft with no model at all rather than skipping the ones whose
+  // model is missing (which is what an empty fighter pool does otherwise).
   const playerModel = () => {
     const sel = selectedRef.current
+    if (runCbatRef.current) return null
     return sel ? getModelUrl(sel.briefId, sel.title) : null
   }
   const pickFighterModel = () => {
+    if (runCbatRef.current) return null
     const pool = fighterPoolRef.current
     if (pool.length === 0) return null
     const fp = pool[Math.floor(Math.random() * pool.length)]
@@ -2189,7 +2257,7 @@ export default function CbatDpt() {
     if (roundNum >= 4) ac.push(spawnPlayerAircraft('CA-N', 'CA-N', playerModel(), ac))
     if (roundNum >= 6) {
       const fm = pickFighterModel()
-      if (fm) ac.push(spawnPlayerAircraft('Fighter', 'Fighter', fm, ac))
+      if (fm || runCbatRef.current) ac.push(spawnPlayerAircraft('Fighter', 'Fighter', fm, ac))
     }
 
     // Enemy aircraft (round 6 → 1, round 7 → 2, round 8 → 3) all spawn
@@ -2199,7 +2267,7 @@ export default function CbatDpt() {
       const modelUrls = []
       for (let i = 0; i < enemyCount; i++) {
         const em = pickFighterModel()
-        if (em) modelUrls.push(em)
+        if (em || runCbatRef.current) modelUrls.push(em)
       }
       if (modelUrls.length > 0) {
         const players = ac.filter(a => a.kind !== 'Enemy')
@@ -2773,6 +2841,10 @@ export default function CbatDpt() {
     const tuning = dptTuning(difficulty)
     runTuningRef.current = tuning
     setRunDifficulty(difficulty)
+    // Play Again keeps the look the run was started in.
+    const realCbat = a === REAL_CBAT_CRAFT
+    runCbatRef.current = realCbat
+    setRunCbat(realCbat)
     setSelected(a)
     selectedRef.current = a
     startTracking(tuning.gameKey)
@@ -2826,6 +2898,29 @@ export default function CbatDpt() {
     return ids
   })()
 
+  // The title bar's round count and meters (drawn under the Real CBAT theme).
+  const shownRound = displayRound(round, runTuning)
+  const runTest = {
+    stage:        'Testing',
+    item:         shownRound,
+    total:        runTuning.rounds.length,
+    timeFrac:     roundEndTime ? Math.max(0, roundEndTime - Date.now()) / roundDurationMs(round) : null,
+    progressFrac: (shownRound - 1) / runTuning.rounds.length,
+  }
+
+  // Sizes for this window (see useViewportFit and the constants at the top).
+  const wideFit   = fit?.wide ? fit : null
+  const controlsW = wideFit ? controlsWidthFor(wideFit.height) : CONTROLS_MAX_W
+  const arenaPx   = wideFit
+    ? Math.max(ARENA_MIN_PX, Math.min(wideFit.width - controlsW - CONTROLS_GAP, wideFit.height - ARENA_COLUMN_CHROME))
+    : null
+  const cbatPx = fit
+    ? (fit.wide
+        ? Math.max(ARENA_MIN_PX, Math.min(fit.width - DPT_CBAT_KEY_W, fit.height - DPT_CBAT_STRIP_H))
+        : fit.width)
+    : null
+  const activeAircraft = aircraftList.find(a => a.id === activeId) ?? null
+
   return (
     <div className="cbat-page">
       <SEO title="DPT" description="Dynamic Projection Test — vector aircraft and intercept enemy contacts." />
@@ -2844,7 +2939,7 @@ export default function CbatDpt() {
         confirmNeeded={['playing', 'over'].includes(phase)}
         quitLabel={<>&larr; Quit</>}
         className={`gap-3 ${phase === 'select' ? '!mb-2' : '!mb-4'}`}
-        test={phase === 'playing' ? { stage: 'Testing' } : phase === 'practice' ? { stage: 'Practice' } : null}
+        test={phase === 'playing' ? runTest : phase === 'practice' ? { stage: 'Practice' } : null}
       >
         {phase === 'practice' && <ModeMarker mode={PRACTICE_MODE_MARKER} />}
         {phase !== 'select' && phase !== 'practice' && <ModeMarker mode={runTuning} />}
@@ -2869,14 +2964,14 @@ export default function CbatDpt() {
           {/* Aircraft selection */}
           {phase === 'select' && (
             <CbatStickLayout
-              stick={
+              stick={cbat ? null : (
                 <DptAircraftPanel
                   aircraft={aircraft}
                   loading={loadingAircraft}
                   value={aircraftPick}
                   onChange={setAircraftPick}
                 />
-              }
+              )}
             >
               <div className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-5 lg:p-8">
                 <AircraftSelect
@@ -2884,6 +2979,7 @@ export default function CbatDpt() {
                   aircraftPick={aircraftPick}
                   onAircraftPick={setAircraftPick}
                   onStart={() => {
+                    if (cbat) { handleSelect(REAL_CBAT_CRAFT); return }
                     if (!aircraft.length) return
                     const picked = aircraftPick === RANDOM_AIRCRAFT
                       ? aircraft[Math.floor(Math.random() * aircraft.length)]
@@ -2896,6 +2992,7 @@ export default function CbatDpt() {
                   difficulty={difficulty}
                   onDifficulty={handleDifficulty}
                   onPractice={openPractice}
+                  cbat={cbat}
                 />
                 <div className="text-center"><CbatTestPageLink test="dpt" /></div>
               </div>
@@ -2912,17 +3009,79 @@ export default function CbatDpt() {
             />
           )}
 
-          {/* Game arena */}
+          {/* Game arena. One measured stage (stageRef), drawn as the real test
+              screen under the Real CBAT theme and as SkyWatch's arena otherwise. */}
           {phase === 'playing' && selected && (
-            <div className="w-full flex flex-col md:flex-row md:items-start md:justify-center md:gap-4">
-            {/* HUD + arena — on md+ sized so arena width fits the available
-                content area beside the controls column AND the viewport
-                height. Horizontal budget: 100vw − 224px (sidebar) − 24px
-                (px-3 padding) − 440px (controls) − 16px (gap) ≈ 100vw − 704px.
-                Vertical budget: 100vh − 56 (topbar) − 48 (py-6) − ~30 HUD ≈
-                100vh − 134px. */}
+            <div ref={stageRef} className="w-full">
+            {runCbat ? (
             <div
-              className="w-full max-w-md md:max-w-none md:w-[min(calc(100vh_-_134px),calc(100vw_-_704px))] md:flex-shrink-0"
+              className="dpt-cbat-stage"
+              data-dpt-cbat-stage
+              style={{ '--dpt-cbat-size': `${cbatPx ?? 600}px`, '--dpt-cbat-key-w': `${DPT_CBAT_KEY_W}px` }}
+            >
+              <aside className="dpt-cbat-legend">
+                <DptCbatLegend hard={runDifficulty === 'hard'} />
+                <DptCbatKeypad
+                  className="dpt-cbat-keypad--side"
+                  turnDir={turnDir}
+                  onTurnDir={setTurnDir}
+                  inputMode={inputMode}
+                  onInputMode={handleInputModeChange}
+                  onDigit={handleDigit}
+                />
+              </aside>
+              <div className="dpt-cbat-radar">
+                <DptCbatRadar>
+                  {dangerZoneList.map(z => (
+                    <DptCbatZone key={`dz-${z.id}`} zone={z} />
+                  ))}
+                  {gateList.map(g => (
+                    <DptCbatGate key={`${g.kind}-${g.id}`} gate={g} />
+                  ))}
+                  <DptCbatProjection aircraft={activeAircraft} />
+                  {aircraftList.map(a => (
+                    <DptCbatAircraft key={a.id} aircraft={a} active={a.id === activeId} dim={doneIds.has(a.id)} />
+                  ))}
+                </DptCbatRadar>
+                {/* Between rounds. The real test gives no verdict, so this
+                    says only where the run is, not whether the round went well. */}
+                {roundOverlay && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center">
+                    <p className="m-0 px-5 py-3 bg-black border border-white text-white text-base" style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                      End of round {displayRound(roundOverlay.round, runTuning)} of {runTuning.rounds.length}
+                    </p>
+                  </div>
+                )}
+              </div>
+              <DptCbatStrip
+                roundLabel={`Round ${shownRound} of ${runTuning.rounds.length}`}
+                aircraftList={aircraftList}
+                activeId={activeId}
+                onSelectActive={setActiveId}
+                inputMode={inputMode}
+                onInputMode={handleInputModeChange}
+                turnDir={turnDir}
+                onTurnDir={setTurnDir}
+                bearingInput={bearingInput}
+              />
+              <DptCbatKeypad
+                className="dpt-cbat-keypad--below"
+                turnDir={turnDir}
+                onTurnDir={setTurnDir}
+                inputMode={inputMode}
+                onInputMode={handleInputModeChange}
+                onDigit={handleDigit}
+              />
+            </div>
+            ) : (
+            <div className="w-full flex flex-col md:flex-row md:items-start md:justify-center md:gap-4">
+            {/* HUD + arena. From md up the column is sized from the window (see
+                arenaPx above) so the arena, the tabs under it and the numpad
+                beside it all fit without the page scrolling. The class width
+                only covers the first frame, before the stage is measured. */}
+            <div
+              className="w-full max-w-md md:max-w-none md:w-[min(calc(100vh_-_160px),calc(100vw_-_704px))] md:flex-shrink-0"
+              style={arenaPx ? { width: arenaPx } : undefined}
             >
               {(() => {
                 const roundLeft = Math.max(0, (roundEndTime - Date.now()) / 1000)
@@ -3024,7 +3183,10 @@ export default function CbatDpt() {
             {/* Controls — narrow fixed column on md+, full width on mobile.
                 Stays a fixed footprint so the arena to its left can grow into
                 whatever viewport space remains. */}
-            <div className="w-full max-w-md mt-2 md:mt-0 md:w-[440px] md:flex-shrink-0">
+            <div
+              className="w-full max-w-md mt-2 md:mt-0 md:w-[440px] md:max-w-none md:flex-shrink-0"
+              style={wideFit ? { width: controlsW } : undefined}
+            >
               <DptControls
                 turnDir={turnDir}
                 onTurnDir={setTurnDir}
@@ -3034,6 +3196,8 @@ export default function CbatDpt() {
                 onDigit={handleDigit}
               />
             </div>
+            </div>
+            )}
             </div>
           )}
 

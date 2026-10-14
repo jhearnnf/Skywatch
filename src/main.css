@@ -881,6 +881,179 @@ button.cbat-keycap:hover:not(:disabled) { background: #d2d2d2; }
 button.cbat-keycap:disabled { background: #6e6e7c; color: #1a1a1a; box-shadow: none; cursor: default; }
 .cbat-keycap-arrow { font-size: 1.05em; min-width: 1.8em; height: 1.7em; }
 
+/* DPT under the Real CBAT theme (components/cbat/DptRealCbat.jsx): the key
+   column, radar and black strip of the real test screen. The page sets the
+   radar's pixel size inline from useViewportFit so the whole screen fits the
+   window; everything here is fixed furniture around it. */
+.dpt-cbat-stage {
+  display: grid;
+  grid-template-columns: var(--dpt-cbat-key-w, 16rem) var(--dpt-cbat-size);
+  grid-template-areas: "key radar" "strip strip";
+  justify-content: center;
+  margin: 0 auto;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #ffffff;
+}
+.dpt-cbat-legend {
+  grid-area: key;
+  height: var(--dpt-cbat-size);
+  overflow-y: auto;
+  padding: 0 6px 6px 0;
+  border-right: 2px solid #ffffff;
+  background: #00007c;
+}
+.dpt-cbat-radar {
+  grid-area: radar;
+  position: relative;
+  width: var(--dpt-cbat-size);
+  height: var(--dpt-cbat-size);
+  overflow: hidden;
+  background: #19194c;
+}
+.dpt-cbat-stage > .dpt-cbat-strip { grid-area: strip; }
+@media (max-width: 767px) {
+  .dpt-cbat-stage {
+    grid-template-columns: var(--dpt-cbat-size);
+    grid-template-areas: "radar" "strip" "keys";
+  }
+  .dpt-cbat-legend { display: none; }
+}
+.dpt-cbat-box {
+  background: #c5d9f1;
+  color: #000000;
+  border: 1px solid #000000;
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.dpt-cbat-key { width: 100%; border-collapse: collapse; }
+/* The dashed trail behind each aircraft: each dash brightens in turn, nearest
+   first (staggered by an inline animation-delay), so a soft shimmer runs back
+   along the trail. Slow on purpose, so it reads as movement without pulling
+   the eye off the radar. */
+.dpt-cbat-trail-dash { animation: dpt-cbat-trail-shimmer 1.6s ease-in-out infinite; }
+@keyframes dpt-cbat-trail-shimmer {
+  0%, 100% { opacity: 0.45; }
+  30%      { opacity: 1; }
+}
+.dpt-cbat-key th,
+.dpt-cbat-key td {
+  border: 1px solid #000000;
+  padding: 4px 5px;
+  vertical-align: middle;
+  font-size: 11px;
+  line-height: 1.3;
+}
+.dpt-cbat-key th { width: 3.6rem; font-weight: 700; text-align: center; }
+.dpt-cbat-key-line { display: flex; align-items: center; gap: 6px; min-height: 18px; }
+.dpt-cbat-key-line + .dpt-cbat-key-line { margin-top: 3px; }
+.dpt-cbat-rings { display: block; width: 100%; max-width: 9rem; height: auto; color: #000000; }
+.dpt-cbat-rules { padding: 4px 5px; background: #ffffff; border-top: 1px solid #000000; }
+.dpt-cbat-notes { background: #ffffff; padding: 5px 6px; }
+.dpt-cbat-notes ul { margin: 1px 0 5px 1em; padding: 0; list-style: disc; }
+.dpt-cbat-notes ul:last-child { margin-bottom: 0; }
+/* A keyboard user is told the keys; a touch user gets the keypad instead. */
+@media (hover: none) { .dpt-cbat-keys-help { display: none; } }
+
+.dpt-cbat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1.5rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.75rem;
+  background: #000000;
+  color: #ffffff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 1rem;
+}
+.dpt-cbat-strip-round { margin-right: auto; white-space: nowrap; }
+.dpt-cbat-strip-aircraft { display: flex; gap: 0.75rem; }
+.dpt-cbat-strip-aircraft button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0 0.15rem;
+  background: none;
+  border: 0;
+  color: #8a8a8a;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dpt-cbat-strip-aircraft button.is-active { color: #ffffff; }
+.dpt-cbat-strip-aircraft i {
+  display: inline-block;
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 1px solid #ffffff;
+  opacity: 0.45;
+}
+.dpt-cbat-strip-aircraft button.is-active i { opacity: 1; }
+.dpt-cbat-strip-fields { display: flex; gap: 1.25rem; margin-right: auto; }
+.dpt-cbat-field { display: inline-flex; align-items: center; gap: 0.3rem; opacity: 0.6; }
+.dpt-cbat-field.is-active { opacity: 1; }
+.dpt-cbat-field button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dpt-cbat-field-value { display: inline-flex; align-items: center; }
+.dpt-cbat-field-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  background: #3a3a3a !important;
+  color: #ffffff;
+  font-size: 0.85rem !important;
+}
+/* Every box keeps one height and one alignment whether or not it holds a
+   digit: an empty inline-flex box sits on its bottom edge, a filled one on its
+   text baseline, and the shift grew the strip (and so the stage) on the first
+   key press. */
+.dpt-cbat-strip-fields,
+.dpt-cbat-field button { line-height: 1; }
+.dpt-cbat-digits { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+.dpt-cbat-digits b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+  width: 1.15rem;
+  height: 1.3rem;
+  background: #3a3a3a;
+  border: 1px solid #6a6a6a;
+  font-weight: 700;
+}
+.dpt-cbat-field.is-active .dpt-cbat-digits b { border-color: #ffffff; }
+
+.dpt-cbat-keypad { display: none; padding: 6px 0; }
+.dpt-cbat-keypad-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 4px; }
+.dpt-cbat-keypad-digits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.dpt-cbat-key {
+  width: 100%;
+  min-width: 0;
+  height: 2.6rem;
+  font-size: 1.05rem;
+  touch-action: manipulation;
+  user-select: none;
+}
+.dpt-cbat-key.is-on { background: #ffffff; }
+/* Touch only: beside the radar in the key column from md up, under the strip
+   on a phone. A desktop with a keyboard draws neither. */
+@media (hover: none) and (min-width: 768px) { .dpt-cbat-keypad--side { display: block; } }
+@media (hover: none) and (max-width: 767px),
+       (max-width: 600px) {
+  .dpt-cbat-stage > .dpt-cbat-keypad--below { display: block; grid-area: keys; }
+}
+
 /* Trace 1 under the Real CBAT theme: the test's key legend, a black box with a
    white border listing Left / Right / Push / Pull beside a small key icon.
    Rows are buttons so touch players can answer too; they grow to a tappable
@@ -1926,6 +2099,17 @@ body.cbat-dpt-fullwidth .app-shell-content {
   padding-left: 0.75rem;
   padding-right: 0.75rem;
 }
+/* .app-shell-main keeps 5rem under every page for the phone's BottomNav, on
+   desktop too (see the rule at the top of this file). DPT sizes its arena to
+   the window, so on desktop, where there is no BottomNav, that 80px came off
+   the arena for nothing. */
+@media (min-width: 768px) {
+  body.cbat-dpt-fullwidth .app-shell-main { padding-bottom: 0; }
+}
+/* And no easing into it: the arena is sized from these paddings, so an eased
+   change resized the arena 300ms after the run had appeared. */
+body.cbat-dpt-fullwidth .app-shell-main,
+body.cbat-dpt-fullwidth .app-shell-content { transition: none; }
 
 /* CBAT picker: widen the main content past max-w-3xl on desktop so the
    Recent Scores side column doesn't squeeze the two-column game grid.

@@ -358,7 +358,9 @@ describe('DPT practice — the turn-direction sweep', () => {
       const { container } = mount()
       openPractice()
       await act(async () => {})
-      expect(observed).toHaveLength(1)
+      // The arena is observed (the page's window-fit hook observes the stage
+      // and the body as well, so it is not the only element).
+      expect(observed.some(el => el.classList?.contains('bg-game-arena'))).toBe(true)
       const c = compass(container)
       // 700 / 370, capped at 2.2.
       expect(c.dataset.compassScale).toBe('1.89')
