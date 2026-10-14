@@ -35,6 +35,7 @@ import {
 } from '../utils/cbat/dptPractice'
 import GuideArrow from '../components/cbat/GuideArrow'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
+import CbatStickLayout from '../components/cbat/CbatStickLayout'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 // The full ladder. A run no longer plays all eight: Easier serves rounds 1-4
@@ -878,11 +879,108 @@ const DptControls = memo(function DptControls({
   )
 })
 
+// ── Aircraft panel ──────────────────────────────────────────────────────────
+// The craft the run flies as CA-A and CA-N, picked in an arcade cabinet beside
+// the instructions the way ACT's joystick panel is (the same `cbat-arcade-panel`
+// styling), rather than as a grid inside the card where picking one used to
+// start the run. "Random" is the first tile and always the default, and the
+// card has a Start button again.
+//
+// Shown twice by the page and never both at once: in the left-hand column of
+// CbatStickLayout from `lg` up, and inside the card below it, where that column
+// is not drawn. The pick itself lives on the page.
+const RANDOM_AIRCRAFT = 'random'
+
+function DptAircraftPanel({ aircraft, loading, value, onChange, className = '' }) {
+  const tile = (selected) => [
+    'cbat-arcade-btn relative flex flex-col items-center justify-center gap-1 rounded-md border-2 p-2 cursor-pointer transition-colors',
+    selected
+      ? 'border-brand-400 border-b-[#1f5da8] bg-brand-600/20 shadow-[0_0_14px_rgba(91,170,255,0.45)]'
+      : 'border-[#12283f] border-b-[#0a1a2c] bg-game-panel hover:border-brand-600/60',
+  ].join(' ')
+
+  return (
+    <div
+      data-dpt-aircraft-panel
+      className={['cbat-arcade-panel rounded-lg border-2 border-brand-600/40 p-3 text-left', className].filter(Boolean).join(' ')}
+    >
+      <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b-2 border-[#12283f]">
+        <span className="font-mono text-[10px] font-extrabold uppercase tracking-[0.22em] text-brand-600">
+          Aircraft
+        </span>
+        <span className="text-base leading-none" aria-hidden="true">✈️</span>
+      </div>
+
+      <p className="cbat-stick-recommend mb-2 text-center font-mono text-base font-extrabold uppercase tracking-[0.16em] leading-tight text-brand-600">
+        <span aria-hidden="true" className="mr-1.5">{'▸'}</span>
+        Choose your craft
+        <span aria-hidden="true" className="ml-1.5">{'◂'}</span>
+      </p>
+
+      <p className="mb-2 text-xs text-game-muted leading-snug">
+        Flown as CA-A and CA-N. From round 6 the Fighter is picked at random.
+      </p>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-6">
+          <div className="w-6 h-6 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mb-2" />
+          <p className="text-xs text-slate-400">Loading aircraft...</p>
+        </div>
+      ) : !aircraft.length ? (
+        <p className="py-4 text-center text-xs text-slate-400">No 3D aircraft available.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2" role="group" aria-label="Aircraft">
+          <button
+            type="button"
+            onClick={() => onChange(RANDOM_AIRCRAFT)}
+            aria-pressed={value === RANDOM_AIRCRAFT}
+            data-dpt-aircraft={RANDOM_AIRCRAFT}
+            className={tile(value === RANDOM_AIRCRAFT)}
+          >
+            <span
+              aria-hidden="true"
+              className={`flex h-10 w-10 items-center justify-center font-mono text-3xl font-black text-brand-600 drop-shadow-[0_0_6px_rgba(91,170,255,0.6)]${value === RANDOM_AIRCRAFT ? ' cbat-stick-attract' : ''}`}
+            >
+              ?
+            </span>
+            <span className="font-mono text-[9px] font-extrabold uppercase tracking-wider text-game-text leading-tight">
+              Random
+            </span>
+          </button>
+          {aircraft.map(a => {
+            const on = value !== RANDOM_AIRCRAFT && value?.briefId === a.briefId
+            return (
+              <button
+                key={a.briefId}
+                type="button"
+                onClick={() => onChange(a)}
+                aria-pressed={on}
+                data-dpt-aircraft={a.briefId}
+                title={a.title}
+                className={`group ${tile(on)}`}
+              >
+                <img
+                  src={a.cutoutUrl}
+                  alt=""
+                  className="h-10 w-10 object-contain transition-transform group-hover:scale-110 drop-shadow-[0_0_6px_rgba(91,170,255,0.4)]"
+                />
+                <span className="w-full truncate text-center text-[9px] leading-tight text-slate-400">
+                  {a.title}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Aircraft Selection Screen ───────────────────────────────────────────────
-// Doubles as DPT's instructions card, so the difficulty pair sits under the
-// title here the way it does on every other split game. There is no launch flash:
-// picking an aircraft IS the Start button.
-function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading, difficulty, onDifficulty, onPractice }) {
+// DPT's instructions card, so the difficulty pair sits under the title here the
+// way it does on every other split game. The aircraft is picked in its own
+// panel (above); Start flies the run with whatever is picked.
+function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loading, personalBest, bestLoading, difficulty, onDifficulty, onPractice }) {
   const tuning = dptTuning(difficulty)
   return (
     <div>
@@ -995,70 +1093,38 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
         </Link>
       </div>
 
-      {/* Practice sits apart from the aircraft grid because picking an aircraft
-          IS the Start button: it must not read as one more way to begin a run. */}
-      <div className="flex flex-col items-center mb-5">
+      {/* Below lg the left-hand column is not drawn, so the aircraft panel
+          sits in the card, above the buttons that use it. */}
+      <DptAircraftPanel
+        aircraft={aircraft}
+        loading={loading}
+        value={aircraftPick}
+        onChange={onAircraftPick}
+        className="lg:hidden max-w-md mx-auto mb-4"
+      />
+
+      <div className="flex flex-wrap gap-3 lg:gap-4 justify-center">
         <button
           type="button"
           onClick={onPractice}
           data-cbat-tutorial-btn
-          className="px-6 py-3 lg:px-8 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
+          className="px-6 py-3 lg:px-7 lg:py-3.5 bg-game-fill hover:bg-game-fill-strong text-game-text font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer"
         >
           Tutorial
         </button>
-        <p className="text-[11px] text-slate-500 mt-2 text-center">
-          Twelve short drills on turning and height. No score, no timer.
-        </p>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={loading || !aircraft.length}
+          data-demo-start
+          className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed"
+        >
+          Start
+        </button>
       </div>
-
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-10">
-          <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mb-4" />
-          <p className="text-sm text-slate-400">Loading aircraft...</p>
-        </div>
-      )}
-
-      {!loading && !aircraft.length && (
-        <div className="text-center py-10">
-          <p className="text-4xl mb-3">✈️</p>
-          <p className="font-bold text-slate-700 mb-1">No 3D aircraft available</p>
-          <p className="text-sm text-slate-400">Add .glb files to <span className="font-mono">public/models/</span> first.</p>
-        </div>
-      )}
-
-      {!loading && aircraft.length > 0 && (
-        <>
-          <h3 className="text-lg lg:text-xl font-bold text-text text-center mb-1">Choose Your Aircraft</h3>
-          <p className="text-xs lg:text-sm text-slate-400 text-center mb-3 lg:mb-4">
-            Used as the visual for CA-A and CA-N — Fighter is randomly assigned per round 6+.
-          </p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-w-md lg:max-w-2xl mx-auto">
-          {aircraft.map((a, i) => (
-            <motion.button
-              key={a.briefId}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.04 }}
-              onClick={() => onSelect(a)}
-              data-demo-start
-              className="relative flex flex-col items-center gap-1.5 p-3 rounded-xl border border-game-line bg-game-panel hover:border-game-accent hover:bg-game-raised transition-all group cursor-pointer"
-            >
-              <span className="absolute top-1 right-1 text-[8px] font-bold px-1.5 py-0.5 rounded bg-brand-600/80 text-white leading-none">
-                3D
-              </span>
-              <img
-                src={a.cutoutUrl}
-                alt={a.title}
-                className="w-14 h-14 object-contain group-hover:scale-110 transition-transform drop-shadow-[0_0_6px_rgba(91,170,255,0.4)]"
-              />
-              <span className="text-[10px] text-slate-400 group-hover:text-brand-600 text-center leading-tight truncate w-full">
-                {a.title}
-              </span>
-            </motion.button>
-          ))}
-          </div>
-        </>
-      )}
+      <p className="text-[11px] text-slate-500 mt-2 mb-5 text-center">
+        The tutorial is twelve short drills on turning and height. No score, no timer.
+      </p>
     </div>
   )
 }
@@ -1872,6 +1938,9 @@ export default function CbatDpt() {
   const [aircraft, setAircraft]               = useState([])
   const [loadingAircraft, setLoadingAircraft] = useState(true)
   const [selected, setSelected]               = useState(null)
+  // The craft picked on the instructions page: an aircraft, or RANDOM_AIRCRAFT
+  // (the default on every visit), resolved to a real one when the run starts.
+  const [aircraftPick, setAircraftPick]       = useState(RANDOM_AIRCRAFT)
   // Fighter pool used for the player's Fighter and the enemy aircraft (rounds 6+)
   const [fighterPool, setFighterPool]         = useState([])
 
@@ -1911,6 +1980,9 @@ export default function CbatDpt() {
   // the side-by-side arena+controls layout can use the full main width
   // (which is already offset for the sidebar via md:ml-56 on app-shell-main).
   useGameBodyClass('cbat-dpt-fullwidth', phase === 'playing' || phase === 'practice')
+  // The instructions page lays out in three columns (the aircraft panel on the
+  // left), which needs the shell's width cap lifted. See CbatStickLayout.
+  useGameBodyClass('cbat-stick-wide', phase === 'select')
 
   // ── Practice ───────────────────────────────────────────────────────────────
   // Fire-and-forget usage tracking (admin Reports per-drill drop-off). Online-
@@ -2695,8 +2767,8 @@ export default function CbatDpt() {
 
   // Handlers
   const handleSelect = useCallback((a) => {
-    // Picking an aircraft is DPT's Start button, so this is where the run's
-    // difficulty is pinned. Changing the card afterwards can't repoint a run
+    // Start on the instructions page, so this is where the run's difficulty
+    // is pinned. Changing the card afterwards can't repoint a run
     // that's already flying.
     const tuning = dptTuning(difficulty)
     runTuningRef.current = tuning
@@ -2758,23 +2830,25 @@ export default function CbatDpt() {
     <div className="cbat-page">
       <SEO title="DPT" description="Dynamic Projection Test — vector aircraft and intercept enemy contacts." />
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <CbatGameHeader
-          title="DPT"
-          fullTitle="Dynamic Projection Test"
-          titleClass="text-text"
-          intro={phase === 'select'}
-          onQuit={phase === 'practice' ? closePractice : handleMenu}
-          confirmNeeded={['playing', 'over'].includes(phase)}
-          quitLabel={<>&larr; Quit</>}
-          className="gap-3 !mb-0 flex-1"
-          test={phase === 'playing' ? { stage: 'Testing' } : phase === 'practice' ? { stage: 'Practice' } : null}
-        >
-          {phase === 'practice' && <ModeMarker mode={PRACTICE_MODE_MARKER} />}
-          {phase !== 'select' && phase !== 'practice' && <ModeMarker mode={runTuning} />}
-        </CbatGameHeader>
-      </div>
+      {/* Header. Not wrapped in a row of its own: on the instructions page it
+          is sticky, and a sticky element cannot leave its parent, so a wrapper
+          exactly its height held it in place and let it scroll away. The 16px
+          under it is the wrapper's old margin (8px of it is the sticky row's
+          own padding on the instructions page). */}
+      <CbatGameHeader
+        title="DPT"
+        fullTitle="Dynamic Projection Test"
+        titleClass="text-text"
+        intro={phase === 'select'}
+        onQuit={phase === 'practice' ? closePractice : handleMenu}
+        confirmNeeded={['playing', 'over'].includes(phase)}
+        quitLabel={<>&larr; Quit</>}
+        className={`gap-3 ${phase === 'select' ? '!mb-2' : '!mb-4'}`}
+        test={phase === 'playing' ? { stage: 'Testing' } : phase === 'practice' ? { stage: 'Practice' } : null}
+      >
+        {phase === 'practice' && <ModeMarker mode={PRACTICE_MODE_MARKER} />}
+        {phase !== 'select' && phase !== 'practice' && <ModeMarker mode={runTuning} />}
+      </CbatGameHeader>
 
       {/* Not logged in */}
       {!user && (
@@ -2794,19 +2868,38 @@ export default function CbatDpt() {
 
           {/* Aircraft selection */}
           {phase === 'select' && (
-            <div className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-5 lg:p-8">
-              <AircraftSelect
-                aircraft={aircraft}
-                onSelect={handleSelect}
-                loading={loadingAircraft}
-                personalBest={personalBest}
-                bestLoading={bestLoading}
-                difficulty={difficulty}
-                onDifficulty={handleDifficulty}
-                onPractice={openPractice}
-              />
-              <div className="text-center"><CbatTestPageLink test="dpt" /></div>
-            </div>
+            <CbatStickLayout
+              stick={
+                <DptAircraftPanel
+                  aircraft={aircraft}
+                  loading={loadingAircraft}
+                  value={aircraftPick}
+                  onChange={setAircraftPick}
+                />
+              }
+            >
+              <div className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-5 lg:p-8">
+                <AircraftSelect
+                  aircraft={aircraft}
+                  aircraftPick={aircraftPick}
+                  onAircraftPick={setAircraftPick}
+                  onStart={() => {
+                    if (!aircraft.length) return
+                    const picked = aircraftPick === RANDOM_AIRCRAFT
+                      ? aircraft[Math.floor(Math.random() * aircraft.length)]
+                      : aircraftPick
+                    handleSelect(picked)
+                  }}
+                  loading={loadingAircraft}
+                  personalBest={personalBest}
+                  bestLoading={bestLoading}
+                  difficulty={difficulty}
+                  onDifficulty={handleDifficulty}
+                  onPractice={openPractice}
+                />
+                <div className="text-center"><CbatTestPageLink test="dpt" /></div>
+              </div>
+            </CbatStickLayout>
           )}
 
           {/* Practice — the drills, on the run's own arena and numpad. Always
