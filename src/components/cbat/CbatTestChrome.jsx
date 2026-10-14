@@ -74,8 +74,15 @@ export function CbatGameHeader({
     )
   }
 
+  // On the instructions page the row stays put while the page scrolls under
+  // it, so the way back is always in reach. It starts 12px higher, over the
+  // shell's top padding, so it pins exactly where it sits and never moves;
+  // the faint band behind it is so instruction text scrolling under it does
+  // not run through the link. See --page-sticky-top in main.css.
   return (
-    <div className={`flex items-center gap-2 mb-2 ${className}`}>
+    <div className={`flex items-center gap-2 ${intro
+      ? 'cbat-sticky-header sticky z-20 -mt-3 pt-3 pb-2 bg-bg/85 backdrop-blur-sm'
+      : 'mb-2'} ${className}`}>
       {quit}
       <h1 className={`text-sm font-extrabold ${titleClass}`}>{title}</h1>
       {children}

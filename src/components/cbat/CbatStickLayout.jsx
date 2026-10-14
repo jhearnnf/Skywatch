@@ -1,3 +1,6 @@
+import { createPortal } from 'react-dom'
+import { useRegisterStickLayout } from './loungeDockContext'
+
 // Three-column instructions layout: a centred instructions card with an
 // optional panel hanging off each side.
 //
@@ -31,6 +34,10 @@
 // width rather than the layout overflowing. The outer columns never shrink, so
 // neither panel is clipped.
 //
+// THE SIDE PANELS STAY PUT while the instructions scroll: sticky, pinned at
+// the height they start at (`cbat-sticky-panel` in main.css), so only the card
+// moves. The back row above them is held the same way (CbatGameHeader).
+//
 // BELOW `lg` NEITHER SIDE COLUMN IS RENDERED. A gamepad is a desktop thing, and
 // on a narrow screen these panels would be back to pushing the card around,
 // which is the problem this exists to solve. A game with something the player
@@ -41,7 +48,17 @@
 // `useGameBodyClass('cbat-stick-wide', …)` while the card is up or there is no
 // room for the outer tracks. See the rule in src/main.css.
 
+//
+// BESIDE THE DESKTOP CHAT the right-hand track goes. The chat panel (see
+// CbatLoungeDock) is pinned to the right edge at 340px and the page scrolls in
+// what is left, so the grid becomes [340px panel | card], hugging the chat
+// column from the left. The right track's contents (ACT's headphones notice)
+// are portalled into that column, above the chat, which keeps them on the
+// card's right exactly where they were. 340px rather than 19rem so every side
+// panel matches the chat. The dock only comes out on a window wide enough for
+// that (1680px), so below it the layout is the one described above.
 export default function CbatStickLayout({ stick, aside = null, children }) {
+  const { docked, upperEl, setStickGrid } = useRegisterStickLayout(Boolean(stick || aside))
   // Nothing to hang off either side: no grid at all, just the centred card.
   //
   // The three tracks exist to RESERVE room, and reserved room for panels that
@@ -55,9 +72,25 @@ export default function CbatStickLayout({ stick, aside = null, children }) {
     return <div className="w-full flex flex-col items-center">{children}</div>
   }
 
+  if (docked) {
+    return (
+      <div ref={setStickGrid} className="cbat-stick-grid flex flex-col items-center lg:grid lg:grid-cols-[340px_minmax(0,42rem)] lg:justify-end lg:items-start lg:gap-6">
+        <aside className="hidden lg:block lg:sticky cbat-sticky-panel" aria-label="Joystick setup">
+          {stick}
+        </aside>
+
+        <div className="w-full flex flex-col items-center">
+          {children}
+        </div>
+
+        {aside && upperEl && createPortal(<div className="content-fade-in">{aside}</div>, upperEl)}
+      </div>
+    )
+  }
+
   return (
     <div className="w-full flex flex-col items-center lg:grid lg:grid-cols-[19rem_minmax(0,42rem)_19rem] lg:justify-center lg:items-start lg:gap-5">
-      <aside className="hidden lg:block" aria-label="Joystick setup">
+      <aside className="hidden lg:block lg:sticky cbat-sticky-panel" aria-label="Joystick setup">
         {stick}
       </aside>
 
@@ -67,7 +100,7 @@ export default function CbatStickLayout({ stick, aside = null, children }) {
 
       {/* Reserved whether or not there is anything in it. An empty track is what
           keeps the card centred rather than centring card-plus-rail as a unit. */}
-      <div className="hidden lg:block" aria-hidden={aside ? undefined : 'true'}>
+      <div className="hidden lg:block lg:sticky cbat-sticky-panel" aria-hidden={aside ? undefined : 'true'}>
         {aside}
       </div>
     </div>

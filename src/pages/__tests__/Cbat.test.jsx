@@ -318,23 +318,47 @@ describe('Cbat page — dense mobile grid', () => {
     expect(bottom).toContainElement(screen.getByTestId('cbat-footer-report'))
   })
 
-  // The strip is a sibling of the two-column row, not a child of its left
-  // column — `mt-auto` against the page's flex column is what pins it to the
-  // bottom edge. So it spans the full width while the Recent Scores column is
-  // painted over the right 340px as `position: fixed`, and without a margin the
-  // centred text sits underneath it: "Report a problem" was buried behind the
-  // chat panel at lg and up.
-  it('keeps the footer strip clear of the fixed side column', () => {
-    renderWithUser()
-    expect(screen.getByTestId('cbat-footer-report').className).toContain('lg:mr-[364px]')
-  })
+  // Desktop, signed in: the window no longer scrolls, the game grid does, so
+  // the grid's scrollbar sits between the games and the side column. The footer
+  // links move to the foot of that scroll area, since there is no page bottom
+  // left to pin them to.
+  describe('desktop split view', () => {
+    afterEach(() => {
+      setWideViewport(false)
+      document.body.classList.remove('cbat-hub-split')
+    })
 
-  it('does not reserve that space when there is no side column to miss', () => {
-    // The column renders for signed-in users only, so a signed-out visitor has
-    // the full width and reserving 364px of it would just shift the text left.
-    mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: vi.fn() })
-    render(<Cbat />)
-    expect(screen.getByTestId('cbat-footer-report').className).not.toContain('lg:mr-')
+    it('scrolls the grid, not the window, and puts the footer at its foot', () => {
+      setWideViewport(true)
+      renderWithUser()
+      expect(document.body.classList.contains('cbat-hub-split')).toBe(true)
+      const scroller = screen.getByTestId('cbat-grid-scroll')
+      expect(scroller.className).toContain('overflow-y-auto')
+      // Focusable, so Page Down and the arrow keys reach it.
+      expect(scroller.getAttribute('tabindex')).toBe('0')
+      expect(scroller).toContainElement(screen.getByTestId('cbat-footer-report'))
+    })
+
+    it('hands the window back when the hub unmounts', () => {
+      setWideViewport(true)
+      const { unmount } = renderWithUser()
+      unmount()
+      expect(document.body.classList.contains('cbat-hub-split')).toBe(false)
+    })
+
+    it('keeps the window-scrolled page on a phone', () => {
+      renderWithUser()
+      expect(document.body.classList.contains('cbat-hub-split')).toBe(false)
+      expect(screen.getByTestId('cbat-grid-scroll').className).not.toContain('overflow-y-auto')
+    })
+
+    it('keeps the window-scrolled page for a signed-out visitor at any width', () => {
+      setWideViewport(true)
+      mockUseAuth.mockReturnValue({ user: null, API: '', apiFetch: vi.fn() })
+      render(<Cbat />)
+      expect(document.body.classList.contains('cbat-hub-split')).toBe(false)
+      expect(screen.getByTestId('cbat-page-bottom')).toContainElement(screen.getByTestId('cbat-footer-report'))
+    })
   })
 
   // The donation ask lives beside the report link rather than anywhere louder.
@@ -829,11 +853,14 @@ describe('CBAT hub — the CBAT LOUNGE landmark', () => {
 
   // The other way round from lg up: the column keeps the chat and the panel
   // under the grid is not rendered at all, so there is still only ever one.
-  it('hands the chat back to the side column at lg and up', () => {
+  // From lg up the chat is the app-level dock's (CbatLoungeDock), which stays
+  // put across CBAT pages. The hub mounts no chat of its own there at all, or
+  // there would be two on one channel.
+  it('mounts no chat of its own at lg and up', () => {
     setWideViewport(true)
     renderWithUser()
     expect(screen.queryByTestId('cbat-lounge-panel')).toBeNull()
-    expect(screen.getAllByRole('tab', { name: 'Lounge' })).toHaveLength(1)
+    expect(screen.queryAllByRole('tab', { name: 'Lounge' })).toHaveLength(0)
   })
 
   // Below the strip, not above it: the landmark is the last thing on the first

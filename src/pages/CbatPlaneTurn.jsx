@@ -1349,18 +1349,19 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
 
       {/* Header — Trace 2 renders its own (it manages its own instructions
           screen and back-button target). */}
+      {/* Not wrapped in a row of its own: on the instructions page the header
+          is sticky, and a sticky element cannot leave its parent, so a wrapper
+          exactly its height would hold it in place and let it scroll away. */}
       {!gameModeTrace2 && (
-        <div className="flex items-center justify-between mb-2">
-          <CbatGameHeader
-            title={TITLE_BY_MODE[mode] ?? 'Trace 1/2'}
-            fullTitle={mode === 'trace1' ? 'Trace Test 1' : undefined}
-            intro={phase === 'select'}
-            onQuit={handleMenu}
-            confirmNeeded={['playing', 'over'].includes(phase)}
-            className="!mb-0 flex-1"
-            test={phase === 'playing' ? { stage: 'Testing' } : null}
-          />
-        </div>
+        <CbatGameHeader
+          title={TITLE_BY_MODE[mode] ?? 'Trace 1/2'}
+          fullTitle={mode === 'trace1' ? 'Trace Test 1' : undefined}
+          intro={phase === 'select'}
+          onQuit={handleMenu}
+          confirmNeeded={['playing', 'over'].includes(phase)}
+          className={phase === 'select' ? '' : '!mb-2'}
+          test={phase === 'playing' ? { stage: 'Testing' } : null}
+        />
       )}
 
       {/* Not logged in */}

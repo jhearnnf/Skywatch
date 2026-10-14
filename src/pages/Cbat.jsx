@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion, useScroll, useTransform } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -12,10 +12,9 @@ import CbatAdminRegionSelect from '../components/CbatAdminRegionSelect'
 import CbatLoungeChat from '../components/CbatLoungeChat'
 import CbatPresenceDots from '../components/cbat/CbatPresenceDots'
 import useChatPresence from '../hooks/useChatPresence'
-import { useLoungeOpen } from '../hooks/useLoungeOpen'
-import LoungeResizeHandle, { DEFAULT_LOUNGE_GROW } from '../components/cbat/LoungeResizeHandle'
-import { useFixedColumn } from '../hooks/useFixedColumn'
-import { useContainWheel } from '../hooks/useContainWheel'
+import LoungeResizeHandle from '../components/cbat/LoungeResizeHandle'
+import { LoungeHubSlot } from '../components/cbat/CbatLoungeDock'
+import { useLoungeDock } from '../components/cbat/loungeDockContext'
 import { usePhoneTight } from '../hooks/usePhoneTight'
 import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
@@ -36,6 +35,9 @@ export { CBAT_GAMES }
 // recorded, and polling at 30s on top of that would routinely show a player in
 // the game they just left. Only admins poll at all.
 const PRESENCE_POLL_MS = 10_000
+
+// Where the desktop game grid was last scrolled to, for Back from a game.
+let savedGridScroll = 0
 
 function CardBgImage({ game, delay = 0, isFlickering = false, dimmed = false }) {
   if (!game.image) return null
@@ -477,20 +479,23 @@ export default function Cbat() {
   // The "Play on a PC" note. Only ever reachable from the native app, where the
   // link that opens it is the one that replaces the donation link.
   const [pcNoteOpen, setPcNoteOpen] = useState(false)
-  // Owned here rather than inside the widget: the split between Recent Scores
-  // and the chat depends on it, so both halves of the column need to see it.
-  const [loungeOpen, setLoungeOpen] = useLoungeOpen()
-  // How that split is shared, dragged by the player; animation is off mid-drag.
-  // Starts even on every visit, deliberately not remembered.
-  const [loungeGrow, setLoungeGrow] = useState(DEFAULT_LOUNGE_GROW)
-  const [loungeResizing, setLoungeResizing] = useState(false)
-  // The side column does not move with the page: only the game grid scrolls.
-  // Fixed rather than sticky, and measured off the spacer aside — see the hook.
-  const sideColumnRef = useRef(null)
-  const sideColumn    = useFixedColumn(sideColumnRef)
-  // The wheel over that column scrolls the chat or Recent Scores, never the
-  // game grid behind it. `user` because the column only mounts once signed in.
-  useContainWheel(sideColumnRef, Boolean(user))
+  // The desktop chat is not this page's: it is one panel held at the app
+  // level that stays put across CBAT pages (see CbatLoungeDock). The hub's
+  // side column only reserves its place under Recent Scores, and the split
+  // between the two is shared state on the dock.
+  const dock = useLoungeDock()
+  // Signed-in users get a Recent Scores side column on lg+ — widen the page
+  // shell so the existing 2-column game grid keeps its natural width instead
+  // of being squeezed by the new column. Mirror of the cbat-dpt-fullwidth pattern.
+  //
+  // A layout effect so the shell is at its wide width before the first paint.
+  // As a plain effect the page painted at 768px and then widened, which is the
+  // "panels snap to size" flicker on arriving back at the hub.
+  useLayoutEffect(() => {
+    if (!user) return
+    document.body.classList.add('cbat-recent-wide')
+    return () => document.body.classList.remove('cbat-recent-wide')
+  }, [user])
   const cbatGameEnabled = settings?.cbatGameEnabled ?? {}
   const visibleGames = CBAT_GAMES.filter(g => !g.hidden)
 
@@ -521,15 +526,6 @@ export default function Cbat() {
   const reportInGrid  = trailingCells >= 2
   const isGameEnabled = (key) => isCbatGameEnabled(cbatGameEnabled, key)
 
-  // Signed-in users get a Recent Scores side column on lg+ — widen the page
-  // shell so the existing 2-column game grid keeps its natural width instead
-  // of being squeezed by the new column. Mirror of the cbat-dpt-fullwidth pattern.
-  useEffect(() => {
-    if (!user) return
-    document.body.classList.add('cbat-recent-wide')
-    return () => document.body.classList.remove('cbat-recent-wide')
-  }, [user])
-
   // The lounge landmark + chat section under the grid. Below `lg` only: from
   // there up the chat already has a permanent home in the side column, and a
   // second copy of the same room on one page would be two live EventSources on
@@ -543,7 +539,8 @@ export default function Cbat() {
   // `hidden lg:block` / `lg:hidden`, because those hide a component that has
   // still mounted: both copies would open an EventSource on the same channel,
   // both would mark it read, and both would answer the typing indicator. Only
-  // one CbatLoungeChat exists on this page at any width.
+  // one CbatLoungeChat exists at any width: this page's own below lg, the
+  // app-level dock's (CbatLoungeDock, same breakpoint) from lg up.
   const [loungeInColumn, setLoungeInColumn] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
   )
@@ -554,6 +551,40 @@ export default function Cbat() {
     mq.addEventListener?.('change', onChange)
     return () => mq.removeEventListener?.('change', onChange)
   }, [])
+
+  // Desktop with a session: the hub is a split view. The page fits the window
+  // exactly and the game grid scrolls inside its own column, with its scrollbar
+  // between the games and the Recent Scores / chat column, which simply sits
+  // beside it. The window itself does not scroll (see `cbat-hub-split` in
+  // main.css, a mirror of the ACT round's full-height flex chain).
+  //
+  // This replaced a window-scrolled page with the side column held in place by
+  // `position: fixed`, which needed its geometry measured off a spacer, a wheel
+  // trap so scrolling over the chat did not scroll the grid behind it, and a
+  // footer margin to keep the links out from under it. And it put the page's
+  // scrollbar on the far side of the chat from the thing it scrolled.
+  //
+  // Below lg, or signed out, nothing changes: one page scrolled by the window,
+  // which the phone's CBAT CHAT landmark reads its reveal from.
+  const deskSplit     = Boolean(user) && loungeInColumn
+  const gridScrollRef = useRef(null)
+  useLayoutEffect(() => {
+    if (!deskSplit) return
+    document.body.classList.add('cbat-hub-split')
+    return () => document.body.classList.remove('cbat-hub-split')
+  }, [deskSplit])
+
+  // The browser restores the WINDOW's scroll on Back, never an element's, so
+  // the grid keeps its own: back from a game lands where you left the list.
+  // Module scope rather than storage, so a reload starts at the top as usual.
+  useLayoutEffect(() => {
+    const el = gridScrollRef.current
+    if (!deskSplit || !el) return
+    el.scrollTop = savedGridScroll
+    const onScroll = () => { savedGridScroll = el.scrollTop }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [deskSplit])
 
   // Scroll-driven reveal for that landmark, mirroring the NEWS landmark on
   // Home: the word starts as a ghost at the bottom edge of the first screen and
@@ -598,6 +629,204 @@ export default function Cbat() {
     return () => clearTimeout(tid)
   }, [])
 
+  // The footer strip and the phone's CBAT CHAT landmark. Rendered in one of
+  // two places — see where `pageBottom` is used below.
+  const pageBottom = (
+    <>
+      {/* The two standing links this page carries that are not games: the
+          donation ask and the report link. `mt-auto` takes up whatever slack
+          the grid leaves, so they sit on the bottom edge of the page rather
+          than trailing the last row of tiles.
+
+          One row, not two stacked lines. On a phone this whole strip
+          disappears when the grid has dead cells to put the links in (see
+          `reportInGrid` above) and the framing sentences are hidden anyway, so
+          the row is two short labels; from `sm` up each label gets its framing
+          sentence back and the row wraps to two lines only if the container is
+          too narrow to hold both — which is the stacked layout, arrived at when
+          it is actually needed rather than always.
+
+          Below the fold on a desktop, unavoidably: the two-across grid is
+          eleven rows of 130px tiles. That is the right place for a standing
+          link even so. The high-intent ask is the post-game note, which fires
+          on a results screen after a measured improvement; this is the findable
+          home for someone who has gone looking, and a footer is where people
+          look. Anyone who reaches it has scrolled 22 games.
+
+          Neither link is a button. A filled CTA here would compete with the
+          tiles for the same glance and read as the page's primary action,
+          which it emphatically is not.
+
+          The donation link is never shown in the native app, whatever the admin
+          flags say — the store-policy reason is set out in CbatGameOver. It
+          reads SLIM_APP rather than useSlimMode() for the same reason given
+          there: slim mode applied to the WEBSITE is just a trimmed site and
+          carries no store exposure. */}
+      {/* The bottom of the first screen, and the thing `mt-auto` now applies to.
+          It holds the footer strip and, below `lg`, the CBAT LOUNGE landmark —
+          they have to be pinned as one unit, because two siblings both asking
+          for `mt-auto` would split the slack between them and leave the
+          landmark floating in the middle of a gap instead of on the edge.
+
+          In the desktop split view it is rendered at the foot of the game
+          grid's own scroll column instead (see `deskSplit`), which is where a
+          footer is once the window no longer scrolls. */}
+      <div data-testid="cbat-page-bottom" className="mt-auto">
+      <div
+        data-testid="cbat-footer-report"
+        className={`pt-1 sm:pt-6 sm:border-t sm:border-slate-200${reportInGrid ? ' hidden sm:block' : ''}`}
+      >
+        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-center text-[10px] sm:text-xs text-slate-500">
+          {!SLIM_APP && (
+            <p className="m-0">
+              <span className="hidden sm:inline">SkyWatch is free and has no ads. Donations cover the running costs. </span>
+              <Link to="/donate" data-testid="cbat-footer-donate" className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors">
+                Support SkyWatch
+              </Link>
+            </p>
+          )}
+          {SLIM_APP && (
+            <p className="m-0">
+              <span className="hidden sm:inline">Every game runs in a desktop browser too. </span>
+              <button
+                type="button"
+                onClick={() => setPcNoteOpen(true)}
+                data-testid="cbat-footer-play-on-pc"
+                className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors"
+              >
+                Play on a PC
+              </button>
+            </p>
+          )}
+          <p className="m-0">
+            <span className="hidden sm:inline">A game not working right? </span>
+            <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
+              Report a problem
+            </Link>
+          </p>
+        </div>
+      </div>
+
+      {/* CBAT LOUNGE landmark — the bottom edge of the first screen, below `lg`
+          only. It is the mobile answer to the side column: a phone has nowhere
+          to dock a permanent chat panel, so the room gets announced here and
+          lives one swipe below the fold.
+
+          Lifted straight from the NEWS landmark on Home, and deliberately so —
+          it is the same gesture (a word on the bottom edge, a swaying chevron,
+          a section that fades in as you scroll into it) and someone who has
+          used one already knows what this one does. What changes is the colour:
+          NEWS is amber because it points at intel briefs; this is brand blue,
+          because everything on this page is.
+
+          Smaller than Home's, though. Home's landmark sits under a short hero
+          with slack to spare; this one is under 22 tiles that are tuned to end
+          at the fold, so the whole block is about 110px — enough to read as a
+          landmark, little enough that it does not push the last row of games
+          off a 667px phone.
+
+          A button, not just a heading: the chevron says "swipe down", but a tap
+          is the more obvious gesture and it should not be a dead one. */}
+      {showLoungeLanding && (
+        <button
+          type="button"
+          data-testid="cbat-lounge-landmark"
+          onClick={() => loungeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          className="lg:hidden relative w-full py-3 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
+          aria-label="CBAT chat: go to the lounge and your group"
+        >
+          {/* Ambient blue radial glow for depth — matches the radar tint below */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            aria-hidden="true"
+            style={{
+              background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(91,170,255,0.10) 0%, rgba(91,170,255,0.04) 40%, transparent 75%)',
+            }}
+          />
+          {/* Radar scan — static rings + slow-rotating conic sweep, behind the
+              word. Opacities stay in the 0.04-0.09 band so it reads as backdrop
+              rather than competing with the (semi-transparent) letters. */}
+          <div
+            className="absolute inset-0 pointer-events-none flex items-center justify-center"
+            aria-hidden="true"
+            style={{ zIndex: 0 }}
+          >
+            <div
+              className="relative"
+              style={{
+                width: 'min(60vh, 520px)',
+                aspectRatio: '1',
+                WebkitMaskImage: 'radial-gradient(circle, black 20%, rgba(0,0,0,0.6) 45%, transparent 75%)',
+                maskImage: 'radial-gradient(circle, black 20%, rgba(0,0,0,0.6) 45%, transparent 75%)',
+              }}
+            >
+              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 200 200">
+                <g fill="none" stroke="rgba(91,170,255,0.07)" strokeWidth="0.4">
+                  <circle cx="100" cy="100" r="95" />
+                  <circle cx="100" cy="100" r="72" />
+                  <circle cx="100" cy="100" r="48" />
+                  <circle cx="100" cy="100" r="24" />
+                  <line x1="5"  y1="100" x2="195" y2="100" />
+                  <line x1="100" y1="5" x2="100" y2="195" />
+                </g>
+                <g stroke="rgba(91,170,255,0.04)" strokeWidth="0.3">
+                  <line x1="33" y1="33"  x2="167" y2="167" />
+                  <line x1="33" y1="167" x2="167" y2="33"  />
+                </g>
+              </svg>
+              <div
+                className="absolute inset-0 rounded-full home-radar-sweep"
+                style={{
+                  background: 'conic-gradient(from 0deg, transparent 0deg, rgba(91,170,255,0.09) 22deg, rgba(91,170,255,0.03) 60deg, transparent 95deg, transparent 360deg)',
+                }}
+              />
+            </div>
+          </div>
+          {/* Top hairline accent */}
+          <div
+            className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-28"
+            style={{ background: 'linear-gradient(90deg, transparent, rgba(91,170,255,0.35), transparent)' }}
+          />
+          <motion.span
+            className="relative block font-black leading-none tracking-[0.15em] text-[1.75rem] sm:text-[3rem]"
+            style={{
+              color:      loungeHeadingColor,
+              textShadow: loungeHeadingShadow,
+              zIndex:     1,
+            }}
+          >
+            CBAT CHAT
+          </motion.span>
+          <motion.span
+            className="relative flex items-center gap-3 mt-1.5"
+            style={{ zIndex: 1, opacity: loungeEyebrowOpacity }}
+          >
+            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
+            <span
+              className="text-[10px] font-bold uppercase tracking-[0.35em]"
+              style={{ color: 'rgba(91,170,255,0.6)' }}
+            >
+              Talk to other agents
+            </span>
+            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
+          </motion.span>
+          <motion.span
+            className="relative block mt-2"
+            aria-hidden="true"
+            style={{ color: 'rgba(91,170,255,0.55)', zIndex: 1, opacity: loungeChevronOpacity }}
+          >
+            <span className="home-chevron-sway block">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </span>
+          </motion.span>
+        </button>
+      )}
+      </div>
+    </>
+  )
+
   return (
     // A flex column exactly as tall as the viewport below the app chrome, so the
     // report link can sit on the bottom edge with mt-auto instead of floating
@@ -621,8 +850,15 @@ export default function Cbat() {
     // OUTSIDE it, or its ~70dvh would count as content inside the box, leave no
     // slack for `mt-auto` to take, and drag the footer and the CBAT LOUNGE
     // landmark up under the last row of tiles instead of onto the bottom edge.
-    <div className="relative">
-    <div className="cbat-page flex flex-col min-h-[calc(100dvh-10rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:min-h-[calc(100dvh-11.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
+    //
+    // The desktop split view (`deskSplit`) swaps all of that for a page exactly
+    // the height of the window, no more and no less: `cbat-hub-root` is the last
+    // link in main.css's full-height flex chain, and the min-height maths gives
+    // way to flex-1.
+    <div className={`relative${deskSplit ? ' cbat-hub-root' : ''}`}>
+    <div className={deskSplit
+      ? 'cbat-page flex flex-col flex-1 min-h-0'
+      : 'cbat-page flex flex-col min-h-[calc(100dvh-10rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:min-h-[calc(100dvh-11.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]'}>
       <SEO
         title="CBAT Practice Tests"
         description="Practise every CBAT-style aptitude subtest in one place: FLAG, ANT, DPT, ACT, Trace, Visualisation and more. Free to play, with every score tracked."
@@ -664,8 +900,19 @@ export default function Cbat() {
         </a>
       )}
 
-      <div className="lg:flex lg:gap-6 lg:items-start">
-        <div className="lg:flex-1 lg:min-w-0">
+      <div className={deskSplit ? 'flex gap-6 flex-1 min-h-0' : 'lg:flex lg:gap-6 lg:items-start'}>
+        {/* In the split view this is the scroll area. The negative margin and
+            matching padding give the tiles' shadows and hover lift room inside
+            the clip without moving them; `pr-3` keeps the scrollbar off the
+            tile edges. Focusable so Page Down and the arrows scroll it. */}
+        <div
+          ref={gridScrollRef}
+          data-testid="cbat-grid-scroll"
+          tabIndex={deskSplit ? 0 : undefined}
+          className={deskSplit
+            ? 'flex-1 min-w-0 overflow-y-auto overscroll-contain scrollbar-inset -ml-3 pl-3 pr-3 -mt-1 pt-1 pb-4 focus:outline-none'
+            : 'lg:flex-1 lg:min-w-0'}
+        >
 
       {/* Lock card — shown when not signed in */}
       {!user && (
@@ -919,31 +1166,20 @@ export default function Cbat() {
       {isAdmin && <CbatPresenceDots containerRef={gridWrapRef} online={presence.online} />}
       </div>
 
+      {deskSplit && pageBottom}
         </div>
 
         {/* Recent scores side column — desktop (lg+) only, requires sign-in.
-            A flex column exactly as tall as the viewport below it, so the two
-            cards can split that height: half each while the chat is open (until the player drags the handle
-            between them, or the group setup form needs more room — see
-            CbatLoungeChat), and Recent Scores takes all of it
-            while the chat is collapsed to its tab. The height is measured
-            rather than set in CSS — see useStickyFillHeight for why. */}
+            A flex column as tall as the split view's row, so the two cards can
+            split that height: half each while the chat is open (until the player drags the handle
+            between them), and Recent Scores takes all of it
+            while the chat is collapsed to its tab. An ordinary column beside
+            the grid: only the grid scrolls, so nothing has to hold it still.
+            The chat half is a placeholder the app-level chat panel lines up
+            over; see LoungeHubSlot. */}
         {user && (
-          <aside ref={sideColumnRef} className="hidden lg:block lg:w-[340px] lg:shrink-0">
-            <div
-              className="flex flex-col"
-              style={sideColumn
-                ? {
-                  position: 'fixed',
-                  top:      sideColumn.top,
-                  left:     sideColumn.left,
-                  width:    sideColumn.width,
-                  height:   sideColumn.height,
-                }
-                // Until the first measurement lands, sit in flow at the column's
-                // natural size. One frame, and never a panel drawn at 0,0.
-                : undefined}
-            >
+          <aside className="hidden lg:block lg:w-[340px] lg:shrink-0">
+            <div className="flex flex-col h-full">
               {/* Admin-only tab docked to the top edge of the card below: admins see
                   player emails on every CBAT board, and this drops them back to the
                   agent view a player gets. Inset from the right so it meets the
@@ -955,230 +1191,25 @@ export default function Cbat() {
                   <CbatAdminViewToggle />
                 </div>
               )}
-              {/* Weight 1 here against the chat's `loungeGrow`, which the
+              {/* Weight 1 here against the chat's `grow`, which the
                   handle between them changes (default 1: an even split). */}
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-0 cbat-side-in">
                 <RecentCbatScores fill />
               </div>
-              {loungeInColumn && loungeOpen && (
+              {loungeInColumn && dock?.available && dock.open && (
                 <LoungeResizeHandle
-                  onChange={setLoungeGrow}
-                  onDragChange={setLoungeResizing}
+                  onChange={dock.setGrow}
+                  onDragChange={dock.setResizing}
                 />
               )}
-              {loungeInColumn && (
-                <CbatLoungeChat
-                  open={loungeOpen}
-                  onToggle={setLoungeOpen}
-                  collapsible
-                  grow={loungeGrow}
-                  resizing={loungeResizing}
-                />
-              )}
+              {loungeInColumn && <LoungeHubSlot />}
             </div>
           </aside>
         )}
       </div>
 
-      {/* The two standing links this page carries that are not games: the
-          donation ask and the report link. `mt-auto` takes up whatever slack
-          the grid leaves, so they sit on the bottom edge of the page rather
-          than trailing the last row of tiles.
 
-          One row, not two stacked lines. On a phone this whole strip
-          disappears when the grid has dead cells to put the links in (see
-          `reportInGrid` above) and the framing sentences are hidden anyway, so
-          the row is two short labels; from `sm` up each label gets its framing
-          sentence back and the row wraps to two lines only if the container is
-          too narrow to hold both — which is the stacked layout, arrived at when
-          it is actually needed rather than always.
-
-          Below the fold on a desktop, unavoidably: the two-across grid is
-          eleven rows of 130px tiles. That is the right place for a standing
-          link even so. The high-intent ask is the post-game note, which fires
-          on a results screen after a measured improvement; this is the findable
-          home for someone who has gone looking, and a footer is where people
-          look. Anyone who reaches it has scrolled 22 games.
-
-          Neither link is a button. A filled CTA here would compete with the
-          tiles for the same glance and read as the page's primary action,
-          which it emphatically is not.
-
-          The donation link is never shown in the native app, whatever the admin
-          flags say — the store-policy reason is set out in CbatGameOver. It
-          reads SLIM_APP rather than useSlimMode() for the same reason given
-          there: slim mode applied to the WEBSITE is just a trimmed site and
-          carries no store exposure. */}
-      {/* `lg:mr-[364px]` keeps this clear of the Recent Scores column, and it is
-          not cosmetic. This strip is a sibling of the lg:flex row above rather
-          than a child of its left column — it has to be, because `mt-auto`
-          against .cbat-page's flex column is what pins it to the bottom edge of
-          the page. So it spans the full width while the side column is
-          `position: fixed` and painted over the right 340px of the viewport,
-          and centred footer text slid underneath it: "Report a problem" was
-          buried behind the chat panel at lg and up.
-
-          340px column + gap-6 (24px) = 364px, and only when there is a column
-          to miss — it renders for signed-in users at lg only, which is exactly
-          when the margin applies. */}
-      {/* The bottom of the first screen, and the thing `mt-auto` now applies to.
-          It holds the footer strip and, below `lg`, the CBAT LOUNGE landmark —
-          they have to be pinned as one unit, because two siblings both asking
-          for `mt-auto` would split the slack between them and leave the
-          landmark floating in the middle of a gap instead of on the edge. */}
-      <div data-testid="cbat-page-bottom" className="mt-auto">
-      <div
-        data-testid="cbat-footer-report"
-        className={`pt-1 sm:pt-6 sm:border-t sm:border-slate-200${reportInGrid ? ' hidden sm:block' : ''}${user ? ' lg:mr-[364px]' : ''}`}
-      >
-        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1 text-center text-[10px] sm:text-xs text-slate-500">
-          {!SLIM_APP && (
-            <p className="m-0">
-              <span className="hidden sm:inline">SkyWatch is free and has no ads. Donations cover the running costs. </span>
-              <Link to="/donate" data-testid="cbat-footer-donate" className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors">
-                Support SkyWatch
-              </Link>
-            </p>
-          )}
-          {SLIM_APP && (
-            <p className="m-0">
-              <span className="hidden sm:inline">Every game runs in a desktop browser too. </span>
-              <button
-                type="button"
-                onClick={() => setPcNoteOpen(true)}
-                data-testid="cbat-footer-play-on-pc"
-                className="font-semibold text-brand-600 hover:text-brand-700 underline underline-offset-2 transition-colors"
-              >
-                Play on a PC
-              </button>
-            </p>
-          )}
-          <p className="m-0">
-            <span className="hidden sm:inline">A game not working right? </span>
-            <Link to="/report" className="font-semibold text-slate-600 hover:text-brand-600 underline underline-offset-2 transition-colors">
-              Report a problem
-            </Link>
-          </p>
-        </div>
-      </div>
-
-      {/* CBAT LOUNGE landmark — the bottom edge of the first screen, below `lg`
-          only. It is the mobile answer to the side column: a phone has nowhere
-          to dock a permanent chat panel, so the room gets announced here and
-          lives one swipe below the fold.
-
-          Lifted straight from the NEWS landmark on Home, and deliberately so —
-          it is the same gesture (a word on the bottom edge, a swaying chevron,
-          a section that fades in as you scroll into it) and someone who has
-          used one already knows what this one does. What changes is the colour:
-          NEWS is amber because it points at intel briefs; this is brand blue,
-          because everything on this page is.
-
-          Smaller than Home's, though. Home's landmark sits under a short hero
-          with slack to spare; this one is under 22 tiles that are tuned to end
-          at the fold, so the whole block is about 110px — enough to read as a
-          landmark, little enough that it does not push the last row of games
-          off a 667px phone.
-
-          A button, not just a heading: the chevron says "swipe down", but a tap
-          is the more obvious gesture and it should not be a dead one. */}
-      {showLoungeLanding && (
-        <button
-          type="button"
-          data-testid="cbat-lounge-landmark"
-          onClick={() => loungeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          className="lg:hidden relative w-full py-3 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
-          aria-label="CBAT chat: go to the lounge and your group"
-        >
-          {/* Ambient blue radial glow for depth — matches the radar tint below */}
-          <div
-            className="absolute inset-0 pointer-events-none"
-            aria-hidden="true"
-            style={{
-              background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(91,170,255,0.10) 0%, rgba(91,170,255,0.04) 40%, transparent 75%)',
-            }}
-          />
-          {/* Radar scan — static rings + slow-rotating conic sweep, behind the
-              word. Opacities stay in the 0.04-0.09 band so it reads as backdrop
-              rather than competing with the (semi-transparent) letters. */}
-          <div
-            className="absolute inset-0 pointer-events-none flex items-center justify-center"
-            aria-hidden="true"
-            style={{ zIndex: 0 }}
-          >
-            <div
-              className="relative"
-              style={{
-                width: 'min(60vh, 520px)',
-                aspectRatio: '1',
-                WebkitMaskImage: 'radial-gradient(circle, black 20%, rgba(0,0,0,0.6) 45%, transparent 75%)',
-                maskImage: 'radial-gradient(circle, black 20%, rgba(0,0,0,0.6) 45%, transparent 75%)',
-              }}
-            >
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 200 200">
-                <g fill="none" stroke="rgba(91,170,255,0.07)" strokeWidth="0.4">
-                  <circle cx="100" cy="100" r="95" />
-                  <circle cx="100" cy="100" r="72" />
-                  <circle cx="100" cy="100" r="48" />
-                  <circle cx="100" cy="100" r="24" />
-                  <line x1="5"  y1="100" x2="195" y2="100" />
-                  <line x1="100" y1="5" x2="100" y2="195" />
-                </g>
-                <g stroke="rgba(91,170,255,0.04)" strokeWidth="0.3">
-                  <line x1="33" y1="33"  x2="167" y2="167" />
-                  <line x1="33" y1="167" x2="167" y2="33"  />
-                </g>
-              </svg>
-              <div
-                className="absolute inset-0 rounded-full home-radar-sweep"
-                style={{
-                  background: 'conic-gradient(from 0deg, transparent 0deg, rgba(91,170,255,0.09) 22deg, rgba(91,170,255,0.03) 60deg, transparent 95deg, transparent 360deg)',
-                }}
-              />
-            </div>
-          </div>
-          {/* Top hairline accent */}
-          <div
-            className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-28"
-            style={{ background: 'linear-gradient(90deg, transparent, rgba(91,170,255,0.35), transparent)' }}
-          />
-          <motion.span
-            className="relative block font-black leading-none tracking-[0.15em] text-[1.75rem] sm:text-[3rem]"
-            style={{
-              color:      loungeHeadingColor,
-              textShadow: loungeHeadingShadow,
-              zIndex:     1,
-            }}
-          >
-            CBAT CHAT
-          </motion.span>
-          <motion.span
-            className="relative flex items-center gap-3 mt-1.5"
-            style={{ zIndex: 1, opacity: loungeEyebrowOpacity }}
-          >
-            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
-            <span
-              className="text-[10px] font-bold uppercase tracking-[0.35em]"
-              style={{ color: 'rgba(91,170,255,0.6)' }}
-            >
-              Talk to other agents
-            </span>
-            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
-          </motion.span>
-          <motion.span
-            className="relative block mt-2"
-            aria-hidden="true"
-            style={{ color: 'rgba(91,170,255,0.55)', zIndex: 1, opacity: loungeChevronOpacity }}
-          >
-            <span className="home-chevron-sway block">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </span>
-          </motion.span>
-        </button>
-      )}
-      </div>
+      {!deskSplit && pageBottom}
 
       {/* End of the first screen — close `.cbat-page` */}
       </div>

@@ -412,8 +412,10 @@ export default function CbatLeaderboard() {
   const sliding = isWeekly && slideRows !== null
   const rowsToRender = sliding ? slideRows : (board?.leaderboard || [])
 
+  // The same 672px as every instructions card, so the middle column does not
+  // change width between a game and its board.
   return (
-    <div className="cbat-leaderboard-page">
+    <div className="cbat-leaderboard-page w-full max-w-2xl mx-auto">
       {cardUserId && (
         <UserCard
           key={cardUserId}
@@ -468,7 +470,7 @@ export default function CbatLeaderboard() {
       </div>
 
       {/* Weekly / All-Time segmented control (source of truth; swipe is an accelerator) */}
-      <div className="w-full max-w-lg mx-auto mb-3">
+      <div className="w-full mb-3">
         <div className="flex bg-game-arena border border-game-line rounded-lg p-0.5" role="tablist">
           {TABS.map(t => {
             const active = tab === t.key
@@ -524,7 +526,7 @@ export default function CbatLeaderboard() {
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.15}
           onDragEnd={onDragEnd}
-          className="w-full max-w-lg mx-auto"
+          className="w-full"
         >
           {isProgress ? (
             <ProgressPanel board={board} cfg={cfg} />

@@ -21,6 +21,14 @@ const scrollCache = new Map()
 let prevPathname = null
 let latestScroll = 0
 
+// The app shell's <main> is the scroller instead of the window on desktop CBAT
+// pages while the chat dock is out (see `cbat-dock-reserve` in main.css). It
+// survives every route change, so without this a new page would open wherever
+// the last one was left. Tracked with its own cache alongside the window's.
+const mainCache = new Map()
+let latestMainScroll = 0
+const shellMain = () => document.querySelector('.app-shell-main')
+
 if (typeof window !== 'undefined') {
   if ('scrollRestoration' in window.history) {
     window.history.scrollRestoration = 'manual'
@@ -30,27 +38,49 @@ if (typeof window !== 'undefined') {
     () => { latestScroll = window.scrollY },
     { passive: true },
   )
+  // Element scrolls do not bubble, so listen in the capture phase.
+  document.addEventListener(
+    'scroll',
+    (e) => { if (e.target instanceof Element && e.target.classList.contains('app-shell-main')) latestMainScroll = e.target.scrollTop },
+    { passive: true, capture: true },
+  )
 }
 
-export default function ScrollToTop() {
-  const { pathname } = useLocation()
+// `pathname` is the page on screen (see AppRoutes), so the reset waits until
+// the outgoing page has finished fading out instead of jumping it to the top
+// mid-fade. Falls back to the URL where no page path is passed.
+export default function ScrollToTop({ pathname: shownPath } = {}) {
+  const { pathname: urlPath } = useLocation()
+  const pathname = shownPath ?? urlPath
   const navType = useNavigationType()
 
   if (prevPathname !== pathname) {
     if (prevPathname !== null) {
       scrollCache.set(prevPathname, latestScroll)
+      mainCache.set(prevPathname, latestMainScroll)
     }
     prevPathname = pathname
 
     if (typeof window !== 'undefined') {
+      const main = shellMain()
       if (navType === 'POP' && !SKIP_POP_RESTORE.has(pathname)) {
         const saved = scrollCache.get(pathname)
         const target = saved != null ? saved : 0
         window.scrollTo(0, target)
         latestScroll = target
+        // <main> only scrolls once the incoming page has mounted and the dock
+        // has reserved its column, so the restore waits a frame for that.
+        const mainTarget = mainCache.get(pathname) ?? 0
+        latestMainScroll = mainTarget
+        if (main) {
+          main.scrollTop = 0
+          if (mainTarget) requestAnimationFrame(() => { main.scrollTop = mainTarget })
+        }
       } else {
         window.scrollTo(0, 0)
         latestScroll = 0
+        if (main) main.scrollTop = 0
+        latestMainScroll = 0
       }
     }
   }
@@ -61,6 +91,8 @@ export default function ScrollToTop() {
 // Test helper — resets module state between test cases.
 export function __resetScrollToTopForTests() {
   scrollCache.clear()
+  mainCache.clear()
   prevPathname = null
   latestScroll = 0
+  latestMainScroll = 0
 }

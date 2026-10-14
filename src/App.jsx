@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { publicPageInitial } from './utils/publicPagePreview'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
@@ -20,6 +20,7 @@ import { ChatUnreadProvider }                from './context/ChatUnreadContext'
 import { GameChromeProvider }                from './context/GameChromeContext'
 import TutorialPickerOverlay                  from './components/TutorialPickerOverlay'
 import CbatMenuMusic                          from './components/CbatMenuMusic'
+import { CbatLoungeDockProvider }            from './components/cbat/CbatLoungeDock'
 import CommunityMusic                         from './components/CommunityMusic'
 import AppShell                            from './components/layout/AppShell'
 import UiThemeSync                         from './components/layout/UiThemeSync'
@@ -122,13 +123,18 @@ import { recordPath } from './utils/routeTrail'
 import useHeartbeat from './hooks/useHeartbeat'
 
 // ── Page transition wrapper ────────────────────────────────────────────────
-function PageWrapper({ children }) {
+// `slide={false}` fades without the vertical nudge. A transform on this wrapper
+// makes it the containing block for any position:fixed descendant, so a page
+// with a fixed panel (the CBAT hub's side column) would see that panel drawn
+// relative to the wrapper for the whole transition and then snap into place.
+// Opacity alone creates no containing block.
+function PageWrapper({ children, slide = true }) {
   return (
     <motion.div
       className="app-page"
-      initial={publicPageInitial({ opacity: 0, y: 8 })}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -4 }}
+      initial={publicPageInitial(slide ? { opacity: 0, y: 8 } : { opacity: 0 })}
+      animate={slide ? { opacity: 1, y: 0 } : { opacity: 1 }}
+      exit={slide ? { opacity: 0, y: -4 } : { opacity: 0 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
       {children}
@@ -247,6 +253,37 @@ function AppRoutes() {
   const skipLaunchLanding = useNativeLaunchRoute(location.pathname, user, !loading)
   useHeartbeat(location.pathname)
 
+  // The path of the page actually on screen, which is not always the URL's.
+  // Navigating changes the URL at once, but the outgoing page stays up for its
+  // fade-out (AnimatePresence mode="wait") before the next one mounts. Shell
+  // behaviour that depends on the route (the game pages' trimmed top padding,
+  // the scroll reset) has to follow the page on screen, or it lands on the
+  // outgoing page mid-fade: leaving a game, its title dropped 12px and a
+  // scrolled page jumped to the top just before it disappeared.
+  //
+  // Switches when the old page has finished leaving (onExitComplete below),
+  // in the same render that mounts the new one. A navigation that keeps the
+  // same transition key has no fade-out, so it switches straight away; and a
+  // fallback timer means a navigation with no exit to wait for (a redirect,
+  // the loading screen) can never leave it behind.
+  const routeKey = transitionKeyFor(location.pathname)
+  const [shown, setShown] = useState(() => ({ path: location.pathname, key: routeKey }))
+  if (shown.key === routeKey && shown.path !== location.pathname) {
+    setShown({ path: location.pathname, key: routeKey })
+  }
+  const latestPathRef = useRef(location.pathname)
+  useLayoutEffect(() => { latestPathRef.current = location.pathname }, [location.pathname])
+  const syncShown = () => {
+    const path = latestPathRef.current
+    setShown(prev => (prev.path === path ? prev : { path, key: transitionKeyFor(path) }))
+  }
+  const stale = shown.key !== routeKey
+  useEffect(() => {
+    if (!stale) return
+    const id = setTimeout(syncShown, 800)
+    return () => clearTimeout(id)
+  }, [stale, location.pathname])
+
   // When the user transitions TO /login from another route, remember where
   // they came from so we can send them back after successful sign-in. Covers
   // every in-page Sign-In Link/button without needing per-call-site changes.
@@ -318,9 +355,9 @@ function AppRoutes() {
   }
 
   return (
-    <AppShell>
-      <ScrollToTop />
-      <AnimatePresence mode="wait" initial={false}>
+    <AppShell shownPath={shown.path}>
+      <ScrollToTop pathname={shown.path} />
+      <AnimatePresence mode="wait" initial={false} onExitComplete={syncShown}>
         <Routes location={location} key={transitionKeyFor(location.pathname)}>
 
           {/* Public */}
@@ -347,7 +384,7 @@ function AppRoutes() {
           <Route path="/case-files/:caseSlug/:chapterSlug/debrief" element={<RequireAuth><PageWrapper><CaseFileDebrief /></PageWrapper></RequireAuth>} />
           <Route path="/play/quiz"              element={<RequireAuth><PageWrapper><QuizBriefsList /></PageWrapper></RequireAuth>} />
           <Route path="/play/battle-of-order"   element={<RequireAuth><PageWrapper><BOOBriefsList /></PageWrapper></RequireAuth>} />
-          <Route path="/cbat"                   element={<PageWrapper><Cbat /></PageWrapper>} />
+          <Route path="/cbat"                   element={<PageWrapper slide={false}><Cbat /></PageWrapper>} />
           {/* Ahead of /cbat/:gameKey/leaderboard so "report" is never read as a game key. Not
               behind RequireAuth: like /cbat itself, it renders its own sign-in card, which makes
               it a landing page for the feature rather than a redirect. */}
@@ -465,7 +502,11 @@ export default function App() {
                     <UiThemeSync />
                     <CbatMockLock />
                     <StaleBuildReload />
-                    <AppRoutes />
+                    {/* Holds the one desktop CBAT chat panel, which stays put across
+                        CBAT pages the way the navbar does. */}
+                    <CbatLoungeDockProvider>
+                      <AppRoutes />
+                    </CbatLoungeDockProvider>
                     <CbatMenuMusic />
         <CommunityMusic />
                     <NotifLayer />

@@ -244,6 +244,28 @@ header.fixed {
   animation: recent-mock-tab-in 420ms cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
 }
 
+/* CBAT hub side column (Recent Scores + chat): rises into place with the page
+   instead of popping in at full size. `backwards`, never `both`: a transform
+   left on the column after the animation would make it the containing block for
+   any position:fixed popover inside the chat. */
+@keyframes cbat-side-in {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.cbat-side-in {
+  animation: cbat-side-in 420ms cubic-bezier(0.22, 1, 0.36, 1) 80ms backwards;
+}
+
+/* Content that arrives after a fetch (a feed's rows, a chat's history) fades
+   up over its loading placeholder rather than replacing it in one frame. */
+@keyframes content-fade-in {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.content-fade-in {
+  animation: content-fade-in 320ms ease-out backwards;
+}
+
 /* Date lock warning: a composed one-time entrance instead of a perpetual
    pulse. It draws the eye, then settles so the irreversible choice is easy to
    read without making the whole form feel like an error state. */
@@ -1844,9 +1866,14 @@ body[data-rsvp-active] > *:not(.rsvp-overlay) {
   will-change: transform;
 }
 .app-shell-body,
-.app-shell-main,
-.app-shell-content {
+.app-shell-main {
   transition: padding 300ms ease-out;
+}
+/* Only the bottom eases here (the immersive bottom bar). The top padding
+   changes with the route (`cbat-route`), and the new page is already on
+   screen when it does, so an eased top read as the page sliding into place. */
+.app-shell-content {
+  transition: padding-bottom 300ms ease-out;
 }
 
 /* CBAT pages: tighten the "← CBAT GAMENAME" header spacing.
@@ -1854,6 +1881,20 @@ body[data-rsvp-active] > *:not(.rsvp-overlay) {
    for /cbat/* routes we collapse it to 0.5rem so the header sits close to
    (but not flush with) the navbar, matching the bottom gap on the header div. */
 .cbat-route .app-shell-content { padding-top: 0.75rem; }
+
+/* Game instruction pages keep the back row and the joystick panels still
+   while the instructions scroll (CbatGameHeader, CbatStickLayout). Sticky
+   offsets are measured from the top of whatever scrolls: the window, under the
+   fixed top bar, or <main> itself while the desktop chat dock is out (see
+   `cbat-dock-reserve`), which already starts below the bar. The panels pin at
+   exactly the height they start at, under the 1.75rem back row (a 20px row and
+   8px under it) plus the 0.75rem shell padding above it, so they never move. */
+:root { --page-sticky-top: calc(3.5rem + env(safe-area-inset-top)); }
+@media (min-width: 1024px) {
+  body.cbat-dock-reserve { --page-sticky-top: 0px; }
+}
+.cbat-sticky-header { top: var(--page-sticky-top); }
+.cbat-sticky-panel  { top: calc(var(--page-sticky-top) + 2.5rem); }
 
 /* Pages that have to fit a phone viewport rather than scroll: the CBAT hub,
    whose six rows of tiles need about 460px of a screen that is only 540-570px
@@ -1894,6 +1935,124 @@ body.cbat-dpt-fullwidth .app-shell-content {
     max-width: none;
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+}
+
+/* CBAT hub split view (desktop, signed in): the page is exactly the window's
+   height and the game grid scrolls in its own column, so its scrollbar sits
+   between the games and the Recent Scores / chat column instead of on the far
+   side of it. Mirror of the cbat-act-wide flex chain below: every wrapper from
+   the shell down to the hub's root has to be in it, the .app-page transition
+   div included, or the grid grows to its content and the window scrolls again.
+   The bottom padding leaves the column 1rem clear of the window edge, where
+   the old fixed column sat. Toggled from src/pages/Cbat.jsx. */
+@media (min-width: 1024px) {
+  html:has(body.cbat-hub-split),
+  body.cbat-hub-split {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  body.cbat-hub-split .app-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  body.cbat-hub-split .app-shell-body,
+  body.cbat-hub-split .app-shell-main,
+  body.cbat-hub-split .app-shell-content,
+  body.cbat-hub-split .app-page,
+  body.cbat-hub-split .cbat-hub-root {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  body.cbat-hub-split .app-shell-main,
+  body.cbat-hub-split .app-shell-content,
+  body.cbat-hub-split .app-page,
+  body.cbat-hub-split .cbat-hub-root {
+    flex-direction: column;
+  }
+  body.cbat-hub-split .app-shell-content { width: 100%; padding-bottom: 0; }
+  /* No padding transition: arriving at the hub must not visibly grow the
+     column by the 4rem this gives back. */
+  body.cbat-hub-split .app-shell-main {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    transition: none;
+  }
+}
+
+/* Desktop CBAT chat dock (src/components/cbat/CbatLoungeDock.jsx): while the
+   chat panel is pinned to the right edge of an instructions or leaderboard
+   page, the page keeps out of its way AND scrolls in its own column, so its
+   scrollbar sits left of the chat exactly where the hub's game-list scrollbar
+   does, rather than on the far side of the chat.
+
+   The window stops scrolling and `.app-shell-main` becomes the scroller,
+   ending 380px from the right edge: 340px panel + 16px edge + the hub's 24px
+   gap, which is where the hub's grid scroller ends. Same thin inset bar as the
+   hub (the `scrollbar-inset` utility, restated here because a utility cannot
+   be applied from a selector). ScrollToTop resets and restores this element
+   as well as the window, since it outlives every route. */
+@media (min-width: 1024px) {
+  html:has(body.cbat-dock-reserve),
+  body.cbat-dock-reserve {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  body.cbat-dock-reserve .app-shell {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  body.cbat-dock-reserve .app-shell-body { min-height: 0; }
+  body.cbat-dock-reserve .app-shell-main {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin-right: 380px;
+    /* The scrollbar's room is kept whether or not the page is long enough to
+       need it. The content hugs the right of this column, so without it every
+       page that grew a scrollbar (a leaderboard filling in, an instructions
+       card taller than the window) jumped 10px sideways, and pages that did
+       and did not need one sat 10px apart. */
+    scrollbar-gutter: stable;
+  }
+  /* Three columns on every instructions page and leaderboard, the same place
+     on all of them: [left 340px | middle 672px | the chat]. The middle column
+     (the instructions card, the board) sits 24px from the chat; the left one
+     is the joystick games' panels and empty elsewhere, with the back row
+     starting at its left edge. Built as a content box hugging the right of
+     <main>: its left padding is the left column plus its gap (`--dock-gutter`,
+     364px, set by CbatLoungeDock from the width actually available and shrunk
+     on a narrower window so the middle column keeps its 672px). `html` in the
+     selector so it beats the per-game widening rules (cbat-stick-wide). No
+     padding transition: the frame must be in place on arrival, not slide. */
+  html body.cbat-dock-reserve .app-shell-content {
+    max-width: none;
+    width: min(100%, calc(42rem + 2rem + 364px));
+    margin-left: auto;
+    margin-right: 0;
+    padding-left: calc(1rem + var(--dock-gutter, 0px));
+    padding-right: 1rem;
+    transition: none;
+  }
+  /* The back row reaches out to the left column's edge. */
+  body.cbat-dock-reserve .cbat-sticky-header { margin-left: calc(-1 * var(--dock-gutter, 0px)); }
+  /* And so does the joystick games' grid, which puts its panel column there. */
+  body.cbat-dock-reserve .cbat-stick-grid { margin-left: calc(-1 * var(--dock-gutter, 0px)); }
+  body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar { width: 10px; }
+  body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar-track { background: transparent; margin-block: 8px; }
+  body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar-thumb {
+    background: #1a3060;
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+  }
+  body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar-thumb:hover { background: #2a4a8a; background-clip: padding-box; }
+  /* The Real CBAT theme's plain grey square thumb wins here as it does over
+     the utility on the hub. */
+  :root[data-theme="cbat"] body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar-thumb {
+    background: #a0a0a0;
+    border-radius: 0;
   }
 }
 

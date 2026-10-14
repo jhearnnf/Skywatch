@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, useAnimate } from 'framer-motion'
 
 // Arrival flourish for the CBAT leaderboard page. A big "THIS WEEK" card appears
@@ -41,8 +42,11 @@ export default function LeaderboardIntro({ onDone }) {
     // separate glow child, leaving the box's geometry clean for the morph.
     async function run() {
       try {
+        // The page dims first, quickly, rather than appearing already dimmed
+        // on the first frame, and the card rises in on top of it.
+        if (backdrop) animate(backdrop, { opacity: [0, 1] }, { duration: 0.22, ease: 'easeOut' })
         if (card) {
-          await animate(card, { opacity: [0, 1] }, { duration: 0.26, ease: 'easeOut' }) // fade in
+          await animate(card, { opacity: [0, 1], scale: [0.94, 1] }, { duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.06 }) // fade in
           if (cancelled) return
           if (glow) await animate(glow, { opacity: [0, 0.7, 0] }, { duration: 0.42, ease: 'easeInOut' }) // flash
           if (cancelled) return
@@ -62,14 +66,19 @@ export default function LeaderboardIntro({ onDone }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return (
+  // Portalled to <body>. The page this is mounted from slides in with a
+  // transform, and a transformed ancestor becomes the containing block for
+  // `position: fixed`, so in-tree the overlay was drawn against the arriving
+  // page rather than the window for the length of that slide and then snapped.
+  // The shared layoutId still links the card to the tab pill through a portal.
+  return createPortal(
     <div
       ref={scope}
       className="fixed inset-0 z-[60] flex items-center justify-center px-6"
       onClick={() => finishRef.current()}
       role="presentation"
     >
-      <div data-intro-backdrop className="absolute inset-0 bg-[#06101e]/85 backdrop-blur-sm" />
+      <div data-intro-backdrop className="absolute inset-0 bg-[#06101e]/85 backdrop-blur-sm" style={{ opacity: 0 }} />
       <motion.div
         data-intro-card
         layoutId={INTRO_PILL_LAYOUT_ID}
@@ -85,6 +94,7 @@ export default function LeaderboardIntro({ onDone }) {
         <span className="relative text-4xl leading-none">🏆</span>
         <span className="relative text-lg font-extrabold uppercase tracking-widest">This Week</span>
       </motion.div>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { useCbatGameInProgress } from '../hooks/useCbatGameInProgress'
+import { useLoungeDock } from './cbat/loungeDockContext'
 
 // "Report a problem", pinned to the bottom corner of every CBAT game page.
 //
@@ -23,16 +24,23 @@ import { useCbatGameInProgress } from '../hooks/useCbatGameInProgress'
 // slides in with a transform, and a transformed ancestor becomes the containing
 // block for `position: fixed` — so in-tree, the link rode the bottom of the page
 // for the length of the transition and then jumped to the viewport corner.
+//
+// Out of the chat's way. While the desktop chat dock fills the right-hand
+// column (see CbatLoungeDock) the corner is the chat's composer, so the link
+// moves to the bottom corner of the page's own column instead: 380px is where
+// that column ends (see `cbat-dock-reserve` in main.css), plus room for its
+// scrollbar.
 export default function CbatGameReportLink() {
   const inProgress = useCbatGameInProgress()
+  const docked = Boolean(useLoungeDock()?.docked)
   if (inProgress) return null
   return createPortal(
     <Link
       to="/report"
       data-testid="cbat-game-report"
-      className="hidden lg:inline-flex fixed bottom-3 right-4 z-30 items-center px-2 py-1 rounded-md
+      className={`hidden lg:inline-flex fixed bottom-3 ${docked ? 'right-[396px]' : 'right-4'} z-30 items-center px-2 py-1 rounded-md
         text-[11px] font-semibold text-slate-500 hover:text-brand-600 bg-surface/80 backdrop-blur-sm
-        underline underline-offset-2 transition-colors"
+        underline underline-offset-2 transition-colors`}
     >
       Report a problem
     </Link>,

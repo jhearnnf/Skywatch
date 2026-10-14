@@ -118,11 +118,11 @@ export default function RecentCbatScores({ fill = false }) {
           <p className="text-xs text-slate-500">Loading recent activity…</p>
         </div>
       ) : error ? (
-        <div className="px-4 py-8 text-center">
+        <div className="content-fade-in px-4 py-8 text-center">
           <p className="text-xs text-slate-500">{error}</p>
         </div>
       ) : visible.length === 0 ? (
-        <div className="px-4 py-8 text-center">
+        <div className="content-fade-in px-4 py-8 text-center">
           <p className="text-xs text-slate-500">
             {view === 'top' && rows.length > 0
               ? `No top ${TOP_RANK_CUTOFF} scores in the last 24 hours.`
@@ -139,7 +139,7 @@ export default function RecentCbatScores({ fill = false }) {
           )}
         </div>
       ) : (
-        <div className={`divide-y divide-game-line/50 overflow-y-auto scrollbar-inset ${
+        <div className={`content-fade-in divide-y divide-game-line/50 overflow-y-auto scrollbar-inset ${
           fill ? 'flex-1 min-h-0' : 'max-h-[640px]'
         }`}>
           {visible.map((r) => {
