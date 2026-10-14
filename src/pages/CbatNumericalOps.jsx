@@ -13,6 +13,7 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import {
   NUMERICAL_OPS_DIFFICULTIES, NUMERICAL_OPS_LAUNCH_MS, numericalOpsTuning, computeGrade,
@@ -540,7 +541,7 @@ export default function CbatNumericalOps() {
                 Solve two-number arithmetic against the clock. Four rounds of five questions, with numbers getting bigger each round. 20 seconds per question.
               </p>
 
-              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
                 {[1, 2, 3, 4].map(r => (
                   <div key={r} className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                     <CbatIntroLabel>R{r}</CbatIntroLabel>
@@ -557,7 +558,7 @@ export default function CbatNumericalOps() {
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">20s per question — running out counts as wrong</span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
                 {best => (

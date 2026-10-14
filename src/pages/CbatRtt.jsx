@@ -11,6 +11,7 @@ import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import RttScene from '../components/RttScene'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
@@ -600,7 +601,7 @@ export default function CbatRtt() {
                   the reticle before the pass ends.
                 </p>
 
-                <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
+                <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   {isTouch
                     ? <div className="flex items-start gap-3"><CbatIntroLabel>Slew</CbatIntroLabel><span className="pt-0.5">hold the pad under the picture and move your thumb. Where you first touch is the middle. The further you move from it, the faster the camera turns. Let go to stop</span></div>
                     : <div className="flex items-start gap-3"><CbatIntroLabel>Slew</CbatIntroLabel><span className="pt-0.5">the further the pointer sits from the middle of the picture, the faster the camera turns — bring it back to the middle to stop</span></div>}
@@ -617,7 +618,7 @@ export default function CbatRtt() {
                   </>)}
                   <div className="flex items-start gap-3"><CbatIntroLabel>Cue</CbatIntroLabel><span className="pt-0.5">an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
-                </div>
+                </CbatIntroList>
 
                 {/* On the card only while there is no stick. With one plugged
                     in this same control renders inside the joystick panel. */}

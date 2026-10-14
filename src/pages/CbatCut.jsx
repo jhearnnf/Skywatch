@@ -13,6 +13,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import {
   CUT_DIFFICULTIES, CUT_LAUNCH_MS, cutTuning,
@@ -1713,7 +1714,7 @@ export default function CbatCut() {
                   tolerance and react to scheduled tasks — the goal is to keep the <span className="text-red-400">Warning panel</span> empty.
                 </p>
 
-                <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
+                <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Engine</CbatIntroLabel><span className="pt-0.5">keep the three fuel tanks within {FUEL_MAX_SPREAD} L</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Nav</CbatIntroLabel><span className="pt-0.5">hold airspeed within ±{SPEED_TOL} kts of required</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Sensor</CbatIntroLabel><span className="pt-0.5">{cbat ? 're-activate Air & Ground sensors on time; select the ordered camera at its Clock time' : 're-activate Air & Ground sensors on time; select the ordered camera'}</span></div>
@@ -1721,7 +1722,7 @@ export default function CbatCut() {
                   <div className="flex items-start gap-3"><CbatIntroLabel>System</CbatIntroLabel><span className="pt-0.5">{cbat ? 'keep hydraulic pressure 90–110; type comms codes, submit when OK lights up, then press Confirm at zero' : 'keep hydraulic pressure 90–110; type comms codes and submit when OK lights up'}</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'🕑'}</span><span className="pt-0.5">The Clock shows in-game time — some tasks are scheduled to it</span></div>
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>{'⏱'}</span><span className="pt-0.5">{tuning.gameMs / 60_000} {tuning.gameMs === 60_000 ? 'minute' : 'minutes'} — the Message display feeds every task</span></div>
-                </div>
+                </CbatIntroList>
 
                 <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
                   {best => best.bestScore}

@@ -45,6 +45,7 @@ import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { generateSitRounds, GRID, COL_LABELS, CLASS_LABEL, MOVING_CLASSES } from '../utils/cbat/sitGenerator'
 import { CLASS_STYLE, HEADING_DEG } from '../components/cbat/sitClassStyle'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import {
   SIT_DIFFICULTIES, SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP, SIT_LAUNCH_MS, SIT_TAB_FADE_MS,
   sitTuning, computeSitGrade, sitPhaseMs, sitRunEstimateMs,
@@ -693,7 +694,7 @@ export default function CbatSit() {
                 Study the ground one layer at a time, from above. No layer shows the whole picture, so putting it together is on you. A camera then flies over the same ground in 3D, and not from the direction you studied it.
               </p>
 
-              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Study the layers. Each one holds a single kind of thing, and you move between them as you like, though each switch takes a moment and the clock keeps running. Only the hills appear on every layer. Some layers are turned, so check the compass beside each one.</span>
@@ -730,7 +731,7 @@ export default function CbatSit() {
                     studying. You can hand back the rest of any study window.
                   </span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               <CbatPersonalBest label={introTuning.label} best={personalBest} loading={bestLoading} className={dim}>
                 {best => (

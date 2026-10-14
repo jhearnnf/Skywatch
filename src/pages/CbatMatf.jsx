@@ -36,6 +36,7 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
 import MatfPrintSheet from '../components/cbat/MatfPrintSheet'
 import MatfPrintoutRail from '../components/cbat/MatfPrintoutRail'
@@ -646,7 +647,7 @@ export default function CbatMatf() {
                 Two parts against the clock. Answer as many as you can, but a wrong answer takes a point off, so don't guess. Nothing here is hard to understand, and everything here is hard to do quickly.
               </p>
 
-              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Coordinate grid, running from minus {introTuning.gridExtent} to plus {introTuning.gridExtent} both ways. Bring one number across, one down, read where they meet.</span>
@@ -671,7 +672,7 @@ export default function CbatMatf() {
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">±{introTuning.gridExtent} grid · {introTuning.tableCount} air-speed tables · {Math.round(introTuning.partMs / 1000)}s per part</span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               <CbatPersonalBest label={introTuning.label} best={personalBest} loading={bestLoading} className={dim}>
                 {best => <>{best.bestScore} points</>}

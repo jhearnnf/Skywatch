@@ -31,6 +31,7 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useClanOffered } from '../utils/cbat/clanOffer'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -134,7 +135,7 @@ function IntroScreen({
         Track aircraft, solve maths under pressure, and strike target shapes. All at once.
       </p>
 
-      <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
+      <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
           <span className="pt-0.5">60-second mission</span>
@@ -155,7 +156,7 @@ function IntroScreen({
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Wrong answers lose points. Score can go negative.</span>
         </div>
-      </div>
+      </CbatIntroList>
 
       {/* Personal best and the leaderboard link both follow the selected
           difficulty — the two boards are entirely separate. */}

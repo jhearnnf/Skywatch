@@ -13,6 +13,7 @@ import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
@@ -751,7 +752,7 @@ export default function CbatSymbols() {
                 increasing difficulty.
               </p>
 
-              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+              <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                 <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>T1</CbatIntroLabel>
                   <span className="pt-0.5">{'Rounds 1\u20135 \u00b7 grid of 12\u201315 symbols'}</span>
@@ -772,7 +773,7 @@ export default function CbatSymbols() {
                       : 'A wrong click counts as missed \u2014 round skips automatically'}
                   </span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               {personalBest && (
                 <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">

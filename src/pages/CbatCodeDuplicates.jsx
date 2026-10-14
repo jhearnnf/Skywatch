@@ -13,6 +13,7 @@ import { useCbatAnswerKeys, useCbatMcq } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
@@ -431,7 +432,7 @@ export default function CbatCodeDuplicates() {
                 A sequence of digits will flash on screen for 5 seconds. Memorise them, then count how many times a specific digit appeared.
               </p>
 
-              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+              <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                 {cbat ? (
                   <>
                     <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
@@ -463,7 +464,7 @@ export default function CbatCodeDuplicates() {
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
                   <span className="pt-0.5">Each sequence is shown for 5 seconds</span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               {personalBest && (
                 <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">

@@ -38,6 +38,7 @@ import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import { useViewportFit } from '../hooks/useViewportFit'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import {
   DptCbatRadar, DptCbatGate, DptCbatZone, DptCbatAircraft, DptCbatProjection,
   DptCbatLegend, DptCbatStrip, DptCbatKeypad,
@@ -1036,7 +1037,7 @@ function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loadi
       </p>
 
       {/* Instructions */}
-      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
+      <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
         <div className="flex items-start gap-2">
           <span className="text-brand-600 shrink-0">🎯</span>
           <span>Vector aircraft through gates using compass bearings</span>
@@ -1074,14 +1075,14 @@ function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loadi
           <span className="text-brand-600 shrink-0">⏱</span>
           <span>{tuning.lengthBlurb}</span>
         </div>
-      </div>
+      </CbatIntroList>
 
       {/* Intercept rules — asymmetric scoring around the white/blue rings.
           Easier plays rounds 1-4, which have no enemies (the Fighter and the
           enemy squadron arrive at ladder round 6) and no danger zones (they
           start at ladder round 5), so it lists only the rule it can actually
           break: CA-A and CA-N closing on each other once both are up. */}
-      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
+      <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
         <p className="text-[10px] lg:text-xs uppercase tracking-wide text-slate-500 mb-1">
           {difficulty === 'easier' ? 'Separation rule' : 'Intercept rules'}
         </p>
@@ -1107,7 +1108,7 @@ function AircraftSelect({ aircraft, aircraftPick, onAircraftPick, onStart, loadi
             <span>Danger zones at <span className="font-mono text-slate-700">020</span> (white ring) and <span className="font-mono text-slate-700">030</span> (black ring) — stay ≥<span className="font-mono text-slate-700">1,000ft</span> above or below</span>
           </div>
         )}
-      </div>
+      </CbatIntroList>
 
       <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className="max-w-md lg:max-w-2xl mx-auto">
         {best => (

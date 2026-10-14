@@ -20,6 +20,7 @@ import { publicPageInitial } from '../utils/publicPagePreview'
 import { CbatGameHeader } from '../components/cbat/CbatTestChrome'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatTheme } from '../hooks/useCbatTheme'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
@@ -837,7 +838,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
         identify aircraft on radar, and find strings in the system feed.
       </p>
 
-      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+      <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
           <span className="pt-0.5">2-minute total time limit</span>
@@ -866,7 +867,7 @@ function Intro({ onStart, onTutorial, personalBest, aircraftReady }) {
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Wrong clicks lose points. Score can go negative.</span>
         </div>
-      </div>
+      </CbatIntroList>
 
       {personalBest && (
         <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4">

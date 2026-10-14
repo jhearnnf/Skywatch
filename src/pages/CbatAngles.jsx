@@ -8,6 +8,7 @@ import { useGameChrome } from '../context/GameChromeContext'
 import SEO from '../components/SEO'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { useCbatTheme } from '../hooks/useCbatTheme'
@@ -449,7 +450,7 @@ export default function CbatAngles() {
                 Identify the displayed angle from 5 options. Two rounds of increasing difficulty.
               </p>
 
-              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+              <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                 <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <CbatIntroLabel>R1</CbatIntroLabel>
                   <span className="pt-0.5">10 angles — multiples of 10°</span>
@@ -462,7 +463,7 @@ export default function CbatAngles() {
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>📊</span>
                   <span className="pt-0.5">Results and accuracy breakdown shown at the end</span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               {personalBest && (
                 <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">

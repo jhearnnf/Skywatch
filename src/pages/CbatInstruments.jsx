@@ -30,6 +30,7 @@ import {
 } from '../utils/cbat/instrumentsModes'
 import { orientationGrade, ORIENTATION_QUESTIONS, ORIENTATION_TIME_LIMIT } from '../utils/cbat/instrumentsOrientation'
 import { DRILL_SECONDS, MAX_POINTS, MIN_POINTS } from '../utils/cbat/instrumentsDrill'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // The practice drill pulls in three.js and the aircraft models, so it only
@@ -604,7 +605,7 @@ export default function CbatInstruments({ forcedMode = null }) {
               </p>
 
               {isPractise ? (
-                <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                   <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                     <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F3AF}'}</span>
                     <span className="pt-0.5">Every few seconds one instrument lights up and the rest grey out. Fly until its needle sits on the pink target and hold it there</span>
@@ -617,9 +618,9 @@ export default function CbatInstruments({ forcedMode = null }) {
                     <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F579}\uFE0F'}</span>
                     <span className="pt-0.5">Arrow keys, WASD, a joystick or drag on the view to bank and pitch. Up pushes the nose down, like a real stick. For throttle, use R and F, the + and - buttons, or your joystick&rsquo;s throttle lever or buttons (set up in the Throttle panel)</span>
                   </div>
-                </div>
+                </CbatIntroList>
               ) : isOrientation ? (
-                <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                   <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                     <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
                     <span className="pt-0.5">{ORIENTATION_QUESTIONS} questions, {ORIENTATION_TIME_LIMIT} seconds for all of them</span>
@@ -632,9 +633,9 @@ export default function CbatInstruments({ forcedMode = null }) {
                     <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2713'}</span>
                     <span className="pt-0.5">Read bank off the roll scale at the top of the attitude indicator. An aircraft flying towards you drops its left wing on your right</span>
                   </div>
-                </div>
+                </CbatIntroList>
               ) : (
-                <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+                <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                   <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                     <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u23F1'}</span>
                     <span className="pt-0.5">90-second total time limit</span>
@@ -647,7 +648,7 @@ export default function CbatInstruments({ forcedMode = null }) {
                     <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u2713'}</span>
                     <span className="pt-0.5">One correct statement, four distractors — variables swapped subtly</span>
                   </div>
-                </div>
+                </CbatIntroList>
               )}
 
               {/* Pick what you fly, as in ACT. SkyWatch only: the Real CBAT

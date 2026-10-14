@@ -82,6 +82,7 @@ import {
   storeActCraft,
 } from '../utils/cbat/actCraft'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const TOTAL_ROUNDS = 5
@@ -2066,7 +2067,7 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
       {/* Only below lg. Above it this same notice is the right-hand column. */}
       <div className="w-full mb-5 lg:hidden">{headphonesNotice}</div>
 
-      <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+      <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'🎯'}</span>
           <span className="pt-0.5">Default: thread every shape (+20 each, −10 if missed)</span>
@@ -2089,7 +2090,7 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Scraping the tunnel wall costs −5 / second</span>
         </div>
-      </div>
+      </CbatIntroList>
 
       {!realCbat && <ActCraftPicker
         options={craftOptions}

@@ -21,6 +21,7 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import {
   SAT_DIFFICULTIES, SAT_LAUNCH_MS, satTuning, satTotalQuestions, computeGrade,
   readStoredSatDifficulty, storeSatDifficulty,
@@ -1393,7 +1394,7 @@ export default function CbatSat() {
                 Build and hold a mental picture of a changing battlefield. Each situation feeds you one piece of information at a time — a contact on the grid, one field of a controller aircraft, or a call over the <span className="text-brand-600">radio</span>. Each one vanishes before the next arrives, then you answer from memory.
               </p>
 
-              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-base lg:text-lg text-game-text${dim}`}>
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-base lg:text-lg text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Observe — contacts (type, count, allegiance, heading), aircraft data, and radio calls, one at a time.</span>
@@ -1415,7 +1416,7 @@ export default function CbatSat() {
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">{PER_QUESTION_MS / 1000}s per question — running out counts as wrong. 🔊 Turn your sound on for the radio calls.</span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               <CbatPersonalBest best={personalBest} loading={bestLoading} className={dim}>
                 {best => (

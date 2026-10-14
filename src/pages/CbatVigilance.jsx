@@ -53,6 +53,7 @@ import {
   readStoredVigilanceDifficulty, storeVigilanceDifficulty, DEFAULT_VIGILANCE_DIFFICULTY,
 } from '../utils/cbat/vigilanceDifficulty'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 
 // Cell indices, 0-based. The LABEL drawn for index i is i + 1, so the axes read
 // 1–9 and every coordinate is two keystrokes off a pad with no zero on it.
@@ -756,7 +757,7 @@ export default function CbatVigilance() {
                   : <>Stars appear on a 9 by 9 grid. Clear each one by keying its coordinates: the row number first, then the column. It is the simplest thing on the battery, and it runs for {tuning.key === 'hard' ? 'three minutes, which is the point of it' : 'one minute on Easier'}.</>}
               </p>
 
-              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'★'}</span>
                   <span className="pt-0.5">A star is worth {tuning.load.starPoints} points. Key the row, then the column. A star on row 2, column 7 is keyed 2 then 7.</span>
@@ -791,7 +792,7 @@ export default function CbatVigilance() {
                       : 'A one-minute run at the original pace, with every clear paying triple. Hard is the full three minutes at standard points with far more stars appearing. A star stays where it is until you key it.'}
                   </span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
                 {best => best.bestScore}

@@ -42,6 +42,7 @@ import CbatGameOver from '../CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../CbatModeSelector'
 import CbatPersonalBest from '../CbatPersonalBest'
 import CbatIntroLabel from './CbatIntroLabel'
+import CbatIntroList from './CbatIntroList'
 import { useCbatPersonalBest } from '../../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 import CbatTestPageLink from './CbatTestPageLink'
@@ -531,7 +532,7 @@ export default function CbatTabbedReasoning({
 
               <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>{introLead}</p>
 
-              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 {introBullets.map((b, i) => (
                   b.muted ? (
                     <div key={i} className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
@@ -552,7 +553,7 @@ export default function CbatTabbedReasoning({
                     {Math.round(introTuning.perQuestionMs / 1000)}s each. Running out counts as wrong
                   </span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               <CbatPersonalBest label={introTuning.label} best={personalBest} loading={bestLoading} className={dim}>
                 {best => (

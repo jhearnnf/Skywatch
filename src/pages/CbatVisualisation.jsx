@@ -29,6 +29,7 @@ import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { visualisationMode, visualisationModes } from '../utils/cbat/visualisationModes'
 import Visualisation3DShape, { VisualisationShapeCanvas } from '../components/cbat/Visualisation3DShape'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 const TOTAL_ROUNDS = 8
@@ -810,7 +811,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                   : 'Each round shows a few shapes with letter-labelled sides. Sides sharing the same letter weld together. Pick the correct final figure from the six options.'}
               </p>
 
-              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
+              <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3">
                 <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'\u{1F551}'}</span>
                   <span className="pt-0.5">{'30 seconds per round · 8 rounds'}</span>
@@ -825,7 +826,7 @@ export default function CbatVisualisation({ forcedMode = null }) {
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
                   <span className="pt-0.5">{'Tap your answer — it’s locked in immediately'}</span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               <CbatPersonalBest label={is3D ? '3D' : '2D'} best={personalBest} loading={bestLoading}>
                 {best => (

@@ -45,6 +45,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Grade badge helper ────────────────────────────────────────────────────────
@@ -154,7 +155,7 @@ function IntroScreen({
         Colours, Letters and Numbers. Catch diamonds, remember a code and do the sums. All at once.
       </p>
 
-      <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
+      <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3${dim}`}>
         <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
           <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
           <span className="pt-0.5">{CLAN_DURATION_MS / 1000}-second run</span>
@@ -175,7 +176,7 @@ function IntroScreen({
           <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
           <span className="pt-0.5">Wrong presses and missed diamonds lose points. Score can go negative.</span>
         </div>
-      </div>
+      </CbatIntroList>
 
       <div className={dim}>
         <KeyLayoutPicker value={keyLayout} onSelect={onKeyLayout} disabled={launching} />

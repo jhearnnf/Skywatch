@@ -43,6 +43,7 @@ import {
   QUESTION_META,
 } from '../utils/antGenerator'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 
 const ROUND_COUNT = 8
 const ROUND_TIME = 60            // seconds per round
@@ -1188,7 +1189,7 @@ export default function CbatAnt() {
                   : 'Speed, distance and time under pressure. Deliver a parcel across an eight-node network — each round one value is missing (Arrival Time, Total Distance, Fuel, or Speed). Calculate it from the data shown.'}
               </p>
 
-              <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-4 lg:mb-7 text-left space-y-2 lg:space-y-3${introDim}`}>
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-4 lg:mb-7 text-left space-y-2 lg:space-y-3${introDim}`}>
                 <div className="flex items-start gap-3 text-sm lg:text-base text-game-text">
                   <span className="shrink-0 w-8 text-center text-brand-600 lg:text-lg" aria-hidden>{'⏱'}</span>
                   <span className="pt-0.5">
@@ -1261,7 +1262,7 @@ export default function CbatAnt() {
                     </div>
                   </>
                 )}
-              </div>
+              </CbatIntroList>
 
               {/* Preview of weight table — the Easier board's one reference. Hard
                   reads two bar charts instead, and they live inside the game. */}

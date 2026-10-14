@@ -12,6 +12,7 @@ import { useCbatTheme } from '../hooks/useCbatTheme'
 import { useCbatMcq, useCbatAnswerKeys } from '../hooks/useCbatAnswerKeys'
 import CbatGameOver from '../components/CbatGameOver'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -451,7 +452,7 @@ export default function CbatDAD() {
                 Read each journey carefully. An object — a ship, aircraft or drone — sets off, and only its first leg gives a compass heading; every turn after that is relative to the way <span className="text-brand-600">it</span> is facing. Track its route and work out which direction it ends up from the start point.
               </p>
 
-              <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text">
+              <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text">
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Read the route — text only, no map while you solve.</span>
@@ -472,7 +473,7 @@ export default function CbatDAD() {
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
                   <span className="pt-0.5">{TOTAL_QUESTIONS} questions · 45s each — running out counts as wrong</span>
                 </div>
-              </div>
+              </CbatIntroList>
 
               {personalBest && (
                 <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">

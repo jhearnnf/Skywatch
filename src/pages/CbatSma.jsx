@@ -29,6 +29,7 @@ import CbatGameOver from '../components/CbatGameOver'
 import StickSetup from '../components/cbat/StickSetup'
 import PedalSetup from '../components/cbat/PedalSetup'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatStickLayout from '../components/cbat/CbatStickLayout'
 import CbatStickRecommendation from '../components/cbat/CbatStickRecommendation'
 import { useStickPresence, usePedalPresence } from '../utils/cbat/useStickPresence'
@@ -611,7 +612,7 @@ export default function CbatSma() {
                   again while you deal with the last drift.
                 </p>
 
-                <div className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
+                <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Control</CbatIntroLabel><span className="pt-0.5">your input sets how fast the dot moves, not where it goes. Centre the control and the dot keeps drifting, so you are always holding something.</span></div>
                   {realCbat ? (
                     <>
@@ -637,7 +638,7 @@ export default function CbatSma() {
                   <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted"><span className="shrink-0 w-8 text-center" aria-hidden>{'ℹ️'}</span><span className="pt-0.5">On the real test the up and down axis is on the joystick and the left and right axis is on a pair of foot pedals. {realCbat
                     ? 'Here the keys stand in for the pedals unless you have a set: calibrate them in the Pedals panel and they take the left and right axis instead.'
                     : 'Here both axes are on one control unless you have pedals: calibrate them in the Pedals panel and they take the left and right axis, exactly as on the test.'}</span></div>
-                </div>
+                </CbatIntroList>
 
                 {/* On the card only while there is no stick. With one plugged
                     in this same control renders inside the joystick panel. */}

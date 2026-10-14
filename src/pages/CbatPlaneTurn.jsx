@@ -43,6 +43,7 @@ import {
 import { pushCheatDigit, emptyCheatBuffer } from '../utils/cbat/roundCheat'
 import { useAdminRoundParam } from '../utils/cbat/useAdminRoundParam'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
+import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 function forwardToMoveState(forwardVec, prevDir) {
@@ -159,7 +160,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
 
       {/* Instructions */}
       {!gameModeTrace2 && (
-        <div className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
+        <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 max-w-md lg:max-w-2xl mx-auto mb-4 lg:mb-5 text-sm lg:text-base text-game-text space-y-1.5 lg:space-y-2">
           {gameModeTrace1 ? (
             <>
               <div className="flex items-start gap-2">
@@ -206,7 +207,7 @@ function AircraftSelect({ aircraft, onSelect, loading, personalBest, bestLoading
               </div>
             </>
           )}
-        </div>
+        </CbatIntroList>
       )}
 
       {gameModeTrace2 && (
