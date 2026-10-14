@@ -149,13 +149,33 @@ export function CbatLoungeDockProvider({ children }) {
   useLayoutEffect(() => {
     if (!reserve) return
     document.body.classList.add('cbat-dock-reserve')
-    // The left column of the three (see `cbat-dock-reserve` in main.css): its
-    // full 340px plus the 24px gap where <main> has the room, and whatever is
-    // left after the 672px middle column and its padding where it does not.
+    // The three columns (see `cbat-dock-reserve` in main.css), spread evenly
+    // between the sidebar and the window edge. `--dock-gutter` is the left
+    // column plus its gap to the middle; `--dock-pad-right` is the room between
+    // the middle column and <main>'s scrollbar.
+    //
+    // Tightest fit is 1068px of <main>: 16 + 340 left + 24 + 672 middle + 16,
+    // with the chat a further 50px past the middle (16 + 10px scrollbar + 24
+    // margin). Narrower than that the left column gives way first, so the
+    // middle keeps its 672px. Wider, the spare room is split so both gaps
+    // either side of the middle match: the left column then sits 16px off the
+    // sidebar exactly as the chat sits 16px off the window edge, and the middle
+    // column is centred on the space right of the sidebar. The old rule hugged
+    // the right and handed every spare pixel to the left, which left a big
+    // hole beside the sidebar on a wide monitor.
     const main = document.querySelector('.app-shell-main')
     const setGutter = () => {
-      const gutter = Math.max(0, Math.min(364, (main?.clientWidth ?? 0) - 672 - 32))
+      const spare = (main?.clientWidth ?? 0) - 1068
+      let gutter = 364
+      let right  = 0
+      if (spare < 0) {
+        gutter = Math.max(0, 364 + spare)
+      } else {
+        right  = Math.max(0, (spare - 26) / 2)
+        gutter = 364 + spare - right
+      }
       document.body.style.setProperty('--dock-gutter', `${gutter}px`)
+      document.body.style.setProperty('--dock-pad-right', `${16 + right}px`)
     }
     setGutter()
     window.addEventListener('resize', setGutter)
@@ -163,6 +183,7 @@ export function CbatLoungeDockProvider({ children }) {
       window.removeEventListener('resize', setGutter)
       document.body.classList.remove('cbat-dock-reserve')
       document.body.style.removeProperty('--dock-gutter')
+      document.body.style.removeProperty('--dock-pad-right')
     }
   }, [reserve])
 

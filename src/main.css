@@ -2199,30 +2199,45 @@ body.cbat-dpt-fullwidth .app-shell-content { transition: none; }
        card taller than the window) jumped 10px sideways, and pages that did
        and did not need one sat 10px apart. */
     scrollbar-gutter: stable;
+    /* Not the 5rem every page keeps for the phone's BottomNav, which is not
+       there on desktop. With it, 104px of nothing sat under the last card and
+       pages that fit the window (ACT) scrolled by a few pixels. 1rem plus the
+       content's own 1.5rem keeps the card bottom clear of the fixed "Report a
+       problem" link. No transition, as on the hub, or arriving here eases the
+       4rem away. */
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    transition: none;
   }
   /* Three columns on every instructions page and leaderboard, the same place
      on all of them: [left 340px | middle 672px | the chat]. The middle column
-     (the instructions card, the board) sits 24px from the chat; the left one
-     is the joystick games' panels and empty elsewhere, with the back row
-     starting at its left edge. Built as a content box hugging the right of
-     <main>: its left padding is the left column plus its gap (`--dock-gutter`,
-     364px, set by CbatLoungeDock from the width actually available and shrunk
-     on a narrower window so the middle column keeps its 672px). `html` in the
-     selector so it beats the per-game widening rules (cbat-stick-wide). No
-     padding transition: the frame must be in place on arrival, not slide. */
+     (the instructions card, the board) is centred on the space right of the
+     sidebar with equal gaps either side; the left one is the joystick games'
+     panels and empty elsewhere, with the back row starting at its left edge.
+     The content box fills <main>; its left padding is the left column plus its
+     gap (`--dock-gutter`) and its right padding the rest (`--dock-pad-right`),
+     both set by CbatLoungeDock from the width actually available, and the left
+     column shrinks on a narrower window so the middle keeps its 672px. `html`
+     in the selector so it beats the per-game widening rules (cbat-stick-wide).
+     No padding transition: the frame must be in place on arrival, not slide. */
   html body.cbat-dock-reserve .app-shell-content {
     max-width: none;
-    width: min(100%, calc(42rem + 2rem + 364px));
-    margin-left: auto;
+    width: 100%;
+    margin-left: 0;
     margin-right: 0;
     padding-left: calc(1rem + var(--dock-gutter, 0px));
-    padding-right: 1rem;
+    padding-right: var(--dock-pad-right, 1rem);
     transition: none;
   }
   /* The back row reaches out to the left column's edge. */
   body.cbat-dock-reserve .cbat-sticky-header { margin-left: calc(-1 * var(--dock-gutter, 0px)); }
-  /* And so does the joystick games' grid, which puts its panel column there. */
-  body.cbat-dock-reserve .cbat-stick-grid { margin-left: calc(-1 * var(--dock-gutter, 0px)); }
+  /* And so does the joystick games' grid, which puts its panel column there.
+     Its gap opens with the gutter so the panels start at the same 16px off
+     the sidebar instead of hugging the middle column; never under the 24px
+     (gap-6) it has elsewhere. */
+  body.cbat-dock-reserve .cbat-stick-grid {
+    margin-left: calc(-1 * var(--dock-gutter, 0px));
+    column-gap: max(1.5rem, calc(var(--dock-gutter, 0px) - 340px));
+  }
   body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar { width: 10px; }
   body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar-track { background: transparent; margin-block: 8px; }
   body.cbat-dock-reserve .app-shell-main::-webkit-scrollbar-thumb {
