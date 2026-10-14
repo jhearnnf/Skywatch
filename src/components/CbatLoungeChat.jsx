@@ -13,6 +13,7 @@ import EditHistoryDialog from '../pages/chat/components/EditHistoryDialog'
 import MentionPicker from '../pages/chat/components/MentionPicker'
 import UserCard from '../pages/chat/components/UserCard'
 import GroupMembersDialog from '../pages/chat/components/GroupMembersDialog'
+import { NewMessagesDivider } from '../pages/chat/components/MessageList'
 import { cohortCopy, formatCohortDate } from '../utils/cbat/cohortCopy'
 import { DEFAULT_LOUNGE_GROW } from './cbat/LoungeResizeHandle'
 
@@ -246,6 +247,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   const [err,       setErr]       = useState('')
   const [draft,     setDraft]     = useState('')
   const [hasNew,    setHasNew]    = useState(false)
+  // Group rooms only. A message there is not read just because the panel is
+  // on screen: it may be sitting beside a game's instructions while the player
+  // reads those. It stays unread (the red number on the tab, plus a "New" line
+  // above it) until they touch the conversation: a click or tap, a scroll, or
+  // typing. `newSince` places the line; `unackedRef` says whether anything is
+  // still waiting for that touch.
+  const [newSince,  setNewSince]  = useState(null)
+  const unackedRef = useRef(false)
   const [groupUnreadCount, setGroupUnreadCount] = useState(0)
   const [allGroupsUnreadCount, setAllGroupsUnreadCount] = useState(0)
   const [selectedAdminGroupUnread, setSelectedAdminGroupUnread] = useState(0)
@@ -365,6 +374,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     : room === 'groups'
       ? (adminGroupId ? `/api/chat/cbat-groups/${adminGroupId}` : '/api/chat/cbat-groups')
       : '/api/chat/lounge'
+  const groupRoom = room === 'group' || (room === 'groups' && Boolean(adminGroupId))
 
   const changeRoom = useCallback((next) => {
     if (next === room) return
@@ -378,6 +388,8 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     setGone(false)
     setErr('')
     setHasNew(false)
+    setNewSince(null)
+    unackedRef.current = false
     if (next !== 'groups') setAdminGroupId(null)
   }, [room])
 
@@ -411,6 +423,15 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       if (!ok) { if (status === 404) setGone(true); setLoading(false); return }
       setLounge(data)
       setHasNew(Boolean(data.unread))
+      const unreadHere = Number(data.unreadCount) || 0
+      if (groupRoom && data.conversationId && unreadHere > 0) {
+        unackedRef.current = true
+        // Never opened: everything is new, so the line goes above the first.
+        setNewSince(data.lastReadAt ?? new Date(0).toISOString())
+      } else {
+        unackedRef.current = false
+        setNewSince(null)
+      }
       if (room === 'group') setGroupUnreadCount(Number(data.unreadCount) || 0)
       if (room === 'groups') {
         if (Array.isArray(data.groups)) {
@@ -628,7 +649,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       // A system line is shown but never counted: no "new messages" nudge and
       // no number on a tab, same as the server's unread counts.
       if (incoming.senderRole === 'system') return
-      if (readingRef.current) {
+      // A group room waits for the player to touch it; see `newSince`. The
+      // line moves down to this message only when everything above it has
+      // already been acknowledged, so it always marks the oldest unread one.
+      if (groupRoom && !unackedRef.current) {
+        unackedRef.current = true
+        setNewSince(new Date(new Date(incoming.createdAt).getTime() - 1).toISOString())
+      }
+      if (readingRef.current && !groupRoom) {
         markRead()
         if (room === 'group') setGroupUnreadCount(0)
         if (room === 'groups' && selectedAdminGroupUnread > 0) {
@@ -659,7 +687,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     source.onerror = () => setStreaming(false)
 
     return () => { source.close(); setStreaming(false) }
-  }, [API, conversationId, enabled, loadMessages, markRead, room, selectedAdminGroupUnread, user])
+  }, [API, conversationId, enabled, groupRoom, loadMessages, markRead, room, selectedAdminGroupUnread, user])
 
   // Fallback for a stream that will not stay up. Skips hidden tabs, like every
   // other poll in the app.
@@ -759,8 +787,10 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   // Having the panel in front of you is what counts as reading it. This fires
   // again when you scroll it into view or come back to the tab, so a room read
   // late still clears.
+  //
+  // Not in a group room, which waits for a touch instead (acknowledge below).
   useEffect(() => {
-    if (!reading || !conversationId) return
+    if (!reading || !conversationId || groupRoom) return
     setHasNew(false)
     if (room === 'group') setGroupUnreadCount(0)
     if (room === 'groups' && selectedAdminGroupUnread > 0) {
@@ -768,7 +798,22 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       setSelectedAdminGroupUnread(0)
     }
     markRead()
-  }, [reading, conversationId, markRead, room, selectedAdminGroupUnread])
+  }, [reading, conversationId, groupRoom, markRead, room, selectedAdminGroupUnread])
+
+  // A group room's unread messages are read once the player touches the
+  // conversation. The "New" line stays where it is for the rest of the visit,
+  // as it does in Community, so they can still see where the new ones began.
+  const acknowledge = useCallback(() => {
+    if (!groupRoom || !unackedRef.current || !conversationId) return
+    unackedRef.current = false
+    setHasNew(false)
+    if (room === 'group') setGroupUnreadCount(0)
+    if (room === 'groups' && selectedAdminGroupUnread > 0) {
+      setAllGroupsUnreadCount(count => Math.max(0, count - selectedAdminGroupUnread))
+      setSelectedAdminGroupUnread(0)
+    }
+    markRead()
+  }, [conversationId, groupRoom, markRead, room, selectedAdminGroupUnread])
 
   // Stick to the bottom, which is where a chat lives. useLayoutEffect so the
   // jump happens before paint rather than as a visible scroll.
@@ -1091,6 +1136,15 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   // no window where a withdrawn message is still on a member's screen.
   const visible = viewerIsAdmin ? messages : messages.filter(m => !m.deleted)
 
+  // The "New" line sits above the first message from someone else after
+  // `newSince`. Group rooms only (see `newSince`).
+  const firstUnseen = newSince
+    ? visible.find(m => m.senderRole !== 'system'
+        && String(m.senderUserId ?? '') !== String(user?._id)
+        && new Date(m.createdAt) > new Date(newSince))
+    : null
+  const firstUnseenId = firstUnseen ? String(firstUnseen._id) : null
+
   // The "@" the caret is sitting in, if any, and whether to offer the picker
   // for it. Suppressed while a display name is still being asked for, since
   // there is no composer to complete into.
@@ -1301,7 +1355,15 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             {dateError && <p className="mt-3 text-xs text-red-400">{dateError}</p>}
           </div>
         </div>
-      ) : <div key={room} className={`${room === 'group' ? 'cbat-room-enter-right' : 'cbat-room-enter-left'} flex-1 min-h-0 flex flex-col`}>
+      ) : <div
+        key={room}
+        className={`${room === 'group' ? 'cbat-room-enter-right' : 'cbat-room-enter-left'} flex-1 min-h-0 flex flex-col`}
+        // Touching the conversation (not the tabs above it) reads a group room.
+        onPointerDown={acknowledge}
+        onFocus={acknowledge}
+        onKeyDown={acknowledge}
+        onWheel={acknowledge}
+      >
 
       {room === 'lounge' && <ActivityStrip activity={activity} />}
 
@@ -1550,7 +1612,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
                 )}
               </div>
             )
-          })
+          }).flatMap((row, i) => (
+            String(visible[i]._id) === firstUnseenId ? [<NewMessagesDivider key="new-divider" />, row] : [row]
+          ))
         )}
         {typingName && (
           <p className="text-[11px] text-slate-500 italic">{typingName} is typing…</p>

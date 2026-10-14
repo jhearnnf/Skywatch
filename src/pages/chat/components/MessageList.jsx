@@ -278,7 +278,7 @@ function TypingIndicator({ name }) {
 // The Discord line: where you got up to last time. Rendered above the first
 // message you have not seen, and frozen for the whole visit — it must not creep
 // down the screen as the poll marks things read underneath you.
-function NewMessagesDivider() {
+export function NewMessagesDivider() {
   return (
     <div className="flex items-center gap-2 mt-3 mb-1" aria-label="New messages">
       <span className="flex-1 h-px bg-red-400/60" />

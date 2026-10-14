@@ -277,6 +277,25 @@ describe('CBAT cohort groups', () => {
     expect(convo.messageCount ?? 0).toBe(0);
   });
 
+  // The CBAT chat draws its "New" line from this, above the first message
+  // after it.
+  it('sends the read marker with the room, for the member and for an admin', async () => {
+    const admin = await createUser({ displayName: 'Control', isAdmin: true });
+    const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });
+    const made = await choose(a);
+    const id = made.body.data.conversationId;
+    const at = Date.now();
+    await request(app).post(`/api/chat/conversations/${id}/read`).set('Cookie', authCookie(a._id));
+    await request(app).post(`/api/chat/conversations/${id}/read`).set('Cookie', authCookie(admin._id));
+
+    const [mine, detail] = await Promise.all([
+      request(app).get('/api/chat/cbat-group').set('Cookie', authCookie(a._id)),
+      request(app).get(`/api/chat/cbat-groups/${id}`).set('Cookie', authCookie(admin._id)),
+    ]);
+    expect(new Date(mine.body.data.lastReadAt).getTime()).toBeGreaterThanOrEqual(at - 1000);
+    expect(new Date(detail.body.data.lastReadAt).getTime()).toBeGreaterThanOrEqual(at - 1000);
+  });
+
   it('announces a person once per room, even if their date is cleared and set again', async () => {
     const admin = await createUser({ displayName: 'Control', isAdmin: true });
     const a = await createUser({ displayName: 'Falcon', firstSeenCountry: 'GB' });

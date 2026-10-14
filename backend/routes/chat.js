@@ -328,6 +328,9 @@ async function serializeCbatGroup(user, { justJoined = false } = {}) {
     welcome: cohortWelcomeFor(convo),
     unread: unreadCount > 0,
     unreadCount,
+    // Where the "New" line goes in the CBAT chat: above the first message
+    // after this. Null when everything counts as unread (never opened).
+    lastReadAt: cutoff ?? null,
     lastMessageAt: convo.lastMessageAt,
     canPost: !refusal,
     displayNameRequired: code === 'DISPLAY_NAME_REQUIRED',
@@ -1285,6 +1288,7 @@ router.get('/cbat-groups/:id', adminOnly, async (req, res) => {
       title: channelTitle(convo),
       unread: unreadCount > 0,
       unreadCount,
+      lastReadAt: read?.lastReadAt ?? null,
       canPost: !refusal,
       displayNameRequired: refusal?.body?.code === 'DISPLAY_NAME_REQUIRED',
       chatBanned: refusal?.body?.code === 'CHAT_BANNED',

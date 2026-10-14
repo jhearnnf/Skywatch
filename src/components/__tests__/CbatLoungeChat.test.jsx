@@ -1555,3 +1555,67 @@ describe('older messages', () => {
     expect(screen.queryByTestId('older-messages')).toBeNull()
   })
 })
+
+// A group message is easy to miss: the chat can sit open beside a game's
+// instructions while the player reads those. So being on screen is not enough
+// to read a group room. The number stays on the tab and a "New" line marks
+// where the unread ones start, until the player touches the conversation.
+describe('a group room waits for the player to touch it', () => {
+  const EARLIER = new Date(Date.now() - 60_000).toISOString()
+  const GROUP = {
+    configured: true, conversationId: 'group-1', date: '2099-10-14', region: 'GB', testName: 'CBAT',
+    memberCount: 3, canPost: true, unread: true, unreadCount: 1, lastReadAt: EARLIER,
+  }
+  const readCalls = fetchMock =>
+    fetchMock.mock.calls.filter(([url, opts]) => String(url).includes('group-1/read') && opts?.method === 'POST')
+
+  it('keeps the number and draws the line on arrival, then reads the room on a click', async () => {
+    const fetchMock = stubFetch({ group: GROUP })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: /My group/ }))
+    const message = await screen.findByText('anyone about?')
+
+    const line = screen.getByLabelText('New messages')
+    expect(line.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByLabelText('1 new group message')).toBeTruthy()
+    expect(readCalls(fetchMock)).toHaveLength(0)
+
+    fireEvent.pointerDown(message)
+    await waitFor(() => expect(readCalls(fetchMock)).toHaveLength(1))
+    expect(screen.queryByLabelText('1 new group message')).toBeNull()
+    // The line stays for the visit, as in Community.
+    expect(screen.getByLabelText('New messages')).toBeTruthy()
+  })
+
+  it('draws no line when nothing is unread', async () => {
+    stubFetch({ group: { ...GROUP, unread: false, unreadCount: 0 } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: /My group/ }))
+    await screen.findByText('anyone about?')
+    expect(screen.queryByLabelText('New messages')).toBeNull()
+  })
+
+  it('counts a live message while the group is open, and reads it once they type', async () => {
+    const fetchMock = stubFetch({ group: { ...GROUP, unread: false, unreadCount: 0, lastReadAt: new Date().toISOString() } })
+    renderOpen()
+    fireEvent.click(await screen.findByRole('tab', { name: /My group/ }))
+    await screen.findByText('anyone about?')
+    await waitFor(() => expect(FakeEventSource.last?.url).toContain('group-1'))
+    const before = readCalls(fetchMock).length
+
+    act(() => {
+      FakeEventSource.last.emit('message', {
+        _id: 'm9', senderUserId: 'u2', senderDisplayName: 'Viper', body: 'test is tomorrow', createdAt: new Date(Date.now() + 1000).toISOString(), mentions: [],
+      })
+    })
+    const fresh = await screen.findByText('test is tomorrow')
+    expect(await screen.findByLabelText('1 new group message')).toBeTruthy()
+    const line = screen.getByLabelText('New messages')
+    expect(line.compareDocumentPosition(fresh) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(readCalls(fetchMock)).toHaveLength(before)
+
+    fireEvent.keyDown(screen.getByPlaceholderText('Message the lounge…'), { key: 'h' })
+    await waitFor(() => expect(readCalls(fetchMock)).toHaveLength(before + 1))
+    expect(screen.queryByLabelText('1 new group message')).toBeNull()
+  })
+})
