@@ -100,7 +100,7 @@ export default function TopBar() {
 
   return (
     <header className="app-topbar fixed top-0 left-0 right-0 z-[1001] bg-slate-50/90 backdrop-blur-md border-b border-slate-200/60 h-14">
-      <div className="max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
+      <div className="relative max-w-6xl mx-auto px-4 h-full flex items-center justify-between gap-3">
 
         {/* Logo — routes to the landing page whenever there is one to reach.
             When there isn't (the native app, or web slim with the landing page
@@ -124,8 +124,16 @@ export default function TopBar() {
 
         {/* Theme — the phone's faint "Switch theme" link, in the gap between
             the logo and the avatar. Desktop carries the full selector on the
-            right instead. */}
-        <div className="relative flex md:hidden items-center justify-center min-w-0">
+            right instead.
+
+            Pinned to the bar's centre rather than left in the flex row, where
+            it sat in the middle of whatever gap the two sides left: a wider
+            right-hand cluster (signed in, streak and Airstars showing) or the
+            SKYWATCH wordmark from sm up pushed it off-centre. Out of the flow
+            it stays put whatever the sides hold. It cannot collide with them:
+            the wordmark only appears from sm (640px), and the link is gone
+            from md (768px), so at its widest overlap the bar still has room. */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex md:hidden items-center justify-center">
           <GuestThemeHint compact />
           <ThemeSelector compact />
         </div>
