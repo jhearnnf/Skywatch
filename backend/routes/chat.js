@@ -1638,9 +1638,120 @@ router.get('/conversations/:id/stream', async (req, res) => {
   }
 });
 
+// ── Search ───────────────────────────────────────────────────────────────────
+
+const SEARCH_MIN_CHARS = 2;
+const SEARCH_MAX_CHARS = 100;
+const SEARCH_PAGE      = 25;
+// The lounge widget searches three rooms at once; Community searches one. A
+// cap well above both, so the parameter cannot be used to fan one request out
+// across every conversation in the collection.
+const SEARCH_MAX_CONVERSATIONS = 5;
+
+// GET /api/chat/search/channels — the public rooms the CBAT lounge widget can
+// search across: the lounge itself, General and Announcements. Resolved here
+// rather than by slug on the client because Announcements is whichever public
+// noticeboard an admin set up, and any of the three can be archived away.
+router.get('/search/channels', async (req, res) => {
+  try {
+    const [lounge, general, announcements] = await Promise.all([
+      ChatConversation.findOne({ type: 'channel', 'channel.slug': LOUNGE_SLUG, isArchived: false }).lean(),
+      ChatConversation.findOne({ type: 'channel', 'channel.slug': 'general', isArchived: false }).lean(),
+      ChatConversation.findOne({
+        type: 'channel', isArchived: false,
+        'channel.postPolicy': 'admin',
+        'channel.audience': { $ne: 'cbat-cohort' },
+      }).sort({ 'channel.order': 1, createdAt: 1 }).lean(),
+    ]);
+    const channels = [
+      ['lounge', lounge], ['general', general], ['announcements', announcements],
+    ]
+      .filter(([, c]) => c && canRead(c, req.user))
+      .map(([key, c]) => ({ key, conversationId: c._id, title: channelTitle(c) }));
+    res.json({ status: 'success', data: { channels } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/chat/search?q=<text>&in=<id,id>&before=<ISO> — messages containing
+// the text, newest first, in the conversations named (each one checked for
+// read access, exactly as opening it would be). `before` pages further back.
+//
+// Removed messages are left out for everyone, admins included: the search is
+// for finding something in the conversation, and a result that jumps to a row
+// the reader cannot see (or that only a moderator can) would be a dead end.
+// System lines are left out too; nobody is looking for "X joined".
+router.get('/search', async (req, res) => {
+  try {
+    const q = String(req.query.q ?? '').trim();
+    if (q.length < SEARCH_MIN_CHARS) {
+      return res.status(400).json({ message: `Type at least ${SEARCH_MIN_CHARS} characters to search.` });
+    }
+    if (q.length > SEARCH_MAX_CHARS) {
+      return res.status(400).json({ message: `Searches are limited to ${SEARCH_MAX_CHARS} characters.` });
+    }
+
+    const ids = [...new Set(String(req.query.in ?? '').split(',').map(s => s.trim()).filter(Boolean))];
+    if (!ids.length || ids.length > SEARCH_MAX_CONVERSATIONS || !ids.every(isValidId)) {
+      return res.status(400).json({ message: 'Choose which conversations to search.' });
+    }
+    const convos = (await ChatConversation.find({ _id: { $in: ids } }).lean())
+      .filter(c => canRead(c, req.user));
+    if (!convos.length) return res.status(403).json({ message: 'Forbidden' });
+    const convoById = new Map(convos.map(c => [String(c._id), c]));
+
+    const filter = {
+      conversationId: { $in: convos.map(c => c._id) },
+      body:           { $regex: escapeRegex(q), $options: 'i' },
+      senderRole:     { $ne: 'system' },
+      deletedAt:      null,
+    };
+    const hiddenSenders = hiddenSenderIds(req.user);
+    if (hiddenSenders.length) filter.senderUserId = { $nin: hiddenSenders };
+    const before = req.query.before ? new Date(req.query.before) : null;
+    if (before && !isNaN(before.getTime())) filter.createdAt = { $lt: before };
+
+    const found = await ChatMessage.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(SEARCH_PAGE + 1)
+      .lean();
+    const hasMore = found.length > SEARCH_PAGE;
+    const page = hasMore ? found.slice(0, SEARCH_PAGE) : found;
+
+    // Profiles per conversation type, because support collapses admins into
+    // one identity for its owner and nothing else does.
+    const viewerIsAdmin = Boolean(req.user.isAdmin);
+    const typeOf = (m) => convoById.get(String(m.conversationId))?.type ?? 'channel';
+    const types = [...new Set(page.map(typeOf))];
+    const senderMaps = await Promise.all(types.map(t => senderProfiles(
+      page.filter(m => typeOf(m) === t),
+      { conversationType: t, viewerIsAdmin },
+    )));
+
+    res.json({ status: 'success', data: {
+      // serializeMessage carries conversationId, which is what tells the
+      // client which room a result lives in.
+      results: page.map(m => serializeMessage(m, {
+        viewerIsAdmin, conversationType: typeOf(m), viewerId: req.user._id,
+      })),
+      senders: Object.assign({}, ...senderMaps),
+      conversations: convos.map(c => ({
+        _id:   c._id,
+        type:  c.type,
+        title: c.type === 'channel' ? channelTitle(c) : (c.title ?? null),
+      })),
+      hasMore,
+    } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ── Messages ─────────────────────────────────────────────────────────────────
 
 // GET /api/chat/conversations/:id/messages?before=<ISO>&limit=50
+//   also ?around=<messageId> and ?after=<ISO>; see the paging note inside.
 router.get('/conversations/:id/messages', async (req, res) => {
   try {
     if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Conversation not found' });
@@ -1651,8 +1762,10 @@ router.get('/conversations/:id/messages', async (req, res) => {
 
     const limit  = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const before = req.query.before ? new Date(req.query.before) : null;
+    const after  = req.query.after ? new Date(req.query.after) : null;
+    const around = req.query.around && isValidId(req.query.around) ? req.query.around : null;
+    if (req.query.around && !around) return res.status(404).json({ message: 'Message not found' });
     const filter = { conversationId: convo._id };
-    if (before && !isNaN(before.getTime())) filter.createdAt = { $lt: before };
 
     // A removed message is gone as far as users are concerned — no tombstone,
     // no "removed by a moderator" placeholder. A placeholder still advertises
@@ -1670,17 +1783,58 @@ router.get('/conversations/:id/messages', async (req, res) => {
     const hiddenSenders = hiddenSenderIds(req.user);
     if (hiddenSenders.length) filter.senderUserId = { $nin: hiddenSenders };
 
-    const messages = await ChatMessage
-      .find(filter)
-      .sort({ createdAt: -1 })
-      .limit(limit + 1)
-      .lean();
+    // Three ways in, Discord-style, all answering with the page oldest first:
+    //   • newest (no cursor) or `before` — the page ending at the cursor, and
+    //     `hasMore` says whether anything precedes it;
+    //   • `around` — a search result's message with a chunk either side, so a
+    //     jump to something from months ago loads that neighbourhood rather
+    //     than every message in between;
+    //   • `after` — the next page down from such a chunk, and `hasNewer` says
+    //     whether the reader has caught back up with the present.
+    // `hasNewer` is false for the newest page and only means something on the
+    // last two; on a `before` page it is not sent at all.
+    let page;
+    let hasMore;
+    let hasNewer;
+    if (around) {
+      const target = await ChatMessage.findOne({ ...filter, _id: around }).lean();
+      if (!target) return res.status(404).json({ message: 'Message not found' });
+      // Ties broken on _id, so a message sharing the target's millisecond is
+      // neither dropped nor drawn twice.
+      const at = target.createdAt;
+      const half = Math.floor(limit / 2);
+      const [older, newer] = await Promise.all([
+        ChatMessage.find({ ...filter, $or: [{ createdAt: { $lt: at } }, { createdAt: at, _id: { $lt: target._id } }] })
+          .sort({ createdAt: -1, _id: -1 }).limit(half + 1).lean(),
+        ChatMessage.find({ ...filter, $or: [{ createdAt: { $gt: at } }, { createdAt: at, _id: { $gt: target._id } }] })
+          .sort({ createdAt: 1, _id: 1 }).limit(half + 1).lean(),
+      ]);
+      hasMore  = older.length > half;
+      hasNewer = newer.length > half;
+      page = [...older.slice(0, half).reverse(), target, ...newer.slice(0, half)];
+    } else if (after && !isNaN(after.getTime())) {
+      const newer = await ChatMessage
+        .find({ ...filter, createdAt: { $gt: after } })
+        .sort({ createdAt: 1 })
+        .limit(limit + 1)
+        .lean();
+      hasNewer = newer.length > limit;
+      // Nothing about what precedes the cursor; the client already has it.
+      hasMore  = undefined;
+      page = hasNewer ? newer.slice(0, limit) : newer;
+    } else {
+      if (before && !isNaN(before.getTime())) filter.createdAt = { $lt: before };
+      const messages = await ChatMessage
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .limit(limit + 1)
+        .lean();
+      hasMore  = messages.length > limit;
+      hasNewer = before ? undefined : false;
+      page = (hasMore ? messages.slice(0, limit) : messages).reverse();
+    }
 
-    const hasMore = messages.length > limit;
-    const items   = await withJoinLineState(
-      (hasMore ? messages.slice(0, limit) : messages).reverse(),
-      convo,
-    );
+    const items = await withJoinLineState(page, convo);
 
     // Read state as it was BEFORE this visit. The client marks the
     // conversation read in a separate call once it has rendered, so this still
@@ -1751,6 +1905,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
       })),
       senders,
       hasMore,
+      hasNewer,
       // Where this viewer got up to last time, and whether anything since then
       // was addressed to them. Null lastReadAt means "never opened", which
       // draws no divider — a first visit is not a pile of unread messages.
