@@ -7,6 +7,7 @@ import { splitMentions, mentionsMe } from '../mentions'
 import { senderName } from '../senderName'
 import { enterShouldSend } from '../enterSends'
 import { useAutoGrow } from '../autoGrow'
+import { centerInScroller } from '../jumpScroll'
 import { PresenceDot } from './PresenceStrip'
 import CbatPassedBadge from '../../../components/CbatPassedBadge'
 import SupporterBadge from '../../../components/SupporterBadge'
@@ -647,6 +648,20 @@ export default function MessageList({
   hasOlder = false,
   loadingOlder = false,
   olderError = false,
+  // The other direction, after a jump to a search result has loaded a chunk
+  // of history away from the present: scrolling to the bottom asks for the
+  // page after the newest message on screen. `hasNewer` is the thread's word
+  // on whether the list is still short of the present.
+  onLoadNewer = null,
+  hasNewer = false,
+  loadingNewer = false,
+  newerError = false,
+  // { id, seq }: scroll this message to the middle of the list. A new seq asks
+  // again for the same message, so picking one result twice still jumps.
+  jumpRequest = null,
+  // Back to the present from a chunk of history. Without it the "Jump to
+  // latest" button can only scroll what is already loaded.
+  onJumpToLatest = null,
 }) {
   const scrollRef = useRef(null)
   // Which row has its actions pinned open, on a device with no hover. Held
@@ -677,14 +692,38 @@ export default function MessageList({
     prevHeightRef.current  = el.scrollHeight
   }, [messages])
 
+  // Away from the present after a jump to a search result, until the viewer
+  // is back at the bottom (or presses "Jump to latest"), which settles that
+  // jump. While away the list does not follow new messages down: they went up
+  // there on purpose.
+  const [settledSeq, setSettledSeq] = useState(null)
+  const away = Boolean(jumpRequest) && jumpRequest.seq !== settledSeq
+  const settle = () => { if (jumpRequest) setSettledSeq(jumpRequest.seq) }
+  // Whether the viewer is parked at the bottom; see trackPinned below.
+  const pinnedRef = useRef(true)
+
+  // Runs before the follow-the-bottom effect below (layout effects always do),
+  // so a chunk of history that replaced the list is centred on its target and
+  // not dumped at the bottom.
+  const handledJumpRef = useRef(null)
+  useLayoutEffect(() => {
+    if (!jumpRequest || handledJumpRef.current === jumpRequest.seq) return
+    const row = document.getElementById(`msg-${jumpRequest.id}`)
+    if (!row) return
+    handledJumpRef.current = jumpRequest.seq
+    centerInScroller(scrollRef.current, row)
+    pinnedRef.current = false
+  }, [jumpRequest, messages])
+
   // Also scrolls when the indicator appears, so it is not left below the fold.
   // Not after a prepend: the viewer went up there on purpose.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     if (prependedRef.current) { prependedRef.current = false; return }
+    if (hasNewer || away) return
     el.scrollTop = el.scrollHeight
-  }, [messages, typingName])
+  }, [messages, typingName, hasNewer, away])
 
   // Ask for the previous page when the top of the list comes into view. An
   // observer rather than a scroll handler, so a page too short to scroll
@@ -704,16 +743,40 @@ export default function MessageList({
     return () => io.disconnect()
   }, [wantOlder, onLoadOlder])
 
+  // The mirror image, at the bottom, while the list is short of the present.
+  const bottomRef = useRef(null)
+  const wantNewer = Boolean(onLoadNewer) && hasNewer && !loadingNewer && !newerError
+  useEffect(() => {
+    const root = scrollRef.current
+    const target = bottomRef.current
+    if (!wantNewer || !root || !target || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) onLoadNewer()
+    }, { root, rootMargin: '0px 0px 120px 0px' })
+    io.observe(target)
+    return () => io.disconnect()
+  }, [wantNewer, onLoadNewer])
+
+  const jumpToLatest = () => {
+    settle()
+    pinnedRef.current = true
+    if (hasNewer && onJumpToLatest) { onJumpToLatest(); return }
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }
+
   // Whether the viewer is at the bottom of the thread. While they are, the
   // list stays there whenever its content gets taller for a reason other than
   // a new message: opening the edit box on the last message, or that box
   // growing as they type. Otherwise the Save and Cancel buttons land below
   // the fold. Scrolling up releases the pin until they come back down.
   const contentRef = useRef(null)
-  const pinnedRef = useRef(true)
   const trackPinned = () => {
     const el = scrollRef.current
-    if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8
+    if (!el) return
+    pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8
+    // Back down at the present by hand: the jump is over.
+    if (pinnedRef.current && !hasNewer && away) settle()
   }
   useEffect(() => {
     const el = scrollRef.current
@@ -750,6 +813,7 @@ export default function MessageList({
     : null
 
   return (
+    <div className="relative flex-1 min-h-0 flex flex-col">
     <div ref={scrollRef} onScroll={trackPinned} className="flex-1 overflow-y-auto px-4 py-3">
       <div ref={contentRef}>
       {onLoadOlder && hasOlder && (
@@ -885,8 +949,36 @@ export default function MessageList({
           </Fragment>
         )
       })}
-      {typingName && <TypingIndicator name={typingName} />}
+      {onLoadNewer && hasNewer && (
+        <div ref={bottomRef} className="flex justify-center py-2" data-testid="newer-messages">
+          {newerError ? (
+            <button
+              type="button"
+              onClick={onLoadNewer}
+              className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors"
+            >
+              Could not load newer messages. Try again
+            </button>
+          ) : (
+            <span className="text-[11px] text-slate-400">
+              {loadingNewer ? 'Loading newer messages…' : 'Scroll down for newer messages'}
+            </span>
+          )}
+        </div>
+      )}
+      {typingName && !hasNewer && <TypingIndicator name={typingName} />}
       </div>
+    </div>
+    {(hasNewer || away) && (
+      <button
+        type="button"
+        onClick={jumpToLatest}
+        data-testid="jump-to-latest"
+        className="absolute bottom-3 right-4 px-3 py-1.5 rounded-full bg-brand-600 hover:bg-brand-700 text-white text-[11px] font-bold shadow-lg transition-colors"
+      >
+        Jump to latest ↓
+      </button>
+    )}
     </div>
   )
 }

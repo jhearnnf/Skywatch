@@ -14,6 +14,8 @@ import MentionPicker from '../pages/chat/components/MentionPicker'
 import UserCard from '../pages/chat/components/UserCard'
 import GroupMembersDialog from '../pages/chat/components/GroupMembersDialog'
 import { NewMessagesDivider } from '../pages/chat/components/MessageList'
+import ChatSearch, { SearchIcon } from '../pages/chat/components/ChatSearch'
+import { centerInScroller, JUMP_HIGHLIGHT_MS } from '../pages/chat/jumpScroll'
 import { cohortCopy, formatCohortDate } from '../utils/cbat/cohortCopy'
 import { DEFAULT_LOUNGE_GROW } from './cbat/LoungeResizeHandle'
 
@@ -241,7 +243,36 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     setHasMore(false)
     setOlderErr(false)
     olderLoadedRef.current = false
+    setHasNewer(false)
+    setNewerErr(false)
+    leave(false)
   }
+  // Search, and the jump to a result. A result older than what is loaded
+  // replaces the list with a chunk around it, Discord-style, which leaves the
+  // list short of the present. `hasNewer` says so; scrolling down pages back
+  // towards it, and every refresh (stream, poll) keeps its hands off the list
+  // until it gets there, because the newest page merged onto a chunk from
+  // last month would leave a hole in the middle.
+  const [searchOpen,   setSearchOpen]   = useState(false)
+  // The public rooms search can reach, from GET /api/chat/search/channels.
+  // Fetched the first time search opens, not on every hub visit.
+  const [searchRooms,  setSearchRooms]  = useState(null)
+  const [hasNewer,     setHasNewer]     = useState(false)
+  const [loadingNewer, setLoadingNewer] = useState(false)
+  const [newerErr,     setNewerErr]     = useState(false)
+  const [highlightId,  setHighlightId]  = useState(null)
+  const [jumpRequest,  setJumpRequest]  = useState(null)
+  const hasNewerRef = useRef(false)
+  hasNewerRef.current = hasNewer
+  const newerInFlight = useRef(false)
+  // A result waiting for its room to load (see the messages effect).
+  const pendingJumpRef = useRef(null)
+  // Set by a jump, cleared once the reader is back at the bottom of the
+  // present. While set the list does not follow new messages down. State too,
+  // because it draws the "Jump to latest" button.
+  const awayRef = useRef(false)
+  const [away, setAway] = useState(false)
+  const leave = (isAway) => { awayRef.current = isAway; setAway(isAway) }
   const [loading,   setLoading]   = useState(true)
   const [busy,      setBusy]      = useState(false)
   const [err,       setErr]       = useState('')
@@ -372,11 +403,17 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
 
   const conversationId = lounge?.conversationId ?? null
   const enabled = Boolean(user) && settings?.chatEnabled !== false
+  // 'channel' is a public room opened from a search result (General,
+  // Announcements). It is read-only here and has no tab: the widget is the
+  // lounge, and those rooms live in Community. Its `lounge` record is built
+  // from the result rather than fetched, so it has no endpoint.
+  const peeking = room === 'channel'
   const roomEndpoint = room === 'group'
     ? '/api/chat/cbat-group'
     : room === 'groups'
       ? (adminGroupId ? `/api/chat/cbat-groups/${adminGroupId}` : '/api/chat/cbat-groups')
-      : '/api/chat/lounge'
+      : peeking ? null
+        : '/api/chat/lounge'
   const groupRoom = room === 'group' || (room === 'groups' && Boolean(adminGroupId))
 
   const changeRoom = useCallback((next) => {
@@ -395,6 +432,24 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     unackedRef.current = false
     if (next !== 'groups') setAdminGroupId(null)
   }, [room])
+
+  // Open a public room from a search result, read-only. Resets exactly what
+  // changeRoom does, then stands the room's record up from the result.
+  const openPeek = (target) => {
+    setRoom('channel')
+    setLounge({ conversationId: target.conversationId, title: target.title, canPost: false })
+    setMessages([])
+    resetHistory()
+    setSenders({})
+    setLoading(true)
+    setMembersOpen(false)
+    setGone(false)
+    setErr('')
+    setHasNew(false)
+    setNewSince(null)
+    unackedRef.current = false
+    setAdminGroupId(null)
+  }
 
   // Auth can resolve after the first render, in which case the lazy default
   // above saw no user. Move an admin to All groups once, the first time we
@@ -417,7 +472,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   [API])
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !roomEndpoint) return
     let cancelled = false
     get(roomEndpoint).then(({ ok, status, data }) => {
       if (cancelled) return
@@ -577,7 +632,8 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     if (!conversationId) return
     const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}`)
     if (!ok || !data) return
-    setMessages(prev => keepOlder(prev, applyJustSent(data.messages ?? [])))
+    // A chunk of history from a search jump is on screen; see `hasNewer`.
+    if (!hasNewerRef.current) setMessages(prev => keepOlder(prev, applyJustSent(data.messages ?? [])))
     // On top of the senders already known, so names on older pages still resolve.
     setSenders(prev => ({ ...prev, ...(data.senders ?? {}) }))
     // Once an older page is on screen, whether there is more is that page's
@@ -614,10 +670,108 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     }
   }, [conversationId, get, hasMore, messages])
 
+  // The page after the newest message on screen, while a jump has left the
+  // list short of the present. Appended; a page that says nothing is newer
+  // means the list has caught up, and the refreshes take over again.
+  const loadNewer = useCallback(async () => {
+    const newest = messages[messages.length - 1]
+    if (!conversationId || !newest || !hasNewer || newerInFlight.current) return
+    newerInFlight.current = true
+    setLoadingNewer(true); setNewerErr(false)
+    try {
+      const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}&after=${encodeURIComponent(newest.createdAt)}`)
+      if (!ok || !data) throw new Error('newer page failed')
+      setMessages(prev => {
+        const ids   = new Set(prev.map(m => String(m._id)))
+        const fresh = (data.messages ?? []).filter(m => !ids.has(String(m._id)))
+        return fresh.length ? [...prev, ...fresh] : prev
+      })
+      setSenders(prev => ({ ...prev, ...(data.senders ?? {}) }))
+      setHasNewer(Boolean(data.hasNewer))
+    } catch {
+      setNewerErr(true)
+    } finally {
+      newerInFlight.current = false
+      setLoadingNewer(false)
+    }
+  }, [conversationId, get, hasNewer, messages])
+
+  const jumpSeq = useRef(0)
+  const requestJump = (id) => {
+    setJumpRequest({ id: String(id), seq: ++jumpSeq.current })
+    setHighlightId(String(id))
+  }
+
+  // Briefly tint the message a jump landed on.
+  useEffect(() => {
+    if (!highlightId) return
+    const id = setTimeout(() => setHighlightId(null), JUMP_HIGHLIGHT_MS)
+    return () => clearTimeout(id)
+  }, [highlightId])
+
+  // The chunk around a search result, in place of whatever is on screen.
+  const loadAround = useCallback(async (messageId) => {
+    if (!conversationId) return
+    const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}&around=${messageId}`)
+    setLoading(false)
+    if (!ok || !data) { setErr('Could not load that message. It may have been removed.'); return }
+    // The chunk's own answer about what is further back, not the newest page's.
+    olderLoadedRef.current = true
+    setMessages(data.messages ?? [])
+    setSenders(prev => ({ ...prev, ...(data.senders ?? {}) }))
+    setHasMore(Boolean(data.hasMore))
+    setOlderErr(false)
+    setHasNewer(Boolean(data.hasNewer))
+    setNewerErr(false)
+    requestJump(messageId)
+  }, [conversationId, get])
+
+  // Back to the newest page from a chunk of history.
+  const jumpToLatest = useCallback(async () => {
+    leave(false)
+    atBottomRef.current = true
+    const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}`)
+    if (!ok || !data) { setErr('Could not load the latest messages.'); return }
+    olderLoadedRef.current = false
+    setMessages(applyJustSent(data.messages ?? []))
+    setSenders(prev => ({ ...prev, ...(data.senders ?? {}) }))
+    setHasMore(Boolean(data.hasMore))
+    setHasNewer(false)
+    setNewerErr(false)
+  }, [applyJustSent, conversationId, get])
+
   useEffect(() => {
     if (!conversationId) return
+    // Arrived here from a search result in another room: open at the result,
+    // not at the bottom.
+    const target = pendingJumpRef.current
+    if (target) { pendingJumpRef.current = null; loadAround(target); return }
     loadMessages().catch(() => setLoading(false))
-  }, [conversationId, loadMessages])
+  }, [conversationId, loadAround, loadMessages])
+
+  // Search reaches the lounge, General and Announcements, whichever room the
+  // widget is showing. Lounge and General are on by default; Announcements is
+  // an opt-in, since it is mostly release notes.
+  const openSearch = () => {
+    setSearchOpen(true)
+    if (searchRooms) return
+    get('/api/chat/search/channels')
+      .then(({ ok, data }) => setSearchRooms(ok && Array.isArray(data?.channels) ? data.channels : []))
+      .catch(() => setSearchRooms([]))
+  }
+
+  const pickResult = (m, target) => {
+    setSearchOpen(false)
+    if (String(m.conversationId) === String(conversationId)) {
+      if (messages.some(x => String(x._id) === String(m._id))) requestJump(m._id)
+      else loadAround(m._id)
+      return
+    }
+    if (!target) return
+    pendingJumpRef.current = String(m._id)
+    if (target.key === 'lounge') changeRoom('lounge')
+    else openPeek(target)
+  }
 
   const markRead = useCallback(() => {
     if (!conversationId) return
@@ -646,13 +800,21 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       // what fills in a first-time speaker's avatar and colour.
       const unnamed = (incoming.mentions ?? []).some(id => !sendersRef.current[String(id)])
       if (unnamed) loadMessages().catch(() => {})
-      setMessages(prev => (
-        // The sender already appended this one from the POST response, and a
-        // reconnect can replay nothing but is cheap to guard anyway.
-        prev.some(m => String(m._id) === String(incoming._id)) ? prev : [...prev, incoming]
-      ))
+      // Not onto a chunk of history from a search jump: it would land after
+      // last month's messages with everything in between missing. Paging down
+      // to the present brings it in.
+      if (!hasNewerRef.current) {
+        setMessages(prev => (
+          // The sender already appended this one from the POST response, and a
+          // reconnect can replay nothing but is cheap to guard anyway.
+          prev.some(m => String(m._id) === String(incoming._id)) ? prev : [...prev, incoming]
+        ))
+      }
       const mine = String(incoming.senderUserId ?? '') === String(user?._id)
       if (mine) return
+      // A room opened from search is a look, not a visit: it is not marked
+      // read and does not light the lounge's own dot.
+      if (room === 'channel') return
       // A system line is shown but never counted: no "new messages" nudge and
       // no number on a tab, same as the server's unread counts.
       if (incoming.senderRole === 'system') return
@@ -797,7 +959,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   //
   // Not in a group room, which waits for a touch instead (acknowledge below).
   useEffect(() => {
-    if (!reading || !conversationId || groupRoom) return
+    if (!reading || !conversationId || groupRoom || peeking) return
     setHasNew(false)
     if (room === 'group') setGroupUnreadCount(0)
     if (room === 'groups' && selectedAdminGroupUnread > 0) {
@@ -805,7 +967,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       setSelectedAdminGroupUnread(0)
     }
     markRead()
-  }, [reading, conversationId, groupRoom, markRead, room, selectedAdminGroupUnread])
+  }, [reading, conversationId, groupRoom, peeking, markRead, room, selectedAdminGroupUnread])
 
   // A group room's unread messages are read once the player touches the
   // conversation. The "New" line stays where it is for the rest of the visit,
@@ -845,11 +1007,51 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     const prepended = Boolean(prevFirst) && first !== prevFirst && messages.some(m => String(m._id) === prevFirst)
     const mineNew   = Boolean(last) && lastId !== prevLastIdRef.current && String(last.senderUserId ?? '') === String(user?._id)
     if (prepended) el.scrollTop += el.scrollHeight - prevHeightRef.current
-    else if (!prevFirst || atBottomRef.current || mineNew) el.scrollTop = el.scrollHeight
+    // Not while reading a search result's neighbourhood: a page arriving
+    // underneath must not carry them off down the list, and the jump effect
+    // below places a fresh chunk itself.
+    else if (!awayRef.current && !hasNewer && (!prevFirst || atBottomRef.current || mineNew)) el.scrollTop = el.scrollHeight
     prevFirstIdRef.current = first
     prevLastIdRef.current  = lastId
     prevHeightRef.current  = el.scrollHeight
-  }, [open, messages, typingName, user?._id])
+  }, [open, messages, typingName, user?._id, hasNewer])
+
+  // Centre the message a jump asked for, once its row is on screen. Declared
+  // after the effect above so it has the last word on a chunk that has just
+  // replaced the list.
+  const handledJumpRef = useRef(null)
+  useLayoutEffect(() => {
+    if (!open || !jumpRequest || handledJumpRef.current === jumpRequest.seq) return
+    const el = scrollRef.current
+    const row = el?.querySelector(`[data-msg-row="${jumpRequest.id}"]`)
+    if (!row) return
+    handledJumpRef.current = jumpRequest.seq
+    centerInScroller(el, row)
+    atBottomRef.current = false
+    leave(true)
+  }, [open, jumpRequest, messages])
+
+  // The page after, when the bottom of a chunk of history comes into view.
+  const bottomRef = useRef(null)
+  const wantNewer = open && hasNewer && !loading && !loadingNewer && !newerErr
+  useEffect(() => {
+    const root = scrollRef.current
+    const target = bottomRef.current
+    if (!wantNewer || !root || !target || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) loadNewer()
+    }, { root, rootMargin: '0px 0px 120px 0px' })
+    io.observe(target)
+    return () => io.disconnect()
+  }, [wantNewer, loadNewer])
+
+  const toLatest = () => {
+    if (hasNewer) { jumpToLatest(); return }
+    leave(false)
+    atBottomRef.current = true
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }
 
   // Ask for the previous page when the top of the list comes into view. An
   // observer rather than a scroll handler, so a page too short to scroll still
@@ -953,9 +1155,15 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
           message: d.data.message,
           at:      Date.now(),
         })
-        setMessages(prev => (
-          prev.some(m => String(m._id) === String(d.data.message._id)) ? prev : [...prev, d.data.message]
-        ))
+        // Sent from a chunk of history: back to the present, where the message
+        // now is. The held copy above covers a load that has not caught up.
+        if (hasNewerRef.current) jumpToLatest()
+        else {
+          if (awayRef.current) leave(false)
+          setMessages(prev => (
+            prev.some(m => String(m._id) === String(d.data.message._id)) ? prev : [...prev, d.data.message]
+          ))
+        }
       }
     } catch (e) {
       setErr(e.message || 'Could not send that')
@@ -1119,7 +1327,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
         className="shrink-0 mt-3 w-full flex items-center gap-2 px-4 py-2.5 rounded-xl bg-game-panel border border-game-line hover:border-brand-400 hover:bg-surface-raised transition-colors text-left"
       >
         <span className="text-[11px] font-extrabold tracking-wider uppercase text-slate-500">
-          {lounge?.title ?? '🛩️ CBAT Lounge'}
+          {(!peeking && lounge?.title) || '🛩️ CBAT Lounge'}
         </span>
         {hasNew && (
           <span
@@ -1231,18 +1439,71 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => (searchOpen ? setSearchOpen(false) : openSearch())}
+          aria-label={searchOpen ? 'Close search' : 'Search the chat'}
+          aria-pressed={searchOpen}
+          title="Search"
+          data-testid="lounge-search-toggle"
+          className={`ml-auto shrink-0 w-8 h-8 grid place-items-center rounded-lg border transition-colors ${searchOpen
+            ? 'border-brand-400 bg-brand-600/10 text-brand-600'
+            : 'border-game-line text-slate-500 hover:text-brand-600 hover:border-brand-400'}`}
+        >
+          <SearchIcon />
+        </button>
         {collapsible && (
           <button
             type="button"
             onClick={() => onToggle(false)}
             aria-expanded="true"
             aria-label="Close the lounge"
-            className="ml-auto text-[11px] text-slate-500 hover:text-slate-400 px-1.5 py-0.5 rounded-lg border border-game-line hover:border-brand-400 transition-colors"
+            className="text-[11px] text-slate-500 hover:text-slate-400 px-1.5 py-0.5 rounded-lg border border-game-line hover:border-brand-400 transition-colors"
           >
             Close
           </button>
         )}
       </div>
+
+      {/* Everything under the header, so search can sit over it rather than
+          replace it: unmounting the list to show results would throw away the
+          reader's scroll position every time search was opened and closed. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+      {searchOpen && (
+        <div className="absolute inset-0 z-20 bg-game-panel flex flex-col">
+          {searchRooms === null ? (
+            <p className="text-xs text-slate-500 text-center py-6">Loading…</p>
+          ) : searchRooms.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-6 px-4">Search is not available right now.</p>
+          ) : (
+            <ChatSearch
+              compact
+              rooms={searchRooms}
+              initialSelected={searchRooms.some(r => r.key !== 'announcements')
+                ? searchRooms.filter(r => r.key !== 'announcements').map(r => r.key)
+                : null}
+              onPick={pickResult}
+              onClose={() => setSearchOpen(false)}
+            />
+          )}
+        </div>
+      )}
+
+      {/* A room opened from a search result. Says where you are and how to
+          get back, since none of the tabs above is lit. */}
+      {peeking && (
+        <div className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2" data-testid="lounge-peek-strip">
+          <button
+            type="button"
+            onClick={() => changeRoom('lounge')}
+            aria-label="Back to the lounge"
+            title="Back to the lounge"
+            className="text-brand-500 hover:text-brand-400 text-xs leading-none px-1 -ml-1 transition-colors"
+          >←</button>
+          <p className="text-[10px] font-bold text-game-text truncate">{lounge?.title}</p>
+          <p className="ml-auto shrink-0 text-[9px] text-slate-500">From search</p>
+        </div>
+      )}
 
       {room === 'group' && lounge?.configured && (
         <div className="shrink-0 px-3 py-2 border-b border-game-line bg-brand-500/[0.06] flex items-center gap-2">
@@ -1385,11 +1646,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
 
       {room === 'lounge' && <ActivityStrip activity={activity} />}
 
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={scrollRef}
         onScroll={e => {
           const el = e.currentTarget
           atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SLACK_PX
+          // Back down at the present by hand: the jump is over.
+          if (atBottomRef.current && !hasNewer && awayRef.current) leave(false)
         }}
         className="flex-1 min-h-0 overflow-y-auto scrollbar-inset px-3 py-2 space-y-1.5"
       >
@@ -1463,8 +1727,10 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             // Both decided by the server: an admin on anything, or the author
             // within an hour of posting. The rule has a clock in it, so the
             // client never tries to work it out — see serializeMessage.
-            const canEdit   = Boolean(m.canEdit)
-            const canDelete = Boolean(m.canDelete)
+            // Never in a room opened from search: it is read-only here, and
+            // editing borrows a composer that room does not have.
+            const canEdit   = !peeking && Boolean(m.canEdit)
+            const canDelete = !peeking && Boolean(m.canDelete)
             const hasActions  = acting || canSeen || canEdit || canDelete
             const actionsOpen = openActionsId === String(m._id)
             // Every action puts the bar away behind it. Where it was opened by
@@ -1489,8 +1755,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
                   if (e.target?.closest?.('button')) return
                   setOpenActionsId(cur => (cur === String(m._id) ? null : String(m._id)))
                 }}
-                className={`content-fade-in group relative text-xs leading-snug break-words ${
-                  mineTag ? 'bg-brand-600/10 border-l-2 border-l-brand-400 -mx-1 px-1 rounded' : ''
+                className={`content-fade-in group relative text-xs leading-snug break-words transition-colors ${
+                  String(highlightId) === String(m._id) ? 'bg-brand-600/25 -mx-1 px-1 rounded'
+                    : mineTag ? 'bg-brand-600/10 border-l-2 border-l-brand-400 -mx-1 px-1 rounded' : ''
                 }`}
               >
                 {m.replyTo && <ReplyQuote replyTo={m.replyTo} senders={senders} />}
@@ -1634,14 +1901,54 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             String(visible[i]._id) === firstUnseenId ? [<NewMessagesDivider key="new-divider" />, row] : [row]
           ))
         )}
-        {typingName && (
+        {!loading && hasNewer && (
+          <div ref={bottomRef} className="flex justify-center py-1" data-testid="newer-messages">
+            {newerErr ? (
+              <button
+                type="button"
+                onClick={loadNewer}
+                className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 px-2 py-1 rounded-lg border border-game-line hover:bg-surface-raised transition-colors"
+              >
+                Could not load newer messages. Try again
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-500">
+                {loadingNewer ? 'Loading newer messages…' : 'Scroll down for newer messages'}
+              </span>
+            )}
+          </div>
+        )}
+        {typingName && !hasNewer && (
           <p className="text-[11px] text-slate-500 italic">{typingName} is typing…</p>
         )}
+      </div>
+      {(hasNewer || away) && (
+        <button
+          type="button"
+          onClick={toLatest}
+          data-testid="jump-to-latest"
+          className="absolute bottom-2 right-3 px-2.5 py-1 rounded-full bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold shadow-lg transition-colors"
+        >
+          Jump to latest ↓
+        </button>
+      )}
       </div>
 
       {err && <p className="shrink-0 text-[11px] text-red-400 px-3 py-1.5 border-t border-game-line">{err}</p>}
 
-      {needsName ? (
+      {peeking ? (
+        // Read-only here. The room's own home, with its composer, is Community.
+        <div className="shrink-0 border-t border-game-line px-3 py-2 flex items-center gap-2">
+          <p className="text-[11px] text-slate-500 min-w-0">Opened from search.</p>
+          <button
+            type="button"
+            onClick={() => navigate(`/chat/${conversationId}`)}
+            className="ml-auto shrink-0 px-2.5 py-1 rounded-lg border border-game-line text-[11px] font-bold text-brand-600 hover:border-brand-400 transition-colors"
+          >
+            Open in Community
+          </button>
+        </div>
+      ) : needsName ? (
         <div className="shrink-0 border-t border-game-line">
           <DisplayNameGate onDone={() => {
             // Optimistic so the composer appears the instant the name saves,
@@ -1797,6 +2104,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
         />
       )}
       </div>}
+      </div>
     </div>
   )
 }

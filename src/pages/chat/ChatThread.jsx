@@ -11,6 +11,8 @@ import ReportMessageDialog from './components/ReportMessageDialog'
 import SeenByDialog from './components/SeenByDialog'
 import EditHistoryDialog from './components/EditHistoryDialog'
 import AnnouncementDrafter from './components/AnnouncementDrafter'
+import ChatSearch, { SearchIcon } from './components/ChatSearch'
+import { JUMP_HIGHLIGHT_MS } from './jumpScroll'
 import { formatLastOnline, isOnlineNow } from './format'
 
 const POLL_MS = 5_000
@@ -106,11 +108,25 @@ export default function ChatThread({
   // which is most of the wait it exists to explain.
   const [botTyping,    setBotTyping]    = useState(null)
   const [askedBot,     setAskedBot]     = useState(null)
+  // Search, and the jump to a result. A result older than what is loaded
+  // replaces the list with a chunk around it (Discord-style), which leaves the
+  // list short of the present: `hasNewer` says so, scrolling down pages back
+  // towards it, and the poll stops merging the newest page in until it is
+  // reached. Merged onto a chunk from last month it would leave a hole.
+  const [searchOpen,   setSearchOpen]   = useState(false)
+  const [hasNewer,     setHasNewer]     = useState(false)
+  const [loadingNewer, setLoadingNewer] = useState(false)
+  const [newerErr,     setNewerErr]     = useState(false)
+  const [jumpRequest,  setJumpRequest]  = useState(null)
+  const hasNewerRef = useRef(false)
+  hasNewerRef.current = hasNewer
 
-  const fetchMessages = useCallback(async ({ limit, before } = {}) => {
+  const fetchMessages = useCallback(async ({ limit, before, around, after } = {}) => {
     const params = new URLSearchParams()
     if (limit)  params.set('limit', limit)
     if (before) params.set('before', before)
+    if (around) params.set('around', around)
+    if (after)  params.set('after', after)
     const q  = params.toString()
     const qs = q ? `?${q}` : ''
     const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages${qs}`, {
@@ -124,7 +140,7 @@ export default function ChatThread({
     // cache agreeing with the screen. A page of older history is not the
     // thread's current state, so it is left out: the cache is a head start on
     // the newest page, and coming back to a channel starts at the bottom.
-    if (!before) {
+    if (!before && !around && !after) {
       setCachedThread(conversationId, {
         messages:     data.messages,
         senders:      data.senders ?? {},
@@ -162,6 +178,82 @@ export default function ChatThread({
       setLoadingOlder(false)
     }
   }, [fetchMessages, hasMore, messages])
+
+  // The next page DOWN, after a jump has left the list short of the present.
+  // Appended; once a page comes back saying nothing is newer, the list has
+  // caught up and the poll takes over again.
+  const newerInFlight = useRef(false)
+  const loadNewer = useCallback(async () => {
+    const newest = [...messages].reverse().find(m => !m.localState)
+    if (!newest || !hasNewer || newerInFlight.current) return
+    newerInFlight.current = true
+    setLoadingNewer(true); setNewerErr(false)
+    try {
+      const d = await fetchMessages({ after: newest.createdAt })
+      setMessages(prev => {
+        const ids   = new Set(prev.map(m => String(m._id)))
+        const fresh = d.messages.filter(m => !ids.has(String(m._id)))
+        return fresh.length ? [...prev, ...fresh] : prev
+      })
+      setSenders(prev => ({ ...prev, ...(d.senders ?? {}) }))
+      setHasNewer(Boolean(d.hasNewer))
+    } catch {
+      setNewerErr(true)
+    } finally {
+      newerInFlight.current = false
+      setLoadingNewer(false)
+    }
+  }, [fetchMessages, hasNewer, messages])
+
+  // Briefly tint the message a jump landed on.
+  useEffect(() => {
+    if (!highlightId) return
+    const id = setTimeout(() => setHighlightId(null), JUMP_HIGHLIGHT_MS)
+    return () => clearTimeout(id)
+  }, [highlightId])
+
+  const jumpSeq = useRef(0)
+  const requestJump = (id) => {
+    setJumpRequest({ id: String(id), seq: ++jumpSeq.current })
+    setHighlightId(String(id))
+  }
+
+  // Jump to a search result. Already loaded: just scroll to it. Otherwise
+  // load the chunk around it in place of what is on screen.
+  const jumpToMessage = async (id) => {
+    setSearchOpen(false)
+    if (messages.some(m => String(m._id) === String(id))) { requestJump(id); return }
+    setJumping(true); setErr('')
+    try {
+      const d = await fetchMessages({ around: id })
+      setMessages(d.messages)
+      setSenders(prev => ({ ...prev, ...(d.senders ?? {}) }))
+      setHasMore(Boolean(d.hasMore))
+      setOlderErr(false)
+      setHasNewer(Boolean(d.hasNewer))
+      setNewerErr(false)
+      requestJump(id)
+    } catch {
+      setErr('Could not load that message. It may have been removed.')
+    } finally {
+      setJumping(false)
+    }
+  }
+
+  // Back to the newest page from a chunk of history. Any send still on its
+  // way up stays on the end.
+  const jumpToLatest = useCallback(async () => {
+    try {
+      const d = await fetchMessages()
+      setMessages(prev => [...d.messages, ...prev.filter(m => m.localState)])
+      setSenders(prev => ({ ...prev, ...(d.senders ?? {}) }))
+      setHasMore(Boolean(d.hasMore))
+      setHasNewer(false)
+      setNewerErr(false)
+    } catch {
+      setErr('Could not load the latest messages.')
+    }
+  }, [fetchMessages])
 
   // Messages this client appended from its own POST, until a poll confirms the
   // server has them. Keyed by id, holding the message and when it was sent.
@@ -253,10 +345,14 @@ export default function ChatThread({
       try {
         const d = await fetchMessages()
         const fresh = applyJustSent(d)
-        setMessages(prev => {
-          const next = mergeOlder(prev, fresh)
-          return signature(prev) === signature(next) ? prev : next
-        })
+        // Reading a chunk of history from a search jump: the newest page has
+        // nothing in common with it yet, so it waits until they catch up.
+        if (!hasNewerRef.current) {
+          setMessages(prev => {
+            const next = mergeOlder(prev, fresh)
+            return signature(prev) === signature(next) ? prev : next
+          })
+        }
         // Merged, never replaced: the poll only covers the newest page, but
         // mergeOlder keeps the older history on screen, and a sender who only
         // appears back there is not in this page's map. Replacing the map
@@ -345,6 +441,11 @@ export default function ChatThread({
 
   const handleSend = (text) => {
     setErr('')
+    // Sending from a chunk of history goes back to the present first, as in
+    // any messaging app: your message belongs at the bottom of the real thread.
+    if (hasNewer) jumpToLatest()
+    // And out of any jump, so the list follows the message down.
+    setJumpRequest(null)
     const quoted  = replyTo
     const localId = `local-${++localSeq.current}`
     setMessages(prev => [...prev, {
@@ -496,6 +597,13 @@ export default function ChatThread({
       method: 'DELETE', credentials: 'include',
     }).catch(() => {})
     forgetJustSent(message)
+    // In a chunk of history the newest page has nothing to merge onto, so the
+    // removal is taken off the screen by hand and that is all.
+    if (hasNewerRef.current) {
+      setMessages(prev => prev.filter(m => String(m._id) !== String(message._id)))
+      onChanged?.()
+      return
+    }
     const fresh = await fetchMessages()
     // The refetch only covers the newest page, so a removal further back is
     // taken out of the kept history by hand.
@@ -580,6 +688,21 @@ export default function ChatThread({
             </p>
           </div>
         </div>
+        {!loading && conversation && (
+          <button
+            type="button"
+            onClick={() => setSearchOpen(o => !o)}
+            aria-label={searchOpen ? 'Close search' : 'Search this conversation'}
+            aria-pressed={searchOpen}
+            title="Search"
+            data-testid="chat-search-toggle"
+            className={`ml-auto shrink-0 w-8 h-8 grid place-items-center rounded-lg border transition-colors ${searchOpen
+              ? 'border-brand-400 bg-brand-600/10 text-brand-600'
+              : 'border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-100'}`}
+          >
+            <SearchIcon />
+          </button>
+        )}
         {type === 'support' && (isClosed ? (
           <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
             Resolved
@@ -630,6 +753,20 @@ export default function ChatThread({
       ) : err && !conversation ? (
         <div className="flex-1 flex items-center justify-center text-sm text-red-600 px-6 text-center">{err}</div>
       ) : (
+        // Search sits over the list rather than replacing it, so opening and
+        // closing it leaves the reader exactly where they were.
+        <div className="relative flex-1 min-h-0 flex flex-col">
+        {searchOpen && (
+          <div className="absolute inset-0 z-10 bg-surface flex flex-col">
+            {/* One room only: Community is already a rail of rooms, so a
+                search here is a search of the one you are looking at. */}
+            <ChatSearch
+              rooms={[{ key: 'here', conversationId, title: heading }]}
+              onPick={(m) => jumpToMessage(m._id)}
+              onClose={() => setSearchOpen(false)}
+            />
+          </div>
+        )}
         <MessageList
           messages={messages}
           currentUserId={user?._id}
@@ -657,6 +794,12 @@ export default function ChatThread({
           hasOlder={hasMore}
           loadingOlder={loadingOlder}
           olderError={olderErr}
+          onLoadNewer={loadNewer}
+          hasNewer={hasNewer}
+          loadingNewer={loadingNewer}
+          newerError={newerErr}
+          jumpRequest={jumpRequest}
+          onJumpToLatest={jumpToLatest}
           typingName={botTyping || askedBot}
           // A feed is a log, not a conversation: every entry is from the same
           // poster, so each one keeps its own name and timestamp. That covers
@@ -671,6 +814,7 @@ export default function ChatThread({
             : 'No messages yet — say hi to get started.'}
           hint={conversation?.welcome ?? null}
         />
+        </div>
       )}
 
       {err && conversation && (
