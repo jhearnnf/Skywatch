@@ -646,10 +646,21 @@ export default function Cbat() {
     }
     fit()
     window.addEventListener('resize', fit)
+    window.visualViewport?.addEventListener('resize', fit)
+    // The top bar and the BottomNav are watched too. Both are sized off the
+    // safe-area insets, and the Android app's WebView can hand those over
+    // after the first fit without firing a window resize: the nav grows by
+    // the gesture-bar inset and the panel, sized against the old nav top,
+    // ends up with its foot tucked behind it.
     const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
     ro?.observe(landmark)
+    const topbarEl = document.querySelector('.app-topbar')
+    const navEl = document.querySelector('.app-bottomnav')
+    if (topbarEl) ro?.observe(topbarEl)
+    if (navEl) ro?.observe(navEl)
     return () => {
       window.removeEventListener('resize', fit)
+      window.visualViewport?.removeEventListener('resize', fit)
       ro?.disconnect()
     }
   }, [loungeRevealOn])
