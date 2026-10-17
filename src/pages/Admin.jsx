@@ -1780,7 +1780,12 @@ function ReportsTab({ API }) {
   // One DAU card for both the loading and loaded snapshot branches — it loads on
   // its own clock, so it must not flash a skeleton just because the rest of the
   // snapshot is still in flight, nor lose its range picker while it is.
-  const dauSub = DAU_RANGES.find(r => r.days === dauDays)?.sub ?? ''
+  // The server starts the series at the first day with data, so a 1Y range on
+  // a younger site is shorter than asked; say where it really starts.
+  const dauTrimmed = dau && dau.dailyDau.length < dau.days
+  const dauSub = dauTrimmed
+    ? `since ${fmtCbatDate(dau.dailyDau[0].date)} (first recorded day)`
+    : DAU_RANGES.find(r => r.days === dauDays)?.sub ?? ''
   const dauLabels = {
     count: 'Active users',
     messages: 'Community messages',

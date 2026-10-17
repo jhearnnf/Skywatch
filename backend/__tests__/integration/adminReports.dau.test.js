@@ -21,6 +21,12 @@ beforeEach(async () => {
   cookie = authCookie(admin._id);
   u1 = await createUser({ agentNumber: '1000001' });
   u2 = await createUser({ agentNumber: '1000002' });
+  // The series starts at the first day with data, so fixture accounts made
+  // "today" would trim every window to one day. Older than any range instead.
+  await User.collection.updateMany(
+    { _id: { $in: [admin._id, u1._id, u2._id] } },
+    { $set: { createdAt: new Date(Date.now() - 2 * 365 * DAY) } },
+  );
 });
 
 afterEach(async () => db.clearDatabase());
@@ -86,6 +92,19 @@ describe('GET /api/admin/reports/dau', () => {
     // Every other day in the window is present and zero-filled.
     const others = res.body.data.dailyDau.filter(r => r.date !== ymd(twoDaysAgo));
     expect(others.every(r => r.count === 0)).toBe(true);
+  });
+
+  it('starts at the first day with data when the range reaches back further', async () => {
+    const firstDay = new Date(Date.now() - 100 * DAY);
+    await satAt(u1._id, firstDay);
+
+    const res = await get('?days=365');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.days).toBe(365);
+    expect(res.body.data.dailyDau[0].date).toBe(ymd(firstDay));
+    expect(res.body.data.dailyDau).toHaveLength(101);
+    expect(res.body.data.dailyDau.at(-1).date).toBe(ymd(Date.now()));
   });
 
   it('only reaches back as far as the requested range', async () => {
@@ -206,7 +225,8 @@ describe('GET /api/admin/reports/dau', () => {
       const res = await get('?days=7');
 
       expect(res.body.data.dailyDau.find(r => r.date === ymd(day)).cbatDates).toBe(2);
-      expect(res.body.data.dailyDau.find(r => r.date === ymd(other)).cbatDates).toBe(0);
+      // `other` falls before the first day with data, so its row is trimmed off.
+      expect(res.body.data.dailyDau.find(r => r.date === ymd(other))?.cbatDates ?? 0).toBe(0);
     });
 
     it('ignores dates outside the requested range', async () => {

@@ -339,6 +339,13 @@ describe('Admin — Reports tab', () => {
     )
   })
 
+  it('names the first recorded day when the 1Y series starts later than a year ago', async () => {
+    // The server drops leading days with no data, so 365 asked, 30 returned.
+    global.fetch = setupFetch({ dau: { ...mockDau(30), data: { ...mockDau(30).data, days: 365 } } })
+    await openReportsTab()
+    await waitFor(() => expect(screen.getByText('since 1 Apr 2026 (first recorded day)')).toBeInTheDocument())
+  })
+
   it('renders Subscription Tiers after Operating Systems', async () => {
     await openReportsTab()
     await waitFor(() => expect(screen.getByText('Subscription Tiers')).toBeInTheDocument())

@@ -576,7 +576,7 @@ router.get('/dau', async (req, res) => {
     const dailyMap = mergeDailyDistinctUsers(streams);
     // One row per day carrying every series, so the chart plots them on a shared
     // x-axis without the frontend having to zip arrays together.
-    const dailyDau = emptyDailyBuckets(start, now).map(b => ({
+    const rows = emptyDailyBuckets(start, now).map(b => ({
       date: b.date,
       count: dailyMap.get(b.date)?.size ?? 0,
       messages: messagesByDay.get(b.date) ?? 0,
@@ -584,6 +584,10 @@ router.get('/dau', async (req, res) => {
       cbatDatesEntered: datesEnteredByDay.get(b.date) ?? 0,
       signups: signupsByDay.get(b.date) ?? 0,
     }));
+    // A range reaching back before anything was recorded (1Y on a site younger
+    // than a year) starts at the first day with data, not on months of zeros.
+    const first = rows.findIndex(r => r.count || r.messages || r.cbatDates || r.cbatDatesEntered || r.signups);
+    const dailyDau = first > 0 ? rows.slice(first) : rows;
 
     res.json({ status: 'success', data: { days, dailyDau } });
   } catch (err) {
