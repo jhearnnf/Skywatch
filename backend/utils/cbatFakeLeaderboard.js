@@ -342,19 +342,16 @@ const FAKE_TUNING = {
   'rtt': {
     // Rapid Tracking Test — accumulating totalScore (higher better), no fixed
     // ceiling in the leaderboard's eyes, though a flawless run tops out at 1980
-    // (12 passes × 3 dead-centre frames + completion bonuses). The demo ceiling
-    // of 960 is a strong-but-human run: most frames captured, most of them off
-    // centre, a couple of passes lost behind cover. Roster trails to 230.
-    // 12 passes of ~8s plus gaps run ~115s; the time column is hidden
-    // (CBAT_LEADERBOARD_CONFIG hideTime) but a small fractional step keeps the
-    // stored times from all matching.
+    // (12 passes × 165). 12 passes of ~8s plus gaps run ~115s; the time column
+    // is hidden (CBAT_LEADERBOARD_CONFIG hideTime) but a small fractional step
+    // keeps the stored times from all matching.
     //
-    // Dropped ~8% from the original tuning when airframe drift went into the
-    // game — the wander mostly costs centring bonus rather than hits — and
-    // raised 5% on 2026-10-01, when a perfect target went from 150 to 165
-    // points (a flawless run is now 1980). Both are estimates: retune this and
-    // the grade bands in rttDifficulty.js together once there are real runs to
-    // look at.
+    // Reseated 2026-10-17 on the real runs flown since the 2026-10-01 update
+    // (155 runs, both themes): lower quartile ~1650, median ~1780, top ~1925.
+    // The old band topped out at 1008, about half what a typical real run now
+    // scores, so a demo row read as a beginner rather than a rival. The new one
+    // runs from a strong run (just under the real top) down to a weak one.
+    // Retune it with the grade bands in rttDifficulty.js.
     //
     // DELIBERATELY NOT round numbers. The multiple-of-5 sequences elsewhere in
     // this file exist because those games can only PRODUCE multiples of 5 (ANT
@@ -363,16 +360,16 @@ const FAKE_TUNING = {
     // a frame pays 22 plus a centring bonus of `round(23 × howCentred)`, so a
     // real total is an arbitrary integer, and a board where every score happens
     // to end in 0 or 5 is itself the tell.
-    floor: 242, ceiling: 1008, seedTime: 114.8, timeStep: 0.3,
-    scoreSequence: [1006, 967, 928, 895, 854, 818, 785, 747, 713, 673, 638, 601, 566, 529, 491, 453, 416, 375, 328, 277],
+    floor: 1052, ceiling: 1880, seedTime: 114.8, timeStep: 0.3,
+    scoreSequence: [1878, 1841, 1797, 1763, 1722, 1689, 1646, 1611, 1574, 1532, 1497, 1458, 1419, 1377, 1338, 1296, 1253, 1207, 1161, 1108],
   },
   'rtt-easier': {
     // Eight passes instead of twelve, so the achievable total is two thirds of
-    // Hard's (1320 for a perfect run) — the demo band scales with it rather
-    // than sitting higher because the game is easier. Arbitrary integers for
-    // the same reason as Hard's, above.
-    floor: 184, ceiling: 709, seedTime: 80.6, timeStep: 0.3,
-    scoreSequence: [707, 676, 652, 622, 600, 565, 543, 513, 489, 460, 433, 406, 379, 355, 324, 297, 274, 245, 219, 190],
+    // Hard's (1320 for a perfect run). Reseated 2026-10-17 on the real runs
+    // since 2026-10-01 (67 runs: median ~1090, upper quartile ~1250), the same
+    // way as Hard's. Arbitrary integers for the same reason as Hard's, above.
+    floor: 668, ceiling: 1264, seedTime: 80.6, timeStep: 0.3,
+    scoreSequence: [1262, 1236, 1207, 1183, 1152, 1124, 1097, 1068, 1041, 1013, 984, 953, 927, 896, 868, 837, 806, 774, 741, 706],
   },
 
   // ── The five tests added to complete the RAF roster ─────────────────────────
@@ -728,8 +725,8 @@ const WEEKLY_PER_PLAY = {
   'sat-easier':        6,  // correctCount /10 — same idea on the shorter run
   'cut':             350,  // accumulating totalScore — a little below a decent single run
   'cut-easier':      260,  // fewer scheduled tasks in the same 180s
-  'rtt':             645,  // accumulating totalScore — a little below a decent single run
-  'rtt-easier':      460,  // eight passes instead of twelve, so a lower total
+  'rtt':            1690,  // real med 1780 (both themes, since 2026-10-01)
+  'rtt-easier':     1040,  // real med 1090
   'sit':               4,  // correctCount /6 — a little below a decent single run
   'sit-easier':        3,  // correctCount /4 — same idea on the shorter run
   'slt':               7,  // correctCount /10

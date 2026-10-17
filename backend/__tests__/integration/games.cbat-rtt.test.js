@@ -98,8 +98,8 @@ describe('CBAT RTT', () => {
       expect(leaderboard).toHaveLength(20);
       expect(leaderboard.every(e => e.isFake)).toBe(true);
       leaderboard.forEach(e => {
-        expect(e.bestScore).toBeGreaterThanOrEqual(242);
-        expect(e.bestScore).toBeLessThanOrEqual(1008);
+        expect(e.bestScore).toBeGreaterThanOrEqual(1052);
+        expect(e.bestScore).toBeLessThanOrEqual(1880);
       });
       // RTT totals are arbitrary integers — a frame pays 20 plus a centring
       // bonus of round(20 × howCentred) — so unlike FLAG's and ANT's boards
@@ -111,21 +111,21 @@ describe('CBAT RTT', () => {
     });
 
     it('places a strong real run at rank 1 above the demos', async () => {
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 1300 }));
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 1900 }));
 
       const res = await request(app).get(LEADERBOARD_URL).set('Cookie', cookie);
       const { leaderboard, myBest } = res.body.data;
 
       expect(leaderboard).toHaveLength(20);
-      expect(leaderboard[0].bestScore).toBe(1300);
+      expect(leaderboard[0].bestScore).toBe(1900);
       expect(leaderboard[0].rank).toBe(1);
       expect(leaderboard[0].isFake).toBeFalsy();
-      expect(myBest.bestScore).toBe(1300);
+      expect(myBest.bestScore).toBe(1900);
     });
 
     it('sorts by highest totalScore, breaking ties on the faster run', async () => {
-      await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 1200, totalTime: 118 }));
-      await request(app).post(RESULT_URL).set('Cookie', cookie2).send(sample({ totalScore: 1200, totalTime: 112 }));
+      await request(app).post(RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 1890, totalTime: 118 }));
+      await request(app).post(RESULT_URL).set('Cookie', cookie2).send(sample({ totalScore: 1890, totalTime: 112 }));
 
       const { leaderboard } = (await request(app).get(LEADERBOARD_URL).set('Cookie', cookie)).body.data;
       const second = leaderboard.findIndex(e => e.agentNumber === '1000002');
@@ -171,15 +171,15 @@ describe('CBAT RTT (Easier)', () => {
 
   it('leaderboard only ranks easier runs', async () => {
     // A hard run that would top the easier board if the collections leaked.
-    await request(app).post(HARD_RESULT_URL).set('Cookie', cookie2).send(sample({ totalScore: 1500 }));
-    await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 900, totalTime: 80 }));
+    await request(app).post(HARD_RESULT_URL).set('Cookie', cookie2).send(sample({ totalScore: 1900 }));
+    await request(app).post(EASIER_RESULT_URL).set('Cookie', cookie).send(sample({ totalScore: 1280, totalTime: 80 }));
 
     const res = await request(app).get(EASIER_LB_URL).set('Cookie', cookie);
     const { leaderboard } = res.body.data;
 
     expect(leaderboard).toHaveLength(20);
     expect(leaderboard.find(e => e.agentNumber === '1000002')).toBeUndefined();
-    // 900 beats every demo row (ceiling 709), so the real easier run leads.
+    // 1280 beats every demo row (ceiling 1264), so the real easier run leads.
     expect(leaderboard[0].agentNumber).toBe('1000001');
   });
 
@@ -190,8 +190,8 @@ describe('CBAT RTT (Easier)', () => {
     expect(leaderboard).toHaveLength(20);
     expect(leaderboard.every(e => e.isFake)).toBe(true);
     leaderboard.forEach(e => {
-      expect(e.bestScore).toBeGreaterThanOrEqual(184);
-      expect(e.bestScore).toBeLessThanOrEqual(709);
+      expect(e.bestScore).toBeGreaterThanOrEqual(668);
+      expect(e.bestScore).toBeLessThanOrEqual(1264);
     });
     expect(leaderboard.every(e => e.bestScore % 5 === 0)).toBe(false);
   });
