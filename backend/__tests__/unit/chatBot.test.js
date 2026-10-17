@@ -309,6 +309,19 @@ describe('silent mode', () => {
     expect(out.reason).toBe('model-refused');
   });
 
+  it('drops a refusal the model bolted onto a real answer, and keeps the answer', async () => {
+    // The Army Air Corps misfire: an ordinary question about another force got
+    // the injection line in front of an answer the model then gave anyway.
+    const out = await generateBotReply({
+      question: 'know much about the AAC pilot requirements',
+      corpus: CORPUS,
+      callAi: aiReturning(`${REFUSALS.injection} Army pilot candidates sit the same CBAT.`),
+      silent: true,
+    });
+    expect(out.refused).toBe(false);
+    expect(out.text).toBe('Army pilot candidates sit the same CBAT.');
+  });
+
   it('stays silent on an API failure, rather than posting an error into a channel', async () => {
     const callAi = jest.fn().mockRejectedValue(new Error('502 upstream'));
     const out = await generateBotReply({
