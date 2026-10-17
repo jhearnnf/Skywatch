@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
 import SEO from '../components/SEO'
@@ -16,6 +16,8 @@ import LoungeResizeHandle from '../components/cbat/LoungeResizeHandle'
 import { LoungeHubSlot } from '../components/cbat/CbatLoungeDock'
 import { useLoungeDock } from '../components/cbat/loungeDockContext'
 import { usePhoneTight } from '../hooks/usePhoneTight'
+import { bottomNavTop, useLoungeScrollSnap } from '../hooks/useLoungeScrollSnap'
+import { LoungePanelReveal, LoungeRevealHeading } from '../components/cbat/LoungeReveal'
 import { CBAT_GAMES, formatEstTime, formatEstTimeCompact, shortTitle } from '../data/cbatGames'
 import { isCbatGameEnabled } from '../utils/cbat/isCbatGameEnabled'
 import { SLIM_APP } from '../utils/appMode'
@@ -586,24 +588,71 @@ export default function Cbat() {
     return () => el.removeEventListener('scroll', onScroll)
   }, [deskSplit])
 
-  // Scroll-driven reveal for that landmark, mirroring the NEWS landmark on
-  // Home: the word starts as a ghost at the bottom edge of the first screen and
-  // lights up as the chat scrolls into view, and the chevron — a "swipe down"
-  // cue — fades out once you have taken the hint.
+  // The scroll between the menu and the lounge under it. The page rests at one
+  // end or the other: the wheel glides it all the way in one go, a finger can
+  // hold it anywhere on the way and it finishes the trip on release. The
+  // heading fills with light from both ends and the panel rises into place as
+  // it goes, all scrubbed off `loungeProgress` (see useLoungeScrollSnap and
+  // components/cbat/LoungeReveal.jsx).
+  const loungeRevealOn = showLoungeLanding && !loungeInColumn
+  const landmarkRef = useRef(null)
+  const { progress: loungeProgress, goToLounge } = useLoungeScrollSnap({
+    enabled: loungeRevealOn,
+    panelRef: loungeRef,
+    landmarkRef,
+  })
+
+  // In the lounge, the landmark's heading sits just under the top bar and the
+  // panel fills everything from there down to just above the BottomNav.
   //
-  // Absolute px thresholds, and shorter ones than Home's. Home has a long news
-  // list under its landmark, so it has hundreds of pixels of scroll to play
-  // with; here the only thing below the fold is the chat panel, so the whole
-  // page scrolls by about its own height — 60dvh, which is 360px on a small
-  // phone. Everything therefore has to be fully lit by ~220px, or a short
-  // screen would reach the bottom of the page with the panel still fading in.
-  const { scrollY } = useScroll()
-  const loungeHeadingColor  = useTransform(scrollY, [40, 220], ['rgba(91,170,255,0.16)', 'rgba(91,170,255,0.55)'])
-  const loungeHeadingShadow = useTransform(scrollY, [40, 220], ['0 0 60px rgba(91,170,255,0.15)', '0 0 80px rgba(91,170,255,0.45)'])
-  const loungeEyebrowOpacity = useTransform(scrollY, [40, 220], [0.55, 1])
-  const loungeChevronOpacity = useTransform(scrollY, [60, 180], [1, 0])
-  const loungePanelOpacity   = useTransform(scrollY, [40, 200], [0, 1])
-  const loungePanelY         = useTransform(scrollY, [40, 200], [24, 0])
+  // Measured, not worked out in rem. Two guesses got this wrong: the landmark's
+  // chevron is invisible by then but still takes ~40px under the eyebrow, and
+  // .app-shell-main reserves 5rem for a BottomNav that is 65px tall, which
+  // left a strip of dead page under the chat. So:
+  //  - the panel tucks up under the landmark's spent chevron (margin-top), so
+  //    only the heading and eyebrow count as the landmark's height;
+  //  - its height is the room between the top bar and the nav, less that;
+  //  - and a negative margin-bottom gives back whatever the page reserves
+  //    beyond the nav's real height, so the page's last scroll position lands
+  //    the panel's foot just above the nav rather than a strip short of it.
+  // Without a BottomNav (md up to lg) the window's bottom edge stands in for it.
+  useLayoutEffect(() => {
+    const landmark = landmarkRef.current
+    const panel = loungeRef.current
+    if (!loungeRevealOn || !landmark || !panel) return
+    const GAP = 8 // above the nav
+    // Below the top bar. The landmark's own py-3 alone left the heading's
+    // glow pressed up against the bar's edge.
+    const TOP_GAP = 16
+    const fit = () => {
+      panel.style.marginTop = ''
+      panel.style.marginBottom = ''
+      const lm = landmark.getBoundingClientRect()
+      const eyebrow = landmark.querySelector('[data-lounge-eyebrow]')
+      const visibleH = eyebrow ? eyebrow.getBoundingClientRect().bottom - lm.top + 14 : lm.height
+      const pr = panel.getBoundingClientRect()
+      const tuck = Math.max(0, pr.top - lm.top - visibleH)
+
+      const topbar = document.querySelector('.app-topbar')
+      const top = topbar ? topbar.getBoundingClientRect().bottom : 0
+      const navTop = bottomNavTop()
+
+      const tail = document.documentElement.scrollHeight - (pr.bottom + window.scrollY)
+      const giveBack = Math.max(0, tail - (window.innerHeight - navTop + GAP))
+
+      panel.style.marginTop = `${-tuck}px`
+      panel.style.marginBottom = `${-giveBack}px`
+      panel.style.height = `${Math.max(360, navTop - GAP - top - TOP_GAP - visibleH)}px`
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
+    ro?.observe(landmark)
+    return () => {
+      window.removeEventListener('resize', fit)
+      ro?.disconnect()
+    }
+  }, [loungeRevealOn])
 
   // Phone-height relief for the hub. /cbat/* game routes already get their top
   // padding cut by `.cbat-route`, but the hub deliberately does not carry that
@@ -726,13 +775,19 @@ export default function Cbat() {
           off a 667px phone.
 
           A button, not just a heading: the chevron says "swipe down", but a tap
-          is the more obvious gesture and it should not be a dead one. */}
+          is the more obvious gesture and it should not be a dead one.
+
+          `sm:mt-6` parts it from the footer strip above, which from sm up is
+          two full sentences and otherwise ran straight into the heading. Not
+          on a phone: there the strip is usually folded into the grid (see
+          `reportInGrid`) and the first screen has no height to spare. */}
       {showLoungeLanding && (
         <button
           type="button"
           data-testid="cbat-lounge-landmark"
-          onClick={() => loungeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          className="lg:hidden relative w-full py-3 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
+          ref={landmarkRef}
+          onClick={goToLounge}
+          className="lg:hidden relative w-full py-3 sm:mt-6 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
           aria-label="CBAT chat: go to the lounge and your group"
         >
           {/* Ambient blue radial glow for depth — matches the radar tint below */}
@@ -787,40 +842,7 @@ export default function Cbat() {
             className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-28"
             style={{ background: 'linear-gradient(90deg, transparent, rgba(91,170,255,0.35), transparent)' }}
           />
-          <motion.span
-            className="relative block font-black leading-none tracking-[0.15em] text-[1.75rem] sm:text-[3rem]"
-            style={{
-              color:      loungeHeadingColor,
-              textShadow: loungeHeadingShadow,
-              zIndex:     1,
-            }}
-          >
-            CBAT CHAT
-          </motion.span>
-          <motion.span
-            className="relative flex items-center gap-3 mt-1.5"
-            style={{ zIndex: 1, opacity: loungeEyebrowOpacity }}
-          >
-            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
-            <span
-              className="text-[10px] font-bold uppercase tracking-[0.35em]"
-              style={{ color: 'rgba(91,170,255,0.6)' }}
-            >
-              Talk to other agents
-            </span>
-            <span className="h-px w-8" style={{ background: 'rgba(91,170,255,0.35)' }} />
-          </motion.span>
-          <motion.span
-            className="relative block mt-2"
-            aria-hidden="true"
-            style={{ color: 'rgba(91,170,255,0.55)', zIndex: 1, opacity: loungeChevronOpacity }}
-          >
-            <span className="home-chevron-sway block">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </span>
-          </motion.span>
+          <LoungeRevealHeading progress={loungeProgress} />
         </button>
       )}
       </div>
@@ -1222,16 +1244,26 @@ export default function Cbat() {
           message list is `flex-1 min-h-0 overflow-y-auto`, which collapses to
           nothing inside an auto-height parent. Only while it is open, though —
           collapsed it is a tab, and 60dvh of empty space under a tab is just a
-          hole in the page. */}
-      {showLoungeLanding && !loungeInColumn && (
-        <motion.div
+          hole in the page.
+
+          In the lounge it fills the screen under the landmark: its height
+          and margins are measured and set by the effect beside
+          `landmarkRef`. 60dvh is only the first-paint fallback. The floor
+          keeps a short screen scrolling rather than crushing the chat.
+
+          Stacked above the landmark (z-[2]) because it tucks up over the
+          landmark's chevron, whose own z-index of 1 would otherwise show
+          through the panel while it fades out. */}
+      {loungeRevealOn && (
+        <div
           ref={loungeRef}
           data-testid="cbat-lounge-panel"
-          className="flex h-[60dvh] min-h-[360px] flex-col"
-          style={{ opacity: loungePanelOpacity, y: loungePanelY }}
+          className="relative z-[2] flex h-[60dvh] min-h-[360px] flex-col"
         >
-          <CbatLoungeChat open collapsible={false} />
-        </motion.div>
+          <LoungePanelReveal progress={loungeProgress}>
+            <CbatLoungeChat open collapsible={false} />
+          </LoungePanelReveal>
+        </div>
       )}
 
       {pcNoteOpen && <PlayOnPcNote onClose={() => setPcNoteOpen(false)} />}

@@ -899,6 +899,15 @@ describe('CBAT hub — the CBAT LOUNGE landmark', () => {
     expect(document.querySelector('button[aria-expanded="false"]')).toBeNull()
   })
 
+  // In the lounge the panel takes all the room under the landmark, so its
+  // height is measured onto it rather than left at the 60dvh fallback.
+  it('sizes the small-screen lounge to the room under the landmark', () => {
+    renderWithUser()
+    const panel = screen.getByTestId('cbat-lounge-panel')
+    expect(panel.style.height).toMatch(/^\d+(\.\d+)?px$/)
+    expect(parseFloat(panel.style.height)).toBeGreaterThanOrEqual(360)
+  })
+
   // Nothing to talk in and nothing to sign in as: the widget itself renders null
   // in both cases, and a landmark pointing at an empty page is worse than none.
   it('is absent when signed out', () => {
