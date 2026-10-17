@@ -4,13 +4,15 @@ import {
   isTargetVisible, isTargetOccluded, targetDirectionAt, targetWorldAt,
   angularError, lookVector, polarToWorld, captureRadius, maxRttScore, isRunOver,
   activeTargetIndex, targetAngularSize, stationAt, directionOf, coverBlocks,
-  trackRtt, isLocked, trackingPoints, zoomStep, fovForZoom, reticleHeightPercent,
-  RTT_KINDS, RTT_SCORE, RTT_TRACK_SCORE, RTT_LOCK_MS, RTT_FRAMES_PER_TARGET, SHUTTER_COOLDOWN_MS,
+  trackRtt, trackingPoints, zoomStep, fovForZoom, reticleHeightPercent,
+  flightLurch, hillHeightAt, terrainHeightAt, FLIGHT_LURCH, FLIGHT_STEP_MS,
+  HILL_CLEAR_M, HILL_TRACK_CLEAR_M, HILL_UNDER_STATION_M,
+  RTT_KINDS, RTT_SCORE, RTT_TRACK_SCORE, RTT_FRAMES_PER_TARGET, SHUTTER_COOLDOWN_MS,
   AZ_LIMIT_DEG, ELEV_MIN_DEG, ELEV_MAX_DEG, STATION_ALT_M, RTT_GAP_MS,
   TARGET_EXIT_MS, BASE_CAPTURE_DEG, AIRFRAME, airframeDisturbance,
   MAX_SEPARATION_DEG, MAX_ARC_DEG, START_ELEV_DEG, CAMERA_FOV_DEG, WIDE_FOV_DEG,
   ZOOM_IN_DEG, ZOOM_OUT_DEG, ZOOM_TIME_MS, PLATFORM_SPEED_MPS, MAX_TARGET_RANGE_M,
-  KIND_MOTION, TARGET_PREVIEW_MS, manoeuvreDurationMs, RTT_LOOKS, TARGET_NAMES,
+  KIND_MOTION, TARGET_PREVIEW_MS, manoeuvreDurationMs, RTT_LOOKS, TARGET_NAMES, BANK_LOOK,
   OCCLUSION_HEAD_MS, OCCLUSION_TAIL_MS, OCCLUSION_GAP_MS,
   MAX_OCCLUDED_FRACTION, MAX_OCCLUSION_ARC_FRAC,
 } from '../rttSim'
@@ -455,7 +457,7 @@ describe('target state', () => {
         for (const t of targets) {
           for (let k = 0; k < t.windowMs; k += 10) {
             const abs = t.tStartMs + k
-            const blocked = covers.some(c => coverBlocks(c, stationAt(abs), targetWorldAt(t, abs), -1e-6))
+            const blocked = covers.some(c => coverBlocks(c, stationAt(abs, t.flight), targetWorldAt(t, abs), -1e-6))
             checked++
             if (blocked) hidden++
             if (isTargetOccluded(t, abs) !== blocked) disagree++
@@ -477,7 +479,7 @@ describe('target state', () => {
         const others = targets.filter(o => o !== t).flatMap(o => o.cover)
         for (let k = 0; k < t.windowMs; k += 50) {
           const abs = t.tStartMs + k
-          if (others.some(c => coverBlocks(c, stationAt(abs), targetWorldAt(t, abs)))) crossed++
+          if (others.some(c => coverBlocks(c, stationAt(abs, t.flight), targetWorldAt(t, abs)))) crossed++
         }
       }
     }
@@ -529,6 +531,156 @@ describe('moving platform', () => {
     expect(d.az).toBeCloseTo(0.4)
     expect(d.elev).toBeCloseTo(-0.3)
     expect(d.range).toBeCloseTo(600)
+  })
+})
+
+// Real CBAT only: the aircraft speeds up, slows down and swings its heading
+// (player reports, 2026-10: "speeding up and slowing down to go and find
+// targets", "a lot more erratic and unpredictable").
+describe('Real CBAT flight', () => {
+  const runs = (tuning, n = 20) => Array.from({ length: n }, (_, i) => generateRttRun(tuning, mulberry32(i + 1)))
+
+  it('only flies erratically on Real CBAT', () => {
+    expect(generateRttRun(HARD, mulberry32(1)).flight).toBeNull()
+    expect(generateRttRun(EASIER, mulberry32(1)).flight).toBeNull()
+    expect(generateRttRun(CBAT_HARD, mulberry32(1)).flight).toBeTruthy()
+  })
+
+  it('keeps the SkyWatch run for a seed exactly as it was', () => {
+    // The flight and the hills draw from their own streams, so the targets of
+    // a SkyWatch seed are untouched by any of it.
+    const run = generateRttRun(HARD, mulberry32(8))
+    expect(run.terrain).toBeNull()
+    expect(run.targets.every(t => t.flight === null)).toBe(true)
+  })
+
+  it('changes speed and heading inside what the airframe could do', () => {
+    for (const tuning of [CBAT_HARD, CBAT_EASIER]) {
+      const spec = tuning.flight
+      let slow = Infinity, fast = 0, accel = 0, turn = 0, wander = 0
+      for (const run of runs(tuning)) {
+        const pts = run.flight.points
+        for (let i = 1; i < pts.length; i++) {
+          slow = Math.min(slow, pts[i].speed)
+          fast = Math.max(fast, pts[i].speed)
+          accel = Math.max(accel, Math.abs(pts[i].accel))
+          turn = Math.max(turn, Math.abs(pts[i].turn))
+        }
+        for (let t = 0; t <= run.durationMs; t += 500) wander = Math.max(wander, Math.abs(stationAt(t, run.flight)[0]))
+      }
+      expect(slow).toBeGreaterThanOrEqual(spec.speedMps[0] - 1e-9)
+      expect(fast).toBeLessThanOrEqual(spec.speedMps[1] + 1e-9)
+      // It really does change speed, not just sit at one.
+      expect(fast - slow).toBeGreaterThan((spec.speedMps[1] - spec.speedMps[0]) * 0.5)
+      expect(accel).toBeLessThanOrEqual(spec.maxAccel * 1.001)
+      expect(turn / DEG).toBeLessThanOrEqual(spec.maxTurnDegS * 1.001)
+      expect(turn / DEG).toBeGreaterThan(spec.maxTurnDegS * 0.2)
+      // It wanders off the track but always comes back towards it.
+      expect(wander).toBeGreaterThan(30)
+      expect(wander).toBeLessThan(1000)
+    }
+  })
+
+  it('always flies forward, and never jumps', () => {
+    for (const run of runs(CBAT_HARD, 10)) {
+      let prev = stationAt(0, run.flight)
+      for (let t = FLIGHT_STEP_MS; t <= run.durationMs; t += FLIGHT_STEP_MS) {
+        const s = stationAt(t, run.flight)
+        expect(s[2]).toBeLessThan(prev[2])
+        expect(Math.hypot(s[0] - prev[0], s[2] - prev[2])).toBeLessThan(CBAT_HARD.flight.speedMps[1] * (FLIGHT_STEP_MS / 1000) + 0.1)
+        prev = s
+      }
+    }
+  })
+
+  // The lurch moves the aim, so like the wander it must cost centring and
+  // never, on its own, push a target the player was holding out of the box.
+  it('lurches the aim, but with the wander on top still inside the capture cone', () => {
+    let az = 0, elev = 0, lurchAz = 0
+    for (const run of runs(CBAT_HARD, 10)) {
+      for (let t = 0; t <= run.durationMs; t += 50) {
+        const w = airframeDisturbance(t / 1000, CBAT_HARD.airframeScale)
+        const l = flightLurch(run.flight, t)
+        az = Math.max(az, Math.abs(w.az + l.az))
+        elev = Math.max(elev, Math.abs(w.elev + l.elev))
+        lurchAz = Math.max(lurchAz, Math.abs(l.az))
+      }
+    }
+    expect(lurchAz / DEG).toBeGreaterThan(0.2)
+    expect(az / DEG).toBeLessThan(BASE_CAPTURE_DEG * 0.75)
+    expect(elev / DEG).toBeLessThan(BASE_CAPTURE_DEG * 0.75)
+    expect(flightLurch(null, 1234)).toEqual({ az: 0, elev: 0, roll: 0 })
+    expect(FLIGHT_LURCH.rollDegPerDegS).toBeGreaterThan(0)
+  })
+})
+
+// Real CBAT only: hills and ridges round the valley (player report,
+// 2026-10-05). A hill must never hide a target: only the sim's own cover may.
+describe('Real CBAT terrain', () => {
+  it('only raises hills on Real CBAT, and raises a good number', () => {
+    expect(generateRttRun(HARD, mulberry32(3)).terrain).toBeNull()
+    let total = 0
+    for (let seed = 1; seed <= 10; seed++) total += generateRttRun(CBAT_HARD, mulberry32(seed)).terrain.hills.length
+    expect(total / 10).toBeGreaterThan(15)
+  })
+
+  it('reads a hill as tallest in the middle and nothing outside it', () => {
+    const hill = { x: 100, z: -200, rx: 400, rz: 200, h: 150, cos: 1, sin: 0 }
+    expect(hillHeightAt(hill, 100, -200)).toBeCloseTo(150)
+    expect(hillHeightAt(hill, 100 + 399, -200)).toBeGreaterThan(0)
+    expect(hillHeightAt(hill, 100 + 401, -200)).toBe(0)
+    expect(hillHeightAt(hill, 100, -200 + 201)).toBe(0)
+    expect(terrainHeightAt({ hills: [hill] }, 100, -200)).toBeCloseTo(150)
+    expect(terrainHeightAt(null, 0, 0)).toBe(0)
+  })
+
+  // Checked independently of how the generator checks it: finer in time and
+  // along each sightline.
+  it('never stands in any sightline to a target, at any moment it is in the world', () => {
+    let worst = -Infinity, checked = 0
+    for (const tuning of [CBAT_HARD, CBAT_EASIER]) {
+      for (let seed = 1; seed <= 6; seed++) {
+        const run = generateRttRun(tuning, mulberry32(seed))
+        for (const t of run.targets) {
+          const from = t.kind === 'static' ? 0 : t.tStartMs - TARGET_PREVIEW_MS
+          for (let ms = from; ms <= t.tEndMs + TARGET_EXIT_MS; ms += 100) {
+            const st = stationAt(Math.max(0, ms), run.flight)
+            const w = targetWorldAt(t, ms, false)
+            const n = Math.ceil(Math.hypot(w[0] - st[0], w[2] - st[2]) / 10)
+            for (let j = 1; j < n; j++) {
+              const f = j / n
+              const ground = terrainHeightAt(run.terrain, st[0] + (w[0] - st[0]) * f, st[2] + (w[2] - st[2]) * f)
+              if (ground === 0) continue
+              const line = st[1] + (w[1] - st[1]) * f + STATION_ALT_M
+              worst = Math.max(worst, ground - line)
+              checked++
+            }
+          }
+        }
+      }
+    }
+    // Hills come close to some sightlines (that is what makes a valley), but
+    // never within HILL_CLEAR_M of one less a little for the coarser grid the
+    // generator samples on.
+    expect(checked).toBeGreaterThan(0)
+    expect(worst).toBeLessThan(-HILL_CLEAR_M / 2)
+  })
+
+  it('keeps clear of the ground every target drives over, and well below the aircraft', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const run = generateRttRun(CBAT_HARD, mulberry32(seed))
+      for (const t of run.targets.filter(x => x.ground)) {
+        for (const pt of t.track) {
+          for (const [dx, dz] of [[0, 0], [HILL_TRACK_CLEAR_M * 0.9, 0], [0, -HILL_TRACK_CLEAR_M * 0.9]]) {
+            expect(terrainHeightAt(run.terrain, pt.p[0] + dx, pt.p[2] + dz)).toBe(0)
+          }
+        }
+      }
+      for (let ms = 0; ms <= run.durationMs; ms += 250) {
+        const st = stationAt(ms, run.flight)
+        expect(terrainHeightAt(run.terrain, st[0], st[2])).toBeLessThan(STATION_ALT_M - HILL_UNDER_STATION_M + 1)
+      }
+    }
   })
 })
 
@@ -596,6 +748,25 @@ describe('manoeuvres', () => {
       else expect(w.keptSpeed, kind).toBeGreaterThan(0.97)
     }
     expect(Object.keys(worst)).toEqual(expect.arrayContaining(['person', 'vehicle', 'boat', 'helicopter', 'jet']))
+  })
+
+  // Player report, 2026-10-17: the helicopter was turning sideways like a jet.
+  // Both themes fly helicopters, so both must keep them mostly upright.
+  it('keeps a helicopter mostly upright in its turns, while a jet rolls into them', () => {
+    let heli = 0, jet = 0
+    for (let seed = 1; seed <= 30; seed++) {
+      for (const tuning of [HARD, CBAT_HARD]) {
+        for (const t of generateRttRun(tuning, mulberry32(seed)).targets) {
+          for (const pt of t.track) {
+            if (t.kind === 'helicopter') heli = Math.max(heli, Math.abs(pt.bank))
+            if (t.kind === 'jet') jet = Math.max(jet, Math.abs(pt.bank))
+          }
+        }
+      }
+    }
+    expect(heli / DEG).toBeGreaterThan(0)
+    expect(heli / DEG).toBeLessThanOrEqual(BANK_LOOK.helicopter.maxDeg + 1e-9)
+    expect(jet / DEG).toBeGreaterThan(30)
   })
 
   it('turns a target by the heading change it was planned with', () => {
@@ -668,7 +839,7 @@ describe('decoys', () => {
       for (const d of generateRttRun(CBAT_HARD, mulberry32(seed)).decoys) {
         for (let k = 0; k <= d.windowMs; k += 100) {
           const w = targetWorldAt(d, d.tStartMs + k)
-          const st = stationAt(d.tStartMs + k)
+          const st = stationAt(d.tStartMs + k, d.flight)
           nearest = Math.min(nearest, Math.hypot(w[0] - st[0], w[1] - st[1], w[2] - st[2]))
         }
       }
@@ -686,7 +857,7 @@ describe('decoys', () => {
   })
 })
 
-// Real CBAT only: wide and coarse while searching, zoomed in on the target.
+// Both themes: wide and coarse while searching, zoomed in on the target.
 describe('zoom', () => {
   it('runs from the wide search view to the normal zoomed view', () => {
     expect(fovForZoom(0)).toBeCloseTo(WIDE_FOV_DEG)
@@ -866,11 +1037,11 @@ describe('rttStats', () => {
   })
 })
 
-// Real CBAT: the target has to be held in the box, for the frames and for the
+// Real CBAT: three photos per target, and the target held in the box for the
 // whole pass.
-describe('Real CBAT tracking scoring', () => {
+describe('Real CBAT photos and tracking', () => {
   const sim = () => makeRttSim(CBAT_HARD, mulberry32(9))
-  const onTarget = (s, index = 0) => [{ index, errorRad: 0, occluded: false }]
+  const onTarget = (index = 0, errorRad = 0, occluded = false) => [{ index, errorRad, occluded }]
   const hold = (s, ms, index = 0, errorRad = 0) => {
     for (let t = 0; t < ms; t += 20) {
       advanceRtt(s, 20)
@@ -878,44 +1049,80 @@ describe('Real CBAT tracking scoring', () => {
     }
   }
 
-  it('wastes a frame snapped before the target has been held in the box', () => {
+  it('counts a photo the moment the target is in the box, with no wait to lock on', () => {
     const s = sim()
-    advanceRtt(s, s.run.targets[0].tStartMs + 100)
-    trackRtt(s, onTarget(s), 100)
-    expect(isLocked(s, 0)).toBe(false)
-    const res = fireShutter(s, onTarget(s))
-    expect(res.kind).toBe('unsteady')
-    expect(s.progress[0].frames).toBe(0)
-    expect(s.score).toBe(RTT_SCORE.wastedFrame)
-  })
-
-  it('counts a frame once the target has been held for the lock time', () => {
-    const s = sim()
-    advanceRtt(s, s.run.targets[0].tStartMs)
-    hold(s, RTT_LOCK_MS + 20)
-    expect(isLocked(s, 0)).toBe(true)
-    const res = fireShutter(s, onTarget(s))
+    advanceRtt(s, s.run.targets[0].tStartMs + 20)
+    const res = fireShutter(s, onTarget())
     expect(res.kind).toBe('hit')
     expect(res.points).toBe(RTT_TRACK_SCORE.frameBase + RTT_TRACK_SCORE.frameCentreBonus)
+    expect(s.progress[0].shots).toEqual(['hit'])
   })
 
-  it('loses the lock the moment the target leaves the box', () => {
+  it('spends a photo on a miss, scores nothing for it, and never gives it back', () => {
     const s = sim()
-    advanceRtt(s, s.run.targets[0].tStartMs)
-    hold(s, RTT_LOCK_MS + 20)
-    hold(s, 20, 0, s.captureRad * 1.5)
-    expect(isLocked(s, 0)).toBe(false)
+    advanceRtt(s, s.run.targets[0].tStartMs + 20)
+    const miss = fireShutter(s, onTarget(0, s.captureRad * 1.5))
+    expect(miss.kind).toBe('miss')
+    expect(miss.points).toBe(0)
+    expect(s.score).toBe(0)
+    expect(s.events[0].bad).toBe(true)
+    advanceRtt(s, SHUTTER_COOLDOWN_MS)
+    expect(fireShutter(s, onTarget()).kind).toBe('hit')
+    advanceRtt(s, SHUTTER_COOLDOWN_MS)
+    expect(fireShutter(s, onTarget()).kind).toBe('hit')
+    // Three photos taken: the fourth press does nothing at all.
+    advanceRtt(s, SHUTTER_COOLDOWN_MS)
+    const before = s.score
+    const fourth = fireShutter(s, onTarget())
+    expect(fourth.kind).toBe('spent')
+    expect(s.score).toBe(before)
+    expect(s.progress[0].shots).toEqual(['miss', 'hit', 'hit'])
+    expect(s.progress[0].frames).toBe(2)
+    expect(s.targetsCompleted).toBe(0)
+    expect(s.framesTaken).toBe(3)
   })
 
-  it('keeps the pass open after the third frame, so holding it still scores', () => {
+  it('spends a photo fired at a target behind cover, and says why', () => {
+    const s = sim()
+    advanceRtt(s, s.run.targets[0].tStartMs + 20)
+    const res = fireShutter(s, onTarget(0, 0, true))
+    expect(res.kind).toBe('occluded')
+    expect(s.progress[0].shots).toEqual(['miss'])
+    expect(s.events[0].text).toMatch(/obscured/)
+  })
+
+  it('does nothing at all between passes', () => {
+    const s = sim()
+    const res = fireShutter(s, [])
+    expect(res.kind).toBe('none')
+    expect(s.score).toBe(0)
+    expect(s.framesTaken).toBe(0)
+  })
+
+  it('charges a missed photo the same shortfall as one never taken', () => {
+    const missed = sim()
+    const t = missed.run.targets[0]
+    advanceRtt(missed, t.tStartMs + 20)
+    fireShutter(missed, onTarget(0, missed.captureRad * 2))
+    advanceRtt(missed, t.windowMs)
+
+    const idle = sim()
+    advanceRtt(idle, t.tEndMs + 20)
+    // Neither held the target in the box, so the tracking points are equal.
+    expect(missed.score).toBe(idle.score)
+    expect(idle.score).toBe(RTT_FRAMES_PER_TARGET * RTT_SCORE.missedFrame)
+  })
+
+  it('keeps the pass open after the third photo, so holding it still scores', () => {
     const s = sim()
     const t = s.run.targets[0]
     advanceRtt(s, t.tStartMs)
-    hold(s, RTT_LOCK_MS + 20)
+    hold(s, 40)
     for (let f = 0; f < RTT_FRAMES_PER_TARGET; f++) {
-      expect(fireShutter(s, onTarget(s)).kind).toBe('hit')
+      expect(fireShutter(s, onTarget()).kind).toBe('hit')
       hold(s, SHUTTER_COOLDOWN_MS + 20)
     }
+    expect(s.targetsCompleted).toBe(1)
     expect(s.progress[0].resolved).toBe(false)
     hold(s, t.tEndMs - s.elapsedMs + 20)
     expect(s.progress[0].resolved).toBe(true)
@@ -934,12 +1141,14 @@ describe('Real CBAT tracking scoring', () => {
     expect(trackingPoints({ trackMs: 0, inBoxMs: 0 }, w).points).toBe(0)
   })
 
-  it('does nothing on SkyWatch, where frames score wherever the shutter fires', () => {
+  it('does nothing on SkyWatch, where frames can be retaken and time in the box is not scored', () => {
     const s = makeRttSim(HARD, mulberry32(9))
     advanceRtt(s, s.run.targets[0].tStartMs + 100)
-    trackRtt(s, onTarget(s), 100)
+    trackRtt(s, onTarget(), 100)
     expect(s.progress[0].inBoxMs).toBe(0)
-    expect(isLocked(s, 0)).toBe(true)
+    shotAt(s, 0, s.captureRad * 2)
+    for (let f = 0; f < RTT_FRAMES_PER_TARGET; f++) expect(shootAfterCooldown(s, 0).kind).toBe('hit')
+    expect(s.targetsCompleted).toBe(1)
   })
 })
 
@@ -964,7 +1173,7 @@ describe('maxRttScore', () => {
       const on = [{ index: i, errorRad: 0, occluded: false }]
       const step = (ms) => { advanceRtt(s, ms); trackRtt(s, on, ms) }
       s.elapsedMs = t.tStartMs
-      step(RTT_LOCK_MS + 10)
+      step(10)
       for (let f = 0; f < RTT_FRAMES_PER_TARGET; f++) {
         expect(fireShutter(s, on).kind).toBe('hit')
         step(SHUTTER_COOLDOWN_MS + 10)

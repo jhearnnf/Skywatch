@@ -48,6 +48,11 @@ const HUD_STANDBY = {
   cueOn: true, cueNext: true, cueAngle: '-40.0deg', cueDeg: '61°',
 }
 const HUD_ON_TARGET = { ...HUD_LIVE, cueOn: false, cueDeg: '3°' }
+// Real CBAT: one photo hit, one missed, one left, and the target behind cover.
+const HUD_PHOTOS = {
+  ...HUD_LIVE, reticle: 'obscured', photos: 'hm-',
+  hidden: 'on', hiddenX: '30%', hiddenY: '40%', hiddenSize: '9%',
+}
 
 vi.mock('../../components/RttScene', () => ({
   default: ({ sim, onShot, onEnd, onHud }) => (
@@ -68,6 +73,7 @@ vi.mock('../../components/RttScene', () => ({
       <button type="button" onClick={() => onHud(HUD_LIVE)}>mock-hud-live</button>
       <button type="button" onClick={() => onHud(HUD_STANDBY)}>mock-hud-standby</button>
       <button type="button" onClick={() => onHud(HUD_ON_TARGET)}>mock-hud-on-target</button>
+      <button type="button" onClick={() => onHud(HUD_PHOTOS)}>mock-hud-photos</button>
     </div>
   ),
 }))
@@ -426,6 +432,44 @@ describe('CbatRtt', () => {
       fireEvent.click(screen.getByRole('button', { name: /mock-perfect/i }))
       expect(screen.queryByText(/Perfect/)).toBeNull()
       expect(playRttPerfect).not.toHaveBeenCalled()
+    })
+  })
+
+  // Players who sat the real test: three photos per target, a red circle on a
+  // target behind cover, and no wait for the box to turn green.
+  describe('Real CBAT photos', () => {
+    it('explains the three-photo limit and drops the old lock-on rule', () => {
+      setup({ uiTheme: 'cbat' })
+      render(<CbatRtt />)
+      expect(screen.getByText(/every press uses one, hit or miss/i)).toBeInTheDocument()
+      expect(screen.getByText(/red circle marks a target/i)).toBeInTheDocument()
+      expect(screen.queryByText(/box has turned green/i)).toBeNull()
+    })
+
+    it('shows the pass s photos as pips and rings a hidden target in red', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      setup({ uiTheme: 'cbat' })
+      render(<CbatRtt />)
+      await playTo()
+      expect(screen.queryByText('Frames')).toBeNull()
+      const ring = screen.getByTestId('rtt-hidden-ring')
+      expect(ring.dataset.state).toBe('off')
+      fireEvent.click(screen.getByRole('button', { name: /mock-hud-photos/i }))
+      const pips = [...screen.getByTestId('rtt-photos').children].map(p => p.dataset.state)
+      expect(pips).toEqual(['h', 'm', '-'])
+      expect(ring.dataset.state).toBe('on')
+      expect(ring.style.left).toBe('30%')
+      expect(ring.style.height).toBe('9%')
+    })
+
+    it('keeps SkyWatch on frames, with no ring', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      setup()
+      render(<CbatRtt />)
+      await playTo()
+      expect(screen.getByText('Frames')).toBeInTheDocument()
+      expect(screen.queryByTestId('rtt-hidden-ring')).toBeNull()
+      expect(screen.queryByTestId('rtt-photos')).toBeNull()
     })
   })
 })

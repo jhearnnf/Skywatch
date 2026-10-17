@@ -16,12 +16,12 @@
 //     counts.
 //   • the airframe wanders less under you, so there is less drift to trim out.
 //
-// The grade bands dropped ~8% on both when the airframe motion went in: the
-// drift mostly costs centring bonus rather than hits. They rose 5% again on
-// 2026-10-01, when a perfect target went from 150 to 165 points (see
-// RTT_SCORE) and the platform started moving. All of these are estimates and
-// want a real playtest — retune them and the demo boards in
-// cbatFakeLeaderboard.js together, as CUT's notes say.
+// The grade bands were estimates until 2026-10-17, when they were reseated on
+// the real runs flown since the 2026-10-01 update (SkyWatch Hard: median 1737,
+// upper quartile 1894; Easier: median 1080, upper quartile 1270). The old
+// bands had Outstanding at about half a perfect run, so nearly every run
+// earned it. Retune them and the demo boards in cbatFakeLeaderboard.js
+// together, as CUT's notes say.
 //
 // Everything else is deliberately shared — the scene, the scoring, the HUD, the
 // input handling — so the two difficulties stay the same test at different
@@ -54,13 +54,17 @@ export const RTT_TUNING = {
     // A steadier platform to shoot from — the airframe still wanders, just less
     // of it (see airframeDisturbance in rttSim).
     airframeScale: 0.6,
+    // Wide and fast while searching, zoomed in and lightly stabilised on the
+    // target (see zoomStep in rttSim). Both themes since 2026-10-17; it came
+    // in on Real CBAT first, from a player's account of the real test.
+    zoom: true,
 
     // Score accumulates and has no shared ceiling: a perfect Easier run is
     // 8 × 150 = 1200 where a perfect Hard run is 12 × 150 = 1800. The bands
     // therefore move DOWN, the same way FLAG's and CUT's do — the opposite of
     // Numerical Operations and SAT, which score a percentage of a fixed
     // question count and so must demand more accuracy on Easier.
-    grades: { outstanding: 767, good: 530, needsWork: 294 },
+    grades: { outstanding: 1230, good: 1060, needsWork: 760 },
   },
   hard: {
     key: 'hard',
@@ -76,40 +80,53 @@ export const RTT_TUNING = {
     occlusionScale: 1,
     captureScale: 1,
     airframeScale: 1,
+    zoom: true,
 
-    grades: { outstanding: 1113, good: 772, needsWork: 436 },
+    grades: { outstanding: 1840, good: 1600, needsWork: 1150 },
   },
 }
 
 // Ordered for the intro screen: easier sits left of the title, hard sits right.
 export const RTT_DIFFICULTIES = [RTT_TUNING.easier, RTT_TUNING.hard]
 
-// What the Real CBAT theme adds on top of each difficulty, from a player's
-// account of the real test (survey, 2026-10-01). Same boards as SkyWatch, so
-// the same perfect score (see maxRttScore); the grade bands sit lower because
-// holding a turning target in the box for a whole pass is harder than
-// snapping three frames of it.
+// What the Real CBAT theme adds on top of each difficulty, from players'
+// accounts of the real test (survey and DMs, 2026-10). Same boards as
+// SkyWatch, so the same perfect score (see maxRttScore).
 //
-//   • zoom: wide and fast while searching, zoomed in and lightly stabilised on
-//     the target;
-//   • trackScoring: a frame only counts once the target has been held in the
-//     box, and time in the box is scored for the whole pass;
+//   • trackScoring: time in the box is scored for the whole pass;
+//   • photoLimit: three photos per target, and every press spends one, hit or
+//     miss ("you would only have 3 opportunities per object");
 //   • manoeuvres: tight turns and bursts of speed, [min, max] per pass;
-//   • decoyGapMs: other aircraft flying through, this far apart.
+//   • decoyGapMs: other aircraft flying through, this far apart;
+//   • flight: the aircraft speeds up, slows down and swings its heading
+//     rather than flying straight (see buildFlight in rttSim), and
+//     airframeScale shakes it harder;
+//   • terrain: hills and ridges round the valley the targets are in.
+//
+// The grade bands are the real Real CBAT runs since 2026-10-01 (Hard: median
+// 1819, upper quartile 1870; Easier: median 1120 over 16 runs), less about 5%
+// for the photo limit and the rougher flight that came in on 2026-10-17. That
+// 5% is an estimate: reseat it once there are runs flown on the new version.
 export const REAL_CBAT_RTT = {
   easier: {
-    zoom: true,
     trackScoring: true,
+    photoLimit: true,
     manoeuvres: [0, 1],
     decoyGapMs: [6000, 12000],
-    grades: { outstanding: 730, good: 505, needsWork: 280 },
+    airframeScale: 0.9,
+    flight: { speedMps: [8, 22], headingDeg: 20, holdMs: [1800, 4200], maxAccel: 2.5, maxTurnDegS: 6 },
+    terrain: true,
+    grades: { outstanding: 1160, good: 980, needsWork: 700 },
   },
   hard: {
-    zoom: true,
     trackScoring: true,
+    photoLimit: true,
     manoeuvres: [1, 2],
     decoyGapMs: [2000, 6000],
-    grades: { outstanding: 1060, good: 735, needsWork: 415 },
+    airframeScale: 1.5,
+    flight: { speedMps: [6, 30], headingDeg: 28, holdMs: [1200, 3500], maxAccel: 3.5, maxTurnDegS: 9 },
+    terrain: true,
+    grades: { outstanding: 1750, good: 1520, needsWork: 1100 },
   },
 }
 

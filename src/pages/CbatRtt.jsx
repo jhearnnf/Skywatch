@@ -49,8 +49,8 @@ function freshCamera() {
 }
 
 // How tall the reticle box starts, as a percentage of the arena height (see
-// reticleHeightPercent). Real CBAT opens zoomed out, and from then on the
-// scene resizes the box as the zoom moves.
+// reticleHeightPercent). A run opens zoomed out, and from then on the scene
+// resizes the box as the zoom moves.
 function reticleBoxPercent(tuning) {
   return reticleHeightPercent(captureRadius(tuning), tuning.zoom ? WIDE_FOV_DEG : CAMERA_FOV_DEG)
 }
@@ -99,6 +99,17 @@ function TargetCue({ innerRef, armRef }) {
         </svg>
       </div>
     </div>
+  )
+}
+
+// Real CBAT: the live pass's three photos, as pips. Each is written by the
+// frame loop (see writeHud): empty until taken, then filled for a hit or
+// crossed out for a miss.
+function PhotoPips({ innerRef }) {
+  return (
+    <span ref={innerRef} className="inline-flex items-center gap-1 h-3.5" data-testid="rtt-photos">
+      {[0, 1, 2].map(i => <span key={i} className="rtt-photo-pip" data-state="-" />)}
+    </span>
   )
 }
 
@@ -185,9 +196,10 @@ function ResultsScreen({ stats, tuning, photos = [], targets = [] }) {
   const accuracy = stats.framesTaken
     ? Math.round((stats.framesOnTarget / stats.framesTaken) * 100)
     : 0
+  const noun = tuning.photoLimit ? 'Photos' : 'Frames'
   const rows = [
     ['Targets completed', `${stats.targetsCompleted} / ${stats.totalTargets}`],
-    ['Frames on target', `${stats.framesOnTarget} / ${stats.totalTargets * RTT_FRAMES_PER_TARGET}`],
+    [`${noun} on target`, `${stats.framesOnTarget} / ${stats.totalTargets * RTT_FRAMES_PER_TARGET}`],
     ['Shutter accuracy', `${accuracy}%`],
     ['Average centring', `${stats.avgCentringErrorDeg}°`],
   ]
@@ -222,8 +234,9 @@ export default function CbatRtt() {
 
   const [phase, setPhase] = useState('intro') // intro | launching | playing | results
   const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredRttDifficulty))
-  // Real CBAT adds the zoom, the hold-in-the-box scoring, manoeuvres and
-  // decoys on top of the difficulty (see REAL_CBAT_RTT).
+  // Real CBAT adds the hold-in-the-box scoring, the three-photo
+  // limit, manoeuvres, decoys, a rougher flight and hills on top of the
+  // difficulty (see REAL_CBAT_RTT).
   const cbat = useCbatTheme()
   // Phones and tablets get a thumb pad under the picture, as ACT does, so a
   // finger never has to cover the target it is tracking.
@@ -371,6 +384,22 @@ export default function CbatRtt() {
         el.bracket.style.left = hud.bracketX
         el.bracket.style.top = hud.bracketY
         el.bracket.style.height = hud.bracketSize
+      }
+    }
+    if (el.photos) {
+      const pips = el.photos.children
+      for (let i = 0; i < pips.length; i++) {
+        const state = hud.photos[i] ?? '-'
+        if (pips[i].dataset.state !== state) pips[i].dataset.state = state
+      }
+    }
+    // Real CBAT: the red ring over a target behind cover.
+    if (el.hidden) {
+      if (el.hidden.dataset.state !== hud.hidden) el.hidden.dataset.state = hud.hidden
+      if (hud.hidden !== 'off') {
+        el.hidden.style.left = hud.hiddenX
+        el.hidden.style.top = hud.hiddenY
+        el.hidden.style.height = hud.hiddenSize
       }
     }
     if (hud.callout && hud.calloutKey !== calloutKeyRef.current) {
@@ -596,9 +625,15 @@ export default function CbatRtt() {
                 <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
 
                 <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
-                  You are looking through a sensor camera slung under an aircraft. Slew it onto each target and
-                  capture <span className="text-game-text">three frames</span> with the target in the centre of
-                  the reticle before the pass ends.
+                  {tuning.photoLimit ? (<>
+                    You are looking through a sensor camera slung under an aircraft. Slew it onto each target, keep
+                    it in the box, and take <span className="text-game-text">three photos</span> of it with the
+                    target in the centre. You only get three per target.
+                  </>) : (<>
+                    You are looking through a sensor camera slung under an aircraft. Slew it onto each target and
+                    capture <span className="text-game-text">three frames</span> with the target in the centre of
+                    the reticle before the pass ends.
+                  </>)}
                 </p>
 
                 <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
@@ -611,13 +646,20 @@ export default function CbatRtt() {
                   <div className="flex items-start gap-3"><CbatIntroLabel>Drift</CbatIntroLabel><span className="pt-0.5">the aircraft never sits still — the picture wanders on its own and you have to keep trimming it back</span></div>
                   <div className="flex items-start gap-3"><CbatIntroLabel>Flight</CbatIntroLabel><span className="pt-0.5">the aircraft flies forward through the area, so even targets that are standing still slide across the picture</span></div>
                   {tuning.realCbat && (<>
-                    <div className="flex items-start gap-3"><CbatIntroLabel>Hold</CbatIntroLabel><span className="pt-0.5">keep the target inside the box for the whole pass. A frame only counts once the box has turned green</span></div>
-                    <div className="flex items-start gap-3"><CbatIntroLabel>Zoom</CbatIntroLabel><span className="pt-0.5">the camera is zoomed out and fast while you search, then zooms in and steadies a little once you are on the target</span></div>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Photos</CbatIntroLabel><span className="pt-0.5">three per target. Every press uses one, hit or miss, and a missed photo is gone. Only shoot with the target in the box</span></div>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Hold</CbatIntroLabel><span className="pt-0.5">keep the target inside the box for the whole pass, before and after your photos. Time in the box scores too</span></div>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Hidden</CbatIntroLabel><span className="pt-0.5">a red circle marks a target while it is behind cover. Keep tracking it until it comes out</span></div>
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Aircraft</CbatIntroLabel><span className="pt-0.5">it speeds up, slows down and turns without warning, and the picture lurches with it</span></div>
                     <div className="flex items-start gap-3"><CbatIntroLabel>Turns</CbatIntroLabel><span className="pt-0.5">targets can turn hard or speed up without warning</span></div>
                     <div className="flex items-start gap-3"><CbatIntroLabel>Traffic</CbatIntroLabel><span className="pt-0.5">other aircraft fly through the area. Only the one the arrow points to is your target</span></div>
                   </>)}
+                  {tuning.zoom && (
+                    <div className="flex items-start gap-3"><CbatIntroLabel>Zoom</CbatIntroLabel><span className="pt-0.5">the camera is zoomed out and fast while you search, then zooms in and steadies a little once you are on the target</span></div>
+                  )}
                   <div className="flex items-start gap-3"><CbatIntroLabel>Cue</CbatIntroLabel><span className="pt-0.5">an arrow points the way to the target — amber while it points at the next one, so use the gaps to get ahead of it</span></div>
-                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">the shutter needs {(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass</span></div>
+                  <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1"><span className="shrink-0 w-8 text-center" aria-hidden>{'⏱'}</span><span className="pt-0.5">{tuning.photoLimit
+                    ? `the shutter needs ${(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between photos`
+                    : `the shutter needs ${(SHUTTER_COOLDOWN_MS / 1000).toFixed(2)}s between frames, so spraying costs you the pass`}</span></div>
                 </CbatIntroList>
 
                 {/* On the card only while there is no stick. With one plugged
@@ -680,6 +722,9 @@ export default function CbatRtt() {
                   {!runTuning.realCbat && (
                     <div ref={el => (hudRef.current.bracket = el)} data-state="off" data-testid="rtt-bracket" className="rtt-bracket" aria-hidden="true" />
                   )}
+                  {runTuning.realCbat && (
+                    <div ref={el => (hudRef.current.hidden = el)} data-state="off" data-testid="rtt-hidden-ring" className="rtt-hidden-ring" aria-hidden="true" />
+                  )}
                   <Reticle boxPercent={boxPercent} innerRef={el => (hudRef.current.reticle = el)} />
                   <TargetCue
                     innerRef={el => (hudRef.current.cue = el)}
@@ -705,7 +750,9 @@ export default function CbatRtt() {
                       </div>
                     </div>
                     <div className="flex items-start gap-4">
-                      <Readout label="Frames" align="right"><span ref={el => (hudRef.current.frames = el)}>–/{RTT_FRAMES_PER_TARGET}</span></Readout>
+                      {runTuning.photoLimit
+                        ? <Readout label="Photos" align="right"><PhotoPips innerRef={el => (hudRef.current.photos = el)} /></Readout>
+                        : <Readout label="Frames" align="right"><span ref={el => (hudRef.current.frames = el)}>–/{RTT_FRAMES_PER_TARGET}</span></Readout>}
                       <Readout label="Score" align="right"><span ref={el => (hudRef.current.score = el)}>0</span></Readout>
                       <Readout label="Time" align="right"><span ref={el => (hudRef.current.clock = el)}>0:00</span></Readout>
                     </div>
@@ -715,8 +762,8 @@ export default function CbatRtt() {
                     <div>
                       <ul className="mb-2 space-y-0.5">
                         {events.map(e => (
-                          <li key={e.id} className={`text-[10px] font-mono leading-tight ${e.delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {e.delta >= 0 ? '+' : ''}{e.delta} · {e.text}
+                          <li key={e.id} className={`text-[10px] font-mono leading-tight ${e.bad ? 'text-red-400' : 'text-green-400'}`}>
+                            {e.delta > 0 ? '+' : ''}{e.delta} · {e.text}
                           </li>
                         ))}
                       </ul>

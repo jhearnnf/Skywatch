@@ -26,6 +26,12 @@
 // WORLD space, as a track of points, and where it appears is worked out from
 // where the station is at that moment. A static installation therefore slides
 // across the picture as the aircraft goes past it, which is the point.
+//
+// On Real CBAT the flight is not straight (see buildFlight): the aircraft
+// speeds up, slows down and swings either side of its track. Every function
+// that needs the station's position takes the run's `flight`, and a target
+// carries a reference to it, so the sim, the scene and the tests all work out
+// the same sightlines.
 
 const DEG = Math.PI / 180
 
@@ -111,15 +117,18 @@ export const RTT_SCORE = {
 
 // Real CBAT scoring. The real test wants the target kept inside the box for the
 // WHOLE pass (player report, 2026-10-01): lining the camera up on the edge of
-// cover and snapping frames as the target came out "wouldn't suffice". So:
+// cover and snapping frames as the target came out "wouldn't suffice". So time
+// in the box is scored for the whole pass, from first contact.
 //
-//   • a frame only counts once the target has been held in the box for
-//     RTT_LOCK_MS without a break (the box turns green when it has);
-//   • time in the box is scored for the whole pass, from first contact.
+// And each target gets three photos, no more (survey and DM, 2026-10): every
+// press during a pass spends one, hit or miss, so a missed photo is gone for
+// good rather than retaken. That replaced the old rule that a frame only
+// counted once the box had been held green for 600 ms: with only three photos,
+// the time-in-box score already rewards holding the target, and a photo lost
+// to a timer the player can't see would be a technicality, not a miss.
 //
 // A perfect target is 3 × 30 + 45 + 30 = 165, the same as SkyWatch's, because
 // both themes share one board.
-export const RTT_LOCK_MS = 600
 export const RTT_TRACK_SCORE = {
   frameBase: 15,
   frameCentreBonus: 15,
@@ -208,6 +217,16 @@ export const KIND_MOTION = {
 const GRAVITY = 9.81
 // The steepest a model is drawn banking into a turn.
 const MAX_BANK_DEG = 75
+// How a kind is DRAWN leaning into its turns, as a share of the bank its
+// turn physically implies and a cap. A jet rolls the whole way. A helicopter
+// stays mostly upright (player report, 2026-10-17: it was "turning sideways
+// like an airplane"): its 14 m/s² of turn works out at about 55° of bank,
+// which reads as a jet, so it is drawn at under a third of that and never past
+// 15°. Drawing only; the track and the scoring are untouched.
+export const BANK_LOOK = {
+  jet: { share: 1, maxDeg: MAX_BANK_DEG },
+  helicopter: { share: 0.3, maxDeg: 15 },
+}
 
 // How long before its pass a moving target is already out there, travelling
 // (user, 2026-10-01: the next target should be in the world well before the
@@ -254,7 +273,7 @@ export function airframeDisturbance(tSec, scale = 1) {
   }
 }
 
-// ── Zoom and stabiliser (Real CBAT) ──────────────────────────────────────────
+// ── Zoom and stabiliser ──────────────────────────────────────────────────────
 //
 // The real sensor is wide and coarse while it is searching, then zooms in and
 // steadies itself a little once it is on the next target (player report,
@@ -341,15 +360,136 @@ export function directionOf(dx, dy, dz) {
   }
 }
 
-// Where the sensor station is at a moment of the run. It flies straight and
-// level along -Z, the way azimuth 0 looks.
-export function stationAt(tMs) {
-  return [0, 0, -PLATFORM_SPEED_MPS * (tMs / 1000)]
+// Where the sensor station is at a moment of the run. With no `flight` it
+// flies straight and level along -Z, the way azimuth 0 looks; with one it
+// follows that flight's stored path (see buildFlight).
+export function stationAt(tMs, flight = null) {
+  if (!flight) return [0, 0, -PLATFORM_SPEED_MPS * (tMs / 1000)]
+  const pts = flight.points
+  // Past either end it carries on along the end segment.
+  const i = clamp(Math.floor(tMs / FLIGHT_STEP_MS), 0, pts.length - 2)
+  const a = pts[i], b = pts[i + 1]
+  const k = (tMs - i * FLIGHT_STEP_MS) / FLIGHT_STEP_MS
+  return [a.x + (b.x - a.x) * k, 0, a.z + (b.z - a.z) * k]
 }
 
-// How far the station flies in a run, for the scene to lay the world out under.
-export function platformPathLength(durationMs) {
-  return PLATFORM_SPEED_MPS * (durationMs / 1000)
+// How far down -Z the station gets in a run, for the scene to lay the world
+// out under.
+export function platformPathLength(durationMs, flight = null) {
+  if (!flight) return PLATFORM_SPEED_MPS * (durationMs / 1000)
+  let far = 0
+  for (let t = 0; t <= durationMs; t += 1000) far = Math.max(far, -stationAt(t, flight)[2])
+  return far
+}
+
+// ── Flight path (Real CBAT) ──────────────────────────────────────────────────
+//
+// Three players described the real platform as anything but steady: "as if
+// the camera were in a fast jet speeding up and slowing down to go and find
+// targets", "a lot more erratic and unpredictable", "on a helicopter". So on
+// Real CBAT the aircraft changes speed and swings its heading either side of
+// its general track (-Z), one change at a time with a pause between, each
+// eased so it stays inside what the airframe could do:
+//
+//   speedMps     [min, max] it flies between
+//   headingDeg   how far either side of the track it swings
+//   holdMs       [min, max] steady time between changes
+//   maxAccel     m/s², the hardest it speeds up or brakes
+//   maxTurnDegS  °/s, the fastest its heading swings
+//
+// Worked out once per run, seeded, and stored every FLIGHT_STEP_MS, so
+// stationAt stays a lookup. Everything that places or checks a target reads
+// the station from here, so the generator's fairness rules (gimbal, range,
+// cover) all hold against the real flight.
+export const FLIGHT_STEP_MS = 100
+const FLIGHT_SUB_MS = 20
+// It steers back towards the track once it has wandered this far off it.
+export const FLIGHT_LATERAL_M = 350
+// A change takes at least this long, however small.
+const FLIGHT_MIN_CHANGE_MS = 1500
+
+// How far past the last target a flight is worked out, so a run can never
+// outfly its path. Generous on purpose: a run's length is only known once its
+// targets are placed, and the targets need the flight to be placed.
+function flightHorizonMs(tuning) {
+  const longest = Math.max(...Object.values(RTT_KINDS).map(k => k.windowMs))
+  return RTT_LEAD_IN_MS + tuning.targets * (longest + RTT_GAP_MS) + 5000
+}
+
+export function buildFlight(spec, horizonMs, rng) {
+  const maxTurn = spec.maxTurnDegS * DEG
+  const maxHeading = spec.headingDeg * DEG
+  // An eased change from one value to another, starting after a steady hold.
+  // A smoothstep's rate peaks at 1.5 × change / duration, which is what the
+  // duration is sized against.
+  const change = (from, to, maxRatePerSec, at) => {
+    const durMs = Math.max(FLIGHT_MIN_CHANGE_MS, ((1.5 * Math.abs(to - from)) / maxRatePerSec) * 1000)
+    return { from, to, t0: at + rand(rng, spec.holdMs[0], spec.holdMs[1]), durMs }
+  }
+  const valueAt = (c, t) => {
+    if (t <= c.t0) return { v: c.from, rate: 0 }
+    if (t >= c.t0 + c.durMs) return { v: c.to, rate: 0 }
+    const k = (t - c.t0) / c.durMs
+    return {
+      v: c.from + (c.to - c.from) * k * k * (3 - 2 * k),
+      rate: ((c.to - c.from) * 6 * k * (1 - k)) / (c.durMs / 1000),
+    }
+  }
+  const nextHeading = (from, at, x) => {
+    // Turned back towards the track once it has wandered too far off it.
+    const lo = x > FLIGHT_LATERAL_M ? -maxHeading : x < -FLIGHT_LATERAL_M ? maxHeading * 0.3 : -maxHeading
+    const hi = x > FLIGHT_LATERAL_M ? -maxHeading * 0.3 : maxHeading
+    return change(from, rand(rng, lo, hi), maxTurn, at)
+  }
+
+  const v0 = rand(rng, spec.speedMps[0], spec.speedMps[1])
+  let speed = change(v0, rand(rng, spec.speedMps[0], spec.speedMps[1]), spec.maxAccel, 0)
+  let heading = nextHeading(0, 0, 0)
+  const points = []
+  let x = 0, z = 0
+  for (let t = 0; t <= horizonMs + FLIGHT_STEP_MS; t += FLIGHT_SUB_MS) {
+    if (t >= speed.t0 + speed.durMs) {
+      speed = change(speed.to, rand(rng, spec.speedMps[0], spec.speedMps[1]), spec.maxAccel, t)
+    }
+    if (t >= heading.t0 + heading.durMs) heading = nextHeading(heading.to, t, x)
+    const sp = valueAt(speed, t)
+    const hd = valueAt(heading, t)
+    if (t % FLIGHT_STEP_MS === 0) {
+      points.push({ x, z, speed: sp.v, accel: sp.rate, turn: hd.rate })
+    }
+    // Heading 0 is straight down -Z; positive swings to +X, the way azimuth
+    // runs.
+    x += Math.sin(hd.v) * sp.v * (FLIGHT_SUB_MS / 1000)
+    z -= Math.cos(hd.v) * sp.v * (FLIGHT_SUB_MS / 1000)
+  }
+  return { points }
+}
+
+// How the airframe's own manoeuvring moves the aim, on top of the steady
+// wander (see airframeDisturbance): speeding up dips the nose and braking
+// lifts it, and a turn drags the picture round with it before the gimbal
+// catches up. Like the wander, it drives the camera AND the hit test.
+//
+// Sized against the capture cone: at the hardest change Hard can make it is
+// about 0.55° in pitch or yaw, so with the wander on top the target still sits
+// inside the box if the player does nothing, but well off centre.
+export const FLIGHT_LURCH = {
+  pitchDegPerMps2: 0.16,
+  yawDegPerDegS: 0.06,
+  // Roll turns the horizon, not the boresight, so it is free of scoring.
+  rollDegPerDegS: 0.45,
+}
+
+export function flightLurch(flight, tMs) {
+  if (!flight) return { az: 0, elev: 0, roll: 0 }
+  const pts = flight.points
+  const p = pts[clamp(Math.round(tMs / FLIGHT_STEP_MS), 0, pts.length - 1)]
+  const turnDegS = p.turn / DEG
+  return {
+    az: turnDegS * FLIGHT_LURCH.yawDegPerDegS * DEG,
+    elev: -p.accel * FLIGHT_LURCH.pitchDegPerMps2 * DEG,
+    roll: turnDegS * FLIGHT_LURCH.rollDegPerDegS * DEG,
+  }
 }
 
 // Angle between two look directions. This is the hit test: a reticle pinned to
@@ -486,10 +626,11 @@ function designTrack(d, manoeuvres) {
   // in (x, z), so a growing θ is a turn to the right seen from above.
   const theta0 = d.dir > 0 ? d.startAz : d.startAz + Math.PI
   const curve = d.dir / rh            // per metre travelled
+  const look = BANK_LOOK[d.kind] ?? BANK_LOOK.jet
   const bankAt = (speed, rate) => {
     if (d.ground) return 0
     const lat = (speed * 1000) * (rate * 1000)
-    return clamp(Math.atan(lat / GRAVITY), -MAX_BANK_DEG * DEG, MAX_BANK_DEG * DEG)
+    return clamp(Math.atan(lat / GRAVITY) * look.share, -look.maxDeg * DEG, look.maxDeg * DEG)
   }
 
   const vyAt = (t) => {
@@ -603,7 +744,7 @@ export function targetWorldAt(target, tMs, clampToWindow = true) {
 // target that has not started yet.
 export function targetDirectionAt(target, tMs, clampToWindow = true, stationMs = tMs) {
   const w = targetWorldAt(target, tMs, clampToWindow)
-  const s = stationAt(stationMs)
+  const s = stationAt(stationMs, target.flight)
   return directionOf(w[0] - s[0], w[1] - s[1], w[2] - s[2])
 }
 
@@ -641,7 +782,7 @@ export function coverBlocks(cover, s, w, pad = 0) {
 function buildCover(target, occ) {
   const frac = target.ground ? GROUND_COVER_FRAC : AIR_COVER_FRAC
   const tm = target.tStartMs + (occ.fromMs + occ.toMs) / 2
-  const sm = stationAt(tm)
+  const sm = stationAt(tm, target.flight)
   const wm = targetWorldAt(target, tm)
   const p = [
     sm[0] + (wm[0] - sm[0]) * frac,
@@ -656,7 +797,7 @@ function buildCover(target, occ) {
 
   const at = (local) => {
     const t = target.tStartMs + local
-    return crossing(cover, stationAt(t), targetWorldAt(target, t))
+    return crossing(cover, stationAt(t, target.flight), targetWorldAt(target, t))
   }
   const a = at(occ.fromMs)
   const b = at(occ.toMs)
@@ -796,7 +937,7 @@ function surveyPass(target) {
   for (let local = 0; local <= target.windowMs; local += TRACK_STEP_MS) {
     const pt = { t: local, p: targetWorldAt(target, target.tStartMs + local) }
     const t = target.tStartMs + pt.t
-    const s = stationAt(t)
+    const s = stationAt(t, target.flight)
     const d = directionOf(pt.p[0] - s[0], pt.p[1] - s[1], pt.p[2] - s[2])
     if (Math.abs(d.az) > (AZ_LIMIT_DEG - GIMBAL_MARGIN_DEG) * DEG) return { ok: false }
     if (d.elev < (ELEV_MIN_DEG + ELEV_MARGIN_DEG) * DEG) return { ok: false }
@@ -822,7 +963,7 @@ function coverCrossesPass(target, covers) {
   // that only grazes a sightline for a moment slips between the checks.
   for (let t = 0; t <= target.windowMs; t += OCCLUSION_STEP_MS) {
     const abs = target.tStartMs + t
-    const s = stationAt(abs)
+    const s = stationAt(abs, target.flight)
     const w = targetWorldAt(target, abs)
     for (const c of covers) if (coverBlocks(c, s, w, c.pad + 2)) return true
   }
@@ -830,7 +971,7 @@ function coverCrossesPass(target, covers) {
 }
 
 // One attempt at a pass.
-function draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, plain) {
+function draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, plain, flight) {
   const spec = RTT_KINDS[kind]
   const windowMs = spec.windowMs
 
@@ -879,12 +1020,12 @@ function draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, plain) {
   // Ground movers stay on the ground plane. Air movers climb or descend a
   // little across the pass.
   const elevRate = spec.ground ? 0 : (rand(rng, -3, 5) * DEG) / windowMs
-  const s0 = stationAt(startAfterMs)
+  const s0 = stationAt(startAfterMs, flight)
   // Everything designTrack and planManoeuvres need. Speeds are m/ms: `vh`
   // across the ground, chosen so the target sweeps `arc` of azimuth in its
   // window; `vy` climbing.
   const design = {
-    s0, startAz, startElev, range, dir, windowMs, ground: !!spec.ground,
+    s0, startAz, startElev, range, dir, windowMs, ground: !!spec.ground, kind,
     vh: (arc * range * Math.cos(startElev)) / windowMs,
     vy: elevRate * range,
   }
@@ -914,6 +1055,8 @@ function draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, plain) {
     occlusions: [],
     cover: [],
     requiredFrames: RTT_FRAMES_PER_TARGET,
+    // The run's flight, shared by every target (null when it flies straight).
+    flight,
   }
   layTrack([])
   return { target, layTrack, design }
@@ -922,10 +1065,10 @@ function draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, plain) {
 // One target pass: drafted until it is legal from the moving station, then
 // given its cover. `placed` is every pass before it, whose cover it must not
 // stand behind and whose sightlines its own cover must not cross.
-function buildTarget(id, kind, tuning, startAfterMs, prevEndAz, rng, placed) {
+function buildTarget(id, kind, tuning, startAfterMs, prevEndAz, rng, placed, flight) {
   const earlierCover = placed.flatMap(t => t.cover)
   for (let attempt = 0; attempt < PASS_ATTEMPTS; attempt++) {
-    const { target, layTrack, design } = draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, false)
+    const { target, layTrack, design } = draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, false, flight)
     let survey = surveyPass(target)
     if (!survey.ok) continue
 
@@ -974,7 +1117,7 @@ function buildTarget(id, kind, tuning, startAfterMs, prevEndAz, rng, placed) {
   // no cover, which the platform carries away from rather than over.
   let plain = null
   for (let attempt = 0; attempt < 10; attempt++) {
-    plain = draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, true).target
+    plain = draftPass(id, kind, tuning, startAfterMs, prevEndAz, rng, true, flight).target
     if (surveyPass(plain).ok && !coverCrossesPass(plain, earlierCover)) break
   }
   return plain
@@ -1016,7 +1159,7 @@ function deriveOcclusions(target, covers) {
   let open = null
   for (let t = 0; t <= target.windowMs; t += OCCLUSION_STEP_MS) {
     const abs = target.tStartMs + t
-    const s = stationAt(abs)
+    const s = stationAt(abs, target.flight)
     const w = targetWorldAt(target, abs)
     // Shrunk by a hair so a sightline exactly on the cover's edge counts as
     // clear: the planned stretch comes back out on the same 10 ms grid it was
@@ -1040,7 +1183,7 @@ const DECOY_LIFE_MS = [9000, 15000]
 const DECOY_SPEED_MPS = { jet: 160, helicopter: 45 }
 const DECOY_SIZE_M = { jet: 15, helicopter: 16 }
 
-function buildDecoys(tuning, durationMs, rng) {
+function buildDecoys(tuning, durationMs, rng, flight) {
   const gap = tuning.decoyGapMs
   if (!gap) return []
   const out = []
@@ -1054,7 +1197,7 @@ function buildDecoys(tuning, durationMs, rng) {
       const elev = rand(rng, 3, 12) * DEG
       const range = rand(rng, DECOY_RANGE_M[0], DECOY_RANGE_M[1])
       const dir = rng() < 0.5 ? -1 : 1
-      const s0 = stationAt(t)
+      const s0 = stationAt(t, flight)
       const o = polarToWorld(az, elev, range)
       const p0 = [s0[0] + o[0], s0[1] + o[1], s0[2] + o[2]]
       const v = DECOY_SPEED_MPS[kind] * (lifeMs / 1000) * dir
@@ -1063,11 +1206,12 @@ function buildDecoys(tuning, durationMs, rng) {
         id: out.length, kind, size: DECOY_SIZE_M[kind],
         tStartMs: Math.round(t), tEndMs: Math.round(t + lifeMs), windowMs: Math.round(lifeMs),
         track: [{ t: 0, p: p0 }, { t: Math.round(lifeMs), p: p1 }],
+        flight,
       }
       let ok = true
       for (let k = 0; k <= decoy.windowMs && ok; k += 250) {
         const w = targetWorldAt(decoy, decoy.tStartMs + k)
-        const s = stationAt(decoy.tStartMs + k)
+        const s = stationAt(decoy.tStartMs + k, flight)
         if (Math.hypot(w[0] - s[0], w[1] - s[1], w[2] - s[2]) < DECOY_MIN_RANGE_M) ok = false
       }
       if (ok) made = decoy
@@ -1084,13 +1228,18 @@ function buildDecoys(tuning, durationMs, rng) {
 
 export function generateRttRun(tuning, rng = Math.random) {
   const kinds = kindSequence(tuning.kinds, tuning.targets, rng)
+  // Drawn from its own stream, so a SkyWatch seed lays out exactly the run it
+  // always did.
+  const flight = tuning.flight
+    ? buildFlight(tuning.flight, flightHorizonMs(tuning), mulberry32(Math.floor(rng() * 4294967296)))
+    : null
   const targets = []
   let t = RTT_LEAD_IN_MS
   // Seeded with where the camera actually starts, so the FIRST pass is placed
   // relative to the player rather than anywhere in 300° of gimbal.
   let prevEndAz = 0
   kinds.forEach((kind, i) => {
-    const target = buildTarget(i, kind, tuning, t, prevEndAz, rng, targets)
+    const target = buildTarget(i, kind, tuning, t, prevEndAz, rng, targets, flight)
     targets.push(target)
     prevEndAz = targetDirectionAt(target, target.tEndMs).az
     t = target.tEndMs + RTT_GAP_MS
@@ -1122,7 +1271,154 @@ export function generateRttRun(tuning, rng = Math.random) {
   }
 
   const durationMs = targets.length ? targets[targets.length - 1].tEndMs + 900 : 0
-  return { targets, decoys: buildDecoys(tuning, durationMs, rng), durationMs }
+  const decoys = buildDecoys(tuning, durationMs, rng, flight)
+  const terrain = tuning.terrain
+    ? buildTerrain(targets, flight, durationMs, mulberry32(Math.floor(rng() * 4294967296)))
+    : null
+  return { targets, decoys, durationMs, flight, terrain }
+}
+
+// ── Terrain (Real CBAT) ──────────────────────────────────────────────────────
+//
+// The real test is flown over "a way bigger area ... with valleys in between
+// mountains which separated objects" (player report, 2026-10-05). So Real
+// CBAT puts hills and ridges round the farmland: smooth elliptical domes,
+// stretched into ridges and laid at any angle.
+//
+// A hill can NEVER hide a target. Cover is the sim's to place, and a hill the
+// sim knew nothing about would hide a target the player is being scored on.
+// So hills are placed after the targets, and a hill is only kept if it stays
+// below every sightline from the aircraft to every target, for the whole time
+// that target is in the world (its early appearance and its exit included),
+// by HILL_CLEAR_M. It must also keep clear of the ground under every ground
+// target's track, so nothing drives up a hillside, and stay well below the
+// aircraft. What survives is the ground the sightlines don't cross: ridges
+// between the targets and mountains beyond them, which is the valley the
+// report describes.
+export const HILL_CLEAR_M = 8
+export const HILL_TRACK_CLEAR_M = 80
+export const HILL_UNDER_STATION_M = 60
+const HILL_COUNT = 70
+const HILL_ATTEMPTS = 200
+const HILL_HEIGHT_M = [50, 240]
+const HILL_RADIUS_M = [300, 1000]
+const HILL_SPREAD_M = 4200
+const SIGHT_STEP_MS = 250
+const SIGHT_STEP_M = 25
+const HILL_CELL_M = 250
+
+// 0 at the rim, 1 at the top. Steep enough at the rim that a hill meets the
+// flat ground on a clean line rather than a wide band the two would flicker
+// over.
+export function hillProfile(k) {
+  return k * (0.35 + 0.65 * k)
+}
+
+// A hill's height above the ground at a point: 0 outside its footprint.
+export function hillHeightAt(hill, x, z) {
+  const dx = x - hill.x
+  const dz = z - hill.z
+  const u = (dx * hill.cos + dz * hill.sin) / hill.rx
+  const v = (-dx * hill.sin + dz * hill.cos) / hill.rz
+  const k = 1 - (u * u + v * v)
+  return k > 0 ? hill.h * hillProfile(k) : 0
+}
+
+export function terrainHeightAt(terrain, x, z) {
+  let h = 0
+  for (const hill of terrain?.hills ?? []) h = Math.max(h, hillHeightAt(hill, x, z))
+  return h
+}
+
+function buildTerrain(targets, flight, durationMs, rng) {
+  // Every point a hill has to keep below, as x, z, the highest the ground may
+  // rise there, and how far the hill's footprint must stay away (0 for a point
+  // on a sightline). Bucketed on a grid so a candidate only checks its patch.
+  const cells = new Map()
+  const add = (x, z, maxH, pad) => {
+    const key = `${Math.floor(x / HILL_CELL_M)},${Math.floor(z / HILL_CELL_M)}`
+    let list = cells.get(key)
+    if (!list) cells.set(key, (list = []))
+    list.push(x, z, maxH, pad)
+  }
+  for (const target of targets) {
+    const from = target.kind === 'static' ? 0 : target.tStartMs - TARGET_PREVIEW_MS
+    const to = target.tEndMs + TARGET_EXIT_MS
+    for (let t = from; t <= to; t += SIGHT_STEP_MS) {
+      const s = stationAt(Math.max(0, t), flight)
+      const w = targetWorldAt(target, t, false)
+      const n = Math.ceil(Math.hypot(w[0] - s[0], w[2] - s[2]) / SIGHT_STEP_M)
+      for (let j = 1; j <= n; j++) {
+        const f = j / n
+        const y = s[1] + (w[1] - s[1]) * f
+        add(s[0] + (w[0] - s[0]) * f, s[2] + (w[2] - s[2]) * f, y + STATION_ALT_M - HILL_CLEAR_M, 0)
+      }
+      if (target.ground) add(w[0], w[2], 0, HILL_TRACK_CLEAR_M)
+    }
+  }
+  for (let t = 0; t <= durationMs; t += 500) {
+    const s = stationAt(t, flight)
+    add(s[0], s[2], STATION_ALT_M - HILL_UNDER_STATION_M, 0)
+  }
+
+  const fits = (hill) => {
+    const reach = Math.max(hill.rx, hill.rz) + HILL_TRACK_CLEAR_M
+    const cx0 = Math.floor((hill.x - reach) / HILL_CELL_M), cx1 = Math.floor((hill.x + reach) / HILL_CELL_M)
+    const cz0 = Math.floor((hill.z - reach) / HILL_CELL_M), cz1 = Math.floor((hill.z + reach) / HILL_CELL_M)
+    for (let cx = cx0; cx <= cx1; cx++) {
+      for (let cz = cz0; cz <= cz1; cz++) {
+        const list = cells.get(`${cx},${cz}`)
+        if (!list) continue
+        for (let i = 0; i < list.length; i += 4) {
+          const x = list[i], z = list[i + 1], maxH = list[i + 2], pad = list[i + 3]
+          if (pad > 0) {
+            // Kept away from: inside the footprint grown by `pad` at all.
+            const dx = x - hill.x, dz = z - hill.z
+            const u = (dx * hill.cos + dz * hill.sin) / (hill.rx + pad)
+            const v = (-dx * hill.sin + dz * hill.cos) / (hill.rz + pad)
+            if (u * u + v * v < 1) return false
+          } else if (hillHeightAt(hill, x, z) > Math.max(0, maxH)) {
+            return false
+          }
+        }
+      }
+    }
+    return true
+  }
+
+  // Each attempt is a short range: two to four overlapping lobes in a line,
+  // tallest in the middle, so the skyline is ridges rather than a field of
+  // lone cones. Every lobe is checked on its own, so a range that runs into a
+  // sightline just comes out shorter.
+  const centreZ = -platformPathLength(durationMs, flight) / 2
+  const halfLength = -centreZ + 2500
+  const hills = []
+  for (let i = 0; i < HILL_ATTEMPTS && hills.length < HILL_COUNT; i++) {
+    const cx = rand(rng, -HILL_SPREAD_M, HILL_SPREAD_M)
+    const cz = centreZ + rand(rng, -halfLength, halfLength)
+    const axis = rng() * Math.PI
+    const lobes = randInt(rng, 2, 4)
+    const peak = rand(rng, HILL_HEIGHT_M[0], HILL_HEIGHT_M[1])
+    const size = rand(rng, HILL_RADIUS_M[0], HILL_RADIUS_M[1])
+    for (let j = 0; j < lobes && hills.length < HILL_COUNT; j++) {
+      const along = (j - (lobes - 1) / 2) * size * rand(rng, 0.7, 1.0)
+      const rx = size * rand(rng, 0.6, 1)
+      const rot = axis + rand(rng, -0.25, 0.25)
+      // Lower towards the ends of the range.
+      const fall = 1 - Math.abs(j - (lobes - 1) / 2) / lobes
+      const hill = {
+        x: cx + Math.cos(axis) * along,
+        z: cz + Math.sin(axis) * along,
+        rx,
+        rz: rx * rand(rng, 0.35, 0.6),
+        h: Math.max(HILL_HEIGHT_M[0] * 0.6, peak * fall * rand(rng, 0.8, 1)),
+        rot, cos: Math.cos(rot), sin: Math.sin(rot),
+        seed: Math.floor(rng() * 1e9),
+      }
+      if (fits(hill)) hills.push(hill)
+    }
+  }
+  return { hills }
 }
 
 // ── Target state at a moment ─────────────────────────────────────────────────
@@ -1214,7 +1510,9 @@ export function makeRttSim(tuning, rng = Math.random) {
     // only ever filled on Real CBAT.
     progress: run.targets.map(() => ({
       frames: 0, resolved: false,
-      acquired: false, holdMs: 0, inBoxMs: 0, trackMs: 0, trackFrac: null,
+      // Real CBAT's photos, in order: 'hit' or 'miss'. Three at most.
+      shots: [],
+      acquired: false, inBoxMs: 0, trackMs: 0, trackFrac: null,
     })),
     lastShotAt: -Infinity,
     // Newest-first list of scoring events for the HUD ticker.
@@ -1222,8 +1520,10 @@ export function makeRttSim(tuning, rng = Math.random) {
   }
 }
 
-function pushEvent(sim, text, delta) {
-  sim.events.unshift({ id: `${sim.elapsedMs}-${sim.events.length}`, text, delta, atMs: sim.elapsedMs })
+// `bad` marks an event that cost something without costing points, such as a
+// photo that missed, so the ticker can colour it as the loss it is.
+function pushEvent(sim, text, delta, bad = delta < 0) {
+  sim.events.unshift({ id: `${sim.elapsedMs}-${sim.events.length}`, text, delta, bad, atMs: sim.elapsedMs })
   if (sim.events.length > 8) sim.events.length = 8
 }
 
@@ -1252,11 +1552,14 @@ export function advanceRtt(sim, dtMs) {
     const p = sim.progress[i]
     if (p.resolved || sim.elapsedMs < target.tEndMs) return
     p.resolved = true
+    // Photos missed and photos never taken are both short, so spraying all
+    // three at nothing is never better than holding fire.
     const owed = target.requiredFrames - p.frames
     if (owed > 0) {
       const delta = owed * RTT_SCORE.missedFrame
+      const noun = sim.tuning.photoLimit ? 'photo' : 'frame'
       sim.score += delta
-      pushEvent(sim, `${target.hud} lost, ${owed} frame${owed === 1 ? '' : 's'} short`, delta)
+      pushEvent(sim, `${target.hud} lost, ${owed} ${noun}${owed === 1 ? '' : 's'} short`, delta)
     }
     if (tracked) {
       const { frac, points } = trackingPoints(p, target.windowMs)
@@ -1277,23 +1580,12 @@ export function trackRtt(sim, candidates, dtMs) {
   for (const c of candidates) {
     const p = sim.progress[c.index]
     if (!p || p.resolved) continue
-    const inBox = c.errorRad <= sim.captureRad
-    if (inBox) {
+    if (c.errorRad <= sim.captureRad) {
       p.acquired = true
       p.inBoxMs += dtMs
-      p.holdMs += dtMs
-    } else {
-      p.holdMs = 0
     }
     if (p.acquired) p.trackMs += dtMs
   }
-}
-
-// Has the target been held in the box long enough for a frame to count?
-// Always true on SkyWatch, which scores wherever the shutter fires.
-export function isLocked(sim, index) {
-  if (!sim.tuning.trackScoring) return true
-  return (sim.progress[index]?.holdMs ?? 0) >= RTT_LOCK_MS
 }
 
 export function isRunOver(sim) {
@@ -1309,6 +1601,7 @@ export function isRunOver(sim) {
 // handles a future where two passes overlap, since the best eligible candidate
 // wins.
 export function fireShutter(sim, candidates = []) {
+  if (sim.tuning.photoLimit) return takePhoto(sim, candidates)
   if (sim.elapsedMs - sim.lastShotAt < SHUTTER_COOLDOWN_MS) {
     return { kind: 'cooldown', points: 0, targetIndex: -1, errorRad: 0 }
   }
@@ -1317,28 +1610,28 @@ export function fireShutter(sim, candidates = []) {
 
   let best = null
   let blockedByOcclusion = false
-  let unsteady = false
   for (const c of candidates) {
     const p = sim.progress[c.index]
     if (!p || p.resolved || p.frames >= RTT_FRAMES_PER_TARGET) continue
     if (c.errorRad > sim.captureRad) continue
     if (c.occluded) { blockedByOcclusion = true; continue }
-    if (!isLocked(sim, c.index)) { unsteady = true; continue }
     if (!best || c.errorRad < best.errorRad) best = c
   }
 
   if (!best) {
     sim.score += RTT_SCORE.wastedFrame
-    const kind = blockedByOcclusion ? 'occluded' : unsteady ? 'unsteady' : 'miss'
-    const text = blockedByOcclusion ? 'Frame wasted, target obscured'
-      : unsteady ? 'Frame wasted, hold the target in the box first'
-        : 'Frame wasted, off target'
+    const kind = blockedByOcclusion ? 'occluded' : 'miss'
+    const text = blockedByOcclusion ? 'Frame wasted, target obscured' : 'Frame wasted, off target'
     pushEvent(sim, text, RTT_SCORE.wastedFrame)
     return { kind, points: RTT_SCORE.wastedFrame, targetIndex: -1, errorRad: 0 }
   }
+  return scoreFrame(sim, best, RTT_SCORE)
+}
 
+// Books a frame that landed, with its centring bonus and, on the third, the
+// completion bonus.
+function scoreFrame(sim, best, scoring) {
   const tracked = !!sim.tuning.trackScoring
-  const scoring = tracked ? RTT_TRACK_SCORE : RTT_SCORE
   const target = sim.run.targets[best.index]
   const p = sim.progress[best.index]
   p.frames += 1
@@ -1358,14 +1651,46 @@ export function fireShutter(sim, candidates = []) {
     points += RTT_SCORE.targetComplete
   }
   sim.score += points
+  const noun = sim.tuning.photoLimit ? 'photo' : 'frame'
   pushEvent(
     sim,
     completed
       ? `${target.hud} complete, 3 of 3`
-      : `${target.hud} frame ${p.frames} of 3`,
+      : `${target.hud} ${noun} ${p.frames} of 3`,
     points,
   )
   return { kind: 'hit', points, targetIndex: best.index, errorRad: best.errorRad, completed, frames: p.frames }
+}
+
+// Real CBAT: the shutter takes one of the live target's three photos. A press
+// with no pass running, or with all three already taken, does nothing at all
+// (kind 'none' / 'spent'); every other press spends a photo, hit or miss. A
+// missed photo scores nothing and is gone, so it costs the frame's points now
+// and the shortfall when the pass closes, the same as one never taken.
+function takePhoto(sim, candidates) {
+  const index = activeTargetIndex(sim)
+  if (index < 0) return { kind: 'none', points: 0, targetIndex: -1, errorRad: 0 }
+  const p = sim.progress[index]
+  if (p.shots.length >= RTT_FRAMES_PER_TARGET) {
+    return { kind: 'spent', points: 0, targetIndex: index, errorRad: 0 }
+  }
+  if (sim.elapsedMs - sim.lastShotAt < SHUTTER_COOLDOWN_MS) {
+    return { kind: 'cooldown', points: 0, targetIndex: -1, errorRad: 0 }
+  }
+  sim.lastShotAt = sim.elapsedMs
+  sim.framesTaken += 1
+
+  const c = candidates.find(x => x.index === index)
+  const inBox = !!c && c.errorRad <= sim.captureRad
+  if (!inBox || c.occluded) {
+    p.shots.push('miss')
+    const occluded = inBox && c.occluded
+    const target = sim.run.targets[index]
+    pushEvent(sim, `${target.hud} photo ${p.shots.length} of 3 missed${occluded ? ', target obscured' : ''}`, 0, true)
+    return { kind: occluded ? 'occluded' : 'miss', points: 0, targetIndex: index, errorRad: 0, shots: p.shots.length }
+  }
+  p.shots.push('hit')
+  return { ...scoreFrame(sim, c, RTT_TRACK_SCORE), shots: p.shots.length }
 }
 
 export function rttStats(sim) {

@@ -15,7 +15,7 @@ import { RTT_KINDS, maxRttScore } from '../rttSim'
 const ALLOWED_KEYS = new Set([
   'key', 'label', 'gameKey', 'bars', 'blurb',
   'targets', 'speedScale', 'kinds', 'maxOcclusions', 'occlusionScale',
-  'captureScale', 'airframeScale', 'grades',
+  'captureScale', 'airframeScale', 'zoom', 'grades',
 ])
 
 describe('RTT difficulty table', () => {
@@ -77,17 +77,44 @@ describe('RTT difficulty table', () => {
   })
 
   it('grades on the played difficulty s bands', () => {
-    expect(computeGrade(1200, RTT_TUNING.hard)).toBe('Outstanding')
-    expect(computeGrade(900, RTT_TUNING.hard)).toBe('Good')
-    expect(computeGrade(500, RTT_TUNING.hard)).toBe('Needs Work')
-    expect(computeGrade(100, RTT_TUNING.hard)).toBe('Failed')
+    expect(computeGrade(1900, RTT_TUNING.hard)).toBe('Outstanding')
+    expect(computeGrade(1700, RTT_TUNING.hard)).toBe('Good')
+    expect(computeGrade(1300, RTT_TUNING.hard)).toBe('Needs Work')
+    expect(computeGrade(500, RTT_TUNING.hard)).toBe('Failed')
     // The same score is a better grade on Easier's lower bands.
-    expect(computeGrade(800, RTT_TUNING.easier)).toBe('Outstanding')
-    expect(computeGrade(800, RTT_TUNING.hard)).toBe('Good')
+    expect(computeGrade(1250, RTT_TUNING.easier)).toBe('Outstanding')
+    expect(computeGrade(1250, RTT_TUNING.hard)).toBe('Needs Work')
+  })
+
+  // Reseated on real runs (2026-10-17): the old bands had Outstanding at about
+  // half a perfect run, and the median run was over 85% of one.
+  it('puts Outstanding near the top of what real players score', () => {
+    for (const t of RTT_DIFFICULTIES) {
+      expect(t.grades.outstanding / maxRttScore(t)).toBeGreaterThan(0.85)
+    }
+  })
+
+  // Real CBAT adds the three-photo limit and a rougher flight on top, so the
+  // same score is worth a little more there.
+  it('gives Real CBAT its own, slightly lower bands and its extra rules', () => {
+    for (const key of ['easier', 'hard']) {
+      const sw = rttTuning(key)
+      const cbat = rttTuning(key, true)
+      expect(cbat.gameKey).toBe(sw.gameKey)
+      expect(cbat.photoLimit).toBe(true)
+      expect(cbat.terrain).toBe(true)
+      expect(cbat.flight.speedMps[1]).toBeGreaterThan(cbat.flight.speedMps[0])
+      expect(sw.photoLimit).toBeUndefined()
+      expect(sw.flight).toBeUndefined()
+      for (const band of ['outstanding', 'good', 'needsWork']) {
+        expect(cbat.grades[band]).toBeLessThan(sw.grades[band])
+      }
+    }
+    expect(rttTuning('easier', true).airframeScale).toBeLessThan(rttTuning('hard', true).airframeScale)
   })
 
   it('keeps every band reachable — Outstanding is under a perfect run', () => {
-    for (const t of RTT_DIFFICULTIES) {
+    for (const t of [...RTT_DIFFICULTIES, rttTuning('easier', true), rttTuning('hard', true)]) {
       expect(t.grades.outstanding).toBeLessThan(maxRttScore(t))
       expect(t.grades.outstanding).toBeGreaterThan(t.grades.good)
       expect(t.grades.good).toBeGreaterThan(t.grades.needsWork)
@@ -135,12 +162,13 @@ describe('Real CBAT tuning', () => {
       expect(real.targets).toBe(plain.targets)
       expect(real.kinds).toEqual(plain.kinds)
       expect(real.realCbat).toBe(true)
-      expect(real.zoom).toBe(true)
       expect(real.trackScoring).toBe(true)
       expect(real.manoeuvres).toHaveLength(2)
       expect(real.decoyGapMs).toHaveLength(2)
-      expect(plain.zoom).toBeUndefined()
       expect(plain.trackScoring).toBeUndefined()
+      // The zoom is the one thing both themes share (2026-10-17).
+      expect(plain.zoom).toBe(true)
+      expect(real.zoom).toBe(true)
     }
   })
 

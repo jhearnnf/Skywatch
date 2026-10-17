@@ -2997,12 +2997,45 @@ body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
 }
 .rtt-reticle[data-state='lock']     { color: #22c55e; }
 .rtt-reticle[data-state='obscured'] { color: #f59e0b; }
-/* Real CBAT: in the box, but not held there long enough for a frame to count
-   yet. Turns green ('lock') once it has been. */
-.rtt-reticle[data-state='hold']     { color: #facc15; }
 /* Three frames already in the bag — there is nothing left to earn on this
    target, so the reticle goes neutral rather than staying invitingly green. */
 .rtt-reticle[data-state='done']     { color: #94a3b8; }
+
+/* Real CBAT: a red circle over a target while it is behind cover, placed by
+   the scene's frame loop in percent of the picture, so the player can keep
+   tracking it through the cover (as the real test does). */
+.rtt-hidden-ring {
+  position: absolute;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border: 2px solid #ef4444;
+  border-radius: 9999px;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
+}
+.rtt-hidden-ring[data-state='off'] { opacity: 0; }
+
+/* Real CBAT: the live pass's three photos. Hollow until taken, filled for a
+   hit, red and struck through for a miss. */
+.rtt-photo-pip {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border: 1.5px solid #64748b;
+}
+.rtt-photo-pip[data-state='h'] { background: #22c55e; border-color: #22c55e; }
+.rtt-photo-pip[data-state='m'] { border-color: #ef4444; }
+.rtt-photo-pip[data-state='m']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1.5px;
+  background: #ef4444;
+  transform: translateX(-50%) rotate(45deg);
+}
 
 /* ── RTT SkyWatch dressing ──────────────────────────────────────────────────
    SkyWatch theme only; Real CBAT renders none of this. Nothing here changes
