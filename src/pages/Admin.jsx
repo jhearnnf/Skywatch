@@ -1781,6 +1781,13 @@ function ReportsTab({ API }) {
   // its own clock, so it must not flash a skeleton just because the rest of the
   // snapshot is still in flight, nor lose its range picker while it is.
   const dauSub = DAU_RANGES.find(r => r.days === dauDays)?.sub ?? ''
+  const dauLabels = {
+    count: 'Active users',
+    messages: 'Community messages',
+    signups: 'Sign-ups',
+    cbatDatesEntered: 'CBAT dates entered',
+    cbatDates: 'CBAT dates',
+  }
   const dauCard = (
     <ChartCard
       title="Daily Active Users"
@@ -1796,25 +1803,24 @@ function ReportsTab({ API }) {
             data={dau.dailyDau}
             xKey="date"
             keys={['count', 'messages', 'signups', 'cbatDatesEntered', 'cbatDates']}
-            labels={{
-              count: 'Active users',
-              messages: 'Community messages',
-              signups: 'Sign-ups',
-              cbatDatesEntered: 'CBAT dates entered',
-              cbatDates: 'CBAT dates',
-            }}
+            labels={dauLabels}
             colors={['#5baaff', '#f59e0b', '#a78bfa', '#f87171', '#34d399']}
             // 1–2 test dates a day would lie flat on the axis under the user
             // count, so they're drawn as day markers instead of a line.
             markerKeys={['cbatDates']}
-            // Each series can be switched off from the legend; hiding Active
-            // users rescales the axis so the small counts are readable.
+            // Sign-ups and dates entered are small daily counts, so they get a
+            // panel of their own beneath the lines, on their own scale.
+            lowerKeys={['signups', 'cbatDatesEntered']}
+            lowerHeight={100}
+            // Each series can be switched off from the legend.
             toggleable
             shadeWeekends
             showLegend
             height={200}
           />
-        : <ChartSkeleton height={200} />}
+        // Same two panels and legend row as the loaded chart, so the card
+        // doesn't change height when the data lands.
+        : <ChartSkeleton height={200} lowerHeight={100} legend={[...Object.values(dauLabels), 'Weekends']} />}
     </ChartCard>
   )
 

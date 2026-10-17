@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import ReportChart from '../ReportChart'
+import ReportChart, { ChartSkeleton } from '../ReportChart'
 
 // The bar-chart legend is drawn outside the Recharts container so a long
 // series list (Daily CBAT Sessions has ~30) cannot eat the plot height on a
@@ -111,8 +111,51 @@ describe('ReportChart toggleable line legend', () => {
     expect(btn.getAttribute('aria-pressed')).toBe('false')
   })
 
+  it('keeps one legend across both panels when some series sit in the lower panel', () => {
+    render(
+      <ReportChart
+        type="line"
+        data={lineData}
+        keys={['count', 'signups', 'cbatDates']}
+        labels={{ count: 'Active users', signups: 'Sign-ups', cbatDates: 'CBAT dates' }}
+        markerKeys={['cbatDates']}
+        lowerKeys={['signups']}
+        toggleable
+        shadeWeekends
+        showLegend
+      />,
+    )
+    for (const name of ['Active users', 'Sign-ups', 'CBAT dates', 'Weekends']) {
+      expect(screen.getAllByRole('button', { name })).toHaveLength(1)
+    }
+    // A lower-panel series is a bar, so its key is a square swatch, not a line.
+    const swatch = screen.getByRole('button', { name: 'Sign-ups' }).querySelector('span[aria-hidden]')
+    expect(swatch.className).toContain('h-2.5')
+    const btn = screen.getByRole('button', { name: 'Sign-ups' })
+    fireEvent.click(btn)
+    expect(btn.getAttribute('aria-pressed')).toBe('false')
+  })
+
   it('has no Weekends switch without weekend shading', () => {
     renderLine()
     expect(screen.queryByRole('button', { name: 'Weekends' })).toBeNull()
+  })
+})
+
+describe('ChartSkeleton', () => {
+  it('mirrors a two-panel chart with its legend row', () => {
+    const { container } = render(
+      <ChartSkeleton height={200} lowerHeight={100} legend={['Active users', 'Sign-ups', 'Weekends']} />,
+    )
+    const blocks = [...container.querySelectorAll('.animate-pulse.flex.items-end')]
+    // Top panel at full height; the lower one gives up the 4px gap above it.
+    expect(blocks.map(b => b.style.height)).toEqual(['200px', '96px'])
+    expect(screen.getByText('Sign-ups')).toBeTruthy()
+    expect(screen.getByText('Weekends')).toBeTruthy()
+  })
+
+  it('is a single block when given only a height', () => {
+    const { container } = render(<ChartSkeleton height={200} />)
+    expect(container.querySelectorAll('.animate-pulse.flex.items-end')).toHaveLength(1)
   })
 })

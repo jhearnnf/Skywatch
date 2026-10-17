@@ -74,12 +74,13 @@ vi.mock('recharts', async () => {
 // hands the chart is the wiring these tests care about; how recharts draws them
 // is ReportChart's own business.
 vi.mock('../../components/admin/ReportChart', () => ({
-  default: ({ keys = [], labels, markerKeys = [], toggleable = false }) => (
+  default: ({ keys = [], labels, markerKeys = [], lowerKeys = [], toggleable = false }) => (
     <div
       data-testid="report-chart"
       data-toggleable={String(toggleable)}
       data-keys={keys.join(',')}
       data-markers={markerKeys.join(',')}
+      data-lower={lowerKeys.join(',')}
       data-labels={keys.map(k => labels?.[k] ?? k).join(',')}
     />
   ),
@@ -314,6 +315,9 @@ describe('Admin — Reports tab', () => {
     // CBAT dates are 1-2 a day, so they're drawn as day markers, not a line
     // that would sit flat on the axis under the user count.
     expect(chart.dataset.markers).toBe('cbatDates')
+    // Sign-ups and dates entered are small daily counts, drawn as bars in a
+    // panel of their own beneath the lines.
+    expect(chart.dataset.lower).toBe('signups,cbatDatesEntered')
   })
 
   it('refetches Daily Active Users when its timeframe changes', async () => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -121,6 +121,8 @@ function ToggleLegend({ items, onToggle }) {
         >
           {it.band
             ? <span aria-hidden className="inline-block w-3 h-3 rounded-[2px]" style={{ background: it.color, opacity: 0.35 }} />
+            : it.bar
+              ? <span aria-hidden className="inline-block w-2.5 h-2.5 rounded-[2px]" style={{ background: it.color }} />
             : it.marker
               ? <span aria-hidden className="inline-block w-3.5 border-t border-dashed" style={{ borderColor: it.color }} />
               : <span aria-hidden className="inline-block w-3.5 border-t-2" style={{ borderColor: it.color }} />}
@@ -131,17 +133,37 @@ function ToggleLegend({ items, onToggle }) {
   )
 }
 
-export function ChartSkeleton({ height = 220 }) {
-  return (
+const SKELETON_BARS = [55, 30, 70, 45, 80, 60, 35, 65, 50, 75]
+
+// lowerHeight / legend mirror a line chart with `lowerKeys` and a toggleable
+// legend, so the card keeps its loaded shape and height while it loads.
+export function ChartSkeleton({ height = 220, lowerHeight, legend }) {
+  const block = (h, bars) => (
     <div
       className="w-full rounded-lg border border-slate-200 bg-slate-100/30 animate-pulse flex items-end gap-2 p-4"
-      style={{ height }}
-      aria-busy="true"
-      aria-label="Loading chart"
+      style={{ height: h }}
     >
-      {[55, 30, 70, 45, 80, 60, 35, 65, 50, 75].map((h, i) => (
-        <div key={i} className="flex-1 bg-slate-200/60 rounded-t" style={{ height: `${h}%` }} />
+      {bars.map((b, i) => (
+        <div key={i} className="flex-1 bg-slate-200/60 rounded-t" style={{ height: `${b}%` }} />
       ))}
+    </div>
+  )
+  return (
+    <div aria-busy="true" aria-label="Loading chart">
+      {block(height, SKELETON_BARS)}
+      {/* The 4px gap comes out of the lower block so the total height matches. */}
+      {lowerHeight && <div className="mt-1">{block(lowerHeight - 4, SKELETON_BARS.map(b => 100 - b))}</div>}
+      {legend && (
+        // Same row metrics as ToggleLegend so it wraps to the same height.
+        <div className="flex flex-wrap justify-center gap-x-1 gap-y-1 mt-1 px-1" style={{ fontSize: 11 }}>
+          {legend.map(label => (
+            <span key={label} className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 animate-pulse">
+              <span aria-hidden className="inline-block w-3.5 h-2.5 rounded-[2px] bg-slate-200/60" />
+              <span className="rounded bg-slate-200/60 text-transparent select-none">{label}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -173,6 +195,12 @@ export function ChartSkeleton({ height = 220 }) {
  * toggleable: line charts only — the legend becomes a row of buttons that show
  *             or hide each series. A hidden series also leaves the y-axis
  *             domain, so hiding a big series rescales the small ones.
+ * lowerKeys: line charts only — subset of `keys` drawn as side-by-side bars in
+ *             a shorter panel beneath the lines, on its own y-axis and sharing
+ *             the dates. For small daily counts (sign-ups) that would lie flat
+ *             under a big series. Markers run through both panels; hovering
+ *             either panel shows the same day in both.
+ * lowerHeight: pixel height of the `lowerKeys` panel (default 100).
  */
 export default function ReportChart({
   type = 'line',
@@ -194,7 +222,10 @@ export default function ReportChart({
   markerKeys,
   toggleable = false,
   shadeWeekends = false,
+  lowerKeys,
+  lowerHeight = 100,
 }) {
+  const syncId = useId()
   const [hiddenKeys, setHiddenKeys] = useState(() => new Set())
   const toggleKey = k => setHiddenKeys(prev => {
     const next = new Set(prev)
@@ -369,41 +400,60 @@ export default function ReportChart({
     ? data.map(row => ({ ...row, [WEEKEND_KEY]: showWeekends && isWeekend(row[xKey]) ? 1 : 0 }))
     : data
   const LineChartish = shadeWeekends ? ComposedChart : LineChart
+  const lowerSet = new Set(lowerKeys ?? [])
+  const hasLower = lowerSet.size > 0
+  const upperKeys = keys.filter(k => !lowerSet.has(k))
+  const colorOf = k => seriesColors[keys.indexOf(k)]
+  // Both panels shade weekends the same way; in the lower one the band sits on
+  // its own hidden x-axis so it isn't grouped beside the count bars.
+  const weekendBand = bandAxis => shadeWeekends && [
+    bandAxis && <XAxis key="wx" xAxisId={WEEKEND_KEY} dataKey={xKey} hide />,
+    <YAxis key="wy" yAxisId={WEEKEND_KEY} domain={[0, 1]} hide />,
+    <Bar
+      key="wb"
+      xAxisId={bandAxis ? WEEKEND_KEY : undefined}
+      yAxisId={WEEKEND_KEY}
+      dataKey={WEEKEND_KEY}
+      fill={WEEKEND_COLOR}
+      fillOpacity={WEEKEND_OPACITY}
+      isAnimationActive={false}
+      activeBar={false}
+      tooltipType="none"
+      legendType="none"
+    />,
+  ]
+  // Day markers; only the top panel carries the count label.
+  const markerLines = withLabel => keys.map((k, i) => markerSet.has(k) && !isHidden(k) && data.filter(row => row[k] > 0).map(row => (
+    <ReferenceLine
+      key={`${k}-${row[xKey]}`}
+      x={row[xKey]}
+      stroke={seriesColors[i]}
+      strokeWidth={1.5}
+      strokeDasharray="4 3"
+      label={withLabel ? { value: row[k], position: 'top', fill: seriesColors[i], fontSize: 10, fontWeight: 600 } : undefined}
+    />
+  )))
+  const tooltip = <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
   return (
     <>
     <ResponsiveContainer width="100%" height={height}>
       {/* Markers' counts sit in a strip above the plot, where no line can cross them. */}
-      <LineChartish data={chartData} barCategoryGap={shadeWeekends ? 0 : undefined} margin={{ top: markerSet.size ? 16 : 4, right: 12, left: 0, bottom: 4 }}>
+      <LineChartish
+        data={chartData}
+        syncId={hasLower ? syncId : undefined}
+        barCategoryGap={shadeWeekends ? 0 : undefined}
+        margin={{ top: markerSet.size ? 16 : 4, right: 12, left: 0, bottom: hasLower ? 0 : 4 }}
+      >
         <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
-        {shadeWeekends && <YAxis yAxisId={WEEKEND_KEY} domain={[0, 1]} hide />}
-        {shadeWeekends && (
-          <Bar
-            yAxisId={WEEKEND_KEY}
-            dataKey={WEEKEND_KEY}
-            fill={WEEKEND_COLOR}
-            fillOpacity={WEEKEND_OPACITY}
-            isAnimationActive={false}
-            activeBar={false}
-            tooltipType="none"
-            legendType="none"
-          />
-        )}
-        <XAxis dataKey={xKey} stroke={COLORS.axis} fontSize={11} tickFormatter={xFmt} />
+        {weekendBand(false)}
+        {/* With a lower panel the dates are printed once, beneath it. */}
+        <XAxis dataKey={xKey} stroke={COLORS.axis} fontSize={11} tickFormatter={xFmt} hide={hasLower} />
         <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
-        <Tooltip contentStyle={tooltipStyle} itemStyle={tooltipItemStyle} labelStyle={tooltipLabelStyle} labelFormatter={xFmt} />
+        {tooltip}
         {!toggleable && (showLegend || compareKey) && <Legend wrapperStyle={{ fontSize: 11, color: COLORS.axis }} />}
         {/* Markers first so the real lines draw over them. */}
-        {keys.map((k, i) => markerSet.has(k) && !isHidden(k) && data.filter(row => row[k] > 0).map(row => (
-          <ReferenceLine
-            key={`${k}-${row[xKey]}`}
-            x={row[xKey]}
-            stroke={seriesColors[i]}
-            strokeWidth={1.5}
-            strokeDasharray="4 3"
-            label={{ value: row[k], position: 'top', fill: seriesColors[i], fontSize: 10, fontWeight: 600 }}
-          />
-        )))}
-        {keys.map((k, i) => markerSet.has(k) ? (
+        {markerLines(true)}
+        {upperKeys.map(k => { const i = keys.indexOf(k); return markerSet.has(k) ? (
           // Invisible line: keeps the value in the tooltip and a dashed key in
           // the legend, while the ReferenceLines above do the drawing.
           <Line
@@ -430,10 +480,39 @@ export default function ReportChart({
             name={labels?.[k] ?? k}
             hide={isHidden(k)}
           />
-        ))}
+        ) })}
         {compareLine}
       </LineChartish>
     </ResponsiveContainer>
+    {hasLower && (
+      <ResponsiveContainer width="100%" height={lowerHeight}>
+        <ComposedChart
+          data={chartData}
+          syncId={syncId}
+          barCategoryGap={shadeWeekends ? 0 : '20%'}
+          barGap={1}
+          margin={{ top: 6, right: 12, left: 0, bottom: 4 }}
+        >
+          <CartesianGrid stroke={COLORS.grid} strokeDasharray="3 3" vertical={false} />
+          {weekendBand(true)}
+          <XAxis dataKey={xKey} stroke={COLORS.axis} fontSize={11} tickFormatter={xFmt} />
+          <YAxis stroke={COLORS.axis} fontSize={11} tickFormatter={yFmt} allowDecimals={false} />
+          {tooltip}
+          {markerLines(false)}
+          {[...lowerSet].map(k => (
+            <Bar
+              key={k}
+              dataKey={k}
+              fill={colorOf(k)}
+              name={labels?.[k] ?? k}
+              maxBarSize={8}
+              radius={[2, 2, 0, 0]}
+              hide={isHidden(k)}
+            />
+          ))}
+        </ComposedChart>
+      </ResponsiveContainer>
+    )}
     {toggleable && (
       <ToggleLegend
         items={[
@@ -442,6 +521,7 @@ export default function ReportChart({
             label: labels?.[k] ?? k,
             color: seriesColors[i],
             marker: markerSet.has(k),
+            bar: lowerSet.has(k) && !markerSet.has(k),
             hidden: hiddenKeys.has(k),
           })),
           ...(shadeWeekends ? [{
