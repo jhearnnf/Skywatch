@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import ReportChart, { ChartSkeleton } from '../ReportChart'
+import { blankBeforeFirstValue } from '../blankBeforeFirstValue'
 
 // The bar-chart legend is drawn outside the Recharts container so a long
 // series list (Daily CBAT Sessions has ~30) cannot eat the plot height on a
@@ -157,5 +158,26 @@ describe('ChartSkeleton', () => {
   it('is a single block when given only a height', () => {
     const { container } = render(<ChartSkeleton height={200} />)
     expect(container.querySelectorAll('.animate-pulse.flex.items-end')).toHaveLength(1)
+  })
+})
+
+describe('blankBeforeFirstValue', () => {
+  const rows = [
+    { date: '2026-03-01', count: 0, messages: 0, signups: 2 },
+    { date: '2026-03-02', count: 3, messages: 0, signups: 0 },
+    { date: '2026-03-03', count: 0, messages: 4, signups: 1 },
+  ]
+
+  it('blanks each line before its own first value, and keeps zeros after it', () => {
+    const out = blankBeforeFirstValue(rows, ['count', 'messages'])
+    expect(out.map(r => r.count)).toEqual([null, 3, 0])
+    expect(out.map(r => r.messages)).toEqual([null, null, 4])
+    // Keys it wasn't asked about are untouched.
+    expect(out.map(r => r.signups)).toEqual([2, 0, 1])
+  })
+
+  it('leaves a series that is never above zero as it is', () => {
+    const out = blankBeforeFirstValue(rows, ['missing'])
+    expect(out).toEqual(rows)
   })
 })

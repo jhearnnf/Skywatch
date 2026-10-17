@@ -1817,6 +1817,9 @@ function ReportsTab({ API }) {
             // panel of their own beneath the lines, on their own scale.
             lowerKeys={['signups', 'cbatDatesEntered']}
             lowerHeight={100}
+            // Active users and messages began on different days; each line
+            // starts on its own first day rather than running flat at zero.
+            startAtFirstValue
             // Each series can be switched off from the legend.
             toggleable
             shadeWeekends

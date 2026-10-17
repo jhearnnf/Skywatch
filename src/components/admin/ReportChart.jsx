@@ -11,6 +11,7 @@ import {
   Legend,
   ReferenceLine,
 } from 'recharts'
+import { blankBeforeFirstValue } from './blankBeforeFirstValue'
 
 const DIM_OPACITY = 0.05
 const DIM_LABEL_OPACITY = 0.3
@@ -201,6 +202,9 @@ export function ChartSkeleton({ height = 220, lowerHeight, legend }) {
  *             under a big series. Markers run through both panels; hovering
  *             either panel shows the same day in both.
  * lowerHeight: pixel height of the `lowerKeys` panel (default 100).
+ * startAtFirstValue: line charts only — each line is left undrawn until its
+ *             first non-zero point, instead of running flat along zero before
+ *             the thing it counts had started.
  */
 export default function ReportChart({
   type = 'line',
@@ -224,6 +228,7 @@ export default function ReportChart({
   shadeWeekends = false,
   lowerKeys,
   lowerHeight = 100,
+  startAtFirstValue = false,
 }) {
   const syncId = useId()
   const [hiddenKeys, setHiddenKeys] = useState(() => new Set())
@@ -396,9 +401,12 @@ export default function ReportChart({
   // Switched off, the bar stays mounted at zero height: removing it would turn
   // the x-axis back into a point scale and every line would shift sideways.
   const showWeekends = !isHidden(WEEKEND_KEY)
-  const chartData = shadeWeekends
-    ? data.map(row => ({ ...row, [WEEKEND_KEY]: showWeekends && isWeekend(row[xKey]) ? 1 : 0 }))
+  const lineData = startAtFirstValue
+    ? blankBeforeFirstValue(data, keys.filter(k => !markerSet.has(k) && !lowerKeys?.includes(k)))
     : data
+  const chartData = shadeWeekends
+    ? lineData.map(row => ({ ...row, [WEEKEND_KEY]: showWeekends && isWeekend(row[xKey]) ? 1 : 0 }))
+    : lineData
   const LineChartish = shadeWeekends ? ComposedChart : LineChart
   const lowerSet = new Set(lowerKeys ?? [])
   const hasLower = lowerSet.size > 0
