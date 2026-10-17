@@ -388,6 +388,9 @@ function ProgressCard({ label, headline, unit, action, pct, tick, to = '/cbat/re
       to={to}
       className={shell}
       title={action}
+      // The hub's admin presence dots treat this as a tile: anyone on the
+      // Aptitude Report page is drawn here.
+      data-cbat-card="report"
     >
       <div className="flex">
         {/* The neutral stripe, never a status colour. Nothing here is a result. */}
@@ -448,6 +451,7 @@ function ScoredCard({ target, label, to = '/cbat/report' }) {
     <Link
       to={to}
       className={shell}
+      data-cbat-card="report"
     >
       <div className="flex">
         <div

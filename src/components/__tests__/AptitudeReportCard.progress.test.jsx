@@ -132,6 +132,14 @@ describe('AptitudeReportCard — below the verdict threshold', () => {
     expect(screen.getByTestId('aptitude-card-stripe').className).toContain('bg-game-line')
   })
 
+  // The hub's admin presence dots measure tiles by this attribute; without it,
+  // someone on /cbat/report has nowhere to be drawn.
+  it('marks the report half as a presence tile', async () => {
+    const { container } = renderWith(PROVISIONAL)
+    await settled()
+    expect(container.querySelector('[data-cbat-card="report"]')).not.toBeNull()
+  })
+
   // Coverage exists from the first run now, so this user has both a coverage figure and a nearly
   // banked game. The runs fraction has to win: 8% is not a thing anyone can act on tonight, and
   // "one more go at CUT" is. Coverage takes over the moment a test is actually settled.

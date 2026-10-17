@@ -5,7 +5,7 @@
  * never survive into the label, because the label is what gets stored.
  */
 const {
-  locationLabel, LOCATIONS, CBAT_CARDS, cbatCardKey, cbatCardFromLabel, mockLocationLabel, MOCK_CARD,
+  locationLabel, LOCATIONS, CBAT_CARDS, cbatCardKey, cbatCardFromLabel, mockLocationLabel, MOCK_CARD, REPORT_CARD,
 } = require('../../constants/presenceLocations');
 
 describe('locationLabel', () => {
@@ -157,7 +157,6 @@ describe('cbatCardKey', () => {
   it('is null for the parts of /cbat that are not a game', () => {
     expect(cbatCardKey('/cbat')).toBeNull();
     expect(cbatCardKey('/cbat/')).toBeNull();
-    expect(cbatCardKey('/cbat/report')).toBeNull();
     expect(cbatCardKey('/profile')).toBeNull();
     expect(cbatCardKey('/cbat/target/something-else')).toBeNull();
   });
@@ -219,6 +218,16 @@ describe('cbatCardFromLabel', () => {
                      undefined, null, 42, {}, []]) {
       expect(cbatCardFromLabel(l)).toBeNull();
     }
+  });
+});
+
+describe('the Aptitude Report tile', () => {
+  it('puts someone on the report page on the report half of the card', () => {
+    expect(cbatCardKey('/cbat/report')).toBe(REPORT_CARD);
+    expect(cbatCardKey('/cbat/report/')).toBe(REPORT_CARD);
+    expect(cbatCardKey('/cbat/report?period=all-time')).toBe(REPORT_CARD);
+    expect(cbatCardFromLabel('Aptitude Report')).toBe(REPORT_CARD);
+    expect(CBAT_CARDS).not.toContain(REPORT_CARD);
   });
 });
 

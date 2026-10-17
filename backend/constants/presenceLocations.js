@@ -192,6 +192,8 @@ function leaderboardLabel(clean) {
 // tile on the hub all the same: the Mock Assessment half of the Aptitude
 // Report card.
 const MOCK_CARD = 'mock';
+// The other half of that card: the Aptitude Report itself.
+const REPORT_CARD = 'report';
 
 const CBAT_CARDS = [
   'target', 'ant', 'symbols', 'code-duplicates', 'angles', 'instruments',
@@ -248,8 +250,11 @@ function cbatCardKey(path) {
   // because a mock's tests run on the ordinary game pages.
   if (/^\/cbat\/mock\/?$/.test(clean)) return MOCK_CARD;
 
+  // The Aptitude Report page, which is the other half of the same card.
+  if (/^\/cbat\/report\/?$/.test(clean)) return REPORT_CARD;
+
   // The game page itself, or one of its leaderboards. Nothing else under /cbat
-  // belongs to a tile — /cbat is the hub, /cbat/report is the Aptitude Report.
+  // belongs to a tile — /cbat is the hub.
   const m = clean.match(/^\/cbat\/([a-z0-9-]{1,40})(?:\/leaderboard)?\/?$/);
   if (!m) return null;
 
@@ -280,9 +285,10 @@ function cardPath(card) {
 // Leaderboard") with the game deliberately dropped, so a label can never say
 // which tile a board belongs to — that is what the stored card is for, and why
 // this is a fallback rather than the mechanism.
-const CARD_BY_LABEL = new Map(
-  CBAT_CARDS.map(card => [locationLabel(cardPath(card)), card]),
-);
+const CARD_BY_LABEL = new Map([
+  ...CBAT_CARDS.map(card => [locationLabel(cardPath(card)), card]),
+  [locationLabel('/cbat/report'), REPORT_CARD],
+]);
 
 function cbatCardFromLabel(label) {
   if (typeof label !== 'string') return null;
@@ -309,5 +315,5 @@ function mockLocationLabel(label, { step, total } = {}) {
 
 module.exports = {
   LOCATIONS, LOCATION_MAX, locationLabel, mockLocationLabel,
-  CBAT_CARDS, MOCK_CARD, cbatCardKey, cbatCardFromLabel,
+  CBAT_CARDS, MOCK_CARD, REPORT_CARD, cbatCardKey, cbatCardFromLabel,
 };
