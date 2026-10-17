@@ -789,16 +789,17 @@ export default function Cbat() {
           is the more obvious gesture and it should not be a dead one.
 
           `sm:mt-6` parts it from the footer strip above, which from sm up is
-          two full sentences and otherwise ran straight into the heading. Not
-          on a phone: there the strip is usually folded into the grid (see
-          `reportInGrid`) and the first screen has no height to spare. */}
+          two full sentences and otherwise ran straight into the heading. A
+          smaller `mt-3` on a phone, where the strip is usually folded into the
+          grid (see `reportInGrid`): with no margin at all the top hairline
+          sat right on the bottom edge of the last row of tiles. */}
       {showLoungeLanding && (
         <button
           type="button"
           data-testid="cbat-lounge-landmark"
           ref={landmarkRef}
           onClick={goToLounge}
-          className="lg:hidden relative w-full py-3 sm:mt-6 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
+          className="lg:hidden relative w-full py-3 mt-3 sm:mt-6 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
           aria-label="CBAT chat: go to the lounge and your group"
         >
           {/* Ambient blue radial glow for depth — matches the radar tint below */}
