@@ -700,7 +700,11 @@ export default function CbatRtt() {
                 className="relative w-full rounded-xl overflow-hidden border border-game-line bg-game-arena select-none touch-none cursor-crosshair"
                 // Shorter on touch, to leave room for the pad and the shutter
                 // under it without the page scrolling mid-run.
-                style={{ height: isTouch ? 'min(56vh, 620px)' : 'min(72vh, 620px)' }}
+                // On desktop it fills the window: the viewport less the app
+                // chrome every /cbat route loses (10.75rem + safe area, see
+                // AppShell) and the header row above the arena. It used to
+                // stop at 620px, which left half a big monitor empty.
+                style={{ height: isTouch ? 'min(56vh, 620px)' : 'max(360px, calc(100dvh - 10.75rem - env(safe-area-inset-bottom) - 2.75rem))' }}
               >
                 <RttScene
                   sim={sim}
