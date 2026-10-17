@@ -1619,3 +1619,46 @@ describe('a group room waits for the player to touch it', () => {
     expect(screen.queryByLabelText('1 new group message')).toBeNull()
   })
 })
+
+// Someone with no test date gets the My group tab highlighted, so the private
+// group chat is found rather than stumbled on. It keeps coming back until a
+// date is entered.
+describe('My group highlight for a player with no test date', () => {
+  it('highlights My group, worded for the test the player will sit', async () => {
+    stubFetch({ group: { configured: false, applicable: true, regionAvailable: true, testName: 'CFAST' } })
+    renderOpen()
+    await waitFor(() => expect(screen.getByTestId('cbat-group-tab').className).toContain('cbat-group-nudge'))
+    expect(screen.getByTestId('cbat-group-tab').getAttribute('title')).toBe('Enter your upcoming CFAST date to join')
+    // The tab still reads as plain "My group": the hint is a description.
+    expect(screen.getByRole('tab', { name: 'My group' })).toBe(screen.getByTestId('cbat-group-tab'))
+  })
+
+  it('leaves My group plain once a date is entered', async () => {
+    const fetchMock = stubFetch({ group: { configured: true, conversationId: 'g1', unreadCount: 0 } })
+    renderOpen()
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/chat/cbat-group'))).toBe(true))
+    expect(screen.getByTestId('cbat-group-tab').className).not.toContain('cbat-group-nudge')
+  })
+
+  // Groups are for people still preparing; someone who has passed is told so
+  // inside the tab, not pulled towards it.
+  it('does not highlight My group for someone who has already passed', async () => {
+    const fetchMock = stubFetch({ group: { configured: false, applicable: false, regionAvailable: true, testName: 'CBAT' } })
+    renderOpen()
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/chat/cbat-group'))).toBe(true))
+    expect(screen.getByTestId('cbat-group-tab').className).not.toContain('cbat-group-nudge')
+  })
+
+  it('comes back after the player looks at My group without entering a date', async () => {
+    stubFetch()
+    renderOpen()
+    await waitFor(() => expect(screen.getByTestId('cbat-group-tab').className).toContain('cbat-group-nudge'))
+
+    // Not on the tab itself: the date form is already in front of them there.
+    fireEvent.click(screen.getByRole('tab', { name: 'My group' }))
+    expect(screen.getByTestId('cbat-group-tab').className).not.toContain('cbat-group-nudge')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Lounge' }))
+    await waitFor(() => expect(screen.getByTestId('cbat-group-tab').className).toContain('cbat-group-nudge'))
+  })
+})

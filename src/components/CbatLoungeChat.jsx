@@ -256,6 +256,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   const [newSince,  setNewSince]  = useState(null)
   const unackedRef = useRef(false)
   const [groupUnreadCount, setGroupUnreadCount] = useState(0)
+  // Set from the My group status poll while no test date has been entered
+  // (and the test has not already been passed): { testName }, else null.
+  const [groupNeedsDate, setGroupNeedsDate] = useState(null)
   const [allGroupsUnreadCount, setAllGroupsUnreadCount] = useState(0)
   const [selectedAdminGroupUnread, setSelectedAdminGroupUnread] = useState(0)
   const [needsName, setNeedsName] = useState(false)
@@ -480,7 +483,11 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       if (document.hidden) return
       get('/api/chat/cbat-group')
         .then(({ ok, data }) => {
-          if (!cancelled && ok) setGroupUnreadCount(Number(data?.unreadCount) || 0)
+          if (cancelled || !ok) return
+          setGroupUnreadCount(Number(data?.unreadCount) || 0)
+          setGroupNeedsDate(data?.configured === false && data?.applicable !== false
+            ? { testName: data?.testName ?? null }
+            : null)
         })
         .catch(() => {})
     }
@@ -1161,6 +1168,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   const shownGroups = [...recentGroups, ...olderGroups.slice(0, previousGroupsShown)]
   const hiddenOlderCount = Math.max(0, olderGroups.length - previousGroupsShown)
 
+  // Highlight My group for as long as the player has no test date entered,
+  // every visit, until they enter one. Not while they are on the tab itself,
+  // where the date form is already in front of them. Saving a date clears it:
+  // the poll that sets it runs again as soon as they leave the tab.
+  const groupNudge = room !== 'group' && groupNeedsDate
+    ? cohortCopy(groupNeedsDate.testName).railHint
+    : null
+
   return (
     <div
       ref={setPanelEl}
@@ -1178,7 +1193,10 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
               role="tab"
               aria-selected={room === key}
               onClick={() => changeRoom(key)}
-              className={`min-w-[4.5rem] rounded-md border px-3 py-1.5 text-center text-[10px] font-extrabold tracking-wide transition-[color,background-color,border-color,box-shadow] duration-200
+              title={key === 'group' && groupNudge ? groupNudge : undefined}
+              aria-description={key === 'group' && groupNudge ? groupNudge : undefined}
+              data-testid={key === 'group' ? 'cbat-group-tab' : undefined}
+              className={`min-w-[4.5rem] rounded-md border px-3 py-1.5 text-center text-[10px] font-extrabold tracking-wide transition-[color,background-color,border-color,box-shadow] duration-200${key === 'group' && groupNudge ? ' cbat-group-nudge' : ''}
                 ${room === key
                   ? 'border-brand-400/70 bg-brand-600 text-white shadow-[0_2px_8px_rgba(37,99,235,.24),inset_0_1px_0_rgba(255,255,255,.16)]'
                   : 'border-transparent text-slate-500 hover:bg-brand-500/8 hover:text-brand-700'}`}
