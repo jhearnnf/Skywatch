@@ -197,6 +197,22 @@ describe('pickPad with pedals about', () => {
     expect(pickPad([hotas], null).id).toBe('HOTAS')
   })
 
+  // The T.Flight Hotas One report (16 Oct 2026): rudder learned on SMA against
+  // the HOTAS's own id, then Forget on the stick panel. The device became
+  // "known only as pedals", pickPad skipped it, and the stick vanished.
+  it('still finds a HOTAS whose stick profile was forgotten but whose rudder is learned', () => {
+    savePedalProfile({
+      id: 'HOTAS', version: PEDAL_PROFILE_VERSION, calibrated: true,
+      axis: { index: 5, centre: 0, min: -1, max: 1, sign: 1 },
+    })
+    const hotas = pad({ id: 'HOTAS', axes: [0, 0, 0, 0, 0, 0], buttons: 14 })
+    expect(pickPad([hotas], null).id).toBe('HOTAS')
+
+    // But a separate stick still beats it, even with fewer buttons.
+    const stick = pad({ id: 'Sidestick', axes: [0, 0], buttons: 4 })
+    expect(pickPad([hotas, stick], null).id).toBe('Sidestick')
+  })
+
   it('prefers a calibrated stick, then the device with more buttons', () => {
     // Uncalibrated pedals listed first must not become the stick: they have
     // no buttons and the stick has a dozen.

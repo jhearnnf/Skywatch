@@ -184,9 +184,16 @@ export function listPads() {
 // pedals on their own USB lead — because whichever one the driver happened to
 // list first would otherwise silently become the stick:
 //
-//   1. a device that is known ONLY as pedals is never the stick. A pedal
-//      profile on the same id as a stick profile is pedals daisy-chained into
-//      the stick's own port, and that device stays a stick.
+//   1. a device that is known ONLY as pedals, and has no buttons, is never
+//      the stick. A pedal profile on the same id as a stick profile is pedals
+//      daisy-chained into the stick's own port, and that device stays a stick.
+//      So does one with buttons and no stick profile: that is a HOTAS whose
+//      rudder (twist, rocker or chained pedals) was learned on SMA before the
+//      stick was calibrated, or after it was forgotten. Skipping it hid the
+//      only stick there was, so the panel said "No joystick detected" and
+//      Calibrate refused to start. It is ranked below any device that is not
+//      known as pedals instead, which still keeps a separate pedal unit from
+//      being taken for an uncalibrated stick.
 //   2. a device with a calibrated stick profile beats one without.
 //   3. a device with more buttons beats one with fewer. Rudder pedals have
 //      none and a flight stick has a dozen, so this is what keeps uncalibrated
@@ -214,9 +221,11 @@ export function pickPad(pads, preferredId) {
   let bestRank = null
   for (const p of pads) {
     const isStick = !!sticks[p.id]?.calibrated
-    if (pedals[p.id] && !sticks[p.id]) continue
+    const buttons = p.buttons ? p.buttons.length : 0
+    const pedalsOnly = !!pedals[p.id] && !sticks[p.id]
+    if (pedalsOnly && buttons === 0) continue
     const throttleOnly = p.id === throttleId && !sticks[p.id]
-    const rank = [isStick ? 1 : 0, throttleOnly ? 0 : 1, p.buttons ? p.buttons.length : 0]
+    const rank = [isStick ? 1 : 0, pedalsOnly ? 0 : 1, throttleOnly ? 0 : 1, buttons]
     if (!best || beats(rank, bestRank)) {
       best = p
       bestRank = rank
