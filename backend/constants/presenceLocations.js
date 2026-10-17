@@ -48,6 +48,9 @@ const LOCATIONS = [
   // the game pages, so /presence asks the mock itself (see mockLocationLabel).
   [/^\/cbat\/mock\/?$/,             'Mock Assessment'],
   [/^\/cbat\/mock\/[^/]+\/?$/,       'Mock score sheet'],
+  [/^\/cbat\/report\/?$/,           'Aptitude Report'],
+  // The fallback only: a board whose game is known gets its name instead (see
+  // leaderboardLabel). This catches a segment nothing recognises.
   [/^\/cbat\/[^/]+\/leaderboard\/?$/, 'CBAT · Leaderboard'],
   [/^\/cbat\/?$/,                   'CBAT menu'],
 
@@ -118,8 +121,57 @@ function locationLabel(path) {
   const clean = path.split('?')[0].split('#')[0].trim();
   if (!clean || !clean.startsWith('/') || clean.length > 300) return null;
 
+  const board = leaderboardLabel(clean);
+  if (board) return board.slice(0, LOCATION_MAX);
+
   const hit = LOCATIONS.find(([rx]) => rx.test(clean));
   return hit ? hit[1].slice(0, LOCATION_MAX) : null;
+}
+
+// ── Which game's leaderboard ─────────────────────────────────────────────────
+//
+// Leaderboard paths are keyed by score model (backend/constants/cbatGames.js),
+// so the segment is not always a card: '/cbat/trace-2/leaderboard' is the Trace
+// tile, '/cbat/cut-easier/leaderboard' is CUT's Easier board. The name comes
+// from this table, or else from the card's own game label, and the difficulty
+// is put back on after. Every word of it is from an allowlist, so a junk
+// segment still cannot reach the database: it gets null here and falls through
+// to the generic 'CBAT · Leaderboard' row.
+const LEADERBOARD_SUFFIX = ' leaderboard';
+
+const LEADERBOARD_NAMES = {
+  'trace-1':                 'Trace 1',
+  'trace-2':                 'Trace 2',
+  'plane-turn':              'Trace',
+  'plane-turn-2d':           'Trace Practise 2D',
+  'plane-turn-3d':           'Trace Practise 3D',
+  'visualisation-2d':        'Visualisation 2D',
+  'visualisation-3d':        'Visualisation 3D',
+  'ant-practise':            'ANT Practise',
+  'vigilance-practise':      'Vigilance Practise',
+  'instruments-orientation': 'Instruments Orientation',
+  'instruments-practise':    'Instruments Practise',
+  'clan':                    'CLAN',
+};
+
+function leaderboardLabel(clean) {
+  const m = clean.match(/^\/cbat\/([a-z0-9-]{1,40})\/leaderboard\/?$/);
+  if (!m) return null;
+
+  const diff = m[1].match(CBAT_DIFFICULTY_SUFFIX);
+  const seg  = m[1].replace(CBAT_DIFFICULTY_SUFFIX, '');
+
+  let name = LEADERBOARD_NAMES[seg];
+  if (!name) {
+    const card = cbatCardKey(clean);
+    if (!card || card === MOCK_CARD) return null;
+    const gameLabel = locationLabel(cardPath(card));
+    if (!gameLabel?.startsWith('CBAT · ')) return null;
+    name = gameLabel.slice('CBAT · '.length);
+  }
+
+  const difficulty = diff ? ` (${diff[1] === 'easier' ? 'Easier' : 'Hard'})` : '';
+  return `CBAT · ${name}${difficulty}${LEADERBOARD_SUFFIX}`;
 }
 
 // ── Which CBAT hub card someone is standing on ───────────────────────────────
@@ -249,6 +301,7 @@ function cbatCardFromLabel(label) {
 function mockLocationLabel(label, { step, total } = {}) {
   const progress = step && total ? `Test ${Math.min(step, total)} of ${total}` : null;
   const game = typeof label === 'string' && label.startsWith('CBAT · ') && label !== 'CBAT · Leaderboard'
+      && !label.endsWith(LEADERBOARD_SUFFIX)
     ? label.slice('CBAT · '.length)
     : null;
   return ['Mock Assessment', game, progress].filter(Boolean).join(' · ');

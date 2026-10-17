@@ -382,7 +382,7 @@ describe('POST /api/users/heartbeat — reporting where you are', () => {
     await beat(user, { path: '/cbat/target/leaderboard' });
 
     const stored = await reload(user);
-    expect(stored.lastLocation).toBe('CBAT · Leaderboard');
+    expect(stored.lastLocation).toBe('CBAT · Target leaderboard');
     expect(stored.lastCbatCard).toBe('target');
   });
 

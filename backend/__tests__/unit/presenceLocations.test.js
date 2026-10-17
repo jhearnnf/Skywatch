@@ -20,7 +20,8 @@ describe('locationLabel', () => {
     // path, /play matches /play/quiz, and so on.
     expect(locationLabel('/cbat')).toBe('CBAT menu');
     expect(locationLabel('/cbat/flag')).toBe('CBAT · FLAG');
-    expect(locationLabel('/cbat/flag/leaderboard')).toBe('CBAT · Leaderboard');
+    expect(locationLabel('/cbat/flag/leaderboard')).toBe('CBAT · FLAG leaderboard');
+    expect(locationLabel('/cbat/report')).toBe('Aptitude Report');
     expect(locationLabel('/play')).toBe('Play');
     expect(locationLabel('/play/quiz')).toBe('Quiz briefs');
     expect(locationLabel('/profile')).toBe('Profile');
@@ -30,6 +31,26 @@ describe('locationLabel', () => {
     expect(locationLabel('/case-files')).toBe('Case Files');
     expect(locationLabel('/case-files/hormuz/one')).toBe('Playing a case file');
     expect(locationLabel('/case-files/hormuz/one/debrief')).toBe('Case file debrief');
+  });
+
+  it('names the game whose leaderboard someone is reading', () => {
+    expect(locationLabel('/cbat/target/leaderboard')).toBe('CBAT · Target leaderboard');
+    expect(locationLabel('/cbat/trace-2/leaderboard')).toBe('CBAT · Trace 2 leaderboard');
+    expect(locationLabel('/cbat/visualisation-3d/leaderboard')).toBe('CBAT · Visualisation 3D leaderboard');
+    expect(locationLabel('/cbat/clan-easier/leaderboard')).toBe('CBAT · CLAN (Easier) leaderboard');
+    expect(locationLabel('/cbat/cut-easier/leaderboard?period=weekly')).toBe('CBAT · Cognitive Updating (Easier) leaderboard');
+    expect(locationLabel('/cbat/dpt-hard/leaderboard/')).toBe('CBAT · DPT (Hard) leaderboard');
+    expect(locationLabel('/cbat/ant-practise/leaderboard')).toBe('CBAT · ANT Practise leaderboard');
+  });
+
+  it('falls back to a plain leaderboard label for a game it does not know', () => {
+    expect(locationLabel('/cbat/some-secret-slug/leaderboard')).toBe('CBAT · Leaderboard');  });
+
+  it('keeps every leaderboard label within the stored limit', () => {
+    for (const seg of ['vigilance-practise', 'sat-easier','numerical-ops-easier', 'instruments-orientation']) {
+      const label = locationLabel(`/cbat/${seg}/leaderboard`);
+      expect(label.length).toBeLessThanOrEqual(60);
+    }
   });
 
   it('tolerates a trailing slash', () => {
@@ -209,6 +230,7 @@ describe('mockLocationLabel', () => {
   it('drops the game when the label is not a game page', () => {
     expect(mockLocationLabel('Mock Assessment', { step: 1, total: 8 })).toBe('Mock Assessment · Test 1 of 8');
     expect(mockLocationLabel('CBAT · Leaderboard', { step: 2, total: 8 })).toBe('Mock Assessment · Test 2 of 8');
+    expect(mockLocationLabel('CBAT · Target leaderboard', { step: 2, total: 8 })).toBe('Mock Assessment · Test 2 of 8');
     expect(mockLocationLabel(null, { step: 2, total: 8 })).toBe('Mock Assessment · Test 2 of 8');
   });
 
