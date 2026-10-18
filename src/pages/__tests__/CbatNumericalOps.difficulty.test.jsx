@@ -204,7 +204,7 @@ describe('Numerical Operations — difficulty selection on the instructions card
     fireEvent.click(startBtn())
     await act(async () => { vi.advanceTimersByTime(LAUNCH_MS + 100) })
 
-    // Time out all 20 questions: 20s each plus the 900ms feedback flash. The
+    // Time out all 20 questions: 20s each plus the 400ms feedback flash. The
     // question and the flash are advanced separately so React commits the phase
     // change in between — one combined advance runs the feedback timeout before
     // the effect that schedules it has been committed, and the run falls a

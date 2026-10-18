@@ -30,7 +30,7 @@ const ROUNDS = 4
 const QUESTIONS_PER_ROUND = 5
 const TOTAL_QUESTIONS = ROUNDS * QUESTIONS_PER_ROUND
 const PER_QUESTION_MS = 20000
-const FEEDBACK_MS = 900
+const FEEDBACK_MS = 400
 
 // ── Question generation ──────────────────────────────────────────────────────
 function randInt(min, max) {
