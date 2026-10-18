@@ -278,3 +278,42 @@ describe('Numerical Operations — generated questions honour the tuning', () =>
     }
   })
 })
+
+// Keys fire on pointerdown so a phone tap can't be lost to a slide or to the
+// browser reading two quick taps on one key as a double-tap zoom.
+describe('Numerical Operations — keypad input', () => {
+  afterEach(() => vi.useRealTimers())
+
+  async function startRun() {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    setup()
+    render(<CbatNumericalOps />)
+    fireEvent.click(startBtn())
+    await act(async () => { vi.advanceTimersByTime(LAUNCH_MS + 100) })
+  }
+  const key = (label) => screen.getByRole('button', { name: label })
+  const shownAnswer = () => document.querySelector('.font-mono.font-bold.text-white')
+    .textContent.split('=').pop().trim()
+
+  it('enters a digit on pointerdown, once, even with the click that follows', async () => {
+    await startRun()
+    // A tap is pointerdown then click: two quick taps on the same key.
+    fireEvent.pointerDown(key('1'), { button: 0 })
+    expect(shownAnswer()).toBe('1')
+    fireEvent.click(key('1'))
+    fireEvent.pointerDown(key('1'), { button: 0 })
+    fireEvent.click(key('1'))
+    expect(shownAnswer()).toBe('11')
+  })
+
+  it('still enters a digit from a click with no pointerdown (keyboard Space/Enter)', async () => {
+    await startRun()
+    fireEvent.click(key('7'))
+    expect(shownAnswer()).toBe('7')
+  })
+
+  it('stops the browser treating key taps as a double-tap zoom', async () => {
+    await startRun()
+    expect(key('1').className).toContain('touch-manipulation')
+  })
+})

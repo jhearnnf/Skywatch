@@ -97,14 +97,30 @@ function formatOp(op) {
 // defined inline would get a new type identity on every render, forcing React
 // to unmount/remount every button each tick — which makes them visibly flash
 // and swallows clicks (the node is replaced between mousedown and mouseup).
+//
+// Keys fire on pointerdown, as on the DPT keypad: a click only lands on finger
+// lift, so a tap that slides is lost, and two quick taps on one key (the 1s
+// of "11") get read as a double-tap zoom. The click that follows a pointerdown
+// is skipped; a click with no pointerdown (keyboard Enter/Space) still fires.
+// touch-manipulation stops the browser waiting to see if a tap is a double-tap.
 function KeyButton({ children, onClick, accent, disabled, canSubmit, demoAnswer }) {
+  const pressedAt = useRef(0)
   return (
     <button
       type="button"
-      onClick={onClick}
+      onPointerDown={(e) => {
+        if (disabled || e.button > 0) return
+        e.preventDefault()
+        pressedAt.current = Date.now()
+        onClick()
+      }}
+      onClick={() => {
+        if (Date.now() - pressedAt.current < 500) return
+        onClick()
+      }}
       disabled={disabled}
       data-demo-answer={demoAnswer ? '' : undefined}
-      className={`py-4 lg:py-5 rounded-lg border-2 font-mono font-bold text-xl lg:text-3xl transition-all ${
+      className={`touch-manipulation select-none py-4 lg:py-5 rounded-lg border-2 font-mono font-bold text-xl lg:text-3xl transition-all ${
         accent === 'submit'
           ? (canSubmit && !disabled
               ? 'bg-brand-600 hover:bg-brand-700 border-brand-600 text-white cursor-pointer'
