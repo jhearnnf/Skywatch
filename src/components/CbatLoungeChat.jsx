@@ -482,8 +482,12 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       setLounge(data)
       setHasNew(Boolean(data.unread))
       const unreadHere = Number(data.unreadCount) || 0
+      // An admin reaches a cohort only by clicking its row in All groups, and
+      // that click is the touch: the row is gone by the time the conversation
+      // mounts, so waiting for another one left the room unread for good.
+      const adminOpened = room === 'groups' && !Array.isArray(data.groups)
       if (groupRoom && data.conversationId && unreadHere > 0) {
-        unackedRef.current = true
+        unackedRef.current = !adminOpened
         // Never opened: everything is new, so the line goes above the first.
         setNewSince(data.lastReadAt ?? new Date(0).toISOString())
       } else {
@@ -495,8 +499,15 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
         if (Array.isArray(data.groups)) {
           setAllGroupsUnreadCount(data.groups.reduce((sum, group) => sum + (Number(group.unread) || 0), 0))
           setSelectedAdminGroupUnread(0)
+        } else if (unreadHere > 0 && data.conversationId) {
+          setHasNew(false)
+          setAllGroupsUnreadCount(count => Math.max(0, count - unreadHere))
+          setSelectedAdminGroupUnread(0)
+          fetch(`${API}/api/chat/conversations/${data.conversationId}/read`, {
+            method: 'POST', credentials: 'include',
+          }).catch(() => {})
         } else {
-          setSelectedAdminGroupUnread(Number(data.unreadCount) || 0)
+          setSelectedAdminGroupUnread(0)
         }
       }
       setNeedsName(Boolean(data.displayNameRequired))

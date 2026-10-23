@@ -470,6 +470,35 @@ describe('private CBAT group', () => {
     expect(await screen.findByLabelText('6 new messages across CBAT groups')).toBeTruthy()
     expect(screen.getByRole('tab', { name: /All groups/ })).toHaveTextContent('6')
   })
+
+  it('reads an admin-opened group straight away: the row click is the touch', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    const list = { groups: [
+      { conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 3, messageCount: 4, unread: 1 },
+      { conversationId: 'c2', date: '2099-10-15', region: 'AU', participantCount: 1, messageCount: 3, unread: 1 },
+    ] }
+    const detail = {
+      configured: true, conversationId: 'c1', date: '2099-10-14', region: 'GB', title: 'CBAT · 14 Oct 2099',
+      unread: true, unreadCount: 1, lastReadAt: '2099-01-01T00:00:00.000Z', canPost: true, memberCount: 3,
+    }
+    global.fetch = vi.fn((url) => {
+      const data = String(url).endsWith('/cbat-groups') ? list
+        : String(url).includes('/api/chat/cbat-groups/') ? detail
+        : String(url).includes('/messages') ? { messages: [], senders: {}, botTyping: null }
+        : {}
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'success', data }) })
+    })
+    renderOpen()
+    expect(await screen.findByLabelText('2 new messages across CBAT groups')).toBeTruthy()
+
+    fireEvent.click(screen.getByText('Region GB'))
+
+    // No further click inside the conversation.
+    await waitFor(() => expect(
+      global.fetch.mock.calls.some(([url, opts]) => String(url).includes('/conversations/c1/read') && opts?.method === 'POST'),
+    ).toBe(true))
+    expect(await screen.findByLabelText('1 new message across CBAT groups')).toBeTruthy()
+  })
 })
 
 describe('open', () => {
