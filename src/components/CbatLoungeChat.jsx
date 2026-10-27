@@ -375,7 +375,11 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   // same reasoning, as pages/chat/ChatThread.jsx.
   const justSentRef = useRef(new Map())
 
-  const applyJustSent = useCallback((serverMessages) => {
+  // `roomId` is the conversation the snapshot came from. This widget switches
+  // rooms without remounting (an admin flicking between two cohorts on the same
+  // date), so a held message must only ever be put back into the room it was
+  // sent to, or it shows up in every room opened within the next 30 seconds.
+  const applyJustSent = useCallback((serverMessages, roomId) => {
     const pending = justSentRef.current
     if (!pending.size) return serverMessages
     const now = Date.now()
@@ -385,6 +389,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       // In the snapshot, or old enough that the server has plainly decided
       // otherwise. Either way stop holding it.
       if (ids.has(id) || now - entry.at > PENDING_MS) { pending.delete(id); continue }
+      if (entry.roomId !== String(roomId)) continue
       held.push(entry.message)
     }
     // They are by definition the newest, so they go on the end.
@@ -644,7 +649,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}`)
     if (!ok || !data) return
     // A chunk of history from a search jump is on screen; see `hasNewer`.
-    if (!hasNewerRef.current) setMessages(prev => keepOlder(prev, applyJustSent(data.messages ?? [])))
+    if (!hasNewerRef.current) setMessages(prev => keepOlder(prev, applyJustSent(data.messages ?? [], conversationId)))
     // On top of the senders already known, so names on older pages still resolve.
     setSenders(prev => ({ ...prev, ...(data.senders ?? {}) }))
     // Once an older page is on screen, whether there is more is that page's
@@ -744,7 +749,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     const { ok, data } = await get(`/api/chat/conversations/${conversationId}/messages?limit=${MESSAGE_LIMIT}`)
     if (!ok || !data) { setErr('Could not load the latest messages.'); return }
     olderLoadedRef.current = false
-    setMessages(applyJustSent(data.messages ?? []))
+    setMessages(applyJustSent(data.messages ?? [], conversationId))
     setSenders(prev => ({ ...prev, ...(data.senders ?? {}) }))
     setHasMore(Boolean(data.hasMore))
     setHasNewer(false)
@@ -1163,6 +1168,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
       if (d?.data?.botReplyingName) setTypingName(d.data.botReplyingName)
       if (d?.data?.message) {
         justSentRef.current.set(String(d.data.message._id), {
+          roomId:  String(conversationId),
           message: d.data.message,
           at:      Date.now(),
         })

@@ -499,6 +499,45 @@ describe('private CBAT group', () => {
     ).toBe(true))
     expect(await screen.findByLabelText('1 new message across CBAT groups')).toBeTruthy()
   })
+
+  it('keeps a just-sent message in its own group when the admin opens another one on the same date', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    const list = { groups: [
+      { conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 3, messageCount: 0 },
+      { conversationId: 'c2', date: '2099-10-14', region: 'AU', participantCount: 1, messageCount: 0 },
+    ] }
+    const detail = (id, region) => ({
+      configured: true, conversationId: id, date: '2099-10-14', region, title: `Test day · 14 Oct 2099 ${region}`,
+      unread: false, unreadCount: 0, lastReadAt: null, canPost: true, memberCount: 1,
+    })
+    const sent = { _id: 'm9', conversationId: 'c1', senderUserId: 'u1', senderDisplayName: 'Control', body: 'hello GB', mentions: [] }
+    apiFetch.mockResolvedValue({ ok: true, json: async () => ({ data: { message: sent } }) })
+    global.fetch = vi.fn((url) => {
+      const u = String(url)
+      // The server has not caught up with the send: every load comes back
+      // empty, which is exactly when the held copy is put back.
+      const data = u.endsWith('/cbat-groups') ? list
+        : u.endsWith('/cbat-groups/c1') ? detail('c1', 'GB')
+        : u.endsWith('/cbat-groups/c2') ? detail('c2', 'AU')
+        : u.includes('/messages') ? { messages: [], senders: {}, botTyping: null }
+        : {}
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'success', data }) })
+    })
+    renderOpen()
+
+    fireEvent.click(await screen.findByText('Region GB'))
+    const box = await screen.findByPlaceholderText(/Message the lounge/i)
+    fireEvent.change(box, { target: { value: 'hello GB' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByText('hello GB')
+
+    fireEvent.click(screen.getByLabelText('Back to all groups'))
+    fireEvent.click(await screen.findByText('Region AU'))
+    await waitFor(() => expect(
+      global.fetch.mock.calls.some(([url]) => String(url).includes('/conversations/c2/messages')),
+    ).toBe(true))
+    expect(screen.queryByText('hello GB')).toBeNull()
+  })
 })
 
 describe('open', () => {
