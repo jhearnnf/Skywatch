@@ -75,6 +75,12 @@ const surveyInviteSchema = new mongoose.Schema({
   optedOutAt:  { type: Date, default: null },
 
   responseId: { type: mongoose.Schema.Types.ObjectId, ref: 'SurveyResponse', default: null },
+
+  // The account behind this invite was deleted. The row is kept so the funnel
+  // counts stay true, with `userId` swapped for a placeholder that matches no
+  // user, the address and token gone and its dates coarsened to the month.
+  // See step 2b of services/deleteUserData.js.
+  erased: { type: Boolean, default: false },
 }, { timestamps: true });
 
 // The idempotency guard for bulk sending, and the reason a double-clicked

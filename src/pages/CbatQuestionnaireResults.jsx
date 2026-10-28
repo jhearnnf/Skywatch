@@ -348,7 +348,7 @@ function Stat({ label, value, hint }) {
 // entirely on where they last saw this person — a display name in Community, an
 // address in the send list.
 function Who({ row }) {
-  const name = row.displayName?.trim() || (row.agentNumber ? `Agent ${row.agentNumber}` : 'Unknown')
+  const name = row.displayName?.trim() || (row.agentNumber ? `Agent ${row.agentNumber}` : row.erased ? 'Deleted account' : 'Unknown')
   return (
     <div className="min-w-0">
       <AgentLink userId={row.userId} name={name} className="block max-w-full text-sm font-semibold text-slate-800 truncate">
@@ -423,7 +423,7 @@ function AnswerCard({ r, open, onToggle, onOpenSheets }) {
           ▶
         </span>
         <div className="min-w-0 flex-1">
-          <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email }} />
+          <Who row={{ ...r.userId, userId: r.userId?._id, email: r.userId?.email, erased: r.erased }} />
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1 text-[10px] text-slate-500">
             {r.role && <span>{roleLabel(r.role, r.roleOther)}</span>}
             {wrote && <span className="text-amber-700 font-semibold">{wrote}</span>}

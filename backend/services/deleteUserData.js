@@ -79,20 +79,21 @@ const OWNED_BY_USER = [
   'GameSessionWheresThatAircraftResult',
   'IntelligenceBriefRead',
   'ProblemReport',
-  // The outcome questionnaire, both halves.
-  //
-  // Deleted rather than kept for the research, which is a real loss: these
-  // answers are scarce and the campaign exists to gather them. But the invite
-  // stores the address we actually mailed, and the response is free text
-  // somebody wrote about their own application and their own result, which is
-  // not something that can be safely de-identified by dropping a column.
-  //
-  // Deleting the invite is also what stops the account being re-mailed, though
-  // by this point there is no account left to mail.
-  'SurveyInvite',
-  'SurveyResponse',
+  // The outcome questionnaire is NOT here: it is kept, de-identified. See
+  // step 2b of deleteUserAndData.
   'UserNotification',
 ];
+
+// First of the month, UTC. What a kept row's dates are coarsened to, so a
+// timestamp cannot be matched back to the person (a send batch, a chat message
+// saying "just did it") once the id is gone. Monthly trends survive.
+const toMonth = (d) => (d ? new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)) : d);
+
+function monthsOf(doc, fields) {
+  const out = {};
+  for (const f of fields) if (doc[f]) out[f] = toMonth(new Date(doc[f]));
+  return out;
+}
 
 // ── Admin-authored content that merely records who touched it ────────────────
 // The doc belongs to the app, not the user — a brief reel still exists after the
@@ -194,6 +195,59 @@ async function deleteUserAndData(userId, context = {}) {
     deleted[modelName] = res.deletedCount;
   }
 
+  // 2b. The outcome questionnaire: kept, de-identified.
+  //
+  //     These answers are scarce and the campaign exists to gather them, so
+  //     deleting them with the account quietly rewrote the results page and
+  //     the Stats tiles every time somebody left. The questionnaire tells
+  //     respondents up front that their answers are kept anonymously after
+  //     account deletion (Survey.jsx, Privacy.jsx), which is what makes keeping
+  //     the free text defensible. A request to remove one is handled by hand.
+  //
+  //     What goes: the account id (swapped for a placeholder that points at no
+  //     user, one per erased account so "people" counts still count them once),
+  //     the mailed address, the token (so the old link stops working), and
+  //     every exact timestamp, coarsened to the month. Deferral and send-error
+  //     state goes too: there is nobody left to re-mail.
+  //
+  //     Written through the raw collection: Mongoose would otherwise refuse to
+  //     touch the immutable `createdAt` and stamp `updatedAt` with today, which
+  //     is itself a timestamp tying the row to the deletion.
+  //
+  //     Score sheets are not kept: they are named documents and go with the
+  //     User in step 6b. `resultImagesUploaded` survives as a count.
+  const SurveyInvite   = model('SurveyInvite');
+  const SurveyResponse = model('SurveyResponse');
+  const invites   = await SurveyInvite.find({ userId: id }).lean();
+  const responses = await SurveyResponse.find({ userId: id }).lean();
+  if (invites.length || responses.length) {
+    const placeholder = new mongoose.Types.ObjectId();
+    for (const inv of invites) {
+      await SurveyInvite.collection.updateOne({ _id: inv._id }, { $set: {
+        userId: placeholder,
+        erased: true,
+        token: `erased:${SurveyInvite.newToken()}`,
+        sentToEmail: null,
+        sendError: null,
+        brokenLinkAt: null,
+        deferredUntil: null,
+        ...monthsOf(inv, ['sentAt', 'openedAt', 'completedAt', 'optedOutAt', 'createdAt', 'updatedAt']),
+      } });
+    }
+    for (const r of responses) {
+      await SurveyResponse.collection.updateOne({ _id: r._id }, { $set: {
+        userId: placeholder,
+        erased: true,
+        ...monthsOf(r, [
+          'startedAt', 'completedAt', 'lastSeenAt', 'testBookedFor',
+          'resultImagesConsentAt', 'createdAt', 'updatedAt',
+        ]),
+      } });
+    }
+  }
+  deleted.SurveyInvite   = invites.length;
+  deleted.SurveyResponse = responses.length;
+
   // 3. Their view records — and any free-text "have your say" answer — inside
   //    admin-authored announcements. The announcement itself is app content.
   await model('UpdateNotification').updateMany(
@@ -245,13 +299,44 @@ async function deleteUserAndData(userId, context = {}) {
   //     looks like in this collection. Nothing reads `visitKey` back to anyone;
   //     it exists only to fold repeat visits into one row, and a fresh random
   //     value keeps doing that job for a row that will never be visited again.
-  const visits = await model('DonationPageVisit')
-    .find({ userId: id }).select('_id').lean();
-  for (const visit of visits) {
-    await model('DonationPageVisit').updateOne(
-      { _id: visit._id },
-      { $set: { userId: null, visitKey: `erased:${new mongoose.Types.ObjectId()}` } },
-    );
+  //
+  //     A signed-in donor's money lives on User.donationPrompt, which is about
+  //     to be deleted, and with it the Stats donation total. So it moves onto
+  //     their (now anonymous) visit row as `paidPence`, exactly where an
+  //     anonymous donor's gift is recorded, and the admin total, which already
+  //     sums both places, stays right. Their first visit takes it; a donor with
+  //     no visit row at all gets one minted for the purpose. Dates go to the
+  //     month, as in step 2b.
+  const DonationPageVisit = model('DonationPageVisit');
+  const donor = await User.findById(id).select('donationPrompt').lean();
+  const donatedAt = donor?.donationPrompt?.donatedAt ?? null;
+  const donatedPence = Math.max(0, donor?.donationPrompt?.donatedTotalPence ?? 0);
+
+  const visits = await DonationPageVisit.find({ userId: id }).sort({ arrivedAt: 1 }).lean();
+  for (const [i, visit] of visits.entries()) {
+    const payment = donatedAt && i === 0
+      ? { paidAt: toMonth(new Date(donatedAt)), paidPence: (visit.paidPence ?? 0) + donatedPence }
+      : {};
+    await DonationPageVisit.collection.updateOne({ _id: visit._id }, { $set: {
+      userId: null,
+      visitKey: `erased:${new mongoose.Types.ObjectId()}`,
+      ...monthsOf(visit, ['arrivedAt', 'checkoutStartedAt', 'paidAt', 'createdAt', 'updatedAt']),
+      ...payment,
+    } });
+  }
+  if (donatedAt && !visits.length) {
+    const month = toMonth(new Date(donatedAt));
+    await DonationPageVisit.collection.insertOne({
+      visitKey: `erased:${new mongoose.Types.ObjectId()}`,
+      userId: null,
+      arrivedAt: month,
+      checkoutStartedAt: null,
+      checkoutCount: 0,
+      paidAt: month,
+      paidPence: donatedPence,
+      createdAt: month,
+      updatedAt: month,
+    });
   }
   deleted.DonationPageVisit = visits.length;
 

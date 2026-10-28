@@ -479,6 +479,7 @@ router.get('/responses', async (_req, res) => {
         displayName: inv.userId?.displayName ?? null,
         email:       inv.sentToEmail ?? inv.userId?.email ?? null,
         optedOutAt:  inv.optedOutAt,
+        erased:      !!inv.erased,
         sentAt:      inv.sentAt,
         // The reason and the pass answer are both optional and both asked AFTER
         // the opt-out was applied, so either may be absent. Absent is not an

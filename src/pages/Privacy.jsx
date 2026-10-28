@@ -288,6 +288,18 @@ export default function Privacy() {
             if you close it.
           </p>
           <p>
+            If you answered our questionnaire, your answers are kept after you delete your account,
+            so that what you told us can keep improving the tests for others. They are kept
+            anonymously: your name, email address and account reference are removed, and the dates
+            are reduced to the month. If you would like your answers removed as well, contact us
+            and we will delete them.
+          </p>
+          <p>
+            If you made a donation, the amount and the month it was made are kept after you delete
+            your account, with nothing that identifies you, so that our donation totals stay
+            accurate. Our payment provider keeps its own record of the payment, as it is required to.
+          </p>
+          <p>
             If you delete your account, your support threads and direct messages are deleted with
             it. Because a channel is shared, messages you posted in one remain visible to other
             users as part of that conversation's history, with your name and account reference

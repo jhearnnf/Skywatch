@@ -115,6 +115,12 @@ const surveyResponseSchema = new mongoose.Schema({
   // page can tell "stopped partway" from "still typing a long answer", which
   // writes nothing until they press on.
   lastSeenAt: { type: Date, default: null },
+
+  // The respondent deleted their account. The answers are kept anonymously, as
+  // the questionnaire tells them they will be: `userId` is a placeholder that
+  // matches no user and every date is coarsened to the month. See step 2b of
+  // services/deleteUserData.js.
+  erased: { type: Boolean, default: false },
 }, { timestamps: true });
 
 surveyResponseSchema.index({ campaign: 1, completedAt: -1 });

@@ -249,28 +249,69 @@ describe('DELETE /api/admin/users/:id', () => {
 });
 
 describe('the dispositions the guard rail cannot check', () => {
-  // The questionnaire is deleted, not kept for the research. The invite holds
-  // the address we mailed and the response is free text about someone's own
-  // application, neither of which survives de-identification by dropping a
-  // column.
-  it('takes the outcome questionnaire with the account', async () => {
+  // The questionnaire is kept, de-identified: the answers are scarce and the
+  // respondent was told on the form that they outlive the account. The person
+  // goes (id, address, token) and every date is coarsened to the month.
+  it('keeps the outcome questionnaire, de-identified', async () => {
     const user = await createUser();
     const invite = await SurveyInvite.create({
       userId: user._id,
       token: SurveyInvite.newToken(),
       sentToEmail: user.email,
+      sentAt: new Date('2026-09-03T09:14:00Z'),
+      deferredUntil: new Date('2026-12-01T00:00:00Z'),
     });
-    await SurveyResponse.create({
+    const response = await SurveyResponse.create({
       inviteId: invite._id,
       userId: user._id,
       campaign: 'cbat_outcome_2026',
+      passedForRole: 'yes',
+      realismRating: 4,
       gaps: 'The SLT was nothing like the practice one.',
+      completedAt: new Date('2026-09-14T15:32:07Z'),
     });
 
     await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
 
     expect(await SurveyInvite.countDocuments({ userId: user._id })).toBe(0);
     expect(await SurveyResponse.countDocuments({ userId: user._id })).toBe(0);
+
+    const inv = await SurveyInvite.findById(invite._id).lean();
+    expect(inv.erased).toBe(true);
+    expect(inv.sentToEmail).toBeNull();
+    expect(inv.token).not.toBe(invite.token);
+    expect(inv.deferredUntil).toBeNull();
+    expect(inv.sentAt).toEqual(new Date('2026-09-01T00:00:00Z'));
+
+    const r = await SurveyResponse.findById(response._id).lean();
+    expect(r.erased).toBe(true);
+    expect(r.gaps).toBe('The SLT was nothing like the practice one.');
+    expect(r.passedForRole).toBe('yes');
+    expect(r.realismRating).toBe(4);
+    expect(r.completedAt).toEqual(new Date('2026-09-01T00:00:00Z'));
+    expect(r.createdAt.getUTCDate()).toBe(1);
+    expect(r.updatedAt.getUTCDate()).toBe(1);
+    // One placeholder per erased account, shared by invite and response, and
+    // pointing at nobody.
+    expect(String(r.userId)).toBe(String(inv.userId));
+    expect(await User.findById(r.userId)).toBeNull();
+  });
+
+  // Two erased respondents must not collide on the invite's unique
+  // (userId, campaign) index, and must stay two people.
+  it('gives each erased respondent their own placeholder', async () => {
+    const a = await createUser();
+    const b = await createUser();
+    for (const u of [a, b]) {
+      await SurveyInvite.create({ userId: u._id, token: SurveyInvite.newToken() });
+    }
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(a._id));
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(b._id));
+
+    const ids = (await SurveyInvite.find({}).lean()).map(r => String(r.userId));
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
   });
 
   // Someone who was asked for a donation was still asked after they leave, so
@@ -287,6 +328,49 @@ describe('the dispositions the guard rail cannot check', () => {
     expect(row.userId).toBeNull();
     expect(row.visitKey).not.toBe(String(user._id));
     expect(row.visitKey).not.toContain(String(user._id));
+    expect(row.paidAt).toBeNull();
+  });
+
+  // A signed-in donor's money lives on the User. It moves onto their anonymous
+  // visit row, where the admin total already looks, instead of vanishing.
+  it('moves a signed-in donation onto the anonymous visit row', async () => {
+    const user = await createUser();
+    await User.updateOne({ _id: user._id }, {
+      'donationPrompt.donatedAt': new Date('2026-08-20T10:00:00Z'),
+      'donationPrompt.donatedTotalPence': 1500,
+    });
+    await DonationPageVisit.create({ visitKey: `u:${user._id}`, userId: user._id });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    const rows = await DonationPageVisit.find({}).lean();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userId).toBeNull();
+    expect(rows[0].paidPence).toBe(1500);
+    expect(rows[0].paidAt).toEqual(new Date('2026-08-01T00:00:00Z'));
+  });
+
+  it('mints an anonymous row for a donor who never had a visit row', async () => {
+    const user = await createUser();
+    await User.updateOne({ _id: user._id }, {
+      'donationPrompt.donatedAt': new Date('2026-08-20T10:00:00Z'),
+      'donationPrompt.donatedTotalPence': 500,
+    });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    const rows = await DonationPageVisit.find({}).lean();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userId).toBeNull();
+    expect(rows[0].visitKey).toMatch(/^erased:/);
+    expect(rows[0].paidPence).toBe(500);
+    expect(rows[0].paidAt).toEqual(new Date('2026-08-01T00:00:00Z'));
+  });
+
+  it('adds nothing to the donation rows for someone who never donated', async () => {
+    const user = await createUser();
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+    expect(await DonationPageVisit.countDocuments({})).toBe(0);
   });
 
   // Two accounts erased in turn must not collide on the unique key.
@@ -346,6 +430,8 @@ describe('cascade coverage', () => {
       // visit the unique `visitKey` IS the account id, so the row needs both
       // columns rewritten and cannot be expressed as an authorship ref.
       'DonationPageVisit',
+      // Kept de-identified: placeholder id, no address or token, dates to the month.
+      'SurveyInvite', 'SurveyResponse',
     ]);
 
     const unhandled = referencing.filter((m) => !handled.has(m));

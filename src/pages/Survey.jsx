@@ -828,6 +828,7 @@ function GapsCard({ initial, realismRating, onSubmit, saving }) {
         data-testid="survey-gaps-input"
         className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface text-sm text-slate-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 resize-y transition-all"
       />
+      <RetentionNote />
       <button
         onClick={() => onSubmit(text.trim())}
         disabled={saving}
@@ -843,6 +844,20 @@ function GapsCard({ initial, realismRating, onSubmit, saving }) {
         Skip this
       </button>
     </div>
+  )
+}
+
+// Said where the free text is written, because that is the answer this promise
+// matters for: account deletion keeps the questionnaire, de-identified (see
+// backend/services/deleteUserData.js step 2b). Privacy.jsx says the same.
+function RetentionNote() {
+  return (
+    <p className="text-[11px] text-slate-500 leading-relaxed mt-2" data-testid="survey-retention-note">
+      Your answers are kept anonymously to help us improve the tests, even if you later delete your account. See our{' '}
+      <Link to="/privacy" className="font-semibold text-slate-600 hover:text-slate-700">
+        privacy policy
+      </Link>.
+    </p>
   )
 }
 
@@ -1471,6 +1486,7 @@ function CommentBox({ onSubmit }) {
         data-testid="survey-comment-input"
         className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-surface text-sm text-slate-800 outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100 resize-y transition-all"
       />
+      <RetentionNote />
       <button
         onClick={() => { onSubmit(text.trim()); setSent(true) }}
         disabled={!text.trim()}
