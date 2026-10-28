@@ -27,6 +27,7 @@ const SurveyInvite       = require('../../models/SurveyInvite');
 const SurveyResponse     = require('../../models/SurveyResponse');
 const DonationPageVisit  = require('../../models/DonationPageVisit');
 const ClipperScript      = require('../../models/ClipperScript');
+const CaseFileInterest   = require('../../models/CaseFileInterest');
 
 beforeAll(async () => {
   await db.connect();
@@ -367,6 +368,23 @@ describe('the dispositions the guard rail cannot check', () => {
     expect(rows[0].paidAt).toEqual(new Date('2026-08-01T00:00:00Z'));
   });
 
+  // A chapter-interest vote is a tally: it stays, the person goes.
+  it('keeps a Case Files interest vote but unlinks it', async () => {
+    const user = await createUser();
+    await CaseFileInterest.create({
+      userId: user._id, caseSlug: 'c1', chapterSlug: 'ch1', interested: true,
+    });
+
+    await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
+
+    const rows = await CaseFileInterest.find({}).lean();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].interested).toBe(true);
+    expect(String(rows[0].userId)).not.toBe(String(user._id));
+    expect(await User.findById(rows[0].userId)).toBeNull();
+    expect(rows[0].createdAt.getUTCDate()).toBe(1);
+  });
+
   it('adds nothing to the donation rows for someone who never donated', async () => {
     const user = await createUser();
     await request(app).delete('/api/users/me').set('Cookie', authCookie(user._id));
@@ -431,7 +449,7 @@ describe('cascade coverage', () => {
       // columns rewritten and cannot be expressed as an authorship ref.
       'DonationPageVisit',
       // Kept de-identified: placeholder id, no address or token, dates to the month.
-      'SurveyInvite', 'SurveyResponse',
+      'SurveyInvite', 'SurveyResponse', 'CaseFileInterest',
     ]);
 
     const unhandled = referencing.filter((m) => !handled.has(m));

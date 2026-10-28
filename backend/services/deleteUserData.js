@@ -248,6 +248,24 @@ async function deleteUserAndData(userId, context = {}) {
   deleted.SurveyInvite   = invites.length;
   deleted.SurveyResponse = responses.length;
 
+  // 2c. Case Files "I want the next chapter" votes: kept, de-identified, for
+  //     the same reason as 2b. A vote is a tally, not a person, and deleting it
+  //     would shrink the admin count every time somebody left. Placeholder id
+  //     rather than null because (userId, caseSlug, chapterSlug) is unique, and
+  //     dates to the month.
+  const CaseFileInterest = model('CaseFileInterest');
+  const votes = await CaseFileInterest.find({ userId: id }).lean();
+  if (votes.length) {
+    const placeholder = new mongoose.Types.ObjectId();
+    for (const v of votes) {
+      await CaseFileInterest.collection.updateOne({ _id: v._id }, { $set: {
+        userId: placeholder,
+        ...monthsOf(v, ['createdAt', 'updatedAt']),
+      } });
+    }
+  }
+  deleted.CaseFileInterest = votes.length;
+
   // 3. Their view records — and any free-text "have your say" answer — inside
   //    admin-authored announcements. The announcement itself is app content.
   await model('UpdateNotification').updateMany(
