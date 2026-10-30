@@ -435,6 +435,13 @@ describe('knowing what SkyWatch has', () => {
     expect(prompt).toMatch(/How do I get better at the 3D practise\?/i);
   });
 
+  it('reads "on here" as a question about our games, not the real battery', () => {
+    const prompt = buildSystemPrompt(CORPUS);
+    expect(prompt).toMatch(/"On here", "on SkyWatch", "in this app".*all mean our games, not the real battery/i);
+    expect(prompt).toMatch(/can I increase the length of some of the tests on here/i);
+    expect(prompt).toMatch(/Never answer it with "the test length is set by the RAF"/i);
+  });
+
   // The exact sentence that prompted this, banned by name.
   it("forbids talking about our own games as somebody else's app", () => {
     const prompt = buildSystemPrompt(CORPUS);
