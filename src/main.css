@@ -2633,7 +2633,22 @@ body.cbat-act-wide .cbat-act-round > .cbat-act-arena {
   body.matf-printing .app-topbar,
   body.matf-printing .app-bottomnav,
   body.matf-printing .app-shell-body > aside,
-  body.matf-printing .matf-print-chrome { display: none !important; }
+  body.matf-printing .matf-print-chrome,
+  body.matf-printing [data-testid="cbat-lounge-dock"],
+  body.matf-printing [data-testid="cbat-lounge-dock-upper"],
+  body.matf-printing [data-testid="cbat-game-report"] { display: none !important; }
+
+  /* The desktop chat dock (`cbat-dock-reserve`) pins the shell to one 100dvh
+     screen and scrolls <main> inside it. The print engine paginates the
+     document, not an inner scroller, so the sheet was cut off at one screen's
+     height: no page break, and the wind sheet never reached the paper. */
+  html:has(body.matf-printing),
+  body.matf-printing { overflow: visible !important; height: auto !important; }
+  body.matf-printing .app-shell {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body.matf-printing .app-shell-main { overflow-y: visible !important; }
 
   /* The shell's own spacing is screen furniture: the topbar offset, the bottom
      nav's clearance and the 768px cap all leave the paper short of the margins
