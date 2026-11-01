@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { setActiveMock, grantGamePath, clearGrantedGamePath } from '../../../lib/cbatMockSession'
@@ -212,6 +212,24 @@ describe('the score sheet', () => {
     expect(order).toEqual(['pilot', 'control-officer-atc', 'intelligence', 'wso', 'nco-control-atc', 'nco-control-wc'])
     expect(screen.getByTestId('mock-sheet-battery-nco-control-atc')).toHaveTextContent('Air Traffic & Weapons Controller (ATC)')
     expect(screen.getByTestId('mock-sheet-battery-nco-control-wc')).toHaveTextContent('Air Traffic & Weapons Controller (WC)')
+  })
+
+  it('lists the tests no role weights under the table, and says nothing when there are none', () => {
+    const step = (codes, labels, done) => ({ codes, labels, done })
+    const mock = { ...sheetMock, region: 'CA', steps: [
+      step(['CUT'], ['Cognitive Updating'], true),
+      step(['ANT'], ['Angles'], true),
+      step(['MATHR'], ['Mathematical Reasoning'], false),
+    ] }
+    render(<CbatMockScoreSheet mock={mock} />)
+    const note = screen.getByTestId('mock-sheet-unscored')
+    expect(note).toHaveTextContent('Also on the CFAST, not scored here: Angles, Mathematical Reasoning (not sat).')
+    expect(note).not.toHaveTextContent('Cognitive Updating')
+    expect(note.textContent).not.toContain('—')
+
+    cleanup()
+    render(<CbatMockScoreSheet mock={{ ...sheetMock, steps: [step(['CUT'], ['Cognitive Updating'], true)] }} />)
+    expect(screen.queryByTestId('mock-sheet-unscored')).toBeNull()
   })
 
   it('is titled as a SkyWatch estimate, never as an official result', () => {

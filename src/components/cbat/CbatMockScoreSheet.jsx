@@ -38,6 +38,33 @@ function testsText(tests) {
   return tests.map(t => (t.mult > 1 ? `${t.mult}(${t.code})` : t.code)).join(', ')
 }
 
+// Tests the mock sat that no role on this sheet weights: a Canadian or Australian mock sits the
+// country's whole test list on top of its borrowed UK role's tests (`mockTests`), and nobody
+// publishes how much the extras count. Listed under the table so a missing test is explained
+// on the sheet itself, not only on the start page.
+function unscoredSteps(mock) {
+  const scored = new Set(mock.sheet.batteries.flatMap(b => b.domains.flatMap(d => d.tests.map(t => t.code))))
+  return (mock.steps ?? []).filter(s => !s.codes.some(c => scored.has(c)))
+}
+
+function UnscoredNote({ steps, testName }) {
+  if (!steps.length) return null
+  const names = steps.map(s => {
+    const name = (s.labels ?? s.codes).join(' + ')
+    return s.done ? name : `${name} (not sat)`
+  })
+  return (
+    <div className="mock-sheet-unscored" data-testid="mock-sheet-unscored">
+      <p><strong>Also on the {testName}, not scored here:</strong> {names.join(', ')}.</p>
+      <p>
+        We do not have complete data yet on how much these tests are weighted, so they are left out
+        of the scores above rather than guessed at. Your runs on them still count on the leaderboards
+        and towards your personal bests.
+      </p>
+    </div>
+  )
+}
+
 const STATUS_WORDS = {
   completed: 'Completed',
   abandoned: 'Left before the end',
@@ -158,6 +185,8 @@ export default function CbatMockScoreSheet({ mock, agentNumber }) {
           {sheetOrder(sheet.batteries).map(b => <BatteryBlock key={b.key} battery={b} />)}
         </table>
       </div>
+
+      <UnscoredNote steps={unscoredSteps(mock)} testName={region?.testName ?? 'CBAT'} />
 
       <footer className="mock-sheet-foot">
         <p>

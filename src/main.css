@@ -5679,6 +5679,8 @@ body.play-mode .card-shadow {
 .mock-sheet-score-value { text-align: center; width: 50px; font-size: 14px; }
 .mock-sheet-score-current { font-weight: 800; }
 
+.mock-sheet-unscored { margin-top: 12px; padding: 8px 10px; border: 1px solid #b9b9b2; font-size: 11px; line-height: 1.45; color: #333; break-inside: avoid; }
+.mock-sheet-unscored p + p { margin-top: 4px; color: #555; }
 .mock-sheet-foot { margin-top: 14px; font-size: 10.5px; line-height: 1.45; color: #444; }
 
 /* Desktop: the sheet wants more than the shell's 768px column. */
