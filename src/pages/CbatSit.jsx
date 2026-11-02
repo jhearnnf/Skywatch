@@ -44,6 +44,7 @@ import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
 import { generateSitRounds, GRID, COL_LABELS, CLASS_LABEL, MOVING_CLASSES } from '../utils/cbat/sitGenerator'
 import { CLASS_STYLE, HEADING_DEG } from '../components/cbat/sitClassStyle'
+import SitCompassRose from '../components/cbat/SitCompassRose'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import CbatIntroList from '../components/cbat/CbatIntroList'
 import {
@@ -161,32 +162,6 @@ function SitMap({ objects, labelled, dim, rotation = 0, sizeClass = 'max-w-[min(
           return <text key={`r${i}`} x={x} y={y} transform={upright(x, y)} fill="var(--color-game-faint)" fontSize={13} textAnchor="middle" dominantBaseline="central" fontWeight="bold">{i + 1}</text>
         })}
         {objects.map(o => <MapObject key={o.id} o={o} cell={CELL} />)}
-      </g>
-    </svg>
-  )
-}
-
-// The compass rose beside each study layer, turned by the same amount as the
-// layer. The red needle is north. Every layer carries one, turned or not, so a
-// turned layer is told apart by where the needle points rather than by a rose
-// suddenly appearing.
-function CompassRose({ rotation = 0 }) {
-  return (
-    <svg
-      viewBox="-20 -20 40 40"
-      className="block w-full h-auto"
-      role="img"
-      aria-label={rotation ? `Compass: this map is turned ${rotation} degrees` : 'Compass: north is up'}
-      data-testid="sit-compass"
-      data-rotation={rotation}
-    >
-      <circle r={18} fill="var(--color-game-arena)" stroke="#13294a" strokeWidth={1.5} />
-      <g transform={rotation ? `rotate(${rotation})` : undefined}>
-        <polygon points="0,-13 3.5,0 -3.5,0" fill="#ef4444" />
-        <polygon points="0,13 3.5,0 -3.5,0" fill="#64748b" />
-        <polygon points="-13,0 0,-2.5 0,2.5" fill="#334155" />
-        <polygon points="13,0 0,-2.5 0,2.5" fill="#334155" />
-        <text x={0} y={-14.5} fill="#ef4444" fontSize={6} fontWeight="bold" textAnchor="middle">N</text>
       </g>
     </svg>
   )
@@ -311,6 +286,8 @@ export default function CbatSit() {
   // The clip's countdown does not start until the renderer is actually up — see
   // the clip effect below.
   const [clipReady, setClipReady] = useState(false)
+  // The clip compass's needle, turned every frame by the 3D scene directly.
+  const clipNeedleRef = useRef(null)
   const [answers, setAnswers] = useState([])
   const [feedback, setFeedback] = useState(null)
   const [remainingMs, setRemainingMs] = useState(0)
@@ -701,7 +678,7 @@ export default function CbatSit() {
                 </div>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>2.</CbatIntroLabel>
-                  <span className="pt-0.5">The clip is a <span className="text-brand-600">3D pass</span> showing all of it at once, from a different direction. The hills never move, so use them to work out which way round you are looking.</span>
+                  <span className="pt-0.5">The clip is a <span className="text-brand-600">3D pass</span> showing all of it at once, from a different direction. The compass at the bottom shows which way is north, and the hills never move, so use them to work out where everything sits.</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>3.</CbatIntroLabel>
@@ -858,7 +835,7 @@ export default function CbatSit() {
                           />
                         </div>
                         <div className="w-10 sm:w-12 shrink-0">
-                          <CompassRose rotation={current.layers[layerIdx].rotation} />
+                          <SitCompassRose rotation={current.layers[layerIdx].rotation} />
                         </div>
                       </div>
                       <Legend classes={[current.layers[layerIdx].cls]} />
@@ -892,16 +869,19 @@ export default function CbatSit() {
                         rendered video of the scene", which is a different thing
                         to read than the plan view you studied. The camera moves;
                         nothing on the ground does, so a slow reader loses
-                        nothing but the parallax. No compass and no grid labels:
-                        working out which way round it has ended up is the task.
-                        See components/cbat/SitClipScene.jsx. */}
+                        nothing but the parallax. No grid labels, but a compass
+                        needle at the bottom of the frame: two people who sat
+                        the real test (a survey answer, 2026-10, and a player,
+                        2026-11) both report one there. The hills are still how
+                        you place things; the needle only says which way round
+                        the ground has come. See components/cbat/SitClipScene.jsx. */}
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.3 }}
                       /* 4:3, so the height cap has to be expressed as a WIDTH:
                          at 4:3 a width of 96vh is a height of 72vh. */
-                      className="w-full mx-auto aspect-[4/3] rounded-lg overflow-hidden bg-game-arena border border-[#13294a]"
+                      className="relative w-full mx-auto aspect-[4/3] rounded-lg overflow-hidden bg-game-arena border border-[#13294a]"
                     >
                       <ClipBoundary fallback={<SitMap objects={current.clip} labelled={false} />}>
                         <Suspense fallback={<SitMap objects={current.clip} labelled={false} />}>
@@ -909,10 +889,29 @@ export default function CbatSit() {
                             objects={current.clip}
                             grid={GRID}
                             durationMs={runTuning.clipMs}
+                            northDeg={current.rotation}
+                            needleRef={clipNeedleRef}
                             onReady={() => setClipReady(true)}
                           />
                         </Suspense>
                       </ClipBoundary>
+                      {/* Bottom-centre, in the strip of foreground grass below
+                          the near hedge: projected across the whole camera arc,
+                          the field's near edge never comes lower than 85% of
+                          the frame height at its centre, so the rose sits under
+                          the field rather than over a cell. Smaller on a phone,
+                          where the same strip is fewer pixels tall. It starts
+                          at the clip's own turn, which is exactly right for the
+                          flat fallback map (drawn north-up then turned); the 3D
+                          scene takes over and turns it with the camera. */}
+                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-7 sm:w-10 pointer-events-none">
+                        <SitCompassRose
+                          rotation={current.rotation}
+                          needleRef={clipNeedleRef}
+                          testId="sit-clip-compass"
+                          label="Compass: the red needle points north"
+                        />
+                      </div>
                     </motion.div>
                   </>
                 )}

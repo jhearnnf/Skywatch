@@ -20,8 +20,12 @@
 // occlusion on the way. The hills remain the anchor, and are drawn as the
 // largest landform in the scene for that reason.
 //
-// NO COMPASS, NO GRID LABELS, AND NO GRID. Working out which way round the
-// ground has ended up is the task. The clip carried grid lines for a while on
+// NO GRID LABELS AND NO GRID, BUT A COMPASS. Working out where things have
+// ended up is the task. The compass was left out at first too, but two people
+// who sat the real test (a survey answer 2026-10, a player 2026-11) report a
+// compass needle at the bottom of the real camera pass, so the page draws one
+// and this scene turns it with the camera (`needleRef`, `northDeg`). It says
+// which way round the ground has come, not where anything is on it. The clip carried grid lines for a while on
 // the reasoning that position had to stay judgeable — but the corpus puts the
 // grid on the STUDY displays ("displays showing where things sit on a grid") and
 // describes the clip only as "a 3D rendered video of the environment". More to
@@ -60,6 +64,7 @@ import { CLASS_STYLE } from './sitClassStyle'
 import {
   CELL, CAMERA, FIELD_HALF, LAKE,
   cellToWorld, headingSpin, terrainHeight,
+  clipCameraAzimuthDeg, clipNorthDeg,
 } from '../../utils/cbat/sitClipGeometry'
 
 // How far the ground runs, and how far the haze lets you see. Terrain has to
@@ -79,7 +84,6 @@ const FOG_FAR = 135
 // them against the board size — the first cut of this scene clipped an aircraft
 // off the edge of the picture, and only a screenshot caught it.
 const CAM_ELEVATION = CAMERA.elevationDeg * Math.PI / 180
-const CAM_SWEEP = CAMERA.sweepDeg * Math.PI / 180
 // Aimed ABOVE the field rather than at it — see CAMERA.lookAtY, which
 // `fitsInFrame` accounts for. Raise it further and the field runs off the
 // bottom of the frame; that guard is what will say so.
@@ -133,15 +137,21 @@ function makeGrassTexture(size = 256) {
 // Driven off elapsed time rather than off a frame counter, so the pass covers
 // the same arc whatever the frame rate — a player on a slow device must not get
 // a different view of the same clip from a player on a fast one.
-function CameraPass({ durationMs }) {
+//
+// The compass needle is turned here, off the same azimuth, by writing its
+// transform attribute directly — one SVG group, sixty times a second, is not
+// worth a React render each time. See clipNorthDeg for the sum.
+function CameraPass({ durationMs, northDeg = 0, needleRef }) {
   const startRef = useRef(null)
   useFrame(({ camera, clock }) => {
     if (startRef.current === null) startRef.current = clock.elapsedTime
     const t = Math.min(1, ((clock.elapsedTime - startRef.current) * 1000) / durationMs)
-    const az = -CAM_SWEEP / 2 + CAM_SWEEP * t
+    const azDeg = clipCameraAzimuthDeg(t)
+    const az = azDeg * Math.PI / 180
     const horiz = CAMERA.radius * Math.cos(CAM_ELEVATION)
     camera.position.set(horiz * Math.sin(az), CAMERA.radius * Math.sin(CAM_ELEVATION), horiz * Math.cos(az))
     camera.lookAt(LOOK_AT)
+    needleRef?.current?.setAttribute('transform', `rotate(${clipNorthDeg(northDeg, azDeg).toFixed(2)})`)
   })
   return null
 }
@@ -589,7 +599,7 @@ function SceneObject({ o, grid }) {
   )
 }
 
-export default function SitClipScene({ objects, grid, durationMs, onReady }) {
+export default function SitClipScene({ objects, grid, durationMs, northDeg = 0, needleRef, onReady }) {
   // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty for
   // real players.
   const demoCanvas = useCbatDemoCanvas()
@@ -637,7 +647,7 @@ export default function SitClipScene({ objects, grid, durationMs, onReady }) {
         shadow-camera-near={1}
         shadow-camera-far={40}
       />
-      <CameraPass durationMs={durationMs} />
+      <CameraPass durationMs={durationMs} northDeg={northDeg} needleRef={needleRef} />
       <Sky />
       <Terrain />
       <Lake />

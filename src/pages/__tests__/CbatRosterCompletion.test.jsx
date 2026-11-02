@@ -576,6 +576,20 @@ describe('SIT — run structure', () => {
     expect(['0', '90', '180', '270']).toContain(compass.getAttribute('data-rotation'))
   })
 
+  it('draws a compass at the bottom of the camera pass, turned to the clip', () => {
+    // A survey answer (2026-10) and a player (2026-11) both report a compass
+    // needle on the real camera pass. It starts at the clip's own turn; the 3D
+    // scene (stubbed here) turns it with the camera — see clipNorthDeg.
+    renderPage(CbatSit)
+    act(() => { press(screen.getByText('Start')) })
+    act(() => { vi.advanceTimersByTime(1100) })
+    expect(screen.queryByTestId('sit-clip-compass')).toBeNull()
+
+    act(() => { press(screen.getByText(/Skip study time/)) })
+    const compass = screen.getByTestId('sit-clip-compass')
+    expect(['0', '90', '180', '270']).toContain(compass.getAttribute('data-rotation'))
+  })
+
   it('lets the player hand back the rest of the study window', () => {
     renderPage(CbatSit)
     act(() => { press(screen.getByText('Start')) })

@@ -191,3 +191,32 @@ export function fitsInFrame({
     && halfVertical > highest
     && halfVertical > lowest
 }
+
+// ── The camera's bearing, and the compass in the clip ────────────────────────
+// Where the camera sits on its arc at a fraction `t` (0 → 1) of the clip, in
+// degrees. Zero is due south of the field looking north; the arc runs evenly
+// either side of it. CameraPass drives the camera off this, and the compass
+// reads the same number, so the needle cannot drift from the view it labels.
+export function clipCameraAzimuthDeg(t) {
+  const clamped = Math.min(1, Math.max(0, t))
+  return -CAMERA.sweepDeg / 2 + CAMERA.sweepDeg * clamped
+}
+
+// Which way the clip's compass needle points, in degrees clockwise from the top
+// of the frame.
+//
+// A sitter (2026-10) and a player (2026-11) both report a compass needle at the
+// bottom of the real camera pass. Two things turn it:
+//
+//   - `rotation`: the generator turns the clip's ground clockwise by this much
+//     (see rotateCell), which carries true north round to that bearing on the
+//     plan, measured from plan-up (world −Z).
+//   - the camera arc: a camera at azimuth `az` looks along plan bearing −az
+//     (it sits at (sin az, cos az) and faces the origin), so everything on the
+//     plan appears turned by +az relative to the top of the frame.
+//
+// Hence rotation + az. The hills are still how you place things; the needle
+// only says which way round the ground has come.
+export function clipNorthDeg(rotation, azimuthDeg) {
+  return (((rotation + azimuthDeg) % 360) + 360) % 360
+}

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   CELL, CAMERA, CLIP_ASPECT, FIELD_HALF, LAKE,
   cellToWorld, headingSpin, headingVector, fitsInFrame, terrainHeight,
+  clipCameraAzimuthDeg, clipNorthDeg,
 } from '../sitClipGeometry'
 import { GRID } from '../sitGenerator'
 
@@ -189,5 +190,38 @@ describe('headingSpin', () => {
   it('leaves anything without a heading unrotated', () => {
     expect(headingSpin(undefined)).toBe(0)
     expect(headingSpin('nonsense')).toBe(0)
+  })
+})
+
+describe('the clip compass', () => {
+  it('sweeps the camera evenly either side of due south', () => {
+    expect(clipCameraAzimuthDeg(0)).toBeCloseTo(-CAMERA.sweepDeg / 2)
+    expect(clipCameraAzimuthDeg(0.5)).toBeCloseTo(0)
+    expect(clipCameraAzimuthDeg(1)).toBeCloseTo(CAMERA.sweepDeg / 2)
+    // Clamped, so a late frame cannot carry the needle past the end of the arc.
+    expect(clipCameraAzimuthDeg(2)).toBeCloseTo(CAMERA.sweepDeg / 2)
+  })
+
+  it('points the needle at north on ground the generator has turned', () => {
+    // Straight on, unturned ground: north is the top of the frame.
+    expect(clipNorthDeg(0, 0)).toBe(0)
+    // Ground turned 90° clockwise puts north on the right (east of the frame).
+    expect(clipNorthDeg(90, 0)).toBe(90)
+    expect(clipNorthDeg(270, 0)).toBe(270)
+  })
+
+  it('turns the needle the same way the ground appears to turn as the camera pans', () => {
+    // The camera at +az sits east of south and looks a little west of north,
+    // so north lies slightly to the RIGHT of the frame's top — a clockwise turn.
+    // Checked against the actual camera direction rather than the formula.
+    const az = 10
+    const a = az * Math.PI / 180
+    const forward = { x: -Math.sin(a), z: -Math.cos(a) }   // camera → origin
+    const right = { x: Math.cos(a), z: -Math.sin(a) }      // forward turned 90° clockwise
+    const north = { x: 0, z: -1 }                          // unturned ground
+    const bearing = Math.atan2(north.x * right.x + north.z * right.z,
+      north.x * forward.x + north.z * forward.z) * 180 / Math.PI
+    expect(clipNorthDeg(0, az)).toBeCloseTo((bearing + 360) % 360)
+    expect(clipNorthDeg(0, -az)).toBeCloseTo(360 - az)
   })
 })
