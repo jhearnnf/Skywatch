@@ -865,3 +865,31 @@ describe('CbatAptitudeReport: an admin simulating a region', () => {
     expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining('simRegion'))
   })
 })
+
+// Leaving the report for the CBAT hub swaps the two pages in ONE commit, and the hub adds the
+// same `cbat-recent-wide` shell class in a layout effect. A plain-effect cleanup here ran after
+// that and stripped the class, leaving the hub squeezed into the 768px shell (player report,
+// 2026-11-01). The stand-in hub below mirrors Cbat.jsx's layout effect.
+describe('CbatAptitudeReport - shell width hand-off to the hub', () => {
+  it('leaves cbat-recent-wide on <body> when the hub replaces it in the same commit', async () => {
+    const { useLayoutEffect } = await import('react')
+    function HubStandIn() {
+      useLayoutEffect(() => {
+        document.body.classList.add('cbat-recent-wide')
+        return () => document.body.classList.remove('cbat-recent-wide')
+      }, [])
+      return <div>hub</div>
+    }
+
+    const { rerender, unmount } = render(<CbatAptitudeReport key="report" />)
+    expect(document.body.classList.contains('cbat-recent-wide')).toBe(true)
+
+    rerender(<HubStandIn key="hub" />)
+    await screen.findByText('hub')
+    await waitFor(() => {})
+    expect(document.body.classList.contains('cbat-recent-wide')).toBe(true)
+
+    unmount()
+    expect(document.body.classList.contains('cbat-recent-wide')).toBe(false)
+  })
+})

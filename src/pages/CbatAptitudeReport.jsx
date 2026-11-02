@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAppSettings } from '../context/AppSettingsContext'
 import { motion } from 'framer-motion'
@@ -654,7 +654,13 @@ export default function CbatAptitudeReport() {
 
   // The sheet is wide — a domain row carries a name, a weight, a nine-cell bar and a verdict.
   // Same shell override the CBAT picker uses.
-  useEffect(() => {
+  //
+  // A layout effect, NOT a plain one, because the hub toggles the same class. Leaving the
+  // report for the hub unmounts this page and mounts the hub in one commit, and React runs a
+  // removed page's plain-effect cleanup AFTER the new page's layout effects - so this cleanup
+  // stripped the class the hub had just added and the hub sat squeezed in the 768px shell
+  // until a reload. A layout cleanup runs before the hub's layout effect adds it back.
+  useLayoutEffect(() => {
     document.body.classList.add('cbat-recent-wide')
     return () => document.body.classList.remove('cbat-recent-wide')
   }, [])
