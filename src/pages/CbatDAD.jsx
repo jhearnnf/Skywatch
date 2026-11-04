@@ -6,6 +6,7 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { generateDadQuestion } from '../utils/cbat/dadGenerator'
+import { buildRealDadQuestions } from '../utils/cbat/dadRealGenerator'
 import SEO from '../components/SEO'
 import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
@@ -27,7 +28,10 @@ function legCountFor(idx) {
 // 90° turns.
 const DIAGONALS_FROM = 9
 
-function buildQuestions() {
+// The Real CBAT theme plays the varied set passers described (landmarks,
+// distances, journeys from a landmark); SkyWatch keeps the turns-and-45° set.
+function buildQuestions(cbat) {
+  if (cbat) return buildRealDadQuestions()
   const out = []
   for (let i = 0; i < TOTAL_QUESTIONS; i++) {
     out.push(generateDadQuestion(legCountFor(i), undefined, { diagonals: i >= DIAGONALS_FROM }))
@@ -374,7 +378,7 @@ export default function CbatDAD() {
 
   const startGame = useCallback(() => {
     startTracking('dad')
-    setQuestions(buildQuestions())
+    setQuestions(buildQuestions(cbat))
     setCurrentIdx(0)
     setAnswers([])
     answersRef.current = []
@@ -383,7 +387,7 @@ export default function CbatDAD() {
     setTotalElapsedMs(0)
     totalElapsedRef.current = 0
     setPhase('playing')
-  }, [startTracking])
+  }, [startTracking, cbat])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -449,7 +453,9 @@ export default function CbatDAD() {
               <p className="text-4xl lg:text-5xl mb-3">🧭</p>
               <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Directions &amp; Distances</p>
               <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
-                Read each journey carefully. An object — a ship, aircraft or drone — sets off, and only its first leg gives a compass heading; every turn after that is relative to the way <span className="text-brand-600">it</span> is facing. Track its route and work out which direction it ends up from the start point.
+                {cbat
+                  ? <>Read each question carefully. Some describe a journey, some describe places and where they are from each other, and some do both. Work out the direction or distance you are asked for, or which two places are closest or furthest apart.</>
+                  : <>Read each journey carefully. An object — a ship, aircraft or drone — sets off, and only its first leg gives a compass heading; every turn after that is relative to the way <span className="text-brand-600">it</span> is facing. Track its route and work out which direction it ends up from the start point.</>}
               </p>
 
               <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text">
@@ -459,15 +465,15 @@ export default function CbatDAD() {
                 </div>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>2.</CbatIntroLabel>
-                  <span className="pt-0.5">Pick the compass direction the object ended up, relative to the start.</span>
+                  <span className="pt-0.5">{cbat ? 'Every direction is at a right angle to the one before, so distances add up in straight lines.' : 'Pick the compass direction the object ended up, relative to the start.'}</span>
                 </div>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>3.</CbatIntroLabel>
-                  <span className="pt-0.5">The route is then drawn so you can check your answer.</span>
+                  <span className="pt-0.5">{cbat ? 'Pick your answer, then press Enter to move on.' : 'The route is then drawn so you can check your answer.'}</span>
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>🧭</span>
-                  <span className="pt-0.5">Later rounds add diagonal headings (NE/SE/SW/NW) and 45° turns.</span>
+                  <span className="pt-0.5">{cbat ? 'Directions can be north, south, east and west, or the diagonals between them (NE, SE, SW, NW).' : 'Later rounds add diagonal headings (NE/SE/SW/NW) and 45° turns.'}</span>
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
@@ -540,7 +546,7 @@ export default function CbatDAD() {
                 <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-2">The Route</p>
                 <p className="text-sm sm:text-lg lg:text-2xl text-game-text leading-relaxed">{currentQuestion.prose}</p>
                 <p className="text-sm lg:text-lg font-bold text-brand-600 mt-3 sm:mt-4">
-                  Which direction is {objectPhrase(currentQuestion.subject)} from the start point?
+                  {currentQuestion.question ?? `Which direction is ${objectPhrase(currentQuestion.subject)} from the start point?`}
                 </p>
               </motion.div>
 

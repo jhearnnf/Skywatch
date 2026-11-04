@@ -26,7 +26,7 @@
 // i.e. the original DAD behaviour; when true (second half), intercardinal
 // headings (NE/SE/SW/NW) and 45° turns are introduced.
 
-const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] // 45° steps, clockwise
+export const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] // 45° steps, clockwise
 // Unit lattice vector per compass index (+y = North, +x = East).
 const VECS = [
   [0, 1],   // N
@@ -38,7 +38,7 @@ const VECS = [
   [-1, 0],  // W
   [-1, 1],  // NW
 ]
-const DIR_WORD = {
+export const DIR_WORD = {
   N: 'North', NE: 'North-East', E: 'East', SE: 'South-East',
   S: 'South', SW: 'South-West', W: 'West', NW: 'North-West',
 }
@@ -66,7 +66,7 @@ export function vecToCompass(x, y) {
   return map[key] || null
 }
 
-function shuffle(arr, rng) {
+export function shuffle(arr, rng) {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1))
@@ -85,7 +85,7 @@ function shuffle(arr, rng) {
 // without reading the journey (a player spotted "if NE and NW are both offered
 // the answer is N"). With a random draw, any member of the set is equally
 // likely to be the answer.
-function buildOptions(answer, rng) {
+export function buildOptions(answer, rng) {
   const others = COMPASS.filter(d => d !== answer)
   const distractors = shuffle(others, rng).slice(0, 3)
   return shuffle([answer, ...distractors], rng)
