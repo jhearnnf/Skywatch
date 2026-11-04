@@ -36,6 +36,14 @@ describe('ComposeBox', () => {
     expect(box().style.height).toBe(`${LINE * 3}px`)
   })
 
+  // Taking focus off the box closes a phone's keyboard after every message.
+  it('keeps focus in the box when Send is pressed', () => {
+    render(<ComposeBox onSend={vi.fn()} />)
+    fireEvent.change(box(), { target: { value: 'hello' } })
+    // fireEvent returns false when the default (the focus move) was prevented.
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Send' }))).toBe(false)
+  })
+
   it('on a phone stops growing past the cap so the composer cannot eat the thread', () => {
     phoneWidth()
     render(<ComposeBox onSend={vi.fn()} />)

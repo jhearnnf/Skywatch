@@ -2057,8 +2057,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
               placeholder={editing ? 'Edit your message…' : 'Message the lounge…'}
               className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-surface border border-game-line focus:border-brand-400 outline-none text-xs text-game-text placeholder:text-slate-500"
             />
+            {/* Pressing Send must not take focus off the input. On a phone that
+                closes the keyboard after every message, and the page jumping
+                to its new height took the hub's lounge snap back up to the
+                game menu. Holding the focus keeps the keyboard up for the next
+                message, as any messaging app does. */}
             <button
               type="button"
+              onMouseDown={e => e.preventDefault()}
               onClick={editing ? saveEdit : send}
               disabled={busy || !draft.trim()}
               className="shrink-0 px-3 py-1.5 bg-brand-600 hover:bg-brand-700 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition-colors"

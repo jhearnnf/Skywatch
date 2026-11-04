@@ -137,8 +137,11 @@ export default function ComposeBox({
         placeholder={placeholder ?? (disabled ? 'This chat is closed.' : 'Type a message…')}
         className="flex-1 resize-none overflow-y-auto px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none text-sm disabled:opacity-50"
       />
+      {/* Pressing Send must not take focus off the box: on a phone that
+          closes the keyboard after every message. Same as the CBAT Lounge. */}
       <button
         type="button"
+        onMouseDown={e => e.preventDefault()}
         onClick={handleSend}
         disabled={disabled || busy || !body.trim()}
         className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-colors"

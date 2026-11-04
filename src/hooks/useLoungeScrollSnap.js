@@ -71,7 +71,13 @@ export function bottomNavTop() {
 
 export function useLoungeScrollSnap({ enabled, panelRef, landmarkRef }) {
   const [store] = useState(createProgressStore)
-  const ctl = useRef({ anim: null, holding: false, lastY: 0, dir: 1, settle: null, bounds: undefined })
+  // `atLounge`: the page has come to rest in the lounge and the reader has not
+  // moved it since. While it holds, a scroll nobody asked for (the phone's
+  // keyboard opening or closing, the panel being refitted to the new height)
+  // puts the page back in the lounge. Read as an ordinary scroll, the keyboard
+  // closing after a tap on Send nudged the page upwards, and the snap took
+  // that as a move towards the menu and glided the page all the way back up.
+  const ctl = useRef({ anim: null, holding: false, lastY: 0, dir: 1, settle: null, bounds: undefined, atLounge: false })
 
   // Where the reveal starts and ends in window scroll: from the panel's top
   // edge entering the bottom of the screen, to the bottom of the page. Read
@@ -112,6 +118,9 @@ export function useLoungeScrollSnap({ enabled, panelRef, landmarkRef }) {
     const duration = Math.min(700, Math.max(420, 340 + Math.abs(dist) * 0.6))
     const t0 = performance.now()
     const c = ctl.current
+    // Heading for the menu is leaving the lounge. Arriving at the lounge is
+    // marked by the scroll handler once the page is actually there.
+    if (dist < 0) c.atLounge = false
     const anim = { target, dir: Math.sign(dist), raf: 0 }
     const frame = (now) => {
       const t = Math.min(1, (now - t0) / duration)
@@ -140,7 +149,17 @@ export function useLoungeScrollSnap({ enabled, panelRef, landmarkRef }) {
       if (c.bounds === undefined) bounds()
       store.set(revealProgress(window.scrollY, c.bounds))
     }
-    const remeasure = () => { bounds(); publish() }
+    // Back to the foot of the page, in one jump: the reader never left the
+    // lounge, so there is nothing to glide through.
+    const pinToLounge = () => {
+      const b = c.bounds
+      if (!c.atLounge || c.holding || c.anim || !b) return
+      if (Math.abs(window.scrollY - b.end) > 1) {
+        window.scrollTo({ top: b.end, behavior: 'instant' })
+        c.lastY = window.scrollY
+      }
+    }
+    const remeasure = () => { bounds(); pinToLounge(); publish() }
 
     const snap = () => {
       c.settle = null
@@ -148,7 +167,7 @@ export function useLoungeScrollSnap({ enabled, panelRef, landmarkRef }) {
       const panel = panelRef.current
       const active = document.activeElement
       if (panel && panel.contains(active) && isTyping(active)) return
-      const target = snapTarget(window.scrollY, bounds(), c.dir)
+      const target = snapTarget(window.scrollY, bounds(), c.atLounge ? 1 : c.dir)
       if (target != null) glideTo(target)
     }
     const scheduleSnap = (ms) => {
@@ -159,6 +178,11 @@ export function useLoungeScrollSnap({ enabled, panelRef, landmarkRef }) {
     const onScroll = () => {
       const y = window.scrollY
       if (y !== c.lastY) { c.dir = y > c.lastY ? 1 : -1; c.lastY = y }
+      const b = c.bounds
+      if (b && y >= b.end - 2) c.atLounge = true
+      // Only a finger can take the page out of the lounge here; the wheel's
+      // way out is a glide, which clears it in glideTo.
+      else if (c.holding) c.atLounge = false
       publish()
       // Our own glide, a finger on the glass, or a fling still running: leave
       // it be. Otherwise (keys, scrollbar, a fling that just ran out) settle
