@@ -737,6 +737,10 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
     // The pre-edit text goes only to admins — it is the moderation record.
     edited:            Boolean(m.editedAt),
     editedAt:          m.editedAt ?? null,
+    // The sender's own id for the message, so their client can swap the copy
+    // it showed while sending for this one (see src/lib/chatOutbox.js). Only
+    // ever to the sender: nobody else has a local copy to match.
+    ...(isMine && m.clientId ? { clientId: m.clientId } : {}),
     // Join lines only, set by withJoinLineState: the person it announced is no
     // longer in the group.
     ...(m.memberLeft !== undefined ? { memberLeft: m.memberLeft } : {}),
@@ -1956,6 +1960,22 @@ router.get('/conversations/:id/messages', async (req, res) => {
 });
 
 // POST /api/chat/conversations/:id/messages — send a message
+// A client's own id for a message it is sending (src/lib/chatOutbox.js).
+const CLIENT_ID_RE = /^[A-Za-z0-9_-]{8,64}$/;
+
+function sendExistingMessage(res, message, convo, user) {
+  return res.json({ status: 'success', data: {
+    message: serializeMessage(message, {
+      viewerIsAdmin:    Boolean(user.isAdmin),
+      conversationType: convo.type,
+      viewerId:         user._id,
+    }),
+    // The bot was asked the first time round; asking again would only put a
+    // second typing indicator up.
+    botReplyingName: null,
+  } });
+}
+
 router.post('/conversations/:id/messages', async (req, res) => {
   try {
     if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Conversation not found' });
@@ -1979,6 +1999,16 @@ router.post('/conversations/:id/messages', async (req, res) => {
       if (blockedBy) {
         return res.status(403).json({ code: 'BLOCKED', message: DM_BLOCK_MESSAGE[blockedBy] });
       }
+    }
+
+    // A retry of a send that already landed (the answer was lost on the way
+    // back): hand back the message it made rather than posting it twice.
+    // Checked before the rate limit, so a burst of retries is never refused.
+    const rawClientId = req.body?.clientId;
+    const clientId = typeof rawClientId === 'string' && CLIENT_ID_RE.test(rawClientId) ? rawClientId : null;
+    if (clientId) {
+      const existing = await ChatMessage.findOne({ senderUserId: req.user._id, clientId }).lean();
+      if (existing) return sendExistingMessage(res, existing, convo, req.user);
     }
 
     if (hitRateLimit(req.user._id)) {
@@ -2035,15 +2065,27 @@ router.post('/conversations/:id/messages', async (req, res) => {
       ? []
       : await resolveMentions(body, { findUsers: findMentionableByName });
 
-    const message = await appendMessage({
-      conversation:      convo,
-      senderUserId:      req.user._id,
-      senderRole,
-      body,
-      senderDisplayName: req.user.displayName ?? null,
-      replyTo,
-      mentions:          mentioned.map(u => u._id),
-    });
+    let message;
+    try {
+      message = await appendMessage({
+        conversation:      convo,
+        senderUserId:      req.user._id,
+        senderRole,
+        body,
+        senderDisplayName: req.user.displayName ?? null,
+        replyTo,
+        mentions:          mentioned.map(u => u._id),
+        clientId,
+      });
+    } catch (e) {
+      // Two tries of the same send racing each other: the second loses on the
+      // unique index and answers with the first one's message.
+      if (e?.code === 11000 && clientId) {
+        const existing = await ChatMessage.findOne({ senderUserId: req.user._id, clientId }).lean();
+        if (existing) return sendExistingMessage(res, existing, convo, req.user);
+      }
+      throw e;
+    }
 
     // The first thing typed into a blank ticket names it.
     if (senderRole === 'user') nameTicketFromFirstMessage(convo, body);

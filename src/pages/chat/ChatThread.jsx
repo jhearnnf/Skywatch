@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useChatUnread } from '../../context/ChatUnreadContext'
@@ -14,6 +14,7 @@ import AnnouncementDrafter from './components/AnnouncementDrafter'
 import ChatSearch, { SearchIcon } from './components/ChatSearch'
 import { JUMP_HIGHLIGHT_MS } from './jumpScroll'
 import { formatLastOnline, isOnlineNow } from './format'
+import * as chatOutbox from '../../lib/chatOutbox'
 
 const POLL_MS = 5_000
 
@@ -70,7 +71,12 @@ export default function ChatThread({
   // it once, late, than to draw it wrong first.
   const cached = getCachedThread(conversationId)
 
-  const [messages,     setMessages]     = useState(cached?.messages     ?? [])
+  // Plus anything still on its way up from an earlier visit: the send queue
+  // outlives this component (see lib/chatOutbox.js).
+  const [messages,     setMessages]     = useState(() => [
+    ...(cached?.messages ?? []),
+    ...chatOutbox.pendingFor(conversationId),
+  ])
   const [senders,      setSenders]      = useState(cached?.senders      ?? {})
   const [conversation, setConversation] = useState(cached?.conversation ?? null)
   // Resolved ticket: the composer is behind a "Reopen ticket" button.
@@ -257,7 +263,14 @@ export default function ChatThread({
 
   // Messages this client appended from its own POST, until a poll confirms the
   // server has them. Keyed by id, holding the message and when it was sent.
-  const justSentRef = useRef(new Map())
+  //
+  // Seeded from the send queue, which remembers what landed while this thread
+  // was closed: a refetch on the way back in may not have caught up with it.
+  const justSentRef = useRef(null)
+  if (!justSentRef.current) {
+    justSentRef.current = new Map(chatOutbox.recentlySentFor(conversationId)
+      .map(m => [String(m._id), { message: m, at: Date.now() }]))
+  }
 
   // A poll issued a moment before you hit Send comes back from before the
   // server had your message. Applied as it stands it takes the message you just
@@ -315,7 +328,9 @@ export default function ChatThread({
     fetchMessages()
       .then(d => {
         if (cancelled) return
-        setMessages(d.messages)
+        // Held sends, and anything still on its way up, stay on the end.
+        const fresh = applyJustSent(d)
+        setMessages(prev => [...fresh, ...prev.filter(m => m.localState)])
         setSenders(d.senders ?? {})
         setConversation(d.conversation)
         setHasMore(Boolean(d.hasMore))
@@ -329,7 +344,7 @@ export default function ChatThread({
       })
       .catch(e => { if (!cancelled) { setErr(e.message); setLoading(false) } })
     return () => { cancelled = true }
-  }, [fetchMessages, markRead])
+  }, [applyJustSent, fetchMessages, markRead])
 
   // Compares a signature rather than just the length, so a moderator deleting
   // or editing a message — either of which changes the content without changing
@@ -383,61 +398,61 @@ export default function ChatThread({
 
   // Sends are optimistic, as in any messaging app: the message goes into the
   // thread the moment you press Enter, marked as sending, and is swapped for the
-  // server's copy when the POST answers. Sends are queued one behind another so
-  // two quick messages cannot land on the server in the wrong order.
-  const localSeq  = useRef(0)
-  const sendQueue = useRef(Promise.resolve())
-
+  // server's copy when it lands. The sending itself is lib/chatOutbox.js, which
+  // outlives this component: leave the thread mid-send and the message still
+  // goes, retried until the server has it. It also keeps one conversation's
+  // sends in order, so two quick messages cannot land the wrong way round.
   const settleLocal = (localId, patch) => setMessages(prev => {
     if (patch === null) return prev.filter(m => m._id !== localId)
     return prev.map(m => (m._id === localId ? { ...m, ...patch } : m))
   })
 
-  const postMessage = async (localId, text, replyToId) => {
-    try {
-      const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text, replyToId }),
+  // What the queue reports back about this conversation's sends. Through a
+  // ref, so the subscription below is made once and still sees fresh state.
+  const onOutboxRef = useRef(null)
+  onOutboxRef.current = (e) => {
+    if (e.conversationId !== String(conversationId)) return
+    if (e.type === 'sent') {
+      const sent = e.message
+      if (e.botReplyingName) setAskedBot(e.botReplyingName)
+      justSentRef.current.set(String(sent._id), { message: sent, at: Date.now() })
+      // Swapped in place, so it keeps its spot. A poll that already brought
+      // the server's copy in means the local one simply goes.
+      setMessages(prev => {
+        if (prev.some(m => String(m._id) === String(sent._id))) {
+          return prev.filter(m => m._id !== e.clientId)
+        }
+        return prev.map(m => (m._id === e.clientId ? sent : m))
       })
-      const d = await r.json().catch(() => null)
-      if (!r.ok) {
-        // The server is the authority on whether a name is needed — a user can
-        // arrive here with a stale client state.
-        if (d?.code === 'DISPLAY_NAME_REQUIRED') { settleLocal(localId, null); setNeedsName(true); return }
-        throw new Error(d?.message || 'Failed to send')
-      }
-      if (d?.data?.botReplyingName) setAskedBot(d.data.botReplyingName)
-      const sent = d?.data?.message
-      if (sent) {
-        justSentRef.current.set(String(sent._id), { message: sent, at: Date.now() })
-        // Swapped in place, so it keeps its spot. A poll that already brought
-        // the server's copy in means the local one simply goes.
-        setMessages(prev => {
-          if (prev.some(m => String(m._id) === String(sent._id))) {
-            return prev.filter(m => m._id !== localId)
-          }
-          return prev.map(m => (m._id === localId ? sent : m))
-        })
-        // Replying to a resolved ticket reopened it server-side; say so now
-        // rather than a poll later, so the Resolved pill and the note go.
-        if (isClosed) { setConversation(c => (c ? { ...c, status: 'open' } : c)); setReopening(false) }
-      } else {
-        settleLocal(localId, null)
-      }
+      // Replying to a resolved ticket reopened it server-side; say so now
+      // rather than a poll later, so the Resolved pill and the note go.
+      if (isClosed) { setConversation(c => (c ? { ...c, status: 'open' } : c)); setReopening(false) }
       onChanged?.()
-    } catch (e) {
-      // Left in the thread, marked, with Retry and Discard beside it, so the
+    } else if (e.type === 'state') {
+      // Left in the thread, marked, with Try again and Delete beside it, so the
       // words you typed are never silently lost.
-      settleLocal(localId, { localState: 'failed' })
-      setErr(e.message || 'Failed to send')
+      settleLocal(e.clientId, { localState: e.state })
+      if (e.state === 'failed') setErr(e.error || 'Failed to send')
+    } else if (e.type === 'gone') {
+      settleLocal(e.clientId, null)
+      // The server is the authority on whether a name is needed — a user can
+      // arrive here with a stale client state.
+      if (e.code === 'DISPLAY_NAME_REQUIRED') setNeedsName(true)
     }
   }
+  useEffect(() => chatOutbox.subscribe(e => onOutboxRef.current?.(e)), [])
 
-  const queueSend = (localId, text, replyToId) => {
-    sendQueue.current = sendQueue.current.then(() => postMessage(localId, text, replyToId))
-  }
+  const postMessage = ({ body, replyToId, clientId }) => apiFetch(
+    `${API}/api/chat/conversations/${conversationId}/messages`,
+    {
+      // Already on screen as sent, so no loading overlay over the page.
+      quiet: true,
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body, replyToId, clientId }),
+    },
+  )
 
   const handleSend = (text) => {
     setErr('')
@@ -447,9 +462,10 @@ export default function ChatThread({
     // And out of any jump, so the list follows the message down.
     setJumpRequest(null)
     const quoted  = replyTo
-    const localId = `local-${++localSeq.current}`
-    setMessages(prev => [...prev, {
+    const localId = chatOutbox.newClientId()
+    const local = {
       _id:               localId,
+      clientId:          localId,
       localState:        'sending',
       localReplyToId:    quoted?._id ?? null,
       body:              text,
@@ -464,7 +480,8 @@ export default function ChatThread({
         displayName: quoted.senderDisplayName ?? null,
         excerpt:     (quoted.body ?? '').slice(0, 160),
       } : null,
-    }])
+    }
+    setMessages(prev => [...prev, local])
     setReplyTo(null)
     // Your first message in a thread wouldn't be in the sender map yet, so
     // your avatar would pop in a poll later. Seed it from the live user.
@@ -480,18 +497,26 @@ export default function ChatThread({
         supporter:     Boolean(user?.supporter),
       },
     })
-    queueSend(localId, text, quoted?._id ?? null)
+    chatOutbox.enqueue({
+      conversationId,
+      userId:    user?._id,
+      body:      text,
+      replyToId: quoted?._id ?? null,
+      local,
+      post:      postMessage,
+    })
   }
 
   const handleRetrySend = (message) => {
     setErr('')
     settleLocal(message._id, { localState: 'sending' })
-    queueSend(message._id, message.body, message.localReplyToId ?? null)
+    chatOutbox.retry(message._id)
   }
 
   const handleDiscardSend = (message) => {
     setErr('')
     settleLocal(message._id, null)
+    chatOutbox.discard(message._id)
   }
 
   const handleClose = async () => {
@@ -617,6 +642,14 @@ export default function ChatThread({
 
   const type       = conversation?.type ?? 'support'
   const isClosed   = type === 'support' && conversation?.status === 'closed'
+
+  // A poll can bring the server's copy of a message in before the send that
+  // made it has answered. Both carry the same clientId, so the local copy
+  // steps aside rather than the message showing twice for a moment.
+  const shownMessages = useMemo(() => {
+    const landed = new Set(messages.filter(m => !m.localState && m.clientId).map(m => m.clientId))
+    return landed.size ? messages.filter(m => !(m.localState && landed.has(m.clientId))) : messages
+  }, [messages])
   const isArchived = Boolean(conversation?.isArchived)
   // Announcements board: everyone reads, only staff post.
   const postPolicy  = conversation?.postPolicy ?? 'everyone'
@@ -768,7 +801,7 @@ export default function ChatThread({
           </div>
         )}
         <MessageList
-          messages={messages}
+          messages={shownMessages}
           currentUserId={user?._id}
           conversationType={type}
           viewerIsAdmin={Boolean(user?.isAdmin)}

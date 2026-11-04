@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useAppSettings } from '../context/AppSettingsContext'
@@ -14,6 +14,8 @@ import MentionPicker from '../pages/chat/components/MentionPicker'
 import UserCard from '../pages/chat/components/UserCard'
 import GroupMembersDialog from '../pages/chat/components/GroupMembersDialog'
 import { NewMessagesDivider } from '../pages/chat/components/MessageList'
+import SendStatus from '../pages/chat/components/SendStatus'
+import * as chatOutbox from '../lib/chatOutbox'
 import ChatSearch, { SearchIcon } from '../pages/chat/components/ChatSearch'
 import { centerInScroller, JUMP_HIGHLIGHT_MS } from '../pages/chat/jumpScroll'
 import { cohortCopy, formatCohortDate } from '../utils/cbat/cohortCopy'
@@ -408,6 +410,22 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
 
   const conversationId = lounge?.conversationId ?? null
   const enabled = Boolean(user) && settings?.chatEnabled !== false
+
+  // Your messages still on their way up. Sending is optimistic, as in the full
+  // room: the message shows the moment you press Send and the server's copy
+  // takes its place when it lands. They are kept apart from `messages` so no
+  // refresh of the room can drop one, and come from lib/chatOutbox.js, which
+  // outlives this widget: leave the hub mid-send and the message still goes,
+  // retried until the server has it.
+  const [pending, setPending] = useState([])
+  const shown = useMemo(() => {
+    if (!pending.length) return messages
+    // A refresh or the stream can bring the server's copy in before the send
+    // has answered; the local one steps aside rather than showing twice.
+    const landed = new Set(messages.map(m => m.clientId).filter(Boolean))
+    const still = pending.filter(m => !landed.has(m.clientId))
+    return still.length ? [...messages, ...still] : messages
+  }, [messages, pending])
   // 'channel' is a public room opened from a search result (General,
   // Announcements). It is read-only here and has no tab: the widget is the
   // lounge, and those rooms live in Community. Its `lounge` record is built
@@ -1016,11 +1034,11 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     if (!open) { prevFirstIdRef.current = null; return }
     const el = scrollRef.current
     if (!el) return
-    const first     = messages[0] ? String(messages[0]._id) : null
-    const last      = messages[messages.length - 1]
+    const first     = shown[0] ? String(shown[0]._id) : null
+    const last      = shown[shown.length - 1]
     const lastId    = last ? String(last._id) : null
     const prevFirst = prevFirstIdRef.current
-    const prepended = Boolean(prevFirst) && first !== prevFirst && messages.some(m => String(m._id) === prevFirst)
+    const prepended = Boolean(prevFirst) && first !== prevFirst && shown.some(m => String(m._id) === prevFirst)
     const mineNew   = Boolean(last) && lastId !== prevLastIdRef.current && String(last.senderUserId ?? '') === String(user?._id)
     if (prepended) el.scrollTop += el.scrollHeight - prevHeightRef.current
     // Not while reading a search result's neighbourhood: a page arriving
@@ -1030,7 +1048,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
     prevFirstIdRef.current = first
     prevLastIdRef.current  = lastId
     prevHeightRef.current  = el.scrollHeight
-  }, [open, messages, typingName, user?._id, hasNewer])
+  }, [open, shown, typingName, user?._id, hasNewer])
 
   // Centre the message a jump asked for, once its row is on screen. Declared
   // after the effect above so it has the last word on a chunk that has just
@@ -1145,48 +1163,97 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
 
   const syncCaret = (e) => setCaret(e.target.selectionStart ?? 0)
 
-  const send = async () => {
+  const syncPending = useCallback(() => {
+    setPending(conversationId ? chatOutbox.pendingFor(conversationId) : [])
+  }, [conversationId])
+
+  // On every room change: what is still going to this room, and what landed
+  // here while the widget was away (a refresh may not have caught up with it).
+  useEffect(() => {
+    syncPending()
+    if (!conversationId) return
+    for (const m of chatOutbox.recentlySentFor(conversationId)) {
+      if (!justSentRef.current.has(String(m._id))) {
+        justSentRef.current.set(String(m._id), { roomId: String(conversationId), message: m, at: Date.now() })
+      }
+    }
+  }, [conversationId, syncPending])
+
+  // What the queue reports back. Through a ref, so the subscription is made
+  // once and still sees this render's room and state.
+  const onOutboxRef = useRef(null)
+  onOutboxRef.current = (e) => {
+    if (!conversationId || e.conversationId !== String(conversationId)) return
+    if (e.type === 'sent') {
+      const sent = e.message
+      if (e.botReplyingName) setTypingName(e.botReplyingName)
+      justSentRef.current.set(String(sent._id), {
+        roomId:  String(conversationId),
+        message: sent,
+        at:      Date.now(),
+      })
+      // Sent from a chunk of history: back to the present, where the message
+      // now is. The held copy above covers a load that has not caught up.
+      if (hasNewerRef.current) jumpToLatest()
+      else {
+        setMessages(prev => (
+          prev.some(m => String(m._id) === String(sent._id)) ? prev : [...prev, sent]
+        ))
+      }
+    } else if (e.type === 'state' && e.state === 'failed') {
+      setErr(e.error || 'Could not send that')
+    } else if (e.type === 'gone' && e.code === 'DISPLAY_NAME_REQUIRED') {
+      // The server is the authority on this, not the flag we loaded earlier.
+      setNeedsName(true)
+    }
+    syncPending()
+  }
+  useEffect(() => chatOutbox.subscribe(e => onOutboxRef.current?.(e)), [])
+
+  const send = () => {
     const text = draft.trim()
-    if (!text || busy || !conversationId) return
-    setBusy(true); setErr('')
-    try {
-      const r = await apiFetch(`${API}/api/chat/conversations/${conversationId}/messages`, {
+    if (!text || !conversationId) return
+    setErr('')
+    const roomId  = conversationId
+    const quoted  = replyTo
+    const localId = chatOutbox.newClientId()
+    chatOutbox.enqueue({
+      conversationId: roomId,
+      userId:    user?._id,
+      body:      text,
+      replyToId: quoted?._id ?? null,
+      local: {
+        _id:               localId,
+        clientId:          localId,
+        body:              text,
+        senderUserId:      user?._id,
+        senderDisplayName: user?.displayName ?? null,
+        senderRole:        user?.isAdmin ? 'admin' : 'user',
+        createdAt:         new Date().toISOString(),
+        reactions: [], mentions: [], deleted: false, editedAt: null,
+        replyTo: quoted ? {
+          messageId:   quoted._id,
+          userId:      quoted.senderUserId ?? null,
+          displayName: quoted.senderDisplayName ?? null,
+          excerpt:     (quoted.body ?? '').slice(0, 160),
+        } : null,
+      },
+      post: ({ body, replyToId, clientId }) => apiFetch(`${API}/api/chat/conversations/${roomId}/messages`, {
+        // Already on screen, so no loading overlay over the hub.
+        quiet: true,
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text, replyToId: replyTo?._id ?? null }),
-      })
-      const d = await r.json().catch(() => null)
-      if (!r.ok) {
-        // The server is the authority on this, not the flag we loaded earlier.
-        if (d?.code === 'DISPLAY_NAME_REQUIRED') { setNeedsName(true); return }
-        throw new Error(d?.message || 'Could not send that')
-      }
-      setDraft('')
-      setReplyTo(null)
-      setMentionDismissed(null)
-      if (d?.data?.botReplyingName) setTypingName(d.data.botReplyingName)
-      if (d?.data?.message) {
-        justSentRef.current.set(String(d.data.message._id), {
-          roomId:  String(conversationId),
-          message: d.data.message,
-          at:      Date.now(),
-        })
-        // Sent from a chunk of history: back to the present, where the message
-        // now is. The held copy above covers a load that has not caught up.
-        if (hasNewerRef.current) jumpToLatest()
-        else {
-          if (awayRef.current) leave(false)
-          setMessages(prev => (
-            prev.some(m => String(m._id) === String(d.data.message._id)) ? prev : [...prev, d.data.message]
-          ))
-        }
-      }
-    } catch (e) {
-      setErr(e.message || 'Could not send that')
-    } finally {
-      setBusy(false)
-    }
+        body: JSON.stringify({ body, replyToId, clientId }),
+      }),
+    })
+    setDraft('')
+    setReplyTo(null)
+    setMentionDismissed(null)
+    // Your own message brings the list back down to it, out of any search
+    // result being read further up.
+    if (awayRef.current) leave(false)
+    syncPending()
   }
 
   // Toggle one of the whitelisted reactions. The response carries the updated
@@ -1366,7 +1433,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   // the server withholds them from everyone else (see the query filter in GET
   // /messages). This drops any that arrive from a cached response, so there is
   // no window where a withdrawn message is still on a member's screen.
-  const visible = viewerIsAdmin ? messages : messages.filter(m => !m.deleted)
+  const visible = viewerIsAdmin ? shown : shown.filter(m => !m.deleted)
 
   // The "New" line sits above the first message from someone else after
   // `newSince`. Group rooms only (see `newSince`).
@@ -1732,7 +1799,9 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
               ? Boolean(prof.isBot)
               : Boolean(lounge?.botName) && m.senderDisplayName === lounge.botName
             const mineTag = (m.mentions ?? []).some(id => String(id) === String(user?._id))
-            const acting  = canPost && !m.deleted
+            // Still on its way up: nothing to react to, reply to or look up yet.
+            const local   = Boolean(m.localState)
+            const acting  = canPost && !m.deleted && !local
             const mine    = String(m.senderUserId ?? '') === String(user?._id)
             const canOpenUser   = !mine && Boolean(m.senderUserId)
             const nameColourFor = isBot ? 'var(--color-game-accent)' : nameColour(m.senderUserId)
@@ -1740,7 +1809,7 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             // endpoint: your own messages, and admins on anyone's. Not gated on
             // canPost — being unable to speak is no reason to lose sight of who
             // read what you already said.
-            const canSeen = viewerIsAdmin || (mine && !m.deleted)
+            const canSeen = !local && (viewerIsAdmin || (mine && !m.deleted))
             // Both decided by the server: an admin on anything, or the author
             // within an hour of posting. The rule has a clock in it, so the
             // client never tries to work it out — see serializeMessage.
@@ -1836,12 +1905,21 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
                   </p>
                 )}
 
-                <Reactions
-                  message={m}
-                  onReact={acting ? react : undefined}
-                  picking={picking === String(m._id)}
-                  onPick={setPicking}
-                />
+                {local ? (
+                  <SendStatus
+                    compact
+                    message={m}
+                    onRetry={() => { setErr(''); chatOutbox.retry(m.clientId) }}
+                    onDiscard={() => { setErr(''); chatOutbox.discard(m.clientId); syncPending() }}
+                  />
+                ) : (
+                  <Reactions
+                    message={m}
+                    onReact={acting ? react : undefined}
+                    picking={picking === String(m._id)}
+                    onPick={setPicking}
+                  />
+                )}
 
                 {/* Hover-reveal, so forty rows of buttons do not compete with
                     the conversation. `hover:` compiles to @media (hover: hover),

@@ -29,7 +29,7 @@ function markRead(userId, conversationId, at = new Date()) {
 // marking it read for the sender (sending implies reading everything up to now).
 async function appendMessage({
   conversation, senderUserId, senderRole, body, senderDisplayName = null, replyTo = null,
-  mentions = [], joinedUserId = null, countsAsMessage = true,
+  mentions = [], joinedUserId = null, countsAsMessage = true, clientId = null,
 }) {
   const message = await ChatMessage.create({
     conversationId: conversation._id,
@@ -40,6 +40,7 @@ async function appendMessage({
     ...(replyTo ? { replyTo } : {}),
     ...(mentions.length ? { mentions } : {}),
     ...(joinedUserId ? { joinedUserId } : {}),
+    ...(clientId ? { clientId } : {}),
   });
 
   const update = {
@@ -92,6 +93,8 @@ async function appendMessage({
     // reactions straight off the message and would otherwise special-case the
     // streamed copy.
     reactions:         [],
+    // So the sender's own tab can swap its local copy for this one.
+    ...(clientId ? { clientId } : {}),
   });
 
   return message;

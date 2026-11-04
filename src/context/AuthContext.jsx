@@ -4,6 +4,7 @@ import { getLevelNumber } from '../utils/levelUtils'
 import { AUTH_TOKEN_KEY, USER_CACHE_KEY, tutorialKey, tutorialClearedKey } from '../utils/storageKeys'
 import { identifyUser, resetPostHog } from '../lib/posthog'
 import { flushOutbox } from '../lib/cbatOutbox'
+import { clearAll as clearChatOutbox } from '../lib/chatOutbox'
 import { flushStartOutbox } from '../utils/cbat/recordStart'
 import { onNetworkChange } from '../lib/net'
 import { getAircraftRoster } from '../lib/offlineRoster'
@@ -74,10 +75,12 @@ export function AuthProvider({ children }) {
   // apiFetch — wraps fetch for user-triggered calls:
   //   • Shows a loading overlay after 400ms if still in-flight (suppresses flicker on fast responses)
   //   • Reports the duration to the backend for admin stats
-  const apiFetch = useCallback(async (url, options) => {
+  //   • `quiet: true` skips the overlay, for work the person is not waiting
+  //     on, such as a chat message already shown as sent (lib/chatOutbox.js)
+  const apiFetch = useCallback(async (url, { quiet = false, ...options } = {}) => {
     const t0 = Date.now()
     let overlayShown = false
-    const showTimer = setTimeout(() => {
+    const showTimer = quiet ? null : setTimeout(() => {
       overlayShown = true
       loadingCountRef.current += 1
       if (loadingCountRef.current === 1) {
@@ -236,6 +239,8 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     await fetch(`${API}/api/auth/logout`, { method: 'POST', headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
     if (isNative) clearToken()
+    // Anything still on its way up was said by the account signing out.
+    clearChatOutbox()
     setUser(null)
     resetPostHog()
     // Signing out on purpose is not a failure. Without this the next 401 from a

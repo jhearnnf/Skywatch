@@ -100,6 +100,13 @@ const chatMessageSchema = new mongoose.Schema({
   // room" hold even when two requests race, and it survives the member's date
   // being cleared and set again by an admin.
   joinedUserId:     { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: undefined },
+
+  // The id the sending client gave this message before it had one of ours.
+  // The client retries a send whose answer never came back (src/lib/chatOutbox.js),
+  // and the first try may well have landed: the unique index below turns that
+  // retry into the same message rather than a second copy. Also lets a client
+  // match its local copy to the real one arriving down the stream.
+  clientId:         { type: String, default: undefined },
 });
 
 chatMessageSchema.index({ conversationId: 1, createdAt: 1 });
@@ -114,6 +121,11 @@ chatMessageSchema.index({ 'replyTo.userId': 1, conversationId: 1, createdAt: 1 }
 chatMessageSchema.index(
   { conversationId: 1, joinedUserId: 1 },
   { unique: true, partialFilterExpression: { joinedUserId: { $type: 'objectId' } } },
+);
+
+chatMessageSchema.index(
+  { senderUserId: 1, clientId: 1 },
+  { unique: true, partialFilterExpression: { clientId: { $type: 'string' } } },
 );
 
 module.exports = mongoose.model('ChatMessage', chatMessageSchema);

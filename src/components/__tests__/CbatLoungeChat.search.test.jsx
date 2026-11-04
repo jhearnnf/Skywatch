@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatLoungeChat from '../CbatLoungeChat'
+import { clearAll as clearChatOutbox } from '../../lib/chatOutbox'
 
 // Search in the CBAT lounge widget.
 //
@@ -64,6 +65,7 @@ const stubFetch = () => {
 const calls = () => globalThis.fetch.mock.calls.map(([u]) => String(u))
 
 beforeEach(() => {
+  clearChatOutbox()
   vi.clearAllMocks()
   searchResults = []
   globalThis.EventSource = FakeEventSource

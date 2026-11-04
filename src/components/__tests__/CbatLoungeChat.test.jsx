@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react'
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import CbatLoungeChat from '../CbatLoungeChat'
+import { clearAll as clearChatOutbox } from '../../lib/chatOutbox'
 import { REACTION_EMOJI } from '../../pages/chat/reactionEmoji'
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
@@ -131,6 +132,7 @@ function stubFetch({ lounge = LOUNGE, loungeStatus = 200, group = { configured: 
 const apiFetch = vi.fn()
 
 beforeEach(() => {
+  clearChatOutbox()
   vi.clearAllMocks()
   mockSettings.value = { chatEnabled: true }
   FakeEventSource.last = null
@@ -548,6 +550,18 @@ describe('open', () => {
     expect(screen.getByText('Viper')).toBeTruthy()
   })
 
+  // Taking focus off the input closes a phone's keyboard after every message,
+  // and the page jumping to its new height threw the hub back to the menu.
+  it('keeps focus in the composer when Send is pressed', async () => {
+    stubFetch()
+    renderOpen()
+    const box = await screen.findByPlaceholderText(/Message the lounge/i)
+    fireEvent.change(box, { target: { value: 'hello' } })
+    // fireEvent returns false when the handler prevented the default, which
+    // is the focus move.
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Send' }))).toBe(false)
+  })
+
   it('marks the room read, so the dot does not come back', async () => {
     const fetchMock = stubFetch()
     renderOpen()
@@ -638,8 +652,39 @@ describe('posting', () => {
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalled())
     const [, opts] = apiFetch.mock.calls[0]
-    expect(JSON.parse(opts.body)).toEqual({ body: 'hello all', replyToId: null })
+    expect(JSON.parse(opts.body)).toEqual({ body: 'hello all', replyToId: null, clientId: expect.any(String) })
     await waitFor(() => expect(box.value).toBe(''))
+  })
+
+  // Discord-style: in the room at once, a spinner only if it is slow, and the
+  // server's copy in its place once it lands.
+  it('shows your message before the server answers', async () => {
+    stubFetch()
+    let answer
+    apiFetch.mockImplementation(() => new Promise(resolve => { answer = resolve }))
+    renderOpen()
+    const box = await screen.findByPlaceholderText(/Message the lounge/i)
+
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      fireEvent.change(box, { target: { value: 'instant' } })
+      fireEvent.keyDown(box, { key: 'Enter' })
+      expect(await screen.findByText('instant')).toBeTruthy()
+      expect(screen.queryByTestId('message-sending')).toBeNull()
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
+      expect(screen.getByTestId('message-sending')).toBeTruthy()
+
+      await act(async () => {
+        answer({ ok: true, status: 200, json: async () => ({ data: { message: {
+          _id: 'm9', senderUserId: 'u1', senderDisplayName: 'Falcon', body: 'instant', mentions: [],
+        } } }) })
+      })
+      await waitFor(() => expect(screen.queryByTestId('message-sending')).toBeNull())
+      expect(screen.getAllByText('instant')).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // The bot only speaks when addressed, so the button writes the mention and
@@ -794,7 +839,7 @@ describe('replying', () => {
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalled())
     const [, opts] = apiFetch.mock.calls[0]
-    expect(JSON.parse(opts.body)).toEqual({ body: 'on my way', replyToId: 'm1' })
+    expect(JSON.parse(opts.body)).toEqual({ body: 'on my way', replyToId: 'm1', clientId: expect.any(String) })
     // Cleared once sent, or the next message would answer the same person.
     await waitFor(() => expect(screen.queryByText('Replying to')).toBeNull())
   })
