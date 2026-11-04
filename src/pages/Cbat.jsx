@@ -620,7 +620,7 @@ export default function Cbat() {
     const landmark = landmarkRef.current
     const panel = loungeRef.current
     if (!loungeRevealOn || !landmark || !panel) return
-    const GAP = 8 // above the nav
+    const GAP = 12 // above the nav
     // Below the top bar. The landmark's own py-3 alone left the heading's
     // glow pressed up against the bar's edge.
     const TOP_GAP = 16
@@ -658,6 +658,13 @@ export default function Cbat() {
     const navEl = document.querySelector('.app-bottomnav')
     if (topbarEl) ro?.observe(topbarEl)
     if (navEl) ro?.observe(navEl)
+    // And the shell's own bottom padding, which `giveBack` is measured
+    // against. usePhoneTight's class lands in a plain effect, after this
+    // fit, and trims 12px off .app-shell-content (eased over 300ms): fitted
+    // against the untrimmed page, the panel's foot ended up behind the nav.
+    // Border-box, because a padding change leaves the content box alone.
+    document.querySelectorAll('.app-shell-content, .app-shell-main')
+      .forEach((el) => ro?.observe(el, { box: 'border-box' }))
     return () => {
       window.removeEventListener('resize', fit)
       window.visualViewport?.removeEventListener('resize', fit)
