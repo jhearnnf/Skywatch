@@ -221,7 +221,10 @@ function GroupOnlineDot({ online }) {
 // against its siblings in a shared column. The desktop dock (see
 // components/cbat/CbatLoungeDock.jsx) is a column of its own with nothing to
 // borrow height from, so there the form scrolls.
-export default function CbatLoungeChat({ open, onToggle, collapsible = true, grow = DEFAULT_LOUNGE_GROW, resizing = false, split = true }) {
+// `adminDefaultRoom` is the tab an admin opens on: All groups in the desktop
+// dock, the lounge on the phone hub (pages/Cbat.jsx). Everyone else always
+// opens on the lounge.
+export default function CbatLoungeChat({ open, onToggle, collapsible = true, grow = DEFAULT_LOUNGE_GROW, resizing = false, split = true, adminDefaultRoom = 'groups' }) {
   const { user, API, apiFetch } = useAuth()
   const { settings } = useAppSettings()
   const navigate = useNavigate()
@@ -331,8 +334,8 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   // The offset of an "@" the user dismissed with Escape, so it stays dismissed
   // until they start a different mention.
   const [mentionDismissed, setMentionDismissed] = useState(null)
-  // Admins land on All groups; everyone else on the lounge.
-  const [room, setRoom] = useState(() => (user?.isAdmin ? 'groups' : 'lounge'))
+  // Admins land on `adminDefaultRoom`; everyone else on the lounge.
+  const [room, setRoom] = useState(() => (user?.isAdmin ? adminDefaultRoom : 'lounge'))
   const [loungeUnreadCount, setLoungeUnreadCount] = useState(0)
   const [dateChoice, setDateChoice] = useState('')
   const [confirmingDate, setConfirmingDate] = useState(false)
@@ -475,14 +478,14 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
   }
 
   // Auth can resolve after the first render, in which case the lazy default
-  // above saw no user. Move an admin to All groups once, the first time we
+  // above saw no user. Move an admin to their default room once, the first time we
   // learn they are one, and never again, so a later manual choice sticks.
   const adminDefaultAppliedRef = useRef(Boolean(user?.isAdmin))
   useEffect(() => {
     if (!user?.isAdmin || adminDefaultAppliedRef.current) return
     adminDefaultAppliedRef.current = true
-    changeRoom('groups')
-  }, [changeRoom, user?.isAdmin])
+    changeRoom(adminDefaultRoom)
+  }, [changeRoom, user?.isAdmin, adminDefaultRoom])
 
   // ── Loading ────────────────────────────────────────────────────────────────
 

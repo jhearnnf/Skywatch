@@ -455,6 +455,14 @@ describe('private CBAT group', () => {
     await waitFor(() => expect(screen.queryByLabelText('5 new lounge messages')).toBeNull())
   })
 
+  it('opens an admin on the lounge when the phone hub asks for it', async () => {
+    mockUseAuth.mockReturnValue({ user: { _id: 'u1', displayName: 'Control', isAdmin: true }, API: '', apiFetch })
+    stubFetch()
+    renderOpen({ adminDefaultRoom: 'lounge' })
+    expect(screen.getByRole('tab', { name: /^Lounge/ }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tab', { name: /All groups/ }).getAttribute('aria-selected')).toBe('false')
+  })
+
   it('still opens a member on the lounge', async () => {
     stubFetch()
     renderOpen()

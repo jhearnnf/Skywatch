@@ -1280,7 +1280,7 @@ export default function Cbat() {
           className="relative z-[2] flex h-[60dvh] min-h-[360px] flex-col"
         >
           <LoungePanelReveal progress={loungeProgress}>
-            <CbatLoungeChat open collapsible={false} />
+            <CbatLoungeChat open collapsible={false} adminDefaultRoom="lounge" />
           </LoungePanelReveal>
         </div>
       )}
