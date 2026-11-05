@@ -596,7 +596,7 @@ export default function Cbat() {
   // components/cbat/LoungeReveal.jsx).
   const loungeRevealOn = showLoungeLanding && !loungeInColumn
   const landmarkRef = useRef(null)
-  const { progress: loungeProgress, goToLounge } = useLoungeScrollSnap({
+  const { progress: loungeProgress, toggleLounge } = useLoungeScrollSnap({
     enabled: loungeRevealOn,
     panelRef: loungeRef,
     landmarkRef,
@@ -805,9 +805,9 @@ export default function Cbat() {
           type="button"
           data-testid="cbat-lounge-landmark"
           ref={landmarkRef}
-          onClick={goToLounge}
+          onClick={toggleLounge}
           className="lg:hidden relative w-full py-3 mt-3 sm:mt-6 flex flex-col items-center select-none bg-transparent border-0 cursor-pointer"
-          aria-label="CBAT chat: go to the lounge and your group"
+          aria-label="CBAT chat: go between the game menu and the lounge"
         >
           {/* Ambient blue radial glow for depth — matches the radar tint below */}
           <div

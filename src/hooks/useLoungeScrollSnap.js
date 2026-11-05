@@ -140,6 +140,16 @@ export function useLoungeScrollSnap({ enabled, panelRef, landmarkRef }) {
     else panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [bounds, glideTo, panelRef])
 
+  // The CBAT CHAT heading is one button for both ways: from the menu it takes
+  // you down to the lounge, and from the lounge (or most of the way there) it
+  // glides you back up to the menu's resting point, as a swipe up would.
+  const toggleLounge = useCallback(() => {
+    const b = bounds()
+    const inLounge = ctl.current.atLounge || store.get() >= 0.5
+    if (b && inLounge) glideTo(b.start)
+    else goToLounge()
+  }, [bounds, glideTo, goToLounge, store])
+
   useEffect(() => {
     if (!enabled) { store.set(0); return }
     const c = ctl.current
@@ -276,5 +286,5 @@ export function useLoungeScrollSnap({ enabled, panelRef, landmarkRef }) {
     }
   }, [enabled, store, bounds, glideTo, stop, panelRef])
 
-  return { progress: store, goToLounge }
+  return { progress: store, goToLounge, toggleLounge }
 }

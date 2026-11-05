@@ -85,3 +85,24 @@ describe('useLoungeScrollSnap: staying in the lounge', () => {
     expect(scrollTo).not.toHaveBeenCalled()
   })
 })
+
+describe('useLoungeScrollSnap: the CBAT CHAT heading as a toggle', () => {
+  it('takes the page down to the lounge from the menu', () => {
+    const { result } = mount()
+    setScroll(START)
+    result.current.toggleLounge()
+    vi.advanceTimersByTime(50)
+    expect(lastTop()).toBe(END)
+  })
+
+  it('glides the page back up to the menu from the lounge', () => {
+    const { result } = mount()
+    setScroll(END)
+    result.current.toggleLounge()
+    vi.advanceTimersByTime(50)
+    expect(lastTop()).toBe(START)
+    // And it stays there: the lounge pin does not drag it back down.
+    vi.advanceTimersByTime(500)
+    expect(lastTop()).toBe(START)
+  })
+})
