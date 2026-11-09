@@ -364,7 +364,8 @@ describe('private CBAT group', () => {
     stubFetch({ group: { groups: [{ conversationId: 'c1', date: '2099-10-14', region: 'GB', participantCount: 7, messageCount: 12, unread: 3 }] } })
     renderOpen()
     fireEvent.click(await screen.findByRole('tab', { name: 'All groups' }))
-    expect(await screen.findByText('7 participants · 12 messages')).toBeTruthy()
+    expect(await screen.findByText('7 participants')).toBeTruthy()
+    expect(screen.getByText('12 messages')).toBeTruthy()
     expect(screen.getByLabelText('3 new messages in this group').className).toContain('bg-red-500')
   })
 

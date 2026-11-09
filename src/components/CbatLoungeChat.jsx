@@ -1652,16 +1652,17 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             const isPast = group.date < todayKey
             return (
             <button key={group.conversationId} type="button" onClick={() => { setAdminGroupId(group.conversationId); setLounge(null); setMessages([]); resetHistory(); setLoading(true) }} className={`w-full rounded-xl border border-game-line bg-surface/70 px-3 py-2.5 flex items-center gap-3 text-left hover:border-brand-400 hover:bg-brand-500/[0.06] hover:-translate-y-px transition-all ${isToday ? 'cbat-group-today' : ''} ${isPast ? 'opacity-50 grayscale hover:opacity-80' : ''}`}>
-              <span className={`w-9 h-9 rounded-xl grid place-items-center ${isToday ? 'bg-amber-500/15 text-amber-500' : 'bg-brand-500/10 text-brand-500'}`}>✈</span>
+              <span className={`w-9 h-9 shrink-0 rounded-xl grid place-items-center ${isToday ? 'bg-amber-500/15 text-amber-500' : 'bg-brand-500/10 text-brand-500'}`}>✈</span>
               <span className="min-w-0">
-                <span className="flex items-center gap-1.5 text-xs font-extrabold text-game-text">
-                  {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}
-                  <FlagOrCode code={group.region} width={18} className="shrink-0" />
+                <span className="block whitespace-nowrap text-xs font-extrabold text-game-text">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}</span>
+                <span className={`mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-[10px] ${isToday ? 'text-amber-500 font-bold' : 'text-slate-500'}`}>
+                  <FlagOrCode code={group.region} width={16} className="shrink-0" />
+                  {isToday ? `Test day · Region ${group.region}` : `Region ${group.region}`}
                 </span>
-                <span className={`block text-[10px] ${isToday ? 'text-amber-500 font-bold' : 'text-slate-500'}`}>{isToday ? `Test day · Region ${group.region}` : `Region ${group.region}`}</span>
               </span>
-              <span className="ml-auto text-[10px] text-slate-500">
-                {group.participantCount ?? 0} participant{group.participantCount === 1 ? '' : 's'} · {group.messageCount} messages
+              <span className="ml-auto shrink-0 text-right leading-tight whitespace-nowrap">
+                <span className="block text-[10px] font-bold text-slate-600">{group.messageCount} message{group.messageCount === 1 ? '' : 's'}</span>
+                <span className="block text-[9px] text-slate-400">{group.participantCount ?? 0} participant{group.participantCount === 1 ? '' : 's'}</span>
               </span>
               {group.unread > 0 && <span aria-label={`${group.unread} new ${group.unread === 1 ? 'message' : 'messages'} in this group`} className="min-w-5 h-5 px-1 rounded-full grid place-items-center bg-red-500 text-white text-[9px] font-black shadow-[0_0_12px_rgba(239,68,68,.45)]">{group.unread}</span>}
             </button>
