@@ -200,8 +200,8 @@ export default function Privacy() {
           <p>
             SkyWatch has a chat feature with three parts: a private support thread between you and
             the SkyWatch team, public channels open to every signed-in user, and direct messages
-            between two users. Chat is available on the website only — it is not part of the
-            SkyWatch mobile app.
+            between two users. Chat is available on the website and in the SkyWatch Android app,
+            and works the same way in both.
           </p>
           <ul className="list-disc pl-5 space-y-1">
             <li>
