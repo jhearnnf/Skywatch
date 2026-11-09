@@ -173,10 +173,12 @@ describe('notifications', () => {
   });
 
   it('counts it again once an admin turns notifications on', async () => {
+    // The member signs up BEFORE the medal lands: channel chat from before an
+    // account existed never dots it (a7f420b), whatever the channel setting.
+    const user  = await createUser({ displayName: 'Falcon' });
     await seedChatBot();
     await postMedalToChannel(DETAIL);
     const admin = await createUser({ isAdmin: true });
-    const user  = await createUser({ displayName: 'Falcon' });
     const id = (await medalsChannel())._id;
 
     const res = await request(app).patch(`/api/chat/admin/channels/${id}`)

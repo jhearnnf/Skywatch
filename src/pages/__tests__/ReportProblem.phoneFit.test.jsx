@@ -98,22 +98,20 @@ describe('ReportProblem — fitting the phone viewport', () => {
     expect(links).toBeGreaterThanOrEqual(3)
   })
 
-  it('keeps both ways to reach us, as equally weighted cards', () => {
+  // A report IS a support ticket now (8022717), so the old "start a chat" or
+  // "send a written report" pair became one form that opens the ticket.
+  it('offers one form that opens a support ticket, not two doors into it', () => {
     render(<ReportProblem />)
-    // The height came out of blurbs and step numbers, never out of an option.
-    expect(screen.getByRole('button', { name: /start a chat/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /submit report/i })).toBeInTheDocument()
-    // Exact strings: the page subtitle also ends "or send a written report."
-    expect(screen.getByText('Talk to a real person')).toBeInTheDocument()
-    expect(screen.getByText('Send a written report')).toBeInTheDocument()
+    expect(screen.getByText('New support ticket')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open ticket' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /start a chat/i })).toBeNull()
+    expect(screen.queryByText('or')).toBeNull()
   })
 
-  it('drops the step numbers on a phone, which contradict the "or" between the cards', () => {
-    const { container } = render(<ReportProblem />)
-    for (const step of ['1', '2']) {
-      const badge = [...container.querySelectorAll('span')].find(s => s.textContent === step)
-      expect(badge.className).toContain('hidden')
-      expect(badge.className).toContain('sm:flex')
-    }
+  it('drops the card blurb on a phone, where the label and placeholder already say it', () => {
+    render(<ReportProblem />)
+    const blurb = screen.getByText(/opens as a private thread with the SkyWatch team/)
+    expect(blurb.className).toContain('hidden')
+    expect(blurb.className).toContain('sm:block')
   })
 })

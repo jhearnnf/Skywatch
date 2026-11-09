@@ -57,7 +57,8 @@ describe('ReportProblem — slim (native) mode', () => {
 
   it('still offers the written report path', () => {
     render(<ReportProblem />)
-    expect(screen.getByText(/Send a written report/i)).toBeDefined()
+    // No Community in slim, so the team replies by email instead.
+    expect(screen.getByText(/the team will reply by email/i)).toBeDefined()
     expect(screen.getByPlaceholderText(/what happened/i)).toBeDefined()
     expect(screen.getByRole('button', { name: /submit report/i })).toBeDefined()
   })
