@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, useId, Fragment } fr
 import { motion, AnimatePresence } from 'framer-motion'
 import Overlay from '../components/ui/Overlay'
 import CountBadge from '../components/ui/CountBadge'
+import { FlagOrCode } from '../components/ui/CountryFlag'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useNewCategoryUnlock } from '../context/NewCategoryUnlockContext'
@@ -4513,12 +4514,6 @@ const fmtDateTime = (ts) => ts
   ? new Date(ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : '—'
 
-// ISO 3166-1 alpha-2 → flag emoji (two regional-indicator symbols). Every
-// two-letter code has one, so no lookup table.
-const flagEmoji = (code) => /^[A-Z]{2}$/.test(code ?? '')
-  ? String.fromCodePoint(...[...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65))
-  : ''
-
 // "United Kingdom" from "GB" — the browser knows every region name, so no
 // table here either. Falls back to the code on a browser without DisplayNames.
 const countryName = (code) => {
@@ -6027,7 +6022,7 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
                       aria-label={`Country: ${describeGeo(u.geo)}`}
                       className={`ml-2 shrink-0 text-sm leading-none rounded ${u.geo.mismatch ? 'ring-2 ring-amber-400/70' : ''}`}
                     >
-                      {flagEmoji(u.geo.country)}
+                      <FlagOrCode code={u.geo.country} width={20} />
                     </span>
                   )}
                   {u.isAdmin && <span className="ml-2 shrink-0 text-[10px] bg-brand-100 text-brand-700 px-1.5 py-0.5 rounded-full font-bold">ADMIN</span>}
@@ -6213,7 +6208,7 @@ function UsersTab({ API, onViewEmailHistory, focusUser = null }) {
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Country</p>
                     <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <span aria-hidden="true">{flagEmoji(u.geo.country)}</span>
+                      <span aria-hidden="true"><FlagOrCode code={u.geo.country} width={20} /></span>
                       <span>{countryName(u.geo.country)}</span>
                       {u.geo.mismatch && u.geo.ipCountry && (
                         <span

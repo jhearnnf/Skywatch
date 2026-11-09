@@ -20,6 +20,7 @@ import ChatSearch, { SearchIcon } from '../pages/chat/components/ChatSearch'
 import { centerInScroller, JUMP_HIGHLIGHT_MS } from '../pages/chat/jumpScroll'
 import { cohortCopy, formatCohortDate } from '../utils/cbat/cohortCopy'
 import { DEFAULT_LOUNGE_GROW } from './cbat/LoungeResizeHandle'
+import { FlagOrCode } from './ui/CountryFlag'
 
 // The mini chat docked under Recent Scores on the CBAT hub.
 //
@@ -1653,7 +1654,10 @@ export default function CbatLoungeChat({ open, onToggle, collapsible = true, gro
             <button key={group.conversationId} type="button" onClick={() => { setAdminGroupId(group.conversationId); setLounge(null); setMessages([]); resetHistory(); setLoading(true) }} className={`w-full rounded-xl border border-game-line bg-surface/70 px-3 py-2.5 flex items-center gap-3 text-left hover:border-brand-400 hover:bg-brand-500/[0.06] hover:-translate-y-px transition-all ${isToday ? 'cbat-group-today' : ''} ${isPast ? 'opacity-50 grayscale hover:opacity-80' : ''}`}>
               <span className={`w-9 h-9 rounded-xl grid place-items-center ${isToday ? 'bg-amber-500/15 text-amber-500' : 'bg-brand-500/10 text-brand-500'}`}>✈</span>
               <span className="min-w-0">
-                <span className="block text-xs font-extrabold text-game-text">{new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}</span>
+                <span className="flex items-center gap-1.5 text-xs font-extrabold text-game-text">
+                  {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${group.date}T00:00:00Z`))}
+                  <FlagOrCode code={group.region} width={18} className="shrink-0" />
+                </span>
                 <span className={`block text-[10px] ${isToday ? 'text-amber-500 font-bold' : 'text-slate-500'}`}>{isToday ? `Test day · Region ${group.region}` : `Region ${group.region}`}</span>
               </span>
               <span className="ml-auto text-[10px] text-slate-500">

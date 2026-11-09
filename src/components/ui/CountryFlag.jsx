@@ -95,6 +95,71 @@ const FLAGS = {
       </g>
     </>
   ),
+
+  // Blue Ensign like Australia's, with the four red, white-edged stars of the
+  // Southern Cross in the fly. The bottom star is the largest.
+  NZ: ({ id }) => (
+    <>
+      <rect width={60} height={30} fill={BLUE} />
+      <UnionFlag w={30} h={15} clipId={`${id}-nz`} />
+      {[[45, 5.5, 1.7], [39.5, 13.5, 1.9], [51, 11.5, 1.7], [45, 24.5, 2.1]].map(([x, y, r]) => (
+        <g key={`${x},${y}`}>
+          <path d={starPath(x, y, 5, r + 0.6, 0.42)} fill="#fff" />
+          <path d={starPath(x, y, 5, r, 0.42)} fill={RED} />
+        </g>
+      ))}
+    </>
+  ),
+
+  // Thirteen stripes, fifty stars in nine alternating rows of six and five.
+  // Squeezed from its real 19:10 into our 2:1 box, which nobody will notice.
+  US: () => (
+    <>
+      <rect width={60} height={30} fill="#fff" />
+      {Array.from({ length: 7 }, (_, i) => (
+        <rect key={i} y={(i * 2 * 30) / 13} width={60} height={30 / 13} fill="#B22234" />
+      ))}
+      <rect width={24} height={(7 * 30) / 13} fill="#3C3B6E" />
+      <g fill="#fff">
+        {Array.from({ length: 9 }, (_, row) =>
+          Array.from({ length: row % 2 ? 5 : 6 }, (_, col) => (
+            <path
+              key={`${row}-${col}`}
+              d={starPath((row % 2 ? 2 * col + 2 : 2 * col + 1) * 2, ((row + 1) * 30 * 7) / 13 / 10, 5, 0.9, 0.382)}
+            />
+          )),
+        )}
+      </g>
+    </>
+  ),
+
+  IE: () => tricolour('#169B62', '#fff', '#FF883E'),
+  FR: () => tricolour('#002395', '#fff', '#ED2939'),
+  IT: () => tricolour('#009246', '#fff', '#CE2B37'),
+  DE: () => bands('#000', '#DD0000', '#FFCE00'),
+  NL: () => bands('#AE1C28', '#fff', '#21468B'),
+}
+
+// Three vertical stripes, hoist to fly.
+function tricolour(a, b, c) {
+  return (
+    <>
+      <rect width={20} height={30} fill={a} />
+      <rect x={20} width={20} height={30} fill={b} />
+      <rect x={40} width={20} height={30} fill={c} />
+    </>
+  )
+}
+
+// Three horizontal bands, top to bottom.
+function bands(a, b, c) {
+  return (
+    <>
+      <rect width={60} height={10} fill={a} />
+      <rect y={10} width={60} height={10} fill={b} />
+      <rect y={20} width={60} height={10} fill={c} />
+    </>
+  )
 }
 
 export const FLAG_CODES = Object.keys(FLAGS)
@@ -104,6 +169,26 @@ export const FLAG_CODES = Object.keys(FLAGS)
 export function hasFlag(emoji) {
   const cc = flagEmojiToCode(emoji)
   return Boolean(cc && FLAGS[cc])
+}
+
+// A flag for any ISO country code: the drawing when we have one, otherwise
+// the code in a small flag-sized box. Never the emoji, which Windows shows as
+// two loose letters.
+export function FlagOrCode({ code, width = 20, className = '' }) {
+  const cc = typeof code === 'string' ? code.toUpperCase() : ''
+  if (!cc) return null
+  if (FLAGS[cc]) return <CountryFlag code={cc} width={width} className={className} />
+  return (
+    <span
+      role="img"
+      aria-label={cc}
+      data-flag={cc}
+      className={`inline-grid place-items-center rounded-sm border border-slate-300 text-[8px] font-black leading-none text-slate-600 ${className}`}
+      style={{ width, height: width / 2 }}
+    >
+      {cc}
+    </span>
+  )
 }
 
 // Renders the flag for `code` (or for a flag emoji), or null if we have no

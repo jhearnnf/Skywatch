@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, it, expect } from 'vitest'
-import CountryFlag, { flagEmojiToCode, hasFlag, FLAG_CODES } from '../CountryFlag'
+import CountryFlag, { flagEmojiToCode, hasFlag, FLAG_CODES, FlagOrCode } from '../CountryFlag'
 
 // Windows has no flag emoji glyphs, so the guide rail's country flags are
 // drawn as SVG. The seed script stores them as emoji (🇨🇦), so the mapping
@@ -23,7 +23,7 @@ describe('CountryFlag', () => {
     expect(FLAG_CODES).toEqual(expect.arrayContaining(['GB', 'CA', 'AU']))
     expect(hasFlag('🇬🇧')).toBe(true)
     // A real flag we have not drawn: the caller keeps the emoji.
-    expect(hasFlag('🇫🇷')).toBe(false)
+    expect(hasFlag('🇯🇵')).toBe(false)
     expect(hasFlag('📖')).toBe(false)
   })
 
@@ -34,7 +34,7 @@ describe('CountryFlag', () => {
     expect(svg.getAttribute('width')).toBe('24')
     expect(svg.getAttribute('height')).toBe('12')
 
-    const { container: none } = render(<CountryFlag emoji="🇫🇷" />)
+    const { container: none } = render(<CountryFlag emoji="🇯🇵" />)
     expect(none.querySelector('svg')).toBeNull()
   })
 
@@ -42,5 +42,22 @@ describe('CountryFlag', () => {
     const { container } = render(<><CountryFlag code="AU" /><CountryFlag code="AU" /></>)
     const ids = [...container.querySelectorAll('clipPath')].map(c => c.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
+describe('FlagOrCode', () => {
+  it('draws every CBAT group region we have a flag for', () => {
+    for (const cc of ['GB', 'AU', 'NZ', 'US', 'CA']) {
+      const { container } = render(<FlagOrCode code={cc} />)
+      expect(container.querySelector(`svg[data-flag="${cc}"]`)).toBeTruthy()
+    }
+  })
+
+  it('falls back to the code in a box, never the emoji, and to nothing for no code', () => {
+    const { container } = render(<FlagOrCode code="jp" />)
+    const box = container.querySelector('span[data-flag="JP"]')
+    expect(box?.textContent).toBe('JP')
+    const { container: none } = render(<FlagOrCode code={null} />)
+    expect(none.firstChild).toBeNull()
   })
 })

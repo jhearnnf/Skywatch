@@ -93,7 +93,7 @@ describe('Admin — Users tab: country', () => {
     await showList([{ ...AGENT, geo: GEO_GB, firstSeenCountry: 'GB' }])
 
     const flag = screen.getByLabelText(/^Country: United Kingdom/)
-    expect(flag.textContent).toBe('🇬🇧')
+    expect(flag.querySelector('svg[data-flag="GB"]')).toBeTruthy()
     expect(flag.getAttribute('title')).toBe('United Kingdom · Europe/London · en-GB')
     expect(screen.queryByText('Country')).toBeNull()
 
