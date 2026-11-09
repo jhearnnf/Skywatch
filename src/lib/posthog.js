@@ -59,4 +59,29 @@ export function captureEvent(name, props) {
   posthog.capture(name, props)
 }
 
+// The recording running right now, for an admin to watch alongside a report.
+// The server builds the link from `sessionId` itself and never takes a URL
+// from here (backend/utils/posthogReplay.js). `offsetMs` points the link at
+// about 30 seconds before this moment, so the admin lands just before the
+// person pressed Report. `path` is only used server-side to rank their
+// earlier sessions and is not stored.
+//
+// Never throws: a blocked or uninitialised PostHog reports "not recording".
+const LOOK_BACK_SECONDS = 30
+export function currentReplay(path = null) {
+  const base = { recording: false, sessionId: null, offsetMs: null, ...(path ? { path } : {}) }
+  if (!initialized) return base
+  try {
+    const sessionId = posthog.get_session_id?.() || null
+    const recording = Boolean(sessionId) && posthog.sessionRecordingStarted?.() === true
+    let offsetMs = null
+    const url = posthog.get_session_replay_url?.({ withTimestamp: true, timestampLookBack: LOOK_BACK_SECONDS })
+    const t = url ? new URL(url).searchParams.get('t') : null
+    if (t && Number.isFinite(Number(t))) offsetMs = Math.max(0, Number(t)) * 1000
+    return { ...base, recording, sessionId, offsetMs }
+  } catch {
+    return base
+  }
+}
+
 export { posthog }

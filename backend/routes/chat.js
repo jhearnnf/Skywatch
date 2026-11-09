@@ -31,6 +31,14 @@ const { overDailyBudget, noteBotSpend } = require('../utils/chatBotBudget');
 const { SUPPORT_LABEL, markRead, appendMessage } = require('../utils/chatWrite');
 const { openTicket, nameTicketFromFirstMessage, resolveTicket, reopenTicket } = require('../utils/supportTickets');
 const { describeReportEnvironment } = require('../utils/reportEnvironment');
+const ChatUpload = require('../models/ChatUpload');
+const {
+  MAX_ATTACHMENTS, KIND_RULES, folderFor, newPublicId, mediaAccess, serializeAttachments, displayText,
+} = require('../utils/chatAttachments');
+const {
+  signDirectUpload, verifyUploadResponse, destroyAsset, accountUsage,
+} = require('../utils/cloudinary');
+const { attachReplay, serializeReplay } = require('../utils/posthogReplay');
 
 // The channels whose composer offers a one-tap "ask the guide bot" button.
 //
@@ -553,6 +561,24 @@ function postRefusal(convo, user) {
   return null;
 }
 
+// The two people in a DM, in the shape mediaAccess() wants, from the viewer
+// and the already-loaded other side. Empty for anything but a DM.
+function dmParticipants(convo, viewer, other) {
+  if (convo.type !== 'dm') return [];
+  return [
+    { _id: viewer._id, isAdmin: Boolean(viewer.isAdmin), isBot: Boolean(viewer.isBot) },
+    ...(other?.userId ? [{ _id: other.userId, isAdmin: Boolean(other.isAdmin), isBot: Boolean(other.isBot) }] : []),
+  ];
+}
+
+// The same, for a route that has not loaded the other side yet.
+async function loadDmParticipants(convo, viewer) {
+  if (convo.type !== 'dm') return [];
+  const otherId = (convo.participantIds ?? []).find(id => String(id) !== String(viewer._id));
+  const other = otherId ? await User.findById(otherId).select('isAdmin isBot').lean() : null;
+  return dmParticipants(convo, viewer, other ? { userId: other._id, isAdmin: other.isAdmin, isBot: other.isBot } : null);
+}
+
 // appendMessage() and markRead() live in utils/chatWrite.js so the report
 // route and the admin Reports tab can write into a ticket too.
 
@@ -692,6 +718,7 @@ async function previewMap(conversationIds) {
     { $group: {
       _id:               '$conversationId',
       body:              { $first: '$body' },
+      attachments:       { $first: '$attachments' },
       createdAt:         { $first: '$createdAt' },
       senderRole:        { $first: '$senderRole' },
       senderUserId:      { $first: '$senderUserId' },
@@ -730,6 +757,11 @@ function serializeMessage(m, { viewerIsAdmin, conversationType, viewerId }) {
     senderRole:        m.senderRole,
     senderDisplayName: label,
     body:              hideBody ? null : m.body,
+    // Withheld exactly as the body is: a removed photo is gone for everyone
+    // but the admins who keep the moderation record.
+    ...((m.attachments ?? []).length && !hideBody
+      ? { attachments: serializeAttachments(m.attachments) }
+      : {}),
     deleted,
     deletedAt:         m.deletedAt ?? null,
     // Shown to everyone, not just admins: a moderator quietly rewriting what
@@ -946,7 +978,8 @@ router.get('/overview', async (req, res) => {
         personalUnread: personal.get(String(c._id)) ?? 0,
         preview: preview
           ? {
-            body: preview.body,
+            // A photo sent on its own previews as "Photo", not a blank line.
+            body: displayText(preview),
             senderDisplayName:
                 c.type === 'support' && preview.senderRole === 'admin'
                   ? SUPPORT_LABEL
@@ -1514,6 +1547,12 @@ router.post('/conversations', async (req, res) => {
     const body = (req.body?.body ?? '').toString().trim();
     if (body.length > 4000) return res.status(400).json({ message: 'Message too long (max 4000 chars)' });
     const { conversation, created } = await openTicket({ user: req.user, body: body || null });
+    // The session they were in when they asked for help, for the admin.
+    if (req.body?.replay) {
+      await attachReplay(conversation._id, req.body.replay, {
+        userId: req.user._id, reportedPath: req.body?.replay?.path ?? null,
+      });
+    }
     res.json({ status: 'success', data: { conversation, created } });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -1879,9 +1918,13 @@ router.get('/conversations/:id/messages', async (req, res) => {
         const otherId = (convo.participantIds ?? [])
           .find(id => String(id) !== String(req.user._id));
         if (!otherId) return null;
-        const other = await User.findById(otherId).select('displayName agentNumber lastSeen').lean();
+        const other = await User.findById(otherId).select('displayName agentNumber lastSeen isAdmin isBot').lean();
         if (!other) return null;
         return {
+          // For the media rules only (utils/chatAttachments.js): whether this
+          // DM is one with an admin. Not sent to the client.
+          isAdmin: Boolean(other.isAdmin),
+          isBot:   Boolean(other.isBot),
           // Their id, so the header name can open the same card a name in a
           // channel does (profile, block). A DM with no messages yet has no
           // senders the client could take the id from.
@@ -1952,12 +1995,202 @@ router.get('/conversations/:id/messages', async (req, res) => {
         // the button is not offered, so the composer needs no slug list of its
         // own — it draws the button when it has a name.
         botName: promptBot?.displayName ?? null,
+        // Photos and videos: whether this thread can carry them, whether the
+        // user side has been given permission, and what THIS viewer may do.
+        // The composer draws the paperclip off `canAttach` and the admin
+        // switch off `canToggle`; neither knows the rules.
+        media: mediaAccess(convo, req.user, dmParticipants(convo, req.user, dmOther)),
+        // Admin-only: the PostHog session the reporter was in when they
+        // reported, and their earlier sessions. Absent for everyone else.
+        ...(convo.type === 'support' && req.user.isAdmin
+          ? { replay: serializeReplay(convo.replay) }
+          : {}),
       },
     } });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+// The files a send names, checked one by one. Each must be:
+//   • an upload Cloudinary really made (the response signature),
+//   • signed for THIS user in THIS conversation, and not attached yet
+//     (the ChatUpload row written when the upload was signed).
+// The kind comes from that row, never from the client. Width, height and
+// duration are display hints from the upload response and are only clamped.
+const ATTACH_FAILED = 'That file could not be attached. Try adding it again.';
+async function resolveAttachments(raw, convo, user) {
+  const prefix = `${folderFor(convo._id)}/`;
+  const seen = new Set();
+  const attachments = [];
+  const num = (v, max) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n), max) : null;
+  };
+  for (const item of raw) {
+    const publicId = typeof item?.publicId === 'string' ? item.publicId : '';
+    if (!publicId.startsWith(prefix) || seen.has(publicId)) return { error: ATTACH_FAILED };
+    seen.add(publicId);
+    if (!verifyUploadResponse({ publicId, version: item.version, signature: item.signature })) {
+      return { error: ATTACH_FAILED };
+    }
+    const upload = await ChatUpload.findOne({
+      publicId, userId: user._id, conversationId: convo._id, messageId: null,
+    }).lean();
+    if (!upload) return { error: ATTACH_FAILED };
+    attachments.push({
+      kind:        upload.kind,
+      publicId,
+      width:       num(item.width, 10000),
+      height:      num(item.height, 10000),
+      bytes:       num(item.bytes, 1024 * 1024 * 1024),
+      durationSec: upload.kind === 'video' ? num(item.duration, 600) : null,
+    });
+  }
+  return { attachments };
+}
+
+// POST /api/chat/conversations/:id/attachments/sign — permission to upload
+// ONE photo or video straight to Cloudinary.
+//
+// Body: { kind: 'image' | 'video', bytes }. Answers with the URL to POST the
+// file to and the signed fields to send with it. Everything that decides where
+// the file lands and how it is shrunk is in the signature, so the client can
+// alter none of it.
+const SIGN_LIMIT_PER_HOUR = 30;
+router.post('/conversations/:id/attachments/sign', async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Conversation not found' });
+    const kind = req.body?.kind;
+    const rule = KIND_RULES[kind];
+    if (!rule) return res.status(400).json({ message: 'Only photos and videos can be sent.' });
+    const bytes = Number(req.body?.bytes);
+    if (Number.isFinite(bytes) && bytes > rule.maxBytes) {
+      return res.status(413).json({
+        code: 'TOO_LARGE',
+        message: kind === 'video'
+          ? 'That video is too large. Videos can be up to 40MB, which is about 20 to 30 seconds from a phone camera.'
+          : 'That photo is too large.',
+      });
+    }
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(503).json({ message: 'Uploads are not available right now.' });
+    }
+
+    const convo = await ChatConversation.findById(req.params.id);
+    if (!convo) return res.status(404).json({ message: 'Conversation not found' });
+    const refusal = postRefusal(convo, req.user);
+    if (refusal) return res.status(refusal.status).json(refusal.body);
+    const access = mediaAccess(convo, req.user, await loadDmParticipants(convo, req.user));
+    if (!access.canAttach) {
+      return res.status(403).json({ code: 'MEDIA_NOT_ALLOWED', message: 'Photos and videos are not turned on for this chat.' });
+    }
+
+    const recent = await ChatUpload.countDocuments({
+      userId: req.user._id, createdAt: { $gt: new Date(Date.now() - 60 * 60 * 1000) },
+    });
+    if (recent >= SIGN_LIMIT_PER_HOUR) {
+      return res.status(429).json({ message: 'You have sent a lot of files in the last hour. Try again a little later.' });
+    }
+
+    const publicId = newPublicId(convo._id, kind);
+    await ChatUpload.create({ publicId, kind, conversationId: convo._id, userId: req.user._id });
+    const signed = signDirectUpload({
+      publicId,
+      resourceType:   rule.resourceType,
+      transformation: rule.transformation,
+      format:         rule.format,
+    });
+    res.json({ status: 'success', data: { kind, publicId, ...signed } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/chat/conversations/:id/media-permission — an admin switches the
+// user side's photo and video uploads on or off. Body: { allowed: boolean }.
+//
+// Turning it on posts a line into the thread asking for anything that shows
+// the problem, so the user knows the paperclip is there and what it is for.
+// Turning it off stops new uploads and says nothing: files already sent stay.
+const MEDIA_ON_LINE = 'SkyWatch Support has turned on photo and video uploads for this chat. '
+  + 'If you can, please send any screenshots, photos or screen recordings that show the issue. '
+  + 'Tap the paperclip next to the message box to add them.';
+const MEDIA_ON_LINE_DM = 'Photo and video uploads are now turned on for this chat. '
+  + 'If you can, please send any screenshots, photos or screen recordings that show the issue. '
+  + 'Tap the paperclip next to the message box to add them.';
+router.post('/conversations/:id/media-permission', adminOnly, async (req, res) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Conversation not found' });
+    if (typeof req.body?.allowed !== 'boolean') return res.status(400).json({ message: 'allowed must be true or false' });
+    const convo = await ChatConversation.findById(req.params.id);
+    if (!convo) return res.status(404).json({ message: 'Conversation not found' });
+    const access = mediaAccess(convo, req.user, await loadDmParticipants(convo, req.user));
+    if (!access.canToggle) return res.status(403).json({ message: 'Uploads cannot be turned on for this chat.' });
+
+    const allowed = req.body.allowed;
+    if (allowed !== Boolean(convo.mediaAllowed?.at)) {
+      convo.mediaAllowed = allowed ? { at: new Date(), byUserId: req.user._id } : null;
+      await convo.save();
+      if (allowed) {
+        await appendMessage({
+          conversation:    convo,
+          senderUserId:    req.user._id,
+          senderRole:      'system',
+          body:            convo.type === 'support' ? MEDIA_ON_LINE : MEDIA_ON_LINE_DM,
+          countsAsMessage: false,
+        });
+      }
+    }
+
+    const media = mediaAccess(convo, req.user, await loadDmParticipants(convo, req.user));
+    res.json({ status: 'success', data: { media } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/chat/admin/media-usage — how much of the free Cloudinary plan is
+// in use, for the readout in the admin chat console. Covers the whole
+// account (brief images too), which is what the plan limit is about.
+router.get('/admin/media-usage', adminOnly, async (_req, res) => {
+  try {
+    const [u, files] = await Promise.all([
+      accountUsage(),
+      ChatUpload.countDocuments({ messageId: { $ne: null } }),
+    ]);
+    res.json({ status: 'success', data: {
+      plan:           u?.plan ?? null,
+      creditsUsed:    u?.credits?.usage ?? null,
+      creditsLimit:   u?.credits?.limit ?? null,
+      creditsPercent: u?.credits?.used_percent ?? null,
+      storageBytes:   u?.storage?.usage ?? null,
+      chatFiles:      files,
+    } });
+  } catch {
+    res.status(502).json({ message: 'Could not read Cloudinary usage.' });
+  }
+});
+
+// Uploads signed and never sent: the tab closed, or the file was taken out of
+// the tray. Destroyed a day on so they do not sit on the free plan for ever.
+const ORPHAN_AGE_MS = 24 * 60 * 60 * 1000;
+async function sweepOrphanUploads() {
+  const stale = await ChatUpload.find({
+    messageId: null, createdAt: { $lt: new Date(Date.now() - ORPHAN_AGE_MS) },
+  }).limit(100).lean();
+  for (const u of stale) {
+    try {
+      await destroyAsset(u.publicId, {
+        type: 'authenticated', resource_type: u.kind === 'video' ? 'video' : 'image', invalidate: true,
+      });
+      await ChatUpload.deleteOne({ _id: u._id });
+    } catch { /* tried again next sweep */ }
+  }
+}
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => { sweepOrphanUploads().catch(() => {}); }, 60 * 60 * 1000).unref?.();
+}
 
 // POST /api/chat/conversations/:id/messages — send a message
 // A client's own id for a message it is sending (src/lib/chatOutbox.js).
@@ -1981,8 +2214,13 @@ router.post('/conversations/:id/messages', async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(404).json({ message: 'Conversation not found' });
 
     const body = (req.body?.body ?? '').toString().trim();
-    if (!body) return res.status(400).json({ message: 'Message body is required' });
+    const rawAttachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+    // A photo on its own is a whole message; otherwise there has to be text.
+    if (!body && !rawAttachments.length) return res.status(400).json({ message: 'Message body is required' });
     if (body.length > 4000) return res.status(400).json({ message: 'Message too long (max 4000 chars)' });
+    if (rawAttachments.length > MAX_ATTACHMENTS) {
+      return res.status(400).json({ message: `You can send up to ${MAX_ATTACHMENTS} photos or videos at a time.` });
+    }
 
     const convo = await ChatConversation.findById(req.params.id);
     if (!convo) return res.status(404).json({ message: 'Conversation not found' });
@@ -2015,6 +2253,22 @@ router.post('/conversations/:id/messages', async (req, res) => {
       return res.status(429).json({ message: 'You are sending messages too quickly. Wait a moment.' });
     }
 
+    // Checked at SEND time, not only when the upload was signed: an admin
+    // can switch the permission off, or lose admin rights, in between.
+    let attachments = [];
+    if (rawAttachments.length) {
+      const access = mediaAccess(convo, req.user, await loadDmParticipants(convo, req.user));
+      if (!access.canAttach) {
+        return res.status(403).json({
+          code: 'MEDIA_NOT_ALLOWED',
+          message: 'Photos and videos are not turned on for this chat.',
+        });
+      }
+      const resolved = await resolveAttachments(rawAttachments, convo, req.user);
+      if (resolved.error) return res.status(400).json({ message: resolved.error });
+      attachments = resolved.attachments;
+    }
+
     // In support, "admin" means an admin replying to someone else's thread.
     // Everywhere else the sender is just a participant, and admins post under
     // their own name — so the role tracks who they are, not where they are.
@@ -2042,14 +2296,14 @@ router.post('/conversations/:id/messages', async (req, res) => {
     if (replyToId && isValidId(replyToId)) {
       const parent = await ChatMessage.findOne({
         _id: replyToId, conversationId: convo._id, deletedAt: null,
-      }).select('senderDisplayName senderRole senderUserId body').lean();
+      }).select('senderDisplayName senderRole senderUserId body attachments').lean();
       if (parent) {
         replyTo = {
           messageId:   parent._id,
           displayName: convo.type === 'support' && parent.senderRole === 'admin'
             ? SUPPORT_LABEL
             : parent.senderDisplayName,
-          excerpt: (parent.body ?? '').slice(0, 160),
+          excerpt: displayText(parent).slice(0, 160),
           // Never shown — this is what makes the reply countable for the person
           // being replied to. See the note on the field in ChatMessage.
           userId:  parent.senderUserId ?? null,
@@ -2076,7 +2330,14 @@ router.post('/conversations/:id/messages', async (req, res) => {
         replyTo,
         mentions:          mentioned.map(u => u._id),
         clientId,
+        attachments,
       });
+      if (attachments.length) {
+        await ChatUpload.updateMany(
+          { publicId: { $in: attachments.map(a => a.publicId) }, messageId: null },
+          { $set: { messageId: message._id } },
+        );
+      }
     } catch (e) {
       // Two tries of the same send racing each other: the second loses on the
       // unique index and answers with the first one's message.
@@ -4186,4 +4447,5 @@ router.delete('/admin/users/:id/chat-ban', adminOnly, async (req, res) => {
   }
 });
 
+router.sweepOrphanUploads = sweepOrphanUploads;
 module.exports = router;

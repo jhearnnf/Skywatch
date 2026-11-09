@@ -171,6 +171,31 @@ async function deleteUserAndData(userId, context = {}) {
   }).select('_id').lean();
   const conversationIds = ownConversations.map((c) => c._id);
 
+  // Photos and videos go with the threads they were sent in. Every file is in
+  // a support ticket or a DM, and both are deleted outright below, so every
+  // file either side sent there goes too — plus anything this user uploaded
+  // and never sent. Best effort, like the score sheets: a Cloudinary hiccup
+  // must not leave the account half-erased.
+  const ChatUpload = model('ChatUpload');
+  const uploads = await ChatUpload.find({
+    $or: [{ userId: id }, ...(conversationIds.length ? [{ conversationId: { $in: conversationIds } }] : [])],
+  }).select('publicId kind').lean();
+  const attached = conversationIds.length
+    ? await ChatMessage.find({ conversationId: { $in: conversationIds }, 'attachments.0': { $exists: true } })
+      .select('attachments').lean()
+    : [];
+  const files = new Map(uploads.map(u => [u.publicId, u.kind]));
+  for (const m of attached) for (const a of m.attachments ?? []) files.set(a.publicId, a.kind);
+  for (const [publicId, kind] of files) {
+    await destroyAsset(publicId, {
+      type: 'authenticated', resource_type: kind === 'video' ? 'video' : 'image', invalidate: true,
+    }).catch(() => {});
+  }
+  if (uploads.length) {
+    const removed = await ChatUpload.deleteMany({ _id: { $in: uploads.map(u => u._id) } });
+    deleted.ChatUpload = removed.deletedCount;
+  }
+
   if (conversationIds.length) {
     const msgs = await ChatMessage.deleteMany({ conversationId: { $in: conversationIds } });
     deleted.ChatMessage = msgs.deletedCount;

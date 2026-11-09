@@ -442,7 +442,7 @@ describe('cascade coverage', () => {
       ...OWNED_BY_USER,
       ...AUTHORSHIP_REFS.map(([name]) => name),
       // Handled explicitly in the service, not via the tables above.
-      'User', 'ChatConversation', 'ChatMessage', 'ChatRead', 'UpdateNotification',
+      'User', 'ChatConversation', 'ChatMessage', 'ChatRead', 'ChatUpload', 'UpdateNotification',
       'SystemLog', 'AdminAction', 'EmailLog',
       // Anonymised in place rather than deleted or null-ed: for a signed-in
       // visit the unique `visitKey` IS the account id, so the row needs both

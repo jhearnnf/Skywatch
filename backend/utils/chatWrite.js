@@ -11,6 +11,7 @@ const ChatConversation = require('../models/ChatConversation');
 const ChatMessage      = require('../models/ChatMessage');
 const ChatRead         = require('../models/ChatRead');
 const chatStream       = require('./chatStream');
+const { serializeAttachments } = require('./chatAttachments');
 
 // Who a message is from, as far as other users are concerned. Support threads
 // collapse every admin to one "SkyWatch Support" identity; in channels and DMs
@@ -29,7 +30,7 @@ function markRead(userId, conversationId, at = new Date()) {
 // marking it read for the sender (sending implies reading everything up to now).
 async function appendMessage({
   conversation, senderUserId, senderRole, body, senderDisplayName = null, replyTo = null,
-  mentions = [], joinedUserId = null, countsAsMessage = true, clientId = null,
+  mentions = [], joinedUserId = null, countsAsMessage = true, clientId = null, attachments = [],
 }) {
   const message = await ChatMessage.create({
     conversationId: conversation._id,
@@ -41,6 +42,7 @@ async function appendMessage({
     ...(mentions.length ? { mentions } : {}),
     ...(joinedUserId ? { joinedUserId } : {}),
     ...(clientId ? { clientId } : {}),
+    ...(attachments.length ? { attachments } : {}),
   });
 
   const update = {
@@ -93,6 +95,10 @@ async function appendMessage({
     // reactions straight off the message and would otherwise special-case the
     // streamed copy.
     reactions:         [],
+    // Signed for whoever is listening. A stream is only ever opened by
+    // someone who can read the conversation, which is the same audience the
+    // files are for.
+    ...(attachments.length ? { attachments: serializeAttachments(attachments) } : {}),
     // So the sender's own tab can swap its local copy for this one.
     ...(clientId ? { clientId } : {}),
   });

@@ -112,7 +112,7 @@ export function recentlySentFor(conversationId) {
 // Queue a message. `local` is the copy the thread shows meanwhile (its `_id`
 // and `clientId` are both the clientId); `post(body)` performs one attempt
 // and resolves to the fetch Response. Returns the local copy.
-export function enqueue({ conversationId, userId, body, replyToId = null, local, post }) {
+export function enqueue({ conversationId, userId, body, replyToId = null, attachments = [], local, post }) {
   const clientId = local?.clientId ?? newClientId()
   const item = {
     clientId,
@@ -120,6 +120,9 @@ export function enqueue({ conversationId, userId, body, replyToId = null, local,
     userId: userId ? String(userId) : null,
     body,
     replyToId,
+    // Files already on Cloudinary: only their signed upload receipts ride
+    // the queue, so a retry re-sends a few hundred bytes, never the file.
+    attachments,
     local: { ...local, _id: clientId, clientId },
     post,
     state: 'sending',
@@ -216,7 +219,7 @@ async function attempt(item) {
       timer = setTimeout(() => reject(new Error('timeout')), ATTEMPT_TIMEOUT_MS)
     })
     const r = await Promise.race([
-      item.post({ body: item.body, replyToId: item.replyToId, clientId }),
+      item.post({ body: item.body, replyToId: item.replyToId, attachments: item.attachments, clientId }),
       timeout,
     ]).finally(() => clearTimeout(timer))
     status = r.status

@@ -31,6 +31,7 @@ const { awardCoins, getCycleThreshold, CYCLE_THRESHOLD } = require('../utils/awa
 const { effectiveTier } = require('../utils/subscription');
 const { resolveSelectedBadge } = require('../utils/selectedBadge');
 const { describeReportEnvironment } = require('../utils/reportEnvironment');
+const { serializeReplay } = require('../utils/posthogReplay');
 const { appendMessage } = require('../utils/chatWrite');
 const { ticketForReport, resolveTicket, reopenTicket } = require('../utils/supportTickets');
 const { validateDisplayName } = require('../utils/displayName');
@@ -3547,10 +3548,23 @@ router.get('/problems', async (req, res) => {
     // The stored environment is raw (UA string, Client Hints, pixel counts);
     // the card wants "Windows 11 · Chrome 128". Described here, at read time,
     // so parser fixes reach every report already filed.
-    const problems = rows.map(p => ({
-      ...p,
-      environmentSummary: describeReportEnvironment(p.environment, { clientPlatform: p.clientPlatform }),
-    }));
+    // The ticket each bug report opened, for the two things the card shows
+    // about it: whether the reporter may send photos and videos, and the
+    // PostHog session they were in. One query for the whole page.
+    const ticketIds = rows.map(p => p.conversationId).filter(Boolean);
+    const tickets = ticketIds.length
+      ? await ChatConversation.find({ _id: { $in: ticketIds } }).select('mediaAllowed replay').lean()
+      : [];
+    const ticketById = new Map(tickets.map(t => [String(t._id), t]));
+
+    const problems = rows.map(p => {
+      const t = p.conversationId ? ticketById.get(String(p.conversationId)) : null;
+      return {
+        ...p,
+        environmentSummary: describeReportEnvironment(p.environment, { clientPlatform: p.clientPlatform }),
+        ticket: t ? { mediaAllowed: Boolean(t.mediaAllowed?.at), replay: serializeReplay(t.replay) } : null,
+      };
+    });
 
     res.json({ status: 'success', data: { problems } });
   } catch (err) {

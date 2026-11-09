@@ -5,7 +5,7 @@ import SEO from '../components/SEO'
 const PRIVACY_EMAIL = 'skywatchdev@proton.me'
 // Section 12 promises changes are posted with an updated effective date, so this
 // moves whenever the policy's substance does — not on typo fixes.
-const EFFECTIVE_DATE = '14 September 2026'
+const EFFECTIVE_DATE = '9 November 2026'
 
 function Section({ title, children }) {
   return (
@@ -226,6 +226,27 @@ export default function Privacy() {
               will see. The support thread does not.
             </li>
             <li>
+              <span className="text-slate-700 font-medium">Photos and videos</span>: in a support
+              thread, or a direct message with a SkyWatch administrator, we may ask you to send
+              photos, screenshots or short videos that show a problem. You can only send them once
+              an administrator has turned this on for that conversation, and only if you choose to.
+              They are seen by you and SkyWatch administrators only, never in public channels, on
+              leaderboards or anywhere else on the site. Location and other camera details are
+              removed from photos before they leave your device, and videos are shortened to one
+              minute and re-encoded when they are stored, which removes the same details. Please do
+              not send identity documents or bank details. If you delete a message, it disappears
+              from the conversation, but SkyWatch administrators keep a copy in case it is needed
+              for moderation.
+            </li>
+            <li>
+              <span className="text-slate-700 font-medium">Session replays with reports</span>: when
+              you report a problem or message the support team, we save a link to the PostHog
+              session replay you were in at the time, and to your sessions from the previous seven
+              days, so an administrator can see the problem as it happened. This does not record
+              anything extra; it points at replays PostHog already holds (see section 7). The links
+              are visible to SkyWatch administrators only.
+            </li>
+            <li>
               <span className="text-slate-700 font-medium">Reports and moderation</span> — you can
               report a message to us. A report records the message, who sent it and who reported it,
               and is visible to administrators only. We may remove messages or withdraw a user's
@@ -254,7 +275,7 @@ export default function Privacy() {
             <li><span className="text-slate-700 font-medium">Vercel</span> — hosts the frontend application.</li>
             <li><span className="text-slate-700 font-medium">Railway</span> — hosts the backend API.</li>
             <li><span className="text-slate-700 font-medium">MongoDB Atlas</span> — stores your account and usage data.</li>
-            <li><span className="text-slate-700 font-medium">Cloudinary</span> — stores images used by the service, including any score sheet you choose to send us. Score sheets are stored so that they cannot be viewed without a link we generate ourselves.</li>
+            <li><span className="text-slate-700 font-medium">Cloudinary</span> — stores images used by the service, including any score sheet you choose to send us and any photos or videos you send in a support thread or a direct message with an administrator. Score sheets, photos and videos are stored so that they cannot be viewed without a link we generate ourselves.</li>
           </ul>
         </Section>
 
@@ -301,7 +322,8 @@ export default function Privacy() {
           </p>
           <p>
             If you delete your account, your support threads and direct messages are deleted with
-            it. Because a channel is shared, messages you posted in one remain visible to other
+            it, including any photos and videos sent in them. Until then, photos and videos you
+            send us are kept; you can ask us to delete them sooner at any point. Because a channel is shared, messages you posted in one remain visible to other
             users as part of that conversation's history, with your name and account reference
             removed. Messages retained for moderation purposes — those removed by a moderator, and
             those in closed channels — are kept in our administrative records and are not visible

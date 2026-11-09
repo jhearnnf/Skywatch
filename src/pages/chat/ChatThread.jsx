@@ -15,6 +15,9 @@ import ChatSearch, { SearchIcon } from './components/ChatSearch'
 import { JUMP_HIGHLIGHT_MS } from './jumpScroll'
 import { formatLastOnline, isOnlineNow } from './format'
 import * as chatOutbox from '../../lib/chatOutbox'
+import AdminToolPanel from '../../components/AdminToolPanel'
+import TicketAdminTools from './components/TicketAdminTools'
+import { attachmentLabel } from './attachmentLabel'
 
 const POLL_MS = 5_000
 
@@ -375,6 +378,23 @@ export default function ChatThread({
         // scrolling up. Fresh profiles win where both have one.
         setSenders(prev => ({ ...prev, ...(d.senders ?? {}) }))
         setBotTyping(d.botTyping ?? null)
+        // The media switch and the replay card can change under an open
+        // thread (an admin turns uploads on; the earlier-sessions lookup
+        // lands), so those two follow the poll. Same object when unchanged,
+        // so nothing re-renders.
+        if (d.conversation) {
+          setConversation(prev => {
+            if (!prev) return prev
+            const same = JSON.stringify(prev.media) === JSON.stringify(d.conversation.media)
+              && JSON.stringify(prev.replay) === JSON.stringify(d.conversation.replay)
+            if (same) return prev
+            // `replay` only ever arrives for an admin on a ticket; its absence
+            // must stay an absence, not become a key holding undefined.
+            return 'replay' in d.conversation
+              ? { ...prev, media: d.conversation.media, replay: d.conversation.replay }
+              : { ...prev, media: d.conversation.media }
+          })
+        }
         // The server is now authoritative again, so drop the optimistic flag.
         // A poll that reports no reply in flight means the bot either answered
         // or decided to stay quiet — either way the indicator has done its job.
@@ -442,7 +462,7 @@ export default function ChatThread({
   }
   useEffect(() => chatOutbox.subscribe(e => onOutboxRef.current?.(e)), [])
 
-  const postMessage = ({ body, replyToId, clientId }) => apiFetch(
+  const postMessage = ({ body, replyToId, attachments, clientId }) => apiFetch(
     `${API}/api/chat/conversations/${conversationId}/messages`,
     {
       // Already on screen as sent, so no loading overlay over the page.
@@ -450,11 +470,17 @@ export default function ChatThread({
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body, replyToId, clientId }),
+      body: JSON.stringify({
+        body, replyToId, clientId,
+        ...(attachments?.length ? { attachments } : {}),
+      }),
     },
   )
 
-  const handleSend = (text) => {
+  // `files` are the composer's finished uploads: each has the signed receipt
+  // the server checks, and a local preview the message is drawn from until
+  // the server's copy arrives.
+  const handleSend = (text, files = []) => {
     setErr('')
     // Sending from a chunk of history goes back to the present first, as in
     // any messaging app: your message belongs at the bottom of the real thread.
@@ -469,6 +495,14 @@ export default function ChatThread({
       localState:        'sending',
       localReplyToId:    quoted?._id ?? null,
       body:              text,
+      ...(files.length ? {
+        attachments: files.map(f => ({
+          kind:   f.kind,
+          url:    f.previewUrl,
+          width:  f.receipt?.width ?? null,
+          height: f.receipt?.height ?? null,
+        })),
+      } : {}),
       senderUserId:      user?._id,
       senderDisplayName: user?.displayName ?? null,
       senderRole:        user?.isAdmin ? 'admin' : 'user',
@@ -478,7 +512,7 @@ export default function ChatThread({
         messageId:   quoted._id,
         userId:      quoted.senderUserId ?? null,
         displayName: quoted.senderDisplayName ?? null,
-        excerpt:     (quoted.body ?? '').slice(0, 160),
+        excerpt:     (quoted.body || attachmentLabel(quoted.attachments)).slice(0, 160),
       } : null,
     }
     setMessages(prev => [...prev, local])
@@ -502,6 +536,7 @@ export default function ChatThread({
       userId:    user?._id,
       body:      text,
       replyToId: quoted?._id ?? null,
+      attachments: files.map(f => f.receipt),
       local,
       post:      postMessage,
     })
@@ -930,8 +965,30 @@ export default function ChatThread({
             mentionConversationId={type === 'support' ? null : conversationId}
             // Drawn only where the server names a bot — the lounge and General.
             botName={conversation?.botName ?? null}
+            // Photos and videos, where the server says this viewer may send
+            // them. Never offered on a resolved ticket until it is reopened.
+            mediaConversationId={conversation?.media?.canAttach ? conversationId : null}
           />
         </>
+      )}
+
+      {/* Admin-only: the upload switch and the reporter's session replay.
+          The server sends `replay` to admins only and `canToggle` is false
+          for everyone else, so this renders nothing for a user. */}
+      {user?.isAdmin && conversation && (conversation.media?.canToggle || 'replay' in conversation) && (
+        <AdminToolPanel title={type === 'support' ? 'Support ticket' : 'Direct message'}>
+          <TicketAdminTools
+            conversationId={conversationId}
+            conversation={conversation}
+            onMediaChanged={(media) => {
+              setConversation(c => (c ? { ...c, media } : c))
+              // Brings in the "uploads are on" line the server just posted.
+              fetchMessages()
+                .then(d => setMessages(prev => mergeOlder(prev, applyJustSent(d))))
+                .catch(() => {})
+            }}
+          />
+        </AdminToolPanel>
       )}
 
       {cardUserId && (

@@ -5,6 +5,8 @@ import { useChatUnread } from '../../context/ChatUnreadContext'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 import useChatPresence from '../../hooks/useChatPresence'
 import { fetchOverview, getCachedOverview, syncChatCacheOwner } from '../../utils/chatCache'
+import { getRouteTrail } from '../../utils/routeTrail'
+import { currentReplay, captureEvent } from '../../lib/posthog'
 import ChatSidebar from './ChatSidebar'
 import ChatThread from './ChatThread'
 import CbatGroupSetup from './components/CbatGroupSetup'
@@ -186,8 +188,14 @@ export default function ChatShell() {
   // A new support ticket. The server hands back the one blank ticket this
   // user already has, if any, rather than a second empty one.
   const startSupport = async () => {
+    // Asking for help is a report too: the admin gets the session they were
+    // in, ranked against the last page they were on before Community.
+    const lastPage = getRouteTrail().filter(p => !p.startsWith('/chat')).at(-1) ?? null
+    captureEvent('problem_reported', { page: lastPage, via: 'message_the_team' })
     const r = await apiFetch(`${API}/api/chat/conversations`, {
       method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replay: currentReplay(lastPage) }),
     })
     const d = await r.json().catch(() => null)
     if (d?.data?.conversation) navigate(`/chat/${d.data.conversation._id}`)

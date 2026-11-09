@@ -34,6 +34,7 @@ const { deleteUserAndData } = require('../services/deleteUserData');
 const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
 const { sanitiseReportEnvironment } = require('../utils/reportEnvironment');
 const { openTicket } = require('../utils/supportTickets');
+const { attachReplay } = require('../utils/posthogReplay');
 const { sanitiseGeoInfo, resolveCountry } = require('../constants/geo');
 const { latestNativeReleases, settledNativeReleases } = require('../utils/latestNativeReleases');
 const AppOpen = require('../models/AppOpen');
@@ -823,6 +824,16 @@ router.post('/report-problem', protect, async (req, res) => {
     // title job runs off the back of it. See utils/supportTickets.js.
     const { conversation } = await openTicket({ user: req.user, body: description, report });
     report.conversationId = conversation._id;
+
+    // The PostHog recording they were in when they pressed Report, for the
+    // admin reading the ticket (utils/posthogReplay.js). The raw page is used
+    // to rank their earlier sessions and is not stored.
+    if (req.body?.replay) {
+      await attachReplay(conversation._id, req.body.replay, {
+        userId: req.user._id,
+        reportedPath: typeof pageReported === 'string' ? pageReported : null,
+      });
+    }
 
     // Auto-raise the editor flag so admins see the issue in the briefs list.
     if (intelligenceBrief) {

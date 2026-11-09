@@ -6776,6 +6776,23 @@ function ProblemsTab({ API, onOpenBrief }) {
     setTick(t => t + 1)
   }
 
+  // The reporter's photo and video uploads for this report's ticket. Turning
+  // it on posts a message in the ticket asking for anything that shows the
+  // issue; turning it off stops new uploads and keeps what was sent.
+  const handleMediaToggle = async (p) => {
+    setBusy(p._id)
+    const r = await apiFetch(`${API}/api/chat/conversations/${p.conversationId}/media-permission`, {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ allowed: !p.ticket?.mediaAllowed }),
+    }).catch(() => null)
+    setBusy(null)
+    setToast(r?.ok
+      ? (p.ticket?.mediaAllowed ? '✓ User uploads turned off' : '✓ User uploads turned on')
+      : 'Could not change uploads for this chat')
+    setTick(t => t + 1)
+  }
+
   // ── Chat moderation, driven straight from a report row ────────────────────
   // These call the chat API rather than the problems API: the report is the
   // trigger, but the action belongs to chat. Each leaves a note on the report
@@ -6967,6 +6984,32 @@ function ProblemsTab({ API, onOpenBrief }) {
                     >
                       Open ticket thread
                     </button>
+                    <button
+                      onClick={() => handleMediaToggle(p)}
+                      disabled={busy === p._id}
+                      data-testid="report-media-toggle"
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${p.ticket?.mediaAllowed
+                        ? 'border border-slate-700 text-slate-700 hover:bg-slate-100'
+                        : 'bg-brand-600 hover:bg-brand-700 text-white'}`}
+                    >
+                      {p.ticket?.mediaAllowed ? 'Stop user uploaded content for this chat' : 'Allow user uploaded content for this chat'}
+                    </button>
+                    {/* The PostHog recording they were in when they reported.
+                        Opens in PostHog; the earlier sessions list is in the
+                        ticket thread's admin tools. */}
+                    {p.ticket?.replay?.recording && p.ticket.replay.url ? (
+                      <a
+                        href={p.ticket.replay.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="report-replay-link"
+                        className="px-3 py-1.5 text-xs font-bold rounded-lg border border-brand-200 text-brand-600 hover:bg-brand-100 transition-colors"
+                      >
+                        Watch session replay
+                      </a>
+                    ) : p.ticket?.replay ? (
+                      <span className="text-[11px] text-slate-600">No recording for this report</span>
+                    ) : null}
                   </div>
                 )}
 

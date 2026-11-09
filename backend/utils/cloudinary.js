@@ -60,4 +60,68 @@ function signedUrl(publicId, options = {}) {
   });
 }
 
-module.exports = { uploadBuffer, destroyAsset, signedUrl };
+/**
+ * Signed parameters for a browser to upload ONE file straight to Cloudinary.
+ *
+ * Every parameter that decides where the file lands and what is kept of it is
+ * part of the signature, so the client can change none of them: not the
+ * public id (which pins the conversation folder), not the `authenticated`
+ * type, and not the incoming transformation that shrinks the file before it
+ * is stored. Cloudinary rejects the upload if any of them differ.
+ *
+ * @returns {{ uploadUrl, fields }} POST `fields` plus the file as multipart to `uploadUrl`
+ */
+function signDirectUpload({ publicId, resourceType, transformation, format }) {
+  const timestamp = Math.round(Date.now() / 1000);
+  const params = {
+    public_id: publicId,
+    timestamp,
+    type: 'authenticated',
+    ...(transformation ? { transformation } : {}),
+    ...(format ? { format } : {}),
+  };
+  const signature = cloudinary.utils.api_sign_request(params, process.env.CLOUDINARY_API_SECRET);
+  return {
+    uploadUrl: `https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/${resourceType}/upload`,
+    fields: { ...params, api_key: process.env.CLOUDINARY_API_KEY, signature },
+  };
+}
+
+/**
+ * True when an upload response really came from Cloudinary for this asset.
+ * The response carries a signature over public_id + version made with our API
+ * secret, so a client cannot claim an upload it never made.
+ */
+function verifyUploadResponse({ publicId, version, signature }) {
+  if (!publicId || !version || !signature) return false;
+  try {
+    return cloudinary.utils.verify_api_response_signature(publicId, version, signature);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Signed delivery URL for an authenticated video, or a still frame from one
+ * (`format: 'jpg'`). The video sibling of signedUrl().
+ */
+function signedVideoUrl(publicId, options = {}) {
+  if (!publicId) return null;
+  return cloudinary.url(publicId, {
+    type: 'authenticated',
+    resource_type: 'video',
+    sign_url: true,
+    secure: true,
+    ...options,
+  });
+}
+
+/** Account usage (storage, bandwidth, credits) for the admin readout. */
+function accountUsage() {
+  return cloudinary.api.usage();
+}
+
+module.exports = {
+  uploadBuffer, destroyAsset, signedUrl,
+  signDirectUpload, verifyUploadResponse, signedVideoUrl, accountUsage,
+};

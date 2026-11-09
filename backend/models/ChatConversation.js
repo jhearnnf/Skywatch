@@ -53,6 +53,54 @@ const chatConversationSchema = new mongoose.Schema({
   // index can test neither null nor $exists: false).
   hasReport: { type: Boolean, default: false },
 
+  // Set when the reporting user's browser was recording a PostHog session at
+  // the moment they reported. ADMIN-ONLY on every read: it is a pointer into
+  // the user's own session recording, and the user never needs it. Only the
+  // session id is stored, never a URL from the client — the link an admin
+  // clicks is built server-side (utils/posthogReplay.js), so a user cannot
+  // plant an arbitrary address in the admin's ticket.
+  //
+  // `earlier` is the fallback for a problem that happened on a previous
+  // visit: the user's last few sessions, fetched once from the PostHog API in
+  // the background and stored, so reopening the ticket never calls PostHog
+  // again. `pages` are location labels (same rule as routeTrail), never paths.
+  replay: {
+    type: {
+      recording:  { type: Boolean, default: false },
+      sessionId:  { type: String, default: null },
+      // Offset into the session, in ms, that the link jumps to: a little
+      // before they pressed Report.
+      offsetMs:   { type: Number, default: null },
+      capturedAt: { type: Date, default: null },
+      earlier: {
+        status:    { type: String, enum: ['pending', 'ready', 'failed', 'unconfigured'], default: 'pending' },
+        fetchedAt: { type: Date, default: null },
+        sessions:  [{
+          _id:            false,
+          sessionId:      { type: String, required: true },
+          startedAt:      { type: Date, default: null },
+          durationSec:    { type: Number, default: null },
+          pages:          [{ type: String }],
+          matchesReport:  { type: Boolean, default: false },
+        }],
+      },
+    },
+    default: null,
+  },
+
+  // ── support + admin dm ─────────────────────────────────────────────────────
+  // An admin's permission for the USER side to send photos and videos. Null
+  // until an admin turns it on; switching it off clears it and stops new
+  // uploads only — files already sent stay where they are. Admins can attach
+  // in an eligible thread whatever this says.
+  mediaAllowed: {
+    type: {
+      at:       { type: Date, required: true },
+      byUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    },
+    default: null,
+  },
+
   // ── dm ─────────────────────────────────────────────────────────────────────
   // Exactly two ids, sorted ascending so the pair has one canonical form.
   participantIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],

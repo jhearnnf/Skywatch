@@ -9,8 +9,35 @@ const chatMessageSchema = new mongoose.Schema({
   conversationId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChatConversation', required: true },
   senderUserId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   senderRole:     { type: String, enum: ['user', 'admin', 'system'], required: true },
-  body:           { type: String, required: true, trim: true, maxlength: 4000 },
+  // Required unless the message carries a photo or video: a screenshot sent
+  // on its own is a whole message. Stored as '' rather than missing, so every
+  // reader that slices or tests `body` keeps working on an attachment-only row.
+  body:           {
+    type: String, trim: true, maxlength: 4000, default: '',
+    required: [function bodyRequired() { return !(this.attachments ?? []).length; }, 'Message body is required'],
+  },
   createdAt:      { type: Date, default: Date.now },
+
+  // Photos and videos, in support tickets and DMs with an admin only (see
+  // utils/chatAttachments.js for who may send where). The bytes live on
+  // Cloudinary as `authenticated` assets, so nothing here is a URL: every
+  // read signs fresh delivery links from `publicId`. `width`/`height` are the
+  // stored asset's, used to reserve space before the image loads.
+  //
+  // Never edited. An edit changes the text and leaves these as they were; a
+  // delete hides them from everyone but admins, exactly as it does the body.
+  attachments: {
+    type: [{
+      _id:         false,
+      kind:        { type: String, enum: ['image', 'video'], required: true },
+      publicId:    { type: String, required: true },
+      width:       { type: Number, default: null },
+      height:      { type: Number, default: null },
+      bytes:       { type: Number, default: null },
+      durationSec: { type: Number, default: null },
+    }],
+    default: undefined,
+  },
 
   // Display name captured at send time. Display names change (on a 30-day
   // cooldown), and a moderation transcript needs to show the name that was on

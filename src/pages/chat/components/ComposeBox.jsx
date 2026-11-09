@@ -4,6 +4,10 @@ import { activeMention } from '../mentions'
 import { senderName } from '../senderName'
 import { enterShouldSend } from '../enterSends'
 import { useAutoGrow } from '../autoGrow'
+import { AttachButton, AttachmentTray } from './ComposeAttachments'
+import { useAttachmentTray } from './useAttachmentTray'
+import { attachmentLabel } from '../attachmentLabel'
+import { useOnline } from '../../../lib/useOnline'
 
 export default function ComposeBox({
   disabled, busy, onSend, placeholder, replyTo, onCancelReply,
@@ -17,8 +21,14 @@ export default function ComposeBox({
   // button. Null everywhere else and the button is simply not drawn — the
   // server decides which rooms those are, not this component.
   botName,
+  // The conversation photos and videos upload into, where this viewer may
+  // send them (the server's `media.canAttach`). Null and there is no
+  // paperclip at all.
+  mediaConversationId = null,
 }) {
   const [body, setBody] = useState('')
+  const tray = useAttachmentTray(mediaConversationId)
+  const online = useOnline()
   const [caret, setCaret] = useState(0)
   // The offset of an "@" the user pressed Escape on, so dismissing stays
   // dismissed until they start a different mention.
@@ -32,12 +42,36 @@ export default function ComposeBox({
 
   const syncCaret = (e) => setCaret(e.target.selectionStart ?? 0)
 
+  // Ready when there is something to send and no upload is still going. A
+  // failed upload holds Send too: the person should retry or remove it rather
+  // than have the message go without the file they meant to include.
+  const hasFiles = tray.items.length > 0
+  const canSend = (Boolean(body.trim()) || hasFiles) && !tray.busy && !tray.hasFailed
+
   const handleSend = () => {
     const text = body.trim()
-    if (!text || disabled || busy) return
-    onSend(text)
+    if (!canSend || disabled || busy) return
+    const files = hasFiles ? tray.take() : []
+    // The second argument only when there are files, so a text-only send is
+    // exactly the call it always was.
+    if (files.length) onSend(text, files)
+    else onSend(text)
     setBody('')
     setDismissed(null)
+  }
+
+  // Paste a screenshot straight in, on desktop. Text pastes are left alone.
+  const onPaste = (e) => {
+    if (!mediaConversationId) return
+    const files = Array.from(e.clipboardData?.files ?? []).filter(f => /^(image|video)\//.test(f.type))
+    if (!files.length) return
+    e.preventDefault()
+    tray.add(files)
+  }
+  const onDrop = (e) => {
+    if (!mediaConversationId || !e.dataTransfer?.files?.length) return
+    e.preventDefault()
+    tray.add(e.dataTransfer.files)
   }
 
   // Replace the half-typed "@fal" with the full "@Falcon ", and put the caret
@@ -77,7 +111,11 @@ export default function ComposeBox({
   }
 
   return (
-    <div className="border-t border-slate-200">
+    <div
+      className="border-t border-slate-200"
+      onDragOver={mediaConversationId ? (e) => e.preventDefault() : undefined}
+      onDrop={onDrop}
+    >
       {/* Reply target, shown above the box so it is obvious what you are
           answering before you start typing. */}
       {replyTo && (
@@ -86,7 +124,7 @@ export default function ComposeBox({
           <span className="font-semibold text-slate-600 shrink-0">
             {senderName(replyTo.senderUserId, senders, replyTo.senderDisplayName) || 'Unknown agent'}
           </span>
-          <span className="text-slate-400 truncate">{replyTo.body}</span>
+          <span className="text-slate-400 truncate">{replyTo.body || attachmentLabel(replyTo.attachments)}</span>
           <button
             type="button"
             onClick={onCancelReply}
@@ -97,6 +135,7 @@ export default function ComposeBox({
           </button>
         </div>
       )}
+      {mediaConversationId && <AttachmentTray tray={tray} />}
       <div className="p-3 flex items-end gap-2 relative">
       {showPicker && (
         <MentionPicker
@@ -118,8 +157,12 @@ export default function ComposeBox({
           🤖
         </button>
       )}
+      {mediaConversationId && (
+        <AttachButton disabled={disabled} offline={!online} onFiles={tray.add} />
+      )}
       <textarea
         ref={inputRef}
+        onPaste={onPaste}
         rows={1}
         disabled={disabled}
         value={body}
@@ -143,7 +186,7 @@ export default function ComposeBox({
         type="button"
         onMouseDown={e => e.preventDefault()}
         onClick={handleSend}
-        disabled={disabled || busy || !body.trim()}
+        disabled={disabled || busy || !canSend}
         className="px-4 py-2 bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-colors"
       >
         Send

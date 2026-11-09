@@ -8,6 +8,7 @@ import { usePhoneTight } from '../hooks/usePhoneTight'
 import { getRouteTrail } from '../utils/routeTrail'
 import { getClientInfo, peekClientInfo } from '../utils/appVersion'
 import { collectReportEnvironment } from '../utils/reportEnvironment'
+import { currentReplay, captureEvent } from '../lib/posthog'
 
 // ── What this page is ────────────────────────────────────────────────────────
 // One form: describe the problem, and it opens a support ticket — a thread in
@@ -114,6 +115,13 @@ export default function ReportProblem() {
     // effort and time-capped inside the collector, so it never blocks the send.
     const environment = await collectReportEnvironment()
 
+    // The page they reported from, and the PostHog recording they are in, so
+    // an admin can watch what happened from their side. The event puts a
+    // marker on that recording's timeline at this exact moment.
+    const pageReported = briefId ? `/brief/${briefId}` : (trail[trail.length - 1] || 'unknown')
+    captureEvent('problem_reported', { page: pageReported })
+    const replay = currentReplay(pageReported)
+
     try {
       const res = await apiFetch(`${API}/api/users/report-problem`, {
         method: 'POST', credentials: 'include',
@@ -124,13 +132,14 @@ export default function ReportProblem() {
           // where the *browser* was before it loaded the site: it is empty on
           // every app launch and on every direct visit, which is why every
           // report from the Android app used to record "unknown".
-          pageReported: briefId ? `/brief/${briefId}` : (trail[trail.length - 1] || 'unknown'),
+          pageReported,
           ...(trail.length ? { routeTrail: trail } : {}),
           // Optional and best-effort, exactly as on the heartbeat — null on a
           // native client whose bridge has not answered yet.
           ...(peekClientInfo() ? { client: peekClientInfo() } : {}),
           ...(environment ? { environment } : {}),
           ...(briefId ? { briefId } : {}),
+          replay,
         }),
       })
       if (!res.ok) throw new Error()

@@ -5,6 +5,7 @@ import { useChatUnread } from '../../context/ChatUnreadContext'
 import MessageList from './components/MessageList'
 import ComposeBox from './components/ComposeBox'
 import SeenByDialog from './components/SeenByDialog'
+import { MediaPermissionToggle, ReplayLinks, MediaUsageReadout } from './components/TicketAdminTools'
 import { agentLabel, formatTime } from './format'
 
 const POLL_MESSAGES_MS = 10_000
@@ -135,7 +136,9 @@ export default function AdminChatView() {
       const messages = keepIfSameLength && prev.id === id && prev.messages.length === d.messages.length
         ? prev.messages
         : d.messages
-      const next = { id, messages, senders }
+      // The thread's own details from the messages endpoint: the media
+      // switch and, for a ticket, the reporter's session replay.
+      const next = { id, messages, senders, conversation: d.conversation ?? prev.conversation ?? null }
       threadCacheRef.current.set(id, next)
       return next
     })
@@ -191,14 +194,17 @@ export default function AdminChatView() {
     setConversations(rows)
   }, [fetchMessages, fetchConversations, selectedId, applyThread])
 
-  const handleSend = async (text) => {
+  const handleSend = async (text, files = []) => {
     if (!selectedId) return
     setBusy(true); setErr('')
     try {
       const r = await apiFetch(`${API}/api/chat/conversations/${selectedId}/messages`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: text }),
+        body: JSON.stringify({
+          body: text,
+          ...(files.length ? { attachments: files.map(f => f.receipt) } : {}),
+        }),
       })
       if (!r.ok) {
         const d = await r.json().catch(() => null)
@@ -363,6 +369,8 @@ export default function AdminChatView() {
             ))}
           </div>
 
+          <MediaUsageReadout />
+
           {typeFilter === 'support' && (
             <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
               {['all', 'open', 'closed'].map(s => (
@@ -499,12 +507,41 @@ export default function AdminChatView() {
               </div>
             )}
 
+            {/* The ticket's admin tools: the user's upload switch and the
+                PostHog replay. This whole page is admin-only, so they sit in
+                the thread rather than in the floating panel. */}
+            {selected.type === 'support' && thread.id === selectedId && thread.conversation && (
+              <details className="border-t border-slate-200 px-3 py-2" data-testid="ticket-admin-tools">
+                <summary className="text-[11px] font-bold text-slate-500 cursor-pointer select-none">
+                  Photos, videos and session replay
+                </summary>
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <MediaPermissionToggle
+                    conversationId={selectedId}
+                    media={thread.conversation.media}
+                    onChanged={() => refreshBoth()}
+                  />
+                  {thread.conversation.replay
+                    ? <ReplayLinks replay={thread.conversation.replay} />
+                    : <p className="text-[11px] text-slate-500">No session details were sent with this ticket.</p>}
+                </div>
+              </details>
+            )}
+
             {err && (
               <p className="text-xs text-red-600 bg-red-50 border-t border-red-200 px-3 py-2">{err}</p>
             )}
 
             {selected.type === 'support' ? (
-              <ComposeBox disabled={selected.status === 'closed'} busy={busy} onSend={handleSend} />
+              <ComposeBox
+                // One per thread, so files added for one ticket can never be
+                // sent into the next one opened.
+                key={`compose-${selectedId}`}
+                disabled={selected.status === 'closed'}
+                busy={busy}
+                onSend={handleSend}
+                mediaConversationId={thread.conversation?.media?.canAttach && thread.id === selectedId ? selectedId : null}
+              />
             ) : (
               // Reading a channel or DM here is moderation, not participation —
               // admins post in channels from the ordinary chat view, under their

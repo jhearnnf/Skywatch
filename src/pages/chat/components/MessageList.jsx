@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import SendStatus from './SendStatus'
+import MessageAttachments from './MessageAttachments'
 import ProfileBadge from '../../../components/ProfileBadge'
 import { formatTime, formatStamp, SUPPORT_LABEL } from '../format'
 import { nameColour } from '../nameColour'
@@ -441,7 +442,8 @@ function MessageRow({
               <span className="text-[10px] text-slate-400">Enter saves, Shift+Enter for a new line</span>
             </div>
           </div>
-        ) : (
+        ) : (m.body || !(m.attachments ?? []).length || m.edited) && (
+          // A photo sent on its own has no text, so no empty line above it.
           <p className={`text-sm text-slate-800 whitespace-pre-wrap break-words ${m.deleted ? 'line-through opacity-60' : ''}`}>
             <MessageBody message={m} senders={senders} currentUserId={currentUserId} />
             {m.edited && !m.deleted && (
@@ -462,6 +464,11 @@ function MessageRow({
               )
             )}
           </p>
+        )}
+        {draft === null && (
+          <div className={m.deleted ? 'opacity-60' : ''}>
+            <MessageAttachments attachments={m.attachments} />
+          </div>
         )}
         {/* Admin-only: users never receive a removed message at all. Which of
             the two removals it was matters to a moderator — an author tidying
