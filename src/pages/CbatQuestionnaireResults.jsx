@@ -474,6 +474,7 @@ function AnswerCard({ r, open, onToggle, onOpenSheets }) {
             {r.helpedRating  != null && <span>Helped {r.helpedRating}/5</span>}
             {r.donationClicked && <span className="text-brand-700 font-semibold">Clicked donate</span>}
             {r.playReviewClicked && <span className="text-brand-700 font-semibold">Opened Play Store</span>}
+            {r.shareClicked && <span className="text-brand-700 font-semibold">Copied share link</span>}
           </div>
 
           {/* What they did here before they sat it. Games played is over the

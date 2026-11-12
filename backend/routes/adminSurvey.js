@@ -547,6 +547,7 @@ router.get('/responses', async (_req, res) => {
           scoreSheets:       responses.reduce((n, r) => n + (r.resultImagesUploaded ?? 0), 0),
           donationClicks: responses.filter(r => r.donationClicked).length,
           playReviewClicks: responses.filter(r => r.playReviewClicked).length,
+          shareClicks: responses.filter(r => r.shareClicked).length,
           roleCounts,
           // The free-text answers are the point of the whole exercise, so they
           // are surfaced in the summary rather than left to be dug out of rows.

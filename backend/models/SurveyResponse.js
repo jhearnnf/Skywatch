@@ -102,6 +102,11 @@ const surveyResponseSchema = new mongoose.Schema({
   // tells us who left one — only that the ask converted as far as the store.
   playReviewClicked: { type: Boolean, default: false },
 
+  // Set when a web respondent copies the site link from the closing screen's
+  // "tell someone who is preparing" ask. Only that the link was copied, not
+  // that it was ever passed on.
+  shareClicked: { type: Boolean, default: false },
+
   // Present only on the opt-out path, which is a different flow: the opt-out is
   // applied first and unconditionally, and these are answered afterwards by
   // someone who has already left. See routes/survey.js.

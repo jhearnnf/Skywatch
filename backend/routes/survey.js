@@ -105,7 +105,7 @@ setInterval(() => {
 async function loadInvite(token) {
   if (!token || typeof token !== 'string' || token.length < 16) return null;
   return SurveyInvite.findOne({ token })
-    .populate('userId', 'displayName agentNumber cbatPassed osSeen.android cbatResultImages cbatTargetBattery');
+    .populate('userId', 'displayName agentNumber cbatPassed osSeen.android cbatResultImages cbatTargetBattery donationPrompt.donatedAt');
 }
 
 // The test and role this person told the Aptitude Report they are aiming for, as answers the
@@ -430,6 +430,11 @@ router.get('/:token', throttle, async (req, res) => {
         // kind things to the store is review gating, which Play's policy
         // prohibits and which is the one way this could put the listing at risk.
         usedAndroid: !!invite.userId?.osSeen?.android,
+        // Has this account ever donated? Someone who already gave is not asked
+        // again; the closing screen thanks them and goes straight to the
+        // review or share ask instead. `hasDonated` rather than `isSupporter`
+        // on purpose: hiding the badge does not undo the gift.
+        hasDonated: User.hasDonated(invite.userId),
         roleGroups: surveyRoles.groups.map(g => ({ ...g, roles: g.roles.filter(r => !r.retired) })),
         // Score sheets this person has already sent, so a reopened link shows
         // them back rather than asking again for something we already have.
@@ -480,6 +485,7 @@ function sanitiseAnswers(body = {}) {
   if ('helpedRating' in body)  out.helpedRating = rating(body.helpedRating);
   if ('donationClicked' in body && body.donationClicked === true) out.donationClicked = true;
   if ('playReviewClicked' in body && body.playReviewClicked === true) out.playReviewClicked = true;
+  if ('shareClicked' in body && body.shareClicked === true) out.shareClicked = true;
 
   return out;
 }

@@ -102,6 +102,12 @@ describe('GET /api/survey/:token', () => {
     expect(res.body.data.usedAndroid).toBe(false);
   });
 
+  it('says whether the account has donated, even with the badge hidden', async () => {
+    expect((await get()).body.data.hasDonated).toBe(false);
+    await User.updateOne({ _id: user._id }, { 'donationPrompt.donatedAt': new Date(), hideSupporterBadge: true });
+    expect((await get()).body.data.hasDonated).toBe(true);
+  });
+
   it('records the first open only', async () => {
     await get();
     const first = (await SurveyInvite.findById(invite._id)).openedAt;
@@ -177,6 +183,12 @@ describe('PATCH /api/survey/:token — progressive saving', () => {
     const row = await SurveyResponse.findOne({ inviteId: invite._id }).lean();
     expect(row.nonsense).toBeUndefined();
     expect((await User.findById(user._id)).isAdmin).toBe(false);
+  });
+
+  it('records a copy of the share link', async () => {
+    await patch({ shareClicked: true });
+    const row = await SurveyResponse.findOne({ inviteId: invite._id });
+    expect(row.shareClicked).toBe(true);
   });
 
   it('records a press through to the Play Store listing', async () => {

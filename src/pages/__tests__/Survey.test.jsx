@@ -376,6 +376,15 @@ describe('Survey — the Google Play ask', () => {
     expect(screen.queryByTestId('survey-play-review')).not.toBeInTheDocument()
   })
 
+  it('offers a web-only respondent the share card instead', async () => {
+    mockApi({ usedAndroid: false })
+    renderSurvey()
+    await finish()
+    expect(screen.queryByTestId('survey-share')).not.toBeInTheDocument()
+    fireEvent.click(await screen.findByText('Not this time'))
+    expect(await screen.findByTestId('survey-share')).toBeInTheDocument()
+  })
+
   // The one that keeps the listing safe. Showing the store link only to happy
   // respondents is review gating, which Play prohibits.
   it('asks the same of someone who failed and rated us 1', async () => {
@@ -1056,5 +1065,60 @@ describe('Survey — pre-filled from the Aptitude Report', () => {
     await reachTestStep()
     expect(await screen.findByTestId('survey-test-raf-cbat')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByTestId('survey-role-prefilled')).not.toBeInTheDocument()
+  })
+})
+
+describe('Survey — someone who has already donated', () => {
+  const finish = async () => {
+    fireEvent.click(await screen.findByTestId('survey-start'))
+    fireEvent.click(await screen.findByTestId('survey-sat-yes'));           await advance()
+    fireEvent.click(await screen.findByTestId('survey-test-raf-cbat'));     await advance()
+    fireEvent.click(await screen.findByTestId('survey-role-pilot'));        await advance()
+    fireEvent.click(await screen.findByTestId('survey-passed-yes'));        await advance()
+    fireEvent.click(await screen.findByTestId('survey-realism-4'));         await advance()
+    fireEvent.click(await screen.findByTestId('survey-helped-5'));          await advance()
+    fireEvent.click(await screen.findByTestId('survey-gaps-submit'));       await advance()
+    await skipSheet()
+    return screen.findByTestId('survey-done')
+  }
+
+  it('is thanked instead of asked again', async () => {
+    mockApi({ hasDonated: true })
+    renderSurvey()
+    await finish()
+    expect(screen.getByTestId('survey-supporter-thanks')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-donate')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('survey-declined')).not.toBeInTheDocument()
+  })
+
+  it('goes straight to the Play ask after using the Android app', async () => {
+    mockApi({ hasDonated: true, usedAndroid: true })
+    renderSurvey()
+    await finish()
+    expect(screen.getByTestId('survey-play-review')).toBeInTheDocument()
+    expect(screen.queryByTestId('survey-share')).not.toBeInTheDocument()
+  })
+
+  it('goes straight to the share card on the web, and records the copy', async () => {
+    mockApi({ hasDonated: true, usedAndroid: false })
+    const writeText = vi.fn().mockResolvedValue()
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    renderSurvey()
+    await finish()
+    expect(screen.queryByTestId('survey-play-review')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('survey-share-copy'))
+    expect(await screen.findByText('Link copied')).toBeInTheDocument()
+    expect(writeText).toHaveBeenCalledWith('https://skywatch.academy')
+    await waitFor(() => expect(patches).toContainEqual({ shareClicked: true }))
+  })
+
+  it('shows the link to copy by hand when there is no clipboard', async () => {
+    mockApi({ hasDonated: true })
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    renderSurvey()
+    await finish()
+    fireEvent.click(screen.getByTestId('survey-share-copy'))
+    expect(await screen.findByTestId('survey-share-fallback')).toHaveTextContent('https://skywatch.academy')
   })
 })

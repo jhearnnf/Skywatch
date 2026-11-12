@@ -6,6 +6,7 @@ import { captureLoginReturn } from '../utils/loginRedirect'
 import SEO from '../components/SEO'
 import { SLIM_APP } from '../utils/appMode'
 import { PLAY_STORE_URL } from '../utils/appUpdate'
+import { SITE_URL } from '../utils/seoTitle'
 import { ROLE_GROUPS, OTHER_ROLE_KEY, filterRoleGroups, roleLabel } from '../data/surveyRoles'
 import surveyTests from '../../backend/constants/surveyTests.json'
 
@@ -236,6 +237,7 @@ export default function Survey() {
         // The demo shows the Play Store ask, which a real screen only gets when
         // the account has actually run the Android app.
         usedAndroid: true,
+        hasDonated: false,
         roleGroups: ROLE_GROUPS,
         resultImages: [],
         response: null,
@@ -680,11 +682,13 @@ export default function Survey() {
               token={token}
               preview={isPreview}
               usedAndroid={!!meta?.usedAndroid}
+              hasDonated={!!meta?.hasDonated}
               awaitingResult={answers.passedForRole === 'waiting'}
               canAddSheet={wantsSheetAsk(answers) && sheets.length === 0}
               onAddSheet={() => goTo('upload')}
               onDonationClick={() => save({ donationClicked: true })}
               onPlayReviewClick={() => save({ playReviewClicked: true })}
+              onShareClick={() => save({ shareClicked: true })}
               onComment={(text) => save({ comment: text })}
             />
           )}
@@ -1180,7 +1184,7 @@ function SheetUploadCard({ API, token, preview = false, returning = false, sheet
   )
 }
 
-function DoneCard({ badge, name, API, token, preview = false, usedAndroid = false, awaitingResult = false, canAddSheet = false, onAddSheet, onDonationClick, onPlayReviewClick, onComment }) {
+function DoneCard({ badge, name, API, token, preview = false, usedAndroid = false, hasDonated = false, awaitingResult = false, canAddSheet = false, onAddSheet, onDonationClick, onPlayReviewClick, onShareClick, onComment }) {
   const [amount, setAmount] = useState(null)
   const [busy,   setBusy]   = useState(false)
   const [error,  setError]  = useState('')
@@ -1256,7 +1260,15 @@ function DoneCard({ badge, name, API, token, preview = false, usedAndroid = fals
           Billing as a carve-out for registered charities, and SkyWatch is not
           one. Same reasoning as Donate.jsx and the post-game ask. The
           questionnaire arrives by web link so this is defensive, not routine. */}
-      {!SLIM_APP && !declined && (
+      {/* Someone who has already donated is never asked again. They get a
+          thank-you in its place and go straight to the growth ask below. */}
+      {hasDonated && (
+        <p className="text-center text-sm text-slate-600 leading-relaxed mb-5" data-testid="survey-supporter-thanks">
+          Thank you as well for supporting SkyWatch. Your donation is part of what keeps it free.
+        </p>
+      )}
+
+      {!SLIM_APP && !hasDonated && !declined && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1348,11 +1360,18 @@ function DoneCard({ badge, name, API, token, preview = false, usedAndroid = fals
       {/* The other ask, and only ever the other one.
           Two asks stacked on one screen dilute each other, so this takes the
           place of the donation rather than sitting under it: it appears once the
-          donation has been turned down, and stands alone in the native app,
-          where a donation cannot be offered at all. Someone who gives has
-          already gone to Stripe and is never asked for anything else. */}
-      {usedAndroid && (declined || SLIM_APP) && (
-        <PlayReviewCard onClick={onPlayReviewClick} />
+          donation has been turned down, stands alone in the native app, where
+          a donation cannot be offered at all, and replaces the donation for
+          anyone who has already given. Someone who gives here has already gone
+          to Stripe and is never asked for anything else.
+
+          Which ask depends on where they used SkyWatch: the Play rating for
+          anyone who has run the Android app, a "tell someone" card for
+          everyone else. Never both. */}
+      {(declined || SLIM_APP || hasDonated) && (
+        usedAndroid
+          ? <PlayReviewCard onClick={onPlayReviewClick} />
+          : <ShareCard onClick={onShareClick} />
       )}
 
       {/* The score sheet step is skipped for anyone still waiting on a result,
@@ -1432,6 +1451,62 @@ function PlayReviewCard({ onClick }) {
       >
         Open Google Play
       </a>
+    </motion.div>
+  )
+}
+
+// The web counterpart of the Play ask: tell someone who is preparing.
+//
+// Deliberately NOT "post about us on Reddit". Asking respondents to post or
+// upvote reads as coordinated promotion, which Reddit treats as manipulation
+// and forces subreddits remove on sight, and a run of similar posts after a
+// survey email would damage the trust that makes word of mouth work. What we
+// want is the organic version: a passer mentioning it when someone asks how to
+// prepare. Reddit is named as one place among several, not as the target.
+//
+// Like the Play ask, it is identical for every answer. One button, copying the
+// site link, so the whole thing is one tap.
+function ShareCard({ onClick }) {
+  const [copied, setCopied] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  const copy = async () => {
+    onClick?.()
+    try {
+      await navigator.clipboard.writeText(SITE_URL)
+      setCopied(true); setFailed(false)
+    } catch {
+      // No clipboard (an old browser or a locked-down frame): show the link to
+      // copy by hand rather than claim it worked.
+      setFailed(true)
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-surface rounded-2xl border border-slate-200 p-4 sm:p-5"
+      data-testid="survey-share"
+    >
+      <p className="text-sm font-bold text-slate-800 mb-1">Tell someone who is preparing</p>
+      <p className="text-xs text-slate-500 leading-relaxed mb-4">
+        Most people find SkyWatch because someone recommended it. If you see someone asking how
+        to prepare, on Reddit, Discord or anywhere else, a mention from you goes a long way.
+      </p>
+      <button
+        type="button"
+        onClick={copy}
+        data-testid="survey-share-copy"
+        className="block w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm text-center transition-colors"
+      >
+        {copied ? 'Link copied' : 'Copy the SkyWatch link'}
+      </button>
+      {failed && (
+        <p className="text-xs text-slate-500 text-center mt-2" data-testid="survey-share-fallback">
+          Copy this link: <span className="font-semibold text-slate-700 select-all">{SITE_URL}</span>
+        </p>
+      )}
     </motion.div>
   )
 }
