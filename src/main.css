@@ -1085,6 +1085,9 @@ button.cbat-keycap:disabled { background: #6e6e7c; color: #1a1a1a; box-shadow: n
   touch-action: manipulation;
 }
 .trace1-cbat-key:active .trace1-cbat-keycap { background: #ffff99; }
+/* After a wrong press, the key that was actually right */
+.trace1-cbat-key-reveal { color: #7dff7d; }
+.trace1-cbat-key-reveal .trace1-cbat-keycap { background: #7dff7d; border-color: #7dff7d; }
 .trace1-cbat-keycap {
   display: inline-flex;
   align-items: center;

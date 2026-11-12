@@ -408,12 +408,17 @@ function HUD({ collected, rotations, elapsed, level }) {
 }
 
 // ── D-pad button ─────────────────────────────────────────────────────────────
-function DpadBtn({ label, onPress, ariaLabel }) {
+// `reveal` lights the button up green: Trace 1 uses it to show the key that was
+// actually right after a wrong press.
+function DpadBtn({ label, onPress, ariaLabel, reveal = false }) {
   return (
     <button
       onPointerDown={onPress}
       data-demo-answer
-      className="rounded-xl bg-game-panel border-2 border-game-line active:border-brand-400 active:bg-game-raised transition-colors flex items-center justify-center text-3xl lg:text-4xl text-slate-700 active:text-brand-600 select-none lg:w-28! lg:h-28!"
+      data-reveal={reveal ? 'true' : undefined}
+      className={reveal
+        ? 'rounded-xl bg-emerald-200 border-2 border-emerald-500 transition-colors flex items-center justify-center text-3xl lg:text-4xl text-white select-none lg:w-28! lg:h-28!'
+        : 'rounded-xl bg-game-panel border-2 border-game-line active:border-brand-400 active:bg-game-raised transition-colors flex items-center justify-center text-3xl lg:text-4xl text-slate-700 active:text-brand-600 select-none lg:w-28! lg:h-28!'}
       style={{ width: 'calc(min(100vw - 2rem, 28rem) * 0.22)', height: 'calc(min(100vw - 2rem, 28rem) * 0.22)' }}
       aria-label={ariaLabel}
     >
@@ -460,7 +465,10 @@ const TRACE1_CBAT_KEYS = [
   { dir: 'down',  cap: '↓', label: 'Pull'  },
 ]
 
-function Trace1CbatKeys({ onPress }) {
+// Turn key → on-screen control direction (stick convention: ↑ dives, ↓ climbs).
+const TRACE1_TURN_TO_DIR = { yawL: 'left', yawR: 'right', pitchD: 'up', pitchU: 'down' }
+
+function Trace1CbatKeys({ onPress, revealDir = null }) {
   return (
     <div className="trace1-cbat-keys mt-4 lg:mt-0">
       {TRACE1_CBAT_KEYS.map(k => (
@@ -469,7 +477,8 @@ function Trace1CbatKeys({ onPress }) {
           type="button"
           onPointerDown={() => onPress(k.dir)}
           data-demo-answer
-          className="trace1-cbat-key"
+          className={revealDir === k.dir ? 'trace1-cbat-key trace1-cbat-key-reveal' : 'trace1-cbat-key'}
+          data-reveal={revealDir === k.dir ? 'true' : undefined}
           aria-label={k.label}
         >
           <span className="trace1-cbat-keycap" aria-hidden="true">{k.cap}</span>
@@ -610,6 +619,9 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
   const [trace1Correct, setTrace1Correct]     = useState(0)
   const [trace1Total, setTrace1Total]         = useState(0)
   const [trace1Popup, setTrace1Popup]         = useState(null)     // { value: '✓'|'✗', key }
+  // After a wrong press, the direction that was actually right ('left' |
+  // 'right' | 'up' | 'down'), lit on the controls so the player learns from it.
+  const [trace1Reveal, setTrace1Reveal]       = useState(null)     // { dir, key }
   const [trace1Banner, setTrace1Banner]       = useState(null)     // round-end banner text
   const [trace1Generation, setTrace1Generation] = useState(0)      // bump to re-init the loop
   // Multi-aircraft state. From round 3 several jets fly at once, all turning on
@@ -1041,6 +1053,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
     trace1LastTurnRef.current = null
     setTrace1Banner(null)
     setTrace1Popup(null)
+    setTrace1Reveal(null)
     trace1StartedAtRef.current = performance.now()
 
     // Force a respawn so the target round's aircraft appear on their spread
@@ -1123,7 +1136,11 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
     if (!trace1AwaitingRef.current) return
     const expected = trace1LastTurnRef.current
     trace1AwaitingRef.current = false
-    trace1ApplyScore(turnKey === expected ? 1 : -1)
+    const right = turnKey === expected
+    trace1ApplyScore(right ? 1 : -1)
+    setTrace1Reveal(!right && TRACE1_TURN_TO_DIR[expected]
+      ? { dir: TRACE1_TURN_TO_DIR[expected], key: trace1PopupSeqRef.current }
+      : null)
   }, [phase, trace1ApplyScore])
 
   // Trace 1 keyboard listener
@@ -1146,6 +1163,13 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
     return () => clearTimeout(id)
   }, [trace1Popup])
 
+  // Clear the correct-key highlight before the next turn's answer window gets busy.
+  useEffect(() => {
+    if (!trace1Reveal) return
+    const id = setTimeout(() => setTrace1Reveal(null), 1000)
+    return () => clearTimeout(id)
+  }, [trace1Reveal])
+
   // Synchronously wipe every Trace 1 display + ref value. Used by handleSelect
   // / handlePlayAgain so the first paint of phase='playing' is already at
   // zero — without this the prior run's HUD flashes for one frame because
@@ -1162,6 +1186,7 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
     setTrace1Selected(0)
     setTrace1Banner(null)
     setTrace1Popup(null)
+    setTrace1Reveal(null)
     // A fresh run is a clean run — the debug flag doesn't survive Play Again.
     trace1DebugRef.current = false
     setTrace1Debug(false)
@@ -1855,14 +1880,14 @@ export default function CbatPlaneTurn({ forcedMode = null }) {
               {/* ── Controls ── */}
               <div className="lg:flex lg:flex-col lg:items-center lg:shrink-0 lg:min-w-[16rem]">
               {gameModeTrace1 && cbat ? (
-                <Trace1CbatKeys onPress={handleRotate} />
+                <Trace1CbatKeys onPress={handleRotate} revealDir={trace1Reveal?.dir ?? null} />
               ) : (gameMode3D || gameModeTrace1) ? (
                 <div className="flex flex-col items-center gap-2 mt-4 lg:mt-0">
-                  <DpadBtn label="↑" onPress={() => handleRotate('up')} ariaLabel={gameModeTrace1 ? 'Recall: dive' : 'Dive'} />
+                  <DpadBtn label="↑" onPress={() => handleRotate('up')} ariaLabel={gameModeTrace1 ? 'Recall: dive' : 'Dive'} reveal={gameModeTrace1 && trace1Reveal?.dir === 'up'} />
                   <div className="flex gap-2">
-                    <DpadBtn label="←" onPress={() => handleRotate('left')}  ariaLabel={gameModeTrace1 ? 'Recall: yaw left' : 'Rotate left'} />
-                    <DpadBtn label="↓" onPress={() => handleRotate('down')}  ariaLabel={gameModeTrace1 ? 'Recall: climb' : 'Climb'} />
-                    <DpadBtn label="→" onPress={() => handleRotate('right')} ariaLabel={gameModeTrace1 ? 'Recall: yaw right' : 'Rotate right'} />
+                    <DpadBtn label="←" onPress={() => handleRotate('left')}  ariaLabel={gameModeTrace1 ? 'Recall: yaw left' : 'Rotate left'} reveal={gameModeTrace1 && trace1Reveal?.dir === 'left'} />
+                    <DpadBtn label="↓" onPress={() => handleRotate('down')}  ariaLabel={gameModeTrace1 ? 'Recall: climb' : 'Climb'} reveal={gameModeTrace1 && trace1Reveal?.dir === 'down'} />
+                    <DpadBtn label="→" onPress={() => handleRotate('right')} ariaLabel={gameModeTrace1 ? 'Recall: yaw right' : 'Rotate right'} reveal={gameModeTrace1 && trace1Reveal?.dir === 'right'} />
                   </div>
                 </div>
               ) : (
