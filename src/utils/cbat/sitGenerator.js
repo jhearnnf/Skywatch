@@ -52,13 +52,39 @@
 // paper map still shows the same ground. Keeping the data north-up is what
 // lets every other rule in this file stay stated against one frame.
 //
+// AIRCRAFT FLY, AND IT IS THE FLIGHT THAT IS JUDGED. Four passers in the CBAT
+// outcome survey (2026-10/11) describe the real test's aircraft the same way:
+// a red jet and a yellow jet arrive late in the test, each briefed as a dotted
+// path on the map plus a separate altitude-against-time graph, and a helicopter
+// briefed as a row of dots marked H, M or L. In the clip they fly through the
+// scene, and "the flight path, speed and altitude/changes in altitude had to be
+// accurate". So a moving object here is a straight flight, not a parked marker:
+//
+//   col/row    where the flight STARTS (north-up, like everything else)
+//   heading    which way it flies, N/E/S/W
+//   jets       `colour` red|yellow, `profile` climb|descend|level
+//   helicopter `levels`, one of L/M/H per waypoint, first and last different
+//
+// A wrong flight is wrong in exactly ONE of two ways: its DIRECTION (turned a
+// quarter or more, or flown backwards) or its ALTITUDE (the opposite trend for
+// a jet, the H/M/L sequence run backwards for the helicopter). Speed is left
+// out on purpose for now: every flight of a class covers the same distance in
+// the same time, because a turning three-second camera pass gives the player
+// nothing to measure speed against. A passer is being asked how they judged it.
+//
+// The two jets are ONE class ("jets"), asked about together. Two classes would
+// push Hard's pool to seven, and the one-more-class-per-clip ramp tops out at
+// six, so the yellow jet or the helicopter would never appear.
+//
 // generateSitRound({ classes, rotations, layerRotations, maxRotatedLayers,
 //                    hillCount, questionsPerClip }, rng)
-//   → { grid, rotation, layers, clip, questions, corruptedClasses }
-//     layers    = [{ cls, rotation, objects: [{ id, cls, col, row }] }] — hills on each
-//     clip      = [{ id, cls, col, row }]  (col/row are 0-indexed)
+//   → { grid, rotation, layers, clip, truth, questions, corruptedClasses, corruptions }
+//     layers    = [{ cls, kind, rotation, objects }] — kind 'map' carries the
+//                 hills; kind 'altitude' is the jets' altitude graph, no ground
+//     clip      = [{ id, cls, col, row, ...flight }]  (col/row are 0-indexed)
 //     questions = [{ askedClass, answer, prompt }]
-//     answer    = true when that class is placed correctly in the clip
+//     answer    = true when that class is correct in the clip
+//     corruptions = [{ id, cls, kind }], kind 'position' | 'direction' | 'altitude'
 
 // 8 × 8, not 6 × 6. The real test's ground is roomier than ours was — a sitter
 // (2026-10) found it "easier to distinguish whether objects were in the right
@@ -85,20 +111,96 @@ export const CLASS_LABEL = {
   truck: 'trucks',
   troops: 'troops',
   trees: 'trees',
-  aircraft: 'aircraft',
+  aircraft: 'jets',
   helicopter: 'helicopters',
   hill: 'hills',
 }
 
-// Per-class count. Aircraft and helicopters stay sparse — they carry a heading
-// as well as a position, which is more to hold than a static feature.
+// Per-class count. Two jets, red and yellow, as every passer describes; one
+// helicopter. A flight is more to hold than a parked object.
 const CLASS_COUNT = {
-  farm: 2, truck: 2, troops: 1, trees: 2, aircraft: 1, helicopter: 1,
+  farm: 2, truck: 2, troops: 1, trees: 2, aircraft: 2, helicopter: 1,
 }
 
-// Classes that carry a flight path (a heading arrow) as well as a position.
+// Classes that fly during the clip.
 export const MOVING_CLASSES = new Set(['aircraft', 'helicopter'])
 const HEADINGS = ['N', 'E', 'S', 'W']
+
+// The jets' colours, in id order: aircraft-0 is red, aircraft-1 yellow.
+export const JET_COLOURS = ['red', 'yellow']
+export const JET_PROFILES = ['climb', 'descend', 'level']
+export const HELI_LEVELS = ['L', 'M', 'H']
+
+// How many cells a flight covers across the clip. Fixed per class, which is
+// what "speed is left out" means: a jet always covers three cells and a
+// helicopter two, so no flight can be wrong on speed alone.
+export const FLIGHT_CELLS = { aircraft: 3, helicopter: 2 }
+
+// One cell step in each direction. Row grows DOWN the plan, north is up.
+const STEP = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] }
+
+// Every cell a flight passes over, start first. The briefing's dots sit on
+// these cells, evenly spaced in time.
+export function flightCells(o) {
+  const n = FLIGHT_CELLS[o.cls]
+  const step = STEP[o.heading]
+  if (!n || !step) return [{ col: o.col, row: o.row }]
+  return Array.from({ length: n + 1 }, (_, i) => ({ col: o.col + step[0] * i, row: o.row + step[1] * i }))
+}
+
+// Where a flight is at a fraction t (0 → 1) of the clip, in fractional cells.
+export function flightPointAt(o, t) {
+  const n = FLIGHT_CELLS[o.cls] || 0
+  const step = STEP[o.heading] || [0, 0]
+  const k = Math.min(1, Math.max(0, t)) * n
+  return { col: o.col + step[0] * k, row: o.row + step[1] * k }
+}
+
+// Height as a fraction of the class's band (0 = lowest, 1 = highest). The
+// study graph and the 3D clip both read this, so the two cannot disagree.
+const JET_LOW = 0.12
+const JET_HIGH = 0.88
+export const HELI_FRAC = { L: 0.12, M: 0.5, H: 0.88 }
+export function flightHeightAt(o, t) {
+  const c = Math.min(1, Math.max(0, t))
+  if (o.cls === 'aircraft') {
+    if (o.profile === 'climb') return JET_LOW + (JET_HIGH - JET_LOW) * c
+    if (o.profile === 'descend') return JET_HIGH - (JET_HIGH - JET_LOW) * c
+    return 0.5
+  }
+  if (o.cls === 'helicopter' && o.levels?.length > 1) {
+    const span = (o.levels.length - 1) * c
+    const i = Math.min(o.levels.length - 2, Math.floor(span))
+    const f = span - i
+    return HELI_FRAC[o.levels[i]] * (1 - f) + HELI_FRAC[o.levels[i + 1]] * f
+  }
+  return 0
+}
+
+function flightFits(col, row, heading, cls, size = GRID) {
+  return flightCells({ cls, col, row, heading })
+    .every(c => c.col >= 0 && c.col < size && c.row >= 0 && c.row < size)
+}
+
+// Does a clip object match what it should have been? Position for everything,
+// and for a flight its direction and altitude as well.
+export function sameAsTruth(o, t) {
+  if (o.col !== t.col || o.row !== t.row) return false
+  if (!MOVING_CLASSES.has(o.cls)) return true
+  if (o.heading !== t.heading) return false
+  if (o.profile !== t.profile) return false
+  return (o.levels || []).join() === (t.levels || []).join()
+}
+
+// The study tabs a set of classes makes: one map per class, plus the jets'
+// altitude graph, which is a tab of its own in the real test.
+export function sitLayerCount(classes) {
+  return classes.length + (classes.includes('aircraft') ? 1 : 0)
+}
+
+export function layerLabel(layer) {
+  return layer.kind === 'altitude' ? 'jet altitude' : CLASS_LABEL[layer.cls]
+}
 
 function shuffle(arr, rng) {
   const a = [...arr]
@@ -169,6 +271,14 @@ export function generateSitRound({
   const free = shuffle(cells, rng)
   let next = 0
   const take = () => free[next++]
+  // The next free cell that passes `ok`, swapped forward so `take` never hands
+  // it out twice. A flight needs a start its whole path fits from.
+  const takeWhere = (ok) => {
+    const i = free.findIndex((c, j) => j >= next && ok(c))
+    if (i < 0) return take()
+    ;[free[next], free[i]] = [free[i], free[next]]
+    return take()
+  }
 
   // Hills first — the fixed reference terrain. Never corrupted, never asked.
   const hills = []
@@ -181,30 +291,52 @@ export function generateSitRound({
   // class. This is the thing that makes the test an integration task: the whole
   // scene exists, but the player only ever sees a slice of it at a time and has
   // to build the rest themselves.
-  const layers = classes.map(cls => {
+  const mapLayers = classes.map(cls => {
     const objects = [...hills]
     for (let i = 0; i < CLASS_COUNT[cls]; i++) {
+      if (MOVING_CLASSES.has(cls)) {
+        const heading = pick(HEADINGS, rng)
+        const cell = takeWhere(c => flightFits(c.col, c.row, heading, cls))
+        const obj = { id: `${cls}-${i}`, cls, col: cell.col, row: cell.row, heading }
+        if (cls === 'aircraft') {
+          obj.colour = JET_COLOURS[i % JET_COLOURS.length]
+          obj.profile = pick(JET_PROFILES, rng)
+        } else {
+          // First and last always differ, so running the sequence backwards
+          // (the helicopter's altitude fault) always changes something.
+          const first = pick(HELI_LEVELS, rng)
+          obj.levels = [first, pick(HELI_LEVELS, rng), pick(HELI_LEVELS.filter(l => l !== first), rng)]
+        }
+        objects.push(obj)
+        continue
+      }
       const cell = take()
-      const obj = { id: `${cls}-${i}`, cls, col: cell.col, row: cell.row }
-      if (MOVING_CLASSES.has(cls)) obj.heading = pick(HEADINGS, rng)
-      objects.push(obj)
+      objects.push({ id: `${cls}-${i}`, cls, col: cell.col, row: cell.row })
     }
-    return { cls, rotation: 0, objects }
+    return { cls, kind: 'map', rotation: 0, objects }
   })
 
-  // Turn some of the layers. Between one and `maxRotatedLayers` of them, and
+  // Turn some of the map layers. Between one and `maxRotatedLayers` of them, and
   // never all: at least one layer stays north-up, so there is always a map that
-  // reads the way the compass rose normally sits.
-  const rotatable = Math.min(maxRotatedLayers, layers.length - 1)
+  // reads the way the compass rose normally sits. The altitude graph is not a
+  // map and is never turned.
+  const rotatable = Math.min(maxRotatedLayers, mapLayers.length - 1)
   if (layerRotations.length && rotatable > 0) {
     const count = 1 + Math.floor(rng() * rotatable)
-    for (const layer of shuffle(layers, rng).slice(0, count)) {
+    for (const layer of shuffle(mapLayers, rng).slice(0, count)) {
       layer.rotation = pick(layerRotations, rng)
     }
   }
 
+  // The jets' altitude graph sits straight after their path map, as its own
+  // tab: "flight paths on a separate briefing page on a graph, tracking time on
+  // the x axis and altitude on the y axis".
+  const layers = mapLayers.flatMap(layer => (layer.cls === 'aircraft'
+    ? [layer, { cls: 'aircraft', kind: 'altitude', rotation: 0, objects: layer.objects.filter(o => o.cls === 'aircraft') }]
+    : [layer]))
+
   // The full scene, which no layer shows and which only the clip ever displays.
-  const scene = [...hills, ...layers.flatMap(l => l.objects.filter(o => o.cls !== 'hill'))]
+  const scene = [...hills, ...mapLayers.flatMap(l => l.objects.filter(o => o.cls !== 'hill'))]
 
   const rotation = pick(rotations, rng)
 
@@ -216,9 +348,10 @@ export function generateSitRound({
     const { col, row } = rotateCell(o.col, o.row, rotation)
     const out = { ...o, col, row }
     if (o.heading) out.heading = rotateHeading(o.heading, rotation)
+    if (o.levels) out.levels = [...o.levels]
     return out
   })
-  const truth = clip.map(o => ({ ...o }))
+  const truth = clip.map(o => (o.levels ? { ...o, levels: [...o.levels] } : { ...o }))
 
   // Cells nothing occupies in the clip — where a corrupted object can move to
   // without landing on top of something and reading as a different error.
@@ -228,12 +361,50 @@ export function generateSitRound({
     rng,
   )
 
+  const corruptions = []
+  const cellKey = (c) => `${c.col},${c.row}`
+
+  // A flight goes wrong in exactly one way: its direction or its altitude.
+  // Never its speed, which is fixed per class (see FLIGHT_CELLS).
+  const corruptFlight = (victim) => {
+    const kind = rng() < 0.5 ? 'direction' : 'altitude'
+    if (kind === 'altitude') {
+      if (victim.cls === 'aircraft') {
+        // The opposite trend: climb and descend swap, level becomes either.
+        victim.profile = victim.profile === 'climb' ? 'descend'
+          : victim.profile === 'descend' ? 'climb'
+            : pick(['climb', 'descend'], rng)
+      } else {
+        victim.levels = [...victim.levels].reverse()
+      }
+    } else {
+      // Turned a quarter or more from the same start, or flown back the way it
+      // came from the far end. Only options the whole path fits, and never a
+      // start that something else is standing on.
+      const end = flightCells(victim).at(-1)
+      const options = [90, 180, 270]
+        .map(turn => ({ col: victim.col, row: victim.row, heading: rotateHeading(victim.heading, turn) }))
+        .filter(o => flightFits(o.col, o.row, o.heading, victim.cls))
+      if (!occupied.has(cellKey(end))) {
+        options.push({ col: end.col, row: end.row, heading: rotateHeading(victim.heading, 180) })
+      }
+      const choice = pick(options, rng)
+      occupied.delete(cellKey(victim))
+      Object.assign(victim, choice)
+      occupied.add(cellKey(victim))
+    }
+    corruptions.push({ id: victim.id, cls: victim.cls, kind })
+    return true
+  }
+
   // Move one object of `cls` to a free cell at least MIN_CORRUPTION_DISTANCE
-  // from where it belongs, so that class reads as plainly wrong.
+  // from where it belongs, so that class reads as plainly wrong. A flight is
+  // made wrong in its direction or its altitude instead.
   const corrupt = (cls) => {
     const candidates = clip.filter(o => o.cls === cls)
     if (!candidates.length) return false
     const victim = candidates[Math.floor(rng() * candidates.length)]
+    if (MOVING_CLASSES.has(cls)) return corruptFlight(victim)
     const i = vacant.findIndex(c =>
       !occupied.has(`${c.col},${c.row}`) && chebyshev(c, victim) >= MIN_CORRUPTION_DISTANCE)
     if (i < 0) return false
@@ -241,6 +412,7 @@ export function generateSitRound({
     victim.col = cell.col
     victim.row = cell.row
     occupied.add(`${cell.col},${cell.row}`)
+    corruptions.push({ id: victim.id, cls, kind: 'position' })
     return true
   }
 
@@ -278,6 +450,7 @@ export function generateSitRound({
     truth,
     questions,
     corruptedClasses,
+    corruptions,
   }
 }
 

@@ -28,7 +28,24 @@ export const CLASS_STYLE = {
   troops:     { fill: '#7a3030', stroke: '#e08080', shape: 'troops' },
   trees:      { fill: '#3f7a48', stroke: '#6fbf7a', shape: 'tree' },
   aircraft:   { fill: '#8a4520', stroke: '#f0a35c', shape: 'arrow' },
-  helicopter: { fill: '#7a6a16', stroke: '#e8d24a', shape: 'rotor' },
+  // Cyan, not the yellow it used to be: the real test's jets are red and
+  // yellow, and a yellow helicopter beside a yellow jet is two contacts that
+  // only differ in silhouette on a three-second look.
+  helicopter: { fill: '#1f5f6a', stroke: '#5fd8e6', shape: 'rotor' },
+}
+
+// The two jets carry their own colours, which are what tell them apart on the
+// path map, the altitude graph and in the clip. Every passer who described them
+// named the same pair.
+export const JET_STYLE = {
+  red:    { fill: '#9a2a22', stroke: '#ff6a5a', shape: 'arrow', label: 'Red jet' },
+  yellow: { fill: '#8f7a12', stroke: '#ffe04a', shape: 'arrow', label: 'Yellow jet' },
+}
+
+// The style one object is drawn in: a jet by its colour, anything else by class.
+export function styleFor(o) {
+  if (o.cls === 'aircraft' && JET_STYLE[o.colour]) return JET_STYLE[o.colour]
+  return CLASS_STYLE[o.cls]
 }
 
 // Which way a marker points on the ground. North is up on the 2D map, which is

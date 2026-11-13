@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   generateSitRound, generateSitRounds, rotateCell, rotateHeading,
   sitRoundPlan, GRID, OBJECT_CLASSES, MIN_CORRUPTION_DISTANCE,
+  MOVING_CLASSES, FLIGHT_CELLS, flightCells, flightHeightAt, sameAsTruth, sitLayerCount,
 } from '../sitGenerator'
 import {
   SIT_TUNING, SIT_ROUNDS, SIT_CLIPS, SIT_QUESTIONS_PER_CLIP,
@@ -30,6 +31,9 @@ const optsFor = (t) => ({
 })
 const HARD = optsFor(SIT_TUNING.hard)
 const EASIER = optsFor(SIT_TUNING.easier)
+
+// The map layers: everything but the jets' altitude graph, which is not ground.
+const mapsOf = (round) => round.layers.filter(l => l.kind === 'map')
 
 // The scene the layers add up to — which nothing but the clip ever shows.
 const sceneOf = (round) => {
@@ -81,7 +85,8 @@ describe('the study layers', () => {
     // makes the whole thing a memory test instead.
     for (let seed = 0; seed < 200; seed++) {
       const round = generateSitRound(HARD, mulberry32(seed))
-      expect([seed, round.layers.length]).toEqual([seed, HARD.classes.length])
+      expect([seed, round.layers.length]).toEqual([seed, sitLayerCount(HARD.classes)])
+      expect([seed, mapsOf(round).length]).toEqual([seed, HARD.classes.length])
       for (const layer of round.layers) {
         const classes = new Set(layer.objects.map(o => o.cls))
         classes.delete('hill')
@@ -95,12 +100,12 @@ describe('the study layers', () => {
       const round = generateSitRound(HARD, mulberry32(seed))
       const hillIds = round.layers[0].objects.filter(o => o.cls === 'hill').map(o => o.id).sort()
       expect(hillIds.length).toBeGreaterThan(0)
-      for (const layer of round.layers) {
+      for (const layer of mapsOf(round)) {
         const ids = layer.objects.filter(o => o.cls === 'hill').map(o => o.id).sort()
         expect([seed, layer.cls, ids]).toEqual([seed, layer.cls, hillIds])
       }
       // And they are in the same place on each, or they would be useless.
-      for (const layer of round.layers) {
+      for (const layer of mapsOf(round)) {
         for (const hill of layer.objects.filter(o => o.cls === 'hill')) {
           const first = round.layers[0].objects.find(o => o.id === hill.id)
           expect([hill.id, hill.col, hill.row]).toEqual([hill.id, first.col, first.row])
@@ -139,7 +144,7 @@ describe('the study layers', () => {
     for (let seed = 0; seed < 100; seed++) {
       const round = generateSitRound(HARD, mulberry32(seed))
       const hillsOf = (l) => l.objects.filter(o => o.cls === 'hill').map(o => `${o.id}@${o.col},${o.row}`).sort()
-      for (const l of round.layers) expect([seed, hillsOf(l)]).toEqual([seed, hillsOf(round.layers[0])])
+      for (const l of mapsOf(round)) expect([seed, hillsOf(l)]).toEqual([seed, hillsOf(round.layers[0])])
     }
   })
 
@@ -203,15 +208,10 @@ describe('generateSitRound', () => {
   it('makes each asked class wrong exactly when its answer is "no"', () => {
     for (let seed = 0; seed < 300; seed++) {
       const round = generateSitRound(HARD, mulberry32(seed))
-      const scene = sceneOf(round)
       for (const q of round.questions) {
-        const misplaced = round.clip.some(o => {
-          if (o.cls !== q.askedClass) return false
-          const source = scene.find(s => s.id === o.id)
-          const expected = rotateCell(source.col, source.row, round.rotation)
-          return o.col !== expected.col || o.row !== expected.row
-        })
-        expect([seed, q.askedClass, misplaced]).toEqual([seed, q.askedClass, !q.answer])
+        const wrong = round.clip.some(o => o.cls === q.askedClass
+          && !sameAsTruth(o, round.truth.find(t => t.id === o.id)))
+        expect([seed, q.askedClass, wrong]).toEqual([seed, q.askedClass, !q.answer])
       }
     }
   })
@@ -223,6 +223,9 @@ describe('generateSitRound', () => {
       for (let seed = 0; seed < 300; seed++) {
         const round = generateSitRound(opts, mulberry32(seed))
         for (const o of round.clip) {
+          // Flights go wrong by direction or altitude, not by being moved; see
+          // the flights block below.
+          if (MOVING_CLASSES.has(o.cls)) continue
           const t = round.truth.find(x => x.id === o.id)
           if (t.col === o.col && t.row === o.row) continue
           const d = Math.max(Math.abs(t.col - o.col), Math.abs(t.row - o.row))
@@ -266,6 +269,9 @@ describe('generateSitRound', () => {
         const source = scene.find(s => s.id === o.id)
         const expected = rotateCell(source.col, source.row, round.rotation)
         expect([o.id, o.col, o.row]).toEqual([o.id, expected.col, expected.row])
+        // A flight's heading turns with the ground; its altitude does not.
+        if (source.heading) expect([o.id, o.heading]).toEqual([o.id, rotateHeading(source.heading, round.rotation)])
+        expect([o.id, o.profile, o.levels]).toEqual([o.id, source.profile, source.levels])
       }
     }
   })
@@ -281,6 +287,112 @@ describe('generateSitRound', () => {
     const a = generateSitRound(HARD, mulberry32(7))
     const b = generateSitRound(HARD, mulberry32(7))
     expect(a).toEqual(b)
+  })
+})
+
+// Survey passers (2026-10/11): a red and a yellow jet, each with a path map and
+// an altitude graph, and a helicopter briefed as H/M/L dots; all fly through
+// the clip and are judged on direction and altitude. Speed is left out for now.
+describe('flights', () => {
+  // The last Hard clip carries every class, jets and helicopter included.
+  const FULL = { ...HARD, classes: SIT_TUNING.hard.classPool }
+  const flightsOf = (round, list = round.clip) => list.filter(o => MOVING_CLASSES.has(o.cls))
+  const onBoard = (c) => c.col >= 0 && c.col < GRID && c.row >= 0 && c.row < GRID
+
+  it('flies a red jet, a yellow jet and a helicopter whose heights are briefed per dot', () => {
+    for (let seed = 0; seed < 100; seed++) {
+      const round = generateSitRound(FULL, mulberry32(seed))
+      const jets = round.truth.filter(o => o.cls === 'aircraft')
+      expect(jets.map(j => j.colour).sort()).toEqual(['red', 'yellow'])
+      for (const j of jets) expect(['climb', 'descend', 'level']).toContain(j.profile)
+      const heli = round.truth.find(o => o.cls === 'helicopter')
+      expect(heli.levels).toHaveLength(FLIGHT_CELLS.helicopter + 1)
+      // First and last differ, so running it backwards always changes it.
+      expect(heli.levels[0]).not.toBe(heli.levels.at(-1))
+    }
+  })
+
+  it('keeps every flight on the board for its whole track, before and after a fault', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      const round = generateSitRound(FULL, mulberry32(seed))
+      for (const list of [round.truth, round.clip, sceneOf(round)]) {
+        for (const o of flightsOf(round, list)) {
+          expect([seed, o.id, flightCells(o).every(onBoard)]).toEqual([seed, o.id, true])
+        }
+      }
+    }
+  })
+
+  it('makes a wrong flight wrong in exactly one way: direction or altitude', () => {
+    let direction = 0, altitude = 0
+    for (let seed = 0; seed < 400; seed++) {
+      const round = generateSitRound(FULL, mulberry32(seed))
+      for (const o of flightsOf(round)) {
+        const t = round.truth.find(x => x.id === o.id)
+        if (sameAsTruth(o, t)) continue
+        const turned = o.heading !== t.heading
+        const climbed = o.profile !== t.profile || o.levels?.join() !== t.levels?.join()
+        expect([seed, o.id, turned !== climbed]).toEqual([seed, o.id, true])
+        if (turned) direction++
+        else {
+          // An altitude fault leaves the track exactly where it was.
+          expect([seed, o.id, o.col, o.row]).toEqual([seed, o.id, t.col, t.row])
+          altitude++
+        }
+      }
+    }
+    // Both kinds really happen.
+    expect(direction).toBeGreaterThan(20)
+    expect(altitude).toBeGreaterThan(20)
+  })
+
+  it('turns an altitude fault into the opposite trend, never a near miss', () => {
+    for (let seed = 0; seed < 300; seed++) {
+      const round = generateSitRound(FULL, mulberry32(seed))
+      for (const c of round.corruptions.filter(x => x.kind === 'altitude')) {
+        const o = round.clip.find(x => x.id === c.id)
+        const t = round.truth.find(x => x.id === c.id)
+        if (o.cls === 'aircraft') {
+          if (t.profile === 'climb') expect(o.profile).toBe('descend')
+          if (t.profile === 'descend') expect(o.profile).toBe('climb')
+          if (t.profile === 'level') expect(['climb', 'descend']).toContain(o.profile)
+        } else {
+          expect(o.levels).toEqual([...t.levels].reverse())
+        }
+      }
+    }
+  })
+
+  it('never changes how far a flight goes, so speed is never the fault', () => {
+    for (let seed = 0; seed < 200; seed++) {
+      const round = generateSitRound(FULL, mulberry32(seed))
+      for (const o of flightsOf(round)) {
+        expect(flightCells(o)).toHaveLength(FLIGHT_CELLS[o.cls] + 1)
+      }
+    }
+  })
+
+  it('briefs the jets on an altitude tab of their own, after their map, never turned', () => {
+    for (let seed = 0; seed < 100; seed++) {
+      const round = generateSitRound(FULL, mulberry32(seed))
+      const i = round.layers.findIndex(l => l.kind === 'altitude')
+      expect(round.layers[i - 1]).toMatchObject({ cls: 'aircraft', kind: 'map' })
+      expect(round.layers[i].rotation).toBe(0)
+      expect(round.layers[i].objects.map(o => o.cls)).toEqual(['aircraft', 'aircraft'])
+    }
+    // And there is no altitude tab when there are no jets.
+    const easy = generateSitRound(EASIER, mulberry32(1))
+    expect(easy.layers.some(l => l.kind === 'altitude')).toBe(false)
+  })
+
+  it('climbs, descends or holds level the way the profile says', () => {
+    const jet = (profile) => ({ cls: 'aircraft', profile })
+    expect(flightHeightAt(jet('climb'), 1)).toBeGreaterThan(flightHeightAt(jet('climb'), 0))
+    expect(flightHeightAt(jet('descend'), 1)).toBeLessThan(flightHeightAt(jet('descend'), 0))
+    expect(flightHeightAt(jet('level'), 1)).toBe(flightHeightAt(jet('level'), 0))
+    const heli = { cls: 'helicopter', levels: ['L', 'H', 'M'] }
+    expect(flightHeightAt(heli, 0.5)).toBeGreaterThan(flightHeightAt(heli, 0))
+    expect(flightHeightAt(heli, 1)).toBeLessThan(flightHeightAt(heli, 0.5))
   })
 })
 
@@ -371,7 +483,8 @@ describe('how long a run takes', () => {
   it('matches the arithmetic, to the second', () => {
     // Stated outright so a tuning change has to be a deliberate one.
     expect(sitPhaseMs(SIT_TUNING.easier)).toEqual({ study: 210000, clips: 32000, answers: 160000 })
-    expect(sitPhaseMs(SIT_TUNING.hard)).toEqual({ study: 180000, clips: 24000, answers: 120000 })
+    // Hard's last two clips carry the jets, and with them an altitude tab each.
+    expect(sitPhaseMs(SIT_TUNING.hard)).toEqual({ study: 200000, clips: 24000, answers: 120000 })
   })
 
   it('counts one clip viewing per QUESTION, not per clip', () => {
@@ -446,7 +559,7 @@ describe('sitDifficulty', () => {
     // easier one.
     for (const tuning of Object.values(SIT_TUNING)) {
       const round = generateSitRound(optsFor(tuning), mulberry32(2))
-      expect([tuning.key, round.layers.length]).toEqual([tuning.key, tuning.classPool.length])
+      expect([tuning.key, round.layers.length]).toEqual([tuning.key, sitLayerCount(tuning.classPool)])
     }
   })
 })

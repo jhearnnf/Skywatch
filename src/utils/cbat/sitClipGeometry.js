@@ -8,6 +8,8 @@
 //
 // See components/cbat/SitClipScene.jsx for the renderer that uses them.
 
+import { flightHeightAt } from './sitGenerator'
+
 // One grid cell is 2 world units, so an 8×8 board spans −8..+8 either way and the
 // scene is centred on the origin whatever the grid size.
 export const CELL = 2
@@ -71,11 +73,26 @@ export const CAMERA = {
 // framing checked below is not the framing anyone sees.
 export const CLIP_ASPECT = 4 / 3
 
-// The tallest thing standing in the scene, ground to top: the airborne aircraft
-// marker rides at 2.6 and its body extends 0.55 above that. Used to size the
-// vertical fit, so it has to track the scene — a guess here is a guess about
-// whether anything gets cropped.
-export const SCENE_MAX_HEIGHT = 3.2
+// How high each flying class rides, as [lowest, highest] in world units. The
+// generator's flightHeightAt gives a 0..1 fraction of this band, and the study
+// graph draws the same fraction, so "climbing" means the same thing on both.
+// The bands are wide on purpose: a climb has to read as a climb on a short,
+// turning camera pass.
+export const FLIGHT_BAND = { aircraft: [1.3, 3.1], helicopter: [1.1, 2.5] }
+// The helicopter's floor clears the tallest ground object (a stand of trees,
+// about 1.15 high) with its skids, so a low pass never flies through a barn.
+
+export function flightWorldHeight(o, t) {
+  const band = FLIGHT_BAND[o.cls]
+  if (!band) return 0
+  return band[0] + (band[1] - band[0]) * flightHeightAt(o, t)
+}
+
+// The tallest thing standing in the scene, ground to top: a jet at the top of
+// its climb rides at 1.3 + 1.8 × 0.88 ≈ 2.88, and its body extends 0.55 above
+// that. Used to size the vertical fit, so it has to track the scene — a guess
+// here is a guess about whether anything gets cropped.
+export const SCENE_MAX_HEIGHT = 3.45
 
 // ── The landscape ────────────────────────────────────────────────────────────
 // The clip used to be a 12 × 12 slab of ground floating in the void, which read

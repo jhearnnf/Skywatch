@@ -1,4 +1,4 @@
-import { sitRoundPlan } from './sitGenerator'
+import { sitRoundPlan, sitLayerCount } from './sitGenerator'
 
 // Spatial Integration Test difficulty tuning.
 //
@@ -92,7 +92,7 @@ export const SIT_TUNING = {
     label: 'Hard',
     gameKey: 'sit',
     bars: 3,
-    blurb: 'Quarter-turns, aircraft and flight paths',
+    blurb: 'Quarter-turns, plus jets and a helicopter in flight',
 
     classPool: ['farm', 'truck', 'troops', 'trees', 'aircraft', 'helicopter'],
     rotations: [90, 180, 270],
@@ -135,7 +135,8 @@ export function sitPhaseMs(tuning) {
       rotations: tuning.rotations,
       questionsPerClip: SIT_QUESTIONS_PER_CLIP,
     })
-    study += plan.classes.length * tuning.studyMsPerLayer
+    // Per TAB: the jets bring a second one, their altitude graph.
+    study += sitLayerCount(plan.classes) * tuning.studyMsPerLayer
   }
   return {
     study,

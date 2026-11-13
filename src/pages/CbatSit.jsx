@@ -42,8 +42,11 @@ import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
 import CbatPersonalBest from '../components/CbatPersonalBest'
 import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import { useGameBodyClass } from '../hooks/useGameBodyClass'
-import { generateSitRounds, GRID, COL_LABELS, CLASS_LABEL, MOVING_CLASSES } from '../utils/cbat/sitGenerator'
-import { CLASS_STYLE, HEADING_DEG } from '../components/cbat/sitClassStyle'
+import {
+  generateSitRounds, GRID, COL_LABELS, CLASS_LABEL, MOVING_CLASSES, FLIGHT_CELLS,
+  flightCells, flightHeightAt, rotateHeading, layerLabel,
+} from '../utils/cbat/sitGenerator'
+import { CLASS_STYLE, JET_STYLE, HEADING_DEG, styleFor } from '../components/cbat/sitClassStyle'
 import SitCompassRose from '../components/cbat/SitCompassRose'
 import CbatIntroLabel from '../components/cbat/CbatIntroLabel'
 import CbatIntroList from '../components/cbat/CbatIntroList'
@@ -65,8 +68,134 @@ import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 // Colours come from the shared table both renderers use, so a truck cannot end
 // up one colour here and another in the clip. See sitClassStyle.js.
 
-function MapObject({ o, cell }) {
-  const s = CLASS_STYLE[o.cls]
+// A flight is drawn as its track: a dot on every cell it passes, evenly spaced
+// in time, starting from a hollow ring and ending at the marker, which points
+// the way it is flying. Survey passers describe exactly this for the real
+// test's jets ("leaving a trail of dots at a uniform time"). The helicopter's
+// dots carry its H/M/L height and, on the study map, light up one after
+// another to show which way it goes: "not animated and only flashed
+// sequentially". `rotation` is the layer's turn, so the letters can be spun
+// back upright.
+const HELI_FLASH_S = 0.6
+
+function FlightTrack({ o, cell, rotation = 0, flash }) {
+  const s = styleFor(o)
+  const pts = flightCells(o).map(c => ({ x: (c.col + 0.5) * cell, y: (c.row + 0.5) * cell }))
+  const heli = o.cls === 'helicopter'
+  const period = pts.length * HELI_FLASH_S
+  const end = flightCells(o).at(-1)
+  return (
+    <g data-flight={o.id}>
+      {pts.slice(0, -1).map((p, i) => (
+        <circle
+          key={i}
+          cx={p.x}
+          cy={p.y}
+          r={cell * (i === 0 ? 0.11 : 0.08)}
+          fill={i === 0 ? 'none' : s.stroke}
+          stroke={s.stroke}
+          strokeWidth={cell * 0.035}
+          opacity={heli && flash ? 0.3 : 0.9}
+        >
+          {heli && flash && (
+            <animate
+              attributeName="opacity"
+              values="1;0.3;0.3"
+              keyTimes="0;0.33;1"
+              calcMode="discrete"
+              dur={`${period}s`}
+              begin={`${i * HELI_FLASH_S}s`}
+              repeatCount="indefinite"
+            />
+          )}
+        </circle>
+      ))}
+      <MapObject o={{ ...o, col: end.col, row: end.row }} cell={cell} />
+      {heli && o.levels?.map((level, i) => {
+        const x = pts[i].x + cell * 0.3
+        const y = pts[i].y - cell * 0.3
+        return (
+          <text
+            key={`l${i}`}
+            x={x}
+            y={y}
+            transform={rotation ? `rotate(${-rotation} ${x} ${y})` : undefined}
+            fill={s.stroke}
+            fontSize={cell * 0.3}
+            fontWeight="bold"
+            textAnchor="middle"
+            dominantBaseline="central"
+          >
+            {level}
+          </text>
+        )
+      })}
+    </g>
+  )
+}
+
+// The jets' altitude tab: height against time across the clip, one line per
+// jet in its own colour, with a dot at each step that matches a dot on the path
+// map. "A separate briefing page on a graph, tracking time on the x axis and
+// altitude on the y axis." Read off the same flightHeightAt the 3D clip flies
+// by, so the graph cannot promise a climb the clip does not show.
+function SitAltitudeChart({ jets, seconds }) {
+  const L = 52, R = 14, T = 16, B = 40
+  const w = SIZE - L - R
+  const h = SIZE - T - B
+  const x = (t) => L + t * w
+  const y = (f) => T + (1 - f) * h
+  const samples = Array.from({ length: 21 }, (_, i) => i / 20)
+  return (
+    <svg
+      viewBox={`0 0 ${SIZE} ${SIZE}`}
+      className="block w-full h-auto max-w-none mx-auto"
+      role="img"
+      aria-label="Jet altitude against time"
+    >
+      <rect x={0} y={0} width={SIZE} height={SIZE} fill="var(--color-game-arena)" />
+      {Array.from({ length: seconds + 1 }, (_, i) => (
+        <g key={i}>
+          <line x1={x(i / seconds)} y1={T} x2={x(i / seconds)} y2={T + h} stroke="#13294a" strokeWidth={1} />
+          <text x={x(i / seconds)} y={T + h + 14} fill="var(--color-game-faint)" fontSize={12} textAnchor="middle">{i}s</text>
+        </g>
+      ))}
+      {[0, 0.5, 1].map(f => (
+        <line key={f} x1={L} y1={y(f)} x2={L + w} y2={y(f)} stroke="#13294a" strokeWidth={1} />
+      ))}
+      <text x={L - 6} y={y(0.88)} fill="var(--color-game-faint)" fontSize={12} textAnchor="end" dominantBaseline="central">High</text>
+      <text x={L - 6} y={y(0.12)} fill="var(--color-game-faint)" fontSize={12} textAnchor="end" dominantBaseline="central">Low</text>
+      <text x={L + w / 2} y={SIZE - 8} fill="var(--color-game-faint)" fontSize={12} textAnchor="middle">Time</text>
+      {/* Red drawn wider and underneath, so two jets on the same profile still
+          show both colours rather than one line hiding the other. */}
+      {jets.map((o, k) => {
+        const s = styleFor(o)
+        const n = FLIGHT_CELLS[o.cls]
+        return (
+          <g key={o.id} data-jet={o.colour}>
+            <polyline
+              points={samples.map(t => `${x(t)},${y(flightHeightAt(o, t))}`).join(' ')}
+              fill="none"
+              stroke={s.stroke}
+              strokeWidth={k === 0 ? 6 : 2.5}
+              strokeLinecap="round"
+              opacity={k === 0 ? 0.75 : 1}
+            />
+            {Array.from({ length: n + 1 }, (_, i) => (
+              <circle key={i} cx={x(i / n)} cy={y(flightHeightAt(o, i / n))} r={k === 0 ? 5 : 3.5} fill={s.stroke} />
+            ))}
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function MapObject({ o, cell, rotation, flash, track }) {
+  if (track && MOVING_CLASSES.has(o.cls)) {
+    return <FlightTrack o={o} cell={cell} rotation={rotation} flash={flash} />
+  }
+  const s = styleFor(o)
   const cx = (o.col + 0.5) * cell
   const cy = (o.row + 0.5) * cell
   const r = cell * 0.3
@@ -133,7 +262,7 @@ const SIZE = GRID * CELL
 // study layer is turned in the real test. The objects are still given in north-
 // up cells; only the drawing turns. Each label is spun back upright about its
 // own centre so it stays attached to its edge but remains readable.
-function SitMap({ objects, labelled, dim, rotation = 0, sizeClass = 'max-w-[min(360px,52vh)]' }) {
+function SitMap({ objects, labelled, dim, rotation = 0, flash = false, sizeClass = 'max-w-[min(360px,52vh)]' }) {
   const pad = labelled ? 18 : 4
   const mid = SIZE / 2
   const upright = (x, y) => (rotation ? `rotate(${-rotation} ${x} ${y})` : undefined)
@@ -161,7 +290,7 @@ function SitMap({ objects, labelled, dim, rotation = 0, sizeClass = 'max-w-[min(
           const x = -9, y = (i + 0.5) * CELL
           return <text key={`r${i}`} x={x} y={y} transform={upright(x, y)} fill="var(--color-game-faint)" fontSize={13} textAnchor="middle" dominantBaseline="central" fontWeight="bold">{i + 1}</text>
         })}
-        {objects.map(o => <MapObject key={o.id} o={o} cell={CELL} />)}
+        {objects.map(o => <MapObject key={o.id} o={o} cell={CELL} rotation={rotation} flash={flash} track />)}
       </g>
     </svg>
   )
@@ -182,21 +311,52 @@ class ClipBoundary extends Component {
   }
 }
 
-function Legend({ classes }) {
+// The jets get a swatch each, since their colour is what tells them apart.
+function legendEntries(cls) {
+  if (cls === 'aircraft') return Object.entries(JET_STYLE).map(([k, s]) => ({ key: k, style: s, text: s.label.toLowerCase() }))
+  return [{ key: cls, style: CLASS_STYLE[cls], text: CLASS_LABEL[cls], moving: MOVING_CLASSES.has(cls) }]
+}
+
+function Legend({ classes, withHills = true }) {
+  const entries = [...(withHills ? ['hill'] : []), ...classes].flatMap(legendEntries)
   return (
     <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-2">
-      {['hill', ...classes].map(cls => (
-        <span key={cls} className="flex items-center gap-1 text-[10px] text-slate-500">
+      {entries.map(({ key, style, text, moving }) => (
+        <span key={key} className="flex items-center gap-1 text-[10px] text-slate-500">
           <span
             className="inline-block w-2.5 h-2.5 rounded-sm"
-            style={{ backgroundColor: CLASS_STYLE[cls].fill, border: `1px solid ${CLASS_STYLE[cls].stroke}` }}
+            style={{ backgroundColor: style.fill, border: `1px solid ${style.stroke}` }}
           />
-          {CLASS_LABEL[cls]}
-          {MOVING_CLASSES.has(cls) && <span className="text-[9px] text-slate-600">(heading)</span>}
+          {text}
+          {moving && <span className="text-[9px] text-slate-600">(flight path)</span>}
         </span>
       ))}
     </div>
   )
+}
+
+// What exactly was wrong with a flight, in true compass terms, for the answer
+// review. The two maps under it show position and direction, but not height,
+// so an altitude fault would otherwise go unexplained.
+const COMPASS_WORD = { N: 'north', E: 'east', S: 'south', W: 'west' }
+const PROFILE_WORD = { climb: 'climbing', descend: 'descending', level: 'flying level' }
+
+function flightFault(round, cls) {
+  const c = round.corruptions?.find(x => x.cls === cls)
+  if (!c || c.kind === 'position') return null
+  const seen = round.clip.find(o => o.id === c.id)
+  const want = round.truth.find(o => o.id === c.id)
+  if (!seen || !want) return null
+  const name = cls === 'aircraft' ? `The ${seen.colour} jet` : 'The helicopter'
+  if (c.kind === 'altitude') {
+    return cls === 'aircraft'
+      ? `${name} was ${PROFILE_WORD[seen.profile]} when it should have been ${PROFILE_WORD[want.profile]}.`
+      : `${name} flew at ${seen.levels.join(', ')} when it should have been ${want.levels.join(', ')}.`
+  }
+  // The clip's headings are on turned ground; turning them back gives the
+  // direction the player studied.
+  const dir = (o) => COMPASS_WORD[rotateHeading(o.heading, -round.rotation)]
+  return `${name} flew ${dir(seen)} when it should have flown ${dir(want)}.`
 }
 
 function ResultsScreen({ answers, totalTime, grade }) {
@@ -684,6 +844,15 @@ export default function CbatSit() {
                   <CbatIntroLabel>3.</CbatIntroLabel>
                   <span className="pt-0.5">Two questions on each clip. The clip plays again before the second one, but you are only told what is being asked after it has finished. Answer the question you were asked, and only that one.</span>
                 </div>
+                {/* Only on a difficulty that has them: survey passers describe
+                    the real test's jets and helicopter as flights, judged on
+                    their direction and on their climb or descent. */}
+                {introTuning.classPool.includes('aircraft') && (
+                  <div className="flex items-start gap-3">
+                    <span className="shrink-0 w-8 text-center" aria-hidden>{'✈️'}</span>
+                    <span className="pt-0.5">Two jets, one red and one yellow, and a helicopter fly through the clip. Their tracks are on the map tabs and the jets' heights are on their own altitude tab. They are only correct if they fly the right way and climb, descend or stay level as shown.</span>
+                  </div>
+                )}
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-amber-400/80 border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center" aria-hidden>{'⚠️'}</span>
                   <span className="pt-0.5">Other things in the frame will be wrong. That never counts against the answer. Checking them costs you the question.</span>
@@ -803,7 +972,7 @@ export default function CbatSit() {
                     <div className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 justify-center">
                       {current.layers.map((layer, i) => (
                         <button
-                          key={layer.cls}
+                          key={`${layer.cls}-${layer.kind}`}
                           type="button"
                           onClick={() => switchLayer(i)}
                           aria-pressed={i === tabIdx}
@@ -813,7 +982,7 @@ export default function CbatSit() {
                               : 'bg-game-arena border-game-line text-slate-600 hover:text-game-text'
                           }`}
                         >
-                          {CLASS_LABEL[layer.cls]}
+                          {layerLabel(layer)}
                         </button>
                       ))}
                     </div>
@@ -825,20 +994,37 @@ export default function CbatSit() {
                       data-visible={layerVisible}
                       style={{ opacity: layerVisible ? 1 : 0, transition: `opacity ${SIT_TAB_FADE_MS}ms ease` }}
                     >
+                      {/* The jets' altitude tab is a graph, not ground, so it
+                          has no compass and no hills; the empty column keeps it
+                          the same size as the maps either side of it. */}
                       <div className="flex items-start gap-2">
                         <div className="flex-1 min-w-0">
-                          <SitMap
-                            objects={current.layers[layerIdx].objects}
-                            rotation={current.layers[layerIdx].rotation}
-                            labelled
-                            sizeClass="max-w-none"
-                          />
+                          {current.layers[layerIdx].kind === 'altitude' ? (
+                            <SitAltitudeChart
+                              jets={current.layers[layerIdx].objects}
+                              seconds={Math.round(runTuning.clipMs / 1000)}
+                            />
+                          ) : (
+                            <SitMap
+                              key={layerIdx}
+                              objects={current.layers[layerIdx].objects}
+                              rotation={current.layers[layerIdx].rotation}
+                              labelled
+                              flash
+                              sizeClass="max-w-none"
+                            />
+                          )}
                         </div>
                         <div className="w-10 sm:w-12 shrink-0">
-                          <SitCompassRose rotation={current.layers[layerIdx].rotation} />
+                          {current.layers[layerIdx].kind !== 'altitude' && (
+                            <SitCompassRose rotation={current.layers[layerIdx].rotation} />
+                          )}
                         </div>
                       </div>
-                      <Legend classes={[current.layers[layerIdx].cls]} />
+                      <Legend
+                        classes={[current.layers[layerIdx].cls]}
+                        withHills={current.layers[layerIdx].kind !== 'altitude'}
+                      />
                     </div>
                     <p className="text-[10px] text-slate-600 mt-2 text-center px-2">
                       No layer shows everything. Only the hills appear on all of them, so use those to line one layer up against the next. Some layers are turned: the red needle on the compass always points north.
@@ -956,8 +1142,11 @@ export default function CbatSit() {
                           </p>
                           <p className="text-center text-xs text-slate-500 mb-2">
                             The camera passed {current.rotation}° round from north-up.
+                            {!currentQuestion.answer && flightFault(current, currentQuestion.askedClass) && (
+                              <> {flightFault(current, currentQuestion.askedClass)}</>
+                            )}
                             {feedback.otherWrong.length > 0 && (
-                              <> The {CLASS_LABEL[feedback.otherWrong[0]]} were out of place too, and nobody asked about those.</>
+                              <> The {CLASS_LABEL[feedback.otherWrong[0]]} were wrong too, and nobody asked about those.</>
                             )}
                           </p>
                           {/* Only shown once the clip's last question is done —

@@ -57,13 +57,14 @@ import { useRef, useMemo, useEffect, useLayoutEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useCbatDemoCanvas } from '../../utils/cbat/demoMode'
-import { CLASS_STYLE } from './sitClassStyle'
+import { CLASS_STYLE, styleFor } from './sitClassStyle'
+import { flightPointAt, FLIGHT_CELLS } from '../../utils/cbat/sitGenerator'
 // Cell placement and heading maths live outside this file so they can be tested
 // without standing up WebGL — see utils/cbat/sitClipGeometry.js for why the
 // heading spin is negated.
 import {
   CELL, CAMERA, FIELD_HALF, LAKE,
-  cellToWorld, headingSpin, terrainHeight,
+  cellToWorld, headingSpin, terrainHeight, flightWorldHeight,
   clipCameraAzimuthDeg, clipNorthDeg,
 } from '../../utils/cbat/sitClipGeometry'
 
@@ -482,28 +483,65 @@ function Trees({ style }) {
   )
 }
 
-// Airborne contacts sit above the ground and carry a heading. The drop line and
-// the ground ring are what make their POSITION readable — the marker alone tells
-// you nothing about which cell it is over once perspective is involved.
-function Airborne({ style, height, children }) {
+// Airborne contacts FLY across the clip: a straight line along their heading,
+// at a height that follows their briefed profile. Survey passers (2026-10/11):
+// the real test's jets and helicopter move through the scene, and their
+// direction and their climb or descent are what is judged.
+//
+// The drop line and the ground ring travel with them. They are what make the
+// track readable at all: a body in the air tells you nothing about which ground
+// it is over once perspective is involved, and the line's length is the
+// clearest cue that the aircraft is climbing or descending.
+//
+// Driven off elapsed time like the camera, so a slow device sees the same
+// flight as a fast one. Positions are written straight onto the refs: three
+// objects moving sixty times a second is not worth a React render each.
+function Flight({ o, grid, durationMs, Body }) {
+  const style = styleFor(o)
+  const group = useRef()
+  const body = useRef()
+  const line = useRef()
+  const startRef = useRef(null)
+
+  const place = (t) => {
+    if (!group.current) return
+    const p = flightPointAt(o, t)
+    const { x, z } = cellToWorld(p.col, p.row, grid)
+    const h = flightWorldHeight(o, t)
+    group.current.position.set(x, 0, z)
+    body.current.position.y = h
+    line.current.position.y = h / 2
+    line.current.scale.y = h
+    // Nose up on a climb, down on a descent: one more cue that agrees with the
+    // drop line, never one that argues with it.
+    const ahead = flightWorldHeight(o, Math.min(1, t + 0.05)) - flightWorldHeight(o, Math.max(0, t - 0.05))
+    body.current.rotation.x = Math.atan2(ahead, 0.1 * FLIGHT_CELLS[o.cls] * CELL)
+  }
+
+  useLayoutEffect(() => { place(0) })
+  useFrame(({ clock }) => {
+    if (startRef.current === null) startRef.current = clock.elapsedTime
+    place(((clock.elapsedTime - startRef.current) * 1000) / durationMs)
+  })
+
   return (
-    <group>
-      <mesh position={[0, height / 2, 0]}>
-        <cylinderGeometry args={[0.02, 0.02, height, 4]} />
+    <group ref={group} rotation={[0, headingSpin(o.heading), 0]}>
+      <mesh ref={line}>
+        <cylinderGeometry args={[0.02, 0.02, 1, 4]} />
         <meshBasicMaterial color={style.stroke} transparent opacity={0.45} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
         <ringGeometry args={[0.3, 0.42, 20]} />
         <meshBasicMaterial color={style.stroke} transparent opacity={0.75} side={THREE.DoubleSide} />
       </mesh>
-      <group position={[0, height, 0]}>{children}</group>
+      <group ref={body}><Body style={style} /></group>
     </group>
   )
 }
 
-function Aircraft({ style }) {
+function JetBody({ style }) {
   return (
-    <Airborne style={style} height={2.6}>
+    <>
       {/* Nose along −Z, which is north on the plan view. Wings and tail surfaces
           are flat triangular prisms, so the planform is what reads from the
           camera's angle rather than the fuselage. */}
@@ -529,13 +567,13 @@ function Aircraft({ style }) {
           <meshStandardMaterial color={style.fill} roughness={0.55} metalness={0.3} flatShading />
         </mesh>
       </group>
-    </Airborne>
+    </>
   )
 }
 
-function Helicopter({ style }) {
+function HeliBody({ style }) {
   return (
-    <Airborne style={style} height={1.8}>
+    <>
       <group>
         <mesh castShadow>
           <capsuleGeometry args={[0.2, 0.32, 4, 10]} />
@@ -577,23 +615,25 @@ function Helicopter({ style }) {
           </mesh>
         ))}
       </group>
-    </Airborne>
+    </>
   )
 }
 
 const MODELS = {
-  hill: Hill, farm: Farm, truck: Truck, troops: Troops,
-  trees: Trees, aircraft: Aircraft, helicopter: Helicopter,
+  hill: Hill, farm: Farm, truck: Truck, troops: Troops, trees: Trees,
 }
+const FLIGHT_BODIES = { aircraft: JetBody, helicopter: HeliBody }
 
-function SceneObject({ o, grid }) {
+function SceneObject({ o, grid, durationMs }) {
+  if (FLIGHT_BODIES[o.cls]) {
+    return <Flight o={o} grid={grid} durationMs={durationMs} Body={FLIGHT_BODIES[o.cls]} />
+  }
   const Model = MODELS[o.cls]
   const style = CLASS_STYLE[o.cls]
   const { x, z } = cellToWorld(o.col, o.row, grid)
-  const spin = headingSpin(o.heading)
   if (!Model || !style) return null
   return (
-    <group position={[x, 0, z]} rotation={[0, spin, 0]}>
+    <group position={[x, 0, z]}>
       <Model style={style} />
     </group>
   )
@@ -603,11 +643,11 @@ export default function SitClipScene({ objects, grid, durationMs, northDeg = 0, 
   // Sizing + pixel-ratio overrides for a canvas inside a demo tile; empty for
   // real players.
   const demoCanvas = useCbatDemoCanvas()
-  // The scene is static for the length of the clip — only the camera moves — so
-  // the object list is built once and never rebuilt on a frame.
+  // The object list is built once and never rebuilt on a frame. The ground
+  // objects stand still; the flights move themselves through refs (see Flight).
   const meshes = useMemo(
-    () => objects.map(o => <SceneObject key={o.id} o={o} grid={grid} />),
-    [objects, grid],
+    () => objects.map(o => <SceneObject key={o.id} o={o} grid={grid} durationMs={durationMs} />),
+    [objects, grid, durationMs],
   )
 
   return (
