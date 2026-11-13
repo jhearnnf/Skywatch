@@ -189,6 +189,31 @@ describe('CbatAnt — practise sheet', () => {
     expect(document.body.textContent).toContain(`${PRACTISE_MAX_SCORE}/${PRACTISE_MAX_SCORE}`)
   })
 
+  // A player reported typing 86, correcting it to 85, and being marked on the 86.
+  // The mark must use whatever is in each box at hand-in, however it got there.
+  it('marks the corrected answer, not the first one typed', () => {
+    openPractise()
+    answerAll()
+    const wrong = (i) => {
+      const r = runRef.current[i]
+      return r.type === 'arrival' ? formatHHMM(r.correctAnswer + 1) : String(r.correctAnswer + 1)
+    }
+    // Wrong first, then corrected — once straight away, once with a visual
+    // breakdown open and other boxes edited in between.
+    fireEvent.change(boxes()[0], { target: { value: wrong(0) } })
+    fireEvent.change(boxes()[0], { target: { value: correctAnswerFor(runRef.current[0]) } })
+    fireEvent.change(boxes()[3], { target: { value: wrong(3) } })
+    fireEvent.click(screen.getAllByRole('button', { name: /show me visually/i })[3])
+    fireEvent.change(boxes()[5], { target: { value: wrong(5) } })
+    fireEvent.change(boxes()[3], { target: { value: correctAnswerFor(runRef.current[3]) } })
+    fireEvent.change(boxes()[5], { target: { value: correctAnswerFor(runRef.current[5]) } })
+    fireEvent.click(markBtn())
+
+    const [, payload] = submitCbatResult.mock.calls[0]
+    expect(payload.exactCount).toBe(PRACTISE_QUESTION_COUNT)
+    expect(payload.totalScore).toBe(PRACTISE_MAX_SCORE)
+  })
+
   it('scores a blank as zero and says so', () => {
     openPractise()
     for (let i = 1; i < PRACTISE_QUESTION_COUNT; i++) answer(i)
