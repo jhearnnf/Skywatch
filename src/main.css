@@ -762,6 +762,51 @@ body::before {
   border: 1px solid #808080;
 }
 
+/* ── Full-width CBAT games: text that grows with a big monitor ──────────
+   The games draw their labels, logs and keys in fixed 8–12px type, sized for
+   a phone and a laptop. On a desktop the full-width games stretch their
+   panels to fill the screen, so on a 1440p or 27" monitor that type ended up
+   tiny inside huge, mostly-empty boxes (a sitter photographed CUT like this
+   on an office monitor). From 1280px wide the small sizes scale with the
+   viewport: ×1 at 1280×760, up to ×1.5, bounded by height as well as width so
+   a wide-but-short window never grows text its panels have no room for.
+   Only while one of these games' play-wide body classes is on, and never in
+   a landing-page demo (useGameBodyClass skips those). Rules that set their
+   own size on a game element (the Real CBAT CUT screen) are more specific and
+   win. */
+@media (min-width: 1280px) {
+  :is(body.cbat-cut-wide, body.cbat-matf-wide, body.cbat-vigilance-wide, body.cbat-flag-wide,
+      body.cbat-tabs-wide, body.cbat-sit-wide, body.cbat-stage-wide, body.cbat-rtt-wide,
+      body.cbat-act-wide, body.cbat-dpt-fullwidth) .app-shell-content
+    :is(.text-\[8px\], .sm\:text-\[8px\], .md\:text-\[8px\], .lg\:text-\[8px\]):not([class*="xl:text-"]) {
+    font-size: max(8px, min(12px, 0.625vw, 1.053vh));
+  }
+  :is(body.cbat-cut-wide, body.cbat-matf-wide, body.cbat-vigilance-wide, body.cbat-flag-wide,
+      body.cbat-tabs-wide, body.cbat-sit-wide, body.cbat-stage-wide, body.cbat-rtt-wide,
+      body.cbat-act-wide, body.cbat-dpt-fullwidth) .app-shell-content
+    :is(.text-\[9px\], .sm\:text-\[9px\], .md\:text-\[9px\], .lg\:text-\[9px\]):not([class*="xl:text-"]) {
+    font-size: max(9px, min(13.5px, 0.703vw, 1.184vh));
+  }
+  :is(body.cbat-cut-wide, body.cbat-matf-wide, body.cbat-vigilance-wide, body.cbat-flag-wide,
+      body.cbat-tabs-wide, body.cbat-sit-wide, body.cbat-stage-wide, body.cbat-rtt-wide,
+      body.cbat-act-wide, body.cbat-dpt-fullwidth) .app-shell-content
+    :is(.text-\[10px\], .sm\:text-\[10px\], .md\:text-\[10px\], .lg\:text-\[10px\]):not([class*="xl:text-"]) {
+    font-size: max(10px, min(15px, 0.781vw, 1.316vh));
+  }
+  :is(body.cbat-cut-wide, body.cbat-matf-wide, body.cbat-vigilance-wide, body.cbat-flag-wide,
+      body.cbat-tabs-wide, body.cbat-sit-wide, body.cbat-stage-wide, body.cbat-rtt-wide,
+      body.cbat-act-wide, body.cbat-dpt-fullwidth) .app-shell-content
+    :is(.text-\[11px\], .sm\:text-\[11px\], .md\:text-\[11px\], .lg\:text-\[11px\]):not([class*="xl:text-"]) {
+    font-size: max(11px, min(16.5px, 0.859vw, 1.447vh));
+  }
+  :is(body.cbat-cut-wide, body.cbat-matf-wide, body.cbat-vigilance-wide, body.cbat-flag-wide,
+      body.cbat-tabs-wide, body.cbat-sit-wide, body.cbat-stage-wide, body.cbat-rtt-wide,
+      body.cbat-act-wide, body.cbat-dpt-fullwidth) .app-shell-content
+    :is(.text-xs, .sm\:text-xs, .md\:text-xs, .lg\:text-xs):not([class*="xl:text-"]) {
+    font-size: max(12px, min(18px, 0.9375vw, 1.579vh));
+  }
+}
+
 /* ── Real CBAT test chrome ──────────────────────────────────────────────
    The title bar, footer strip and key caps of the real test software
    (components/cbat/CbatTestChrome.jsx). Only ever rendered under the Real
