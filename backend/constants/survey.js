@@ -8,11 +8,9 @@
  * did they pass, how close our practice tests were to the real battery, and
  * whether we helped. It ends on a donation ask.
  *
- * NOTHING HERE SENDS ANYTHING. Every send is an explicit admin button press —
- * see routes/adminSurvey.js. There is no cron, no queue and no auto-send on any
- * schedule, deliberately: the whole point of the list is that an admin can come
- * back in a fortnight, see who has already been mailed ticked off, and choose
- * the next batch by hand.
+ * NOTHING HERE SENDS ANYTHING. A send is either an admin button press (see
+ * routes/adminSurvey.js) or, only while an admin has switched it on, the
+ * auto-send (utils/surveyAutoSend.js), which presses the same button on a timer.
  */
 
 // One campaign for now. Stored on every invite and response so a second
@@ -55,6 +53,12 @@ const WARM_BAND_DAYS = 14;
 // Emails per send. Resend's batch endpoint takes up to 100; 50 keeps a single
 // mistake small and matches the size an admin can actually eyeball first.
 const BATCH_SIZE = 50;
+
+// Auto-send: how long between automatic sends, and how often the backend checks
+// whether one is due. The check is cheap (one settings read) and only the claim
+// in utils/surveyAutoSend.js decides whether anything goes out.
+const SURVEY_AUTO_SEND_INTERVAL_HOURS = 48;
+const SURVEY_AUTO_SEND_CHECK_MINUTES  = 30;
 
 // ── Deferral, for people who have not sat the test yet ───────────────────────
 //
@@ -205,6 +209,8 @@ module.exports = {
   DEFAULT_DORMANT_DAYS,
   WARM_BAND_DAYS,
   BATCH_SIZE,
+  SURVEY_AUTO_SEND_INTERVAL_HOURS,
+  SURVEY_AUTO_SEND_CHECK_MINUTES,
   EXCLUDED_EMAILS,
   EXCLUDED_DISPLAY_NAMES,
   isExcludedAccount,

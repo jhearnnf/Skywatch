@@ -93,6 +93,64 @@ const open = async () => {
 beforeEach(() => { mockApi() })
 afterEach(() => { vi.restoreAllMocks() })
 
+describe('CbatPassersSection — auto-send', () => {
+  const withAutoSend = (autoSend, over = {}) => {
+    const d = cohort()
+    d.surveyEnabled = true
+    d.autoSend = { enabled: false, intervalHours: 48, lastAt: null, lastResult: null, nextAt: null, ...autoSend }
+    Object.assign(d, over)
+    return d
+  }
+
+  it('asks before switching on, naming how many the first run would mail', async () => {
+    mockApi(withAutoSend({}))
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-auto-send-toggle'))
+    expect(screen.getByTestId('cbat-passers-auto-send-confirm')).toHaveTextContent(/1 person right now/)
+    expect(settingsPatch).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
+    await waitFor(() => expect(settingsPatch).toMatchObject({ cbatSurveyAutoSendEnabled: true }))
+    await waitFor(() => expect(screen.getByTestId('cbat-passers-auto-send-toggle')).toBeChecked())
+  })
+
+  it('cancelling leaves it off and saves nothing', async () => {
+    mockApi(withAutoSend({}))
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-auto-send-toggle'))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(settingsPatch).toBeNull()
+    expect(screen.getByTestId('cbat-passers-auto-send-toggle')).not.toBeChecked()
+  })
+
+  it('switches off straight away, without asking', async () => {
+    mockApi(withAutoSend({ enabled: true }))
+    await open()
+
+    fireEvent.click(screen.getByTestId('cbat-passers-auto-send-toggle'))
+    await waitFor(() => expect(settingsPatch).toMatchObject({ cbatSurveyAutoSendEnabled: false }))
+  })
+
+  it('says what the last run did and when the next one is', async () => {
+    const lastAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    mockApi(withAutoSend({ enabled: true, lastAt, lastResult: { sentCount: 3, failedCount: 0, error: null } }))
+    await open()
+
+    const box = screen.getByTestId('cbat-passers-auto-send')
+    expect(box).toHaveTextContent(/sent to 3/)
+    expect(box).toHaveTextContent(/Next:/)
+    expect(screen.getByText(/Auto-send is on/)).toBeInTheDocument()
+  })
+
+  it('says it is paused while the questionnaire is closed', async () => {
+    mockApi(withAutoSend({ enabled: true }, { surveyEnabled: false }))
+    await open()
+    expect(screen.getByTestId('cbat-passers-auto-send')).toHaveTextContent(/Paused while the questionnaire is closed/)
+  })
+})
+
 describe('CbatPassersSection — the list', () => {
   it('groups candidates under the day of their last finished run', async () => {
     await open()

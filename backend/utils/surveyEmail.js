@@ -99,8 +99,11 @@ function clientUrl() {
 // is the difference between a decision and an accident.
 const LOCAL_HOST_RE = /^(localhost|127\.|0\.0\.0\.0|\[::1\]|.*\.local)/i;
 
-function clientUrlProblem() {
-  if (process.env.ALLOW_LOCAL_EMAIL_LINKS === 'true') return null;
+// `strict` ignores the ALLOW_LOCAL_EMAIL_LINKS override. The auto-send uses it:
+// a dev machine that switched the override on for a deliberate test send must
+// never ALSO start mailing real users on a timer (local talks to prod Mongo).
+function clientUrlProblem({ strict = false } = {}) {
+  if (!strict && process.env.ALLOW_LOCAL_EMAIL_LINKS === 'true') return null;
 
   const raw = clientUrl();
   let url;

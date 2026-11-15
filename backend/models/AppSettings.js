@@ -401,8 +401,7 @@ const appSettingsSchema = new mongoose.Schema({
   // utils/surveyEmail.js). Edited from Admin › Content.
   //
   // `cbatSurveyEnabled` gates the questionnaire PAGE, not the sending. Sending
-  // has no flag because it has no automation to gate: a mail only ever leaves
-  // when an admin presses the button. Turning this off closes the form to new
+  // is gated separately by cbatSurveyAutoSendEnabled below. Turning this off closes the form to new
   // answers without withdrawing links already in people's inboxes — they get a
   // "this has closed" page rather than a broken one.
   cbatSurveyEnabled:        { type: Boolean, default: true },
@@ -417,6 +416,15 @@ const appSettingsSchema = new mongoose.Schema({
   // constants/survey.js; 0/absent falls back to those.
   cbatSurveyMinCompletions: { type: Number, default: 0 },
   cbatSurveyDormantDays:    { type: Number, default: 0 },
+
+  // Auto-send: when on, the backend does what the "Send bulk email" button does
+  // (saved thresholds, next batch, default email) once every
+  // SURVEY_AUTO_SEND_INTERVAL_HOURS. OFF by default. LastAt is the claim the
+  // scheduler takes before sending, so a restart or a second server cannot
+  // send twice. See utils/surveyAutoSend.js.
+  cbatSurveyAutoSendEnabled:    { type: Boolean, default: false },
+  cbatSurveyAutoSendLastAt:     { type: Date,    default: null },
+  cbatSurveyAutoSendLastResult: { type: mongoose.Schema.Types.Mixed, default: null },
 
   // Combat readiness (difficulty selection) screen — all optional; absent/empty falls back to hardcoded defaults
   combatReadinessTitle:    { type: String, default: '' },

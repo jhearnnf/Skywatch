@@ -64,6 +64,9 @@ await require('./models/Media').ensurePlaceholderForBriefs();
     // Add the clientResultId path/index to CBAT result schemas so offline score
     // submissions can be deduplicated on flush retries.
     require('./utils/cbatResult').ensureCbatResultPaths();
+    // The questionnaire auto-send timer. Sends nothing unless an admin has
+    // switched it on, and never from a backend whose email links would be local.
+    require('./utils/surveyAutoSend').startSurveyAutoSend();
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })

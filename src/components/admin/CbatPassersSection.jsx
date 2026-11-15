@@ -17,10 +17,10 @@ import SURVEY_COPY from '../../../backend/constants/surveyEmailDefaults.json'
  * chosen in another, with neither on screen beside the other. The pencil beside
  * the email here opens the same fields that section held.
  *
- * NOTHING SENDS WITHOUT A DELIBERATE CLICK, and the click is guarded by a
- * confirmation that names every recipient. There is no scheduler behind this
- * and no "send remaining" sweep: an admin picks a batch, sends it, and the
- * people in it are ticked off. Coming back a fortnight later shows the
+ * A send is a deliberate click, guarded by a confirmation that names every
+ * recipient, OR the opt-in auto-send (AutoSendControl below; off by default),
+ * which does the same as that click on a fresh panel every two days. Either way
+ * the people sent to are ticked off. Coming back a fortnight later shows the
  * newly-dormant accounts unticked and everyone already contacted marked, so the
  * list doubles as the record of who has been asked.
  *
@@ -281,8 +281,10 @@ export default function CbatPassersSection({ API, openOnMount = false, presetGro
         throw new Error(json.message || 'Could not save')
       }
       setNotice(`${label} saved.`)
+      return true
     } catch (err) {
       setError(err.message)
+      return false
     } finally {
       setSavingDefaults(false)
     }
@@ -362,7 +364,9 @@ export default function CbatPassersSection({ API, openOnMount = false, presetGro
         <div>
           <h3 className="font-bold text-slate-800">Potential CBAT Passers Survey</h3>
           <p className="text-[11px] text-slate-500 mt-0.5">
-            Trained hard, then went quiet. Nothing sends without your click.
+            {data?.autoSend?.enabled
+              ? `Trained hard, then went quiet. Auto-send is on: the next batch goes out every ${Math.round((data.autoSend.intervalHours ?? 48) / 24)} days.`
+              : 'Trained hard, then went quiet. Nothing sends without your click.'}
           </p>
         </div>
         <span className="text-slate-400 text-xs ml-2">{open ? '▲' : '▼'}</span>
@@ -422,6 +426,23 @@ export default function CbatPassersSection({ API, openOnMount = false, presetGro
               </span>
             </span>
           </label>
+
+          {data?.autoSend && (
+            <AutoSendControl
+              autoSend={data.autoSend}
+              surveyOpen={data.surveyEnabled !== false}
+              linkProblem={data.linkProblem}
+              nextBatchCount={(data.nextBatchIds ?? []).length}
+              busy={savingDefaults}
+              onChange={async (enabled) => {
+                const ok = await saveSettings(
+                  { cbatSurveyAutoSendEnabled: enabled },
+                  enabled ? 'Auto-send switched on' : 'Auto-send switched off',
+                )
+                if (ok) setData(d => ({ ...d, autoSend: { ...d.autoSend, enabled } }))
+              }}
+            />
+          )}
 
           {/* Loading the list pre-ticks the batch the server would send, which
               is the right default but the wrong starting point when you only
@@ -747,6 +768,90 @@ export default function CbatPassersSection({ API, openOnMount = false, presetGro
           />
         )}
       </AnimatePresence>
+    </div>
+  )
+}
+
+const fmtDateTime = (d) => new Date(d).toLocaleString('en-GB', {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+})
+
+// The auto-send switch. Saves straight away (it is not part of "Save as
+// defaults") because a switch that sends email must never look on while being
+// off, or the other way round. Turning it ON asks first, naming how many people
+// the first run would mail, because that run happens within half an hour.
+function AutoSendControl({ autoSend, surveyOpen, linkProblem, nextBatchCount, busy, onChange }) {
+  const [confirming, setConfirming] = useState(false)
+  const days = Math.round((autoSend.intervalHours ?? 48) / 24)
+  const last = autoSend.lastResult
+  const lastAt = autoSend.lastAt ? new Date(autoSend.lastAt) : null
+  const nextAt = lastAt ? new Date(lastAt.getTime() + (autoSend.intervalHours ?? 48) * 3600 * 1000) : null
+  const nextText = !nextAt || nextAt <= new Date() ? 'within 30 minutes' : fmtDateTime(nextAt)
+
+  let lastText = null
+  if (last?.error) lastText = `failed: ${last.error}`
+  else if (last && !last.sentCount && !last.failedCount) lastText = 'nobody new to send to'
+  else if (last) lastText = `sent to ${last.sentCount}${last.failedCount ? `, ${last.failedCount} failed` : ''}`
+
+  return (
+    <div className="mb-4" data-testid="cbat-passers-auto-send">
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={autoSend.enabled}
+          disabled={busy}
+          onChange={e => {
+            if (e.target.checked) setConfirming(true)
+            else { setConfirming(false); onChange(false) }
+          }}
+          data-testid="cbat-passers-auto-send-toggle"
+          className="mt-0.5 shrink-0 w-4 h-4 accent-brand-600"
+        />
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-slate-800">Send automatically every {days} days</span>
+          <span className="block text-[10px] text-slate-500">
+            Does what Send bulk email does when this list first loads: the saved defaults above, the
+            pre-ticked people, the normal invitation. Nobody is ever emailed twice.
+          </span>
+        </span>
+      </label>
+
+      {confirming && !autoSend.enabled && (
+        <div className="mt-2 ml-6 text-xs text-slate-700 bg-surface-raised border border-slate-300 rounded-xl px-3 py-2" data-testid="cbat-passers-auto-send-confirm">
+          <p className="mb-2">
+            The first batch ({nextBatchCount} {nextBatchCount === 1 ? 'person' : 'people'} right now) goes out
+            within 30 minutes, then a new batch every {days} days.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setConfirming(false); onChange(true) }}
+              disabled={busy}
+              className="px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold disabled:opacity-40"
+            >
+              Turn on
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {(autoSend.enabled || lastAt) && (
+        <div className="mt-1 ml-6 text-[10px] text-slate-500 space-y-0.5">
+          {lastAt && <p>Last auto-send: {fmtDateTime(lastAt)}{lastText ? `, ${lastText}` : ''}.</p>}
+          {autoSend.enabled && linkProblem && (
+            <p className="text-rose-600">Not running on this server: the email links would not work here.</p>
+          )}
+          {autoSend.enabled && !linkProblem && !surveyOpen && (
+            <p className="text-amber-700">Paused while the questionnaire is closed.</p>
+          )}
+          {autoSend.enabled && !linkProblem && surveyOpen && <p>Next: {nextText}.</p>}
+        </div>
+      )}
     </div>
   )
 }

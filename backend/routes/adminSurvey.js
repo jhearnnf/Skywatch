@@ -23,14 +23,15 @@ const {
   resolveVariant,
   EMAIL_VARIANTS,
 } = require('../utils/surveyEmail');
+const { inviteAndSend, savedThresholds } = require('../utils/surveySend');
+const { nextAutoSendAt } = require('../utils/surveyAutoSend');
 const { summariseCbatForUsers } = require('../utils/cbatAptitudeReport');
 const surveyRoles = require('../constants/surveyRoles.json');
 const {
   SURVEY_CAMPAIGN,
   SURVEY_TEST_CAMPAIGN,
-  DEFAULT_MIN_COMPLETIONS,
-  DEFAULT_DORMANT_DAYS,
   BATCH_SIZE,
+  SURVEY_AUTO_SEND_INTERVAL_HOURS,
 } = require('../constants/survey');
 
 router.use(protect, adminOnly);
@@ -46,16 +47,14 @@ const BATTERY_BY_ROLE = Object.fromEntries(
 // experimenting with the sliders, and constants/survey.js otherwise. Query wins
 // so the list can be re-cut without saving anything.
 async function resolveThresholds(query = {}) {
-  const s = await AppSettings.getSettings();
+  const saved = savedThresholds(await AppSettings.getSettings());
   const fromQuery = (v) => {
     const n = Number(v);
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
   return {
-    minCompletions: fromQuery(query.minCompletions)
-      ?? (s.cbatSurveyMinCompletions || DEFAULT_MIN_COMPLETIONS),
-    dormantDays: fromQuery(query.dormantDays)
-      ?? (s.cbatSurveyDormantDays || DEFAULT_DORMANT_DAYS),
+    minCompletions: fromQuery(query.minCompletions) ?? saved.minCompletions,
+    dormantDays:    fromQuery(query.dormantDays)    ?? saved.dormantDays,
   };
 }
 
@@ -66,6 +65,7 @@ router.get('/', async (req, res) => {
     const { minCompletions, dormantDays } = await resolveThresholds(req.query);
     const cohort = await buildCbatPasserCohort({ minCompletions, dormantDays });
     const nextBatch = selectNextBatch(cohort, BATCH_SIZE);
+    const settings = await AppSettings.getSettings();
 
     res.json({
       status: 'success',
@@ -79,7 +79,16 @@ router.get('/', async (req, res) => {
         // list rather than in a separate content panel, because "is the form
         // still accepting answers" is a question you ask while looking at who
         // has been asked, not while editing copy.
-        surveyEnabled: (await AppSettings.getSettings()).cbatSurveyEnabled !== false,
+        surveyEnabled: settings.cbatSurveyEnabled !== false,
+        // The every-two-days auto-send: its switch, when it last ran and what
+        // it did, and when it will next run. See utils/surveyAutoSend.js.
+        autoSend: {
+          enabled:       !!settings.cbatSurveyAutoSendEnabled,
+          intervalHours: SURVEY_AUTO_SEND_INTERVAL_HOURS,
+          lastAt:        settings.cbatSurveyAutoSendLastAt ?? null,
+          lastResult:    settings.cbatSurveyAutoSendLastResult ?? null,
+          nextAt:        nextAutoSendAt(settings),
+        },
         linkBase: clientUrl(),
         linkProblem: clientUrlProblem(),
         // The two pieces of copy a send can go out with, so the picker is built
@@ -184,8 +193,8 @@ router.get('/preview', async (req, res) => {
 
 // POST /api/admin/cbat-passers/send — mail the next batch.
 //
-// The ONLY path in the codebase that sends a questionnaire email, and it runs
-// only when an admin presses the button. Body may carry `userIds` to send to a
+// The admin button. The other sender is the opt-in auto-send
+// (utils/surveyAutoSend.js); both go through utils/surveySend.js. Body may carry `userIds` to send to a
 // hand-picked set (which is how a 'warm' band candidate, or someone found only
 // through the search box, gets included), or nothing at all to take the next
 // `limit` from the ready band.
@@ -233,68 +242,10 @@ router.post('/send', async (req, res) => {
       return res.status(400).json({ message: 'No eligible recipients — everyone in the ready band has already been emailed, or is waiting on a test date they gave us.' });
     }
 
-    // Invite rows first: a token has to exist before it can be put in an email.
-    //
-    // An existing invite is REUSED rather than replaced when it is mailable —
-    // a failed send, or someone who said "not yet" and whose date has now come
-    // round. Keeping the same row (and the same token) means their earlier
-    // answers stay attached to the questionnaire and the link from the first
-    // email still works, which matters because people keep old mail.
-    //
-    // The unique (userId, campaign) index is still what makes a double-clicked
-    // button harmless: a racing second insert collides and that user is dropped
-    // from the send rather than mailed twice.
-    const recipients = [];
-    for (const candidate of chosen) {
-      // eslint-disable-next-line no-await-in-loop
-      let invite = await SurveyInvite.findOne({ userId: candidate._id, campaign: SURVEY_CAMPAIGN });
-
-      if (invite) {
-        if (!SurveyInvite.isMailable(invite)) continue;
-      } else {
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          invite = await SurveyInvite.create({
-            userId: candidate._id,
-            campaign: SURVEY_CAMPAIGN,
-            token: SurveyInvite.newToken(),
-            sentToEmail: candidate.email,
-          });
-        } catch (err) {
-          if (err?.code === 11000) continue; // raced — someone else just invited them
-          throw err;
-        }
-      }
-      recipients.push({ invite, token: invite.token, user: candidate });
-    }
-
-    if (!recipients.length) {
+    const { sent, failed, recipientCount } = await inviteAndSend(chosen, { variant });
+    if (!recipientCount) {
       return res.status(400).json({ message: 'Every chosen account has already been contacted for this questionnaire.' });
     }
-
-    const { sent, failed } = await sendSurveyBatch(
-      recipients.map(r => ({ user: r.user, token: r.token })),
-      { variant },
-    );
-
-    const sentIds   = new Set(sent.map(s => s.userId.toString()));
-    const failedMap = new Map(failed.map(f => [f.userId.toString(), f.error]));
-    const now = new Date();
-
-    await Promise.all(recipients.map(r => {
-      const id = r.user._id.toString();
-      // A successful send clears any deferral: the wait has been served, and
-      // this IS the follow-up it was waiting for. If they say "not yet" again,
-      // the questionnaire sets a fresh one.
-      return SurveyInvite.updateOne(
-        { _id: r.invite._id },
-        sentIds.has(id)
-          // brokenLinkAt is cleared here and only here: the debt is settled by an
-          // email that actually went out, not by an admin ticking something.
-          ? { $set: { sentAt: now, sendError: null, deferredUntil: null, brokenLinkAt: null, sentToEmail: r.user.email }, $inc: { sendCount: 1 } }
-          : { $set: { sentAt: r.invite.sentAt ?? null, sendError: failedMap.get(id) ?? 'unknown send failure' } },
-      );
-    }));
 
     res.json({
       status: 'success',
