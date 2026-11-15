@@ -38,8 +38,8 @@ import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 // ── Panels ───────────────────────────────────────────────────────────────────
 function Panel({ title, accent = 'var(--color-game-accent)', children, pad = true }) {
   return (
-    <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
-      <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-game-line"
+    <div className="cbat-cut-panel w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+      <div className="cbat-cut-panel-title shrink-0 px-2 py-1 text-[10px] xl:text-xs font-extrabold uppercase tracking-wider border-b border-game-line"
         style={{ color: accent }}>
         {title}
       </div>
@@ -78,14 +78,14 @@ function MessagePanel({ messages, litId = null, arrowId = null, emphasis = null 
     if (el) el.scrollTop = el.scrollHeight
   }, [lastId])
   return (
-    <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
-      <div className="shrink-0 px-2 py-1 text-[10px] font-extrabold uppercase tracking-wider border-b border-game-line" style={{ color: 'var(--color-game-accent)' }}>
+    <div className="cbat-cut-panel w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+      <div className="cbat-cut-panel-title shrink-0 px-2 py-1 text-[10px] xl:text-xs font-extrabold uppercase tracking-wider border-b border-game-line" style={{ color: 'var(--color-game-accent)' }}>
         Message
       </div>
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
+      <div ref={scrollRef} className="cbat-cut-message flex-1 min-h-0 overflow-y-auto p-2 xl:p-3 flex flex-col">
         <ul className="mt-auto space-y-1">
           {messages.map(m => (
-            <li key={m.id} className="text-[11px] leading-snug text-game-text flex gap-2 items-baseline">
+            <li key={m.id} className="text-[11px] xl:text-sm leading-snug text-game-text flex gap-2 items-baseline">
               {m.id === arrowId && <GuideArrow dir="right" inline />}
               <span className="text-slate-500 font-mono shrink-0">{m.wall}</span>
               <span className={m.id === litId ? 'cbat-word-lit font-bold' : ''}>
@@ -99,17 +99,61 @@ function MessagePanel({ messages, litId = null, arrowId = null, emphasis = null 
   )
 }
 
+// A titled sub-panel of the real CUT screen: navy title bar over a black body,
+// thin light border (Hydraulic Pressure, Load Drop Interface and so on). Only
+// rendered under the Real CBAT theme; styled in main.css.
+function CbatBox({ title, className = '', bodyClassName = '', children }) {
+  return (
+    <div className={`cbat-cut-box ${className}`}>
+      <div className="cbat-cut-box-title">{title}</div>
+      <div className={`cbat-cut-box-body ${bodyClassName}`}>{children}</div>
+    </div>
+  )
+}
+
+const TANK_TICKS = [1, 2, 3, 4, 5]
+
 // `arrowTank` / `arrowUrgent` are tutorial-only and default off.
-function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false }) {
+// `cbat` draws the Real CBAT version: three outlined tanks with tick marks and
+// an orange fill, the level in litres and an ON/OFF status key under each.
+function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false, cbat = false }) {
   const levels = fuel.map(f => f.level)
   const maxLevel = Math.max(...levels)
   const spread = maxLevel - Math.min(...levels)
   const bad = spread > FUEL_MAX_SPREAD
   // Every tank has to stay within FUEL_MAX_SPREAD of the fullest one.
   const floor = maxLevel - FUEL_MAX_SPREAD
+  if (cbat) {
+    return (
+      <Panel title="Engine">
+        <div className="cbat-cut-fit">
+          <CbatBox title="Fuel Tanks" className="cbat-cut-fuel">
+            <div className="cbat-cut-tanks">
+              {fuel.map((f, i) => (
+                <div key={i} className="cbat-cut-tank-col">
+                  <span className="cbat-cut-tank-label">Tank {i + 1}</span>
+                  <div className="cbat-cut-tank">
+                    <div className="cbat-cut-tank-fill" style={{ height: `${Math.max(0, Math.min(100, (f.level / 500) * 100))}%` }} />
+                    {TANK_TICKS.map(t => <span key={t} className="cbat-cut-tank-tick" style={{ bottom: `${(t / 6) * 100}%` }} />)}
+                  </div>
+                  <span className="cbat-cut-tank-level">{Math.round(f.level)}L</span>
+                  <button onClick={() => onToggle(i)} data-demo-answer data-on={f.on}
+                    className="cbat-pill relative cursor-pointer">
+                    {i === arrowTank && <GuideArrow dir="right" urgent={arrowUrgent} />}
+                    {f.on ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="cbat-cut-caption">Current Status</p>
+          </CbatBox>
+        </div>
+      </Panel>
+    )
+  }
   return (
     <Panel title="Engine">
-      <p className="text-[10px] text-slate-400 mb-2">
+      <p className="text-[10px] xl:text-xs text-slate-400 mb-2">
         One tank feeds at a time (it drains). Keep all tanks within {FUEL_MAX_SPREAD} L — switch the feed to the fullest tank.
       </p>
       <div className="flex items-end justify-around gap-2 h-[62%] min-h-[150px]">
@@ -118,18 +162,18 @@ function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false }) 
           const low = f.level < floor
           return (
             <div key={i} className="flex-1 flex flex-col items-center h-full">
-              <div className="relative flex-1 min-h-0 w-10 bg-game-arena border border-game-line rounded overflow-hidden">
+              <div className="relative flex-1 min-h-0 w-10 xl:w-14 bg-game-arena border border-game-line rounded overflow-hidden">
                 <div className="absolute bottom-0 left-0 right-0 transition-[height] duration-100"
                   style={{ height: `${pct}%`, background: f.on ? '#22c55e' : low ? '#ef4444' : 'var(--color-game-accent)' }} />
               </div>
-              <p className={`shrink-0 text-base font-mono font-bold mt-1 ${low ? 'text-red-400' : 'text-game-text'}`}>
+              <p className={`shrink-0 text-base xl:text-xl font-mono font-bold mt-1 ${low ? 'text-red-400' : 'text-game-text'}`}>
                 {Math.round(f.level)}<span className="text-[10px] font-normal text-slate-500 ml-0.5">L</span>
               </p>
               <button
                 onClick={() => onToggle(i)}
                 data-demo-answer
                 data-on={f.on}
-                className={`cbat-pill relative mt-1 w-10 shrink-0 px-1 py-3 text-xs font-bold rounded transition-colors cursor-pointer ${
+                className={`cbat-pill relative mt-1 w-10 xl:w-14 shrink-0 px-1 py-3 text-xs xl:text-sm font-bold rounded transition-colors cursor-pointer ${
                   f.on ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
                 }`}
               >
@@ -140,7 +184,7 @@ function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false }) 
           )
         })}
       </div>
-      <p className={`text-[11px] font-bold mt-2 ${bad ? 'text-red-400' : 'text-green-400'}`}>
+      <p className={`text-[11px] xl:text-sm font-bold mt-2 ${bad ? 'text-red-400' : 'text-green-400'}`}>
         Spread: {Math.round(spread)} L {bad ? '— imbalance!' : '— OK'}
       </p>
     </Panel>
@@ -149,32 +193,60 @@ function EnginePanel({ fuel, onToggle, arrowTank = null, arrowUrgent = false }) 
 
 // `arrowPlus` / `arrowMinus` / `holdOk` / `arrowUrgent` are tutorial-only and
 // default off. `holdOk` is the "you are on the number, leave it" mark.
-function NavigationPanel({ speed, requiredSpeed, onAdjust, arrowPlus = false, arrowMinus = false, holdOk = false, arrowUrgent = false }) {
+// `cbat` draws the Real CBAT version: a Required | Current Air Speed table in
+// knots with round + and − keys under the current speed, and no hints.
+function NavigationPanel({ speed, requiredSpeed, onAdjust, arrowPlus = false, arrowMinus = false, holdOk = false, arrowUrgent = false, cbat = false }) {
   const diff = speed - requiredSpeed
   const ok = Math.abs(diff) <= SPEED_TOL
+  if (cbat) {
+    return (
+      <Panel title="Navigation">
+        <div className="cbat-cut-fit">
+          <CbatBox title="Air Speed" className="cbat-cut-speed">
+            <div className="cbat-cut-speed-grid">
+              <span className="cbat-cut-speed-head">Required Air Speed</span>
+              <span className="cbat-cut-speed-head">Current Air Speed</span>
+              <span className="cbat-cut-speed-val">{requiredSpeed} knots</span>
+              <span className="cbat-cut-speed-val">{holdOk && <GuideOk />}{Math.round(speed)} knots</span>
+            </div>
+            <div className="cbat-cut-speed-keys">
+              <button onClick={() => onAdjust(SPEED_STEP)} className="cbat-cut-round-key relative cursor-pointer">
+                {arrowPlus && <GuideArrow dir="up" urgent={arrowUrgent} />}
+                +
+              </button>
+              <button onClick={() => onAdjust(-SPEED_STEP)} className="cbat-cut-round-key relative cursor-pointer">
+                {arrowMinus && <GuideArrow dir="up" urgent={arrowUrgent} />}
+                −
+              </button>
+            </div>
+          </CbatBox>
+        </div>
+      </Panel>
+    )
+  }
   return (
     <Panel title="Navigation">
       <div className="flex flex-col items-center justify-center gap-2 h-full">
         <div className="flex gap-6 items-end">
           <div className="text-center">
-            <p className="text-[9px] uppercase tracking-wide text-slate-500">Current</p>
-            <p className={`text-3xl font-mono font-bold flex items-center justify-center ${ok ? 'text-green-400' : 'text-red-400'}`}>
+            <p className="text-[9px] xl:text-[11px] uppercase tracking-wide text-slate-500">Current</p>
+            <p className={`text-3xl xl:text-5xl font-mono font-bold flex items-center justify-center ${ok ? 'text-green-400' : 'text-red-400'}`}>
               {holdOk && <GuideOk />}
               {Math.round(speed)}
             </p>
           </div>
           <div className="text-center">
-            <p className="text-[9px] uppercase tracking-wide text-slate-500">Required</p>
-            <p className="text-3xl font-mono font-bold text-red-400">{requiredSpeed}</p>
+            <p className="text-[9px] xl:text-[11px] uppercase tracking-wide text-slate-500">Required</p>
+            <p className="text-3xl xl:text-5xl font-mono font-bold text-red-400">{requiredSpeed}</p>
           </div>
         </div>
         <p className="text-[10px] text-slate-400">Hold within ±{SPEED_TOL} kts (aim for required + {SPEED_TOL})</p>
         <div className="flex gap-3">
-          <button onClick={() => onAdjust(-SPEED_STEP)} className="cbat-pill relative px-4 py-2 bg-game-fill hover:bg-game-fill-strong text-white text-lg font-bold rounded cursor-pointer">
+          <button onClick={() => onAdjust(-SPEED_STEP)} className="cbat-pill relative px-4 py-2 xl:px-6 xl:py-3 bg-game-fill hover:bg-game-fill-strong text-white text-lg font-bold rounded cursor-pointer">
             {arrowMinus && <GuideArrow dir="up" urgent={arrowUrgent} />}
             −
           </button>
-          <button onClick={() => onAdjust(SPEED_STEP)} className="cbat-pill relative px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold rounded cursor-pointer">
+          <button onClick={() => onAdjust(SPEED_STEP)} className="cbat-pill relative px-4 py-2 xl:px-6 xl:py-3 bg-brand-600 hover:bg-brand-700 text-white text-lg font-bold rounded cursor-pointer">
             {arrowPlus && <GuideArrow dir="up" urgent={arrowUrgent} />}
             +
           </button>
@@ -191,13 +263,13 @@ function SensorRow({ label, rem, kind, onActivate, arrow = false, urgent = false
   const overdue = rem < 0
   const armed = rem <= SENSOR_ARM_WINDOW / 1000
   return (
-    <div className="flex items-center justify-between gap-2 bg-game-arena border border-game-line rounded px-2 py-1.5">
-      <span className="text-[11px] text-game-text">{label}</span>
-      <span className={`text-[11px] font-mono ${overdue ? 'text-red-400 font-bold' : armed ? 'text-amber-400' : 'text-slate-400'}`}>
+    <div className="cbat-cut-row flex items-center justify-between gap-2 bg-game-arena border border-game-line rounded px-2 py-1.5 xl:py-2.5">
+      <span className="text-[11px] xl:text-sm text-game-text">{label}</span>
+      <span className={`text-[11px] xl:text-sm font-mono ${overdue ? 'text-red-400 font-bold' : armed ? 'text-amber-400' : 'text-slate-400'}`}>
         {overdue ? 'OVERDUE' : `${Math.ceil(rem)}s`}
       </span>
       <button onClick={() => onActivate(kind)} data-demo-answer data-on={armed || overdue}
-        className={`cbat-pill relative px-2 py-1 text-[10px] font-bold rounded cursor-pointer transition-colors ${
+        className={`cbat-pill relative px-2 py-1 xl:px-3 xl:py-1.5 text-[10px] xl:text-xs font-bold rounded cursor-pointer transition-colors ${
           armed || overdue ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
         }`}>
         {arrow && <GuideArrow dir="down" urgent={urgent} />}
@@ -208,20 +280,44 @@ function SensorRow({ label, rem, kind, onActivate, arrow = false, urgent = false
 }
 
 // `arrowCamera` / `arrowSensor` / `arrowUrgent` are tutorial-only and default off.
+// `cbat` (Real CBAT) sets the same controls in titled boxes.
 // `hideOrder` is the Real CBAT variant: the order names a camera AND a Clock
 // time, and the panel shows neither — like the drop order, it lives in Message.
-function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt, onCamera, onActivate, hideOrder = false, arrowCamera = null, arrowSensor = null, arrowUrgent = false }) {
+function SensorPanel({ elapsedMs, camera, requiredCamera, airDueAt, groundDueAt, onCamera, onActivate, hideOrder = false, arrowCamera = null, arrowSensor = null, arrowUrgent = false, cbat = false }) {
   const airRem = (airDueAt - elapsedMs) / 1000
   const groundRem = (groundDueAt - elapsedMs) / 1000
+  if (cbat) {
+    return (
+      <Panel title="Sensor">
+        <div className="cbat-cut-fit cbat-cut-fit-col">
+          <CbatBox title="Camera Select" className="cbat-cut-camera">
+            <div className="cbat-cut-camera-keys">
+              {['Alpha', 'Bravo'].map(c => (
+                <button key={c} onClick={() => onCamera(c)} data-demo-answer data-on={camera === c}
+                  className="cbat-pill relative cursor-pointer">
+                  {c === arrowCamera && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                  {c}
+                </button>
+              ))}
+            </div>
+          </CbatBox>
+          <CbatBox title="Sensors" className="cbat-cut-sensors">
+            <SensorRow label="Air" rem={airRem} kind="air" onActivate={onActivate} arrow={arrowSensor === 'air'} urgent={arrowUrgent} />
+            <SensorRow label="Ground" rem={groundRem} kind="ground" onActivate={onActivate} arrow={arrowSensor === 'ground'} urgent={arrowUrgent} />
+          </CbatBox>
+        </div>
+      </Panel>
+    )
+  }
   return (
     <Panel title="Sensor">
       <div className="space-y-2">
         <div>
-          <p className="text-[9px] uppercase tracking-wide text-slate-500 mb-1">Camera {requiredCamera && !hideOrder && <span className="text-amber-400">— order: {requiredCamera}</span>}</p>
+          <p className="text-[9px] xl:text-[11px] uppercase tracking-wide text-slate-500 mb-1">Camera {requiredCamera && !hideOrder && <span className="text-amber-400">— order: {requiredCamera}</span>}</p>
           <div className="flex gap-2">
             {['Alpha', 'Bravo'].map(c => (
               <button key={c} onClick={() => onCamera(c)} data-demo-answer data-on={camera === c}
-                className={`cbat-pill relative flex-1 px-2 py-1.5 text-[11px] font-bold rounded cursor-pointer transition-colors ${
+                className={`cbat-pill relative flex-1 px-2 py-1.5 xl:py-2.5 text-[11px] xl:text-sm font-bold rounded cursor-pointer transition-colors ${
                   camera === c ? 'bg-green-600 text-white' : 'bg-game-fill text-game-text hover:bg-game-fill-strong'
                 }`}>
                 {c === arrowCamera && <GuideArrow dir="down" urgent={arrowUrgent} />}
@@ -283,13 +379,13 @@ function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = 
   const groups = field.digits === 6 ? [2, 2, 2] : [field.digits]
   let idx = 0
   return (
-    <div className="flex items-center gap-1.5 min-w-0" data-cbat-field={field.key}>
-      <span className="w-[5.2rem] shrink-0 text-[10px] text-game-text truncate">{field.label}</span>
-      <div className={`relative flex items-center gap-0.5 cursor-text${arrow === 'boxes' ? ' cbat-triple-pulse' : ''}`} onClick={() => selectDigit(Math.min(digits.length, field.digits - 1))}>
+    <div className="cbat-cut-field flex items-center gap-1.5 min-w-0" data-cbat-field={field.key}>
+      <span className="cbat-cut-field-label w-[5.2rem] xl:w-[7rem] shrink-0 text-[10px] xl:text-sm text-game-text truncate">{field.label}</span>
+      <div className={`cbat-cut-field-boxes relative flex items-center gap-0.5 cursor-text${arrow === 'boxes' ? ' cbat-triple-pulse' : ''}`} onClick={() => selectDigit(Math.min(digits.length, field.digits - 1))}>
         {arrow === 'boxes' && <GuideArrow dir="down" urgent={urgent} />}
         {groups.map((n, g) => (
           <span key={g} className="flex items-center gap-0.5">
-            {g > 0 && <span className="text-[10px] text-game-muted px-px">:</span>}
+            {g > 0 && <span className="text-[10px] xl:text-sm text-game-muted px-px">:</span>}
             {Array.from({ length: n }, () => {
               const i = idx++
               return (
@@ -297,7 +393,7 @@ function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = 
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={(e) => { e.stopPropagation(); selectDigit(i) }}
                   style={selectedDigit === i ? { backgroundColor: 'var(--color-game-accent)', color: 'var(--color-game-arena)', outline: '2px solid var(--color-game-accent)' } : undefined}
-                  className="w-4 h-5 flex items-center justify-center bg-game-arena border border-game-line text-[11px] font-mono text-game-text">
+                  className="cbat-cut-digit w-4 h-5 xl:w-6 xl:h-7 flex items-center justify-center bg-game-arena border border-game-line text-[11px] xl:text-base font-mono text-game-text">
                   {digits[i] ?? ''}
                 </span>
               )
@@ -335,7 +431,7 @@ function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = 
         onClick={() => onConfirm(field.key)}
         aria-label={`Confirm ${field.order}`}
         data-demo-answer
-        className={`cbat-confirm relative shrink-0 w-5 h-5 rounded-full border border-game-line-strong bg-brand-600 hover:bg-brand-700 cursor-pointer${arrow === 'confirm' ? ' cbat-triple-pulse' : ''}`}
+        className={`cbat-confirm relative shrink-0 w-5 h-5 xl:w-7 xl:h-7 rounded-full border border-game-line-strong bg-brand-600 hover:bg-brand-700 cursor-pointer${arrow === 'confirm' ? ' cbat-triple-pulse' : ''}`}
       >
         {arrow === 'confirm' && <GuideArrow dir="down" urgent={urgent} />}
       </button>
@@ -345,12 +441,14 @@ function MissionField({ field, state, onType, onConfirm, arrow = null, urgent = 
 
 // `lights` is how many dispenser lamps are lit (two per load value on the
 // interface); RELEASE is live only with all six.
-function MissionPanel({ mission, lights, onType, onConfirm, onRelease, arrowField = null, arrowAt = 'confirm', arrowRelease = false, arrowUrgent = false }) {
+// `cbat` (Real CBAT) numbers the dispenser lamps 1 to 6 and labels the row
+// Activate, as on the real dispenser; the boxes and rows are styled in main.css.
+function MissionPanel({ mission, lights, onType, onConfirm, onRelease, arrowField = null, arrowAt = 'confirm', arrowRelease = false, arrowUrgent = false, cbat = false }) {
   const full = lights >= DISPENSER_LIGHTS
   const section = (title, keys) => (
-    <div className="bg-game-panel border border-game-line rounded p-1.5">
-      <p className="text-[9px] uppercase tracking-wide text-game-accent mb-1">{title}</p>
-      <div className="space-y-1">
+    <div className="cbat-cut-box bg-game-panel border border-game-line rounded p-1.5 xl:p-2.5">
+      <p className="cbat-cut-box-title text-[9px] xl:text-[11px] uppercase tracking-wide text-game-accent mb-1">{title}</p>
+      <div className="cbat-cut-box-body space-y-1 xl:space-y-1.5">
         {keys.map(k => (
           <MissionField key={k} field={MISSION_FIELD_BY_KEY[k]} state={mission.fields[k]}
             onType={onType} onConfirm={onConfirm} arrow={arrowField === k ? arrowAt : null} urgent={arrowUrgent} />
@@ -360,18 +458,24 @@ function MissionPanel({ mission, lights, onType, onConfirm, onRelease, arrowFiel
   )
   return (
     <Panel title="Mission">
-      <div className="space-y-1.5" data-cbat-mission>
+      <div className="cbat-cut-mission space-y-1.5 xl:space-y-2.5" data-cbat-mission>
         {section('Load Drop Interface', ['loadTime', 'loadLat', 'loadLon'])}
-        <div className="bg-game-panel border border-game-line rounded p-1.5 flex items-center gap-2">
-          <p className="text-[9px] uppercase tracking-wide text-game-accent shrink-0">Load Drop Dispenser</p>
-          <div className="flex items-center gap-1 ml-auto" aria-label={`${lights} of ${DISPENSER_LIGHTS} lights`}>
+        <div className="cbat-cut-box cbat-cut-dispenser bg-game-panel border border-game-line rounded p-1.5 xl:p-2.5 flex items-center gap-2">
+          <p className="cbat-cut-box-title text-[9px] xl:text-[11px] uppercase tracking-wide text-game-accent shrink-0">Load Drop Dispenser</p>
+          {cbat && <span className="cbat-cut-activate">Activate</span>}
+          <div className="cbat-cut-lights flex items-center gap-1 xl:gap-1.5 ml-auto" aria-label={`${lights} of ${DISPENSER_LIGHTS} lights`}>
             {Array.from({ length: DISPENSER_LIGHTS }, (_, i) => (
-              <span key={i} data-light={i < lights ? 'on' : 'off'}
-                className={`w-3 h-3 rounded-full border ${i < lights ? 'bg-green-500 border-green-300' : 'bg-game-arena border-game-line'}`} />
+              <span key={i} className="cbat-cut-lamp">
+                <span data-light={i < lights ? 'on' : 'off'}
+                  className={`block w-3 h-3 xl:w-4 xl:h-4 rounded-full border ${i < lights ? 'bg-green-500 border-green-300' : 'bg-game-arena border-game-line'}`} />
+                {/* Drawn by CSS from data-n, so the panel's text never holds a digit
+                    an order could be confused with (CbatCut.mission.test). */}
+                {cbat && <span className="cbat-cut-lamp-num" data-n={i + 1} aria-hidden="true" />}
+              </span>
             ))}
           </div>
           <button onClick={onRelease} data-demo-answer disabled={!full}
-            className={`cbat-key cbat-round relative shrink-0 px-2 py-1 text-[10px] font-extrabold rounded cursor-pointer transition-colors disabled:cursor-not-allowed ${
+            className={`cbat-key cbat-round relative shrink-0 px-2 py-1 xl:px-3 xl:py-1.5 text-[10px] xl:text-xs font-extrabold rounded cursor-pointer transition-colors disabled:cursor-not-allowed ${
               full ? 'bg-brand-600 hover:bg-brand-700 text-white' : 'bg-game-fill text-game-muted'
             }${arrowRelease ? ' cbat-triple-pulse' : ''}`}>
             {arrowRelease && <GuideArrow dir="down" urgent={arrowUrgent} />}
@@ -396,7 +500,15 @@ function MissionPanel({ mission, lights, onType, onConfirm, onRelease, arrowFiel
 // still running down — the keypad locks and the countdown keeps going.
 // `pumpPair` (Real CBAT variant) draws the pump as the real ON | OFF pair with
 // the live state lit, instead of one toggle showing its state.
-function SystemPanel({ codeSubmitWindowMs = CODE_SUBMIT_WINDOW, pressure, pump, code, codeEntry, codeAck = null, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode, onAckCode, pumpPair = false, arrowPump = false, arrowKey = null, holdOk = false, waitHint = false, arrowUrgent = false }) {
+// `cbat` lays the same controls out as the real System display: the tall
+// Hydraulic Pressure gauge (High / Correct / Low, scale 70 to 130), a Hydraulic
+// Pump box, and a Communications Code box with its Time Left counter. The
+// keypad stays, inside that box: there is no keyboard entry for the code.
+const CBAT_GAUGE_MIN = 70
+const CBAT_GAUGE_MAX = 130
+const pad3 = (n) => String(Math.max(0, n)).padStart(3, '0').slice(-3)
+
+function SystemPanel({ codeSubmitWindowMs = CODE_SUBMIT_WINDOW, pressure, pump, code, codeEntry, codeAck = null, elapsedMs, onPump, onDigit, onClearCode, onSubmitCode, onAckCode, pumpPair = false, arrowPump = false, arrowKey = null, holdOk = false, waitHint = false, arrowUrgent = false, cbat = false }) {
   const keyCls = (k) => (arrowKey === k ? ' cbat-triple-pulse' : '')
   const keysLive = !!code && !code.entered
   const zone = pressure < PRESS_LOW ? 'LOW' : pressure > PRESS_HIGH ? 'HIGH' : 'CORRECT'
@@ -408,14 +520,98 @@ function SystemPanel({ codeSubmitWindowMs = CODE_SUBMIT_WINDOW, pressure, pump, 
   // OK only accepts in the final CODE_SUBMIT_WINDOW; before that, count down to it.
   const submitOpen = !!code && elapsedMs >= code.dueAt - codeSubmitWindowMs
   const armRem = code ? Math.ceil((code.dueAt - codeSubmitWindowMs - elapsedMs) / 1000) : null
+  if (cbat) {
+    const span = CBAT_GAUGE_MAX - CBAT_GAUGE_MIN
+    const cbatFill = Math.max(0, Math.min(100, ((pressure - CBAT_GAUGE_MIN) / span) * 100))
+    const status = code?.entered
+      ? <span className="cbat-cut-status">Accepted</span>
+      : code && !submitOpen
+        ? waitHint
+          ? <span className="cbat-cut-status flex items-center" data-guide-wait><GuideArrow dir="right" inline />wait, OK in {armRem}s</span>
+          : <span className="cbat-cut-status">OK opens in {armRem}s</span>
+        : null
+    return (
+      <Panel title="System">
+        <div className="cbat-cut-system">
+          <CbatBox title="Hydraulic Pressure" className="cbat-cut-hyd">
+            <div className="cbat-cut-gauge">
+              <div className="cbat-cut-gauge-zones">
+                <span className="cbat-cut-zone-high">High<br />Pressure</span>
+                <span className="cbat-cut-zone-ok">Correct<br />Pressure</span>
+                <span className="cbat-cut-zone-low">Low<br />Pressure</span>
+              </div>
+              <div className="cbat-cut-gauge-bar">
+                <div className="cbat-cut-gauge-fill" style={{ height: `${cbatFill}%` }} />
+              </div>
+              <div className="cbat-cut-gauge-scale">
+                <span>{CBAT_GAUGE_MAX}</span><span>{PRESS_HIGH}</span><span>{PRESS_LOW}</span><span>{CBAT_GAUGE_MIN}</span>
+              </div>
+              {holdOk && <span className="cbat-cut-gauge-ok"><GuideOk /></span>}
+            </div>
+          </CbatBox>
+          <div className="cbat-cut-system-col">
+            <CbatBox title="Hydraulic Pump" className="cbat-cut-pump">
+              {[true, false].map(on => (
+                <button key={String(on)} onClick={() => { if (pump !== on) onPump() }} data-demo-answer data-on={pump === on}
+                  aria-label={`Pump ${on ? 'ON' : 'OFF'}`}
+                  className="cbat-pill relative cursor-pointer">
+                  {arrowPump && pump !== on && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                  {on ? 'ON' : 'OFF'}
+                </button>
+              ))}
+            </CbatBox>
+            <CbatBox title="Communications Code" className="cbat-cut-comms">
+              <div className="cbat-cut-comms-row">
+                {[0, 1, 2].map(i => <span key={i} className="cbat-cut-cell">{codeEntry[i] ?? ''}</span>)}
+                <span className="cbat-cut-led" data-on={!!code?.entered} />
+              </div>
+              <div className="cbat-cut-comms-row">
+                <span className="cbat-cut-comms-label">Time Left:</span>
+                {codeAck
+                  ? <button onClick={onAckCode} data-demo-answer
+                      className={`cbat-key relative px-3 py-1 rounded cursor-pointer${keyCls('ACK')}`}>
+                      {arrowKey === 'ACK' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                      Confirm
+                    </button>
+                  : (code ? pad3(codeRem) : '   ').split('').map((c, i) => (
+                      <span key={i} className={`cbat-cut-cell cbat-cut-cell-big${code && codeRem <= 5 ? ' cbat-cut-cell-hot' : ''}`}>{c.trim()}</span>
+                    ))}
+              </div>
+              {status}
+              <div className={`cbat-cut-keypad ${keysLive ? '' : 'opacity-40 pointer-events-none'}`} aria-disabled={!keysLive}>
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
+                  <button key={d} onClick={() => onDigit(d)} disabled={!keysLive} className={`cbat-key relative rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
+                    {arrowKey === d && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                    {d}
+                  </button>
+                ))}
+                <button onClick={onClearCode} disabled={!keysLive} className={`cbat-key relative rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
+                  {arrowKey === 'CLR' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                  CLR
+                </button>
+                <button onClick={() => onDigit('0')} disabled={!keysLive} className={`cbat-key relative rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
+                  {arrowKey === '0' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                  0
+                </button>
+                <button onClick={onSubmitCode} disabled={!submitOpen || !keysLive} className={`cbat-key relative rounded cursor-pointer disabled:cursor-not-allowed${keyCls('OK')}`}>
+                  {arrowKey === 'OK' && <GuideArrow dir="down" urgent={arrowUrgent} />}
+                  OK
+                </button>
+              </div>
+            </CbatBox>
+          </div>
+        </div>
+      </Panel>
+    )
+  }
   return (
     <Panel title="System">
       <div className="flex gap-2 sm:gap-3 h-full min-h-0">
         {/* Hydraulic pressure — narrower on small screens so the keypad can grow;
             the gauge itself is a thin bar, so it loses nothing. */}
         <div className="flex flex-col items-center justify-between shrink-0 w-[38%] sm:w-1/2">
-          <p className="text-[9px] uppercase tracking-wide text-slate-500">Hydraulic Pressure</p>
-          <div className="relative flex-1 w-8 my-1 bg-game-arena border border-game-line rounded overflow-hidden">
+          <p className="text-[9px] xl:text-[11px] uppercase tracking-wide text-slate-500">Hydraulic Pressure</p>
+          <div className="relative flex-1 w-8 xl:w-12 my-1 bg-game-arena border border-game-line rounded overflow-hidden">
             {/* correct band, tinted behind the fill */}
             <div className="absolute left-0 right-0 bg-green-500/20"
               style={{ bottom: `${gaugePct(PRESS_LOW)}%`, height: `${gaugePct(PRESS_HIGH) - gaugePct(PRESS_LOW)}%` }} />
@@ -425,7 +621,7 @@ function SystemPanel({ codeSubmitWindowMs = CODE_SUBMIT_WINDOW, pressure, pump, 
             <div className="absolute left-0 right-0 h-px bg-green-200" style={{ bottom: `${gaugePct(PRESS_LOW)}%` }} />
             <div className="absolute left-0 right-0 h-px bg-green-200" style={{ bottom: `${gaugePct(PRESS_HIGH)}%` }} />
           </div>
-          <p className={`text-base font-mono font-bold flex items-center ${zoneCol}`}>
+          <p className={`text-base xl:text-2xl font-mono font-bold flex items-center ${zoneCol}`}>
             {holdOk && <GuideOk />}
             {Math.round(pressure)}
           </p>
@@ -457,9 +653,9 @@ function SystemPanel({ codeSubmitWindowMs = CODE_SUBMIT_WINDOW, pressure, pump, 
         </div>
         {/* Comms code keypad — fills the panel height so the keys are thumb-sized */}
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
-          <p className="text-[9px] uppercase tracking-wide text-slate-500">Comms Code</p>
+          <p className="text-[9px] xl:text-[11px] uppercase tracking-wide text-slate-500">Comms Code</p>
           <div className="flex items-center justify-between mb-1">
-            <span className="cbat-code-cells font-mono text-lg text-game-text tracking-widest">{codeEntry.padEnd(3, '·')}</span>
+            <span className="cbat-code-cells font-mono text-lg xl:text-2xl text-game-text tracking-widest">{codeEntry.padEnd(3, '·')}</span>
             {codeAck
               ? <button onClick={onAckCode} data-demo-answer
                   className={`cbat-key relative px-2 py-0.5 text-[10px] font-extrabold rounded bg-brand-600 hover:bg-brand-700 text-white cursor-pointer${keyCls('ACK')}`}>
@@ -484,20 +680,20 @@ function SystemPanel({ codeSubmitWindowMs = CODE_SUBMIT_WINDOW, pressure, pump, 
               flat keypad. The keys are never stretched to fill the panel. */}
           <div className={`grid grid-cols-3 gap-1 ${keysLive ? '' : 'opacity-40 pointer-events-none'}`} aria-disabled={!keysLive}>
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map(d => (
-              <button key={d} onClick={() => onDigit(d)} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
+              <button key={d} onClick={() => onDigit(d)} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 xl:py-2 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm xl:text-lg rounded cursor-pointer disabled:cursor-not-allowed${keyCls(d)}`}>
                 {arrowKey === d && <GuideArrow dir="down" urgent={arrowUrgent} />}
                 {d}
               </button>
             ))}
-            <button onClick={onClearCode} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-fill hover:bg-game-fill-strong text-game-text text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
+            <button onClick={onClearCode} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 xl:py-2 bg-game-fill hover:bg-game-fill-strong text-game-text text-[11px] sm:text-[10px] xl:text-sm font-bold rounded cursor-pointer disabled:cursor-not-allowed${keyCls('CLR')}`}>
               {arrowKey === 'CLR' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               CLR
             </button>
-            <button onClick={() => onDigit('0')} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
+            <button onClick={() => onDigit('0')} disabled={!keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 xl:py-2 bg-game-raised hover:bg-[#163055] text-game-text font-mono text-base sm:text-sm xl:text-lg rounded cursor-pointer disabled:cursor-not-allowed${keyCls('0')}`}>
               {arrowKey === '0' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               0
             </button>
-            <button onClick={onSubmitCode} disabled={!submitOpen || !keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-[10px] font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40${keyCls('OK')}`}>
+            <button onClick={onSubmitCode} disabled={!submitOpen || !keysLive} className={`cbat-key relative aspect-[4/3] sm:aspect-auto sm:py-1 xl:py-2 bg-brand-600 hover:bg-brand-700 text-white text-[11px] sm:text-[10px] xl:text-sm font-bold rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-40${keyCls('OK')}`}>
               {arrowKey === 'OK' && <GuideArrow dir="down" urgent={arrowUrgent} />}
               OK
             </button>
@@ -531,7 +727,7 @@ function NavButtons({ active, onSelect, arrowActive = false, boxed = false, stac
         <span key={k} className="relative flex-1 min-w-0 flex">
           {arrowActive && active === k && <GuideArrow dir="up" />}
           <button onClick={() => onSelect(k)} data-demo-answer data-on={active === k}
-            className={`cbat-pill w-full min-w-0 overflow-hidden rounded px-1 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
+            className={`cbat-pill cbat-cut-mfd-key w-full min-w-0 overflow-hidden rounded px-1 xl:px-2 text-left text-[10px] sm:text-[11px] font-bold uppercase tracking-tight sm:tracking-wide whitespace-nowrap transition-colors cursor-pointer ${
               active === k ? 'bg-green-600 text-white' : 'bg-game-raised text-game-text hover:bg-[#163055] hover:text-white'
             }`}>
             {SYSTEM_LABELS[k]}
@@ -547,6 +743,9 @@ function NavButtons({ active, onSelect, arrowActive = false, boxed = false, stac
 // so it never sits over the gameplay panels. Mirrors the Recent Scores aside on
 // the CBAT hub — lg+ only. When minimised it collapses to a slim reopen tab.
 const ARENA_STYLE = { height: '84vh', minHeight: 600 }
+// Fluid so HH:MM:SS always fits the narrow Clock panel on a phone, and grows
+// with a big monitor instead of stopping at 20px.
+const CLOCK_FONT = { fontSize: 'clamp(10px, min(3.2vw, 3.4vh), 34px)' }
 
 function CommentaryPanel({ log, open, onToggle }) {
   if (!open) {
@@ -1158,11 +1357,11 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
     const sim = view
     switch (key) {
       case 'message':    return <MessagePanel messages={sim.messages} litId={guide.messageLit ?? guide.messageId ?? null} arrowId={guide.messageId ?? null} emphasis={guide.messageEmph ?? null} />
-      case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} arrowTank={guide.tank ?? null} arrowUrgent={!!guide.urgent} />
-      case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} arrowPlus={!!guide.plus} arrowMinus={!!guide.minus} holdOk={!!guide.ok} arrowUrgent={!!guide.urgent} />
-      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} arrowCamera={guide.camera ?? null} arrowSensor={guide.sensor ?? null} arrowUrgent={!!guide.urgent} />
-      case 'mission':    return <MissionPanel mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} arrowField={guide.field ?? null} arrowAt={guide.fieldAt ?? 'confirm'} arrowRelease={!!guide.release} arrowUrgent={!!guide.urgent} />
-      case 'system':     return <SystemPanel codeSubmitWindowMs={sim.tuning.codeSubmitWindowMs} pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
+      case 'engine':     return <EnginePanel cbat={sim.cbat} fuel={sim.fuel} onToggle={onToggleTank} arrowTank={guide.tank ?? null} arrowUrgent={!!guide.urgent} />
+      case 'navigation': return <NavigationPanel cbat={sim.cbat} speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} arrowPlus={!!guide.plus} arrowMinus={!!guide.minus} holdOk={!!guide.ok} arrowUrgent={!!guide.urgent} />
+      case 'sensor':     return <SensorPanel cbat={sim.cbat} elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} arrowCamera={guide.camera ?? null} arrowSensor={guide.sensor ?? null} arrowUrgent={!!guide.urgent} />
+      case 'mission':    return <MissionPanel cbat={sim.cbat} mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} arrowField={guide.field ?? null} arrowAt={guide.fieldAt ?? 'confirm'} arrowRelease={!!guide.release} arrowUrgent={!!guide.urgent} />
+      case 'system':     return <SystemPanel cbat={sim.cbat} codeSubmitWindowMs={sim.tuning.codeSubmitWindowMs} pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} arrowPump={!!guide.pump} arrowKey={guide.key ?? null} holdOk={!!guide.pressureOk} waitHint={!!guide.wait} arrowUrgent={!!guide.urgent} />
       default:           return null
     }
   }
@@ -1247,23 +1446,23 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
       <div className="cbat-tutorial-arena flex flex-col gap-1.5" style={TUTORIAL_ARENA_STYLE}>
         <div className={`flex gap-1.5${cls('strip', missionStep)}`} style={{ flex: '10 1 0', minHeight: 0 }}>
           <div style={{ width: '80%' }}>
-            <div className="w-full h-full flex flex-col bg-game-panel border rounded-lg overflow-hidden"
+            <div className="cbat-cut-panel cbat-cut-warning w-full h-full flex flex-col bg-game-panel border rounded-lg overflow-hidden"
               style={{ borderColor: sim.warnings.length ? '#ef4444' : 'var(--color-game-line)' }}>
-              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-red-400">Warning</div>
+              <div className="cbat-cut-panel-title shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] xl:text-xs leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-red-400">{cbat ? 'Warning Panel' : 'Warning'}</div>
               <div className="flex-1 min-h-0 overflow-auto px-2 py-0.5 sm:py-1 flex flex-wrap items-start sm:items-center content-start sm:content-center gap-x-3 sm:gap-y-0.5">
                 {guide.warning && <GuideArrow dir="right" inline />}
                 {sim.warnings.length === 0
-                  ? <span className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
-                  : sim.warnings.map(w => <span key={w} className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-red-400 font-bold">⚠ {w}</span>)}
+                  ? !cbat && <span className="text-[10px] sm:text-[11px] xl:text-sm leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
+                  : sim.warnings.map(w => <span key={w} className="cbat-cut-warning-line text-[10px] sm:text-[11px] xl:text-sm leading-[1.1] sm:leading-snug text-red-400 font-bold">⚠ {w}</span>)}
               </div>
             </div>
           </div>
           <div style={{ width: '20%' }}>
-            <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
-              <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-brand-500">Clock</div>
+            <div className="cbat-cut-panel cbat-cut-clock w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+              <div className="cbat-cut-panel-title shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] xl:text-xs leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-brand-500">Clock</div>
               <div className="flex-1 min-h-0 flex items-center justify-center px-1 overflow-hidden">
                 {guide.clock && <GuideArrow dir="right" inline />}
-                <span className={`font-mono font-bold leading-none text-game-text tabular-nums whitespace-nowrap${guide.clock || guide.mission === 'press' ? ' cbat-word-lit' : ''}`} style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
+                <span className={`font-mono font-bold leading-none text-game-text tabular-nums whitespace-nowrap${guide.clock || guide.mission === 'press' ? ' cbat-word-lit' : ''}`} style={CLOCK_FONT}>
                   {fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}
                 </span>
               </div>
@@ -1272,14 +1471,14 @@ function CutTutorial({ onExit, onProgress, cbat = false }) {
         </div>
 
         <div className="flex flex-col lg:flex-row gap-1.5" style={{ flex: '90 1 0', minHeight: 0 }}>
-          <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
+          <div className="cbat-cut-stack flex flex-col gap-1.5 rounded-lg p-1.5" data-cut-stack="1" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
             <div className={`cbat-mfd-slot ${cls('nav').trim()}`} style={{ flex: '5 1 0', minHeight: 0 }}>
               <NavButtons active={sel1} onSelect={setSel1} arrowActive={!!guide.nav} boxed={sim.cbat} stack={1} />
             </div>
             <div className={cls('panel1', missionStep).trim()} style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel1)}</div>
           </div>
 
-          <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
+          <div className="cbat-cut-stack flex flex-col gap-1.5 rounded-lg p-1.5" data-cut-stack="2" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
             <div className={`cbat-mfd-slot ${cls('nav').trim()}`} style={{ flex: '5 1 0', minHeight: 0 }}>
               <NavButtons active={sel2} onSelect={setSel2} arrowActive={!!guide.nav} boxed={sim.cbat} stack={2} />
             </div>
@@ -1628,11 +1827,11 @@ export default function CbatCut() {
     const sim = view
     switch (key) {
       case 'message':    return <MessagePanel messages={sim.messages} />
-      case 'engine':     return <EnginePanel fuel={sim.fuel} onToggle={onToggleTank} />
-      case 'navigation': return <NavigationPanel speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
-      case 'sensor':     return <SensorPanel elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} />
-      case 'mission':    return <MissionPanel mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} />
-      case 'system':     return <SystemPanel codeSubmitWindowMs={sim.tuning.codeSubmitWindowMs} pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} />
+      case 'engine':     return <EnginePanel cbat={sim.cbat} fuel={sim.fuel} onToggle={onToggleTank} />
+      case 'navigation': return <NavigationPanel cbat={sim.cbat} speed={sim.speed} requiredSpeed={sim.requiredSpeed} onAdjust={onAdjustSpeed} />
+      case 'sensor':     return <SensorPanel cbat={sim.cbat} elapsedMs={sim.elapsedMs} camera={sim.camera} requiredCamera={sim.requiredCamera} airDueAt={sim.airDueAt} groundDueAt={sim.groundDueAt} onCamera={onCamera} onActivate={onActivate} hideOrder={sim.cbat} />
+      case 'mission':    return <MissionPanel cbat={sim.cbat} mission={sim.mission} lights={dispenserLights(sim)} onType={onTypeField} onConfirm={onConfirmField} onRelease={onReleaseLoad} />
+      case 'system':     return <SystemPanel cbat={sim.cbat} codeSubmitWindowMs={sim.tuning.codeSubmitWindowMs} pressure={sim.pressure} pump={sim.pump} code={sim.code} codeEntry={sim.codeEntry} codeAck={sim.codeAck} elapsedMs={sim.elapsedMs} onPump={onPump} onDigit={onDigit} onClearCode={onClearCode} onSubmitCode={onSubmitCode} onAckCode={onAckCode} pumpPair={sim.cbat} />
       default:           return null
     }
   }
@@ -1748,27 +1947,27 @@ export default function CbatCut() {
               {/* Warning strip — 10% */}
               <div className="flex gap-1.5" style={{ flex: '10 1 0', minHeight: 0 }}>
                 <div style={{ width: '80%' }}>
-                  <div className="w-full h-full flex flex-col bg-game-panel border rounded-lg overflow-hidden"
+                  <div className="cbat-cut-panel cbat-cut-warning w-full h-full flex flex-col bg-game-panel border rounded-lg overflow-hidden"
                     style={{ borderColor: sim.warnings.length ? '#ef4444' : 'var(--color-game-line)' }}>
                     {/* Below sm the header and rows tighten up so four wrapped
                         warning lines still fit the strip; sm+ keeps the original
                         sizing, which already had the room. */}
-                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-red-400">Warning</div>
+                    <div className="cbat-cut-panel-title shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] xl:text-xs leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-red-400">{sim.cbat ? 'Warning Panel' : 'Warning'}</div>
                     <div className="flex-1 min-h-0 overflow-auto px-2 py-0.5 sm:py-1 flex flex-wrap items-start sm:items-center content-start sm:content-center gap-x-3 sm:gap-y-0.5">
                       {sim.warnings.length === 0
-                        ? <span className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
-                        : sim.warnings.map(w => <span key={w} className="text-[10px] sm:text-[11px] leading-[1.1] sm:leading-snug text-red-400 font-bold">⚠ {w}</span>)}
+                        ? !sim.cbat && <span className="text-[10px] sm:text-[11px] xl:text-sm leading-[1.1] sm:leading-snug text-green-400 font-bold">All systems nominal</span>
+                        : sim.warnings.map(w => <span key={w} className="cbat-cut-warning-line text-[10px] sm:text-[11px] xl:text-sm leading-[1.1] sm:leading-snug text-red-400 font-bold">⚠ {w}</span>)}
                     </div>
                   </div>
                 </div>
                 <div style={{ width: '20%' }}>
-                  <div className="w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
-                    <div className="shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-brand-500">Clock</div>
+                  <div className="cbat-cut-panel cbat-cut-clock w-full h-full flex flex-col bg-game-panel border border-game-line rounded-lg overflow-hidden">
+                    <div className="cbat-cut-panel-title shrink-0 px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] xl:text-xs leading-none sm:leading-normal font-extrabold uppercase tracking-wider border-b border-game-line text-brand-500">Clock</div>
                     <div className="flex-1 min-h-0 flex items-center justify-center px-1 overflow-hidden">
                       {/* Fluid so HH:MM:SS always fits this narrow panel; capped at
                           the old 20px so desktop is unchanged. */}
                       <span className="font-mono font-bold leading-none text-game-text tabular-nums whitespace-nowrap"
-                        style={{ fontSize: 'clamp(10px, 3.2vw, 20px)' }}>
+                        style={CLOCK_FONT}>
                         {fmtWall(sim.clockStartSec + sim.elapsedMs / 1000)}
                       </span>
                     </div>
@@ -1781,13 +1980,13 @@ export default function CbatCut() {
                   arena height below the warning strip either way. */}
               <div className="flex flex-col lg:flex-row gap-1.5" style={{ flex: '90 1 0', minHeight: 0 }}>
                 {/* Display 1 — nav (5%) + selected panel (40%) */}
-                <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
+                <div className="cbat-cut-stack flex flex-col gap-1.5 rounded-lg p-1.5" data-cut-stack="1" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(91,170,255,0.06)', border: '1px solid rgba(91,170,255,0.18)' }}>
                   <div className="cbat-mfd-slot" style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel1} onSelect={setSel1} boxed={sim.cbat} stack={1} /></div>
                   <div style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel1)}</div>
                 </div>
 
                 {/* Display 2 — nav (5%) + selected panel (40%) */}
-                <div className="flex flex-col gap-1.5 rounded-lg p-1.5" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
+                <div className="cbat-cut-stack flex flex-col gap-1.5 rounded-lg p-1.5" data-cut-stack="2" style={{ flex: '1 1 0', minHeight: 0, minWidth: 0, background: 'rgba(250,204,21,0.05)', border: '1px solid rgba(250,204,21,0.16)' }}>
                   <div className="cbat-mfd-slot" style={{ flex: '5 1 0', minHeight: 0 }}><NavButtons active={sel2} onSelect={setSel2} boxed={sim.cbat} stack={2} /></div>
                   <div style={{ flex: '40 1 0', minHeight: 0 }}>{renderPanel(sel2)}</div>
                 </div>

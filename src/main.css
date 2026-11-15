@@ -762,6 +762,544 @@ body::before {
   border: 1px solid #808080;
 }
 
+/* ── CUT under the Real CBAT theme: the screen itself ───────────────────
+   Modelled on the real test's screen (TMI screenshot in APPLICATION_INFO and
+   rafcbat.wordpress.com's CUT guide): every display is a stucco-grey panel
+   under a gradient title bar (olive Warning Panel, teal Clock, red for the
+   left display and its index, green for the right), and every instrument sits
+   in a black box under a navy title bar with white Tahoma-style text.
+
+   One type size drives the lot (--cut-fs), sized off the viewport so the
+   screen reads the same on a laptop and on a 27" monitor rather than leaving
+   10px text in a panel the size of a dinner plate. Everything below is scoped
+   to the theme; the SkyWatch board never matches any of it. */
+:root[data-theme="cbat"] .cbat-cut-page {
+  --cut-fs: clamp(11px, min(0.95vw, 1.6vh), 18px);
+  --cut-grey: #6e6e6e;
+  --cut-stucco:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.6 1.05'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    linear-gradient(#767676, #666666);
+  font-family: Tahoma, Verdana, Arial, sans-serif;
+}
+/* The two display stacks lose their SkyWatch tint and frame (inline styles) */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-stack {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+/* Every display: grey stucco with a thin light frame */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-panel,
+:root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed {
+  background: var(--cut-stucco);
+  background-color: var(--cut-grey);
+  border: 2px solid #b8b8c8 !important;
+  border-radius: 0;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-panel-title,
+:root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed .cbat-mfd-title {
+  font-size: var(--cut-fs);
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-align: center;
+  color: #ffffff !important;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55);
+  padding: 0.1em 0.5em;
+  border-bottom: 1px solid #c8c8c8;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.18)),
+    linear-gradient(90deg, #6a0000, #c40000 45%, #580000);
+}
+:root[data-theme="cbat"] .cbat-cut-page [data-cut-stack="2"] .cbat-cut-panel-title,
+:root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed[data-stack="2"] .cbat-mfd-title {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.18)),
+    linear-gradient(90deg, #005400, #00b000 45%, #004400);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-warning .cbat-cut-panel-title {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.18)),
+    linear-gradient(90deg, #4c4c00, #b4b400 50%, #4c4c00);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-clock .cbat-cut-panel-title {
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.18)),
+    linear-gradient(90deg, #005858, #18a8a8 50%, #005858);
+}
+/* Warning Panel and Clock are black screens; warnings read white-on-black in
+   red, the clock in plain white figures */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-warning,
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-clock {
+  background: #000000;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-warning-line {
+  font-size: var(--cut-fs);
+  font-weight: 400;
+  color: #ff5050;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-clock .tabular-nums {
+  font-family: Tahoma, Verdana, Arial, sans-serif;
+  font-weight: 400;
+  color: #ffffff;
+}
+/* Message is a black comms screen */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-message {
+  background: #000000;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-message li {
+  font-size: var(--cut-fs);
+  color: #ffffff;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-message li .font-mono {
+  color: #a8a8b8;
+}
+/* Pills scale with the screen's type rather than a fixed rem. Legends are
+   dark on the glossy face, as on the real index: maroon on red, deep green
+   on green. */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-pill {
+  color: #6a0000;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  font-size: calc(var(--cut-fs) * 1.1);
+  height: 1.75em;
+  max-height: 1.75em;
+  min-width: 3.4em;
+  padding: 0 0.85em;
+}
+@media (min-width: 64rem) {
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed {
+    padding: 0 0.8em 0.55em;
+    gap: 0.45em 0.9em;
+  }
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed .cbat-mfd-title {
+    margin: 0 -0.8em 0.2em;
+  }
+  :root[data-theme="cbat"] .cbat-cut-page .cbat-mfd-boxed .cbat-pill {
+    font-size: calc(var(--cut-fs) * 1.2);
+    min-width: 0;
+    width: min(100%, 8em);
+  }
+}
+
+:root[data-theme="cbat"] .cbat-cut-page .cbat-pill[data-on="true"] {
+  color: #0a3a0a;
+}
+/* An instrument box: navy title bar over a black body */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-box {
+  background: #000000;
+  border: 2px solid;
+  border-color: #c8c8d8 #5a5a6a #5a5a6a #c8c8d8;
+  border-radius: 0;
+  padding: 0;
+  color: #ffffff;
+  font-size: var(--cut-fs);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-box-title {
+  margin: 0;
+  padding: 0.12em 0.8em;
+  font-size: var(--cut-fs);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+  background: linear-gradient(#2626b8, #0a0a78 55%, #000060);
+  border-bottom: 1px solid #8a8ac8;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-box-body {
+  padding: 0.5em 0.7em;
+}
+/* Centres a panel's instruments in its stucco, like the real layout */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-fit {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-fit-col {
+  flex-direction: column;
+  gap: 1.2em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-caption {
+  text-align: center;
+  margin-top: 0.4em;
+}
+
+/* Engine: three outlined tanks with tick marks and an orange fill */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-tanks {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2.4em;
+  padding: 0.3em 1.2em 0;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-tank-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-tank {
+  position: relative;
+  width: 4em;
+  height: clamp(6em, 24vh, 15em);
+  border: 2px solid #ffffff;
+  background: #000000;
+  overflow: hidden;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-tank-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ff8424;
+  transition: height 100ms linear;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-tank-tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #ffffff 0.75em, transparent 0.75em, transparent calc(100% - 0.75em), #ffffff calc(100% - 0.75em));
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-tank-level {
+  font-size: calc(var(--cut-fs) * 1.1);
+}
+
+/* Navigation: the Required | Current Air Speed table */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-speed .cbat-cut-box-body {
+  padding: 0.8em 1em 0.6em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-speed-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 2px solid #c8c8c8;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-speed-head,
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-speed-val {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: 1px solid #c8c8c8;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-speed-head {
+  padding: 0.4em 1.2em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-speed-val {
+  padding: 0.7em 1em;
+  font-size: calc(var(--cut-fs) * 2.1);
+  white-space: nowrap;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-speed-keys {
+  display: flex;
+  justify-content: center;
+  gap: 1.2em;
+  width: 50%;
+  margin-left: auto;
+  padding-top: 0.6em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-round-key {
+  width: 2.3em;
+  height: 2.3em;
+  border-radius: 9999px;
+  border: 1px solid #303030;
+  font-size: calc(var(--cut-fs) * 1.4);
+  font-weight: 700;
+  line-height: 1;
+  color: #000000;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #d0d0d0 45%, #8a8a8a);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-round-key:hover {
+  filter: brightness(1.08);
+}
+
+/* Sensor: camera keys and the Air / Ground rows */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-camera-keys {
+  display: flex;
+  justify-content: center;
+  gap: 1.2em;
+  padding: 0.2em 1em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-sensors {
+  min-width: 18em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-row {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0.35em 0.2em;
+  gap: 1em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-row + .cbat-cut-row {
+  border-top: 1px solid #6a6a6a;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-row > span {
+  font-size: var(--cut-fs);
+  color: #ffffff;
+}
+
+/* Mission: three centred boxes, the interfaces drawn as label | boxes tables */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-mission {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9em;
+  padding: 0.3em 0;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-mission > * {
+  margin: 0;
+  width: min(100%, 30em);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-mission > .cbat-cut-box > .cbat-cut-box-body {
+  margin: 0.4em;
+  padding: 0;
+  border: 1px solid #8a8a8a;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-mission .cbat-cut-box-body > * {
+  margin: 0;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-field {
+  gap: 0;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-field + .cbat-cut-field {
+  border-top: 1px solid #8a8a8a;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-field-label {
+  width: 7.2em;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding: 0.35em 0.5em;
+  border-right: 1px solid #8a8a8a;
+  font-size: var(--cut-fs);
+  color: #ffffff;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-field-boxes {
+  padding: 0.3em 0.4em 0.3em 0.6em;
+  gap: 0.15em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-field-boxes .text-game-muted {
+  color: #ffffff;
+  font-size: var(--cut-fs);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-digit {
+  width: 1.55em;
+  height: 1.75em;
+  font-size: var(--cut-fs);
+  background: #1c1c1c;
+  border: 1px solid #6a6a6a;
+  color: #ffffff;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-field .cbat-confirm {
+  width: 1.45em;
+  height: 1.45em;
+  font-size: var(--cut-fs);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-dispenser {
+  flex-wrap: wrap;
+  gap: 0.6em 0.9em;
+  padding: 0 0 0.6em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-dispenser > .cbat-cut-box-title {
+  flex: 0 0 100%;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-activate {
+  margin-left: 0.8em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-lights {
+  margin-left: 0;
+  gap: 0.75em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-lamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-lamp > [data-light] {
+  width: 1.35em;
+  height: 1.35em;
+  border: 1px solid #303030;
+  background: radial-gradient(circle at 35% 30%, #f0f0f0, #b0b0b0 45%, #6a6a6a);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-lamp > [data-light="on"] {
+  border-color: #064006;
+  background: radial-gradient(circle at 35% 30%, #d8ffd0, #40e040 45%, #108010);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-lamp-num::after {
+  content: attr(data-n);
+  line-height: 1;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-dispenser .cbat-key {
+  margin: 0 0.8em 0 auto;
+  font-size: calc(var(--cut-fs) * 1.05);
+  padding: 0.3em 1em;
+  color: #404040;
+}
+
+/* System: the tall pressure gauge, the pump, and the comms code box */
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-system {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: 1em;
+  padding: 0.4em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-system-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge {
+  position: relative;
+  display: flex;
+  gap: 0;
+  height: clamp(11em, 36vh, 22em);
+  padding: 0.7em 2.6em 0.7em 0.6em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-zones {
+  display: flex;
+  flex-direction: column;
+  width: 6.4em;
+  background: #ffffff;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-zones > span {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  padding: 0 0.4em;
+  line-height: 1.15;
+  color: #000000;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-zones > .cbat-cut-zone-ok {
+  background: #0a800a;
+  color: #b8e8b0;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-bar {
+  position: relative;
+  width: 1.1em;
+  background:
+    repeating-linear-gradient(to top, #9a9a9a 0 1px, transparent 1px 0.62em),
+    #ffffff;
+  border-left: 1px solid #9a9a9a;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    repeating-linear-gradient(to top, #c06000 0 1px, transparent 1px 0.62em),
+    #f0a000;
+  transition: height 100ms linear;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-scale {
+  position: absolute;
+  top: 0.7em;
+  bottom: 0.7em;
+  right: 0.3em;
+  width: 2.1em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-scale > span {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  line-height: 1;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-scale > span:nth-child(1) { top: 0; transform: none; }
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-scale > span:nth-child(2) { top: 33.333%; }
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-scale > span:nth-child(3) { top: 66.667%; }
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-scale > span:nth-child(4) { top: 100%; transform: translateY(-100%); }
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-gauge-ok {
+  position: absolute;
+  left: -1.6em;
+  top: 50%;
+  transform: translateY(-50%);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-pump .cbat-cut-box-body {
+  display: flex;
+  justify-content: center;
+  gap: 0.6em;
+  padding: 0.5em 1.4em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-comms .cbat-cut-box-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-comms-row {
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-comms-label {
+  margin-right: 0.5em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35em;
+  height: 1.6em;
+  font-size: calc(var(--cut-fs) * 1.15);
+  font-weight: 700;
+  color: #000000;
+  background: #ffffff;
+  border: 1px solid #ffffff;
+  outline: 1px solid #000000;
+  outline-offset: -3px;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-cell-big {
+  font-size: calc(var(--cut-fs) * 1.5);
+  font-weight: 400;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-cell-hot {
+  color: #c00000;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-led {
+  width: 1.15em;
+  height: 1.15em;
+  margin-left: 0.35em;
+  border-radius: 9999px;
+  border: 1px solid #303030;
+  background: radial-gradient(circle at 35% 30%, #f0f0f0, #9a9a9a 45%, #5a5a5a);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-led[data-on="true"] {
+  border-color: #064006;
+  background: radial-gradient(circle at 35% 30%, #d8ffd0, #40e040 45%, #108010);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-comms .cbat-key {
+  font-size: var(--cut-fs);
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-status {
+  font-size: calc(var(--cut-fs) * 0.85);
+  color: #ffff99;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 2.6em);
+  gap: 0.3em;
+}
+:root[data-theme="cbat"] .cbat-cut-page .cbat-cut-keypad .cbat-key {
+  padding: 0.3em 0;
+}
+
+/* CUT's display keys (SkyWatch board): twelve keys share the width, so their
+   label scales off the viewport rather than a breakpoint size, which clipped
+   NAVIGATION at 1366px. The Real CBAT theme sizes its own pills above. */
+@media (min-width: 1280px) {
+  :root:not([data-theme="cbat"]) body.cbat-cut-wide .app-shell-content .cbat-cut-mfd-key {
+    font-size: clamp(11px, 0.68vw, 14px);
+  }
+}
+
 /* ── Full-width CBAT games: text that grows with a big monitor ──────────
    The games draw their labels, logs and keys in fixed 8–12px type, sized for
    a phone and a laptop. On a desktop the full-width games stretch their
