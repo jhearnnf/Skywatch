@@ -284,6 +284,15 @@ const appSettingsSchema = new mongoose.Schema({
   // the emoji stay until an admin switches this on in Game Options.
   cbatDrawnIconsEnabled:      { type: Boolean,  default: false },
 
+  // Seasonal decoration on the CBAT hub (/cbat) only. 'none' draws nothing;
+  // the other keys must match src/data/holidayThemes.js. Admins pick it in Game
+  // Options and can preview any theme before setting it live.
+  cbatHolidayTheme: {
+    type: String,
+    enum: ['none', 'christmas', 'easter', 'halloween'],
+    default: 'none',
+  },
+
   // There used to be a progressAwardDonateUrl here: free text for wherever the
   // ask should point, because donations went to somebody else's site (a Stripe
   // payment link, Ko-fi) and only an admin could know the address. Donations

@@ -1201,6 +1201,11 @@ router.patch('/settings', requireReason, async (req, res) => {
       return res.status(400).json({ message: 'updateCoverEnabled must be a boolean' });
     }
 
+    if ('cbatHolidayTheme' in updates &&
+        !['none', 'christmas', 'easter', 'halloween'].includes(updates.cbatHolidayTheme)) {
+      return res.status(400).json({ message: 'cbatHolidayTheme must be none, christmas, easter or halloween' });
+    }
+
     // cbatTiers must be a valid subset of ['free','silver','gold','admin']
     if ('cbatTiers' in updates) {
       if (!Array.isArray(updates.cbatTiers)) {

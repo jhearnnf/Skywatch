@@ -27,6 +27,8 @@ import { isPublicCbatGame } from '../utils/cbat/publicGames'
 import { useClanOffered } from '../utils/cbat/clanOffer'
 import CountryFlag from '../components/ui/CountryFlag'
 import CbatGameIcon from '../components/cbat/CbatGameIcon'
+import CbatHolidayTheme from '../components/cbat/CbatHolidayTheme'
+import { holidayTheme } from '../data/holidayThemes'
 
 // Re-export so existing imports (`import { CBAT_GAMES } from './Cbat'`) still work.
 export { CBAT_GAMES }
@@ -507,6 +509,14 @@ export default function Cbat() {
   // wrapper, which is why the grid gains one.
   const gridWrapRef = useRef(null)
   const isAdmin     = !!user?.isAdmin
+
+  // Seasonal decoration (admin setting `cbatHolidayTheme`). An admin can
+  // preview any theme from Game Options before setting it live: the settings
+  // page sends them here with `holidayPreview` in the router state, which
+  // wins over the live value for that visit only and is seen by nobody else.
+  const holidayPreview = isAdmin ? (location.state?.holidayPreview ?? null) : null
+  const activeHoliday  = holidayPreview ?? settings?.cbatHolidayTheme ?? 'none'
+  const cbatPageRef    = useRef(null)
   const presence    = useChatPresence(isAdmin, PRESENCE_POLL_MS)
   // Whether the FLAG tile also offers CLAN (everyone, unless an admin has
   // switched the game off).
@@ -897,7 +907,7 @@ export default function Cbat() {
     // link in main.css's full-height flex chain, and the min-height maths gives
     // way to flex-1.
     <div className={`relative${deskSplit ? ' cbat-hub-root' : ''}`}>
-    <div className={deskSplit
+    <div ref={cbatPageRef} className={deskSplit
       ? 'cbat-page flex flex-col flex-1 min-h-0'
       : 'cbat-page flex flex-col min-h-[calc(100dvh-10rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] sm:min-h-[calc(100dvh-11.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]'}>
       <SEO
@@ -905,6 +915,24 @@ export default function Cbat() {
         description="Practise every CBAT-style aptitude subtest in one place: FLAG, ANT, DPT, ACT, Trace, Visualisation and more. Free to play, with every score tracked."
         jsonLd={cbatHubJsonLd(isGameEnabled)}
       />
+
+      {holidayPreview && (
+        <div
+          data-testid="cbat-holiday-preview-strip"
+          className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-300 bg-brand-50 px-3 py-2"
+        >
+          <p className="text-xs text-slate-700">
+            Previewing the <span className="font-bold">{holidayTheme(holidayPreview)?.label ?? holidayPreview}</span> theme. Only you can see this.
+          </p>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition-colors"
+          >
+            End preview
+          </button>
+        </div>
+      )}
 
       <h1 className="text-2xl font-extrabold text-slate-900 mb-3 sm:mb-1">CBAT Aptitude Practise</h1>
       {/* The strapline is for someone who has just landed here — a signed-out visitor, and the
@@ -1205,6 +1233,10 @@ export default function Cbat() {
           paints over the tiles, and pointer-events-none so it never takes a tap
           from one. */}
       {isAdmin && <CbatPresenceDots containerRef={gridWrapRef} online={presence.online} />}
+
+      {/* Holiday theme: falling snow over the game column and snow settling on
+          a few tiles. Never interactive (see CbatHolidayTheme). */}
+      <CbatHolidayTheme theme={activeHoliday} pageRef={cbatPageRef} areaRef={gridScrollRef} containerRef={gridWrapRef} />
       </div>
 
       {deskSplit && pageBottom}

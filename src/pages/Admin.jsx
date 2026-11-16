@@ -43,6 +43,7 @@ import CbatPassersSection from '../components/admin/CbatPassersSection'
 import { CBAT_GAMES } from './Cbat'
 import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
 import CbatGameIcon from '../components/cbat/CbatGameIcon'
+import { HOLIDAY_THEMES, isHolidayThemeLive } from '../data/holidayThemes'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -3708,6 +3709,7 @@ function SettingsTab({ API }) {
           'cbatTiers',
           'cbatGameEnabled',
           'cbatDrawnIconsEnabled',
+          'cbatHolidayTheme',
           'progressAwardEnabled',
           'progressAwardDonateEnabled',
           'caseFilesEnabled',
@@ -4020,6 +4022,53 @@ function SettingsTab({ API }) {
                     checked={draft.cbatDrawnIconsEnabled ?? false}
                     onChange={v => set('cbatDrawnIconsEnabled', v)}
                   />
+
+                  {/* ── Holiday theme ───────────────────────────────────
+                      Button row, not a <select> (the OS list ignores the dark
+                      theme). Preview opens the hub with the picked theme for
+                      this admin only, before it is saved. */}
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest pt-4 pb-1">Holiday theme</p>
+                  <div className="py-2.5 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-700 mb-1">Decoration on the CBAT games page</p>
+                    <p className="text-xs text-slate-400 mb-2">
+                      Adds a little seasonal decoration to the main CBAT page for everyone. It never covers or blocks a
+                      game button, and it does not appear in the games themselves or in the chat. Save Game Options to
+                      set it live.
+                    </p>
+                    <div className="flex flex-wrap gap-2" data-testid="cbat-holiday-theme-options">
+                      {HOLIDAY_THEMES.map(t => {
+                        const selected = (draft.cbatHolidayTheme ?? 'none') === t.key
+                        return (
+                          <button
+                            key={t.key}
+                            type="button"
+                            disabled={!t.implemented}
+                            aria-pressed={selected}
+                            data-testid={`cbat-holiday-theme-${t.key}`}
+                            onClick={() => set('cbatHolidayTheme', t.key)}
+                            className={`px-3 py-1.5 text-sm font-bold rounded-xl border transition-colors ${
+                              selected
+                                ? 'bg-brand-600 border-brand-600 text-white'
+                                : t.implemented
+                                  ? 'border-slate-200 text-slate-600 hover:border-brand-300 hover:text-brand-600'
+                                  : 'border-slate-200 text-slate-400 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            {t.label}{!t.implemented && <span className="ml-1 text-[10px] font-semibold uppercase">Coming soon</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!isHolidayThemeLive(draft.cbatHolidayTheme)}
+                      data-testid="cbat-holiday-theme-preview"
+                      onClick={() => navigate('/cbat', { state: { holidayPreview: draft.cbatHolidayTheme } })}
+                      className="mt-3 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Preview on the CBAT page
+                    </button>
+                  </div>
 
                   {/* ── Progress awards ─────────────────────────────────
                       Two switches on purpose: the milestone screen is a retention
