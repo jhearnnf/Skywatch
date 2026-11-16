@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { submitCbatResult } from '../lib/cbatOutbox'
 import { getAircraftRoster } from '../lib/offlineRoster'
 import { useAppSettings } from '../context/AppSettingsContext'
+import { useCbatTheme } from '../hooks/useCbatTheme'
 import { useGameChrome } from '../context/GameChromeContext'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useCbatDemo } from '../utils/cbat/demoMode'
@@ -653,6 +654,11 @@ export default function CbatFlag() {
   const { settings } = useAppSettings()
   const { enterImmersive, exitImmersive } = useGameChrome()
   const clanOffered = useClanOffered()
+  // Real CBAT: maths answers go in by clicking the on-screen pad only.
+  const cbat = useCbatTheme()
+  const [keyNotice, setKeyNotice] = useState(false)
+  const keyNoticeTimerRef = useRef(null)
+  useEffect(() => () => clearTimeout(keyNoticeTimerRef.current), [])
 
   const [phase, setPhase] = useState('intro')   // intro | launching | tutorial | playing | results
   // `?tutorial=1` (the Mock Assessment's "Tutorial first") opens the tutorial on arrival.
@@ -1007,6 +1013,8 @@ export default function CbatFlag() {
   // Digits 0-9 mirror the numpad. Backspace/Delete/arrow keys are blocked
   // entirely — there's no delete affordance in the game and arrow keys
   // would otherwise scroll the page during play.
+  // Under Real CBAT the keyboard enters nothing: digits (top row or numpad,
+  // NumLock on or off) are swallowed and a short notice says to click the pad.
   useEffect(() => {
     if (phase !== 'playing') return
     const BLOCKED_KEYS = new Set([
@@ -1019,14 +1027,22 @@ export default function CbatFlag() {
         e.preventDefault()
         return
       }
-      if (e.key >= '0' && e.key <= '9') {
+      const isDigit = e.key.length === 1 && e.key >= '0' && e.key <= '9'
+      if (cbat && (isDigit || (e.code || '').startsWith('Numpad'))) {
+        e.preventDefault()
+        setKeyNotice(true)
+        clearTimeout(keyNoticeTimerRef.current)
+        keyNoticeTimerRef.current = setTimeout(() => setKeyNotice(false), 2200)
+        return
+      }
+      if (isDigit) {
         e.preventDefault()
         handleDigit(e.key)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [phase, handleDigit])
+  }, [phase, handleDigit, cbat])
 
   // ── Aircraft Y/N handlers ─────────────────────────────────────────────────
   const handleAcAnswer = useCallback((choice) => {
@@ -1268,12 +1284,23 @@ export default function CbatFlag() {
                     className="cbat-flag-controls w-full max-w-[280px] mx-auto shrink-0 z-10"
                   >
                     <div className="cbat-flag-panel bg-game-panel border border-game-line rounded-xl p-3 max-[600px]:p-1.5 flex flex-col gap-3 max-[600px]:gap-1.5">
-                      <Numpad
-                        question={mathQuestion}
-                        entered={mathEntered}
-                        onDigit={handleDigit}
-                        disabled={!mathQuestion}
-                      />
+                      <div className="relative">
+                        <Numpad
+                          question={mathQuestion}
+                          entered={mathEntered}
+                          onDigit={handleDigit}
+                          disabled={!mathQuestion}
+                        />
+                        {keyNotice && (
+                          <div
+                            role="alert"
+                            data-testid="flag-keyboard-notice"
+                            className="absolute inset-x-0 top-0 z-10 bg-game-arena border border-amber-500 rounded-lg px-2 py-2 text-center text-xs font-bold text-amber-700 pointer-events-none"
+                          >
+                            The keyboard is turned off. Click the numbers on the number pad.
+                          </div>
+                        )}
+                      </div>
                       {palette.length === 3 && (
                         <div className="cbat-flag-strikes grid grid-cols-3 gap-1.5 max-[600px]:gap-1">
                           {palette.map((p) => (
