@@ -148,7 +148,11 @@ function buildShapeSpecs(palette) {
 }
 
 // ── Shape placement with rejection sampling ───────────────────────────────────
-function placeShapes(fieldW, fieldH, palette) {
+// One shape per quadrant of the placement box. Plain uniform sampling put all
+// four shapes on the same half of the field in about one run in five, leaving
+// the rest of the field with nothing for an aircraft ring to arm. Specs are
+// already shuffled, so which shape lands in which quadrant still varies.
+export function placeShapes(fieldW, fieldH, palette) {
   const specs = buildShapeSpecs(palette)
   if (specs.length === 0) return []
   const shapeCount = specs.length
@@ -191,11 +195,16 @@ function placeShapes(fieldW, fieldH, palette) {
 
     const placed = []
     let allFit = true
+    const midX = (minX + maxX) / 2
+    const midY = (minY + maxY) / 2
     for (let k = 0; k < shapeCount; k++) {
+      const q = k % 4
+      const [qx0, qx1] = q % 2 === 0 ? [minX, midX] : [midX, maxX]
+      const [qy0, qy1] = q < 2 ? [minY, midY] : [midY, maxY]
       let cx, cy, ok = false
       for (let tries = 0; tries < 400; tries++) {
-        cx = randRange(minX, maxX)
-        cy = randRange(minY, maxY)
+        cx = randRange(qx0, qx1)
+        cy = randRange(qy0, qy1)
         if (!placed.some(p => Math.hypot(p.cx - cx, p.cy - cy) < minDist)) {
           ok = true
           break
