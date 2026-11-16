@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { DOT, presenceSlots, slotPosition } from './cbatPresenceSlots'
+import { DOT, offsetWithin, presenceSlots, slotPosition } from './cbatPresenceSlots'
 
 // Who is in which game, drawn straight onto the hub. Admin only — the caller
 // does that gating, because the presence data itself is admin-only (see GET
@@ -127,21 +127,6 @@ export default function CbatPresenceDots({ containerRef, online = [] }) {
 // Same tiles in the same places? Compared field by field rather than by
 // JSON.stringify so key order can never make two identical measurements look
 // different.
-// A node's offset from the container, summed up its offsetParent chain. The
-// game tiles sit directly against the container, so for them this is just
-// offsetLeft/offsetTop; the Mock tile is nested inside the Aptitude Report
-// card, whose own positioned elements would otherwise be what it measured from.
-// Still offsets, not rects, for the reason above.
-function offsetWithin(node, container) {
-  let left = 0
-  let top  = 0
-  for (let n = node; n && n !== container; n = n.offsetParent) {
-    left += n.offsetLeft
-    top  += n.offsetTop
-  }
-  return { left, top }
-}
-
 function sameCards(a, b) {
   const keys = Object.keys(b)
   if (Object.keys(a).length !== keys.length) return false

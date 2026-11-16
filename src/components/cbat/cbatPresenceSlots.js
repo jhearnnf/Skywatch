@@ -60,3 +60,19 @@ export function slotPosition(card, index) {
     y: card.top + INSET,
   }
 }
+
+// A node's offset from the container, summed up its offsetParent chain. The
+// game tiles sit directly against the container, so for them this is just
+// offsetLeft/offsetTop; the Mock tile is nested inside the Aptitude Report
+// card, whose own positioned elements would otherwise be what it measured from.
+// Offsets, not rects: the tiles mount with a translating entrance, and a rect
+// would measure them mid-flight. Offsets ignore transforms.
+export function offsetWithin(node, container) {
+  let left = 0
+  let top  = 0
+  for (let n = node; n && n !== container; n = n.offsetParent) {
+    left += n.offsetLeft
+    top  += n.offsetTop
+  }
+  return { left, top }
+}
