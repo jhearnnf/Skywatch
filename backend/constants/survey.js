@@ -58,7 +58,18 @@ const BATCH_SIZE = 50;
 // whether one is due. The check is cheap (one settings read) and only the claim
 // in utils/surveyAutoSend.js decides whether anything goes out.
 const SURVEY_AUTO_SEND_INTERVAL_HOURS = 48;
-const SURVEY_AUTO_SEND_CHECK_MINUTES  = 30;
+const SURVEY_AUTO_SEND_CHECK_MINUTES  = 5;
+
+// Send-time rotation (added 2026-11-17). Each automatic send goes out at a fixed
+// UK hour, stepping through these in order, so over time every slot gets a fair
+// share of batches and the open rates can be compared (scripts/surveySendTimeReport.js).
+// One slot per bucket from the first look at the data: morning, afternoon,
+// evening, late. Four slots on a two-day cadence is an eight-day cycle, so the
+// weekday rotates too instead of morning always landing on the same day.
+const SURVEY_AUTO_SEND_HOURS_UK = [9, 13, 18, 22];
+// A slot missed by more than this (server down) moves to the same hour the next
+// day rather than sending at whatever odd hour the server came back.
+const SURVEY_AUTO_SEND_GRACE_HOURS = 2;
 
 // ── Deferral, for people who have not sat the test yet ───────────────────────
 //
@@ -211,6 +222,8 @@ module.exports = {
   BATCH_SIZE,
   SURVEY_AUTO_SEND_INTERVAL_HOURS,
   SURVEY_AUTO_SEND_CHECK_MINUTES,
+  SURVEY_AUTO_SEND_HOURS_UK,
+  SURVEY_AUTO_SEND_GRACE_HOURS,
   EXCLUDED_EMAILS,
   EXCLUDED_DISPLAY_NAMES,
   isExcludedAccount,

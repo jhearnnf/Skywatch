@@ -30,7 +30,7 @@ function savedThresholds(settings) {
 // `chosen` is a list of cohort rows (each with _id and email). Returns what was
 // sent and what failed; `recipientCount` is how many survived the invite step
 // (0 means every chosen account had already been contacted).
-async function inviteAndSend(chosen, { variant } = {}) {
+async function inviteAndSend(chosen, { variant, logMeta } = {}) {
   // Invite rows first: a token has to exist before it can be put in an email.
   //
   // An existing invite is REUSED rather than replaced when it is mailable —
@@ -70,7 +70,7 @@ async function inviteAndSend(chosen, { variant } = {}) {
 
   const { sent, failed } = await sendSurveyBatch(
     recipients.map(r => ({ user: r.user, token: r.token })),
-    { variant },
+    { variant, logMeta },
   );
 
   const sentIds   = new Set(sent.map(s => s.userId.toString()));

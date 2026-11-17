@@ -208,7 +208,9 @@ function renderSurveyEmail({ fields, user, token }) {
  * throws for a partial failure: the caller has already written invite rows and
  * needs to know precisely which ones went out so it can stamp them.
  */
-async function sendSurveyBatch(recipients, { variant = DEFAULT_VARIANT } = {}) {
+// `logMeta` is merged into each EmailLog row's metadata (the auto-send stamps
+// its rotation slot there, for scripts/surveySendTimeReport.js).
+async function sendSurveyBatch(recipients, { variant = DEFAULT_VARIANT, logMeta = {} } = {}) {
   if (!recipients.length) return { sent: [], failed: [] };
 
   assertMailableClientUrl();
@@ -254,7 +256,7 @@ async function sendSurveyBatch(recipients, { variant = DEFAULT_VARIANT } = {}) {
       subject: messages[i].subject,
       status: err ? 'failed' : 'sent',
       error: err ?? null,
-      metadata: { campaign: SURVEY_CAMPAIGN, batchSize: recipients.length, variant: chosenVariant },
+      metadata: { ...logMeta, campaign: SURVEY_CAMPAIGN, batchSize: recipients.length, variant: chosenVariant },
     }).catch(() => {});
   });
 

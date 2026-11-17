@@ -144,6 +144,25 @@ describe('CbatPassersSection — auto-send', () => {
     expect(screen.getByText(/Auto-send is on/)).toBeInTheDocument()
   })
 
+  it('names the rotating send times and when the first batch goes', async () => {
+    const nextAt = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString()
+    mockApi(withAutoSend({ hoursUk: [9, 13, 18, 22], nextAt }))
+    await open()
+
+    const box = screen.getByTestId('cbat-passers-auto-send')
+    expect(box).toHaveTextContent(/09:00, 13:00, 18:00 and 22:00 UK time/)
+    fireEvent.click(screen.getByTestId('cbat-passers-auto-send-toggle'))
+    expect(screen.getByTestId('cbat-passers-auto-send-confirm')).toHaveTextContent(/goes out at /)
+    expect(screen.getByTestId('cbat-passers-auto-send-confirm')).not.toHaveTextContent(/within 5 minutes/)
+  })
+
+  it('shows the next send time the server worked out', async () => {
+    const nextAt = new Date(Date.now() + 3 * 60 * 60 * 1000)
+    mockApi(withAutoSend({ enabled: true, hoursUk: [9, 13, 18, 22], nextAt: nextAt.toISOString() }))
+    await open()
+    expect(screen.getByTestId('cbat-passers-auto-send')).not.toHaveTextContent(/Next: within/)
+  })
+
   it('says it is paused while the questionnaire is closed', async () => {
     mockApi(withAutoSend({ enabled: true }, { surveyEnabled: false }))
     await open()

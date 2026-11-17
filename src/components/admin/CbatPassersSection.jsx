@@ -779,14 +779,16 @@ const fmtDateTime = (d) => new Date(d).toLocaleString('en-GB', {
 // The auto-send switch. Saves straight away (it is not part of "Save as
 // defaults") because a switch that sends email must never look on while being
 // off, or the other way round. Turning it ON asks first, naming how many people
-// the first run would mail, because that run happens within half an hour.
+// the first run would mail, and when that run happens (the next slot in the send-time rotation).
 function AutoSendControl({ autoSend, surveyOpen, linkProblem, nextBatchCount, busy, onChange }) {
   const [confirming, setConfirming] = useState(false)
   const days = Math.round((autoSend.intervalHours ?? 48) / 24)
   const last = autoSend.lastResult
   const lastAt = autoSend.lastAt ? new Date(autoSend.lastAt) : null
-  const nextAt = lastAt ? new Date(lastAt.getTime() + (autoSend.intervalHours ?? 48) * 3600 * 1000) : null
-  const nextText = !nextAt || nextAt <= new Date() ? 'within 30 minutes' : fmtDateTime(nextAt)
+  const nextAt = autoSend.nextAt ? new Date(autoSend.nextAt) : null
+  const nextText = !nextAt || nextAt <= new Date() ? 'within 5 minutes' : fmtDateTime(nextAt)
+  const hours = (autoSend.hoursUk ?? []).map(h => `${String(h).padStart(2, '0')}:00`)
+  const hoursText = hours.length > 1 ? `${hours.slice(0, -1).join(', ')} and ${hours[hours.length - 1]}` : hours[0]
 
   let lastText = null
   if (last?.error) lastText = `failed: ${last.error}`
@@ -812,6 +814,7 @@ function AutoSendControl({ autoSend, surveyOpen, linkProblem, nextBatchCount, bu
           <span className="block text-[10px] text-slate-500">
             Does what Send bulk email does when this list first loads: the saved defaults above, the
             pre-ticked people, the normal invitation. Nobody is ever emailed twice.
+            {hoursText && ` Each send goes out at the next time in turn (${hoursText} UK time) so we can see which time gets the most replies.`}
           </span>
         </span>
       </label>
@@ -820,7 +823,7 @@ function AutoSendControl({ autoSend, surveyOpen, linkProblem, nextBatchCount, bu
         <div className="mt-2 ml-6 text-xs text-slate-700 bg-surface-raised border border-slate-300 rounded-xl px-3 py-2" data-testid="cbat-passers-auto-send-confirm">
           <p className="mb-2">
             The first batch ({nextBatchCount} {nextBatchCount === 1 ? 'person' : 'people'} right now) goes out
-            within 30 minutes, then a new batch every {days} days.
+            {nextAt && nextAt > new Date() ? ` at ${fmtDateTime(nextAt)}` : ' within 5 minutes'}, then a new batch every {days} days.
           </p>
           <div className="flex gap-2">
             <button

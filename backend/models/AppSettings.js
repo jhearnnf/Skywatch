@@ -427,13 +427,16 @@ const appSettingsSchema = new mongoose.Schema({
   cbatSurveyDormantDays:    { type: Number, default: 0 },
 
   // Auto-send: when on, the backend does what the "Send bulk email" button does
-  // (saved thresholds, next batch, default email) once every
-  // SURVEY_AUTO_SEND_INTERVAL_HOURS. OFF by default. LastAt is the claim the
+  // (saved thresholds, next batch, default email) every
+  // SURVEY_AUTO_SEND_INTERVAL_HOURS, at a rotating fixed UK hour. OFF by default. LastAt is the claim the
   // scheduler takes before sending, so a restart or a second server cannot
   // send twice. See utils/surveyAutoSend.js.
   cbatSurveyAutoSendEnabled:    { type: Boolean, default: false },
   cbatSurveyAutoSendLastAt:     { type: Date,    default: null },
   cbatSurveyAutoSendLastResult: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Index into SURVEY_AUTO_SEND_HOURS_UK of the slot the last run used; the
+  // next run takes the one after. Null = never run, so the first run takes slot 0.
+  cbatSurveyAutoSendSlot:       { type: Number,  default: null },
 
   // Combat readiness (difficulty selection) screen — all optional; absent/empty falls back to hardcoded defaults
   combatReadinessTitle:    { type: String, default: '' },

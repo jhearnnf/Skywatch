@@ -24,7 +24,7 @@ const {
   EMAIL_VARIANTS,
 } = require('../utils/surveyEmail');
 const { inviteAndSend, savedThresholds } = require('../utils/surveySend');
-const { nextAutoSendAt } = require('../utils/surveyAutoSend');
+const { nextAutoSendSlot } = require('../utils/surveyAutoSend');
 const { summariseCbatForUsers } = require('../utils/cbatAptitudeReport');
 const surveyRoles = require('../constants/surveyRoles.json');
 const {
@@ -32,6 +32,7 @@ const {
   SURVEY_TEST_CAMPAIGN,
   BATCH_SIZE,
   SURVEY_AUTO_SEND_INTERVAL_HOURS,
+  SURVEY_AUTO_SEND_HOURS_UK,
 } = require('../constants/survey');
 
 router.use(protect, adminOnly);
@@ -85,9 +86,13 @@ router.get('/', async (req, res) => {
         autoSend: {
           enabled:       !!settings.cbatSurveyAutoSendEnabled,
           intervalHours: SURVEY_AUTO_SEND_INTERVAL_HOURS,
+          // The UK hours the sends rotate through, for the panel's description.
+          hoursUk:       SURVEY_AUTO_SEND_HOURS_UK,
           lastAt:        settings.cbatSurveyAutoSendLastAt ?? null,
           lastResult:    settings.cbatSurveyAutoSendLastResult ?? null,
-          nextAt:        nextAutoSendAt(settings),
+          // Computed even while off, so the turn-on confirmation can say when
+          // the first batch would go. The panel only shows it once on.
+          nextAt:        nextAutoSendSlot(settings).at,
         },
         linkBase: clientUrl(),
         linkProblem: clientUrlProblem(),
