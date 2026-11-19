@@ -21,9 +21,26 @@ const SystemLog = require('../models/SystemLog');
 // a misconfigured domain from writing thousands of identical rows.
 const dayKeyFor = (d = new Date()) => d.toISOString().slice(0, 10);
 
+// Our own Vercel preview builds. Every push gets a throwaway address such as
+// https://skywatch-8emgy8qkm-james-projects-cecab406.vercel.app (or
+// skywatch-git-<branch>-... for a branch alias), and Vercel loads each one in
+// headless Chrome to make its dashboard thumbnail. That page calls the live
+// API, gets blocked, and used to leave a fresh batch of log rows per deploy.
+//
+// They are still BLOCKED (a preview must never reach production data with a
+// signed-in cookie); they just aren't logged. The team suffix
+// "james-projects-cecab406" can only be issued to our Vercel account, and the
+// pattern is anchored at both ends, so a look-alike such as
+// skywatch-x-james-projects-cecab406.vercel.app.evil.com, or any other
+// *.vercel.app project, still gets logged.
+const OWN_PREVIEW_ORIGIN = /^https:\/\/skywatch-[a-z0-9-]+-james-projects-cecab406\.vercel\.app$/;
+const isOwnPreviewOrigin = (origin) =>
+  typeof origin === 'string' && OWN_PREVIEW_ORIGIN.test(origin);
+
 // Fire-and-forget. Never awaited by request handling and never throws: a logging
 // failure must not turn into a second failure on top of the one being logged.
 function recordRejectedOrigin(origin, req) {
+  if (isOwnPreviewOrigin(origin)) return;
   const now = new Date();
   const dayKey = dayKeyFor(now);
 
@@ -52,4 +69,4 @@ function recordRejectedOrigin(origin, req) {
   ).catch(() => { /* logging must never break the request */ });
 }
 
-module.exports = { recordRejectedOrigin, dayKeyFor };
+module.exports = { recordRejectedOrigin, dayKeyFor, isOwnPreviewOrigin };
