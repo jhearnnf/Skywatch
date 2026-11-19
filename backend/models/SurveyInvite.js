@@ -108,6 +108,25 @@ surveyInviteSchema.statics.isMailable = function isMailable(invite, now = new Da
   return invite.deferredUntil <= now;             // deferred, and the wait is over
 };
 
+// Whether an admin may send this invitation AGAIN, by hand, because it went out
+// before the person's test. An email that arrives before the test asks
+// "how did it go?" of someone who has not sat it yet, and the usual reply is
+// none at all, which `isMailable` then reads as "leave them be" for good.
+//
+// Hand-picked sends only: the bulk batch and the auto-send never use this, so
+// nobody gets a second email they did not have an admin decide on.
+//
+// `testDate` is the account's CBAT date (stored as UTC midnight of the day);
+// the resend opens on that day, not before, so a test still to come cannot be
+// asked about early a second time.
+surveyInviteSchema.statics.isResendableAfterTest = function isResendableAfterTest(invite, testDate, now = new Date()) {
+  if (!invite || !invite.sentAt || !testDate) return false;
+  if (invite.optedOutAt || invite.completedAt) return false;
+  const test = new Date(testDate);
+  if (Number.isNaN(test.getTime())) return false;
+  return new Date(invite.sentAt) < test && test <= now;
+};
+
 surveyInviteSchema.statics.newToken = function newToken() {
   return crypto.randomBytes(32).toString('hex');
 };

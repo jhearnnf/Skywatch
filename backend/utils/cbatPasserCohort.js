@@ -51,7 +51,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Everything the search and the hand-picked send need to judge an account:
 // identity, the flags that block a send, and the heartbeat that dates it.
 const SEARCH_FIELDS =
-  'agentNumber email displayName isTester cbatPassed isAdmin isBot isBanned researchEmailOptOut researchEmailExcluded lastSeen';
+  'agentNumber email displayName isTester cbatPassed isAdmin isBot isBanned researchEmailOptOut researchEmailExcluded lastSeen cbatDate upcomingCbatDate';
 
 /**
  * Per-user CBAT activity for an arbitrary set of accounts.
@@ -123,6 +123,7 @@ async function collectCbatActivity(userIds) {
  * mailability rule. Anything computed here is computed for both.
  */
 function toPasserRow(u, { runs, playedMs, activityMs, daysDormant, invite, dormantDays, now }) {
+  const testDate = u.upcomingCbatDate ?? u.cbatDate ?? null;
   return {
     _id:          u._id,
     agentNumber:  u.agentNumber,
@@ -155,6 +156,12 @@ function toPasserRow(u, { runs, playedMs, activityMs, daysDormant, invite, dorma
     // worth retrying, or a "not yet" whose deferral has expired. Computed from
     // the model's own rule so the list and the sender cannot disagree.
     mailable: SurveyInvite.isMailable(invite, now),
+    // The member's own date wins over the admin's, as everywhere else.
+    cbatDate: testDate ?? null,
+    // Emailed before their test date, which has now arrived. Not mailable in
+    // bulk, but an admin may tick them and send it again.
+    resendable: !SurveyInvite.isMailable(invite, now)
+      && SurveyInvite.isResendableAfterTest(invite, testDate, now),
   };
 }
 
@@ -181,7 +188,7 @@ async function buildCbatPasserCohort({
       isBanned: { $ne: true },
       'researchEmailOptOut.at': null,
     },
-    'agentNumber email displayName isTester cbatPassed cbatPassedAt researchEmailExcluded lastSeen createdAt subscriptionTier',
+    'agentNumber email displayName isTester cbatPassed cbatPassedAt researchEmailExcluded lastSeen createdAt subscriptionTier cbatDate upcomingCbatDate',
   ).lean();
 
   const candidates = users.filter(u => !isExcludedAccount(u));
@@ -410,6 +417,7 @@ async function describeSurveyUsers(users, {
       // A hard block overrides the invite rule; a soft one does not, because
       // the whole point of the search is to reach past the soft ones.
       mailable: !blocked && row.mailable,
+      resendable: !blocked && row.resendable,
       inCohort: excludedReason === null,
     };
   });

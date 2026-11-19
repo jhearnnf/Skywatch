@@ -212,8 +212,9 @@ export default function CbatPassersSection({ API, openOnMount = false, presetGro
   }, [rows, picked])
 
   // The server's own rule, echoed: never invited, a failed send worth retrying,
-  // or a deferral that has run out.
-  const selectable = (u) => u.mailable
+  // or a deferral that has run out. Plus, by hand only (never pre-ticked),
+  // someone whose email went out before their test date.
+  const selectable = (u) => u.mailable || u.resendable
 
   const toggle = (id) => setSelected(prev => {
     const next = new Set(prev)
@@ -905,7 +906,7 @@ function SearchHitRow({ user, minCompletions, checked, onToggle }) {
       <PasserRow
         user={user}
         checked={checked}
-        selectable={user.mailable}
+        selectable={user.mailable || user.resendable}
         onToggle={onToggle}
       />
       {reason && (
@@ -913,7 +914,12 @@ function SearchHitRow({ user, minCompletions, checked, onToggle }) {
           {reason}
         </p>
       )}
-      {!reason && emailed && (
+      {!reason && emailed && user.resendable && (
+        <p className="px-4 pb-2 text-[10px] text-amber-700" data-testid="cbat-passers-resend-hint">
+          Emailed {fmtDate(user.invite.sentAt)}, before their test on {fmtDate(user.cbatDate)}. Tick to send it again.
+        </p>
+      )}
+      {!reason && emailed && !user.resendable && (
         <p className="px-4 pb-2 text-[10px] text-slate-500">We've already emailed this user for this questionnaire.</p>
       )}
     </div>
@@ -981,6 +987,11 @@ function PasserRow({ user, checked, selectable, onToggle }) {
         )}
         {user.needsResend && (
           <p className="text-[9px] text-rose-600 font-semibold">Link was dead</p>
+        )}
+        {user.resendable && (
+          <p className="text-[9px] text-amber-700 font-semibold" title={`Emailed before their test on ${fmtDate(user.cbatDate)}`}>
+            Sent before test
+          </p>
         )}
         {inv?.completedAt && <p className="text-[9px] text-brand-700 font-semibold">Answered</p>}
         {inv?.optedOutAt && <p className="text-[9px] text-slate-400">Opted out</p>}

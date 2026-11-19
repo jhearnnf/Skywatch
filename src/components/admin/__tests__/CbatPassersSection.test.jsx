@@ -659,4 +659,36 @@ describe('CbatPassersSection — opened for a lounge group', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Send now' }))
     await waitFor(() => expect(sendBody?.userIds).toEqual(['g1']))
   })
+
+  it('lets someone emailed before their test date be ticked again, but not by default', async () => {
+    mockApi(cohort({ nextBatchIds: [] }))
+    searchHits = [
+      person({
+        _id: 'r1', agentNumber: '3333333', email: 'r1@example.com',
+        invite: { sentAt: '2026-09-26T10:00:00.000Z', openedAt: null, completedAt: null, optedOutAt: null, sendError: null, deferredUntil: null, sendCount: 1 },
+        cbatDate: '2026-11-19T00:00:00.000Z',
+        mailable: false, resendable: true,
+      }),
+    ]
+    render(
+      <MemoryRouter initialEntries={['/admin']}>
+        <Routes>
+          <Route path="/admin" element={
+            <CbatPassersSection API="" openOnMount presetGroup={{ title: 'CBAT · 19 Nov 2026', ids: ['r1'] }} />
+          } />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const group = await screen.findByTestId('cbat-passers-group')
+    const box = within(group).getByRole('checkbox', { name: 'Select Agent 3333333' })
+    expect(box).not.toBeDisabled()
+    expect(box).not.toBeChecked()
+    expect(within(group).getByTestId('cbat-passers-resend-hint')).toHaveTextContent(/before their test on 19 Nov 2026/)
+
+    fireEvent.click(box)
+    fireEvent.click(screen.getByRole('button', { name: /Send bulk email/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Send now' }))
+    await waitFor(() => expect(sendBody?.userIds).toEqual(['r1']))
+  })
 })

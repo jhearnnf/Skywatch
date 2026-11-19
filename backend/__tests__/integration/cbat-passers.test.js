@@ -1048,6 +1048,68 @@ describe('someone who was mailed a link that did not work', () => {
   });
 });
 
+describe('someone emailed before their test date', () => {
+  // Sent, and their test date (the member's own, or the admin's) has since
+  // arrived. Ordinarily a sent, unanswered invite is never mailed again.
+  async function sentEarly({ testDaysAgo = 1, field = 'upcomingCbatDate', ...overrides } = {}) {
+    const u = await candidate(overrides);
+    await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    await SurveyInvite.updateOne({ userId: u._id, campaign: SURVEY_CAMPAIGN }, { $set: { sentAt: daysAgo(20) } });
+    await User.updateOne({ _id: u._id }, { [field]: daysAgo(testDaysAgo) });
+    return u;
+  }
+  const rowFor = async (u) => {
+    const res = await getList();
+    return res.body.data.groups.flatMap(g => g.users).find(r => r._id === u._id.toString());
+  };
+  const sendTo = (u) => request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie)
+    .send({ userIds: [u._id.toString()] });
+
+  it('is resendable by hand but not mailable in bulk', async () => {
+    const u = await sentEarly();
+    const row = await rowFor(u);
+    expect(row.mailable).toBe(false);
+    expect(row.resendable).toBe(true);
+
+    const bulk = await getList();
+    expect(bulk.body.data.nextBatchIds.map(String)).not.toContain(u._id.toString());
+  });
+
+  it('a hand-picked send goes out again, on the same token', async () => {
+    const u = await sentEarly({ field: 'cbatDate' });
+    const before = await SurveyInvite.findOne({ userId: u._id });
+
+    const res = await sendTo(u);
+    expect(res.status).toBe(200);
+    expect(res.body.data.sent).toContain(u.email);
+
+    const after = await SurveyInvite.findOne({ userId: u._id });
+    expect(after.token).toBe(before.token);
+    expect(after.sendCount).toBe(2);
+    // Sent after the test now, so not offered a third time.
+    expect((await rowFor(u)).resendable).toBe(false);
+  });
+
+  it('a bulk send does not reach them', async () => {
+    await sentEarly();
+    const res = await request(app).post('/api/admin/cbat-passers/send').set('Cookie', cookie).send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('is not offered while the test is still to come', async () => {
+    const u = await sentEarly({ testDaysAgo: -3 });
+    expect((await rowFor(u)).resendable).toBe(false);
+    expect((await sendTo(u)).status).toBe(400);
+  });
+
+  it('is not offered if they answered or unsubscribed', async () => {
+    const u = await sentEarly();
+    await SurveyInvite.updateOne({ userId: u._id }, { $set: { completedAt: new Date() } });
+    expect((await rowFor(u)).resendable).toBe(false);
+    expect((await sendTo(u)).status).toBe(400);
+  });
+});
+
 // There is one email. The apology copy that used to sit beside it was written
 // for the September 2026 batch whose links were dead, and was removed once
 // everyone owed one had been re-sent — so what is guarded here is that an

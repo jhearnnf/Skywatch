@@ -224,7 +224,7 @@ router.post('/send', async (req, res) => {
       const wanted = new Set(req.body.userIds.map(String));
       chosen = cohort.groups
         .flatMap(g => g.users)
-        .filter(u => wanted.has(u._id.toString()) && u.mailable);
+        .filter(u => wanted.has(u._id.toString()) && (u.mailable || u.resendable));
 
       // Anyone left over came from the search box, which reaches past the
       // thresholds and the named exclusion list on purpose. They are resolved
@@ -235,7 +235,7 @@ router.post('/send', async (req, res) => {
       const missing = [...wanted].filter(id => !found.has(id));
       if (missing.length) {
         const extras = await describeSurveyUsersByIds(missing, { minCompletions, dormantDays });
-        chosen = chosen.concat(extras.filter(u => u.mailable));
+        chosen = chosen.concat(extras.filter(u => u.mailable || u.resendable));
       }
 
       chosen = chosen.slice(0, limit);
@@ -247,7 +247,11 @@ router.post('/send', async (req, res) => {
       return res.status(400).json({ message: 'No eligible recipients — everyone in the ready band has already been emailed, or is waiting on a test date they gave us.' });
     }
 
-    const { sent, failed, recipientCount } = await inviteAndSend(chosen, { variant });
+    // Only a hand-picked send may reach someone emailed before their test date.
+    const { sent, failed, recipientCount } = await inviteAndSend(chosen, {
+      variant,
+      allowResendAfterTest: Array.isArray(req.body?.userIds) && req.body.userIds.length > 0,
+    });
     if (!recipientCount) {
       return res.status(400).json({ message: 'Every chosen account has already been contacted for this questionnaire.' });
     }

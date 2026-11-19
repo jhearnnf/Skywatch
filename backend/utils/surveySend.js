@@ -30,7 +30,11 @@ function savedThresholds(settings) {
 // `chosen` is a list of cohort rows (each with _id and email). Returns what was
 // sent and what failed; `recipientCount` is how many survived the invite step
 // (0 means every chosen account had already been contacted).
-async function inviteAndSend(chosen, { variant, logMeta } = {}) {
+//
+// `allowResendAfterTest` lets a hand-picked send reach someone already emailed
+// whose email went out before their test date (SurveyInvite.isResendableAfterTest).
+// Each candidate must carry `cbatDate`. The bulk batch and the auto-send never pass it.
+async function inviteAndSend(chosen, { variant, logMeta, allowResendAfterTest = false } = {}) {
   // Invite rows first: a token has to exist before it can be put in an email.
   //
   // An existing invite is REUSED rather than replaced when it is mailable —
@@ -48,7 +52,9 @@ async function inviteAndSend(chosen, { variant, logMeta } = {}) {
     let invite = await SurveyInvite.findOne({ userId: candidate._id, campaign: SURVEY_CAMPAIGN });
 
     if (invite) {
-      if (!SurveyInvite.isMailable(invite)) continue;
+      const resend = allowResendAfterTest
+        && SurveyInvite.isResendableAfterTest(invite, candidate.cbatDate);
+      if (!SurveyInvite.isMailable(invite) && !resend) continue;
     } else {
       try {
         // eslint-disable-next-line no-await-in-loop
