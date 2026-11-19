@@ -2478,7 +2478,6 @@ async function submitSatResult(req, res, Model) {
       totalQuestions,
       totalTime,
       avgTimePerQuestionMs,
-      ...extra,
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2548,7 +2547,6 @@ async function submitQuestionCountResult(req, res, Model) {
       totalQuestions,
       totalTime,
       avgTimePerQuestionMs,
-      ...extra,
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
