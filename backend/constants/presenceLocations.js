@@ -101,6 +101,10 @@ const LOCATIONS = [
   [/^\/privacy\/?$/,                'Privacy'],
   [/^\/delete-account\/?$/,         'Deleting their account'],
   [/^\/share\/?$/,                  'Share'],
+  // The outcome questionnaire. The emailed link carries a token in the path;
+  // only the label is stored, so the token never reaches the database.
+  [/^\/survey\/[^/]+\/opt-out\/?$/, 'Survey opt-out'],
+  [/^\/survey(\/[^/]+)?\/?$/,       'Outcome survey'],
   [/^\/login\/?$/,                  'Login'],
   [/^\/home\/?$/,                   'Home'],
   [/^\/?$/,                         'Landing page'],

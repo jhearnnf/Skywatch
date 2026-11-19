@@ -64,6 +64,9 @@ describe('locationLabel', () => {
     expect(locationLabel('/brief/68f1a2b3c4d5e6f708192a3b')).toBe('Reading a brief');
     expect(locationLabel('/quiz/68f1a2b3c4d5e6f708192a3b')).toBe('Brief quiz');
     expect(locationLabel('/chat/68f1a2b3c4d5e6f708192a3b')).toBe('Community');
+    expect(locationLabel('/survey/abc123token')).toBe('Outcome survey');
+    expect(locationLabel('/survey/abc123token/opt-out')).toBe('Survey opt-out');
+    expect(locationLabel('/survey')).toBe('Outcome survey');
   });
 
   it('never returns anything containing part of the path it was given', () => {
@@ -71,6 +74,7 @@ describe('locationLabel', () => {
     const paths = [
       ...ids.map(id => `/brief/${id}`),
       ...ids.map(id => `/chat/${id}`),
+      ...ids.map(id => `/survey/${id}`),
       ...ids.map(id => `/case-files/${id}/${id}`),
       ...ids.map(id => `/cbat/${id}/leaderboard`),
     ];
