@@ -485,7 +485,9 @@ export default function CbatInstruments({ forcedMode = null }) {
   // shell's max-w-3xl. See main.css.
   // Room for the joystick + throttle rail beside the Practise card.
   useGameBodyClass('cbat-stick-wide', phase === 'intro' && isPractise && !forcedMode)
-  useGameBodyClass('cbat-stage-wide', phase === 'calibrating' || phase === 'playing' || phase === 'feedback' || drillFlying)
+  // Orientation runs in its own phase. Without the wide stage the shell's
+  // max-w-3xl leaves the four answer pictures ~170px after the 30rem dials.
+  useGameBodyClass('cbat-stage-wide', phase === 'calibrating' || phase === 'playing' || phase === 'feedback' || phase === 'orientation' || drillFlying)
 
   const handlePick = useCallback((idx) => {
     if (phase !== 'playing' || !round) return

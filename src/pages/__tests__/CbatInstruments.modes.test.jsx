@@ -150,6 +150,9 @@ describe('CbatInstruments orientation run', () => {
       expect(screen.getByTestId('orientation-attitude')).toBeTruthy()
       expect(screen.getByTestId('orientation-compass')).toBeTruthy()
       expect(container.querySelectorAll('[data-option]')).toHaveLength(ORIENTATION_OPTIONS)
+      // Without the wide stage the shell caps the run at max-w-3xl and the four
+      // pictures were squeezed to ~170px beside the dials (support ticket, 2026-11-19).
+      expect(document.body.classList.contains('cbat-stage-wide')).toBe(true)
 
       for (let q = 0; q < ORIENTATION_QUESTIONS; q++) {
         // The instruments name the answer through the pictures' data attributes.
@@ -176,6 +179,7 @@ describe('CbatInstruments orientation run', () => {
 
       expect(screen.getByTestId('game-over').dataset.gameKey).toBe('instruments-orientation')
       expect(mockSubmit).toHaveBeenCalledTimes(1)
+      expect(document.body.classList.contains('cbat-stage-wide')).toBe(false)
       const [key, payload] = mockSubmit.mock.calls[0]
       expect(key).toBe('instruments-orientation')
       expect(payload.correctCount).toBe(5)
