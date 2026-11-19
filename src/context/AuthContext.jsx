@@ -13,6 +13,7 @@ import { setOutboxOwner } from '../lib/outboxOwner'
 import { noteApiReachable, noteApiUnauthorized, noteApiUnreachable, onApiHealthChange, getApiHealth } from '../lib/apiHealth'
 import { reportApiUnreachable, stashUnreachable } from '../lib/apiDiagnostics'
 import { reportMusicOff, onMusicOff } from '../lib/musicOffReport'
+import { disableOnDevice } from '../lib/pushNotifications'
 
 // Exported so a caller can deliberately substitute the auth value for a
 // subtree — the landing page's live game wall wraps each demo-mounted game in
@@ -237,6 +238,13 @@ export function AuthProvider({ children }) {
   }, [user, apiFetch])
 
   const logout = async () => {
+    // Take this device off push first, while the request is still signed in,
+    // so a shared phone or laptop stops showing this account's messages.
+    // Capped so a slow push service never holds up signing out.
+    await Promise.race([
+      disableOnDevice({ API, apiFetch }),
+      new Promise(r => setTimeout(r, 3000)),
+    ])
     await fetch(`${API}/api/auth/logout`, { method: 'POST', headers: nativeHeaders(), ...(isNative ? {} : { credentials: 'include' }) })
     if (isNative) clearToken()
     // Anything still on its way up was said by the account signing out.

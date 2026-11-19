@@ -34,11 +34,24 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Chat push notifications (Firebase). The icon and channel are
+             also named per message by the backend; these are the fallbacks
+             for anything that arrives without them. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notify" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="chat" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+: chat push notifications need the user's say-so, asked
+         from Profile > Settings > Push Notifications. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Android 11+ package visibility: without this, the OS hides the
          Text-To-Speech engine (a separate app) from us and the SAT radio

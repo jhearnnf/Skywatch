@@ -24,6 +24,8 @@ import { CbatLoungeDockProvider }            from './components/cbat/CbatLoungeD
 import CommunityMusic                         from './components/CommunityMusic'
 import AppShell                            from './components/layout/AppShell'
 import UiThemeSync                         from './components/layout/UiThemeSync'
+import PushNotificationBridge              from './components/PushNotificationBridge'
+import InAppPushNotice                     from './components/InAppPushNotice'
 import { useNativeBackButton }             from './hooks/useNativeBackButton'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
@@ -500,6 +502,7 @@ export default function App() {
                 <ChatUnreadProvider>
                   <GameChromeProvider>
                     <UiThemeSync />
+                    <PushNotificationBridge />
                     <CbatMockLock />
                     <StaleBuildReload />
                     {/* Holds the one desktop CBAT chat panel, which stays put across
@@ -513,6 +516,7 @@ export default function App() {
                     <OfflineStatus />
                     <HiddenDuringMock>
                       <UpdateNotificationModal />
+                      <InAppPushNotice />
                       <LearnNavFlasher />
                       <PlayNavFlasher />
                       <TutorialPickerOverlay />

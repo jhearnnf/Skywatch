@@ -223,6 +223,9 @@ export default defineConfig({
         // of them would bloat every install's precache for nothing.
         globIgnores: ['**/models/**', 'cbat-tests.html', 'cbat-tests/**'],
         additionalManifestEntries: offlineGlbPrecacheEntries(),
+        // Chat push notifications: the push and notification-click handlers
+        // live in public/push-sw.js and run inside this generated worker.
+        importScripts: ['push-sw.js'],
         // 3D/vendor chunks. The app ships as a single eagerly-imported bundle,
         // so this has to clear the whole thing — and it MUST, because offline
         // CBAT play precaches the app shell. A bundle over the limit is not

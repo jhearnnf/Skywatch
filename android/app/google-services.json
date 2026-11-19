@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "250872035382",
+    "project_id": "skywatch-f5a6e",
+    "storage_bucket": "skywatch-f5a6e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:250872035382:android:562ded4e320c22f5344097",
+        "android_client_info": {
+          "package_name": "academy.skywatch.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAJvEnFtAC-UH7lSOgRx127n-LNIeEbGy8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

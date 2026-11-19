@@ -25,6 +25,7 @@ import DeleteAccountModal from '../components/DeleteAccountModal'
 import { getClientInfo } from '../utils/appVersion'
 import { PLAY_STORE_URL, fetchLiveWebVersion, forceUpdateWebApp, isNativeUpdateAvailable, isWebUpdateAvailable } from '../utils/appUpdate'
 import BlockedAgents from './chat/components/BlockedAgents'
+import PushNotificationSettings from '../components/PushNotificationSettings'
 import AppUpdateCover from '../components/AppUpdateCover'
 import AdminToolPanel from '../components/AdminToolPanel'
 
@@ -941,6 +942,9 @@ export default function Profile() {
               rather than inside Community itself, because blocking someone
               removes their messages from the very place you would look for
               them. See BlockedAgents. */}
+          {/* Phone / desktop push: which device, and what about. */}
+          {appSettings?.chatEnabled !== false && <PushNotificationSettings />}
+
           {appSettings?.chatEnabled !== false && <BlockedAgents />}
 
           {!slim && (<>
