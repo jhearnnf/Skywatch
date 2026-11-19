@@ -26,6 +26,7 @@ import AppShell                            from './components/layout/AppShell'
 import UiThemeSync                         from './components/layout/UiThemeSync'
 import PushNotificationBridge              from './components/PushNotificationBridge'
 import InAppPushNotice                     from './components/InAppPushNotice'
+import PushOptInPrompt                     from './components/PushOptInPrompt'
 import { useNativeBackButton }             from './hooks/useNativeBackButton'
 import ScrollToTop                         from './components/ScrollToTop'
 import AirstarNotification                 from './components/AirstarNotification'
@@ -517,6 +518,7 @@ export default function App() {
                     <HiddenDuringMock>
                       <UpdateNotificationModal />
                       <InAppPushNotice />
+                      <PushOptInPrompt />
                       <LearnNavFlasher />
                       <PlayNavFlasher />
                       <TutorialPickerOverlay />
