@@ -529,27 +529,25 @@ describe('CBAT short tile titles', () => {
 describe('Cbat page — tile badges', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('no longer announces the difficulty modes — they are not news any more', () => {
+  it('announces the difficulty modes on DAD only, the newest split', () => {
     // FLAG, CUT, Numerical Operations and SAT all carried a "New Difficulty
-    // Modes" badge from when the split shipped. Every one of them has had it for
-    // months and half the roster now has a split, so the badge had stopped
-    // distinguishing anything and was only crowding the tiles.
+    // Modes" badge from when their splits shipped and have long since given it
+    // up. DAD gained its Easier mode in November 2026, so it is the one tile
+    // that says so.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge === 'New Difficulty Modes')).toEqual([])
-    expect(screen.queryByText('New Difficulty Modes')).toBeNull()
+    expect(CBAT_GAMES.filter(g => g.badge === 'New Difficulty Modes').map(g => g.key)).toEqual(['dad'])
+    expect(screen.getAllByText('New Difficulty Modes')).toHaveLength(1)
   })
 
-  it('points at RTT, which has had an update', () => {
-    // RTT gained the three-photo limit, the rougher flight and the hills.
-    //
-    // Keep the slot rare, or it stops meaning "look here" — DPT's "New
+  it('keeps the slot to one tile at a time', () => {
+    // Keep the slot rare, or it stops meaning "look here". DPT's "New
     // Tutorial", ANT's and then Vigilance's "New Hard Mode", the Instruments
     // and Vigilance "New Practise Mode", FLAG | CLAN's "New CLAN Tutorial",
-    // RTT's first "New Updates" and ACT's and SAT's "New Update" each gave the
-    // slot up in turn.
+    // RTT's "New Updates" and "New Update", and ACT's and SAT's "New Update"
+    // each gave the slot up in turn.
     renderWithUser()
-    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['rtt'])
-    expect(screen.getAllByText('New Update')).toHaveLength(1)
+    expect(CBAT_GAMES.filter(g => g.badge).map(g => g.key)).toEqual(['dad'])
+    expect(screen.queryByText('New Update')).toBeNull()
     expect(screen.queryByText('New Updates')).toBeNull()
     expect(screen.queryByText('New Practise Mode')).toBeNull()
     expect(screen.queryByText('New CLAN Tutorial')).toBeNull()
