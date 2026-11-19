@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useAuth } from '../../../context/AuthContext'
 import { AdminToolSection } from '../../../components/AdminToolPanel'
+import { reportClientLabel } from '../../../utils/reportClientLabel'
 
 const fmtDuration = (sec) => {
   if (!Number.isFinite(sec)) return null
@@ -145,16 +146,66 @@ export function ReplayLinks({ replay }) {
   )
 }
 
-// Both, as sections of the page's Admin tools panel.
+// Where the user had been, which build and what device, when they asked for
+// help. The server sends it in one shape whether the ticket came from "Report
+// a problem" or "Message the team", and the rows read the same as the
+// report's card in Admin › Reports. Admin-only: `report` is never sent to
+// anyone else.
+export function TicketContext({ context }) {
+  if (!context) {
+    return (
+      <p className="text-[11px] text-slate-500" data-testid="ticket-context">
+        No device details were sent with this ticket. Tickets opened before these were recorded do not have them.
+      </p>
+    )
+  }
+  const client = reportClientLabel(context)
+  return (
+    <div className="text-[11px] text-slate-600 space-y-1" data-testid="ticket-context">
+      {context.pageReported && (
+        <p><span className="font-semibold">Page:</span> {context.pageReported}</p>
+      )}
+      {/* Oldest first, so the last entry is the page they left to ask. */}
+      {context.routeTrail?.length > 0 && (
+        <p><span className="font-semibold">Came from:</span> {context.routeTrail.join(' → ')}</p>
+      )}
+      {client && <p><span className="font-semibold">App:</span> {client}</p>}
+      {context.environmentSummary?.length > 0 && (
+        <dl className="pt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+          {context.environmentSummary.map(row => (
+            <Fragment key={row.label}>
+              <dt className="font-semibold">{row.label}</dt>
+              <dd className="min-w-0 break-words">{row.value}</dd>
+            </Fragment>
+          ))}
+          {context.userAgent && (
+            <>
+              <dt className="font-semibold text-slate-500">User agent</dt>
+              <dd className="min-w-0 break-all text-slate-500 font-mono text-[10px] leading-relaxed">{context.userAgent}</dd>
+            </>
+          )}
+        </dl>
+      )}
+    </div>
+  )
+}
+
+// All of it, as sections of the page's Admin tools panel.
 export default function TicketAdminTools({ conversationId, conversation, onMediaChanged }) {
   const media = conversation?.media
   const hasReplay = conversation && 'replay' in conversation
-  if (!media?.canToggle && !hasReplay) return null
+  const hasContext = conversation && 'report' in conversation
+  if (!media?.canToggle && !hasReplay && !hasContext) return null
   return (
     <>
       {media?.canToggle && (
         <AdminToolSection title="Photos and videos">
           <MediaPermissionToggle conversationId={conversationId} media={media} onChanged={onMediaChanged} />
+        </AdminToolSection>
+      )}
+      {hasContext && (
+        <AdminToolSection title="Device and app">
+          <TicketContext context={conversation.report} />
         </AdminToolSection>
       )}
       {hasReplay && (

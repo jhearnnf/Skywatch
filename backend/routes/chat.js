@@ -31,6 +31,7 @@ const { overDailyBudget, noteBotSpend } = require('../utils/chatBotBudget');
 const { SUPPORT_LABEL, markRead, appendMessage } = require('../utils/chatWrite');
 const { openTicket, nameTicketFromFirstMessage, resolveTicket, reopenTicket } = require('../utils/supportTickets');
 const { describeReportEnvironment } = require('../utils/reportEnvironment');
+const { sanitiseReportContext } = require('../utils/reportContext');
 const ChatUpload = require('../models/ChatUpload');
 const {
   MAX_ATTACHMENTS, KIND_RULES, folderFor, newPublicId, mediaAccess, serializeAttachments, displayText,
@@ -1512,25 +1513,37 @@ router.post('/dm', async (req, res) => {
   }
 });
 
-// The report behind a ticket, as the admin thread header shows it: where it
-// was filed from, what the device was. Null for a thread with no report.
+// The context behind a ticket, as the admin's ticket tools show it: where the
+// user had been, which build, what the device was. A report-backed ticket
+// reads its report; a "Message the team" ticket reads the copy it was opened
+// with. Both come out in one shape so the admin card never has to know which
+// way the ticket came in. Null when neither exists (tickets opened before
+// this was captured, or by an admin).
+function describeContext(c, extra = {}) {
+  return {
+    _id:                null,
+    pageReported:       c.pageReported ?? null,
+    routeTrail:         c.routeTrail ?? [],
+    clientPlatform:     c.clientPlatform ?? null,
+    clientVersion:      c.clientVersion ?? null,
+    clientBuild:        c.clientBuild ?? null,
+    userAgent:          c.environment?.userAgent ?? null,
+    environmentSummary: describeReportEnvironment(c.environment, { clientPlatform: c.clientPlatform }),
+    ...extra,
+  };
+}
+
 async function reportContextFor(convo) {
-  if (!convo.reportId) return null;
+  if (!convo.reportId) {
+    return convo.context
+      ? describeContext(convo.context, { source: 'ticket', time: convo.context.capturedAt ?? null })
+      : null;
+  }
   const r = await ProblemReport.findById(convo.reportId)
     .select('pageReported routeTrail clientPlatform clientVersion clientBuild environment solved intelligenceBrief time')
     .lean();
   if (!r) return null;
-  return {
-    _id:                r._id,
-    pageReported:       r.pageReported,
-    routeTrail:         r.routeTrail ?? [],
-    clientPlatform:     r.clientPlatform ?? null,
-    clientVersion:      r.clientVersion ?? null,
-    clientBuild:        r.clientBuild ?? null,
-    solved:             Boolean(r.solved),
-    time:               r.time,
-    environmentSummary: describeReportEnvironment(r.environment, { clientPlatform: r.clientPlatform }),
-  };
+  return describeContext(r, { _id: r._id, source: 'report', solved: Boolean(r.solved), time: r.time });
 }
 
 // ── User: support tickets ────────────────────────────────────────────────────
@@ -1547,6 +1560,11 @@ router.post('/conversations', async (req, res) => {
     const body = (req.body?.body ?? '').toString().trim();
     if (body.length > 4000) return res.status(400).json({ message: 'Message too long (max 4000 chars)' });
     const { conversation, created } = await openTicket({ user: req.user, body: body || null });
+    // The same evidence a problem report carries — route trail, build and
+    // device — cleaned by the same builder (utils/reportContext.js). Written
+    // over a reused blank ticket too: the newest press is the one that counts.
+    const context = sanitiseReportContext(req.body, req.headers['user-agent']);
+    await ChatConversation.updateOne({ _id: conversation._id }, { $set: { context } });
     // The session they were in when they asked for help, for the admin.
     if (req.body?.replay) {
       await attachReplay(conversation._id, req.body.replay, {

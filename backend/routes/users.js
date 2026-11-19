@@ -32,7 +32,7 @@ const mongoose = require('mongoose');
 const { validateDisplayName, cooldownRemaining, COOLDOWN_DAYS } = require('../utils/displayName');
 const { deleteUserAndData } = require('../services/deleteUserData');
 const { sanitiseClientInfo, osFromUserAgent, NATIVE_PLATFORMS } = require('../constants/clientPlatforms');
-const { sanitiseReportEnvironment } = require('../utils/reportEnvironment');
+const { sanitiseReportContext } = require('../utils/reportContext');
 const { openTicket } = require('../utils/supportTickets');
 const { attachReplay } = require('../utils/posthogReplay');
 const { sanitiseGeoInfo, resolveCountry } = require('../constants/geo');
@@ -763,10 +763,6 @@ router.delete('/me/game-unlocks/:key/unlock', protect, async (req, res) => {
   }
 });
 
-// How many pages of context a report may carry. The client sends five; this is
-// the cap on what an arbitrary caller can make us store.
-const ROUTE_TRAIL_MAX = 5;
-
 // POST /api/users/report-problem
 //
 // Both `pageReported` and `routeTrail` arrive as raw pathnames and are stored as
@@ -782,21 +778,13 @@ const ROUTE_TRAIL_MAX = 5;
 // they did before rather than storing a stray referrer.
 router.post('/report-problem', protect, async (req, res) => {
   try {
-    const { pageReported, description, briefId, routeTrail, client, environment } = req.body;
+    const { pageReported, description, briefId } = req.body;
     if (!description) return res.status(400).json({ message: 'Description required' });
 
-    const trail = Array.isArray(routeTrail)
-      ? routeTrail.slice(-ROUTE_TRAIL_MAX).map(locationLabel).filter(Boolean)
-      : [];
-
-    // Best-effort, like the heartbeat's: a client that cannot name its build
-    // must still be able to file a report.
-    const clientInfo = sanitiseClientInfo(client);
-
-    // The device itself: OS, browser, screen, GPU. The User-Agent header is
-    // taken from the request rather than the payload, so even a bundle that
-    // predates the client-side collector files a report we can place.
-    const env = sanitiseReportEnvironment(environment, req.headers['user-agent']);
+    // Route trail, build and device (OS, browser, screen, GPU), cleaned by the
+    // same builder "Message the team" uses (utils/reportContext.js), so a
+    // ticket and a report carry the same evidence.
+    const context = sanitiseReportContext(req.body, req.headers['user-agent']);
 
     let intelligenceBrief = null;
     if (briefId) {
@@ -810,13 +798,11 @@ router.post('/report-problem', protect, async (req, res) => {
       pageReported: locationLabel(pageReported) || 'unknown',
       description,
       intelligenceBrief,
-      routeTrail: trail,
-      ...(clientInfo ? {
-        clientPlatform: clientInfo.platform,
-        clientVersion:  clientInfo.version,
-        clientBuild:    clientInfo.build,
-      } : {}),
-      ...(env ? { environment: env } : {}),
+      routeTrail:     context.routeTrail,
+      clientPlatform: context.clientPlatform,
+      clientVersion:  context.clientVersion,
+      clientBuild:    context.clientBuild,
+      ...(context.environment ? { environment: context.environment } : {}),
     });
 
     // The report opens a support ticket: a thread with the report as its

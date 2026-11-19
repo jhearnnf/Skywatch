@@ -972,10 +972,11 @@ export default function ChatThread({
         </>
       )}
 
-      {/* Admin-only: the upload switch and the reporter's session replay.
-          The server sends `replay` to admins only and `canToggle` is false
-          for everyone else, so this renders nothing for a user. */}
-      {user?.isAdmin && conversation && (conversation.media?.canToggle || 'replay' in conversation) && (
+      {/* Admin-only: the upload switch, the reporter's device and their
+          session replay. The server sends `report` and `replay` to admins
+          only and `canToggle` is false for everyone else, so this renders
+          nothing for a user. */}
+      {user?.isAdmin && conversation && (conversation.media?.canToggle || 'replay' in conversation || 'report' in conversation) && (
         <AdminToolPanel title={type === 'support' ? 'Support ticket' : 'Direct message'}>
           <TicketAdminTools
             conversationId={conversationId}

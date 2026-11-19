@@ -5,7 +5,7 @@ import { useChatUnread } from '../../context/ChatUnreadContext'
 import { useGameBodyClass } from '../../hooks/useGameBodyClass'
 import useChatPresence from '../../hooks/useChatPresence'
 import { fetchOverview, getCachedOverview, syncChatCacheOwner } from '../../utils/chatCache'
-import { getRouteTrail } from '../../utils/routeTrail'
+import { collectHelpContext } from '../../utils/helpContext'
 import { currentReplay, captureEvent } from '../../lib/posthog'
 import ChatSidebar from './ChatSidebar'
 import ChatThread from './ChatThread'
@@ -190,12 +190,15 @@ export default function ChatShell() {
   const startSupport = async () => {
     // Asking for help is a report too: the admin gets the session they were
     // in, ranked against the last page they were on before Community.
-    const lastPage = getRouteTrail().filter(p => !p.startsWith('/chat')).at(-1) ?? null
+    // It carries the same trail, build and device a problem report does
+    // (utils/helpContext.js), so the admin gets the same evidence either way.
+    const context  = await collectHelpContext({ skip: p => p.startsWith('/chat') })
+    const lastPage = context.routeTrail.at(-1) ?? null
     captureEvent('problem_reported', { page: lastPage, via: 'message_the_team' })
     const r = await apiFetch(`${API}/api/chat/conversations`, {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ replay: currentReplay(lastPage) }),
+      body: JSON.stringify({ ...context, pageReported: lastPage, replay: currentReplay(lastPage) }),
     })
     const d = await r.json().catch(() => null)
     if (d?.data?.conversation) navigate(`/chat/${d.data.conversation._id}`)

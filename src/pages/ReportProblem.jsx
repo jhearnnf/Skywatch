@@ -5,9 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import SEO from '../components/SEO'
 import { useSlimMode } from '../hooks/useSlimMode'
 import { usePhoneTight } from '../hooks/usePhoneTight'
-import { getRouteTrail } from '../utils/routeTrail'
-import { getClientInfo, peekClientInfo } from '../utils/appVersion'
-import { collectReportEnvironment } from '../utils/reportEnvironment'
+import { getClientInfo } from '../utils/appVersion'
+import { collectHelpContext } from '../utils/helpContext'
 import { currentReplay, captureEvent } from '../lib/posthog'
 
 // ── What this page is ────────────────────────────────────────────────────────
@@ -105,15 +104,12 @@ export default function ReportProblem() {
     }
     setBusy(true); setError('')
 
-    // Where they were, oldest first. The form's own page is dropped: it is the
-    // one page we already know they were on, and it would otherwise be the last
-    // entry of every report ever filed.
-    const trail = getRouteTrail().filter(p => !/^\/report\/?$/.test(p))
-
-    // OS, browser, screen, GPU and the rest — the questions a report cannot be
-    // triaged without and the reporter has no reason to know to answer. Best
-    // effort and time-capped inside the collector, so it never blocks the send.
-    const environment = await collectReportEnvironment()
+    // Where they were (oldest first), their build and their device: the same
+    // context "Message the team" sends (utils/helpContext.js). The form's own
+    // page is dropped from the trail: it is the one page we already know they
+    // were on, and it would otherwise be the last entry of every report.
+    const { routeTrail: trail, client, environment } =
+      await collectHelpContext({ skip: p => /^\/report\/?$/.test(p) })
 
     // The page they reported from, and the PostHog recording they are in, so
     // an admin can watch what happened from their side. The event puts a
@@ -136,7 +132,7 @@ export default function ReportProblem() {
           ...(trail.length ? { routeTrail: trail } : {}),
           // Optional and best-effort, exactly as on the heartbeat — null on a
           // native client whose bridge has not answered yet.
-          ...(peekClientInfo() ? { client: peekClientInfo() } : {}),
+          ...(client ? { client } : {}),
           ...(environment ? { environment } : {}),
           ...(briefId ? { briefId } : {}),
           replay,

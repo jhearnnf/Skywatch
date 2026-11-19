@@ -28,7 +28,7 @@ vi.mock('../../../lib/chatMedia', async (orig) => {
 
 import ComposeBox from '../components/ComposeBox'
 import MessageList from '../components/MessageList'
-import { MediaPermissionToggle, ReplayLinks } from '../components/TicketAdminTools'
+import { MediaPermissionToggle, ReplayLinks, TicketContext } from '../components/TicketAdminTools'
 
 beforeAll(() => {
   globalThis.URL.createObjectURL = vi.fn(() => 'blob:preview')
@@ -152,5 +152,25 @@ describe('admin tools', () => {
     expect(screen.getByText(/No recording for this report/)).toBeTruthy()
     expect(screen.getByText("Couldn't load earlier sessions.")).toBeTruthy()
     expect(screen.queryByRole('link', { name: 'Watch session replay' })).toBeNull()
+  })
+
+  // One card for either door into a ticket: the server sends the same shape.
+  it("shows the user's page, trail, build and device like the Reports tab", () => {
+    render(<TicketContext context={{
+      source: 'ticket', pageReported: 'CBAT · Instruments', routeTrail: ['CBAT menu', 'CBAT · Instruments'],
+      clientPlatform: 'web', clientVersion: '1.2.76', clientBuild: 'b43c949',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0)',
+      environmentSummary: [{ label: 'OS', value: 'Windows 10' }, { label: 'Display', value: '2560×1440' }],
+    }} />)
+    expect(screen.getByText('CBAT menu → CBAT · Instruments')).toBeTruthy()
+    expect(screen.getByText('Web 1.2.76 (b43c949)')).toBeTruthy()
+    expect(screen.getByText('2560×1440')).toBeTruthy()
+    expect(screen.getByText('Mozilla/5.0 (Windows NT 10.0)')).toBeTruthy()
+  })
+
+  it('says so when a ticket came with no device details', () => {
+    render(<TicketContext context={null} />)
+    expect(screen.getByTestId('ticket-context').textContent).toMatch(/No device details/)
+    expect(screen.getByTestId('ticket-context').textContent).not.toMatch(/—/)
   })
 })

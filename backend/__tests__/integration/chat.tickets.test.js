@@ -252,3 +252,76 @@ describe('the solved/closed mirror from the chat side', () => {
     expect((await ProblemReport.findById(report._id)).solved).toBe(true);
   });
 });
+
+// "Message the team" and "Report a problem" are two doors into the same
+// ticket, so the admin gets the same evidence from either: route trail,
+// build and device, cleaned by the one builder (utils/reportContext.js).
+describe('"Message the team" carries the same context as a report', () => {
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+  const openTicket = (user, body) =>
+    request(app).post('/api/chat/conversations').set('Cookie', cookie(user)).set('User-Agent', UA).send(body);
+
+  it('stores the trail, build and device and shows them to an admin in the report shape', async () => {
+    const user  = await createUser();
+    const admin = await createAdminUser();
+    const res = await openTicket(user, {
+      pageReported: '/cbat/instruments',
+      routeTrail: ['/cbat', '/cbat/instruments'],
+      client: { platform: 'web', version: '1.2.76', build: 'b43c949' },
+      environment: { screenWidth: 2560, screenHeight: 1440, viewportWidth: 2560, viewportHeight: 1279, theme: 'cbat' },
+    });
+    expect(res.status).toBe(200);
+    const id = res.body.data.conversation._id;
+
+    const saved = await ChatConversation.findById(id).lean();
+    expect(saved.context.routeTrail).toEqual(['CBAT menu', 'CBAT · Instruments']);
+    expect(saved.context.clientVersion).toBe('1.2.76');
+    expect(saved.context.environment.screenWidth).toBe(2560);
+    // The header, not the payload, exactly as a report does it.
+    expect(saved.context.environment.userAgent).toBe(UA);
+
+    const theirs = await messagesOf(admin, id);
+    const ctx = theirs.body.data.conversation.report;
+    expect(ctx.source).toBe('ticket');
+    expect(ctx.pageReported).toBe('CBAT · Instruments');
+    expect(ctx.clientPlatform).toBe('web');
+    expect(ctx.clientBuild).toBe('b43c949');
+    expect(ctx.userAgent).toBe(UA);
+    expect(ctx.environmentSummary.find(r => r.label === 'Display').value).toMatch(/2560/);
+
+    const mine = await messagesOf(user, id);
+    expect(mine.body.data.conversation.report).toBeUndefined();
+  });
+
+  it('still records the OS and browser from a client that sends nothing', async () => {
+    const user = await createUser();
+    const res = await openTicket(user, {});
+    const saved = await ChatConversation.findById(res.body.data.conversation._id).lean();
+    expect(saved.context.environment.userAgent).toBe(UA);
+    expect(saved.context.routeTrail).toEqual([]);
+  });
+
+  it('keeps nothing it does not recognise', async () => {
+    const user = await createUser();
+    const res = await openTicket(user, {
+      routeTrail: ['/not-a-real-page', '/cbat'],
+      client: { platform: 'toaster', version: '1' },
+      environment: { screenWidth: 1920, evil: '<script>' },
+    });
+    const saved = await ChatConversation.findById(res.body.data.conversation._id).lean();
+    expect(saved.context.routeTrail).toEqual(['CBAT menu']);
+    expect(saved.context.clientPlatform).toBeNull();
+    expect(saved.context.environment.evil).toBeUndefined();
+  });
+
+  it('gives a report-backed ticket the same shape, read from its report', async () => {
+    const user  = await createUser();
+    const admin = await createAdminUser();
+    const { conversationId } = await fileReport(user);
+    const ctx = (await messagesOf(admin, conversationId)).body.data.conversation.report;
+    expect(ctx.source).toBe('report');
+    expect(ctx._id).toBeTruthy();
+    expect(Object.keys(ctx)).toEqual(expect.arrayContaining(
+      ['pageReported', 'routeTrail', 'clientPlatform', 'clientVersion', 'clientBuild', 'userAgent', 'environmentSummary']));
+  });
+});

@@ -1,4 +1,19 @@
 const mongoose = require('mongoose');
+const reportEnvironmentSchema = require('./schemas/reportEnvironment');
+
+// What a "Message the team" ticket was opened with: the same route trail,
+// build and device a problem report records (utils/reportContext.js), so a
+// ticket and a report give the admin the same evidence. A ticket opened FROM
+// a report leaves this null and reads the report's copy instead.
+const ticketContextSchema = new mongoose.Schema({
+  pageReported:   { type: String, default: null },
+  routeTrail:     { type: [String], default: [] },
+  clientPlatform: { type: String, default: null },
+  clientVersion:  { type: String, default: null },
+  clientBuild:    { type: String, default: null },
+  environment:    { type: reportEnvironmentSchema, default: undefined },
+  capturedAt:     { type: Date, default: Date.now },
+}, { _id: false });
 
 // One collection backs all three kinds of chat, discriminated by `type`:
 //
@@ -52,6 +67,11 @@ const chatConversationSchema = new mongoose.Schema({
   // blank-ticket index below needs an equality it can filter on (a partial
   // index can test neither null nor $exists: false).
   hasReport: { type: Boolean, default: false },
+
+  // Admin-only, like `replay`: the user's route trail, build and device when
+  // they pressed "Message the team". Null on report-backed tickets (the
+  // report holds it) and on tickets opened before this was captured.
+  context: { type: ticketContextSchema, default: null },
 
   // Set when the reporting user's browser was recording a PostHog session at
   // the moment they reported. ADMIN-ONLY on every read: it is a pointer into

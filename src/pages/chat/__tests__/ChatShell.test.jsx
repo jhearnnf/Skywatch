@@ -32,6 +32,7 @@ vi.mock('../ChatThread', () => ({
 
 import ChatShell from '../ChatShell'
 import { clearChatCache, syncChatCacheOwner, fetchOverview } from '../../../utils/chatCache'
+import { recordPath, __resetRouteTrail } from '../../../utils/routeTrail'
 
 const overview = (data) => {
   mockApiFetch.mockResolvedValue({ ok: true, json: async () => ({ status: 'success', data }) })
@@ -63,6 +64,7 @@ describe('ChatShell', () => {
     // Each one starts cold unless it says otherwise.
     syncChatCacheOwner(null)
     clearChatCache()
+    __resetRouteTrail()
   })
 
   it('renders the rail from a single overview call', async () => {
@@ -251,6 +253,29 @@ describe('ChatShell', () => {
       expect(screen.queryByText('General')).toBeNull()
       expect(screen.queryByText('Viper')).toBeNull()
     })
+  })
+
+  // "Message the team" and "Report a problem" are two doors into one ticket:
+  // the admin should get the same trail, build and device from either.
+  it('opens a ticket carrying the same context a problem report sends', async () => {
+    recordPath('/cbat')
+    recordPath('/cbat/instruments')
+    recordPath('/chat')
+    overview({ tickets: [], channels: [], dms: [], viewer: VIEWER })
+    render(<ChatShell />)
+    await waitFor(() => expect(screen.getByTestId('new-ticket')).toBeTruthy())
+    mockApiFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { conversation: { _id: 't9' } } }) })
+    fireEvent.click(screen.getByTestId('new-ticket'))
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/chat/t9'))
+
+    const call = mockApiFetch.mock.calls.find(([url, opts]) => url === '/api/chat/conversations' && opts?.method === 'POST')
+    const body = JSON.parse(call[1].body)
+    // Community itself is dropped, so the last page is the one they left.
+    expect(body.routeTrail).toEqual(['/cbat', '/cbat/instruments'])
+    expect(body.pageReported).toBe('/cbat/instruments')
+    expect(body.environment).toEqual(expect.objectContaining({ viewportWidth: expect.any(Number) }))
+    expect(body.client).toEqual(expect.objectContaining({ platform: 'web' }))
+    expect('replay' in body).toBe(true)
   })
 
   it('always offers a new ticket, and lists open tickets as conversations', async () => {

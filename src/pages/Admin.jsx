@@ -44,6 +44,7 @@ import { CBAT_GAMES } from './Cbat'
 import { CBAT_ADMIN_GAMES } from '../data/cbatGames'
 import CbatGameIcon from '../components/cbat/CbatGameIcon'
 import { HOLIDAY_THEMES, isHolidayThemeLive } from '../data/holidayThemes'
+import { reportClientLabel } from '../utils/reportClientLabel'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -6741,14 +6742,6 @@ function reportUserLabel(u, unknown = 'Unknown agent') {
   return parts.filter(Boolean).join(' · ') || unknown
 }
 
-// "Android 1.2.34 (39)" — what the reporter's client said it was running when
-// they sent it. Null on reports filed before the form captured this, and on any
-// client that could not name its build; the line is then simply absent.
-function reportClientLabel(p) {
-  if (!p?.clientPlatform) return null
-  const os = { android: 'Android', ios: 'iOS', web: 'Web' }[p.clientPlatform] ?? p.clientPlatform
-  return [os, p.clientVersion, p.clientBuild ? `(${p.clientBuild})` : null].filter(Boolean).join(' ')
-}
 
 // Which channels an update actually went out on. `notificationSent` is absent on
 // updates written before the channels could be combined — back then "not emailed"

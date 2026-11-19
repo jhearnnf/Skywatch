@@ -5,7 +5,7 @@ import { useChatUnread } from '../../context/ChatUnreadContext'
 import MessageList from './components/MessageList'
 import ComposeBox from './components/ComposeBox'
 import SeenByDialog from './components/SeenByDialog'
-import { MediaPermissionToggle, ReplayLinks, MediaUsageReadout } from './components/TicketAdminTools'
+import { MediaPermissionToggle, ReplayLinks, MediaUsageReadout, TicketContext } from './components/TicketAdminTools'
 import { agentLabel, formatTime } from './format'
 
 const POLL_MESSAGES_MS = 10_000
@@ -507,15 +507,18 @@ export default function AdminChatView() {
               </div>
             )}
 
-            {/* The ticket's admin tools: the user's upload switch and the
-                PostHog replay. This whole page is admin-only, so they sit in
-                the thread rather than in the floating panel. */}
+            {/* The ticket's admin tools: the user's device, their upload
+                switch and the PostHog replay. This whole page is admin-only,
+                so they sit in the thread rather than in the floating panel. */}
             {selected.type === 'support' && thread.id === selectedId && thread.conversation && (
               <details className="border-t border-slate-200 px-3 py-2" data-testid="ticket-admin-tools">
                 <summary className="text-[11px] font-bold text-slate-500 cursor-pointer select-none">
-                  Photos, videos and session replay
+                  Device, photos, videos and session replay
                 </summary>
                 <div className="mt-2 grid gap-3 md:grid-cols-2">
+                  <div className="md:col-span-2">
+                    <TicketContext context={thread.conversation.report ?? null} />
+                  </div>
                   <MediaPermissionToggle
                     conversationId={selectedId}
                     media={thread.conversation.media}
