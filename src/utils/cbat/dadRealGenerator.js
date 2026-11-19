@@ -14,8 +14,9 @@
 //     miles south west, then 700 miles south east...").
 //   - "Not Pythagoras, all based off square angles ... the distances created
 //     rectangles." Every leg and every statement here is at a right angle to
-//     the others, and a distance is only ever asked along a straight line, so
-//     no answer needs a square root.
+//     the others, a distance is only ever asked along a straight line, and a
+//     "closest"/"furthest" winner is clear from side lengths alone, so no
+//     answer needs a square root.
 //   - "The above kind of questions got joined together": a journey that sets
 //     off from one of the landmarks.
 //
@@ -236,6 +237,15 @@ function layChain(count, frame, set, rng) {
 
 const sub = (p, q) => [p[0] - q[0], p[1] - q[1]]
 const d2 = ([a, b]) => a * a + b * b
+// Bounds a player can read straight off a sketch, with no Pythagoras: a
+// diagonal gap is never shorter than its longer side (`reach`) and never longer
+// than walking both sides (`span`). A "closest"/"furthest" winner must beat
+// every rival on these bounds alone, e.g. "X and Y are at most 300 apart; every
+// other pair is at least 400 apart along one direction".
+const reach = ([a, b]) => Math.max(Math.abs(a), Math.abs(b))
+const span = ([a, b]) => Math.abs(a) + Math.abs(b)
+// True when gap `w` is shorter than every gap in `rivals` without a square root.
+const plainlyShorter = (w, rivals) => rivals.every(r => reach(r) > span(w))
 const adjacent = (links, i, j) => links.some(l => (l.from === i && l.to === j) || (l.from === j && l.to === i))
 
 function pairOptions(answerPair, allPairs, label, rng) {
@@ -248,6 +258,7 @@ function pairOptions(answerPair, allPairs, label, rng) {
 //   'direction' — "In which direction is X from Y?"
 //   'distance'  — "How far is X from Y?" (always a straight line)
 //   'closest' / 'furthest' — "Which two islands are closest together?"
+//               (decidable from the sketch alone, see `plainlyShorter`)
 // The asked-about pair is never one stated directly, so it always has to be
 // worked out.
 export function generateLandmarkQuestion(count, ask, rng = Math.random) {
@@ -298,6 +309,12 @@ export function generateLandmarkQuestion(count, ask, rng = Math.random) {
     const [best, next] = ranked
     const clear = ask === 'closest' ? best.d * 1.5 <= next.d : best.d >= next.d * 1.5
     if (!clear) continue
+    const gap = (p) => sub(points[p[0]], points[p[1]])
+    const rivals = ranked.slice(1).map(r => gap(r.p))
+    const plain = ask === 'closest'
+      ? plainlyShorter(gap(best.p), rivals)
+      : rivals.every(r => plainlyShorter(r, [gap(best.p)]))
+    if (!plain) continue
     if (ask === 'closest' && adjacent(links, best.p[0], best.p[1])) continue
     const label = ([i, j]) => `${set.short(names[i])} and ${set.short(names[j])}`
     const { answer, options } = pairOptions(best.p, pairs, label, rng)
@@ -344,6 +361,7 @@ export function generateCombinedQuestion(count, legCount, ask, rng = Math.random
     if (ask === 'nearest') {
       const ranked = points.map((p, i) => ({ i, d: d2(sub(end, p)) })).sort((m, n) => m.d - n.d)
       if (ranked[0].d * 1.5 > ranked[1].d) continue
+      if (!plainlyShorter(sub(end, points[ranked[0].i]), ranked.slice(1).map(r => sub(end, points[r.i])))) continue
       if (ranked[0].i === from) continue // "where it started" is too easy a catch
       const label = (i) => set.short(names[i])
       const others = shuffle(points.map((_, i) => i).filter(i => i !== ranked[0].i), rng).slice(0, 3)

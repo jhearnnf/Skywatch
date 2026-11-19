@@ -76,6 +76,19 @@ function compassOf([e, n]) {
   return COMPASS[Math.round(idx) % 8]
 }
 const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1])
+// Side lengths of the gap p→q on the question's own grid (frame 1 is the N/E
+// grid turned 45°). A player with no Pythagoras knows the gap is at least the
+// longer side (`lo`) and at most both sides walked (`hi`).
+function sides(p, q, frame) {
+  const [e, n] = [p[0] - q[0], p[1] - q[1]]
+  const [a, b] = frame === 1 ? [(e + n) / Math.SQRT2, (e - n) / Math.SQRT2] : [n, e]
+  return { lo: Math.max(Math.abs(a), Math.abs(b)), hi: Math.abs(a) + Math.abs(b) }
+}
+// The winning gap must beat every rival on those bounds alone.
+function expectPlainlyShorter(win, rivals) {
+  for (const r of rivals) expect(r.lo).toBeGreaterThan(win.hi + 1e-6)
+}
+
 
 // Checks the printed answer against the solver.
 function verify(q) {
@@ -112,11 +125,17 @@ function verify(q) {
     // clear winner (squared margin 1.5×)
     if (m[1].startsWith('closest')) expect(best[2] ** 2 * 1.5).toBeLessThanOrEqual(next[2] ** 2 + 1e-6)
     else expect(best[2] ** 2).toBeGreaterThanOrEqual(next[2] ** 2 * 1.5 - 1e-6)
+    // decidable without Pythagoras
+    const side = (pr) => sides(pos[pr[0]], pos[pr[1]], q.frame)
+    if (m[1].startsWith('closest')) expectPlainlyShorter(side(best), pairs.slice(1).map(side))
+    else for (const r of pairs.slice(1)) expectPlainlyShorter(side(r), [side(best)])
     const ans = q.answer.toLowerCase().split(' and ')
     expect(ans.sort()).toEqual([best[0], best[1]].sort())
   } else if ((m = qm.match(/^Which \w+ is the \w+ now closest to\?$/))) {
     const ranked = Object.entries(pos).map(([n, p]) => [n, dist(p, traveller)]).sort((a, b) => a[1] - b[1])
     expect(ranked[0][1] ** 2 * 1.5).toBeLessThanOrEqual(ranked[1][1] ** 2 + 1e-6)
+    const side = ([n]) => sides(pos[n], traveller, q.frame)
+    expectPlainlyShorter(side(ranked[0]), ranked.slice(1).map(side))
     expect(q.answer.toLowerCase()).toBe(ranked[0][0])
   } else {
     throw new Error(`unknown question: ${qm}`)
