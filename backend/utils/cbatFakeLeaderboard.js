@@ -35,6 +35,7 @@ const GAME_OFFSET = {
   'numerical-ops-easier': 9,
   'act':             18,
   'dad':             22,
+  'dad-hard':        7,
   'cut':              3,
   'cut-easier':       5,
   'sat':             21,
@@ -297,6 +298,13 @@ const FAKE_TUNING = {
     // timer — 15 reading-comprehension questions run ~120–300s.
     floor: 4, ceiling: 15, seedTime: 128.6, timeStep: 6.3,
     scoreSequence: [14, 13, 13, 12, 12, 11, 11, 11, 10, 10, 9, 9, 9, 8, 8, 7, 7, 6, 5, 4],
+  },
+  'dad-hard': {
+    // The fresh Hard board (2026-11-19). Real CBAT Hard runs since the
+    // 2026-11-04 question set average 6.4/15 with a best of 14, so the demos
+    // sit well below the old board's: top demo 12, trailing to 3.
+    floor: 3, ceiling: 15, seedTime: 168.3, timeStep: 7.4,
+    scoreSequence: [12, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 7, 7, 7, 6, 6, 5, 5, 4, 3],
   },
   'sat': {
     // correctCount out of 18 (Situational Awareness Test), higher is better. Top
@@ -721,6 +729,7 @@ const WEEKLY_PER_PLAY = {
   // hard one on the same 0–100 scale.
   'numerical-ops-easier': 85,
   'dad':               9,  // correctCount /15 — a little below a decent single run
+  'dad-hard':          6,  // Real CBAT Hard averages 6.4/15 since 2026-11-04
   'sat':              11,  // correctCount /18 — a little below a decent single run
   'sat-easier':        6,  // correctCount /10 — same idea on the shorter run
   'cut':             350,  // accumulating totalScore — a little below a decent single run

@@ -162,6 +162,7 @@ function journeyProse(who, from, legs, wording, step, unit) {
 }
 
 // A journey from a named start, asking where it ends up from that start.
+// opts: { ask, wording, frame } pin those choices instead of rolling them.
 export function generateJourneyQuestion(legCount, rng = Math.random, opts = {}) {
   const randInt = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1))
   const ask = opts.ask || (rng() < 0.5 ? 'direction' : 'distance')
@@ -170,7 +171,7 @@ export function generateJourneyQuestion(legCount, rng = Math.random, opts = {}) 
   const step = 100, unit = 'miles'
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const frame = randInt(0, 1)
+    const frame = opts.frame ?? randInt(0, 1)
     const laid = layLegs(Math.max(2, legCount), frame, ask, rng)
     if (!laid) continue
     const [a, b] = laid.end
@@ -203,7 +204,7 @@ export function generateJourneyQuestion(legCount, rng = Math.random, opts = {}) 
 // ("A is north of B" / "B is south of A") and the statements come in chain
 // order, reverse order or shuffled, so the player has to build the picture
 // rather than read it off top to bottom.
-function layChain(count, frame, set, rng) {
+function layChain(count, frame, set, rng, { ordered = false } = {}) {
   const randInt = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1))
   const group = set.groups[randInt(0, set.groups.length - 1)]
   const names = shuffle(group, rng).slice(0, count)
@@ -231,7 +232,7 @@ function layChain(count, frame, set, rng) {
     const dir = axisDir(frame, flip ? (l.k + 2) % 4 : l.k)
     return `${cap(set.full(names[subj]))} is ${l.units * set.step} ${set.unit} ${dirWord(dir)} of ${set.full(names[ref])}.`
   })
-  const order = rng() < 1 / 3 ? statements : rng() < 0.5 ? [...statements].reverse() : shuffle(statements, rng)
+  const order = ordered || rng() < 1 / 3 ? statements : rng() < 0.5 ? [...statements].reverse() : shuffle(statements, rng)
   return { names, points, links, prose: order.join(' ') }
 }
 
@@ -261,12 +262,12 @@ function pairOptions(answerPair, allPairs, label, rng) {
 //               (decidable from the sketch alone, see `plainlyShorter`)
 // The asked-about pair is never one stated directly, so it always has to be
 // worked out.
-export function generateLandmarkQuestion(count, ask, rng = Math.random) {
+export function generateLandmarkQuestion(count, ask, rng = Math.random, opts = {}) {
   const randInt = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1))
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const set = SETS[randInt(0, SETS.length - 1)]
-    const frame = randInt(0, 1)
-    const chain = layChain(count, frame, set, rng)
+    const frame = opts.frame ?? randInt(0, 1)
+    const chain = layChain(count, frame, set, rng, opts)
     if (!chain) continue
     const { names, points, links } = chain
     const pairs = []
@@ -329,16 +330,21 @@ export function generateLandmarkQuestion(count, ask, rng = Math.random) {
   throw new Error(`generateLandmarkQuestion(${count}, ${ask}): no valid layout found`)
 }
 
+// opts (landmark and combined questions alike):
+//   frame   — 0 pins the plain N/E/S/W grid, 1 the 45°-turned one
+//   ordered — state the links in chain order (A to B, B to C, ...) rather than
+//             reversed or shuffled
+//
 // ── Combined: landmarks + a journey from one of them ─────────────────────────
 //   'nearest'   — "Which island is the boat now closest to?"
 //   'direction' — "In which direction is the boat from Pigeon Island?"
 //   'distance'  — "How far is the boat from Pigeon Island?"
-export function generateCombinedQuestion(count, legCount, ask, rng = Math.random) {
+export function generateCombinedQuestion(count, legCount, ask, rng = Math.random, opts = {}) {
   const randInt = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1))
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const set = SETS[randInt(0, SETS.length - 1)]
-    const frame = randInt(0, 1)
-    const chain = layChain(count, frame, set, rng)
+    const frame = opts.frame ?? randInt(0, 1)
+    const chain = layChain(count, frame, set, rng, opts)
     if (!chain) continue
     const { names, points } = chain
     const from = randInt(0, count - 1)
@@ -429,6 +435,51 @@ export function buildRealDadQuestions(rng = Math.random) {
       () => generateCombinedQuestion(4, 3, dirOrDist(), rng),
       () => generateCombinedQuestion(5, 3, pick(['nearest', 'direction', 'distance']), rng),
       () => generateLandmarkQuestion(5, extreme(), rng),
+    ], rng),
+  ]
+  return stages.flat().map(make => make())
+}
+
+// ── The Easier run ───────────────────────────────────────────────────────────
+// Same 15 questions and the same kinds as Hard, each made lighter:
+//   - always the plain N/E/S/W grid, never the 45°-turned one
+//   - journeys give every leg a heading (no "turns left" wording) and run
+//     2–4 legs instead of 4–6
+//   - three or four landmarks instead of four or five, stated in chain order
+//   - combined questions use a two-leg journey
+//   Q1–4   journeys (a two-leg journey only ever asks a direction: two legs at
+//          a right angle never end on a straight line from the start)
+//   Q5–8   three landmarks: direction, distance + a four-landmark
+//          closest/furthest + a journey
+//   Q9–12  four landmarks: direction, distance, closest/furthest + a journey
+//   Q13–15 landmarks + a short journey from one of them
+// "Which is closest" questions always use four landmarks: four answer options
+// need at least four places (or six pairs) to choose between.
+export function buildRealDadEasierQuestions(rng = Math.random) {
+  const pick = (arr) => arr[Math.floor(rng() * arr.length)]
+  const extreme = () => pick(['closest', 'furthest'])
+  const easy = { frame: 0, ordered: true }
+  const trip = (legs) => () => generateJourneyQuestion(legs, rng, {
+    frame: 0, wording: 'headings', ...(legs === 2 ? { ask: 'direction' } : {}),
+  })
+  const stages = [
+    [trip(2), trip(2), trip(3), trip(3)],
+    shuffle([
+      () => generateLandmarkQuestion(3, 'direction', rng, easy),
+      () => generateLandmarkQuestion(3, 'distance', rng, easy),
+      () => generateLandmarkQuestion(4, extreme(), rng, easy),
+      trip(3),
+    ], rng),
+    shuffle([
+      () => generateLandmarkQuestion(4, 'direction', rng, easy),
+      () => generateLandmarkQuestion(4, 'distance', rng, easy),
+      () => generateLandmarkQuestion(4, extreme(), rng, easy),
+      trip(4),
+    ], rng),
+    shuffle([
+      () => generateCombinedQuestion(4, 2, 'nearest', rng, easy),
+      () => generateCombinedQuestion(3, 2, 'direction', rng, easy),
+      () => generateCombinedQuestion(3, 2, 'distance', rng, easy),
     ], rng),
   ]
   return stages.flat().map(make => make())

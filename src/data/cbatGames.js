@@ -188,7 +188,8 @@ export const CBAT_LEADERBOARD_CONFIG = {
   'act':             { title: 'ACT',               emoji: '🎧',  scoreLabel: 'Score',     lowerIsBetter: false, formatScore: (s) => `${s}`,     backPath: '/cbat/act',            hideTime: true, showInput: true },
   'numerical-ops':   { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
   'numerical-ops-easier': { title: 'Numerical Operations', emoji: '🧮', scoreLabel: 'Correct %', lowerIsBetter: false, maxScore: 100, formatScore: (s) => `${s}%`, backPath: '/cbat/numerical-ops', difficultyGroup: 'numerical-ops' },
-  'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad' },
+  'dad':             { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad', difficultyGroup: 'dad' },
+  'dad-hard':        { title: 'Directions & Distances', emoji: '🧭', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 15, formatScore: (s) => `${s}/15`, backPath: '/cbat/dad', difficultyGroup: 'dad' },
   'sat':             { title: 'Situational Awareness Test', emoji: '🗺️', scoreLabel: 'Correct', lowerIsBetter: false, maxScore: 18, formatScore: (s) => `${s}/18`, backPath: '/cbat/sat', difficultyGroup: 'sat' },
   // Easier asks 10 questions (2 situations × 5) where Hard asks 18, so unlike
   // the other splits the two boards don't share a ceiling. Separate collections
@@ -260,6 +261,12 @@ export const CBAT_DIFFICULTY_GROUPS = {
   'numerical-ops': [
     { gameKey: 'numerical-ops-easier', label: 'Easier' },
     { gameKey: 'numerical-ops',        label: 'Hard' },
+  ],
+  // ANT's way round: plain `dad` is Easier (the pre-split board, scores kept)
+  // and Hard is the fresh `dad-hard`.
+  dad: [
+    { gameKey: 'dad',      label: 'Easier' },
+    { gameKey: 'dad-hard', label: 'Hard' },
   ],
   sat: [
     { gameKey: 'sat-easier', label: 'Easier' },

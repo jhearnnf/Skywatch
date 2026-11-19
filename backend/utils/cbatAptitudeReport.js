@@ -130,6 +130,22 @@ function easierKeyFor(hardKey) {
   return plain ?? null;
 }
 
+// A scored board can carry on from an older one: `reportAlsoReads: { key, filter }` on its
+// registry entry folds that board's matching runs into its form, newest first, as though they had
+// been played on it. DAD uses it: the report scores `dad-hard`, and every `dad` run not played on
+// Easier still counts, so nobody's DAD reading changed when Hard moved to a fresh board, and each
+// new Hard run pushes an old one out of the window.
+function formSources(gameKey) {
+  const cfg = CBAT_GAMES[gameKey];
+  const sources = [{ cfg, match: { ...(cfg.modeFilter ?? {}) } }];
+  const also = cfg.reportAlsoReads;
+  if (also && CBAT_GAMES[also.key]) {
+    const prev = CBAT_GAMES[also.key];
+    sources.push({ cfg: prev, match: { ...(prev.modeFilter ?? {}), ...(also.filter ?? {}) }, fromKey: also.key });
+  }
+  return sources;
+}
+
 // ── Form ─────────────────────────────────────────────────────────────────────────────────────
 // One query per scorable game, run in parallel. Every result model carries the
 // { userId: 1, createdAt: -1 } index this sorts on.
@@ -146,12 +162,14 @@ async function loadForm(userId, gameKeys = SCORED_GAME_KEYS) {
     const cfg = CBAT_GAMES[gameKey];
     if (!cfg) return [gameKey, null];
 
-    const query = { ...(cfg.modeFilter ?? {}), userId };
-    const recent = await cfg.Model.find(query)
-      .select(`${cfg.primaryField} createdAt`)
+    const limit = Math.max(FORM_WINDOW, minRunsFor(gameKey));
+    const lists = await Promise.all(formSources(gameKey).map(src => src.cfg.Model.find({ ...src.match, userId })
+      .select(`${src.cfg.primaryField} createdAt`)
       .sort({ createdAt: -1 })
-      .limit(Math.max(FORM_WINDOW, minRunsFor(gameKey)))
-      .lean();
+      .limit(limit)
+      .lean()
+      .then(rows => rows.map(r => ({ score: r[src.cfg.primaryField], createdAt: r.createdAt })))));
+    const recent = lists.flat().sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
 
     if (!recent.length) {
       // Distinguish "never touched this game" from "only ever played it on Easier", so the report
@@ -164,7 +182,7 @@ async function loadForm(userId, gameKeys = SCORED_GAME_KEYS) {
       return [gameKey, { runs: 0, form: null, easierOnly, lastPlayedAt: null }];
     }
 
-    const scores = recent.map(r => r[cfg.primaryField]).filter(Number.isFinite);
+    const scores = recent.map(r => r.score).filter(Number.isFinite);
     // Averaged over the WINDOW only. A player six runs into CUT is measured on their last three,
     // which are their settled ones — widening the mean to six would pull their own early
     // learning runs back in, which is the bias the bar exists to correct.
@@ -201,10 +219,18 @@ async function loadFormForUsers(userIds, gameKeys = SCORED_GAME_KEYS) {
 
     // Sliced to the larger of the window and this game's bar, for the same reason loadForm is —
     // `runs` has to be able to reach the bar, while `form` still averages the window alone.
-    const rows = await cfg.Model.aggregate([
-      { $match: { ...(cfg.modeFilter ?? {}), userId: { $in: userIds } } },
+    // Each source projected to { userId, score, createdAt } so a board carried on from an older
+    // one (see formSources) can be unioned in and sorted as one history.
+    const leg = src => [
+      { $match: { ...src.match, userId: { $in: userIds } } },
+      { $project: { _id: 0, userId: 1, createdAt: 1, score: `$${src.cfg.primaryField}` } },
+    ];
+    const [head, ...tail] = formSources(gameKey);
+    const rows = await head.cfg.Model.aggregate([
+      ...leg(head),
+      ...tail.map(src => ({ $unionWith: { coll: src.cfg.Model.collection.name, pipeline: leg(src) } })),
       { $sort: { userId: 1, createdAt: -1 } },
-      { $group: { _id: '$userId', scores: { $push: `$${cfg.primaryField}` } } },
+      { $group: { _id: '$userId', scores: { $push: '$score' } } },
       { $project: { recent: { $slice: ['$scores', Math.max(FORM_WINDOW, minRunsFor(gameKey))] } } },
     ]);
 

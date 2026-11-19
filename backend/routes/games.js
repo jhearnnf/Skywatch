@@ -64,6 +64,7 @@ const GameSessionCbatActResult             = CBAT_GAMES['act'].Model;
 const GameSessionCbatNumericalOpsResult    = CBAT_GAMES['numerical-ops'].Model;
 const GameSessionCbatNumericalOpsEasierResult = CBAT_GAMES['numerical-ops-easier'].Model;
 const GameSessionCbatDADResult             = CBAT_GAMES['dad'].Model;
+const GameSessionCbatDADHardResult         = CBAT_GAMES['dad-hard'].Model;
 const GameSessionCbatSatResult             = CBAT_GAMES['sat'].Model;
 const GameSessionCbatSatEasierResult       = CBAT_GAMES['sat-easier'].Model;
 const GameSessionCbatCutResult             = CBAT_GAMES['cut'].Model;
@@ -2440,21 +2441,29 @@ async function submitNumericalOpsResult(req, res, Model) {
 router.post('/cbat/numerical-ops/result', protect, (req, res) => submitNumericalOpsResult(req, res, GameSessionCbatNumericalOpsResult));
 router.post('/cbat/numerical-ops-easier/result', protect, (req, res) => submitNumericalOpsResult(req, res, GameSessionCbatNumericalOpsEasierResult));
 
-// POST /api/games/cbat/dad/result
-router.post('/cbat/dad/result', protect, async (req, res) => {
+// POST /api/games/cbat/dad/result (Easier) and /dad-hard/result (Hard)
+// Identical payloads; the board is fixed by the route. `dad` is ALSO where
+// builds from before the split post their Hard-game runs, so only a run that
+// says it was Easier is stamped as one; the Aptitude Report keeps counting the
+// rest as Hard (see `reportAlsoReads` in constants/cbatGames.js).
+async function submitDadResult(req, res, Model, extra = {}) {
   try {
     const { correctCount, totalQuestions, totalTime, avgTimePerQuestionMs } = req.body;
-    const result = await saveCbatResult(GameSessionCbatDADResult, req, {
+    const result = await saveCbatResult(Model, req, {
       correctCount,
       totalQuestions,
       totalTime,
       avgTimePerQuestionMs,
+      ...extra,
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
-});
+}
+router.post('/cbat/dad/result', protect, (req, res) => submitDadResult(req, res, GameSessionCbatDADResult,
+  req.body?.difficulty === 'easier' ? { difficulty: 'easier' } : {}));
+router.post('/cbat/dad-hard/result', protect, (req, res) => submitDadResult(req, res, GameSessionCbatDADHardResult));
 
 // POST /api/games/cbat/sat/result and /sat-easier/result
 // Identical payloads — Easier just asks 10 questions instead of 18, which the
@@ -2469,6 +2478,7 @@ async function submitSatResult(req, res, Model) {
       totalQuestions,
       totalTime,
       avgTimePerQuestionMs,
+      ...extra,
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -2538,6 +2548,7 @@ async function submitQuestionCountResult(req, res, Model) {
       totalQuestions,
       totalTime,
       avgTimePerQuestionMs,
+      ...extra,
     });
     res.status(201).json({ status: 'success', data: result });
   } catch (err) {
@@ -3468,6 +3479,7 @@ router.get('/cbat/trace-2/leaderboard', protect, (req, res) => cbatLeaderboard(r
 router.get('/cbat/numerical-ops/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'numerical-ops'));
 router.get('/cbat/numerical-ops-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'numerical-ops-easier'));
 router.get('/cbat/dad/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dad'));
+router.get('/cbat/dad-hard/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'dad-hard'));
 router.get('/cbat/sat/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sat'));
 router.get('/cbat/sat-easier/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'sat-easier'));
 router.get('/cbat/cut/leaderboard', protect, (req, res) => cbatLeaderboard(req, res, 'cut'));
@@ -3710,6 +3722,7 @@ router.get('/cbat/trace-2/personal-best', protect, (req, res) => cbatPersonalBes
 router.get('/cbat/numerical-ops/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'numerical-ops'));
 router.get('/cbat/numerical-ops-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'numerical-ops-easier'));
 router.get('/cbat/dad/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dad'));
+router.get('/cbat/dad-hard/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'dad-hard'));
 router.get('/cbat/sat/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sat'));
 router.get('/cbat/sat-easier/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'sat-easier'));
 router.get('/cbat/cut/personal-best', protect, (req, res) => cbatPersonalBest(req, res, 'cut'));

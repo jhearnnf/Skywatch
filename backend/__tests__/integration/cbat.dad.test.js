@@ -134,3 +134,78 @@ describe('CBAT Directions and Distances (DAD)', () => {
     });
   });
 });
+
+describe('CBAT DAD split: plain dad = Easier (old scores kept), dad-hard = fresh Hard', () => {
+  const GameSessionCbatDADHardResult = require('../../models/GameSessionCbatDADHardResult');
+  const { loadForm } = require('../../utils/cbatAptitudeReport');
+  const sample = { correctCount: 9, totalQuestions: 15, totalTime: 171.4, avgTimePerQuestionMs: 11426 };
+
+  it('saves a Hard run to its own collection and never touches the Easier board', async () => {
+    const res = await request(app).post('/api/games/cbat/dad-hard/result').set('Cookie', cookie).send(sample);
+    expect(res.status).toBe(201);
+    expect(await GameSessionCbatDADHardResult.countDocuments()).toBe(1);
+    expect(await GameSessionCbatDADResult.countDocuments()).toBe(0);
+
+    const pb = await request(app).get('/api/games/cbat/dad-hard/personal-best').set('Cookie', cookie);
+    expect(pb.body.data.bestScore).toBe(9);
+    const easierPb = await request(app).get('/api/games/cbat/dad/personal-best').set('Cookie', cookie);
+    expect(easierPb.body.data).toBeNull();
+  });
+
+  it('serves its own leaderboard', async () => {
+    await request(app).post('/api/games/cbat/dad-hard/result').set('Cookie', cookie).send(sample);
+    const res = await request(app).get('/api/games/cbat/dad-hard/leaderboard').set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.leaderboard.some(e => e.agentNumber === '1000001')).toBe(true);
+    const easier = await request(app).get('/api/games/cbat/dad/leaderboard').set('Cookie', cookie);
+    expect(easier.body.data.leaderboard.some(e => e.agentNumber === '1000001')).toBe(false);
+  });
+
+  it('stamps an Easier run on the plain board, and only when the body says so', async () => {
+    await request(app).post(`/api/games/cbat/dad/result`).set('Cookie', cookie).send({ ...sample, difficulty: 'easier' });
+    await request(app).post(`/api/games/cbat/dad/result`).set('Cookie', cookie).send(sample); // a pre-split build
+    await request(app).post(`/api/games/cbat/dad-hard/result`).set('Cookie', cookie).send({ ...sample, difficulty: 'easier' });
+    const plain = await GameSessionCbatDADResult.find().lean();
+    expect(plain.map(r => r.difficulty ?? null).sort()).toEqual(['easier', null]);
+    const hard = await GameSessionCbatDADHardResult.findOne().lean();
+    expect(hard.difficulty).toBeUndefined();
+  });
+
+  describe('Aptitude Report form', () => {
+    const at = (min) => new Date(Date.UTC(2026, 10, 19, 12, min));
+    const old = (n, min) => GameSessionCbatDADResult.create({ userId: user._id, correctCount: n, totalTime: 100, createdAt: at(min) });
+
+    it('keeps the pre-split reading when no Hard runs exist yet', async () => {
+      await old(15, 1); await old(13, 2); await old(14, 3);
+      const form = await loadForm(user._id, ['dad-hard']);
+      expect(form['dad-hard'].runs).toBe(3);
+      expect(form['dad-hard'].form).toBe(14);
+    });
+
+    it('ignores Easier runs', async () => {
+      await old(14, 1);
+      await GameSessionCbatDADResult.create({ userId: user._id, correctCount: 15, totalTime: 60, difficulty: 'easier', createdAt: at(5) });
+      const form = await loadForm(user._id, ['dad-hard']);
+      expect(form['dad-hard'].runs).toBe(1);
+      expect(form['dad-hard'].form).toBe(14);
+    });
+
+    it('lets new Hard runs push the old ones out, newest first', async () => {
+      await old(15, 1); await old(15, 2); await old(15, 3);
+      await GameSessionCbatDADHardResult.create({ userId: user._id, correctCount: 6, totalTime: 200, createdAt: at(10) });
+      await GameSessionCbatDADHardResult.create({ userId: user._id, correctCount: 9, totalTime: 200, createdAt: at(11) });
+      const form = await loadForm(user._id, ['dad-hard']);
+      // window of 3: 9, 6 (Hard) and the newest old 15
+      expect(form['dad-hard'].form).toBe(10);
+    });
+
+    it('reads the same from the many-users loader', async () => {
+      const { loadFormForUsers } = require('../../utils/cbatAptitudeReport');
+      await old(15, 1); await old(15, 2);
+      await GameSessionCbatDADResult.create({ userId: user._id, correctCount: 1, totalTime: 60, difficulty: 'easier', createdAt: at(4) });
+      await GameSessionCbatDADHardResult.create({ userId: user._id, correctCount: 6, totalTime: 200, createdAt: at(10) });
+      const byUser = await loadFormForUsers([user._id], ['dad-hard']);
+      expect(byUser[String(user._id)]['dad-hard'].form).toBe(12);
+    });
+  });
+});

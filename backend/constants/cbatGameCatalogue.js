@@ -196,10 +196,11 @@ const CBAT_GAME_CATALOGUE = [
   },
   {
     name: 'DAD',
-    registryKeys: ['dad'],
+    registryKeys: ['dad', 'dad-hard'],
     simulates: 'DAD',
     aliases: ['dad', 'directions and distances', 'directions'],
-    what: 'follow a journey of relative turns from text alone, then name the direction back to where you started.',
+    what: 'read a journey or a set of places described in text alone, then work out a direction, a distance, or which places are closest or furthest apart. Every leg is at a right angle, so no Pythagoras is needed. Easier has shorter routes and fewer places; Hard adds longer routes, diagonal headings and more places.',
+    difficulties: ['Easier', 'Hard'],
   },
   {
     name: 'Cognitive Updating Test',

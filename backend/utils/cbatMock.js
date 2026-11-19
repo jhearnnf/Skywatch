@@ -46,31 +46,55 @@ function gameKeyFromRequest(req) {
   return m && CBAT_GAMES[m[1]] ? m[1] : null;
 }
 
+// ── Boards that moved ────────────────────────────────────────────────────────────────────────
+// A board the mock used to score under another key. DAD's Hard half moved from `dad` to `dad-hard`
+// on 2026-11-19 (plain `dad` became the Easier board), and two kinds of player are out of step
+// with that for a while:
+//
+//   - one on a build from before the split. Its DAD page has no Easier mode and plays the Hard
+//     game, but it posts to `dad`, and it sends no `mockId` because the step it is shown names
+//     `dad-hard`, a key that build has never heard of. The run is claimed anyway (see
+//     claimMovedBoardRun) unless it says it was played on Easier, which no old build can.
+//   - one whose mock was planned before the move, so its step still names `dad`. Every step is
+//     read through `currentMockKey`, so it is served, claimed and scored as `dad-hard`.
+const MOCK_BOARD_MOVES = { dad: 'dad-hard' };
+const currentMockKey = (gameKey) => MOCK_BOARD_MOVES[gameKey] ?? gameKey;
+
+// The key a saved run counts as inside a mock, or null when it cannot count: a run on a board the
+// mock has moved off counts as the new board, unless it was played on Easier.
+function mockKeyForRun(gameKey, result) {
+  if (!gameKey) return null;
+  if (MOCK_BOARD_MOVES[gameKey]) return result?.difficulty === 'easier' ? null : MOCK_BOARD_MOVES[gameKey];
+  return gameKey;
+}
+
 // Record a saved run against the mock it names, if it is the run the mock is waiting on.
 // Idempotent: a retried submission that resolves to the same result row is a no-op. Never throws
 // into the caller — a problem here must not fail a score submission.
 async function claimMockResult({ userId, mockId, gameKey, result, now = new Date() }) {
   try {
-    if (!mockId || !gameKey || !result || !mongoose.isValidObjectId(mockId)) return null;
+    const key = mockKeyForRun(gameKey, result);
+    if (!mockId || !key || !result || !mongoose.isValidObjectId(mockId)) return null;
     const mock = await CbatMockAssessment.findOne({ _id: mockId, userId });
     if (!mock || mock.status !== 'active') return null;
     if (await expireIfIdle(mock, now)) return null;
 
     const step = mock.steps[mock.currentStep];
-    if (!step || !step.gameKeys.includes(gameKey)) return null;
-    if (step.results.some(r => r.gameKey === gameKey)) return mock;
+    const stepKeys = step ? step.gameKeys.map(currentMockKey) : [];
+    if (!stepKeys.includes(key)) return null;
+    if (step.results.some(r => currentMockKey(r.gameKey) === key)) return mock;
 
     const primary = CBAT_GAMES[gameKey]?.primaryField;
     const score = Number(result[primary]);
     step.results.push({
-      gameKey,
+      gameKey: key,
       resultId: result._id,
       score: Number.isFinite(score) ? score : null,
       playedAt: result.createdAt ?? now,
     });
     mock.lastActivityAt = now;
 
-    if (step.gameKeys.every(g => step.results.some(r => r.gameKey === g))) {
+    if (stepKeys.every(g => step.results.some(r => currentMockKey(r.gameKey) === g))) {
       step.done = true;
       const finished = mock.currentStep;
       mock.currentStep += 1;
@@ -102,7 +126,8 @@ function mockForm(mock) {
   for (const step of mock.steps) {
     for (const r of step.results) {
       if (!Number.isFinite(r.score)) continue;
-      form[r.gameKey] = { runs: minRunsFor(r.gameKey), form: r.score, easierOnly: false, lastPlayedAt: r.playedAt };
+      const key = currentMockKey(r.gameKey);
+      form[key] = { runs: minRunsFor(key), form: r.score, easierOnly: false, lastPlayedAt: r.playedAt };
     }
   }
   return form;
@@ -170,13 +195,15 @@ function serialiseMock(mock, { withSheet = false } = {}) {
     steps: m.steps.map(s => ({
       codes: s.codes,
       labels: s.codes.map(c => TESTS[c]?.label ?? c),
-      gameKeys: s.gameKeys,
+      // Read through currentMockKey, so a step planned before a board moved is served as the board
+      // it scores now.
+      gameKeys: s.gameKeys.map(currentMockKey),
       // Where each board is played, from the server's config rather than the client's, so a tab
       // running an older build still opens the right board (see `paths` in the mock config).
-      paths: Object.fromEntries(s.gameKeys.map(g => [g, MOCK.paths[g] ?? null])),
+      paths: Object.fromEntries(s.gameKeys.map(currentMockKey).map(g => [g, MOCK.paths[g] ?? null])),
       minutes: s.minutes,
       done: s.done,
-      played: s.results.map(r => r.gameKey),
+      played: s.results.map(r => currentMockKey(r.gameKey)),
     })),
     breakAfter: m.breakAfter,
     currentStep: m.currentStep,
@@ -193,8 +220,22 @@ function serialiseMock(mock, { withSheet = false } = {}) {
   return out;
 }
 
+// A run with no `mockId` on a board the mock has moved off: the pre-split build case above. If the
+// player's active mock is waiting on the board this run now counts as, claim it for that mock.
+async function claimMovedBoardRun({ userId, gameKey, result, now = new Date() }) {
+  if (!MOCK_BOARD_MOVES[gameKey]) return null;
+  const key = mockKeyForRun(gameKey, result);
+  if (!key) return null;
+  const mock = await CbatMockAssessment.findOne({ userId, status: 'active' }).sort({ startedAt: -1 }).select('_id steps currentStep').lean();
+  const step = mock?.steps?.[mock.currentStep];
+  if (!step || !step.gameKeys.map(currentMockKey).includes(key)) return null;
+  return claimMockResult({ userId, mockId: String(mock._id), gameKey, result, now });
+}
+
 module.exports = {
   IDLE_LIMIT_MS,
+  MOCK_BOARD_MOVES,
+  claimMovedBoardRun,
   expireIfIdle,
   findActiveMock,
   gameKeyFromRequest,

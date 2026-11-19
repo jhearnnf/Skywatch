@@ -100,11 +100,18 @@ async function saveCbatResult(Model, req, fields, extraFilter = {}) {
 // waiting on, the mock records it and moves to the next test (see utils/cbatMock.js). Awaited, so
 // the mock has moved on by the time the game's "Continue assessment" button appears. Required
 // lazily: cbatMock pulls in the Aptitude Report scorer, which this module has no other need of.
+//
+// A run with no `mockId` can still belong to a mock when it was posted by a build from before a
+// board moved (see MOCK_BOARD_MOVES in utils/cbatMock.js): that build cannot know the mock wants it.
 async function claimForMock(req, result) {
   const mockId = req.body?.mockId;
-  if (!mockId) return;
-  const { claimMockResult, gameKeyFromRequest } = require('./cbatMock');
-  await claimMockResult({ userId: req.user._id, mockId, gameKey: gameKeyFromRequest(req), result });
+  const { claimMockResult, claimMovedBoardRun, gameKeyFromRequest } = require('./cbatMock');
+  const gameKey = gameKeyFromRequest(req);
+  if (!mockId) {
+    await claimMovedBoardRun({ userId: req.user._id, gameKey, result });
+    return;
+  }
+  await claimMockResult({ userId: req.user._id, mockId, gameKey, result });
 }
 
 module.exports = { ensureCbatResultPaths, saveCbatResult };

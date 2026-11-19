@@ -4,6 +4,7 @@ import {
   generateLandmarkQuestion,
   generateCombinedQuestion,
   buildRealDadQuestions,
+  buildRealDadEasierQuestions,
 } from '../dadRealGenerator'
 
 function mulberry32(seed) {
@@ -76,6 +77,7 @@ function compassOf([e, n]) {
   return COMPASS[Math.round(idx) % 8]
 }
 const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1])
+
 // Side lengths of the gap p→q on the question's own grid (frame 1 is the N/E
 // grid turned 45°). A player with no Pythagoras knows the gap is at least the
 // longer side (`lo`) and at most both sides walked (`hi`).
@@ -88,7 +90,6 @@ function sides(p, q, frame) {
 function expectPlainlyShorter(win, rivals) {
   for (const r of rivals) expect(r.lo).toBeGreaterThan(win.hi + 1e-6)
 }
-
 
 // Checks the printed answer against the solver.
 function verify(q) {
@@ -237,5 +238,53 @@ describe('buildRealDadQuestions', () => {
 
   it('is deterministic for a seed', () => {
     expect(buildRealDadQuestions(mulberry32(7))).toEqual(buildRealDadQuestions(mulberry32(7)))
+  })
+})
+
+describe('buildRealDadEasierQuestions', () => {
+  const landmarkCount = (q) => q.names?.length ?? 0
+
+  it('builds 15 valid questions with every kind in the mix', () => {
+    const kinds = new Set()
+    for (const seed of SEEDS.slice(0, 100)) {
+      const qs = buildRealDadEasierQuestions(mulberry32(seed))
+      expect(qs).toHaveLength(15)
+      qs.forEach(q => { verify(q); kinds.add(`${q.kind}:${q.ask}`) })
+      qs.slice(0, 4).forEach(q => expect(q.kind).toBe('journey'))
+      expect(qs.slice(12).filter(q => q.kind === 'combined')).toHaveLength(3)
+    }
+    for (const k of ['journey:direction', 'journey:distance', 'landmarks:direction', 'landmarks:distance',
+      'landmarks:closest', 'landmarks:furthest', 'combined:nearest', 'combined:direction', 'combined:distance']) {
+      expect(kinds).toContain(k)
+    }
+  })
+
+  it('is lighter than Hard: plain grid, headings only, shorter journeys, fewer places', () => {
+    for (const seed of SEEDS.slice(0, 100)) {
+      for (const q of buildRealDadEasierQuestions(mulberry32(seed))) {
+        expect(q.frame).toBe(0) // never the 45°-turned grid
+        expect(q.prose).not.toMatch(/turns (left|right)/)
+        if (q.kind === 'journey') expect(q.legs.length).toBeLessThanOrEqual(4)
+        if (q.kind === 'combined') expect(q.legs.length).toBe(2)
+        if (q.kind !== 'journey') expect(landmarkCount(q)).toBeLessThanOrEqual(4)
+      }
+    }
+  })
+
+  it('states landmark links in chain order', () => {
+    for (const seed of SEEDS.slice(0, 50)) {
+      const q = generateLandmarkQuestion(4, 'direction', mulberry32(seed), { frame: 0, ordered: true })
+      // Each statement names the chain pair i, i+1 in order.
+      const sentences = q.prose.split('. ').filter(Boolean)
+      sentences.forEach((sentence, i) => {
+        const a = q.names[i], b = q.names[i + 1]
+        const low = sentence.toLowerCase()
+        expect(low.includes(a.toLowerCase()) && low.includes(b.toLowerCase())).toBe(true)
+      })
+    }
+  })
+
+  it('is deterministic for a seed', () => {
+    expect(buildRealDadEasierQuestions(mulberry32(7))).toEqual(buildRealDadEasierQuestions(mulberry32(7)))
   })
 })

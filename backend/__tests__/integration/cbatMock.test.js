@@ -159,6 +159,60 @@ describe('claiming runs', () => {
   });
 });
 
+describe('DAD moved from dad to dad-hard (2026-11-19): players who have not updated yet', () => {
+  const DAD_STEP = { codes: ['DAD'], gameKeys: ['dad-hard'], minutes: 5 };
+  const OLD_DAD_STEP = { codes: ['DAD'], gameKeys: ['dad'], minutes: 5 };
+  const dadRun = (extra = {}) => ({ correctCount: 11, totalQuestions: 15, totalTime: 160, ...extra });
+
+  it("claims a pre-split build's run on dad, which carries no mockId, as the Hard step", async () => {
+    const id = await startPinned([DAD_STEP, FLAG_STEP]);
+    const res = await request(app).post('/api/games/cbat/dad/result').set('Cookie', cookie).send(dadRun());
+    expect(res.status).toBe(201);
+    const mock = await CbatMockAssessment.findById(id);
+    expect(mock.currentStep).toBe(1);
+    expect(mock.steps[0].results[0]).toMatchObject({ gameKey: 'dad-hard', score: 11 });
+  });
+
+  it('never counts an Easier run towards the mock', async () => {
+    const id = await startPinned([DAD_STEP, FLAG_STEP]);
+    await request(app).post('/api/games/cbat/dad/result').set('Cookie', cookie).send(dadRun({ difficulty: 'easier' }));
+    await request(app).post('/api/games/cbat/dad/result').set('Cookie', cookie).send(dadRun({ difficulty: 'easier', mockId: id }));
+    const mock = await CbatMockAssessment.findById(id);
+    expect(mock.currentStep).toBe(0);
+  });
+
+  it('does not touch a mock that is waiting on something else', async () => {
+    const id = await startPinned([FLAG_STEP, DAD_STEP]);
+    await request(app).post('/api/games/cbat/dad/result').set('Cookie', cookie).send(dadRun());
+    const mock = await CbatMockAssessment.findById(id);
+    expect(mock.currentStep).toBe(0);
+    expect(mock.steps[0].results).toHaveLength(0);
+  });
+
+  it("serves a mock planned before the move as dad-hard, and claims the updated page's run", async () => {
+    const id = await startPinned([OLD_DAD_STEP, FLAG_STEP]);
+    const current = await request(app).get('/api/cbat-mock/current').set('Cookie', cookie);
+    const step = current.body.data.mock.steps[0];
+    expect(step.gameKeys).toEqual(['dad-hard']);
+    expect(step.paths['dad-hard']).toBe('/cbat/dad?difficulty=hard');
+
+    await request(app).post('/api/games/cbat/dad-hard/result').set('Cookie', cookie).send(dadRun({ mockId: id }));
+    const mock = await CbatMockAssessment.findById(id);
+    expect(mock.currentStep).toBe(1);
+  });
+
+  it('scores a DAD result saved under the old key on the sheet', async () => {
+    const id = await startPinned([OLD_DAD_STEP]);
+    await CbatMockAssessment.updateOne({ _id: id }, { $set: {
+      'steps.0.results': [{ gameKey: 'dad', score: 13, playedAt: new Date() }], 'steps.0.done': true,
+      status: 'completed', endedAt: new Date(),
+    } });
+    const sheet = buildMockSheet(await CbatMockAssessment.findById(id));
+    const tests = sheet.batteries.flatMap(b => b.domains.flatMap(d => d.tests));
+    expect(tests.find(t => t.code === 'DAD').sat).toBe(true);
+  });
+});
+
 describe('the idle limit', () => {
   it('closes a mock left idle past the limit, keeps its scores, and tells the player once', async () => {
     const id = await startPinned([FLAG_STEP, VISS_STEP]);

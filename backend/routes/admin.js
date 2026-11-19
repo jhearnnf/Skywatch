@@ -1228,7 +1228,7 @@ router.patch('/settings', requireReason, async (req, res) => {
       'plane-turn-2d', 'plane-turn-3d', 'trace-1', 'trace-2', 'flag', 'flag-easier',
       'clan', 'clan-easier',
       'visualisation-2d', 'visualisation-3d',
-      'dpt', 'dpt-hard', 'dpt-easier', 'act', 'numerical-ops', 'numerical-ops-easier', 'dad', 'sat', 'sat-easier', 'cut', 'cut-easier',
+      'dpt', 'dpt-hard', 'dpt-easier', 'act', 'numerical-ops', 'numerical-ops-easier', 'dad', 'dad-hard', 'sat', 'sat-easier', 'cut', 'cut-easier',
       'rtt', 'rtt-easier',
       'sit', 'sit-easier', 'slt', 'slt-easier', 'vlt', 'vlt-easier',
       'matf', 'matf-easier', 'vigilance', 'vigilance-hard', 'vigilance-practise', 'sma', 'sma-easier',

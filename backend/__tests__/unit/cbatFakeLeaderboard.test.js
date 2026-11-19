@@ -32,6 +32,7 @@ const GAME_MAX = {
   'numerical-ops':   100,    // percentage 0–100
   'numerical-ops-easier': 100,
   'dad':             15,     // 15 questions, one point each
+  'dad-hard':      15,
   'sat':             18,     // 18 questions (3 situations × 6), one point each
   'sat-easier':      10,     // 10 questions (2 situations × 5), one point each
   'cut':             null,   // accumulating score, no fixed ceiling

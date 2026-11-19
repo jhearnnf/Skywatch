@@ -30,7 +30,7 @@
     { "guideId": "dpt",       "slug": "dpt-dynamic-projection-test",       "short": "DPT",  "group": "spatial",      "playPath": "/cbat/dpt",           "gameKeys": ["dpt", "dpt-hard", "dpt-easier"],
       "title": "CBAT DPT: Dynamic Projection Test Tips and Practice",
       "description": "What the Dynamic Projection Test (DPT) is really like, the heading and height mistakes candidates make, and how to practise it in your browser." },
-    { "guideId": "dad",       "slug": "dad-directions-and-distances",      "short": "DAD",  "group": "spatial",      "playPath": "/cbat/dad",           "gameKeys": ["dad"],
+    { "guideId": "dad",       "slug": "dad-directions-and-distances",      "short": "DAD",  "group": "spatial",      "playPath": "/cbat/dad",           "gameKeys": ["dad", "dad-hard"],
       "title": "CBAT DAD: Directions and Distances Tips and Practice",
       "description": "What the Directions and Distances test (DAD) is like, how candidates keep track of relative turns, and a free CBAT-style version to practise." },
     { "guideId": "sat",       "slug": "sat-situational-awareness-test",    "short": "SAT",  "group": "multitasking", "playPath": "/cbat/sat",           "gameKeys": ["sat", "sat-easier"],

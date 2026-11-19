@@ -6,7 +6,15 @@ import { submitCbatResult } from '../lib/cbatOutbox'
 import { useCbatTracking } from '../utils/cbat/useCbatTracking'
 import { useGameChrome } from '../context/GameChromeContext'
 import { generateDadQuestion } from '../utils/cbat/dadGenerator'
-import { buildRealDadQuestions } from '../utils/cbat/dadRealGenerator'
+import { buildRealDadQuestions, buildRealDadEasierQuestions } from '../utils/cbat/dadRealGenerator'
+import {
+  DAD_DIFFICULTIES, DAD_LAUNCH_MS, DAD_TOTAL_QUESTIONS, dadTuning, computeDadGrade,
+  readStoredDadDifficulty, storeDadDifficulty,
+} from '../utils/cbat/dadDifficulty'
+import { initialDifficulty } from '../utils/cbat/difficultyParam'
+import { CbatModeRow, ModeMarker } from '../components/CbatModeSelector'
+import CbatPersonalBest from '../components/CbatPersonalBest'
+import { useCbatPersonalBest } from '../hooks/useCbatPersonalBest'
 import SEO from '../components/SEO'
 import { CbatGameHeader, CbatFooterStrip, CbatKeyCap } from '../components/cbat/CbatTestChrome'
 import { useCbatTheme } from '../hooks/useCbatTheme'
@@ -17,24 +25,18 @@ import CbatIntroList from '../components/cbat/CbatIntroList'
 import CbatTestPageLink from '../components/cbat/CbatTestPageLink'
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const TOTAL_QUESTIONS = 15
+const TOTAL_QUESTIONS = DAD_TOTAL_QUESTIONS
 const PER_QUESTION_MS = 45000
-// Leg count ramps with progress: Q1–4 → 3 legs, Q5–8 → 4, Q9–12 → 5, Q13–15 → 6.
-function legCountFor(idx) {
-  return 3 + Math.floor(idx / 4)
-}
-// Intercardinal headings (NE/SE/SW/NW) and 45° turns only appear in the final
-// rounds (10–15, i.e. 0-indexed ≥ 9); earlier rounds stay cardinal-only with
-// 90° turns.
-const DIAGONALS_FROM = 9
 
 // The Real CBAT theme plays the varied set passers described (landmarks,
-// distances, journeys from a landmark); SkyWatch keeps the turns-and-45° set.
-function buildQuestions(cbat) {
-  if (cbat) return buildRealDadQuestions()
+// distances, journeys from a landmark); SkyWatch keeps the turns set. The
+// difficulty picks the lighter or fuller version of whichever set it is
+// (leg counts and diagonals for SkyWatch live in utils/cbat/dadDifficulty.js).
+function buildQuestions(cbat, tuning) {
+  if (cbat) return tuning.key === 'easier' ? buildRealDadEasierQuestions() : buildRealDadQuestions()
   const out = []
   for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-    out.push(generateDadQuestion(legCountFor(i), undefined, { diagonals: i >= DIAGONALS_FROM }))
+    out.push(generateDadQuestion(tuning.legsAt(i), undefined, { diagonals: i >= tuning.diagonalsFrom }))
   }
   return out
 }
@@ -185,14 +187,21 @@ function PathReveal({ path, youLabel = 'YOU' }) {
 }
 
 // ── Results screen (embedded inside CbatGameOver) ────────────────────────────
-function ResultsScreen({ answers, totalTime }) {
+const GRADE_LOOK = {
+  Outstanding: { emoji: '🎖️', color: 'text-green-400' },
+  Good: { emoji: '🧭', color: 'text-brand-600' },
+  'Needs Work': { emoji: '🔧', color: 'text-amber-400' },
+  Failed: { emoji: '💥', color: 'text-red-400' },
+}
+
+function ResultsScreen({ answers, totalTime, tuning }) {
   const correct = answers.filter(a => a.correct).length
   const pct = Math.round((correct / TOTAL_QUESTIONS) * 100)
 
-  const grade = pct >= 90 ? { label: 'Outstanding', emoji: '🎖️', color: 'text-green-400' }
-    : pct >= 70 ? { label: 'Good', emoji: '🧭', color: 'text-brand-600' }
-    : pct >= 50 ? { label: 'Needs Work', emoji: '🔧', color: 'text-amber-400' }
-    : { label: 'Failed', emoji: '💥', color: 'text-red-400' }
+  // Bands come from the difficulty played: both share the 15-question ceiling,
+  // so Easier asks for a more accurate run for the same grade.
+  const label = computeDadGrade(pct, tuning)
+  const grade = { label, ...GRADE_LOOK[label] }
 
   return (
     <div className="w-full bg-game-panel border border-game-line rounded-xl p-8 text-center">
@@ -238,7 +247,16 @@ export default function CbatDAD() {
   const { user, apiFetch, API } = useAuth()
   const { start: startTracking, markCompleted: markGameCompleted } = useCbatTracking()
 
-  const [phase, setPhase] = useState('intro') // intro | playing | feedback | results
+  const [phase, setPhase] = useState('intro') // intro | launching | playing | feedback | results
+
+  // The difficulty the instructions card is set to (remembered), and the one
+  // the run on screen was launched at: the ref is what the game logic reads,
+  // the state is what the render tree reads.
+  const [difficulty, setDifficulty] = useState(() => initialDifficulty(readStoredDadDifficulty))
+  const tuning = dadTuning(difficulty)
+  const runTuningRef = useRef(tuning)
+  const [runDifficulty, setRunDifficulty] = useState(difficulty)
+  const runTuning = dadTuning(runDifficulty)
   const { enterImmersive, exitImmersive } = useGameChrome()
   useEffect(() => {
     if (phase === 'playing' || phase === 'feedback') enterImmersive()
@@ -252,7 +270,6 @@ export default function CbatDAD() {
   const [feedback, setFeedback] = useState(null) // { correct, picked, answer }
   const [qRemainingMs, setQRemainingMs] = useState(PER_QUESTION_MS)
   const [totalElapsedMs, setTotalElapsedMs] = useState(0)
-  const [personalBest, setPersonalBest] = useState(null)
   const [scoreSaved, setScoreSaved] = useState(false)
   const [queued, setQueued] = useState(false)
 
@@ -264,25 +281,26 @@ export default function CbatDAD() {
   useEffect(() => { answersRef.current = answers }, [answers])
   useEffect(() => { totalElapsedRef.current = totalElapsedMs }, [totalElapsedMs])
 
-  // Fetch personal best
-  useEffect(() => {
-    if (!user) return
-    apiFetch(`${API}/api/games/cbat/dad/personal-best`)
-      .then(r => r.json())
-      .then(d => { if (d.data) setPersonalBest(d.data) })
-      .catch(() => {})
-  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Keyed by board, so flipping mode never shows one board's best under the
+  // other's name.
+  const { best: personalBest, loading: bestLoading, refresh: fetchPB } =
+    useCbatPersonalBest(tuning.gameKey, { user, apiFetch, API })
 
   // Submit score to backend
   const submitScore = useCallback((finalAnswers, finalTotalMs) => {
     const correctCount = finalAnswers.filter(a => a.correct).length
     const totalTime = finalTotalMs / 1000
     const avgTimePerQuestionMs = Math.round(finalTotalMs / TOTAL_QUESTIONS)
+    // The board the finished run was played on, whatever the card shows now.
+    const playedKey = runTuningRef.current.gameKey
 
     setScoreSaved(false)
     setQueued(false)
     markGameCompleted({ score: correctCount })
-    submitCbatResult('dad', {
+    submitCbatResult(playedKey, {
+        // `dad` is the Easier board but also holds Hard runs from before the
+        // split; this is how the Aptitude Report tells an Easier run apart.
+        ...(runTuningRef.current.key === 'easier' ? { difficulty: 'easier' } : {}),
         correctCount,
         totalQuestions: TOTAL_QUESTIONS,
         totalTime,
@@ -291,13 +309,10 @@ export default function CbatDAD() {
       .then((r) => {
         setScoreSaved(!!r?.synced)
         setQueued(!!r?.queued)
-        apiFetch(`${API}/api/games/cbat/dad/personal-best`)
-          .then(r => r.json())
-          .then(d => { if (d.data) setPersonalBest(d.data) })
-          .catch(() => {})
+        fetchPB(playedKey)
       })
       .catch(() => {})
-  }, [apiFetch, API, markGameCompleted])
+  }, [apiFetch, API, markGameCompleted, fetchPB])
 
   const cbat = useCbatTheme()
   const currentQuestion = questions[currentIdx] || null
@@ -377,8 +392,8 @@ export default function CbatDAD() {
   }
 
   const startGame = useCallback(() => {
-    startTracking('dad')
-    setQuestions(buildQuestions(cbat))
+    startTracking(runTuningRef.current.gameKey)
+    setQuestions(buildQuestions(cbat, runTuningRef.current))
     setCurrentIdx(0)
     setAnswers([])
     answersRef.current = []
@@ -388,6 +403,29 @@ export default function CbatDAD() {
     totalElapsedRef.current = 0
     setPhase('playing')
   }, [startTracking, cbat])
+
+  // Start flashes the chosen difficulty on a greyed-out card for
+  // DAD_LAUNCH_MS before the first question.
+  const beginLaunch = useCallback(() => {
+    runTuningRef.current = tuning
+    setRunDifficulty(tuning.key)
+    setPhase('launching')
+  }, [tuning])
+
+  // Keyed to `phase` alone, reading startGame through a ref, so an unrelated
+  // render can never restart the flash.
+  const startGameRef = useRef(startGame)
+  useEffect(() => { startGameRef.current = startGame })
+  useEffect(() => {
+    if (phase !== 'launching') return
+    const t = setTimeout(() => startGameRef.current(), DAD_LAUNCH_MS)
+    return () => clearTimeout(t)
+  }, [phase])
+
+  const chooseDifficulty = useCallback((key) => {
+    setDifficulty(key)
+    storeDadDifficulty(key)
+  }, [])
 
   const goToIntro = useCallback(() => {
     clearInterval(tickRef.current)
@@ -405,6 +443,10 @@ export default function CbatDAD() {
 
   const remainingSec = (qRemainingMs / 1000).toFixed(0)
   const correctSoFar = answers.filter(a => a.correct).length
+  const launching = phase === 'launching'
+  // During the launch flash everything but the chosen difficulty greys out.
+  const dim = launching ? ' cbat-launch-dim' : ''
+  const easier = tuning.key === 'easier'
   const testBar = (phase === 'playing' || phase === 'feedback') && currentQuestion ? {
     stage: 'Testing',
     item: currentIdx + 1,
@@ -421,11 +463,14 @@ export default function CbatDAD() {
       <CbatGameHeader
         title={<>Directions &amp; Distances</>}
         fullTitle="Directions and Distances"
-        intro={phase === 'intro'}
+        intro={phase === 'intro' || launching}
         onQuit={goToIntro}
         confirmNeeded={['playing', 'feedback'].includes(phase)}
+        className={dim.trim()}
         test={testBar}
-      />
+      >
+        {(phase === 'playing' || phase === 'feedback') && <ModeMarker mode={runTuning} />}
+      </CbatGameHeader>
 
       {/* Not logged in */}
       {!user && (
@@ -444,21 +489,28 @@ export default function CbatDAD() {
         <div className="flex flex-col items-center">
 
           {/* Intro screen */}
-          {phase === 'intro' && (
+          {(phase === 'intro' || launching) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="w-full max-w-md lg:max-w-2xl bg-game-panel border border-game-line rounded-xl p-6 lg:p-9 text-center"
             >
-              <p className="text-4xl lg:text-5xl mb-3">🧭</p>
-              <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Directions &amp; Distances</p>
-              <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
+              <p className={`text-4xl lg:text-5xl mb-3${dim}`}>🧭</p>
+              <p className={`text-xl lg:text-2xl font-extrabold text-white mb-2${dim}`}>Directions &amp; Distances</p>
+              <CbatModeRow
+                modes={DAD_DIFFICULTIES}
+                value={difficulty}
+                onSelect={chooseDifficulty}
+                launching={launching}
+              />
+              <p className={`text-[11px] text-brand-600 mb-3${dim}`}>{tuning.blurb}</p>
+              <p className={`text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto${dim}`}>
                 {cbat
                   ? <>Read each question carefully. Some describe a journey, some describe places and where they are from each other, and some do both. Work out the direction or distance you are asked for, or which two places are closest or furthest apart.</>
                   : <>Read each journey carefully. An object — a ship, aircraft or drone — sets off, and only its first leg gives a compass heading; every turn after that is relative to the way <span className="text-brand-600">it</span> is facing. Track its route and work out which direction it ends up from the start point.</>}
               </p>
 
-              <CbatIntroList className="bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text">
+              <CbatIntroList className={`bg-game-arena rounded-lg border border-game-line p-4 lg:p-6 mb-5 lg:mb-7 text-left space-y-2 lg:space-y-3 text-sm lg:text-base text-game-text${dim}`}>
                 <div className="flex items-start gap-3">
                   <CbatIntroLabel>1.</CbatIntroLabel>
                   <span className="pt-0.5">Read the route — text only, no map while you solve.</span>
@@ -473,7 +525,7 @@ export default function CbatDAD() {
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted border-t border-game-line pt-2 lg:pt-3 mt-1">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>🧭</span>
-                  <span className="pt-0.5">{cbat ? 'Directions can be north, south, east and west, or the diagonals between them (NE, SE, SW, NW).' : 'Later rounds add diagonal headings (NE/SE/SW/NW) and 45° turns.'}</span>
+                  <span className="pt-0.5">{cbat ? 'Directions can be north, south, east and west, or the diagonals between them (NE, SE, SW, NW).' : easier ? 'Every heading is north, south, east or west, and every turn is 90°.' : 'Later rounds add diagonal headings (NE/SE/SW/NW) and 45° turns.'}</span>
                 </div>
                 <div className="flex items-start gap-3 text-xs lg:text-sm text-game-muted">
                   <span className="shrink-0 w-8 text-center lg:text-lg" aria-hidden>⏱</span>
@@ -481,28 +533,27 @@ export default function CbatDAD() {
                 </div>
               </CbatIntroList>
 
-              {personalBest && (
-                <div className="bg-game-arena rounded-lg border border-game-line p-3 lg:p-4 mb-4 text-center">
-                  <p className="text-[10px] lg:text-xs text-slate-500 uppercase tracking-wide mb-1">Personal Best</p>
-                  <p className="text-lg lg:text-xl font-mono font-bold text-brand-600">
-                    {personalBest.bestScore}/{TOTAL_QUESTIONS}
+              <CbatPersonalBest label={tuning.label} best={personalBest} loading={bestLoading} className={dim}>
+                {best => (
+                  <>
+                    {best.bestScore}/{TOTAL_QUESTIONS}
                     <span className="text-slate-500 mx-1">·</span>
-                    {personalBest.bestTime.toFixed(1)}s
-                  </p>
-                  <p className="text-[10px] lg:text-xs text-slate-500 mt-0.5">{personalBest.attempts} attempt{personalBest.attempts !== 1 ? 's' : ''}</p>
-                </div>
-              )}
+                    {best.bestTime.toFixed(1)}s
+                  </>
+                )}
+              </CbatPersonalBest>
 
-              <div className="text-center mb-4">
-                <Link to="/cbat/dad/leaderboard" className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
+              <div className={`text-center mb-4${dim}`}>
+                <Link to={`/cbat/${tuning.gameKey}/leaderboard`} className="text-xs lg:text-sm text-brand-600 hover:text-brand-700 transition-colors">
                   View Leaderboard →
                 </Link>
               </div>
 
               <button
-                onClick={startGame}
+                onClick={beginLaunch}
+                disabled={launching}
                 data-demo-start
-                className="px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-lg transition-colors text-sm lg:text-base"
+                className={`px-8 py-3 lg:px-10 lg:py-3.5 bg-brand-600 hover:bg-brand-700 disabled:bg-game-fill disabled:text-slate-500 text-white font-bold rounded-lg transition-colors text-sm lg:text-base cursor-pointer disabled:cursor-not-allowed${dim}`}
               >
                 Start
               </button>
@@ -619,7 +670,7 @@ export default function CbatDAD() {
           {/* Results */}
           {phase === 'results' && (
             <CbatGameOver
-              gameKey="dad"
+              gameKey={runTuning.gameKey}
               score={answers.filter(a => a.correct).length}
               time={totalElapsedMs / 1000}
               scoreSaved={scoreSaved}
@@ -630,6 +681,7 @@ export default function CbatDAD() {
               <ResultsScreen
                 answers={answers}
                 totalTime={totalElapsedMs / 1000}
+                tuning={runTuning}
               />
             </CbatGameOver>
           )}

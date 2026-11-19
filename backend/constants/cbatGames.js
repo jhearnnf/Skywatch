@@ -23,6 +23,7 @@ const GameSessionCbatTrace1Result        = require('../models/GameSessionCbatTra
 const GameSessionCbatTrace2Result        = require('../models/GameSessionCbatTrace2Result');
 const GameSessionCbatNumericalOpsResult  = require('../models/GameSessionCbatNumericalOpsResult');
 const GameSessionCbatNumericalOpsEasierResult = require('../models/GameSessionCbatNumericalOpsEasierResult');
+const GameSessionCbatDADHardResult = require('../models/GameSessionCbatDADHardResult');
 const GameSessionCbatDADResult           = require('../models/GameSessionCbatDADResult');
 const GameSessionCbatSatResult           = require('../models/GameSessionCbatSatResult');
 const GameSessionCbatSatEasierResult     = require('../models/GameSessionCbatSatEasierResult');
@@ -374,12 +375,36 @@ const CBAT_GAMES = {
     bestOp: '$max',
     label: 'Numerical Operations (Easier)',
   },
+  // DAD split ANT's way round (2026-11-19): the plain `dad` key is the EASIER
+  // board and keeps every score set before the split; Hard is `dad-hard`, a
+  // fresh board. The old board could no longer be topped once the Real CBAT
+  // question set got harder, so Hard starts clean rather than under sixteen
+  // perfect runs from the old questions. Label stays bare like ANT's;
+  // cbatLabelWithDifficulty adds "(Easier)".
+  //
+  // `dad` also still takes runs from builds that predate the split, and those
+  // ARE the Hard game. A run from the current build's Easier mode is stamped
+  // `difficulty: 'easier'` by the route, which is how the Aptitude Report tells
+  // them apart (see `reportAlsoReads` on 'dad-hard').
   'dad': {
     Model: GameSessionCbatDADResult,
     primaryField: 'correctCount',
     sortDir: -1,           // higher is better
     bestOp: '$max',
     label: 'Directions and Distances',
+    hardKey: 'dad-hard',
+  },
+  'dad-hard': {
+    Model: GameSessionCbatDADHardResult,
+    primaryField: 'correctCount',
+    sortDir: -1,
+    bestOp: '$max',
+    label: 'Directions and Distances',   // cbatLabelWithDifficulty appends "(Hard)"
+    // The Aptitude Report reads this board's runs together with every `dad`
+    // run that was not played on Easier, newest first. Everyone's DAD reading
+    // therefore carries over unchanged at the split, and each new Hard run
+    // pushes an old one out of their recent-form window.
+    reportAlsoReads: { key: 'dad', filter: { difficulty: { $ne: 'easier' } } },
   },
   'sat': {
     Model: GameSessionCbatSatResult,
