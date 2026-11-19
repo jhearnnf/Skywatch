@@ -80,6 +80,7 @@ const OWNED_BY_USER = [
   'GameSessionWheresThatAircraftResult',
   'IntelligenceBriefRead',
   'ProblemReport',
+  'PushSubscription',
   // The outcome questionnaire is NOT here: it is kept, de-identified. See
   // step 2b of deleteUserAndData.
   'UserNotification',

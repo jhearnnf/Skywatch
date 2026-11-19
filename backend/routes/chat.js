@@ -24,6 +24,7 @@ const {
   generateBotReply, screenChannelMention, stripMention, looksHostile, REFUSALS,
 } = require('../utils/chatBot');
 const chatStream = require('../utils/chatStream');
+const pushNotify = require('../utils/pushNotify');
 const { LOUNGE_SLUG } = require('../seeds/seedCbatLounge');
 const { resolveMentions, MENTION_LIMIT } = require('../utils/chatMentions');
 const { selectGuideSlice } = require('../utils/cbatGuideRetrieval');
@@ -3011,6 +3012,11 @@ router.post('/messages/:id/reactions', async (req, res) => {
     // client resolve its own view. Reactions are rare enough that the extra
     // read costs nothing next to getting that wrong.
     chatStream.publish(message.conversationId, 'refresh', { reason: 'reaction' });
+
+    // Only an added reaction notifies the author; taking one back is silent.
+    if (!mine) {
+      pushNotify.scheduleReaction({ conversation: convo, message: fresh, reactor: req.user, emoji });
+    }
 
     res.json({ status: 'success', data: {
       message: serializeMessage(fresh, {

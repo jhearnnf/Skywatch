@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const { protect } = require('../middleware/auth');
+const { PREF_KEYS: PUSH_PREF_KEYS } = require('../utils/pushNotify');
 const User = require('../models/User');
 const { effectiveTier } = require('../utils/subscription');
 const { clearShowcaseCache } = require('../utils/cbatShowcase');
@@ -352,6 +353,34 @@ router.patch('/me/community-notifications', protect, async (req, res) => {
       { returnDocument: 'after' }
     ).populate('rank');
 
+    const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
+    res.json({ status: 'success', data: { user } });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PATCH /api/users/me/push-prefs — which push notifications this account
+// wants. Body: any subset of the switches, each a boolean, e.g.
+// { reactions: false, general: true }. Unknown keys are rejected rather than
+// ignored, so a typo in a client cannot silently do nothing.
+router.patch('/me/push-prefs', protect, async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const keys = Object.keys(body);
+    if (!keys.length) {
+      return res.status(400).json({ status: 'error', message: 'Nothing to change' });
+    }
+    const $set = {};
+    for (const key of keys) {
+      if (!PUSH_PREF_KEYS.includes(key) || typeof body[key] !== 'boolean') {
+        return res.status(400).json({ status: 'error', message: `Invalid setting: ${key}` });
+      }
+      $set[`pushPrefs.${key}`] = body[key];
+    }
+
+    const updated = await User.findByIdAndUpdate(req.user._id, { $set }, { returnDocument: 'after' })
+      .populate('rank');
     const user = await withSelectedBadge(updated.toObject({ virtuals: true }));
     res.json({ status: 'success', data: { user } });
   } catch (err) {

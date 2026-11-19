@@ -11,6 +11,7 @@ const ChatConversation = require('../models/ChatConversation');
 const ChatMessage      = require('../models/ChatMessage');
 const ChatRead         = require('../models/ChatRead');
 const chatStream       = require('./chatStream');
+const pushNotify       = require('./pushNotify');
 const { serializeAttachments } = require('./chatAttachments');
 
 // Who a message is from, as far as other users are concerned. Support threads
@@ -102,6 +103,11 @@ async function appendMessage({
     // So the sender's own tab can swap its local copy for this one.
     ...(clientId ? { clientId } : {}),
   });
+
+  // Phone / desktop notifications, for the same reason the stream push lives
+  // here: every writer gets them without remembering to. Scheduled, never
+  // awaited, so a slow push service cannot hold up a send.
+  pushNotify.scheduleNewMessage({ conversation, message, senderDisplayName });
 
   return message;
 }

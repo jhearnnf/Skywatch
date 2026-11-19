@@ -114,6 +114,24 @@ const userSchema = new mongoose.Schema(
     // silences the badge only; the user keeps full access to Community.
     communityNotificationsEnabled: { type: Boolean, default: true },
 
+    // Which phone / desktop push notifications this account wants. Separate
+    // from the unread dot above: that one is about the navbar, this is about
+    // the device buzzing. Account-level, so it applies to every device the
+    // user has turned push on for (PushSubscription holds the devices).
+    //
+    // Things aimed at YOU default on; whole rooms default off, because a busy
+    // room notifying everyone on every line would teach people to switch the
+    // lot off. Absent fields read as their default, so no backfill is needed.
+    pushPrefs: {
+      dms:       { type: Boolean, default: true },
+      replies:   { type: Boolean, default: true },
+      mentions:  { type: Boolean, default: true },
+      reactions: { type: Boolean, default: true },
+      lounge:    { type: Boolean, default: false },
+      general:   { type: Boolean, default: false },
+      updates:   { type: Boolean, default: false },
+    },
+
     // Admin-set flag marking an account as a tester. Purely admin-facing (never
     // exposed on public profile/leaderboard): in the Admin › Users panel it
     // floats an offline tester to the top of the offline group and gives the row

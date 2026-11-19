@@ -62,6 +62,7 @@ app.use('/api/admin',  require('./routes/admin'));
 app.use('/api/survey', require('./routes/survey'));
 app.use('/api/users',  require('./routes/users'));
 app.use('/api/chat',   require('./routes/chat'));
+app.use('/api/push',   require('./routes/push'));
 app.use('/api/tutorials', require('./routes/tutorials'));
 app.use('/api/stripe',        require('./routes/stripe'));
 // Public: /donate reports its own arrivals here, so the donation funnel has a
