@@ -53,6 +53,12 @@
          from Profile > Settings > Push Notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- The activity is locked to portrait, which Play otherwise reads as
+         "requires a portrait screen" and hides the app from devices without
+         one (Chromebooks, some tablets, XR). Portrait is still what runs;
+         this only stops it being an install requirement. -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
+
     <!-- Android 11+ package visibility: without this, the OS hides the
          Text-To-Speech engine (a separate app) from us and the SAT radio
          calls stay silent. -->
