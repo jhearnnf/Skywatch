@@ -28,9 +28,9 @@ import { CODE_DIGITS } from '../actAudio'
 const ROUND_CONFIG = [
   { speed: 4.0, shapes: 16, distractorOdds: 0.15, avoidOdds: 0.40, bleepOdds: 0.05, turns: 12, callsigns: 2 },
   { speed: 4.5, shapes: 20, distractorOdds: 0.20, avoidOdds: 0.45, bleepOdds: 0.06, turns: 14, callsigns: 2 },
-  { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.50, bleepOdds: 0.07, turns: 16, callsigns: 2 },
+  { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.50, bleepOdds: 0.07, turns: 16, callsigns: 3 },
   { speed: 5.5, shapes: 28, distractorOdds: 0.28, avoidOdds: 0.55, bleepOdds: 0.08, turns: 18, callsigns: 3 },
-  { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.60, bleepOdds: 0.09, turns: 20, callsigns: 3 },
+  { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.60, bleepOdds: 0.09, turns: 20, callsigns: 4 },
 ]
 
 // Rough curve length matching the in-game tunnel — turnCount + 4 segments at
@@ -460,11 +460,11 @@ describe('generateAudioPlan — colour/number orders', () => {
     }
   })
 
-  it('real orders carry your callsign, fakes a valid distractor', () => {
+  it('real orders carry one of your callsigns, fakes one that is not yours', () => {
     for (let i = 0; i < 60; i++) {
       for (const cue of plan(4).cues.filter(c => c.kind === 'order')) {
-        if (cue.real) expect(cue.callsigns).toEqual(USER_CALLSIGN)
-        else expect(cue.callsigns.some(c => USER_CALLSIGN.includes(c))).toBe(false)
+        expect(cue.callsigns).toHaveLength(1)
+        expect(USER_CALLSIGN.includes(cue.callsigns[0])).toBe(cue.real)
         expect(['colour', 'number']).toContain(cue.attr)
         if (cue.mode === 'at') {
           expect(cue.leadS).toBeGreaterThanOrEqual(ORDER_LEAD_S[0])
@@ -529,6 +529,41 @@ describe('generateAudioPlan — colour/number orders', () => {
         if (plan(r).cues.filter(c => c.kind === 'avoid').length < 2) short++
       }
       expect(short, `round ${r + 1}`).toBeLessThanOrEqual(2)
+    }
+  })
+})
+
+// The real test gives you a SET of callsigns and addresses each order to just
+// one of them ("Bravo, avoid the next square"), never the whole set at once.
+describe('generateAudioPlan — one callsign per spoken cue', () => {
+  const SETS = [['alpha', 'bravo'], ['alpha', 'bravo'], ['alpha', 'bravo', 'echo'], ['alpha', 'bravo', 'echo'], ['alpha', 'bravo', 'echo', 'hotel']]
+
+  it('avoids name one of your callsigns, distractors one that is not', () => {
+    for (let r = 0; r < 5; r++) {
+      const set = SETS[r]
+      for (let i = 0; i < 40; i++) {
+        const len = approxCurveLen(r)
+        const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+        for (const cue of generateAudioPlan(events, ROUND_CONFIG[r], set, r, len)) {
+          if (cue.kind !== 'avoid' && cue.kind !== 'distractor') continue
+          expect(cue.callsigns).toHaveLength(1)
+          expect(set.includes(cue.callsigns[0])).toBe(cue.kind === 'avoid')
+        }
+      }
+    }
+  })
+
+  it('spreads avoids across the set instead of always using the same word', () => {
+    // With at least two avoids per round and the set dealt from a deck, the
+    // first two avoids always name two different callsigns.
+    for (let r = 0; r < 5; r++) {
+      for (let i = 0; i < 40; i++) {
+        const len = approxCurveLen(r)
+        const events = generateShapeEvents(len, ROUND_CONFIG[r].shapes, r)
+        const avoids = generateAudioPlan(events, ROUND_CONFIG[r], SETS[r], r, len).filter(c => c.kind === 'avoid')
+        if (avoids.length < 2) continue
+        expect(avoids[0].callsigns[0]).not.toBe(avoids[1].callsigns[0])
+      }
     }
   })
 })

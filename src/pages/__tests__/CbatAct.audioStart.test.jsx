@@ -136,7 +136,7 @@ describe('CbatAct intro audio start', () => {
     expect(startBtn().textContent).toMatch(/loading audio/i)
 
     await finishLoad()
-    await waitFor(() => expect(screen.getByText(/your callsign for this round/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/your callsigns for this round/i)).toBeDefined())
     expect(engineState.instances[0].ensureRunning).toHaveBeenCalled()
   })
 
@@ -159,7 +159,7 @@ describe('CbatAct intro audio start', () => {
     await finishLoad()
 
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/audio failed to load/i))
-    expect(screen.queryByText(/your callsign for this round/i)).toBeNull()
+    expect(screen.queryByText(/your callsigns for this round/i)).toBeNull()
     expect(startBtn().textContent).toMatch(/retry/i)
     // The missing clips were retried, not the whole load.
     expect(engineState.instances[0].loadClips).toHaveBeenCalledTimes(1)
@@ -173,7 +173,7 @@ describe('CbatAct intro audio start', () => {
     await finishLoad()
 
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/blocked the audio/i))
-    expect(screen.queryByText(/your callsign for this round/i)).toBeNull()
+    expect(screen.queryByText(/your callsigns for this round/i)).toBeNull()
   })
 
   it('retry re-checks the context from the tap and starts once it wakes', async () => {
@@ -185,7 +185,7 @@ describe('CbatAct intro audio start', () => {
 
     engineState.running = true
     fireEvent.click(startBtn())
-    await waitFor(() => expect(screen.getByText(/your callsign for this round/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/your callsigns for this round/i)).toBeDefined())
     expect(engineState.instances).toHaveLength(1)
     expect(engineState.instances[0].ensureRunning).toHaveBeenCalledTimes(2)
   })
@@ -198,7 +198,7 @@ describe('CbatAct intro audio start', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeDefined())
 
     fireEvent.click(screen.getByRole('button', { name: /start without audio/i }))
-    await waitFor(() => expect(screen.getByText(/your callsign for this round/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/your callsigns for this round/i)).toBeDefined())
   })
 
   it('a demo engine (no context) starts without any audio gating', async () => {
@@ -208,7 +208,7 @@ describe('CbatAct intro audio start', () => {
     render(<CbatAct />)
     fireEvent.click(startBtn())
     await finishLoad()
-    await waitFor(() => expect(screen.getByText(/your callsign for this round/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/your callsigns for this round/i)).toBeDefined())
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })

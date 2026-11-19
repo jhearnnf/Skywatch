@@ -4,7 +4,7 @@
 // in three.js / R3F. The planner is pure JS — pass `curveLen` (world units)
 // instead of a curve object.
 
-import { generateDistractorCallsign, CODE_DIGITS } from './actAudio'
+import { generateDistractorCallsign, makeCallsignDeck, CODE_DIGITS } from './actAudio'
 import { IMMEDIATE_WINDOW_S, DELAYED_WINDOW_S } from './actOrders'
 //
 // Core invariants enforced here (the source of truth for ACT scheduling):
@@ -41,7 +41,7 @@ export const RENDERED_AHEAD = 3
 // target shape.
 export const MIN_THINK_TIME_S = 3
 
-// Worst-case length of an avoid audio sequence (3 callsign clips + the
+// Length estimate of an avoid audio sequence (one callsign clip + the
 // combined "avoid the next X" clip). Used to convert MIN_THINK_TIME_S to a
 // t-distance via cfg.speed and curveLen.
 export const AUDIO_DURATION_S_EST = 2.8
@@ -139,8 +139,8 @@ export function scoreCodeRecall(expected, entered) {
 // has to stay clear of the avoid's spoken words, so it may land in the think
 // time before the target — holding two things at once is the test.
 
-// Worst-case length of the spoken order. Immediate: callsign (up to three
-// words) + "change colour to" + value. Delayed adds "at" + up to two number
+// Worst-case length of the spoken order. Immediate: callsign (one word) +
+// "change colour to" + value. Delayed adds "at" + up to two number
 // words + "seconds".
 export const ORDER_NOW_AUDIO_EST_S = 3.8
 export const ORDER_AT_AUDIO_EST_S  = 5.6
@@ -577,6 +577,14 @@ export function generateAudioPlan(events, roundCfg, userCallsign, roundIdx, curv
   }
 
   cues.sort((a, b) => a.t - b.t)
+
+  // Each real order names ONE of the player's callsigns. Dealt in time order
+  // from a shuffled deck, so the round works through the whole set before any
+  // word repeats and the player has to listen for all of them.
+  const nextCallsign = makeCallsignDeck(userCallsign)
+  for (const cue of cues) {
+    if (cue.kind === 'avoid' || (cue.kind === 'order' && cue.real)) cue.callsigns = nextCallsign()
+  }
   return cues
 }
 

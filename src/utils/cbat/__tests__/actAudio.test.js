@@ -6,6 +6,7 @@ import {
   pickCallsigns,
   isValidDistractor,
   generateDistractorCallsign,
+  makeCallsignDeck,
   buildAvoidSequence,
   computeDistractionSegments,
   CODE_VOICE,
@@ -32,83 +33,65 @@ describe('pickCallsigns', () => {
   })
 })
 
-describe('isValidDistractor — 2-callsign rounds', () => {
-  const userSet = ['bravo', 'echo']
-
-  it('rejects exact same set in same order', () => {
-    expect(isValidDistractor(['bravo', 'echo'], userSet)).toBe(false)
-  })
-
-  it('rejects reordered same set', () => {
-    expect(isValidDistractor(['echo', 'bravo'], userSet)).toBe(false)
-  })
-
-  it('rejects 50% overlap (one matching)', () => {
-    expect(isValidDistractor(['bravo', 'alpha'], userSet)).toBe(false)
-    expect(isValidDistractor(['echo', 'delta'], userSet)).toBe(false)
-  })
-
-  it('accepts 100% different (no overlap)', () => {
-    expect(isValidDistractor(['alpha', 'delta'], userSet)).toBe(true)
-    expect(isValidDistractor(['charlie', 'hotel'], userSet)).toBe(true)
-  })
-})
-
-describe('isValidDistractor — 3-callsign rounds', () => {
+// Every spoken order names ONE callsign. A distractor is any single callsign
+// outside the player's set; the old multi-word rules no longer apply.
+describe('isValidDistractor', () => {
   const userSet = ['bravo', 'echo', 'charlie']
 
-  it('rejects exact same set', () => {
-    expect(isValidDistractor(['bravo', 'echo', 'charlie'], userSet)).toBe(false)
+  it('accepts a single callsign outside the set', () => {
+    expect(isValidDistractor(['alpha'], userSet)).toBe(true)
+    expect(isValidDistractor(['hotel'], userSet)).toBe(true)
   })
 
-  it('rejects any reordering of same set', () => {
-    expect(isValidDistractor(['echo', 'charlie', 'bravo'], userSet)).toBe(false)
-    expect(isValidDistractor(['charlie', 'bravo', 'echo'], userSet)).toBe(false)
+  it("rejects any one of the player's own callsigns", () => {
+    for (const c of userSet) expect(isValidDistractor([c], userSet)).toBe(false)
   })
 
-  it('rejects 2/3 overlap (only 33% different)', () => {
-    expect(isValidDistractor(['bravo', 'echo', 'alpha'], userSet)).toBe(false)
-  })
-
-  it('accepts 1/3 overlap (66.7% different)', () => {
-    expect(isValidDistractor(['bravo', 'alpha', 'delta'], userSet)).toBe(true)
-    expect(isValidDistractor(['echo', 'hotel', 'delta'], userSet)).toBe(true)
-  })
-
-  it('accepts 0% overlap (100% different)', () => {
-    expect(isValidDistractor(['alpha', 'delta', 'hotel'], userSet)).toBe(true)
+  it('rejects multi-word callsigns', () => {
+    expect(isValidDistractor(['alpha', 'delta'], userSet)).toBe(false)
   })
 })
 
 describe('generateDistractorCallsign', () => {
-  it('always returns a valid distractor for 2-callsign user sets', () => {
-    const userSet = ['bravo', 'echo']
-    for (let i = 0; i < 100; i++) {
-      const d = generateDistractorCallsign(userSet)
-      expect(d).not.toBeNull()
-      expect(isValidDistractor(d, userSet)).toBe(true)
+  it('returns one callsign outside the set, for every set size used (2-4)', () => {
+    for (const size of [2, 3, 4]) {
+      for (let i = 0; i < 100; i++) {
+        const userSet = pickCallsigns(size)
+        const d = generateDistractorCallsign(userSet)
+        expect(d).toHaveLength(1)
+        expect(CALLSIGNS).toContain(d[0])
+        expect(isValidDistractor(d, userSet)).toBe(true)
+      }
     }
   })
 
-  it('always returns a valid distractor for 3-callsign user sets', () => {
-    const userSet = ['bravo', 'echo', 'charlie']
-    for (let i = 0; i < 100; i++) {
-      const d = generateDistractorCallsign(userSet)
-      expect(d).not.toBeNull()
-      expect(isValidDistractor(d, userSet)).toBe(true)
+  it('returns null when the set covers the whole pool', () => {
+    expect(generateDistractorCallsign([...CALLSIGNS])).toBeNull()
+  })
+})
+
+describe('makeCallsignDeck', () => {
+  it('deals one callsign at a time and uses the whole set before repeating', () => {
+    const userSet = ['golf', 'bravo', 'charlie', 'echo']
+    const next = makeCallsignDeck(userSet)
+    for (let lap = 0; lap < 5; lap++) {
+      const dealt = []
+      for (let i = 0; i < userSet.length; i++) {
+        const c = next()
+        expect(c).toHaveLength(1)
+        dealt.push(c[0])
+      }
+      expect([...dealt].sort()).toEqual([...userSet].sort())
     }
   })
 })
 
 describe('buildAvoidSequence', () => {
-  it('builds 2-callsign + combined avoid+shape clip', () => {
-    expect(buildAvoidSequence(['bravo', 'echo'], 'circle'))
-      .toEqual(['bravo', 'echo', 'avoid_the_next_circle'])
-  })
-
-  it('builds 3-callsign + combined avoid+shape clip (square)', () => {
-    expect(buildAvoidSequence(['bravo', 'echo', 'hotel'], 'square'))
-      .toEqual(['bravo', 'echo', 'hotel', 'avoid_the_next_square'])
+  it('builds one callsign + combined avoid+shape clip', () => {
+    expect(buildAvoidSequence(['bravo'], 'circle'))
+      .toEqual(['bravo', 'avoid_the_next_circle'])
+    expect(buildAvoidSequence(['hotel'], 'square'))
+      .toEqual(['hotel', 'avoid_the_next_square'])
   })
 })
 

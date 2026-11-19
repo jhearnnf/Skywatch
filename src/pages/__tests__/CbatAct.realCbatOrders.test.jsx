@@ -105,7 +105,7 @@ async function playRound(n) {
   await act(async () => {
     for (let i = 0; i < 3; i++) fireEvent.keyDown(window, { key: String(n) })
   })
-  await waitFor(() => expect(screen.queryByText(/your callsign for this round/i)).toBeNull(), { timeout: 4500 })
+  await waitFor(() => expect(screen.queryByText(/your callsigns for this round/i)).toBeNull(), { timeout: 4500 })
 }
 
 const ballLabel = () => screen.getByTestId('act-ball-state').querySelector('[aria-label]').getAttribute('aria-label')

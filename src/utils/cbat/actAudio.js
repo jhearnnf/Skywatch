@@ -737,35 +737,44 @@ export function pickCallsigns(count) {
   return out;
 }
 
-// Returns true iff `candidate` is a valid distractor for the given user set.
-//   - No reorder/permutation of the user's set.
-//   - At least 66% of the words in `candidate` are NOT in the user's set.
-//     (2-word: both must differ; 3-word: at most 1 may overlap.)
+// Every spoken order names ONE callsign, never the player's whole set. The
+// player is given a set (2-4 words) and obeys any order addressed to any one
+// word in it. A candidate who passed the real test was caught out by the old
+// format, where the full set was read out together ("Bravo Echo, avoid...").
+//
+// A distractor is therefore a single callsign that is not in the player's set.
 export function isValidDistractor(candidate, userSet) {
-  if (candidate.length !== userSet.length) return false;
-  const userPool = new Set(userSet);
-  const sameSetIgnoringOrder =
-    candidate.every(c => userPool.has(c)) &&
-    new Set(candidate).size === candidate.length;
-  if (sameSetIgnoringOrder) return false;
-  const overlap = candidate.filter(c => userPool.has(c)).length;
-  const differentRatio = (candidate.length - overlap) / candidate.length;
-  return differentRatio >= 0.66;
+  return Array.isArray(candidate) && candidate.length === 1 && !userSet.includes(candidate[0]);
 }
 
-// Generate a distractor callsign array of the same length as userSet.
-// Tries up to 30 candidates before giving up (returns null if no valid one
-// exists for some reason — shouldn't with 6-callsign pool).
+// Generate a one-word distractor callsign (as a one-element array, so it drops
+// straight into buildAvoidSequence / buildOrderSequence). Null only if the
+// player's set covers the whole pool.
 export function generateDistractorCallsign(userSet) {
-  for (let attempt = 0; attempt < 30; attempt++) {
-    const candidate = pickCallsigns(userSet.length);
-    if (isValidDistractor(candidate, userSet)) return candidate;
-  }
-  return null;
+  const pool = CALLSIGNS.filter(c => !userSet.includes(c));
+  if (!pool.length) return null;
+  return [pool[Math.floor(Math.random() * pool.length)]];
+}
+
+// Hands out the player's callsigns one at a time for their real orders. Works
+// through a shuffled copy of the set before reusing any word, so every
+// callsign in the set gets spoken across a round, not just the first.
+export function makeCallsignDeck(userSet) {
+  let deck = [];
+  return () => {
+    if (!deck.length) {
+      deck = [...userSet];
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+    }
+    return [deck.pop()];
+  };
 }
 
 // Build the chunk-name sequence for an "avoid" instruction.
-// One callsign clip per word, plus a single combined "avoid the next <shape>" clip.
+// The callsign clip (one word), plus a single combined "avoid the next <shape>" clip.
 export function buildAvoidSequence(callsigns, shape) {
   return [...callsigns, `avoid_the_next_${shape}`];
 }

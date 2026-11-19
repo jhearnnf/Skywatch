@@ -111,11 +111,14 @@ const ROUND_CONFIG = [
   // distractorOdds and bleepOdds were halved when `shapes` doubled — both are
   // applied per-event, so without the halving the round would have ~2× as
   // many distractor cues and bleeps as the original tuning intended.
+  //
+  // `callsigns` is the SIZE of the player's set. Each spoken order names one
+  // word from it (see cbatActPlan.js), and the set grows across the rounds.
   { speed: 4.0, shapes: 16, distractorOdds: 0.15, avoidOdds: 0.55, bleepOdds: 0.05, turns: 12, callsigns: 2 },
   { speed: 4.5, shapes: 20, distractorOdds: 0.20, avoidOdds: 0.60, bleepOdds: 0.06, turns: 14, callsigns: 2 },
-  { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.65, bleepOdds: 0.07, turns: 16, callsigns: 2 },
+  { speed: 5.0, shapes: 24, distractorOdds: 0.25, avoidOdds: 0.65, bleepOdds: 0.07, turns: 16, callsigns: 3 },
   { speed: 5.5, shapes: 28, distractorOdds: 0.28, avoidOdds: 0.70, bleepOdds: 0.08, turns: 18, callsigns: 3 },
-  { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.75, bleepOdds: 0.09, turns: 20, callsigns: 3 },
+  { speed: 6.5, shapes: 32, distractorOdds: 0.30, avoidOdds: 0.75, bleepOdds: 0.09, turns: 20, callsigns: 4 },
 ]
 
 // Colour / number orders per round — Real CBAT theme only (see actOrders.js).
@@ -123,7 +126,7 @@ const ROUND_CONFIG = [
 // orders arrive in round 3 as immediate ones, and the delayed "at N seconds"
 // kind joins in rounds 4 and 5. `fake` orders use someone else's callsign.
 // Round 5 keeps round 4's mix: two delayed windows plus the code readout
-// did not fit a 66 s round, and its speed and three-word callsigns already
+// did not fit a 66 s round, and its speed and four callsigns already
 // make it the hardest.
 const ROUND_ORDERS = [
   null,
@@ -1444,7 +1447,7 @@ function RoundRecap({ roundIdx, stats, codeResult, onContinue, isFinal }) {
     >
       <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Round {roundIdx + 1} of {TOTAL_ROUNDS} — debrief</p>
       <p className="text-xl font-extrabold text-white mb-4">
-        Callsign was <span className="text-brand-600 uppercase tracking-wider">{stats.callsign.join(' ')}</span>
+        {stats.callsign.length > 1 ? 'Callsigns were' : 'Callsign was'} <span className="text-brand-600 uppercase tracking-wider">{stats.callsign.join(' · ')}</span>
       </p>
 
       <div className="grid grid-cols-2 gap-2 mb-4 text-left">
@@ -2044,9 +2047,10 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
       <p className="text-4xl lg:text-5xl mb-3">🎧</p>
       <p className="text-xl lg:text-2xl font-extrabold text-white mb-2">Auditory Capacity Test</p>
       <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
-        Steer the ball through every shape. Listen for your callsign — when you hear
-        <span className="text-brand-600 font-bold"> "avoid the next circle/square" </span>
-        with your full callsign, skip that one. Triangles are always default-thread.
+        Steer the ball through every shape. Each round gives you a few callsigns. The voice
+        only ever says one at a time. When it says any one of yours followed by
+        <span className="text-brand-600 font-bold"> "avoid the next circle/square"</span>,
+        skip that shape. Triangles are always flown through.
       </p>
 
       <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
@@ -2057,7 +2061,7 @@ function IntroScreen({ personalBest, onStart, onStartSilent, audioStatus, mockSt
       {realCbat && (
         <p className="text-sm lg:text-base text-slate-400 mb-5 lg:mb-7 lg:max-w-lg lg:mx-auto">
           From round 3 your ball has a <span className="text-brand-600 font-bold">colour and a number</span>.
-          When your callsign tells you to change one, do it straight away, or at the second it gives
+          When one of your callsigns tells you to change one, do it straight away, or at the second it gives
           if it says "at" a time. Watch the Seconds clock for those. On a keyboard press R, G or Y
           for red, green or yellow, and 1 to 9 for the number. On a touch screen use the buttons
           under BLEEP. Ignore orders for other callsigns.
@@ -2350,11 +2354,11 @@ function ActRound({ roundIdx, audio, showCallsignOverlay, onRoundComplete, tutor
             className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-20"
           >
             <div className="text-center px-6">
-              <p className="text-xs text-slate-400 uppercase tracking-widest mb-3">Your callsign for this round</p>
+              <p className="text-xs text-slate-400 uppercase tracking-widest mb-3">Your callsigns for this round</p>
               <p className="text-3xl sm:text-5xl font-extrabold text-brand-600 uppercase tracking-[0.25em]">
-                {state.userCallsign.join(' ')}
+                {state.userCallsign.join(' · ')}
               </p>
-              <p className="text-xs text-slate-500 mt-4">Memorise it — it won't be shown again until the debrief.</p>
+              <p className="text-xs text-slate-500 mt-4">Obey orders for any one of these. Memorise them, they won't be shown again until the debrief.</p>
             </div>
           </motion.div>
         )}
