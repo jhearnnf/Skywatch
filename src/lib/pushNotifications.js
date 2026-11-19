@@ -55,7 +55,12 @@ function urlBase64ToUint8Array(base64) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
 }
 
-const loadNative = () => import('@capacitor/push-notifications').then(m => m.PushNotifications)
+// Resolves to the MODULE, never the plugin itself. A Capacitor plugin object
+// answers every property as a native method, `then` included, so a promise
+// resolved with it treats it as another promise and waits forever. That hung
+// the Settings card on "checking" (button greyed out) in the 1.2.78 Android
+// build. Always destructure: `const { PushNotifications } = await loadNative()`.
+const loadNative = () => import('@capacitor/push-notifications')
 
 /**
  * Where this device stands.
@@ -71,7 +76,7 @@ export async function deviceStatus({ API, apiFetch }) {
   if (kind === 'native') {
     if (!config?.fcm) return 'unavailable'
     try {
-      const PushNotifications = await loadNative()
+      const { PushNotifications } = await loadNative()
       const { receive } = await PushNotifications.checkPermissions()
       if (receive === 'denied') return 'blocked'
       return receive === 'granted' && readLocal(NATIVE_TOKEN_KEY) ? 'on' : 'off'
@@ -141,7 +146,7 @@ export async function enableOnDevice({ API, apiFetch }) {
 
   if (kind === 'native') {
     if (!config?.fcm) return 'unavailable'
-    const PushNotifications = await loadNative()
+    const { PushNotifications } = await loadNative()
     let { receive } = await PushNotifications.checkPermissions()
     if (receive !== 'granted') ({ receive } = await PushNotifications.requestPermissions())
     if (receive !== 'granted') return 'blocked'
@@ -181,7 +186,7 @@ export async function disableOnDevice({ API, apiFetch }) {
       endpoint = readLocal(NATIVE_TOKEN_KEY)
       writeLocal(NATIVE_TOKEN_KEY, null)
       if (endpoint) {
-        const PushNotifications = await loadNative()
+        const { PushNotifications } = await loadNative()
         await PushNotifications.unregister().catch(() => {})
       }
     } else if (kind === 'web') {
@@ -213,7 +218,7 @@ export async function refreshDevice({ API, apiFetch }) {
     const kind = pushKind()
     if (kind === 'native') {
       if (!readLocal(NATIVE_TOKEN_KEY)) return
-      const PushNotifications = await loadNative()
+      const { PushNotifications } = await loadNative()
       const { receive } = await PushNotifications.checkPermissions()
       if (receive !== 'granted') return
       const token = await registerNative(PushNotifications)
@@ -242,7 +247,7 @@ export function listenForForeground(handler) {
   if (kind === 'native') {
     let handle = null
     let stopped = false
-    loadNative().then(PushNotifications =>
+    loadNative().then(({ PushNotifications }) =>
       PushNotifications.addListener('pushNotificationReceived', (n) => {
         handler({
           title: n?.title ?? '',
@@ -278,7 +283,7 @@ export function listenForTaps(go) {
   if (kind === 'native') {
     let handle = null
     let stopped = false
-    loadNative().then(PushNotifications =>
+    loadNative().then(({ PushNotifications }) =>
       PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
         const url = action?.notification?.data?.url
         if (isAppUrl(url)) go(url)

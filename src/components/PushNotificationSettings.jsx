@@ -10,6 +10,10 @@ import { deviceStatus, enableOnDevice, disableOnDevice, pushKind } from '../lib/
 //   2. What to be notified about. Saved to the account, so it applies to
 //      every device that has notifications on.
 
+// How long the "can this device do push" check may take before the button
+// is made usable anyway.
+const CHECK_TIMEOUT_MS = 8000
+
 // Mirrors User.pushPrefs defaults on the server.
 const DEFAULTS = {
   dms: true, replies: true, mentions: true, reactions: true,
@@ -70,8 +74,14 @@ export default function PushNotificationSettings() {
   useEffect(() => {
     if (!pushKind()) return
     let alive = true
-    deviceStatus({ API, apiFetch }).then(s => { if (alive) setStatus(s) })
-    return () => { alive = false }
+    // Never leave the button greyed out on a check that failed or stalled:
+    // fall back to "off", and turning it on reports any real problem.
+    const fallback = setTimeout(() => { if (alive) setStatus(s => (s === 'checking' ? 'off' : s)) }, CHECK_TIMEOUT_MS)
+    deviceStatus({ API, apiFetch })
+      .then(s => { if (alive) setStatus(s) })
+      .catch(() => { if (alive) setStatus('off') })
+      .finally(() => clearTimeout(fallback))
+    return () => { alive = false; clearTimeout(fallback) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API])
 
