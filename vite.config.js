@@ -287,6 +287,10 @@ export default defineConfig({
     __APP_BUILD__:   JSON.stringify(buildId()),
   },
   server: {
+    // Android builds write thousands of files into android/**/build and the
+    // web build rewrites dist/. Watching either makes the dev server react to
+    // every write, which ran node out of memory after a day of Android builds.
+    watch: { ignored: ['**/android/**', '**/dist/**'] },
     proxy: {
       '/api': 'http://localhost:5000',
     }
